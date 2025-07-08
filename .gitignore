@@ -1,0 +1,105 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+.svelte-kit/
+.vercel/
+.netlify/
+.output/
+
+# Local env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+playwright/.cache/
+e2e/.cache/
+
+# IDE and Editor directories
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+.history/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+tmp/
+temp/
+
+# Package manager files
+.npm/
+.yarn/
+.pnpm-debug.log
+
+# Supabase
+.supabase/
+!supabase/config.toml
+!supabase/migrations/
+!supabase/functions/
+!supabase/seed.sql
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Uploads and generated files
+uploads/
+public/uploads/
+static/uploads/
+
+# Build analysis
+stats.html
+bundle-stats.json
+
+# TypeScript
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# SvelteKit
+.svelte-kit/
+
+# Miscellaneous
+*.backup
+*.bak
+.eslintcache
+.prettiercache

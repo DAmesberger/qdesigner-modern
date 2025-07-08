@@ -1,0 +1,32 @@
+{
+  "name": "@qdesigner/database",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "vitest",
+    "db:types": "supabase gen types typescript --local > src/types/database.types.ts",
+    "db:migrate": "supabase db push",
+    "db:reset": "supabase db reset"
+  },
+  "dependencies": {
+    "@qdesigner/shared": "workspace:*",
+    "@supabase/auth-helpers-shared": "^0.5.0",
+    "@supabase/supabase-js": "^2.39.3"
+  },
+  "devDependencies": {
+    "supabase": "^1.142.2",
+    "typescript": "~5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
