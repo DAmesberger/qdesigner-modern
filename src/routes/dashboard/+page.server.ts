@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
-import { supabase } from '$lib/services/supabase';
+import { supabase } from '$lib/shared/services/supabase';
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   // Get the current user session

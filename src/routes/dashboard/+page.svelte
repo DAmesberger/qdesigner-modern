@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import { goto } from '$app/navigation';
-  import { formatDistanceToNow } from '$lib/utils/date';
+  import { formatDistanceToNow } from '$lib/shared/utils/date';
   
   export let data: PageData;
   

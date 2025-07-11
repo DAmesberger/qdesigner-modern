@@ -1,13 +1,13 @@
 <script lang="ts">
-	import HeroSection from '$lib/components/marketing/hero/HeroSection.svelte';
-	import SocialProofBar from '$lib/components/marketing/social-proof/SocialProofBar.svelte';
-	import FeatureBento from '$lib/components/marketing/features/FeatureBento.svelte';
-	import PerformanceMetrics from '$lib/components/marketing/features/PerformanceMetrics.svelte';
-	import InteractiveDemo from '$lib/components/marketing/demo/InteractiveDemo.svelte';
-	import IntegrationEcosystem from '$lib/components/marketing/features/IntegrationEcosystem.svelte';
-	import TestimonialSection from '$lib/components/marketing/social-proof/TestimonialSection.svelte';
-	import PricingSection from '$lib/components/marketing/pricing/PricingSection.svelte';
-	import CTASection from '$lib/components/marketing/cta/CTASection.svelte';
+	import HeroSection from '$lib/features/marketing/components/hero/HeroSection.svelte';
+	import SocialProofBar from '$lib/features/marketing/components/social-proof/SocialProofBar.svelte';
+	import FeatureBento from '$lib/features/marketing/components/features/FeatureBento.svelte';
+	import PerformanceMetrics from '$lib/features/marketing/components/features/PerformanceMetrics.svelte';
+	import InteractiveDemo from '$lib/features/marketing/components/demo/InteractiveDemo.svelte';
+	import IntegrationEcosystem from '$lib/features/marketing/components/features/IntegrationEcosystem.svelte';
+	import TestimonialSection from '$lib/features/marketing/components/social-proof/TestimonialSection.svelte';
+	import PricingSection from '$lib/features/marketing/components/pricing/PricingSection.svelte';
+	import CTASection from '$lib/features/marketing/components/cta/CTASection.svelte';
 </script>
 
 <svelte:head>
