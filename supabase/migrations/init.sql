@@ -17,6 +17,23 @@ GRANT USAGE ON SCHEMA auth TO postgres;
 GRANT CREATE ON SCHEMA auth TO postgres;
 GRANT ALL ON SCHEMA auth TO anon, authenticated, service_role;
 
+-- Create auth function stubs (will be replaced by Supabase)
+CREATE OR REPLACE FUNCTION auth.uid() 
+RETURNS uuid 
+LANGUAGE sql 
+STABLE 
+AS $$
+  SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
+$$;
+
+CREATE OR REPLACE FUNCTION auth.jwt() 
+RETURNS jsonb 
+LANGUAGE sql 
+STABLE 
+AS $$
+  SELECT NULLIF(current_setting('request.jwt.claims', true), '')::jsonb
+$$;
+
 -- =====================================================
 -- 1. EXTENSIONS
 -- =====================================================
@@ -844,30 +861,34 @@ FOR EACH ROW EXECUTE FUNCTION update_group_size();
 -- =====================================================
 -- 10. ROW LEVEL SECURITY
 -- =====================================================
+-- NOTE: RLS is disabled during development for easier iteration
+-- Uncomment these sections when ready for production
 
 -- Enable RLS on all tables
-ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
-ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE project_members ENABLE ROW LEVEL SECURITY;
-ALTER TABLE questionnaire_definitions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE responses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE interaction_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE session_variables ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE participant_groups ENABLE ROW LEVEL SECURITY;
-ALTER TABLE participant_group_members ENABLE ROW LEVEL SECURITY;
-ALTER TABLE session_analytics ENABLE ROW LEVEL SECURITY;
-ALTER TABLE project_analytics ENABLE ROW LEVEL SECURITY;
-ALTER TABLE export_jobs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE data_retention_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sync_queue ENABLE ROW LEVEL SECURITY;
-ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
-ALTER TABLE role_definitions ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE project_members ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE questionnaire_definitions ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE responses ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE interaction_events ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE session_variables ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE participant_groups ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE participant_group_members ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE session_analytics ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE project_analytics ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE export_jobs ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE data_retention_logs ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE sync_queue ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE role_definitions ENABLE ROW LEVEL SECURITY;
 
+-- RLS POLICIES (Commented out during development)
+/*
 -- Organization access policy
 CREATE POLICY org_access ON organizations
   FOR ALL
@@ -954,16 +975,7 @@ CREATE POLICY "Users can update their own profile"
 -- Organization member policies
 CREATE POLICY "Members can view their organization memberships"
   ON organization_members FOR SELECT
-  USING (
-    user_id = auth.uid()
-    OR organization_id IN (
-      SELECT organization_id 
-      FROM organization_members 
-      WHERE user_id = auth.uid() 
-      AND role IN ('owner', 'admin')
-      AND status = 'active'
-    )
-  );
+  USING (user_id = auth.uid());
 
 -- Project member policies
 CREATE POLICY "Members can view project memberships"
@@ -1076,6 +1088,7 @@ CREATE POLICY "Organization admins can manage API keys"
       AND status = 'active'
     )
   );
+*/
 
 -- =====================================================
 -- 11. PERFORMANCE INDEXES
@@ -1120,7 +1133,380 @@ INSERT INTO role_definitions (name, display_name, scope, permissions, is_system)
 ('viewer', 'Viewer', 'project', '{"view_questionnaire": true, "view_progress": true}', true);
 
 -- =====================================================
--- 13. GRANT PERMISSIONS
+-- 13. ONBOARDING SYSTEM TABLES
+-- =====================================================
+
+-- Organization Invitations
+CREATE TABLE IF NOT EXISTS organization_invitations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  email VARCHAR(255) NOT NULL,
+  role VARCHAR(50) NOT NULL DEFAULT 'member',
+  invited_by UUID NOT NULL REFERENCES users(id),
+  
+  -- Token and security
+  token UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
+  
+  -- Tracking
+  status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'viewed', 'accepted', 'declined', 'expired', 'revoked')),
+  viewed_at TIMESTAMPTZ,
+  accepted_at TIMESTAMPTZ,
+  declined_at TIMESTAMPTZ,
+  
+  -- Custom fields
+  custom_message TEXT,
+  project_assignments UUID[],
+  
+  -- Metadata
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Prevent duplicate active invitations
+  CONSTRAINT unique_active_invitation UNIQUE(organization_id, email) 
+    DEFERRABLE INITIALLY DEFERRED
+);
+
+-- Add conditional unique constraint for pending invitations only
+CREATE UNIQUE INDEX idx_unique_pending_invitation 
+  ON organization_invitations(organization_id, email) 
+  WHERE status = 'pending';
+
+-- Domain verification for auto-join
+CREATE TABLE IF NOT EXISTS organization_domains (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  domain VARCHAR(255) NOT NULL,
+  
+  -- Verification
+  verification_token UUID DEFAULT gen_random_uuid(),
+  verification_method VARCHAR(50) CHECK (verification_method IN ('dns', 'email', 'file', NULL)),
+  verified_at TIMESTAMPTZ,
+  verified_by UUID REFERENCES users(id),
+  last_verified_at TIMESTAMPTZ,
+  
+  -- Configuration
+  auto_join_enabled BOOLEAN DEFAULT true,
+  include_subdomains BOOLEAN DEFAULT false,
+  default_role VARCHAR(50) DEFAULT 'member',
+  
+  -- Rules (stored as JSONB for flexibility)
+  email_whitelist JSONB DEFAULT '[]'::jsonb,
+  email_blacklist JSONB DEFAULT '[]'::jsonb,
+  
+  -- Welcome configuration
+  welcome_message TEXT,
+  auto_assign_projects UUID[],
+  
+  -- Metadata
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(domain)
+);
+
+-- Email verification tokens
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  email VARCHAR(255) NOT NULL,
+  token VARCHAR(6) NOT NULL,
+  
+  -- Security
+  attempts INTEGER DEFAULT 0,
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '10 minutes'),
+  verified_at TIMESTAMPTZ,
+  
+  -- Test mode flag
+  is_test_mode BOOLEAN DEFAULT false,
+  
+  -- IP tracking for security
+  request_ip INET,
+  verified_ip INET,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Audit trail for onboarding events
+CREATE TABLE IF NOT EXISTS onboarding_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id),
+  event_type VARCHAR(50) NOT NULL CHECK (event_type IN (
+    'signup_started', 'signup_completed', 'email_verified', 
+    'org_created', 'org_joined', 'invitation_sent', 'invitation_viewed',
+    'invitation_accepted', 'invitation_declined', 'domain_verified',
+    'onboarding_completed'
+  )),
+  
+  -- Context
+  organization_id UUID REFERENCES organizations(id),
+  invitation_id UUID REFERENCES organization_invitations(id),
+  
+  -- Event details
+  metadata JSONB DEFAULT '{}',
+  ip_address INET,
+  user_agent TEXT,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for performance
+CREATE INDEX idx_invitations_org ON organization_invitations(organization_id);
+CREATE INDEX idx_invitations_email ON organization_invitations(email);
+CREATE INDEX idx_invitations_token ON organization_invitations(token);
+CREATE INDEX idx_invitations_status ON organization_invitations(status);
+CREATE INDEX idx_invitations_expires ON organization_invitations(expires_at);
+
+CREATE INDEX idx_domains_org ON organization_domains(organization_id);
+CREATE INDEX idx_domains_domain ON organization_domains(domain);
+CREATE INDEX idx_domains_verified ON organization_domains(verified_at) WHERE verified_at IS NOT NULL;
+
+CREATE INDEX idx_email_verifications_email ON email_verifications(email);
+CREATE INDEX idx_email_verifications_user ON email_verifications(user_id);
+CREATE INDEX idx_email_verifications_expires ON email_verifications(expires_at);
+
+CREATE INDEX idx_onboarding_events_user ON onboarding_events(user_id);
+CREATE INDEX idx_onboarding_events_org ON onboarding_events(organization_id);
+CREATE INDEX idx_onboarding_events_type ON onboarding_events(event_type);
+CREATE INDEX idx_onboarding_events_created ON onboarding_events(created_at);
+
+-- RLS Policies (Commented out during development)
+/*
+-- Organization Invitations
+ALTER TABLE organization_invitations ENABLE ROW LEVEL SECURITY;
+
+-- Users can view invitations sent to their email
+CREATE POLICY "Users can view their invitations" ON organization_invitations
+  FOR SELECT USING (
+    email = auth.jwt() ->> 'email'
+  );
+
+-- Organization admins/owners can manage invitations
+CREATE POLICY "Org admins can manage invitations" ON organization_invitations
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM organization_members om
+      WHERE om.organization_id = organization_invitations.organization_id
+        AND om.user_id = auth.uid()
+        AND om.role IN ('owner', 'admin')
+        AND om.status = 'active'
+    )
+  );
+
+-- Organization Domains
+ALTER TABLE organization_domains ENABLE ROW LEVEL SECURITY;
+
+-- Only org owners can manage domains
+CREATE POLICY "Org owners can manage domains" ON organization_domains
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM organization_members om
+      WHERE om.organization_id = organization_domains.organization_id
+        AND om.user_id = auth.uid()
+        AND om.role = 'owner'
+        AND om.status = 'active'
+    )
+  );
+
+-- Email Verifications
+ALTER TABLE email_verifications ENABLE ROW LEVEL SECURITY;
+
+-- Allow anon users to insert verifications (needed for signup flow)
+CREATE POLICY "Allow anon to insert verifications" ON email_verifications
+  FOR INSERT TO anon
+  WITH CHECK (true);
+
+-- Allow authenticated users to manage their own verifications
+CREATE POLICY "Allow authenticated to manage own verifications" ON email_verifications
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- Onboarding Events
+ALTER TABLE onboarding_events ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own events
+CREATE POLICY "Users can view own events" ON onboarding_events
+  FOR SELECT USING (user_id = auth.uid());
+
+-- Org admins can view org events
+CREATE POLICY "Org admins can view org events" ON onboarding_events
+  FOR SELECT USING (
+    organization_id IN (
+      SELECT om.organization_id 
+      FROM organization_members om
+      WHERE om.user_id = auth.uid()
+        AND om.role IN ('owner', 'admin')
+        AND om.status = 'active'
+    )
+  );
+*/
+
+-- Functions
+
+-- Function to check if email domain has auto-join
+CREATE OR REPLACE FUNCTION check_domain_auto_join(email_address TEXT)
+RETURNS TABLE (
+  organization_id UUID,
+  organization_name TEXT,
+  default_role VARCHAR(50),
+  welcome_message TEXT
+) AS $$
+DECLARE
+  email_domain TEXT;
+BEGIN
+  -- Extract domain from email
+  email_domain := SPLIT_PART(email_address, '@', 2);
+  
+  -- Check for exact domain match or subdomain match
+  RETURN QUERY
+  SELECT 
+    od.organization_id,
+    o.name as organization_name,
+    od.default_role,
+    od.welcome_message
+  FROM organization_domains od
+  JOIN organizations o ON od.organization_id = o.id
+  WHERE od.verified_at IS NOT NULL
+    AND od.auto_join_enabled = true
+    AND (
+      od.domain = email_domain
+      OR (od.include_subdomains = true AND email_domain LIKE '%.' || od.domain)
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(od.email_blacklist) AS blacklist
+      WHERE email_address LIKE blacklist
+    )
+    AND (
+      jsonb_array_length(od.email_whitelist) = 0
+      OR EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(od.email_whitelist) AS whitelist
+        WHERE email_address LIKE whitelist
+      )
+    )
+  LIMIT 1;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to generate 6-digit verification code
+CREATE OR REPLACE FUNCTION generate_verification_code()
+RETURNS TEXT AS $$
+BEGIN
+  RETURN LPAD(FLOOR(RANDOM() * 1000000)::TEXT, 6, '0');
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to handle invitation acceptance
+CREATE OR REPLACE FUNCTION accept_invitation(invitation_token UUID, user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  inv RECORD;
+BEGIN
+  -- Get invitation details
+  SELECT * INTO inv FROM organization_invitations
+  WHERE token = invitation_token
+    AND status = 'pending'
+    AND expires_at > NOW()
+  FOR UPDATE;
+  
+  IF NOT FOUND THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Add user to organization
+  INSERT INTO organization_members (
+    organization_id,
+    user_id,
+    role,
+    status,
+    joined_at
+  ) VALUES (
+    inv.organization_id,
+    user_id,
+    inv.role,
+    'active',
+    NOW()
+  )
+  ON CONFLICT (organization_id, user_id) 
+  DO UPDATE SET
+    role = EXCLUDED.role,
+    status = 'active',
+    joined_at = NOW();
+  
+  -- Update invitation status
+  UPDATE organization_invitations
+  SET 
+    status = 'accepted',
+    accepted_at = NOW(),
+    updated_at = NOW()
+  WHERE id = inv.id;
+  
+  -- Log event
+  INSERT INTO onboarding_events (
+    user_id,
+    event_type,
+    organization_id,
+    invitation_id,
+    metadata
+  ) VALUES (
+    user_id,
+    'invitation_accepted',
+    inv.organization_id,
+    inv.id,
+    jsonb_build_object('role', inv.role)
+  );
+  
+  RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger to update updated_at timestamps
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_organization_invitations_updated_at
+  BEFORE UPDATE ON organization_invitations
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_organization_domains_updated_at
+  BEFORE UPDATE ON organization_domains
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to expire old invitations
+CREATE OR REPLACE FUNCTION expire_old_invitations()
+RETURNS void AS $$
+BEGIN
+  UPDATE organization_invitations
+  SET status = 'expired'
+  WHERE status = 'pending'
+    AND expires_at < NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to handle new user creation
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.users (auth_id, email, full_name)
+  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger for new user creation
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- =====================================================
+-- 14. GRANT PERMISSIONS
 -- =====================================================
 
 -- Grant usage on all sequences
@@ -1128,3 +1514,12 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
 -- Grant permissions on functions
 GRANT EXECUTE ON FUNCTION calculate_session_analytics(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION check_domain_auto_join(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION generate_verification_code() TO authenticated;
+GRANT EXECUTE ON FUNCTION accept_invitation(UUID, UUID) TO authenticated;
+
+-- Grant permissions on onboarding tables
+GRANT ALL ON organization_invitations TO anon, authenticated;
+GRANT ALL ON organization_domains TO anon, authenticated;
+GRANT ALL ON email_verifications TO anon, authenticated;
+GRANT ALL ON onboarding_events TO anon, authenticated;

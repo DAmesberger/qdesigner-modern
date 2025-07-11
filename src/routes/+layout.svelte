@@ -17,6 +17,7 @@
     '/login', 
     '/signup', 
     '/forgot-password',
+    '/onboarding/organization',
     '/features',
     '/pricing',
     '/solutions',

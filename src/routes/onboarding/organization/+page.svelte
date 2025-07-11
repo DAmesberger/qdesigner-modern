@@ -5,13 +5,19 @@
   import Input from '$lib/components/ui/forms/Input.svelte';
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
+  import Card from '$lib/components/common/Card.svelte';
+  import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import { supabase } from '$lib/services/supabase';
-  import { createFirstOrganization } from '$lib/database/auth-helpers';
+  import { createFirstOrganization, userHasOrganization } from '$lib/database/auth-helpers';
+  import { getPendingInvitations, acceptInvitation, type Invitation } from '$lib/services/invitations';
   
   let organizationName = '';
   let loading = false;
   let error: string | null = null;
   let currentUser: any = null;
+  let pendingInvitations: Invitation[] = [];
+  let showCreateForm = false;
+  let acceptingInvitation = false;
   
   onMount(async () => {
     // Check if user is authenticated
@@ -29,7 +35,44 @@
       .single();
       
     currentUser = userData;
+    
+    // Check if user already has organizations
+    if (currentUser && await userHasOrganization(currentUser.id)) {
+      await goto('/dashboard');
+      return;
+    }
+    
+    // Check for pending invitations
+    if (user.email) {
+      pendingInvitations = await getPendingInvitations(user.email);
+      
+      // If user has invitations but no form preference, show invitations
+      if (pendingInvitations.length > 0 && !showCreateForm) {
+        showCreateForm = false;
+      } else {
+        showCreateForm = true;
+      }
+    }
   });
+  
+  async function handleAcceptInvitation(invitation: Invitation) {
+    if (!currentUser) return;
+    
+    acceptingInvitation = true;
+    error = null;
+    
+    const { success, error: acceptError } = await acceptInvitation(
+      invitation.token,
+      currentUser.id
+    );
+    
+    if (success) {
+      await goto('/dashboard');
+    } else {
+      error = acceptError || 'Failed to accept invitation';
+      acceptingInvitation = false;
+    }
+  }
   
   async function handleCreateOrganization() {
     if (!organizationName.trim()) {
@@ -68,7 +111,65 @@
 
   <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
     <div class="bg-card px-4 py-8 shadow sm:rounded-lg sm:px-10">
-      <form class="space-y-6" on:submit|preventDefault={handleCreateOrganization}>
+      {#if pendingInvitations.length > 0 && !showCreateForm}
+        <div class="space-y-4">
+          <h3 class="text-lg font-semibold text-center mb-4">
+            You have {pendingInvitations.length} pending invitation{pendingInvitations.length > 1 ? 's' : ''}
+          </h3>
+          
+          {#each pendingInvitations as invitation}
+            <Card class="p-4">
+              <div class="flex items-start justify-between mb-3">
+                <div>
+                  <h4 class="font-semibold text-foreground">
+                    {invitation.organization?.name}
+                  </h4>
+                  <p class="text-sm text-muted-foreground">
+                    Invited by {invitation.invited_by?.full_name || invitation.invited_by?.email}
+                  </p>
+                </div>
+                <Badge variant="primary" size="sm">
+                  {invitation.role}
+                </Badge>
+              </div>
+              
+              {#if invitation.customMessage}
+                <p class="text-sm italic text-muted-foreground mb-3">
+                  "{invitation.customMessage}"
+                </p>
+              {/if}
+              
+              <Button
+                variant="primary"
+                size="sm"
+                class="w-full"
+                on:click={() => handleAcceptInvitation(invitation)}
+                loading={acceptingInvitation}
+              >
+                Accept & Join
+              </Button>
+            </Card>
+          {/each}
+          
+          <div class="relative my-6">
+            <div class="absolute inset-0 flex items-center">
+              <div class="w-full border-t border-border" />
+            </div>
+            <div class="relative flex justify-center text-sm">
+              <span class="bg-card px-4 text-muted-foreground">Or</span>
+            </div>
+          </div>
+          
+          <Button
+            variant="secondary"
+            class="w-full"
+            on:click={() => showCreateForm = true}
+          >
+            Create New Organization Instead
+          </Button>
+        </div>
+      {:else}
+        <form class="space-y-6" on:submit|preventDefault={handleCreateOrganization}>
         <div>
           <FormGroup 
             label="Organization Name" 
@@ -104,7 +205,21 @@
           </Button>
         </div>
       </form>
+      {/if}
 
+      {#if showCreateForm && pendingInvitations.length > 0}
+        <div class="mt-6 text-center">
+          <button
+            type="button"
+            class="text-sm text-primary hover:text-primary/80"
+            on:click={() => showCreateForm = false}
+          >
+            ← Back to invitations
+          </button>
+        </div>
+      {/if}
+
+      {#if showCreateForm}
       <div class="mt-6">
         <div class="relative">
           <div class="absolute inset-0 flex items-center">
@@ -147,6 +262,7 @@
           </div>
         </div>
       </div>
+      {/if}
     </div>
   </div>
 </div>

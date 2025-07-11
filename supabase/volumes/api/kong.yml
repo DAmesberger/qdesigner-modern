@@ -39,8 +39,11 @@ services:
             - x-client-info
           headers:
             - Accept
+            - Accept-Profile
             - Authorization
             - Content-Type
+            - Content-Profile
+            - Prefer
             - x-client-info
             - x-supabase-api-version
             - apikey
@@ -48,6 +51,7 @@ services:
             - GET
             - POST
             - PUT
+            - PATCH
             - DELETE
             - OPTIONS
 
@@ -72,8 +76,11 @@ services:
             - x-client-info
           headers:
             - Accept
+            - Accept-Profile
             - Authorization
             - Content-Type
+            - Content-Profile
+            - Prefer
             - x-client-info
             - x-supabase-api-version
             - apikey
@@ -81,6 +88,7 @@ services:
             - GET
             - POST
             - PUT
+            - PATCH
             - DELETE
             - OPTIONS
       - name: key-auth
@@ -109,8 +117,10 @@ services:
             - x-client-info
           headers:
             - Accept
+            - Accept-Profile
             - Authorization
             - Content-Type
+            - Content-Profile
             - Prefer
             - x-client-info
             - apikey
@@ -118,6 +128,7 @@ services:
             - GET
             - POST
             - PUT
+            - PATCH
             - DELETE
             - OPTIONS
             - HEAD
@@ -146,14 +157,20 @@ services:
             - x-client-info
           headers:
             - Accept
+            - Accept-Profile
             - Authorization
             - Content-Type
+            - Content-Profile
+            - Prefer
             - x-client-info
             - x-supabase-api-version
             - apikey
           methods:
             - GET
             - POST
+            - PUT
+            - PATCH
+            - DELETE
             - OPTIONS
       - name: key-auth
         config:
@@ -181,8 +198,11 @@ services:
             - x-client-info
           headers:
             - Accept
+            - Accept-Profile
             - Authorization
             - Content-Type
+            - Content-Profile
+            - Prefer
             - x-client-info
             - x-supabase-api-version
             - apikey
@@ -190,6 +210,7 @@ services:
             - GET
             - POST
             - PUT
+            - PATCH
             - DELETE
             - OPTIONS
             - HEAD
@@ -217,12 +238,18 @@ plugins:
         - Authorization
       headers:
         - Accept
+        - Accept-Profile
         - Authorization
         - Content-Type
+        - Content-Profile
+        - Prefer
+        - x-client-info
+        - x-supabase-api-version
         - apikey
       methods:
         - GET
         - POST
         - PUT
+        - PATCH
         - DELETE
         - OPTIONS

@@ -30,19 +30,24 @@
       }
       
       if (data.user) {
+        console.log('Login successful, user:', data.user.email);
         // Sync user with our database and get organizations
         const userInfo = await handleAuthUser(data.user);
+        console.log('User info:', userInfo);
         
         // Check if user has any organizations
         if (userInfo.organizations.length === 0) {
+          console.log('No organizations, redirecting to onboarding');
           // Redirect to organization setup
           await goto('/onboarding/organization');
         } else {
+          console.log('Has organizations, redirecting to dashboard');
           // Redirect to dashboard
           await goto('/dashboard');
         }
       }
     } catch (err) {
+      console.error('Login error:', err);
       error = err instanceof Error ? err.message : 'An error occurred during sign in';
       loading = false;
     }

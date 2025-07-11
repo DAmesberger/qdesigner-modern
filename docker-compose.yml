@@ -100,6 +100,7 @@ services:
       DB_SSL: "false"
       PORT: 4000
       JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-your-super-secret-key-base-that-is-at-least-64-bytes}
       REPLICATION_MODE: RLS
       REPLICATION_POLL_INTERVAL: 100
       SECURE_CHANNELS: "true"
@@ -109,7 +110,7 @@ services:
 
   # Storage API
   supabase-storage:
-    image: supabase/storage-api:v0.40.4
+    image: supabase/storage-api:v0.46.4
     container_name: qdesigner-storage
     depends_on:
       supabase-db:
@@ -127,6 +128,7 @@ services:
       FILE_SIZE_LIMIT: 52428800
       STORAGE_BACKEND: file
       FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      GLOBAL_S3_BUCKET: local-storage
       # Add your S3 config here if needed
     volumes:
       - supabase-storage-data:/var/lib/storage

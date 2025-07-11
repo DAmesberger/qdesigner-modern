@@ -112,3 +112,7 @@ The variable system (`packages/scripting-engine`) supports:
 1. Create migration in `supabase/migrations/`
 2. Update types in `packages/database/src/types/`
 3. Run `supabase db push` to apply locally
+
+## Code Guidance
+
+- Never use simpler approaches without asking

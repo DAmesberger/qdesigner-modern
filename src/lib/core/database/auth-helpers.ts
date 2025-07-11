@@ -35,19 +35,33 @@ export async function handleAuthUser(authUser: User) {
       // If user was invited to an organization, handle that here
       await handlePendingInvitations(authUser.email!);
     } else {
-      // Update last login
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          last_login_at: new Date().toISOString(),
-          login_count: (existingUser.login_count || 0) + 1
-        })
-        .eq('id', existingUser.id);
+      // Update last login - don't fail if this errors
+      try {
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            last_login_at: new Date().toISOString(),
+            login_count: (existingUser.login_count || 0) + 1
+          })
+          .eq('id', existingUser.id);
 
-      if (updateError) throw updateError;
+        if (updateError) {
+          console.warn('Failed to update last login:', updateError);
+        }
+      } catch (err) {
+        console.warn('Failed to update last login:', err);
+      }
     }
 
-    // Get user's organizations
+    // Get the user record we'll work with
+    const userRecord = existingUser || await supabase
+      .from('users')
+      .select('*')
+      .eq('auth_id', authUser.id)
+      .single()
+      .then(res => res.data);
+    
+    // Get user's organizations using the public.users.id
     const { data: memberships } = await supabase
       .from('organization_members')
       .select(`
@@ -62,11 +76,11 @@ export async function handleAuthUser(authUser: User) {
           subscription_status
         )
       `)
-      .eq('user_id', existingUser?.id || authUser.id)
+      .eq('user_id', userRecord?.id)
       .eq('status', 'active');
 
     return {
-      user: existingUser || { auth_id: authUser.id, email: authUser.email },
+      user: userRecord || { auth_id: authUser.id, email: authUser.email },
       organizations: memberships || []
     };
   } catch (error) {

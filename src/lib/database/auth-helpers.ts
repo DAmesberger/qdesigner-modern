@@ -1,5 +1,6 @@
 import { supabase } from '$lib/services/supabase';
 import type { User } from '@supabase/supabase-js';
+import { checkDomainAutoJoin } from '$lib/services/domain-verification';
 
 /**
  * Handle user creation/update after authentication
@@ -32,22 +33,78 @@ export async function handleAuthUser(authUser: User) {
 
       if (insertError) throw insertError;
 
-      // If user was invited to an organization, handle that here
-      await handlePendingInvitations(authUser.email!);
-    } else {
-      // Update last login
-      const { error: updateError } = await supabase
+      // Get the newly created user's ID
+      const { data: newUser } = await supabase
         .from('users')
-        .update({
-          last_login_at: new Date().toISOString(),
-          login_count: (existingUser.login_count || 0) + 1
-        })
-        .eq('id', existingUser.id);
+        .select('id')
+        .eq('auth_id', authUser.id)
+        .single();
 
-      if (updateError) throw updateError;
+      // If user was invited to an organization, handle that here
+      await handlePendingInvitations(authUser.email!, newUser?.id);
+    } else {
+      // Update last login - don't fail if this errors
+      try {
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            last_login_at: new Date().toISOString(),
+            login_count: (existingUser.login_count || 0) + 1
+          })
+          .eq('id', existingUser.id);
+
+        if (updateError) {
+          console.warn('Failed to update last login:', updateError);
+        }
+      } catch (err) {
+        console.warn('Failed to update last login:', err);
+      }
     }
 
-    // Get user's organizations
+    // Get the user record we'll work with
+    const userRecord = existingUser || await supabase
+      .from('users')
+      .select('*')
+      .eq('auth_id', authUser.id)
+      .single()
+      .then(res => res.data);
+    
+    // Check for domain auto-join
+    if (!existingUser && authUser.email) {
+      const domainCheck = await checkDomainAutoJoin(authUser.email);
+      if (domainCheck.canAutoJoin && domainCheck.organizationId && userRecord?.id) {
+        // Add user to organization via domain auto-join
+        try {
+          await supabase
+            .from('organization_members')
+            .insert({
+              organization_id: domainCheck.organizationId,
+              user_id: userRecord.id,
+              role: domainCheck.defaultRole || 'member',
+              status: 'active',
+              joined_at: new Date().toISOString()
+            });
+        } catch (err) {
+          // Ignore if already a member
+          console.log('User might already be a member:', err);
+        }
+
+        // Log event
+        await supabase
+          .from('onboarding_events')
+          .insert({
+            user_id: userRecord.id,
+            event_type: 'org_joined',
+            organization_id: domainCheck.organizationId,
+            metadata: { 
+              method: 'domain_auto_join',
+              domain: authUser.email.split('@')[1]
+            }
+          });
+      }
+    }
+
+    // Get user's organizations using the public.users.id
     const { data: memberships } = await supabase
       .from('organization_members')
       .select(`
@@ -62,11 +119,11 @@ export async function handleAuthUser(authUser: User) {
           subscription_status
         )
       `)
-      .eq('user_id', existingUser?.id || authUser.id)
+      .eq('user_id', userRecord?.id)
       .eq('status', 'active');
 
     return {
-      user: existingUser || { auth_id: authUser.id, email: authUser.email },
+      user: userRecord || { auth_id: authUser.id, email: authUser.email },
       organizations: memberships || []
     };
   } catch (error) {
@@ -78,11 +135,32 @@ export async function handleAuthUser(authUser: User) {
 /**
  * Handle pending organization invitations
  */
-async function handlePendingInvitations(email: string) {
-  // Check for pending invitations by email
-  // This would be implemented based on your invitation system
-  // For now, we'll just return
-  return;
+async function handlePendingInvitations(email: string, userId?: string) {
+  try {
+    // Get all pending invitations for this email
+    const { data: invitations } = await supabase
+      .from('organization_invitations')
+      .select('token')
+      .eq('email', email)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString());
+
+    if (!invitations || invitations.length === 0) {
+      return;
+    }
+
+    // Auto-accept all pending invitations
+    for (const invitation of invitations) {
+      if (userId) {
+        await supabase.rpc('accept_invitation', {
+          invitation_token: invitation.token,
+          user_id: userId
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error handling pending invitations:', error);
+  }
 }
 
 /**
