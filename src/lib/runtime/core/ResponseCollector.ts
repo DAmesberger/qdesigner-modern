@@ -1,4 +1,4 @@
-import type { Question, ResponseType } from '$lib/questionnaire/types/questionnaire';
+import type { Question, ResponseType } from '$lib/shared';
 
 export interface ResponseHandlerConfig {
   onResponse: (value: any) => void;

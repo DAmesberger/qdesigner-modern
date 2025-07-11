@@ -1,0 +1,8 @@
+{
+  "name": "magic-ui",
+  "command": "npx",
+  "args": [
+    "-y",
+    "@modelcontextprotocol/server-magic-ui"
+  ]
+}

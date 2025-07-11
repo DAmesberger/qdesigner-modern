@@ -1,52 +1,84 @@
 # QDesigner Modern
 
-A modern, high-performance questionnaire platform built with Svelte, TypeScript, and WebGL 2.0.
+A modern, high-performance questionnaire platform built with Svelte, TypeScript, and WebGL 2.0. Features a sophisticated designer interface with real-time persistence to Supabase.
 
-## Features
+## ✨ Features
 
-- **WebGL 2.0 Rendering**: 120+ FPS support for precise reaction time measurements
-- **Sophisticated Variable System**: Mathematical formulas, dependencies, and custom functions
-- **Multimedia Stimuli**: Support for images, videos, audio, and composite stimuli
-- **High-Precision Timing**: Microsecond-accurate response collection
-- **Modern Stack**: Svelte 5, TypeScript, Tailwind CSS, Vite
+- **🎨 Visual Questionnaire Designer**: Drag-and-drop interface with real-time preview
+- **💾 Cloud Persistence**: Automatic save/load with Supabase integration
+- **⚡ WebGL 2.0 Rendering**: 120+ FPS support for precise reaction time measurements
+- **🧮 Sophisticated Variable System**: Mathematical formulas, dependencies, and custom functions
+- **🎬 Multimedia Stimuli**: Support for images, videos, audio, and composite stimuli
+- **⏱️ High-Precision Timing**: Microsecond-accurate response collection
+- **🚀 Modern Stack**: Svelte 5, TypeScript, Tailwind CSS, Vite, Supabase
 
-## Architecture
+## 🏗️ Architecture
+
+This is a monorepo managed with pnpm workspaces:
 
 ```
-src/
-├── lib/
-│   ├── questionnaire/
-│   │   ├── types/          # TypeScript interfaces for questionnaires
-│   │   ├── variables/      # Variable engine with formula evaluation
-│   │   └── runtime/        # Questionnaire execution engine
-│   ├── renderer/           # WebGL 2.0 rendering system
-│   ├── experiments/        # Reaction test and other experiments
-│   └── components/         # Svelte components
+qdesigner-modern/
+├── apps/
+│   ├── designer/           # Main designer application
+│   ├── fillout/           # Questionnaire runtime (planned)
+│   └── admin/             # Admin interface (planned)
+├── packages/
+│   ├── api/               # Backend API server
+│   ├── database/          # Supabase client and types
+│   ├── renderer/          # WebGL 2.0 rendering engine
+│   ├── scripting-engine/  # Variable system & formula evaluation
+│   └── shared/            # Shared types and utilities
+├── supabase/
+│   └── migrations/        # Database schema
+└── docs/                  # Technical documentation
 ```
 
-## Development
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 18+
+- pnpm (`npm install -g pnpm`)
+- Docker and Docker Compose
+
+### Development Setup
 
 ```bash
+# Clone the repository
+git clone <repository-url>
+cd qdesigner-modern
+
 # Install dependencies
-npm install
+pnpm install
 
-# Start development server
-npm run dev
+# First-time setup (creates database, runs migrations, seeds data)
+pnpm dev:setup
 
-# Run tests
-npm test
-
-# Build for production
-npm run build
+# Start development (Supabase + app)
+pnpm dev:full
 ```
 
-## Variable System
+That's it! No manual configuration needed. The development environment includes:
+- 🐘 PostgreSQL database (via Supabase)
+- 🔐 Authentication service
+- 📦 File storage
+- 📧 Email testing (Mailhog)
 
-The variable system supports:
+### Service URLs
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| App | http://localhost:5173 | QDesigner application |
+| Supabase | http://localhost:54321 | Database management UI |
+| Mailhog | http://localhost:8025 | Email testing interface |
+
+## 📝 Variable System
+
+The variable system supports complex formulas with:
 
 - **Basic Operations**: `+`, `-`, `*`, `/`, `^`, `sqrt()`, etc.
 - **Conditional Logic**: `IF(condition, trueValue, falseValue)`
-- **Array Functions**: `SUM()`, `AVG()`, `COUNT()`
+- **Array Functions**: `SUM()`, `AVG()`, `COUNT()`, `MIN()`, `MAX()`
 - **String Functions**: `CONCAT()`, `LENGTH()`
 - **Time Functions**: `NOW()`, `TIME_SINCE()`
 - **Random Functions**: `RANDOM()`, `RANDINT(min, max)`
@@ -56,45 +88,78 @@ Example formula:
 IF(reactionTime < 300, "Fast", IF(reactionTime < 500, "Normal", "Slow"))
 ```
 
-## Question Types
+## 🎯 Question Types
 
-- **Text Questions**: Simple text prompts
-- **Choice Questions**: Single/multiple choice
-- **Scale Questions**: Likert scales, sliders
-- **Reaction Tests**: High-precision timing tasks
-- **Multimedia Questions**: Image/video/audio stimuli
+- **Text/Instructions**: Display information or instructions
+- **Choice Questions**: Single/multiple choice with customizable options
+- **Scale Questions**: Likert scales, sliders, visual analog scales
+- **Reaction Tests**: High-precision timing tasks with WebGL rendering
+- **Multimedia Questions**: Image/video/audio stimuli presentation
+- **Matrix Questions**: Grid-based questions for complex data collection
 
-## Response Collection
+## 📊 Data Collection
 
-- Reaction times with microsecond precision
-- All keypress events with timestamps
-- Mouse tracking (optional)
-- Response corrections and attempts
-- Automatic variable updates
+- ⏱️ Microsecond-precision timing for all responses
+- ⌨️ Complete keystroke logging with timestamps
+- 🖱️ Optional mouse tracking and click coordinates
+- 📝 Response history and corrections
+- 🔄 Automatic variable computation and updates
+- 💾 Real-time data persistence to Supabase
 
-## Export Formats
-
-- CSV for Excel
-- SPSS for statistical analysis
-- JSON for custom processing
-- Raw data with timing information
-
-## Requirements
-
-- Node.js 20+
-- Modern browser with WebGL 2.0 support
-- 120+ Hz display recommended for reaction tests
-
-## Docker
+## 🛠️ Development Commands
 
 ```bash
-# Development
-docker-compose up qdesigner-dev
+# Start everything (recommended)
+pnpm dev:full
 
-# Production
-docker-compose up qdesigner-prod
+# Start only the app (if services are already running)
+pnpm dev
+
+# Manage Supabase services
+pnpm dev:services        # Start services
+pnpm dev:services:down   # Stop services
+pnpm dev:services:logs   # View logs
+
+# Testing
+pnpm test               # Run unit tests
+pnpm test:e2e          # Run E2E tests
+pnpm test:coverage     # Generate coverage report
+
+# Code quality
+pnpm lint              # Check linting
+pnpm lint:fix          # Auto-fix issues
+pnpm format            # Format code
+pnpm check             # Type checking
 ```
 
-## License
+## 🐳 Docker Support
+
+```bash
+# Development with Docker
+docker-compose up qdesigner-dev
+
+# Production build
+docker-compose up qdesigner-prod
+
+# Run specific services
+docker-compose up supabase-db supabase-auth
+```
+
+## 📚 Documentation
+
+- [Development Setup](docs/DEVELOPMENT.md) - Detailed development environment guide
+- [Designer Overview](docs/DESIGNER_OVERVIEW.md) - Architecture of the designer interface
+- [Runtime Architecture](docs/RUNTIME_ARCHITECTURE.md) - How questionnaires are executed
+- [Precise Timing](docs/PRECISE_TIMING.md) - Technical details on timing precision
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
 
 See LICENSE file for details.

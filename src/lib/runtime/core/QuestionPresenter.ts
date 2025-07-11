@@ -1,6 +1,6 @@
-import type { Question, Stimulus } from '$lib/questionnaire/types/questionnaire';
-import type { VariableEngine } from '$lib/questionnaire/variables/VariableEngine';
-import type { WebGLRenderer } from '$lib/renderer/WebGLRenderer';
+import type { Question, Stimulus } from '$lib/shared';
+import type { VariableEngine } from '$lib/scripting-engine';
+import type { WebGLRenderer } from '$lib/renderer';
 import type { ResourceManager } from '../resources/ResourceManager';
 import { TextRenderer } from '../renderers/TextRenderer';
 import { ImageRenderer } from '../renderers/ImageRenderer';

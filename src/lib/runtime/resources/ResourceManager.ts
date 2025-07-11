@@ -1,4 +1,4 @@
-import type { Questionnaire, Question, Stimulus } from '$lib/questionnaire/types/questionnaire';
+import type { Questionnaire, Question, Stimulus } from '$lib/shared';
 
 export interface Resource {
   id: string;

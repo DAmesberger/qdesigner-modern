@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
-  import type { Questionnaire } from '$lib/questionnaire/types/questionnaire';
+  import type { Questionnaire } from '$lib/shared';
   
   let canvas: HTMLCanvasElement;
   let runtime: QuestionnaireRuntime | null = null;

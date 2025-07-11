@@ -1,0 +1,55 @@
+{
+  "folders": [
+    {
+      "name": "🏠 Root",
+      "path": "."
+    },
+    {
+      "name": "🎨 Designer App",
+      "path": "apps/designer"
+    },
+    {
+      "name": "🔧 API",
+      "path": "packages/api"
+    },
+    {
+      "name": "🗄️ Database",
+      "path": "packages/database"
+    },
+    {
+      "name": "🎮 Renderer",
+      "path": "packages/renderer"
+    },
+    {
+      "name": "🧮 Scripting Engine",
+      "path": "packages/scripting-engine"
+    },
+    {
+      "name": "📦 Shared",
+      "path": "packages/shared"
+    }
+  ],
+  "settings": {
+    "npm.packageManager": "pnpm",
+    "eslint.workingDirectories": [
+      { "mode": "auto" }
+    ],
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true
+  },
+  "extensions": {
+    "recommendations": [
+      "svelte.svelte-vscode",
+      "esbenp.prettier-vscode",
+      "dbaeumer.vscode-eslint",
+      "bradlc.vscode-tailwindcss",
+      "ms-playwright.playwright",
+      "vitest.explorer",
+      "ms-vscode.vscode-typescript-next",
+      "christian-kohler.path-intellisense",
+      "mikestead.dotenv",
+      "usernamehw.errorlens",
+      "yoavbls.pretty-ts-errors"
+    ]
+  }
+}

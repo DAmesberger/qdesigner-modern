@@ -4,15 +4,13 @@ import type {
   Page,
   Variable,
   FlowControl,
-  QuestionVariable
-} from '$lib/questionnaire/types/questionnaire';
-import type { 
+  QuestionVariable,
   QuestionnaireSession, 
   Response,
   VariableState 
-} from '$lib/questionnaire/types/response';
-import { VariableEngine } from '$lib/questionnaire/variables/VariableEngine';
-import { WebGLRenderer } from '$lib/renderer/WebGLRenderer';
+} from '$lib/shared';
+import { VariableEngine } from '$lib/scripting-engine';
+import { WebGLRenderer } from '$lib/renderer';
 import { ResourceManager } from '../resources/ResourceManager';
 import { QuestionPresenter } from './QuestionPresenter';
 import { ResponseCollector } from './ResponseCollector';

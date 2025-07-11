@@ -1,37 +1,28 @@
 version: '3.8'
 
 services:
-  # QDesigner Development
-  qdesigner-dev:
-    build:
-      context: .
-      target: development
+  # Kong API Gateway
+  kong:
+    image: kong:3.4
+    container_name: qdesigner-kong
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: request-transformer,cors,key-auth,acl
     ports:
-      - "5173:5173"
+      - "8000:8000/tcp"
+      - "8443:8443/tcp"
     volumes:
-      - .:/app
-      - /app/node_modules
-    environment:
-      - NODE_ENV=development
-      - VITE_SUPABASE_URL=http://localhost:54321
-      - VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-    command: pnpm dev
+      - ./supabase/volumes/api/kong.yml:/var/lib/kong/kong.yml:ro
     depends_on:
-      - supabase-db
+      - supabase-auth
+    restart: unless-stopped
 
-  # QDesigner Production
-  qdesigner-prod:
-    build:
-      context: .
-      target: production
-    ports:
-      - "8080:80"
-    environment:
-      - NODE_ENV=production
-
-  # Supabase Local Development
+  # PostgreSQL Database
   supabase-db:
-    image: supabase/postgres:15.1.0.117
+    image: postgres:15-alpine
+    container_name: qdesigner-postgres
     healthcheck:
       test: pg_isready -U postgres -h localhost
       interval: 5s
@@ -47,21 +38,21 @@ services:
       - ./supabase/migrations:/docker-entrypoint-initdb.d
     restart: unless-stopped
 
+  # GoTrue Authentication Service
   supabase-auth:
     image: supabase/gotrue:v2.132.3
+    container_name: qdesigner-auth
     depends_on:
       supabase-db:
         condition: service_healthy
-    ports:
-      - "54321:9999"
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: 9999
-      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:54321}
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres?search_path=auth
       GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:5173}
-      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS}
+      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS:-http://localhost:5173,http://localhost:5174}
       GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-false}
       GOTRUE_JWT_ADMIN_ROLES: service_role
       GOTRUE_JWT_AUD: authenticated
@@ -78,13 +69,28 @@ services:
       GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-QDesigner}
     restart: unless-stopped
 
-  supabase-realtime:
-    image: supabase/realtime:v2.25.35
+  # PostgREST - RESTful API for PostgreSQL
+  supabase-rest:
+    image: postgrest/postgrest:v11.2.0
+    container_name: qdesigner-rest
     depends_on:
       supabase-db:
         condition: service_healthy
-    ports:
-      - "54323:4000"
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+    restart: unless-stopped
+
+  # Realtime - Websocket server
+  supabase-realtime:
+    image: supabase/realtime:v2.25.35
+    container_name: qdesigner-realtime
+    depends_on:
+      supabase-db:
+        condition: service_healthy
     environment:
       DB_HOST: supabase-db
       DB_PORT: 5432
@@ -97,44 +103,39 @@ services:
       REPLICATION_MODE: RLS
       REPLICATION_POLL_INTERVAL: 100
       SECURE_CHANNELS: "true"
-      SLOT_NAME: supabase_realtime_rls
+      SLOT_NAME: realtime_rls
       TEMPORARY_SLOT: "true"
     restart: unless-stopped
 
+  # Storage API
   supabase-storage:
-    image: supabase/storage-api:v0.43.11
+    image: supabase/storage-api:v0.40.4
+    container_name: qdesigner-storage
     depends_on:
       supabase-db:
         condition: service_healthy
-    ports:
-      - "54324:5000"
+      supabase-rest:
+        condition: service_started
     environment:
       ANON_KEY: ${SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
       SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
+      PROJECT_REF: qdesigner
+      POSTGREST_URL: http://supabase-rest:3000
+      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
+      PGOPTIONS: -c search_path=storage,public
       FILE_SIZE_LIMIT: 52428800
       STORAGE_BACKEND: file
       FILE_STORAGE_BACKEND_PATH: /var/lib/storage
-      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
-      ENABLE_IMAGE_TRANSFORMATION: "true"
-      IMGPROXY_URL: http://imgproxy:8080
+      # Add your S3 config here if needed
     volumes:
       - supabase-storage-data:/var/lib/storage
     restart: unless-stopped
 
-  imgproxy:
-    image: darthsim/imgproxy:v3.8.0
-    environment:
-      IMGPROXY_BIND: ":8080"
-      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /
-      IMGPROXY_USE_ETAG: "true"
-      IMGPROXY_ENABLE_WEBP_DETECTION: "true"
-    volumes:
-      - supabase-storage-data:/var/lib/storage
-
-  # Development mail server
+  # Email testing with MailHog
   mailhog:
     image: mailhog/mailhog
+    container_name: qdesigner-mailhog
     ports:
       - "1025:1025"
       - "8025:8025"

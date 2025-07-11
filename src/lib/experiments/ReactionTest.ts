@@ -1,5 +1,5 @@
-import { WebGLRenderer } from '../renderer/WebGLRenderer';
-import type { RenderCommand } from '../types/renderer';
+import { WebGLRenderer } from '$lib/renderer';
+import type { RenderCommand } from '$lib/shared';
 
 export interface ReactionTestConfig {
   stimulusDuration: number; // How long to show the stimulus (ms)

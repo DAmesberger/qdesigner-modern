@@ -1,5 +1,5 @@
 import type { IStimulus } from './Stimulus';
-import type { Stimulus as StimulusConfig } from '$lib/questionnaire/types/questionnaire';
+import type { Stimulus as StimulusConfig } from '$lib/shared';
 import { TextStimulus } from './TextStimulus';
 import { ImageStimulus } from './ImageStimulus';
 import { VideoStimulus } from './VideoStimulus';
