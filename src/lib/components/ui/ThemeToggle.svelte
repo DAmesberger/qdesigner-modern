@@ -1,14 +1,21 @@
 <script lang="ts">
   import { theme } from '$lib/stores/theme';
-  import { onMount } from 'svelte';
+  import { untrack } from 'svelte';
   
+  // Use Svelte 5's $state rune
   let currentTheme = $state<'light' | 'dark'>('light');
   
-  onMount(() => {
-    theme.init();
-    const unsubscribe = theme.subscribe(value => {
+  // Create an effect that runs when component mounts
+  $effect(() => {
+    // Initialize theme
+    untrack(() => theme.init());
+    
+    // Subscribe to theme changes
+    const unsubscribe = theme.subscribe((value) => {
       currentTheme = value;
     });
+    
+    // Cleanup on unmount
     return unsubscribe;
   });
   

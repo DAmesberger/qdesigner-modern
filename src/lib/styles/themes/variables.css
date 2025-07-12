@@ -64,38 +64,8 @@
   --ring: 263.4 70% 50.4%;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    
-    --primary: 263.4 70% 50.4%;
-    --primary-foreground: 210 40% 98%;
-    
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    
-    --ring: 263.4 70% 50.4%;
-  }
-}
+/* Removed @media (prefers-color-scheme: dark) to prevent system theme override.
+   Dark mode is now controlled exclusively by the .dark class */
 
 * {
   border-color: hsl(var(--border));

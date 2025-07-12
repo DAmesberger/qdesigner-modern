@@ -72,6 +72,13 @@ That's it! No manual configuration needed. The development environment includes:
 | Supabase | http://localhost:54321 | Database management UI |
 | Mailhog | http://localhost:8025 | Email testing interface |
 
+### Test Credentials
+
+For local development, you can use the following test account:
+
+- **Email**: `demo@example.com`
+- **Password**: `demo123456`
+
 ## 📝 Variable System
 
 The variable system supports complex formulas with:

@@ -10,13 +10,13 @@
   export let name: string | undefined = undefined;
   
   $: textareaClasses = `
-    block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm 
+    block w-full rounded-md border-0 py-1.5 text-foreground bg-background shadow-sm 
     ring-1 ring-inset focus:ring-2 focus:ring-inset sm:text-sm sm:leading-6
     ${error 
-      ? 'ring-red-300 placeholder:text-red-300 focus:ring-red-500' 
-      : 'ring-gray-300 placeholder:text-gray-400 focus:ring-indigo-600'
+      ? 'ring-destructive placeholder:text-destructive focus:ring-destructive' 
+      : 'ring-border placeholder:text-muted-foreground focus:ring-primary'
     }
-    ${disabled ? 'bg-gray-50 text-gray-500' : ''}
+    ${disabled ? 'bg-muted text-muted-foreground opacity-50' : ''}
   `;
 </script>
 

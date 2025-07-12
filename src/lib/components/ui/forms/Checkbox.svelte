@@ -8,9 +8,9 @@
   export let description: string = '';
   
   $: checkboxClasses = `
-    h-4 w-4 rounded border-gray-300 text-indigo-600 
-    focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2
-    ${disabled ? 'bg-gray-50 cursor-not-allowed' : 'cursor-pointer'}
+    h-4 w-4 rounded border-border text-primary 
+    focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background
+    ${disabled ? 'bg-muted cursor-not-allowed opacity-50' : 'cursor-pointer'}
   `;
 </script>
 
@@ -30,12 +30,12 @@
   {#if label || description}
     <div class="ml-3 text-sm leading-6">
       {#if label}
-        <label for={id} class="font-medium text-gray-900 {disabled ? 'cursor-not-allowed' : 'cursor-pointer'}">
+        <label for={id} class="font-medium text-foreground {disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}">
           {label}
         </label>
       {/if}
       {#if description}
-        <p class="text-gray-500">{description}</p>
+        <p class="text-muted-foreground">{description}</p>
       {/if}
     </div>
   {/if}

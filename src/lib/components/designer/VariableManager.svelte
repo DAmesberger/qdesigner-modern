@@ -1,11 +1,16 @@
 <script lang="ts">
   import { designerStore } from '$lib/stores/designerStore';
   import type { Variable, VariableType } from '$lib/shared';
+  import FormulaEditor from '../editor/FormulaEditor.svelte';
+  import { onMount } from 'svelte';
   
   let showAddVariable = false;
   let editingVariable: Variable | null = null;
   let variables: Variable[] = [];
   let selectedVariableId: string | null = null;
+  let showAdvancedEditor = false;
+  let showDependencyGraph = false;
+  let dependencyCanvas: HTMLCanvasElement;
 
   // Form state
   let newVariable = {
@@ -146,20 +151,188 @@
     };
     return icons[type] || '❓';
   }
+
+  // Calculate variable dependencies
+  function calculateDependencies(): Map<string, Set<string>> {
+    const deps = new Map<string, Set<string>>();
+    
+    variables.forEach(variable => {
+      if (variable.formula) {
+        const dependencies = new Set<string>();
+        // Simple regex to find variable references
+        const variableRefs = variable.formula.match(/\b[a-zA-Z_]\w*\b/g) || [];
+        
+        variableRefs.forEach(ref => {
+          // Check if it's actually a variable name
+          if (variables.some(v => v.name === ref)) {
+            dependencies.add(ref);
+          }
+        });
+        
+        deps.set(variable.name, dependencies);
+      }
+    });
+    
+    return deps;
+  }
+
+  // Draw dependency graph
+  function drawDependencyGraph() {
+    if (!dependencyCanvas) return;
+    
+    const ctx = dependencyCanvas.getContext('2d');
+    if (!ctx) return;
+    
+    const width = dependencyCanvas.width;
+    const height = dependencyCanvas.height;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+    
+    // Calculate positions for nodes
+    const nodePositions = new Map<string, { x: number; y: number }>();
+    const dependencies = calculateDependencies();
+    
+    // Simple circular layout
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(width, height) * 0.35;
+    
+    variables.forEach((variable, index) => {
+      const angle = (index / variables.length) * 2 * Math.PI;
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle);
+      nodePositions.set(variable.name, { x, y });
+    });
+    
+    // Draw edges (dependencies)
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1;
+    
+    dependencies.forEach((deps, varName) => {
+      const fromPos = nodePositions.get(varName);
+      if (!fromPos) return;
+      
+      deps.forEach(depName => {
+        const toPos = nodePositions.get(depName);
+        if (!toPos) return;
+        
+        // Draw arrow
+        ctx.beginPath();
+        ctx.moveTo(fromPos.x, fromPos.y);
+        
+        // Calculate arrow position (stop before node)
+        const dx = toPos.x - fromPos.x;
+        const dy = toPos.y - fromPos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const nodeRadius = 30;
+        
+        const endX = fromPos.x + (dx / distance) * (distance - nodeRadius);
+        const endY = fromPos.y + (dy / distance) * (distance - nodeRadius);
+        
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+        
+        // Draw arrowhead
+        const arrowSize = 8;
+        const angle = Math.atan2(dy, dx);
+        
+        ctx.beginPath();
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(
+          endX - arrowSize * Math.cos(angle - Math.PI / 6),
+          endY - arrowSize * Math.sin(angle - Math.PI / 6)
+        );
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(
+          endX - arrowSize * Math.cos(angle + Math.PI / 6),
+          endY - arrowSize * Math.sin(angle + Math.PI / 6)
+        );
+        ctx.stroke();
+      });
+    });
+    
+    // Draw nodes
+    variables.forEach(variable => {
+      const pos = nodePositions.get(variable.name);
+      if (!pos) return;
+      
+      // Node background
+      ctx.fillStyle = selectedVariableId === variable.id ? '#dbeafe' : '#f3f4f6';
+      ctx.strokeStyle = selectedVariableId === variable.id ? '#3b82f6' : '#9ca3af';
+      ctx.lineWidth = 2;
+      
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 25, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+      
+      // Variable icon
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(getVariableIcon(variable.type), pos.x, pos.y - 5);
+      
+      // Variable name
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = '#374151';
+      ctx.fillText(variable.name, pos.x, pos.y + 35);
+    });
+  }
+
+  onMount(() => {
+    if (showDependencyGraph && dependencyCanvas) {
+      drawDependencyGraph();
+    }
+  });
+
+  $: if (showDependencyGraph && dependencyCanvas && variables.length > 0) {
+    drawDependencyGraph();
+  }
 </script>
 
 <div class="bg-white rounded-lg shadow-sm border border-gray-200">
   <div class="p-4 border-b border-gray-200">
     <div class="flex items-center justify-between">
       <h3 class="text-lg font-semibold text-gray-800">Variables</h3>
-      <button
-        on:click={() => showAddVariable = true}
-        class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
-      >
-        Add Variable
-      </button>
+      <div class="flex items-center space-x-2">
+        <button
+          on:click={() => showDependencyGraph = !showDependencyGraph}
+          class="px-3 py-1 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors text-sm flex items-center space-x-1"
+          title={showDependencyGraph ? 'Hide dependency graph' : 'Show dependency graph'}
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zM9 9V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2zm6 0v6a2 2 0 002 2h2a2 2 0 002-2v-6a2 2 0 00-2-2h-2a2 2 0 00-2 2z" />
+          </svg>
+          <span>{showDependencyGraph ? 'Hide' : 'Show'} Graph</span>
+        </button>
+        <button
+          on:click={() => showAddVariable = true}
+          class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+        >
+          Add Variable
+        </button>
+      </div>
     </div>
   </div>
+
+  {#if showDependencyGraph && variables.length > 0}
+    <div class="p-4 bg-gray-50 border-b border-gray-200">
+      <h4 class="text-sm font-medium text-gray-700 mb-2">Variable Dependencies</h4>
+      <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <canvas
+          bind:this={dependencyCanvas}
+          width="400"
+          height="300"
+          class="w-full"
+          style="max-width: 400px; margin: 0 auto; display: block;"
+        />
+      </div>
+      <p class="text-xs text-gray-500 mt-2 text-center">
+        Arrows show which variables depend on others
+      </p>
+    </div>
+  {/if}
 
   <div class="p-4">
     {#if variables.length > 0}
@@ -320,21 +493,49 @@
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Formula (optional)</label>
-          <textarea
-            value={editingVariable ? editingVariable.formula : newVariable.formula}
-            on:input={(e) => {
-              const value = e.currentTarget.value;
-              if (editingVariable) {
-                editingVariable.formula = value;
-              } else {
-                newVariable.formula = value;
-              }
-            }}
-            rows="3"
-            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-            placeholder="e.g., age * 10 + reactionTime"
-          />
+          <div class="flex items-center justify-between mb-1">
+            <label class="block text-sm font-medium text-gray-700">Formula (optional)</label>
+            <button
+              type="button"
+              on:click={() => showAdvancedEditor = !showAdvancedEditor}
+              class="text-xs text-blue-600 hover:text-blue-700"
+            >
+              {showAdvancedEditor ? 'Simple Editor' : 'Advanced Editor'}
+            </button>
+          </div>
+          
+          {#if showAdvancedEditor}
+            <FormulaEditor
+              value={editingVariable ? editingVariable.formula || '' : newVariable.formula}
+              on:change={(e) => {
+                const value = e.detail;
+                if (editingVariable) {
+                  editingVariable.formula = value;
+                } else {
+                  newVariable.formula = value;
+                }
+              }}
+              height="150px"
+              placeholder="e.g., age * 10 + reactionTime"
+              variables={Object.fromEntries(variables.map(v => [v.name, v.type]))}
+            />
+          {:else}
+            <textarea
+              value={editingVariable ? editingVariable.formula : newVariable.formula}
+              on:input={(e) => {
+                const value = e.currentTarget.value;
+                if (editingVariable) {
+                  editingVariable.formula = value;
+                } else {
+                  newVariable.formula = value;
+                }
+              }}
+              rows="3"
+              class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+              placeholder="e.g., age * 10 + reactionTime"
+            />
+          {/if}
+          
           <p class="text-xs text-gray-500 mt-1">
             Use other variable names directly in formulas
           </p>

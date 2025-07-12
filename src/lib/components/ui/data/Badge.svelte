@@ -4,14 +4,14 @@
   export let dot = false;
   
   const variantClasses = {
-    gray: 'bg-gray-50 text-gray-600 ring-gray-500/10',
-    red: 'bg-red-50 text-red-700 ring-red-600/10',
-    yellow: 'bg-yellow-50 text-yellow-800 ring-yellow-600/20',
-    green: 'bg-green-50 text-green-700 ring-green-600/20',
-    blue: 'bg-blue-50 text-blue-700 ring-blue-700/10',
-    indigo: 'bg-indigo-50 text-indigo-700 ring-indigo-700/10',
-    purple: 'bg-purple-50 text-purple-700 ring-purple-700/10',
-    pink: 'bg-pink-50 text-pink-700 ring-pink-700/10'
+    gray: 'bg-muted text-muted-foreground ring-border',
+    red: 'bg-destructive/10 text-destructive ring-destructive/20',
+    yellow: 'bg-yellow-50 text-yellow-800 ring-yellow-600/20 dark:bg-yellow-900/10 dark:text-yellow-400 dark:ring-yellow-400/20',
+    green: 'bg-green-50 text-green-700 ring-green-600/20 dark:bg-green-900/10 dark:text-green-400 dark:ring-green-400/20',
+    blue: 'bg-blue-50 text-blue-700 ring-blue-700/10 dark:bg-blue-900/10 dark:text-blue-400 dark:ring-blue-400/20',
+    indigo: 'bg-primary/10 text-primary ring-primary/20',
+    purple: 'bg-purple-50 text-purple-700 ring-purple-700/10 dark:bg-purple-900/10 dark:text-purple-400 dark:ring-purple-400/20',
+    pink: 'bg-pink-50 text-pink-700 ring-pink-700/10 dark:bg-pink-900/10 dark:text-pink-400 dark:ring-pink-400/20'
   };
   
   const sizeClasses = {
@@ -20,14 +20,14 @@
   };
   
   const dotColors = {
-    gray: 'fill-gray-500',
-    red: 'fill-red-500',
-    yellow: 'fill-yellow-500',
-    green: 'fill-green-500',
-    blue: 'fill-blue-500',
-    indigo: 'fill-indigo-500',
-    purple: 'fill-purple-500',
-    pink: 'fill-pink-500'
+    gray: 'fill-muted-foreground',
+    red: 'fill-destructive',
+    yellow: 'fill-yellow-500 dark:fill-yellow-400',
+    green: 'fill-green-500 dark:fill-green-400',
+    blue: 'fill-blue-500 dark:fill-blue-400',
+    indigo: 'fill-primary',
+    purple: 'fill-purple-500 dark:fill-purple-400',
+    pink: 'fill-pink-500 dark:fill-pink-400'
   };
 </script>
 

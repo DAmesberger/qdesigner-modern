@@ -8,37 +8,41 @@ function createThemeStore() {
     ? (localStorage.getItem('theme') as Theme) || 'light'
     : 'light';
   
-  const { subscribe, set, update } = writable<Theme>(storedTheme);
+  const store = writable<Theme>(storedTheme);
+  const { subscribe, set: setStore, update: updateStore } = store;
 
   return {
     subscribe,
     toggle: () => {
-      update(theme => {
+      updateStore(theme => {
         const newTheme = theme === 'light' ? 'dark' : 'light';
         if (typeof window !== 'undefined') {
           localStorage.setItem('theme', newTheme);
+          // Remove old theme class and add new one without affecting other classes
           document.documentElement.classList.remove('light', 'dark');
           document.documentElement.classList.add(newTheme);
         }
         return newTheme;
       });
     },
-    set: (theme: Theme) => {
+    set: (newTheme: Theme) => {
       if (typeof window !== 'undefined') {
-        localStorage.setItem('theme', theme);
+        localStorage.setItem('theme', newTheme);
+        // Remove old theme class and add new one without affecting other classes
         document.documentElement.classList.remove('light', 'dark');
-        document.documentElement.classList.add(theme);
+        document.documentElement.classList.add(newTheme);
       }
-      set(theme);
+      setStore(newTheme);
     },
     init: () => {
       if (typeof window !== 'undefined') {
         const savedTheme = (localStorage.getItem('theme') as Theme) || 
           (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         
+        // Remove any existing theme classes and add the correct one
         document.documentElement.classList.remove('light', 'dark');
         document.documentElement.classList.add(savedTheme);
-        set(savedTheme);
+        setStore(savedTheme);
       }
     }
   };

@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env.development') });
 
-const supabaseUrl = process.env.PUBLIC_SUPABASE_URL || 'http://localhost:54321';
+const supabaseUrl = process.env.PUBLIC_SUPABASE_URL || 'http://localhost:8000';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
 
 // Create admin client with service role key
@@ -63,7 +63,11 @@ async function createTestUser() {
     console.log('   Password: test123456');
 
   } catch (error) {
-    console.error('❌ Error creating test user:', error.message);
+    console.error('❌ Error creating test user:', error);
+    if (error instanceof Error) {
+      console.error('   Message:', error.message);
+      console.error('   Stack:', error.stack);
+    }
     process.exit(1);
   }
 }

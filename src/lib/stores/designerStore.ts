@@ -318,6 +318,17 @@ function createDesignerStore() {
       })
     ),
 
+    // Update page questions (for drag and drop reordering)
+    updatePageQuestions: (pageId: string, questionIds: string[]) => update(state =>
+      produce(saveUndoState(state), draft => {
+        const page = draft.questionnaire.pages.find(p => p.id === pageId);
+        if (page) {
+          page.questions = questionIds;
+          draft.questionnaire.modified = new Date();
+        }
+      })
+    ),
+
     // Reorder questions within a page
     reorderQuestions: (pageId: string, oldIndex: number, newIndex: number) => update(state =>
       produce(saveUndoState(state), draft => {

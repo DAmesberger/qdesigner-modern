@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import * as monaco from 'monaco-editor';
   import type { Question } from '$lib/shared';
   
   export let question: Question;
   export let onUpdate: (script: string) => void;
   
   let editorContainer: HTMLDivElement;
-  let editor: monaco.editor.IStandaloneCodeEditor;
+  let editor: any;
+  let monaco: any;
   
   // Script template
   const scriptTemplate = `// Question Script: ${question.name || question.id}
@@ -137,59 +137,69 @@ declare namespace QuestionAPI {
 }
 `;
   
-  onMount(() => {
-    // Configure Monaco
-    monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
-      noSemanticValidation: false,
-      noSyntaxValidation: false,
-    });
+  onMount(async () => {
+    // Only load Monaco in browser environment
+    if (typeof window === 'undefined') return;
     
-    monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
-      target: monaco.languages.typescript.ScriptTarget.ES2020,
-      allowNonTsExtensions: true,
-      moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-      module: monaco.languages.typescript.ModuleKind.ESNext,
-      allowJs: true,
-    });
-    
-    // Add type definitions
-    monaco.languages.typescript.javascriptDefaults.addExtraLib(
-      typeDefinitions,
-      'questionapi.d.ts'
-    );
-    
-    // Create editor
-    editor = monaco.editor.create(editorContainer, {
-      value: question.settings?.script || scriptTemplate,
-      language: 'javascript',
-      theme: 'vs-dark',
-      minimap: { enabled: false },
-      automaticLayout: true,
-      fontSize: 13,
-      lineNumbers: 'on',
-      scrollBeyondLastLine: false,
-      wordWrap: 'on',
-      formatOnPaste: true,
-      formatOnType: true,
-      suggestOnTriggerCharacters: true,
-      quickSuggestions: {
-        other: true,
-        comments: false,
-        strings: true,
-      },
-    });
-    
-    // Handle changes
-    editor.onDidChangeModelContent(() => {
-      const value = editor.getValue();
-      onUpdate(value);
-    });
-    
-    // Add keyboard shortcuts
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_S, () => {
-      // Save shortcut - could trigger save
-      console.log('Save triggered');
-    });
+    try {
+      // Dynamically import Monaco
+      monaco = await import('monaco-editor');
+      
+      // Configure Monaco
+      monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+        noSemanticValidation: false,
+        noSyntaxValidation: false,
+      });
+      
+      monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+        target: monaco.languages.typescript.ScriptTarget.ES2020,
+        allowNonTsExtensions: true,
+        moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+        module: monaco.languages.typescript.ModuleKind.ESNext,
+        allowJs: true,
+      });
+      
+      // Add type definitions
+      monaco.languages.typescript.javascriptDefaults.addExtraLib(
+        typeDefinitions,
+        'questionapi.d.ts'
+      );
+      
+      // Create editor
+      editor = monaco.editor.create(editorContainer, {
+        value: question.settings?.script || scriptTemplate,
+        language: 'javascript',
+        theme: 'vs-dark',
+        minimap: { enabled: false },
+        automaticLayout: true,
+        fontSize: 13,
+        lineNumbers: 'on',
+        scrollBeyondLastLine: false,
+        wordWrap: 'on',
+        formatOnPaste: true,
+        formatOnType: true,
+        suggestOnTriggerCharacters: true,
+        quickSuggestions: {
+          other: true,
+          comments: false,
+          strings: true,
+        },
+      });
+      
+      // Handle changes
+      editor.onDidChangeModelContent(() => {
+        const value = editor.getValue();
+        onUpdate(value);
+      });
+      
+      // Add keyboard shortcuts
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_S, () => {
+        // Save shortcut - could trigger save
+        console.log('Save triggered');
+      });
+    } catch (error) {
+      console.error('Failed to load Monaco Editor:', error);
+    }
   });
   
   onDestroy(() => {
