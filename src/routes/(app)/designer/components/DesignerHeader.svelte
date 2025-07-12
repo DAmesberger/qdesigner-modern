@@ -152,7 +152,7 @@
     
     <!-- Preview Button -->
     <button
-      on:click={() => designerStore.togglePreview()}
+      on:click={() => dispatch('togglePreview')}
       class="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
     >
       Preview

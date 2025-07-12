@@ -13,10 +13,13 @@
   import RightSidebar from './components/RightSidebar.svelte';
   import WYSIWYGCanvas from './WYSIWYGCanvas.svelte';
   import StructuralCanvas from './StructuralCanvas.svelte';
+  import RealtimePreview from '$lib/components/designer/RealtimePreview.svelte';
   
   // State
   let viewMode: 'structural' | 'wysiwyg' = 'wysiwyg';
   let activeTab: 'blocks' | 'questions' | 'variables' | 'flow' = 'blocks';
+  let showPreview = false;
+  let previewSplitPosition = 50; // percentage
   
   // Initialize
   onMount(() => {
@@ -42,7 +45,7 @@
           break;
         case 'p':
           e.preventDefault();
-          designerStore.togglePreview();
+          showPreview = !showPreview;
           break;
         case 'd':
           e.preventDefault();
@@ -78,6 +81,7 @@
     questionCount={$designerStore.questionnaire.questions.length}
     {viewMode}
     on:viewModeChange={handleViewModeChange}
+    on:togglePreview={() => showPreview = !showPreview}
   />
   
   <!-- Main Content -->
@@ -86,11 +90,46 @@
     <LeftSidebar bind:activeTab />
     
     <!-- Canvas Area -->
-    <main class="flex-1 overflow-hidden bg-gray-50 relative">
-      {#if viewMode === 'structural'}
-        <StructuralCanvas />
-      {:else}
-        <WYSIWYGCanvas />
+    <main class="flex-1 overflow-hidden bg-gray-50 relative flex">
+      <!-- Designer Canvas -->
+      <div 
+        class="flex-1 overflow-hidden"
+        style="width: {showPreview ? previewSplitPosition : 100}%"
+      >
+        {#if viewMode === 'structural'}
+          <StructuralCanvas />
+        {:else}
+          <WYSIWYGCanvas />
+        {/if}
+      </div>
+      
+      <!-- Preview Panel -->
+      {#if showPreview}
+        <div 
+          class="preview-panel overflow-hidden border-l border-gray-300"
+          style="width: {100 - previewSplitPosition}%"
+        >
+          <div class="preview-header">
+            <h3 class="text-sm font-semibold text-gray-700">Live Preview</h3>
+            <button
+              on:click={() => showPreview = false}
+              class="p-1 hover:bg-gray-100 rounded"
+              title="Close preview (Ctrl+P)"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div class="preview-content">
+            <RealtimePreview 
+              autoUpdate={true}
+              updateDelay={300}
+              showDebugPanel={false}
+              interactive={true}
+            />
+          </div>
+        </div>
       {/if}
     </main>
     
@@ -100,6 +139,26 @@
 </div>
 
 <style>
+  .preview-panel {
+    display: flex;
+    flex-direction: column;
+    background: white;
+  }
+  
+  .preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+  }
+  
+  .preview-content {
+    flex: 1;
+    overflow: hidden;
+  }
+  
   /* Responsive breakpoints for mobile/tablet */
   @media (max-width: 768px) {
     /* Stack layout vertically on mobile */

@@ -47,17 +47,19 @@ export class VariableEngine {
    * Register a variable in the engine
    */
   public registerVariable(variable: Variable): void {
-    this.variables.set(variable.id, variable);
+    // Use variable.name as the key since our Variable interface uses 'name' not 'id'
+    const varId = variable.name;
+    this.variables.set(varId, variable);
     
     // Initialize with default value if provided
     if (variable.defaultValue !== undefined) {
-      this.setVariable(variable.id, variable.defaultValue, 'default');
+      this.setVariable(varId, variable.defaultValue, 'default');
     }
 
     // Build dependency graph if formula exists
     if (variable.formula) {
       const dependencies = this.extractDependencies(variable.formula);
-      this.dependencyGraph.set(variable.id, new Set(dependencies));
+      this.dependencyGraph.set(varId, new Set(dependencies));
       
       // Update reverse dependencies
       dependencies.forEach(depId => {
@@ -362,15 +364,22 @@ export class VariableEngine {
   public getAllVariables(): Record<string, any> {
     const result: Record<string, any> = {};
     
-    for (const [id, variable] of this.variables) {
+    for (const [varName, variable] of this.variables) {
       try {
-        result[variable.name] = this.getVariable(id);
+        result[varName] = this.getVariable(varName);
       } catch (error) {
-        result[variable.name] = null;
+        result[varName] = null;
       }
     }
 
     return result;
+  }
+  
+  /**
+   * Set value by variable name (alias for setVariable)
+   */
+  public setValue(name: string, value: any): void {
+    this.setVariable(name, value, 'runtime');
   }
 
   /**
