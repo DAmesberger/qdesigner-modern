@@ -2,7 +2,9 @@
   import { 
     designerStore, 
     currentPage, 
-    currentPageQuestions 
+    currentPageBlocks,
+    currentBlock,
+    currentBlockQuestions 
   } from '$lib/stores/designerStore';
   import QuestionVisualRenderer from '$lib/wysiwyg/QuestionVisualRenderer.svelte';
   import LiveTestRunner from '$lib/wysiwyg/LiveTestRunner.svelte';
@@ -14,8 +16,8 @@
   let theme = defaultTheme;
   let showTestRunner = false;
   
-  // DnD items
-  $: items = $currentPageQuestions.map(q => ({ 
+  // DnD items - show questions from current block
+  $: items = $currentBlockQuestions.map(q => ({ 
     id: q.id, 
     question: q 
   }));
@@ -24,8 +26,8 @@
     const newItems = e.detail.items;
     // Update order in store
     const questionIds = newItems.map((item: any) => item.id);
-    if ($currentPage) {
-      designerStore.updatePageQuestions($currentPage.id, questionIds);
+    if ($currentBlock) {
+      designerStore.updateBlockQuestions($currentBlock.id, questionIds);
     }
   }
   
@@ -40,10 +42,10 @@
   function handleDrop(e: DragEvent) {
     e.preventDefault();
     const data = e.dataTransfer?.getData('application/json');
-    if (data && $currentPage) {
+    if (data && $currentBlock) {
       const parsedData = JSON.parse(data);
       if (parsedData.type === 'new-question' && parsedData.questionType) {
-        designerStore.addQuestion($currentPage.id, parsedData.questionType);
+        designerStore.addQuestion($currentBlock.id, parsedData.questionType);
       }
     }
   }
@@ -99,9 +101,43 @@
       >
         <!-- Page Header -->
         <div class="px-8 pt-8 pb-4 border-b border-gray-100">
-          <h2 class="text-xl font-semibold text-gray-900">
-            {$currentPage?.name || 'Page 1'}
-          </h2>
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-semibold text-gray-900">
+                {$currentPage?.name || 'Page 1'}
+              </h2>
+              {#if $currentBlock}
+                <p class="text-sm text-gray-500 mt-1 flex items-center">
+                  <span class="text-gray-400 mr-1">›</span>
+                  {$currentBlock.name || 'Untitled Block'}
+                  {#if $currentBlock.type !== 'standard'}
+                    <span class="ml-2 text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600">
+                      {$currentBlock.type}
+                    </span>
+                  {/if}
+                </p>
+              {/if}
+            </div>
+            
+            <!-- Block selector -->
+            {#if $currentPageBlocks.length > 1}
+              <div class="flex items-center space-x-2">
+                <label class="text-sm text-gray-600">Block:</label>
+                <select
+                  value={$currentBlock?.id}
+                  on:change={(e) => designerStore.setCurrentBlock(e.currentTarget.value)}
+                  class="text-sm px-3 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {#each $currentPageBlocks as block}
+                    <option value={block.id}>
+                      {block.name || 'Untitled Block'}
+                      ({block.questions.length} questions)
+                    </option>
+                  {/each}
+                </select>
+              </div>
+            {/if}
+          </div>
         </div>
         
         <!-- Questions Area -->

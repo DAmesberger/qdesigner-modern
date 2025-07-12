@@ -48,7 +48,8 @@ export interface ValidationRule {
 export interface Question {
   id: string;
   type: QuestionType;
-  page?: string; // Page ID
+  page?: string; // Page ID (deprecated, use blockId)
+  blockId?: string; // Block ID this question belongs to
   stimulus?: Stimulus;
   prompt?: TextContent;
   responseType: ResponseType;
@@ -156,10 +157,37 @@ export interface DisplayCondition {
 export interface Page {
   id: string;
   name?: string;
-  questions: string[]; // Question IDs
+  blocks: Block[]; // Blocks containing questions
+  questions?: string[]; // Direct question IDs (for backward compatibility)
   layout?: LayoutConfig;
   transitions?: PageTransition;
   conditions?: DisplayCondition[];
+}
+
+export interface Block {
+  id: string;
+  pageId: string;
+  name?: string;
+  type: 'standard' | 'randomized' | 'conditional' | 'loop';
+  questions: string[]; // Question IDs in this block
+  layout?: LayoutConfig;
+  conditions?: DisplayCondition[];
+  randomization?: RandomizationConfig;
+  loop?: LoopConfig;
+  metadata?: Record<string, any>;
+}
+
+export interface RandomizationConfig {
+  enabled: boolean;
+  preserveFirst?: number; // Keep first N questions in order
+  preserveLast?: number; // Keep last N questions in order
+  grouping?: string[][]; // Groups of question IDs that stay together
+}
+
+export interface LoopConfig {
+  iterations: number | string; // Number or formula
+  iterationVariable?: string; // Variable to store current iteration
+  exitCondition?: string; // Formula to break loop early
 }
 
 export interface LayoutConfig {

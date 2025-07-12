@@ -16,7 +16,7 @@
   
   // State
   let viewMode: 'structural' | 'wysiwyg' = 'wysiwyg';
-  let activeTab: 'questions' | 'variables' | 'flow' = 'questions';
+  let activeTab: 'blocks' | 'questions' | 'variables' | 'flow' = 'blocks';
   
   // Initialize
   onMount(() => {
@@ -74,6 +74,7 @@
   <DesignerHeader
     questionnaireName={$designerStore.questionnaire.name}
     pageCount={$designerStore.questionnaire.pages.length}
+    blockCount={$designerStore.questionnaire.pages.reduce((acc, p) => acc + p.blocks.length, 0)}
     questionCount={$designerStore.questionnaire.questions.length}
     {viewMode}
     on:viewModeChange={handleViewModeChange}

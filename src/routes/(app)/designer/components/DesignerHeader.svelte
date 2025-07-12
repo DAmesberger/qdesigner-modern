@@ -12,6 +12,7 @@
   
   export let questionnaireName: string;
   export let pageCount: number;
+  export let blockCount: number;
   export let questionCount: number;
   export let viewMode: 'structural' | 'wysiwyg';
   
@@ -81,7 +82,7 @@
       {questionnaireName || 'Untitled Questionnaire'}
     </h1>
     <p class="text-xs text-gray-500">
-      {pageCount} {pageCount === 1 ? 'page' : 'pages'} • {questionCount} {questionCount === 1 ? 'question' : 'questions'}
+      {pageCount} {pageCount === 1 ? 'page' : 'pages'} • {blockCount} {blockCount === 1 ? 'block' : 'blocks'} • {questionCount} {questionCount === 1 ? 'question' : 'questions'}
     </p>
   </div>
   

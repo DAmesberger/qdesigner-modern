@@ -5,6 +5,7 @@ import type {
   Questionnaire, 
   Question, 
   Page, 
+  Block,
   Variable, 
   FlowControl,
   QuestionType,
@@ -16,10 +17,11 @@ import { QuestionnairePersistenceService } from '$lib/services/questionnairePers
 export interface DesignerState {
   questionnaire: Questionnaire;
   selectedItemId: string | null;
-  selectedItemType: 'question' | 'page' | 'variable' | 'flow' | null;
+  selectedItemType: 'question' | 'page' | 'block' | 'variable' | 'flow' | null;
   isDragging: boolean;
   previewMode: boolean;
   currentPageId: string | null;
+  currentBlockId: string | null;
   validationErrors: ValidationError[];
   undoStack: Questionnaire[];
   redoStack: Questionnaire[];
@@ -38,29 +40,42 @@ export interface ValidationError {
 }
 
 // Initial empty questionnaire
-const createEmptyQuestionnaire = (): Questionnaire => ({
-  id: nanoid(),
-  name: 'New Questionnaire',
-  description: '',
-  version: '1.0.0',
-  created: new Date(),
-  modified: new Date(),
-  variables: [],
-  questions: [],
-  pages: [{
-    id: 'page1',
-    name: 'Page 1',
+const createEmptyQuestionnaire = (): Questionnaire => {
+  const firstPageId = 'page1';
+  const firstBlockId = 'block1';
+  
+  return {
+    id: nanoid(),
+    name: 'New Questionnaire',
+    description: '',
+    version: '1.0.0',
+    created: new Date(),
+    modified: new Date(),
+    variables: [],
     questions: [],
-    layout: { type: 'vertical', spacing: 16, alignment: 'center' }
-  }],
-  flow: [],
-  settings: {
-    allowBackNavigation: true,
-    showProgressBar: true,
-    saveProgress: true,
-    webgl: { targetFPS: 120 }
-  }
-});
+    pages: [{
+      id: firstPageId,
+      name: 'Page 1',
+      blocks: [{
+        id: firstBlockId,
+        pageId: firstPageId,
+        name: 'Block 1',
+        type: 'standard',
+        questions: [],
+        layout: { type: 'vertical', spacing: 16, alignment: 'center' }
+      }],
+      questions: [], // Keep for backward compatibility
+      layout: { type: 'vertical', spacing: 16, alignment: 'center' }
+    }],
+    flow: [],
+    settings: {
+      allowBackNavigation: true,
+      showProgressBar: true,
+      saveProgress: true,
+      webgl: { targetFPS: 120 }
+    }
+  };
+};
 
 // Create the main designer store
 function createDesignerStore() {
@@ -71,6 +86,7 @@ function createDesignerStore() {
     isDragging: false,
     previewMode: false,
     currentPageId: 'page1',
+    currentBlockId: 'block1',
     validationErrors: [],
     undoStack: [],
     redoStack: [],
@@ -154,16 +170,91 @@ function createDesignerStore() {
       })
     ),
 
-    // Question operations
-    addQuestion: (pageId: string, questionType: QuestionType, position?: number) => update(state =>
+    // Block operations
+    addBlock: (pageId: string, blockType: Block['type'] = 'standard') => update(state =>
       produce(saveUndoState(state), draft => {
         const page = draft.questionnaire.pages.find(p => p.id === pageId);
         if (!page) return;
 
+        const newBlock: Block = {
+          id: `block${nanoid(6)}`,
+          pageId,
+          name: `Block ${page.blocks.length + 1}`,
+          type: blockType,
+          questions: [],
+          layout: { type: 'vertical', spacing: 16, alignment: 'center' }
+        };
+
+        page.blocks.push(newBlock);
+        draft.questionnaire.modified = new Date();
+      })
+    ),
+
+    updateBlock: (blockId: string, updates: Partial<Block>) => update(state =>
+      produce(saveUndoState(state), draft => {
+        for (const page of draft.questionnaire.pages) {
+          const block = page.blocks.find(b => b.id === blockId);
+          if (block) {
+            Object.assign(block, updates);
+            draft.questionnaire.modified = new Date();
+            break;
+          }
+        }
+      })
+    ),
+
+    deleteBlock: (blockId: string) => update(state =>
+      produce(saveUndoState(state), draft => {
+        for (const page of draft.questionnaire.pages) {
+          const blockIndex = page.blocks.findIndex(b => b.id === blockId);
+          if (blockIndex !== -1) {
+            const block = page.blocks[blockIndex];
+            // Remove questions in this block
+            draft.questionnaire.questions = draft.questionnaire.questions.filter(
+              q => q.blockId !== blockId
+            );
+            // Remove the block
+            page.blocks.splice(blockIndex, 1);
+            // Update current block if needed
+            if (draft.currentBlockId === blockId && page.blocks.length > 0) {
+              draft.currentBlockId = page.blocks[0].id;
+            }
+            draft.questionnaire.modified = new Date();
+            break;
+          }
+        }
+      })
+    ),
+
+    setCurrentBlock: (blockId: string) => update(state =>
+      produce(state, draft => {
+        draft.currentBlockId = blockId;
+      })
+    ),
+
+    // Question operations
+    addQuestion: (blockId: string, questionType: QuestionType, position?: number) => update(state =>
+      produce(saveUndoState(state), draft => {
+        // Find the block
+        let targetBlock: Block | undefined;
+        let targetPage: Page | undefined;
+        
+        for (const page of draft.questionnaire.pages) {
+          const block = page.blocks.find(b => b.id === blockId);
+          if (block) {
+            targetBlock = block;
+            targetPage = page;
+            break;
+          }
+        }
+        
+        if (!targetBlock || !targetPage) return;
+
         const newQuestion: Question = {
           id: `q${nanoid(6)}`,
           type: questionType,
-          page: pageId,
+          blockId: blockId,
+          page: targetPage.id, // Keep for backward compatibility
           prompt: { text: 'New Question' },
           responseType: { type: 'single' },
           variables: []
@@ -172,11 +263,11 @@ function createDesignerStore() {
         // Add question to questionnaire
         draft.questionnaire.questions.push(newQuestion);
 
-        // Add question ID to page
+        // Add question ID to block
         if (position !== undefined && position >= 0) {
-          page.questions.splice(position, 0, newQuestion.id);
+          targetBlock.questions.splice(position, 0, newQuestion.id);
         } else {
-          page.questions.push(newQuestion.id);
+          targetBlock.questions.push(newQuestion.id);
         }
 
         // Select the new question
@@ -204,11 +295,19 @@ function createDesignerStore() {
           draft.questionnaire.questions.splice(qIndex, 1);
         }
 
-        // Remove from page
+        // Remove from blocks
         draft.questionnaire.pages.forEach(page => {
-          const index = page.questions.indexOf(questionId);
-          if (index !== -1) {
-            page.questions.splice(index, 1);
+          page.blocks.forEach(block => {
+            const index = block.questions.indexOf(questionId);
+            if (index !== -1) {
+              block.questions.splice(index, 1);
+            }
+          });
+          
+          // Also check direct page questions for backward compatibility
+          const index = page.questions?.indexOf(questionId);
+          if (index !== undefined && index !== -1) {
+            page.questions!.splice(index, 1);
           }
         });
 
@@ -318,52 +417,87 @@ function createDesignerStore() {
       })
     ),
 
-    // Update page questions (for drag and drop reordering)
+    // Update block questions (for drag and drop reordering)
+    updateBlockQuestions: (blockId: string, questionIds: string[]) => update(state =>
+      produce(saveUndoState(state), draft => {
+        for (const page of draft.questionnaire.pages) {
+          const block = page.blocks.find(b => b.id === blockId);
+          if (block) {
+            block.questions = questionIds;
+            draft.questionnaire.modified = new Date();
+            break;
+          }
+        }
+      })
+    ),
+
+    // Update page questions (for backward compatibility)
     updatePageQuestions: (pageId: string, questionIds: string[]) => update(state =>
       produce(saveUndoState(state), draft => {
         const page = draft.questionnaire.pages.find(p => p.id === pageId);
-        if (page) {
+        if (page && page.questions) {
           page.questions = questionIds;
           draft.questionnaire.modified = new Date();
         }
       })
     ),
 
-    // Reorder questions within a page
-    reorderQuestions: (pageId: string, oldIndex: number, newIndex: number) => update(state =>
+    // Reorder questions within a block
+    reorderQuestionsInBlock: (blockId: string, oldIndex: number, newIndex: number) => update(state =>
+      produce(saveUndoState(state), draft => {
+        for (const page of draft.questionnaire.pages) {
+          const block = page.blocks.find(b => b.id === blockId);
+          if (block) {
+            const [removed] = block.questions.splice(oldIndex, 1);
+            block.questions.splice(newIndex, 0, removed);
+            draft.questionnaire.modified = new Date();
+            break;
+          }
+        }
+      })
+    ),
+
+    // Reorder blocks within a page
+    reorderBlocks: (pageId: string, oldIndex: number, newIndex: number) => update(state =>
       produce(saveUndoState(state), draft => {
         const page = draft.questionnaire.pages.find(p => p.id === pageId);
         if (page) {
-          const [removed] = page.questions.splice(oldIndex, 1);
-          page.questions.splice(newIndex, 0, removed);
+          const [removed] = page.blocks.splice(oldIndex, 1);
+          page.blocks.splice(newIndex, 0, removed);
           draft.questionnaire.modified = new Date();
         }
       })
     ),
 
-    // Move question between pages
-    moveQuestionToPage: (questionId: string, targetPageId: string, position?: number) => 
+    // Move question between blocks
+    moveQuestionToBlock: (questionId: string, targetBlockId: string, position?: number) => 
       update(state => produce(saveUndoState(state), draft => {
         const question = draft.questionnaire.questions.find(q => q.id === questionId);
         if (!question) return;
 
-        // Remove from current page
+        // Remove from current block
         draft.questionnaire.pages.forEach(page => {
-          const index = page.questions.indexOf(questionId);
-          if (index !== -1) {
-            page.questions.splice(index, 1);
-          }
+          page.blocks.forEach(block => {
+            const index = block.questions.indexOf(questionId);
+            if (index !== -1) {
+              block.questions.splice(index, 1);
+            }
+          });
         });
 
-        // Add to target page
-        const targetPage = draft.questionnaire.pages.find(p => p.id === targetPageId);
-        if (targetPage) {
-          if (position !== undefined) {
-            targetPage.questions.splice(position, 0, questionId);
-          } else {
-            targetPage.questions.push(questionId);
+        // Find target block and add question
+        for (const page of draft.questionnaire.pages) {
+          const targetBlock = page.blocks.find(b => b.id === targetBlockId);
+          if (targetBlock) {
+            if (position !== undefined) {
+              targetBlock.questions.splice(position, 0, questionId);
+            } else {
+              targetBlock.questions.push(questionId);
+            }
+            question.blockId = targetBlockId;
+            question.page = page.id; // Update page for backward compatibility
+            break;
           }
-          question.page = targetPageId;
         }
 
         draft.questionnaire.modified = new Date();
@@ -591,9 +725,53 @@ export const currentPageQuestions = derived(
     const page = $state.questionnaire.pages.find(p => p.id === $state.currentPageId);
     if (!page) return [];
     
-    return page.questions
+    // Get all questions from all blocks in the page
+    const questionIds: string[] = [];
+    page.blocks.forEach(block => {
+      questionIds.push(...block.questions);
+    });
+    
+    // Also include direct page questions for backward compatibility
+    if (page.questions) {
+      questionIds.push(...page.questions);
+    }
+    
+    return questionIds
       .map(qId => $state.questionnaire.questions.find(q => q.id === qId))
       .filter(Boolean) as Question[];
+  }
+);
+
+export const currentBlock = derived(
+  designerStore,
+  $state => {
+    if (!$state.currentBlockId) return null;
+    
+    for (const page of $state.questionnaire.pages) {
+      const block = page.blocks.find(b => b.id === $state.currentBlockId);
+      if (block) return block;
+    }
+    return null;
+  }
+);
+
+export const currentBlockQuestions = derived(
+  designerStore,
+  $state => {
+    const block = get(currentBlock);
+    if (!block) return [];
+    
+    return block.questions
+      .map(qId => $state.questionnaire.questions.find(q => q.id === qId))
+      .filter(Boolean) as Question[];
+  }
+);
+
+export const currentPageBlocks = derived(
+  designerStore,
+  $state => {
+    const page = $state.questionnaire.pages.find(p => p.id === $state.currentPageId);
+    return page?.blocks || [];
   }
 );
 
@@ -607,6 +785,12 @@ export const selectedItem = derived(
         return $state.questionnaire.questions.find(q => q.id === $state.selectedItemId);
       case 'page':
         return $state.questionnaire.pages.find(p => p.id === $state.selectedItemId);
+      case 'block':
+        for (const page of $state.questionnaire.pages) {
+          const block = page.blocks.find(b => b.id === $state.selectedItemId);
+          if (block) return block;
+        }
+        return null;
       case 'variable':
         return $state.questionnaire.variables.find(v => v.id === $state.selectedItemId);
       case 'flow':

@@ -2,9 +2,10 @@
   import { slide } from 'svelte/transition';
   import { onMount } from 'svelte';
   import QuestionPalette from '$lib/components/designer/QuestionPalette.svelte';
+  import BlockManager from '$lib/components/designer/BlockManager.svelte';
   import VariableManager from '$lib/components/designer/VariableManager.svelte';
   
-  export let activeTab: 'questions' | 'variables' | 'flow' = 'questions';
+  export let activeTab: 'blocks' | 'questions' | 'variables' | 'flow' = 'blocks';
   
   let isCollapsed = false;
   
@@ -23,6 +24,7 @@
   }
   
   const tabs = [
+    { id: 'blocks', label: 'Blocks', icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z' },
     { id: 'questions', label: 'Questions', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
     { id: 'variables', label: 'Variables', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
     { id: 'flow', label: 'Flow', icon: 'M13 10V3L4 14h7v7l9-11h-7z' }
@@ -73,7 +75,9 @@
       
       <!-- Tab Content -->
       <div class="flex-1 overflow-y-auto">
-        {#if activeTab === 'questions'}
+        {#if activeTab === 'blocks'}
+          <BlockManager />
+        {:else if activeTab === 'questions'}
           <QuestionPalette />
         {:else if activeTab === 'variables'}
           <VariableManager />
