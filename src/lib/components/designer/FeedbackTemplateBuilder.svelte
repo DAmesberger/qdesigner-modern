@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import MonacoEditor from '$lib/components/MonacoEditor.svelte';
+  import MonacoEditor from '$lib/wysiwyg/MonacoEditor.svelte';
   import type { Variable } from '$lib/shared/types/variables';
   
   export let template: string = '';

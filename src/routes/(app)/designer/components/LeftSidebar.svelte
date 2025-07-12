@@ -4,6 +4,7 @@
   import QuestionPalette from '$lib/components/designer/QuestionPalette.svelte';
   import BlockManager from '$lib/components/designer/BlockManager.svelte';
   import VariableManager from '$lib/components/designer/VariableManager.svelte';
+  import theme from '$lib/theme';
   
   export let activeTab: 'blocks' | 'questions' | 'variables' | 'flow' = 'blocks';
   
@@ -32,14 +33,14 @@
 </script>
 
 <aside 
-  class="relative bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out"
+  class="relative flex flex-col transition-all duration-300 ease-in-out {theme.components.designerSidebar.base}"
   class:w-80={!isCollapsed}
   class:w-14={isCollapsed}
 >
   <!-- Collapse Toggle -->
   <button
     on:click={toggleCollapse}
-    class="absolute -right-3 top-20 z-10 w-6 h-6 bg-white border border-gray-300 rounded-full flex items-center justify-center hover:bg-gray-50 transition-colors"
+    class="absolute -right-3 top-20 z-10 w-6 h-6 {theme.semantic.bgSurface} {theme.semantic.borderDefault} border rounded-full flex items-center justify-center {theme.semantic.interactive.ghost} transition-colors"
     title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
   >
     <svg 
@@ -57,17 +58,17 @@
     <!-- Full Sidebar -->
     <div transition:slide={{ duration: 300, axis: 'x' }}>
       <!-- Tabs -->
-      <div class="flex border-b border-gray-200">
+      <div class="flex {theme.semantic.borderDefault} border-b">
         {#each tabs as tab}
           <button
-            class="flex-1 px-4 py-3 text-sm font-medium transition-colors relative"
-            class:text-gray-900={activeTab === tab.id}
-            class:text-gray-600={activeTab !== tab.id}
+            class="flex-1 px-4 py-3 text-sm font-medium transition-colors relative {theme.semantic.interactive.ghost}"
+            class:text-foreground={activeTab === tab.id}
+            class:text-muted-foreground={activeTab !== tab.id}
             on:click={() => activeTab = tab.id}
           >
             {tab.label}
             {#if activeTab === tab.id}
-              <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+              <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
             {/if}
           </button>
         {/each}
@@ -99,11 +100,10 @@
     <div class="flex flex-col items-center py-4 space-y-4">
       {#each tabs as tab}
         <button
-          class="p-2 rounded-md transition-colors relative group"
-          class:bg-gray-100={activeTab === tab.id}
-          class:text-gray-900={activeTab === tab.id}
-          class:text-gray-600={activeTab !== tab.id}
-          class:hover:bg-gray-50={activeTab !== tab.id}
+          class="p-2 rounded-md transition-colors relative group {theme.semantic.interactive.ghost}"
+          class:bg-muted={activeTab === tab.id}
+          class:text-foreground={activeTab === tab.id}
+          class:text-muted-foreground={activeTab !== tab.id}
           on:click={() => activeTab = tab.id}
           title={tab.label}
         >
@@ -112,7 +112,7 @@
           </svg>
           
           <!-- Tooltip -->
-          <div class="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap">
+          <div class="absolute left-full ml-2 px-2 py-1 bg-foreground text-background text-xs rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
             {tab.label}
           </div>
         </button>

@@ -3,6 +3,7 @@
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
   import type { Block } from '$lib/shared';
+  import theme from '$lib/theme';
   
   let showAddBlock = false;
   let editingBlock: Block | null = null;
@@ -168,21 +169,21 @@
   }
 </script>
 
-<div class="bg-white rounded-lg shadow-sm border border-gray-200">
-  <div class="p-4 border-b border-gray-200">
+<div class="{theme.components.container.card}">
+  <div class="p-4 border-b {theme.semantic.borderDefault}">
     <div class="flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-gray-800">Blocks</h3>
+      <h3 class="{theme.typography.h4} {theme.semantic.textPrimary}">Blocks</h3>
       <div class="flex items-center space-x-2">
         <button
           on:click={() => dragDisabled = !dragDisabled}
-          class="px-3 py-1 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors text-sm"
+          class="{theme.components.button.variants.secondary} {theme.components.button.sizes.sm} rounded-md"
           title={dragDisabled ? 'Enable reordering' : 'Disable reordering'}
         >
           {dragDisabled ? '🔒' : '🔓'} Reorder
         </button>
         <button
           on:click={() => showAddBlock = true}
-          class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+          class="{theme.components.button.variants.default} {theme.components.button.sizes.sm} rounded-md"
         >
           Add Block
         </button>

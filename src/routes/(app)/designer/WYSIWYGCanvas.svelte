@@ -11,9 +11,10 @@
   import { defaultTheme } from '$lib/shared';
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
+  import uiTheme from '$lib/theme';
   
   // Theme management - in real app would come from store
-  let theme = defaultTheme;
+  let questionnaireTheme = defaultTheme;
   let showTestRunner = false;
   
   // DnD items - show questions from current block
@@ -51,19 +52,19 @@
   }
 </script>
 
-<div class="h-full bg-gray-100 overflow-auto">
+<div class="h-full overflow-auto {uiTheme.components.designerCanvas.base}">
   <!-- Canvas Controls -->
-  <div class="sticky top-0 z-10 bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+  <div class="sticky top-0 z-10 {uiTheme.semantic.bgBase} {uiTheme.semantic.borderDefault} border-b px-4 py-2 flex items-center justify-between backdrop-blur-sm bg-opacity-95">
     <div class="flex items-center gap-2">
       <!-- Zoom Controls -->
-      <div class="flex items-center bg-white rounded-md border border-gray-300">
-        <button class="px-2 py-1 text-sm hover:bg-gray-50">
+      <div class="flex items-center {uiTheme.semantic.bgSurface} rounded-md {uiTheme.semantic.borderDefault} border">
+        <button class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost}">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
           </svg>
         </button>
-        <span class="px-2 py-1 text-sm text-gray-700 border-x border-gray-300">100%</span>
-        <button class="px-2 py-1 text-sm hover:bg-gray-50">
+        <span class="px-2 py-1 text-sm {uiTheme.semantic.textPrimary} border-x {uiTheme.semantic.borderDefault}">100%</span>
+        <button class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost}">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
           </svg>
@@ -71,7 +72,7 @@
       </div>
       
       <!-- Grid Toggle -->
-      <button class="p-1.5 text-gray-600 hover:bg-white rounded-md border border-transparent hover:border-gray-300">
+      <button class="p-1.5 {uiTheme.semantic.textSecondary} {uiTheme.semantic.interactive.ghost} rounded-md">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
         </svg>
@@ -80,7 +81,7 @@
     
     <button
       on:click={() => showTestRunner = true}
-      class="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 rounded-md border border-gray-300 hover:bg-gray-50 text-sm"
+      class="flex items-center gap-1.5 px-3 py-1.5 {uiTheme.components.button.variants.outline} {uiTheme.components.button.sizes.sm} rounded-md"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -95,23 +96,23 @@
     <div class="max-w-3xl mx-auto">
       <!-- Page Background -->
       <div 
-        class="bg-white rounded-lg shadow-sm min-h-[600px]"
+        class="{uiTheme.components.container.card} min-h-[600px]"
         on:drop={handleDrop}
         on:dragover={(e) => e.preventDefault()}
       >
         <!-- Page Header -->
-        <div class="px-8 pt-8 pb-4 border-b border-gray-100">
+        <div class="px-8 pt-8 pb-4 border-b {uiTheme.semantic.borderDefault}">
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="text-xl font-semibold text-gray-900">
+              <h2 class="{uiTheme.typography.h3} {uiTheme.semantic.textPrimary}">
                 {$currentPage?.name || 'Page 1'}
               </h2>
               {#if $currentBlock}
-                <p class="text-sm text-gray-500 mt-1 flex items-center">
+                <p class="{uiTheme.typography.bodySmall} {uiTheme.semantic.textSecondary} mt-1 flex items-center">
                   <span class="text-gray-400 mr-1">›</span>
                   {$currentBlock.name || 'Untitled Block'}
                   {#if $currentBlock.type !== 'standard'}
-                    <span class="ml-2 text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600">
+                    <span class="ml-2 {uiTheme.components.badge.default} {uiTheme.components.badge.outline}">
                       {$currentBlock.type}
                     </span>
                   {/if}

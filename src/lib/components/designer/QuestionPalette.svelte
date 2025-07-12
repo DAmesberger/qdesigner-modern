@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { QuestionType } from '$lib/shared';
+  import theme from '$lib/theme';
 
   interface QuestionTemplate {
     type: QuestionType;
@@ -78,33 +79,33 @@
   }
 </script>
 
-<div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-  <h3 class="text-lg font-semibold mb-4 text-gray-800">Question Types</h3>
+<div class="{theme.components.container.card} p-4">
+  <h3 class="{theme.typography.h4} mb-4 {theme.semantic.textPrimary}">Question Types</h3>
   <div class="space-y-2">
     {#each questionTemplates as template}
       <div
         draggable="true"
         on:dragstart={(e) => handleDragStart(e, template)}
         on:dragend={handleDragEnd}
-        class="p-3 bg-gray-50 rounded-lg cursor-move hover:bg-gray-100 transition-colors
-               {draggedItem === template ? 'opacity-50 shadow-lg ring-2 ring-blue-500' : ''}"
+        class="p-3 {theme.semantic.bgSubtle} rounded-lg cursor-move {theme.semantic.interactive.ghost} transition-all transform hover:scale-[1.02] hover:shadow-md
+               {draggedItem === template ? 'opacity-50 shadow-lg ring-2 ring-primary' : ''}"
       >
         <div class="flex items-start space-x-3">
           <span class="text-2xl" role="img" aria-label={template.label}>
             {template.icon}
           </span>
           <div class="flex-1">
-            <h4 class="font-medium text-gray-900">{template.label}</h4>
-            <p class="text-sm text-gray-600">{template.description}</p>
+            <h4 class="{theme.typography.label} {theme.semantic.textPrimary}">{template.label}</h4>
+            <p class="{theme.typography.caption}">{template.description}</p>
           </div>
         </div>
       </div>
     {/each}
   </div>
 
-  <div class="mt-6 pt-4 border-t border-gray-200">
-    <h4 class="text-sm font-medium text-gray-700 mb-2">Tips</h4>
-    <ul class="text-xs text-gray-600 space-y-1">
+  <div class="mt-6 pt-4 border-t {theme.semantic.borderDefault}">
+    <h4 class="{theme.typography.label} {theme.semantic.textSecondary} mb-2">Tips</h4>
+    <ul class="{theme.typography.caption} {theme.spacing.stack.xs}">
       <li>• Drag questions to the canvas</li>
       <li>• Drop between existing questions</li>
       <li>• Use variables for control flow</li>
