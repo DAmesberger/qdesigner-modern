@@ -8,6 +8,7 @@
   import ScaleQuestion from '../questions/ScaleQuestion.svelte';
   import TextInputQuestion from '../questions/TextInputQuestion.svelte';
   import MatrixQuestion from '../questions/MatrixQuestion.svelte';
+  import StatisticalFeedbackQuestion from '../questions/StatisticalFeedbackQuestion.svelte';
   
   export let question: Question;
   export let value: any = undefined;
@@ -23,7 +24,8 @@
     'multiple-choice': MultipleChoiceQuestion,
     'scale': ScaleQuestion,
     'text-input': TextInputQuestion,
-    'matrix': MatrixQuestion
+    'matrix': MatrixQuestion,
+    'statistical-feedback': StatisticalFeedbackQuestion
   };
   
   // Get the appropriate component

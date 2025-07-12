@@ -51,6 +51,13 @@
       icon: '🔧',
       description: 'Advanced custom logic',
       defaultResponseType: 'custom'
+    },
+    {
+      type: 'statistical-feedback',
+      label: 'Statistical Feedback',
+      icon: '📊',
+      description: 'Charts and personalized feedback',
+      defaultResponseType: 'none'
     }
   ];
 
