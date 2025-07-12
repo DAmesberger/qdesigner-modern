@@ -1,6 +1,9 @@
 <script lang="ts">
   import { designerStore, isSaving, isLoading, lastSaved, saveError } from '$lib/features/designer/stores/designerStore';
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { toast } from '$lib/stores/toast';
+  import Skeleton from '$lib/components/ui/Skeleton.svelte';
   
   let showLoadDialog = false;
   let questionnaires: any[] = [];
@@ -8,19 +11,25 @@
   let isListLoading = false;
   let listError = '';
   
-  // Mock user ID for now - in production this would come from auth
-  const userId = 'test-user-123';
+  // Get user from page data (passed from layout)
+  $: user = $page.data.user;
   
   onMount(() => {
-    // Set the user ID in the store
-    designerStore.setUserId(userId);
+    // Set the user ID in the store when we have a user
+    if (user?.id) {
+      designerStore.setUserId(user.id);
+    }
   });
+  
+  // Update user ID when it changes
+  $: if (user?.id) {
+    designerStore.setUserId(user.id);
+  }
   
   async function handleSave() {
     const success = await designerStore.saveQuestionnaire();
     if (success) {
-      // Show success notification (you can add a toast library later)
-      console.log('Questionnaire saved successfully');
+      toast.success('Questionnaire saved successfully');
     }
   }
   
@@ -33,7 +42,7 @@
       questionnaires = await designerStore.listQuestionnaires();
     } catch (error) {
       listError = 'Failed to load questionnaires';
-      console.error('Error loading questionnaires:', error);
+      toast.error('Failed to load questionnaires');
     } finally {
       isListLoading = false;
     }
@@ -46,6 +55,9 @@
     if (success) {
       showLoadDialog = false;
       selectedQuestionnaireId = '';
+      toast.success('Questionnaire loaded successfully');
+    } else {
+      toast.error('Failed to load questionnaire');
     }
   }
   
@@ -122,11 +134,14 @@
       
       <div class="flex-1 overflow-y-auto p-6">
         {#if isListLoading}
-          <div class="flex justify-center py-8">
-            <svg class="w-8 h-8 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
+          <div class="space-y-2">
+            {#each Array(3) as _}
+              <div class="p-3 border rounded-lg">
+                <Skeleton width="70%" height={20} className="mb-2" />
+                <Skeleton width="90%" height={16} className="mb-1" />
+                <Skeleton width="40%" height={14} />
+              </div>
+            {/each}
           </div>
         {:else if listError}
           <div class="text-red-600 text-center py-4">{listError}</div>

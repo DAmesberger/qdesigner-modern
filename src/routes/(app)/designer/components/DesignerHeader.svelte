@@ -10,6 +10,7 @@
   import { goto } from '$app/navigation';
   import { createEventDispatcher } from 'svelte';
   import theme from '$lib/theme';
+  import VersionManager from '$lib/components/designer/VersionManager.svelte';
   
   export let questionnaireName: string;
   export let pageCount: number;
@@ -86,6 +87,9 @@
       {pageCount} {pageCount === 1 ? 'page' : 'pages'} • {blockCount} {blockCount === 1 ? 'block' : 'blocks'} • {questionCount} {questionCount === 1 ? 'question' : 'questions'}
     </p>
   </div>
+  
+  <!-- Version Manager -->
+  <VersionManager questionnaireId={$designerStore.questionnaire.id} />
   
   <!-- Center Actions -->
   <div class="flex items-center gap-2">

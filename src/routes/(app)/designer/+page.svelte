@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { page } from '$app/stores';
   import { 
     designerStore, 
     currentPage,
     currentPageQuestions,
     selectedItem
   } from '$lib/stores/designerStore';
+  import { autoSave } from '$lib/services/autoSave';
   
   // Components
   import DesignerHeader from './components/DesignerHeader.svelte';
@@ -14,17 +16,41 @@
   import WYSIWYGCanvas from './WYSIWYGCanvas.svelte';
   import StructuralCanvas from './StructuralCanvas.svelte';
   import RealtimePreview from '$lib/components/designer/RealtimePreview.svelte';
+  import CrashRecovery from '$lib/components/ui/CrashRecovery.svelte';
+  import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
   
   // State
   let viewMode: 'structural' | 'wysiwyg' = 'wysiwyg';
   let activeTab: 'blocks' | 'questions' | 'variables' | 'flow' = 'blocks';
   let showPreview = false;
   let previewSplitPosition = 50; // percentage
+  let showCommandPalette = false;
+  
+  // Get user from page data
+  $: user = $page.data.user;
   
   // Initialize
   onMount(() => {
     designerStore.initVariableEngine();
+    
+    // Set user ID if available
+    if (user?.id) {
+      designerStore.setUserId(user.id);
+    }
+    
+    // Start auto-save
+    autoSave.start();
   });
+  
+  onDestroy(() => {
+    // Stop auto-save when component unmounts
+    autoSave.stop();
+  });
+  
+  // Update user ID when it changes
+  $: if (user?.id) {
+    designerStore.setUserId(user.id);
+  }
   
   // Keyboard shortcuts
   function handleKeydown(e: KeyboardEvent) {
@@ -41,7 +67,11 @@
           break;
         case 's':
           e.preventDefault();
-          designerStore.saveQuestionnaire();
+          designerStore.saveQuestionnaire().then(success => {
+            if (success) {
+              autoSave.resetTracking();
+            }
+          });
           break;
         case 'p':
           e.preventDefault();
@@ -137,6 +167,12 @@
     <RightSidebar />
   </div>
 </div>
+
+<!-- Crash Recovery Dialog -->
+<CrashRecovery />
+
+<!-- Command Palette -->
+<CommandPalette bind:isOpen={showCommandPalette} />
 
 <style>
   .preview-panel {

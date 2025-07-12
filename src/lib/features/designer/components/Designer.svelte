@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { designerStore, canUndo, canRedo } from '$lib/features/designer/stores/designerStore';
+  import { page } from '$app/stores';
+  import { autoSave } from '$lib/services/autoSave';
   import QuestionPalette from './QuestionPalette.svelte';
   import PageCanvas from './PageCanvas.svelte';
   import VariableManager from './VariableManager.svelte';
@@ -11,10 +13,26 @@
   let showPreview = false;
   let questionnaireName = '';
   let pages: any[] = [];
+  
+  // Get user from page data
+  $: user = $page.data.user;
 
   // Initialize
   onMount(() => {
     designerStore.initVariableEngine();
+    
+    // Set user ID if available
+    if (user?.id) {
+      designerStore.setUserId(user.id);
+    }
+    
+    // Start auto-save
+    autoSave.start();
+  });
+  
+  onDestroy(() => {
+    // Stop auto-save when component unmounts
+    autoSave.stop();
   });
 
   // Subscribe to store
@@ -50,7 +68,11 @@
   }
 
   async function handleSave() {
-    await designerStore.saveQuestionnaire();
+    const success = await designerStore.saveQuestionnaire();
+    if (success) {
+      // Reset auto-save tracking after manual save
+      autoSave.resetTracking();
+    }
   }
 
   function handleExport() {
