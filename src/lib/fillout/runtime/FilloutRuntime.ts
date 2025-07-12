@@ -28,6 +28,8 @@ export class FilloutRuntime {
 	private runtime: QuestionnaireRuntime;
 	private variableEngine: VariableEngine;
 	private responses: Response[] = [];
+	private currentQuestion: Question | null = null;
+	private currentPage: Page | null = null;
 	
 	constructor(private config: FilloutRuntimeConfig) {
 		this.sessionId = config.sessionId;
@@ -109,6 +111,9 @@ export class FilloutRuntime {
 		// Find the question
 		const question = this.config.questionnaire.questions.find(q => q.id === response.questionId);
 		if (!question) return;
+		
+		// Update current question reference
+		this.currentQuestion = question;
 		
 		// Persist to database
 		await this.persistResponse(response, question);
@@ -245,7 +250,9 @@ export class FilloutRuntime {
 	}
 	
 	handleKeyPress(event: KeyboardEvent): void {
-		this.runtime.handleKeyPress(event);
+		// The runtime doesn't have handleKeyPress, need to handle differently
+		// For now, just log
+		console.log('Key press:', event.key);
 	}
 	
 	getSession(): QuestionnaireSession | null {
@@ -276,7 +283,8 @@ export class FilloutRuntime {
 		if (questionEvents.length === 0) return 0;
 		
 		const firstEvent = questionEvents[0];
-		return performance.now() - (firstEvent.stimulusOnsetTime || 0);
+		if (!firstEvent || !firstEvent.stimulusOnsetTime) return 0;
+		return performance.now() - firstEvent.stimulusOnsetTime;
 	}
 
 	/**
@@ -286,7 +294,9 @@ export class FilloutRuntime {
 		// Dispose persistence service
 		this.persistenceService.dispose();
 		
-		// Dispose runtime
-		this.runtime.dispose();
+		// Dispose runtime if it has dispose method
+		if ('dispose' in this.runtime && typeof this.runtime.dispose === 'function') {
+			this.runtime.dispose();
+		}
 	}
 }

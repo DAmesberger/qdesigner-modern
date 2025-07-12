@@ -1,4 +1,4 @@
-import { supabase } from '$lib/supabase';
+import { supabase } from '$lib/services/supabase';
 import type { ResponseData, InteractionEvent } from '$lib/types/response';
 import type { Session } from '$lib/types/session';
 

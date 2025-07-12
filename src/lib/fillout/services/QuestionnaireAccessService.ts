@@ -1,9 +1,9 @@
-import { supabase } from '$lib/supabase';
-import type { QuestionnaireDefinition } from '$lib/types/questionnaire';
+import { supabase } from '$lib/services/supabase';
+import type { Questionnaire } from '$lib/shared/types/questionnaire';
 import type { Session } from '$lib/types/session';
 
 export interface QuestionnaireAccess {
-	questionnaire: QuestionnaireDefinition;
+	questionnaire: Questionnaire;
 	requiresAuth: boolean;
 	requiresConsent: boolean;
 	allowAnonymous: boolean;
@@ -62,7 +62,7 @@ export class QuestionnaireAccessService {
 			}
 
 			// Parse questionnaire definition
-			const definition = questionnaire.definition as QuestionnaireDefinition;
+			const definition = questionnaire.definition as Questionnaire;
 
 			return {
 				valid: true,
@@ -188,5 +188,5 @@ function getBrowserName(): string {
 function getBrowserVersion(): string {
 	const userAgent = navigator.userAgent;
 	const match = userAgent.match(/(firefox|chrome|safari|edge)\/?\s*(\d+)/i);
-	return match ? match[2] : 'Unknown';
+	return match && match[2] ? match[2] : 'Unknown';
 }
