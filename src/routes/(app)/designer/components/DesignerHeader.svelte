@@ -9,6 +9,7 @@
   } from '$lib/stores/designerStore';
   import { goto } from '$app/navigation';
   import { createEventDispatcher } from 'svelte';
+  import theme from '$lib/theme';
   
   export let questionnaireName: string;
   export let pageCount: number;
@@ -60,28 +61,28 @@
   }
 </script>
 
-<header class="bg-white border-b border-gray-200 h-14 flex items-center px-4 gap-4">
+<header class="h-14 flex items-center px-4 gap-4 {theme.semantic.bgSurface} {theme.semantic.borderDefault} border-b">
   <!-- Logo/Back Button -->
   <button
     on:click={() => goto('/dashboard')}
-    class="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+    class="flex items-center gap-2 {theme.semantic.textSecondary} {theme.semantic.interactive.ghost} px-2 py-1 rounded-md transition-colors"
     title="Back to Dashboard"
   >
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
     </svg>
-    <span class="font-semibold text-gray-900 hidden sm:inline">QDesigner</span>
+    <span class="font-semibold {theme.semantic.textPrimary} hidden sm:inline">QDesigner</span>
   </button>
   
   <!-- Separator -->
-  <div class="h-6 w-px bg-gray-300"></div>
+  <div class="h-6 w-px {theme.semantic.borderDefault}"></div>
   
   <!-- Questionnaire Name -->
   <div class="flex-1 min-w-0">
-    <h1 class="text-lg font-semibold text-gray-900 truncate">
+    <h1 class="text-lg font-semibold {theme.semantic.textPrimary} truncate">
       {questionnaireName || 'Untitled Questionnaire'}
     </h1>
-    <p class="text-xs text-gray-500">
+    <p class="text-xs {theme.semantic.textSecondary}">
       {pageCount} {pageCount === 1 ? 'page' : 'pages'} • {blockCount} {blockCount === 1 ? 'block' : 'blocks'} • {questionCount} {questionCount === 1 ? 'question' : 'questions'}
     </p>
   </div>
@@ -89,11 +90,11 @@
   <!-- Center Actions -->
   <div class="flex items-center gap-2">
     <!-- Undo/Redo -->
-    <div class="flex items-center bg-gray-100 rounded-md p-0.5">
+    <div class="flex items-center {theme.semantic.bgSubtle} rounded-md p-0.5">
       <button
         on:click={() => designerStore.undo()}
         disabled={!$canUndo}
-        class="p-1.5 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        class="p-1.5 rounded {theme.semantic.bgHover} hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         title="Undo (Ctrl+Z)"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -104,7 +105,7 @@
       <button
         on:click={() => designerStore.redo()}
         disabled={!$canRedo}
-        class="p-1.5 rounded hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        class="p-1.5 rounded {theme.semantic.bgHover} hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         title="Redo (Ctrl+Shift+Z)"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -115,7 +116,7 @@
     </div>
     
     <!-- View Mode Toggle -->
-    <div class="flex items-center bg-gray-100 rounded-md p-0.5">
+    <div class="flex items-center {theme.semantic.bgSubtle} rounded-md p-0.5">
       <button
         class="px-2 py-1 text-xs font-medium rounded transition-colors"
         class:bg-white={viewMode === 'structural'}
