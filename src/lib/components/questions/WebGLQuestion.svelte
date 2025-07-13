@@ -1,6 +1,6 @@
 <script lang="ts">
   import BaseQuestion from './BaseQuestion.svelte';
-  import type { ExtendedQuestion, WebGLQuestionConfig } from './types';
+  import type { ExtendedQuestion, WebGLQuestionConfig, WebGLContent } from './types';
   import { onMount, onDestroy } from 'svelte';
   import { WebGLRenderer } from '$lib/core/renderer/WebGLRenderer';
   
@@ -268,7 +268,7 @@
       bind:this={canvas}
       class="webgl-canvas"
       class:edit-mode={mode === 'edit'}
-    />
+    ></canvas>
     
     {#if mode === 'edit'}
       <div class="edit-overlay">

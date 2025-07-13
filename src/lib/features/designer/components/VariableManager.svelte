@@ -34,6 +34,7 @@
     { value: 'date', label: 'Date' },
     { value: 'time', label: 'Time' },
     { value: 'array', label: 'List' },
+    { value: 'object', label: 'Object' },
     { value: 'reaction_time', label: 'Reaction Time' },
     { value: 'stimulus_onset', label: 'Stimulus Onset' }
   ];
@@ -109,6 +110,12 @@
         } catch {
           return [];
         }
+      case 'object':
+        try {
+          return JSON.parse(value);
+        } catch {
+          return {};
+        }
       case 'date':
       case 'time':
         return new Date(value);
@@ -122,6 +129,7 @@
     
     switch (type) {
       case 'array':
+      case 'object':
         return JSON.stringify(value);
       case 'date':
         return value instanceof Date ? value.toLocaleDateString() : value;
@@ -286,7 +294,7 @@
           <select
             value={editingVariable ? editingVariable.type : newVariable.type}
             on:change={(e) => {
-              const value = e.currentTarget.value;
+              const value = e.currentTarget.value as VariableType;
               if (editingVariable) {
                 editingVariable.type = value;
               } else {
@@ -305,11 +313,11 @@
           <label class="block text-sm font-medium text-gray-700 mb-1">Default Value (optional)</label>
           <input
             type="text"
-            value={editingVariable ? editingVariable.defaultValue : newVariable.defaultValue}
+            value={editingVariable ? formatValue(editingVariable.defaultValue, editingVariable.type) : newVariable.defaultValue}
             on:input={(e) => {
               const value = e.currentTarget.value;
               if (editingVariable) {
-                editingVariable.defaultValue = value;
+                editingVariable.defaultValue = parseDefaultValue(value, editingVariable.type);
               } else {
                 newVariable.defaultValue = value;
               }

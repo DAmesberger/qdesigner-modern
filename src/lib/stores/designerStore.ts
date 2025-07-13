@@ -162,8 +162,8 @@ function createDesignerStore() {
           // Remove the page
           draft.questionnaire.pages.splice(index, 1);
           // Update current page if needed
-          if (draft.currentPageId === pageId) {
-            draft.currentPageId = draft.questionnaire.pages[0].id;
+          if (draft.currentPageId === pageId && draft.questionnaire.pages.length > 0) {
+            draft.currentPageId = draft.questionnaire.pages[0]?.id || null;
           }
           draft.questionnaire.modified = new Date();
         }
@@ -220,7 +220,7 @@ function createDesignerStore() {
             page.blocks?.splice(blockIndex, 1);
             // Update current block if needed
             if (draft.currentBlockId === blockId && page.blocks && page.blocks.length > 0) {
-              draft.currentBlockId = page.blocks[0].id;
+              draft.currentBlockId = page.blocks[0]?.id || null;
             }
             draft.questionnaire.modified = new Date();
             break;
@@ -684,7 +684,9 @@ function createDesignerStore() {
 
       const result = await OfflinePersistenceService.saveQuestionnaire(
         state.questionnaire,
-        state.userId
+        state.userId,
+        state.questionnaire.projectId || 'default-project',
+        state.questionnaire.organizationId || 'default-org'
       );
 
       update(s => produce(s, draft => {
@@ -710,7 +712,7 @@ function createDesignerStore() {
       }));
 
       const state = get({ subscribe });
-      const result = await OfflinePersistenceService.loadQuestionnaire(questionnaireId, state.userId);
+      const result = await OfflinePersistenceService.loadQuestionnaire(questionnaireId, state.userId || '');
 
       update(s => produce(s, draft => {
         draft.isLoading = false;
@@ -746,7 +748,8 @@ function createDesignerStore() {
         return [];
       }
 
-      const questionnaires = await OfflinePersistenceService.listQuestionnaires(state.userId);
+      const projectId = state.questionnaire.projectId || 'default-project';
+      const questionnaires = await OfflinePersistenceService.listQuestionnaires(state.userId, projectId);
       return questionnaires;
     },
 
@@ -768,9 +771,7 @@ function createDesignerStore() {
 
       // For now, we'll just mark it as deleted in the sync queue
       // Full delete implementation would need to be added to OfflinePersistenceService
-      const result = { success: false };
-
-      return result.success;
+      return false;
     }
   };
 }

@@ -247,7 +247,7 @@ export class QuestionnaireRuntime {
     this.variableEngine.setVariable('_currentPage', pageIndex + 1, 'system');
     
     // Check page conditions
-    if (!this.evaluateConditions(this.currentPage.conditions)) {
+    if (this.currentPage && !this.evaluateConditions(this.currentPage.conditions)) {
       // Skip this page
       await this.navigateToPage(pageIndex + 1);
       return;
@@ -266,7 +266,7 @@ export class QuestionnaireRuntime {
   private async showNextQuestion(): Promise<void> {
     if (!this.currentPage) return;
     
-    const questionIds = this.currentPage.questions ?? [];
+    const questionIds = this.currentPage?.questions ?? [];
     if (this.currentQuestionIndex >= questionIds.length) {
       // Page complete, check flow control
       await this.handleFlowControl();
@@ -275,6 +275,11 @@ export class QuestionnaireRuntime {
     
     // Get question
     const questionId = questionIds[this.currentQuestionIndex];
+    if (!questionId) {
+      this.currentQuestionIndex++;
+      await this.showNextQuestion();
+      return;
+    }
     this.currentQuestion = this.config.questionnaire.questions.find(q => q.id === questionId) || null;
     
     if (!this.currentQuestion) {

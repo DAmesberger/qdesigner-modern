@@ -137,7 +137,7 @@ export class CompositeStimulus extends BaseStimulus {
         
         // Restore GL state
         if (!currentBlend) gl.disable(gl.BLEND);
-        gl.viewport(...currentViewport);
+        gl.viewport(currentViewport[0], currentViewport[1], currentViewport[2], currentViewport[3]);
       }
     });
     

@@ -188,7 +188,7 @@ export class AudioRenderer extends BaseRenderer {
     let x = 0;
     
     for (let i = 0; i < bufferLength; i++) {
-      const v = dataArray![i] / 128.0;
+      const v = dataArray[i]! / 128.0;
       const y = v * this.canvas.height / 2;
       
       if (i === 0) {
@@ -219,7 +219,7 @@ export class AudioRenderer extends BaseRenderer {
     let x = 0;
     
     for (let i = 0; i < bufferLength; i++) {
-      const barHeight = (dataArray![i] / 255) * this.canvas.height;
+      const barHeight = (dataArray[i]! / 255) * this.canvas.height;
       
       this.ctx.fillStyle = this.audioConfig.visualizerColor || '#00ff00';
       this.ctx.fillRect(x, this.canvas.height - barHeight, barWidth, barHeight);

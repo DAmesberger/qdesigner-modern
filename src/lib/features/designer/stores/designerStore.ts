@@ -147,7 +147,7 @@ function createDesignerStore() {
           draft.questionnaire.pages.splice(index, 1);
           // Update current page if needed
           if (draft.currentPageId === pageId && draft.questionnaire.pages.length > 0) {
-            draft.currentPageId = draft.questionnaire.pages[0].id;
+            draft.currentPageId = draft.questionnaire.pages[0]?.id || null;
           }
           draft.questionnaire.modified = new Date();
         }
@@ -534,7 +534,9 @@ function createDesignerStore() {
 
       const result = await OfflinePersistenceService.saveQuestionnaire(
         state.questionnaire,
-        state.userId
+        state.userId,
+        state.questionnaire.projectId || 'default-project',
+        state.questionnaire.organizationId || 'default-org'
       );
 
       update(s => produce(s, draft => {
@@ -559,7 +561,8 @@ function createDesignerStore() {
         draft.saveError = null;
       }));
 
-      const result = await OfflinePersistenceService.loadQuestionnaire(questionnaireId, state.userId);
+      const state = get({ subscribe });
+      const result = await OfflinePersistenceService.loadQuestionnaire(questionnaireId, state.userId || '');
 
       update(s => produce(s, draft => {
         draft.isLoading = false;
@@ -595,7 +598,8 @@ function createDesignerStore() {
         return [];
       }
 
-      const questionnaires = await OfflinePersistenceService.listQuestionnaires(state.userId);
+      const projectId = state.questionnaire.projectId || 'default-project';
+      const questionnaires = await OfflinePersistenceService.listQuestionnaires(state.userId, projectId);
       return questionnaires;
     },
 
@@ -617,9 +621,7 @@ function createDesignerStore() {
 
       // For now, we'll just mark it as deleted in the sync queue
       // Full delete implementation would need to be added to OfflinePersistenceService
-      return { success: false };
-
-      return result.success;
+      return false;
     }
   };
 }

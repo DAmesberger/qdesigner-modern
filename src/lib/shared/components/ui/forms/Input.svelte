@@ -9,7 +9,7 @@
   export let id: string | undefined = undefined;
   export let name: string | undefined = undefined;
   // Autocomplete disabled per business decision
-  export let autocomplete: string | undefined = "off";
+  export let autocomplete: HTMLInputElement['autocomplete'] = "off";
   
   $: inputClasses = `
     block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm 

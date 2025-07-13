@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Question } from '$lib/shared';
+  import type { Question } from '$lib/shared/types/questionnaire';
   import StatisticsBuilder from '../designer/StatisticsBuilder.svelte';
   import FeedbackTemplateBuilder from '../designer/FeedbackTemplateBuilder.svelte';
   
@@ -16,7 +16,7 @@
     selectedVariables: [],
     showLegend: true,
     showGrid: true,
-    template: 'Your score: ${score}',
+    template: 'Your score: $\{score}',
     interpretation: []
   };
   
@@ -33,7 +33,7 @@
       let processed = config.template;
       
       // Replace variable references
-      processed = processed.replace(/\$\{([^}]+)\}/g, (match, expression) => {
+      processed = processed.replace(/\$\\{([^}]+)\\}/g, (match: string, expression: string) => {
         try {
           const func = new Function(...Object.keys(variables), `return ${expression}`);
           const result = func(...Object.values(variables));
@@ -61,6 +61,7 @@
         <button
           on:click={() => showConfig = !showConfig}
           class="config-toggle"
+          aria-label="Toggle configuration"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -95,7 +96,7 @@
               <StatisticsBuilder
                 variableId={config.selectedVariables[0] || ''}
                 type={config.chartType}
-                title={question.content?.title || ''}
+                title={(question as any).content?.title || ''}
                 showLegend={config.showLegend}
                 showGrid={config.showGrid}
               />
@@ -103,11 +104,13 @@
               <FeedbackTemplateBuilder
                 bind:template={config.template}
                 variables={Object.keys(variables).map(name => ({
+                  id: name,
                   name,
                   type: typeof variables[name] === 'number' ? 'number' : 'string',
                   label: name,
-                  defaultValue: variables[name]
-                }))}
+                  defaultValue: variables[name],
+                  scope: 'local' as const
+                }))} 
                 showPreview={true}
               />
             {/if}
@@ -129,7 +132,7 @@
     <!-- Preview Mode -->
     <div class="preview-mode">
       <div class="preview-header">
-        <h3>{question.content?.title || 'Statistical Feedback'}</h3>
+        <h3>{(question as any).content?.title || 'Statistical Feedback'}</h3>
       </div>
       <div class="preview-content">
         {#if config.chartType}
@@ -156,8 +159,8 @@
   {:else}
     <!-- Runtime Mode -->
     <div class="runtime-mode">
-      {#if question.content?.title}
-        <h3 class="feedback-title">{question.content.title}</h3>
+      {#if (question as any).content?.title}
+        <h3 class="feedback-title">{(question as any).content.title}</h3>
       {/if}
       
       <div class="feedback-content">

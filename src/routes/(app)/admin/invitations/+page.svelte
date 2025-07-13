@@ -22,8 +22,21 @@
   let inviteLoading = false;
   
   // Current user and organization
-  let currentUser: any = null;
-  let currentOrg: any = null;
+  interface User {
+    id: string;
+    auth_id: string;
+    email: string;
+    full_name?: string;
+  }
+  
+  interface Organization {
+    id: string;
+    name: string;
+    slug: string;
+  }
+  
+  let currentUser: User | null = null;
+  let currentOrg: Organization | null = null;
   
   onMount(async () => {
     await loadData();
@@ -55,7 +68,7 @@
             slug
           )
         `)
-        .eq('user_id', currentUser.id)
+        .eq('user_id', currentUser!.id)
         .eq('status', 'active')
         .single();
       
@@ -65,7 +78,7 @@
         return;
       }
       
-      currentOrg = membership.organizations;
+      currentOrg = membership.organizations as Organization;
       
       // Load invitations
       await loadInvitations();
@@ -119,7 +132,7 @@
     const { data, error: inviteError } = await createInvitation({
       organizationId: currentOrg.id,
       email: inviteEmail,
-      role: inviteRole as any,
+      role: inviteRole,
       customMessage: inviteMessage || undefined,
       invitedBy: currentUser.id
     });
@@ -139,6 +152,7 @@
   
   async function handleRevokeInvitation(invitationId: string) {
     if (!confirm('Are you sure you want to revoke this invitation?')) return;
+    if (!currentUser) return;
     
     const { success: revokeSuccess, error: revokeError } = await revokeInvitation(
       invitationId,
@@ -202,15 +216,19 @@
   </div>
   
   {#if error}
-    <Alert variant="error" class="mb-4">
-      {error}
-    </Alert>
+    <div class="mb-4">
+      <Alert variant="error">
+        {error}
+      </Alert>
+    </div>
   {/if}
   
   {#if success}
-    <Alert variant="success" class="mb-4">
-      {success}
-    </Alert>
+    <div class="mb-4">
+      <Alert variant="success">
+        {success}
+      </Alert>
+    </div>
   {/if}
   
   {#if showNewInviteForm}

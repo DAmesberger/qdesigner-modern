@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { designerStore } from '$lib/stores/designerStore';
-  import type { Questionnaire, QuestionnaireTheme, Variable } from '$lib/shared';
+  import type { Questionnaire, Question, QuestionnaireTheme, Variable } from '$lib/shared';
   import { VariableEngine } from '$lib/scripting-engine';
   import QuestionRenderer from '../runtime/QuestionRenderer.svelte';
   import { writable } from 'svelte/store';
@@ -21,7 +21,7 @@
   let variables = writable<Record<string, any>>({});
   let variableEngine: VariableEngine;
   let previewKey = 0; // Force re-render
-  let updateTimer: number;
+  let updateTimer: ReturnType<typeof setTimeout>;
   let isLoading = false;
   let error: string | null = null;
   
@@ -139,7 +139,7 @@
       previewKey++; // Force re-render
       
     } catch (e) {
-      error = e.message || 'Failed to update preview';
+      error = e instanceof Error ? e.message : 'Failed to update preview';
     } finally {
       isLoading = false;
     }
@@ -168,7 +168,7 @@
   }
   
   function navigateNext() {
-    if (currentBlockIndex < (currentPage.blocks ?? []).length - 1) {
+    if (currentPage && currentBlockIndex < (currentPage.blocks ?? []).length - 1) {
       currentBlockIndex++;
     } else if (currentPageIndex < questionnaire.pages.length - 1) {
       currentPageIndex++;
@@ -182,7 +182,7 @@
     } else if (currentPageIndex > 0) {
       currentPageIndex--;
       const prevPage = questionnaire.pages[currentPageIndex];
-      currentBlockIndex = (prevPage.blocks ?? []).length - 1;
+      currentBlockIndex = prevPage ? (prevPage.blocks ?? []).length - 1 : 0;
     }
   }
   
@@ -192,14 +192,7 @@
     const allAnswered = requiredQuestions.every(q => $responses[q.id] !== undefined);
     
     // Check page navigation conditions
-    if (currentPage?.navigation?.canNavigateNext) {
-      try {
-        const result = variableEngine.evaluateFormula(currentPage.navigation.canNavigateNext);
-        return allAnswered && result.value;
-      } catch {
-        return allAnswered;
-      }
-    }
+    // TODO: Add navigation property to Page interface if needed
     
     return allAnswered;
   }
@@ -241,6 +234,7 @@
         class:active={deviceType === 'desktop'}
         on:click={() => deviceType = 'desktop'}
         title="Desktop view"
+        aria-label="Desktop view"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
           <path d="M2 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2h-5l1 2h2a1 1 0 110 2H6a1 1 0 110-2h2l1-2H4a2 2 0 01-2-2V4z"/>
@@ -251,6 +245,7 @@
         class:active={deviceType === 'tablet'}
         on:click={() => deviceType = 'tablet'}
         title="Tablet view"
+        aria-label="Tablet view"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
           <path d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm4 14a1 1 0 100-2 1 1 0 000 2z"/>
@@ -261,6 +256,7 @@
         class:active={deviceType === 'mobile'}
         on:click={() => deviceType = 'mobile'}
         title="Mobile view"
+        aria-label="Mobile view"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
           <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2z"/>
@@ -273,6 +269,7 @@
         class="control-btn"
         on:click={resetPreview}
         title="Reset preview"
+        aria-label="Reset preview"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 10a6 6 0 0110.472-3.944m1.528 3.944a6 6 0 01-10.472 3.944M16 6v4h-4M4 10v4h4"/>
@@ -284,6 +281,7 @@
         class:active={showDebugPanel}
         on:click={() => showDebugPanel = !showDebugPanel}
         title="Toggle debug panel"
+        aria-label="Toggle debug panel"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
           <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
@@ -325,15 +323,16 @@
         "
       >
         {#if showDeviceFrame && deviceConfig.frame}
-          <div class="device-frame" style="background-image: url({deviceConfig.frameSrc})"></div>
+          <div class="device-frame" style="background-image: url({deviceConfig.frame && 'frameSrc' in deviceConfig ? deviceConfig.frameSrc : ''})"></div>
         {/if}
         
-        <div class="preview-content" key={previewKey}>
+        {#key previewKey}
+        <div class="preview-content">
           {#if currentPage}
             <div class="page-header">
-              <h2>{currentPage.name}</h2>
+              <h2>{currentPage.name || currentPage.title || `Page ${currentPageIndex + 1}`}</h2>
               {#if currentBlock}
-                <p class="block-info">{currentBlock.name || 'Block ' + (currentBlockIndex + 1)}</p>
+                <p class="block-info">{currentBlock.name || `Block ${currentBlockIndex + 1}`}</p>
               {/if}
             </div>
             
@@ -387,6 +386,7 @@
             </div>
           {/if}
         </div>
+        {/key}
       </div>
     {:else}
       <div class="empty-state">

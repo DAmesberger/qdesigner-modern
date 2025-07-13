@@ -99,9 +99,9 @@
     });
   }
   
-  $: interpolatedTitle = question.content?.title ? interpolateTemplate(question.content.title) : '';
-  $: interpolatedText = question.content?.text ? interpolateTemplate(question.content.text) : '';
-  $: interpolatedHelpText = question.content?.helpText ? interpolateTemplate(question.content.helpText) : '';
+  $: interpolatedTitle = question.name ? interpolateTemplate(question.name) : '';
+  $: interpolatedText = question.text ? interpolateTemplate(question.text) : (question.content ? interpolateTemplate(question.content) : '');
+  $: interpolatedHelpText = question.instruction ? interpolateTemplate(question.instruction) : '';
   $: isValid = validate();
 </script>
 

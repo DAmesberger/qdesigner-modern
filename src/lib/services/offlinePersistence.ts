@@ -92,7 +92,12 @@ export class OfflinePersistenceService {
           
           if (result.success && result.questionnaire) {
             // Update IndexedDB with server version
-            await db.saveQuestionnaire(result.questionnaire, userId);
+            await db.saveQuestionnaire(
+              result.questionnaire, 
+              userId,
+              result.questionnaire.organizationId,
+              result.questionnaire.projectId
+            );
             await db.questionnaires.update(questionnaireId, {
               syncStatus: 'synced',
               serverVersion: (await db.questionnaires.get(questionnaireId))?.localVersion
@@ -132,12 +137,12 @@ export class OfflinePersistenceService {
   /**
    * List questionnaires from offline storage
    */
-  static async listQuestionnaires(userId: string): Promise<any[]> {
+  static async listQuestionnaires(userId: string, projectId: string): Promise<any[]> {
     try {
       // If online, try to get fresh list
       if (get(isOnline)) {
         try {
-          const result = await QuestionnairePersistenceService.listQuestionnaires(userId);
+          const result = await QuestionnairePersistenceService.listQuestionnaires(projectId);
           if (result.success) {
             // Update local cache with server list
             // This is a simplified approach - in production you'd want more sophisticated sync
@@ -272,12 +277,13 @@ export class OfflinePersistenceService {
             );
           case 'delete':
             return await QuestionnairePersistenceService.deleteQuestionnaire(
-              item.recordId,
-              item.userId
+              item.recordId
             );
+          default:
+            throw new Error(`Unknown operation: ${item.operation}`);
         }
-        break;
-      // Add other table types as needed
+      default:
+        throw new Error(`Unknown table: ${item.table}`);
     }
   }
 

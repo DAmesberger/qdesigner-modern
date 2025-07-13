@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { designerStore } from '$lib/stores/designerStore';
   import { Chart, registerables } from 'chart.js';
-  import type { Variable } from '$lib/shared';
+  import type { Variable } from '$lib/shared/types/questionnaire';
   
   Chart.register(...registerables);
   
@@ -94,7 +94,7 @@
           datasets: selectedVariables.map((varId, index) => {
             const variable = variables.find(v => v.name === varId);
             return {
-              label: variable?.label || varId,
+              label: (variable as any)?.label || varId,
               data: generateMockData(varId),
               backgroundColor: colors[index % colors.length] + '33',
               borderColor: colors[index % colors.length],
@@ -348,7 +348,7 @@
           {#each ['bar', 'line', 'pie', 'radar', 'distribution', 'percentile'] as chartType}
             <button
               class="chart-type-button"
-              class:active={type === chartType}
+              class:active={type === chartType as any}
               on:click={() => { type = chartType; createChart(); }}
             >
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -388,7 +388,7 @@
                   }
                 }}
               />
-              <span>{variable.label || variable.name}</span>
+              <span>{(variable as any).label || variable.name}</span>
               {#if variable.type === 'number'}
                 <span class="variable-type">numeric</span>
               {/if}

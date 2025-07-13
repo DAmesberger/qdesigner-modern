@@ -42,7 +42,7 @@ export type VariableType =
   | 'stimulus_onset';
 
 export interface ValidationRule {
-  type: 'required' | 'min' | 'max' | 'pattern' | 'custom';
+  type: 'required' | 'min' | 'max' | 'minLength' | 'maxLength' | 'pattern' | 'custom';
   value?: any;
   message?: string;
   condition?: string; // Formula that must evaluate to true

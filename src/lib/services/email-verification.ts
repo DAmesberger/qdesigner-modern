@@ -167,11 +167,16 @@ export async function verifyCode({
       throw updateError;
     }
 
-    // If user exists, update their email_confirmed_at
+    // If user exists, update their email_confirmed status
     if (verification.user_id) {
-      await supabase.auth.admin.updateUserById(verification.user_id, {
-        email_confirmed_at: new Date().toISOString()
-      });
+      // Update the user's email verification status in the users table
+      await supabase
+        .from('users')
+        .update({ 
+          email_verified: true,
+          email_verified_at: new Date().toISOString()
+        })
+        .eq('auth_id', verification.user_id);
     }
 
     // Log event

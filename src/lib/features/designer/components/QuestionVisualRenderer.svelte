@@ -1,10 +1,11 @@
 <script lang="ts">
   import type { Question, QuestionnaireTheme } from '$lib/shared';
+  import { defaultTheme } from '$lib/shared';
   import { createEventDispatcher } from 'svelte';
   import { produce } from 'immer';
   
   export let question: Question;
-  export let theme: QuestionnaireTheme;
+  export let theme: QuestionnaireTheme = defaultTheme;
   export let mode: 'edit' | 'preview' = 'preview';
   export let selected = false;
   
@@ -63,7 +64,7 @@
     const styles = theme.components.response.choice;
     
     return {
-      component: 'choice',
+      component: 'choice' as const,
       options,
       multipleChoice,
       styles
@@ -77,7 +78,7 @@
       : theme.components.response.text.input;
     
     return {
-      component: 'text',
+      component: 'text' as const,
       multiline,
       styles
     };
@@ -90,7 +91,7 @@
     const styles = theme.components.response.scale;
     
     return {
-      component: 'scale',
+      component: 'scale' as const,
       min,
       max,
       labels,
@@ -149,17 +150,18 @@
   <!-- Response Area -->
   <div class="response-area" style="margin-top: {theme.global.spacing[4]}">
     {#if responseConfig?.component === 'choice'}
+      {@const choiceConfig = responseConfig}
       <div 
         class="choices"
         style="display: flex; flex-direction: column; gap: {theme.components.question.response.gap}"
       >
-        {#each responseConfig.options as option, index}
+        {#each choiceConfig.options as option, index}
           <label
             class="choice-option"
-            style={Object.entries(responseConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ')}
+            style={Object.entries(choiceConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ')}
           >
             <input
-              type={responseConfig.multipleChoice ? 'checkbox' : 'radio'}
+              type={choiceConfig.multipleChoice ? 'checkbox' : 'radio'}
               name={`question-${question.id}`}
               value={option}
               disabled={mode === 'edit'}
@@ -169,31 +171,33 @@
         {/each}
       </div>
     {:else if responseConfig?.component === 'text'}
-      {#if responseConfig.multiline}
+      {@const textConfig = responseConfig}
+      {#if textConfig.multiline}
         <textarea
           placeholder="Enter your response..."
           rows="4"
-          style={Object.entries(responseConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ') + '; width: 100%'}
+          style={Object.entries(textConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ') + '; width: 100%'}
           disabled={mode === 'edit'}
         />
       {:else}
         <input
           type="text"
           placeholder="Enter your response..."
-          style={Object.entries(responseConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ') + '; width: 100%'}
+          style={Object.entries(textConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ') + '; width: 100%'}
           disabled={mode === 'edit'}
         />
       {/if}
     {:else if responseConfig?.component === 'scale'}
+      {@const scaleConfig = responseConfig}
       <div 
         class="scale-options"
         style="display: flex; gap: {theme.global.spacing[2]}; justify-content: space-between"
       >
-        {#each Array(responseConfig.max - responseConfig.min + 1) as _, i}
-          {@const value = responseConfig.min + i}
+        {#each Array(scaleConfig.max - scaleConfig.min + 1) as _, i}
+          {@const value = scaleConfig.min + i}
           <label
             class="scale-option"
-            style={Object.entries(responseConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ') + '; cursor: pointer; text-align: center; flex: 1'}
+            style={Object.entries(scaleConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ') + '; cursor: pointer; text-align: center; flex: 1'}
           >
             <input
               type="radio"
@@ -203,9 +207,9 @@
               style="display: block; margin: 0 auto {theme.global.spacing[1]}"
             />
             <span>{value}</span>
-            {#if (value === responseConfig.min && responseConfig.labels.min) || (value === responseConfig.max && responseConfig.labels.max)}
+            {#if (value === scaleConfig.min && scaleConfig.labels.min) || (value === scaleConfig.max && scaleConfig.labels.max)}
               <div style="font-size: {theme.global.typography.fontSize.sm}; color: {theme.global.colors.text.secondary}; margin-top: {theme.global.spacing[1]}">
-                {value === responseConfig.min ? responseConfig.labels.min : responseConfig.labels.max}
+                {value === scaleConfig.min ? scaleConfig.labels.min : scaleConfig.labels.max}
               </div>
             {/if}
           </label>

@@ -13,34 +13,34 @@
   const templates = [
     {
       name: 'Simple Score',
-      template: 'Your score: ${score} out of ${maxScore} (${Math.round(score/maxScore*100)}%)'
+      template: 'Your score: $\{score} out of $\{maxScore} ($\{Math.round(score/maxScore*100)}%)'
     },
     {
       name: 'Performance Feedback',
-      template: `${IF(score >= 80, "Excellent performance!", IF(score >= 60, "Good job!", "Keep practicing!"))}
+      template: `$\{IF(score >= 80, "Excellent performance!", IF(score >= 60, "Good job!", "Keep practicing!"))}
       
-Your score: ${score} points
-Time taken: ${Math.round(responseTime/1000)} seconds`
+Your score: $\{score} points
+Time taken: $\{Math.round(responseTime/1000)} seconds`
     },
     {
       name: 'Comparative',
-      template: `Your result: ${score}
-Average: ${avgScore}
-${IF(score > avgScore, "You performed above average!", "You performed below average.")}`
+      template: `Your result: $\{score}
+Average: $\{avgScore}
+$\{IF(score > avgScore, "You performed above average!", "You performed below average.")}`
     },
     {
       name: 'Detailed Analysis',
       template: `## Your Results
 
-**Overall Score:** ${score}/${maxScore} (${Math.round(score/maxScore*100)}%)
+**Overall Score:** $\{score}/$\{maxScore} ($\{Math.round(score/maxScore*100)}%)
 
 ### Performance by Category:
-- Category A: ${categoryA} (${IF(categoryA >= 8, "Strong", "Needs improvement")})
-- Category B: ${categoryB} (${IF(categoryB >= 8, "Strong", "Needs improvement")})
-- Category C: ${categoryC} (${IF(categoryC >= 8, "Strong", "Needs improvement")})
+- Category A: $\{categoryA} ($\{IF(categoryA >= 8, "Strong", "Needs improvement")})
+- Category B: $\{categoryB} ($\{IF(categoryB >= 8, "Strong", "Needs improvement")})
+- Category C: $\{categoryC} ($\{IF(categoryC >= 8, "Strong", "Needs improvement")})
 
 ### Interpretation:
-${IF(score >= 80, "You have demonstrated excellent understanding of the material. Your performance across all categories shows strong comprehension.", IF(score >= 60, "You have a good grasp of the material. Consider reviewing areas where you scored lower.", "There's room for improvement. We recommend reviewing the material and practicing more."))}`
+$\{IF(score >= 80, "You have demonstrated excellent understanding of the material. Your performance across all categories shows strong comprehension.", IF(score >= 60, "You have a good grasp of the material. Consider reviewing areas where you scored lower.", "There's room for improvement. We recommend reviewing the material and practicing more."))}`
     }
   ];
   
@@ -114,7 +114,7 @@ ${IF(score >= 80, "You have demonstrated excellent understanding of the material
   
   // Insert variable at cursor
   function insertVariable(varName: string) {
-    const insertion = `\${${varName}}`;
+    const insertion = `$\{${varName}}`;
     dispatch('insertText', insertion);
   }
   
@@ -227,25 +227,25 @@ ${IF(score >= 80, "You have demonstrated excellent understanding of the material
           <h5 class="section-title">Functions</h5>
           <div class="function-list">
             <button
-              on:click={() => insertFunction('${IF(condition, "true", "false")}')}
+              on:click={() => insertFunction('$\{IF(condition, "true", "false")}')}
               class="function-item"
             >
               IF(condition, true, false)
             </button>
             <button
-              on:click={() => insertFunction('${Math.round(value)}')}
+              on:click={() => insertFunction('$\{Math.round(value)}')}
               class="function-item"
             >
               Math.round(value)
             </button>
             <button
-              on:click={() => insertFunction('${Math.floor(value)}')}
+              on:click={() => insertFunction('$\{Math.floor(value)}')}
               class="function-item"
             >
               Math.floor(value)
             </button>
             <button
-              on:click={() => insertFunction('${value.toFixed(2)}')}
+              on:click={() => insertFunction('$\{value.toFixed(2)}')}
               class="function-item"
             >
               toFixed(decimals)

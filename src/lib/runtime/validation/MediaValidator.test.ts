@@ -15,7 +15,7 @@ describe('MediaValidator', () => {
 
   const createTestQuestionnaire = (questions: Question[]): Questionnaire => ({
     id: 'test',
-    version: 1,
+    version: '1.0.0',
     name: 'Test Questionnaire',
     description: '',
     pages: [{
@@ -27,11 +27,8 @@ describe('MediaValidator', () => {
     variables: [],
     flow: [],
     settings: {},
-    metadata: {
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      createdBy: 'test'
-    }
+    created: new Date(),
+    modified: new Date()
   });
 
   describe('validateQuestionnaire', () => {
@@ -54,10 +51,16 @@ describe('MediaValidator', () => {
     it('should fail validation when image URL returns 404', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'image',
+        type: 'multimedia',
         name: 'Image Question',
         text: 'Look at this image',
-        responseType: { type: 'single' },
+        responseType: { 
+          type: 'single',
+          options: [
+            { id: 'opt1', value: 1, label: 'Option 1' },
+            { id: 'opt2', value: 2, label: 'Option 2' }
+          ]
+        },
         stimulus: {
           type: 'image',
           content: {
@@ -89,10 +92,16 @@ describe('MediaValidator', () => {
     it('should fail validation when network error occurs', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'video',
+        type: 'multimedia',
         name: 'Video Question',
         text: 'Watch this video',
-        responseType: { type: 'single' },
+        responseType: { 
+          type: 'single',
+          options: [
+            { id: 'opt1', value: 1, label: 'Option 1' },
+            { id: 'opt2', value: 2, label: 'Option 2' }
+          ]
+        },
         stimulus: {
           type: 'video',
           content: {
@@ -118,10 +127,16 @@ describe('MediaValidator', () => {
     it('should warn about CORS issues', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'audio',
+        type: 'multimedia',
         name: 'Audio Question',
         text: 'Listen to this',
-        responseType: { type: 'single' },
+        responseType: { 
+          type: 'single',
+          options: [
+            { id: 'opt1', value: 1, label: 'Option 1' },
+            { id: 'opt2', value: 2, label: 'Option 2' }
+          ]
+        },
         stimulus: {
           type: 'audio',
           content: {
@@ -153,10 +168,16 @@ describe('MediaValidator', () => {
     it('should warn about large file sizes', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'video',
+        type: 'multimedia',
         name: 'Large Video',
         text: 'Watch this',
-        responseType: { type: 'single' },
+        responseType: { 
+          type: 'single',
+          options: [
+            { id: 'opt1', value: 1, label: 'Option 1' },
+            { id: 'opt2', value: 2, label: 'Option 2' }
+          ]
+        },
         stimulus: {
           type: 'video',
           content: {
@@ -191,10 +212,16 @@ describe('MediaValidator', () => {
     it('should validate composite stimuli', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'composite',
+        type: 'multimedia',
         name: 'Composite Question',
         text: 'Multiple media',
-        responseType: { type: 'single' },
+        responseType: { 
+          type: 'single',
+          options: [
+            { id: 'opt1', value: 1, label: 'Option 1' },
+            { id: 'opt2', value: 2, label: 'Option 2' }
+          ]
+        },
         stimulus: {
           type: 'composite',
           content: {
@@ -246,10 +273,16 @@ describe('MediaValidator', () => {
       const questionnaire = createTestQuestionnaire([
         {
           id: 'q1',
-          type: 'image',
+          type: 'multimedia',
           name: 'Image 1',
           text: 'Same image',
-          responseType: { type: 'single' },
+          responseType: { 
+            type: 'single',
+            options: [
+              { id: 'opt1', value: 1, label: 'Option 1' },
+              { id: 'opt2', value: 2, label: 'Option 2' }
+            ]
+          },
           stimulus: {
             type: 'image',
             content: {
@@ -259,10 +292,16 @@ describe('MediaValidator', () => {
         },
         {
           id: 'q2',
-          type: 'image',
+          type: 'multimedia',
           name: 'Image 2',
           text: 'Same image again',
-          responseType: { type: 'single' },
+          responseType: { 
+            type: 'single',
+            options: [
+              { id: 'opt1', value: 1, label: 'Option 1' },
+              { id: 'opt2', value: 2, label: 'Option 2' }
+            ]
+          },
           stimulus: {
             type: 'image',
             content: {

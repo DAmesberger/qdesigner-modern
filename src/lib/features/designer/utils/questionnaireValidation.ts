@@ -101,18 +101,20 @@ export class QuestionnaireValidator {
         warnings.push({
           type: 'structure',
           severity: 'warning',
-          message: `Page "${page.name}" has no questions`
+          message: `Page "${page.name || 'Unnamed page'}" has no questions`
         });
       }
 
       // Check if all question IDs in page exist
-      for (const questionId of page.questions) {
-        if (!questionnaire.questions.find(q => q.id === questionId)) {
-          errors.push({
-            type: 'structure',
-            severity: 'error',
-            message: `Page "${page.name}" references non-existent question "${questionId}"`
-          });
+      if (page.questions) {
+        for (const questionId of page.questions) {
+          if (!questionnaire.questions.find(q => q.id === questionId)) {
+            errors.push({
+              type: 'structure',
+              severity: 'error',
+              message: `Page "${page.name || 'Unnamed page'}" references non-existent question "${questionId}"`
+            });
+          }
         }
       }
     }
@@ -120,7 +122,7 @@ export class QuestionnaireValidator {
     // Check for orphaned questions
     const referencedQuestions = new Set<string>();
     for (const page of questionnaire.pages) {
-      page.questions.forEach(qId => referencedQuestions.add(qId));
+      page.questions?.forEach(qId => referencedQuestions.add(qId));
     }
 
     for (const question of questionnaire.questions) {

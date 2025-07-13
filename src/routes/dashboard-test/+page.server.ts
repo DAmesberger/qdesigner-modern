@@ -26,10 +26,10 @@ export const load: PageServerLoad = async () => {
 
   // Calculate summary statistics
   const totalQuestionnaires = questionnaires?.length || 0;
-  const totalResponses = questionnaires?.reduce((sum, q) => sum + Number(q.total_responses || 0), 0) || 0;
-  const activeQuestionnaires = questionnaires?.filter(q => q.status === 'published').length || 0;
+  const totalResponses = questionnaires?.reduce((sum: number, q: any) => sum + Number(q.total_responses || 0), 0) || 0;
+  const activeQuestionnaires = questionnaires?.filter((q: any) => q.status === 'published').length || 0;
   const avgCompletionRate = questionnaires?.length > 0
-    ? questionnaires.reduce((sum, q) => {
+    ? questionnaires.reduce((sum: number, q: any) => {
         const rate = q.total_responses > 0 
           ? (Number(q.completed_responses) / Number(q.total_responses)) * 100 
           : 0;

@@ -18,6 +18,8 @@ export interface Invitation {
   token: string;
   status: 'pending' | 'viewed' | 'accepted' | 'declined' | 'expired' | 'revoked';
   expiresAt: string;
+  createdAt: string;
+  acceptedAt?: string | null;
   customMessage?: string;
   organization?: {
     id: string;
@@ -48,6 +50,8 @@ function transformInvitation(dbInvitation: any): Invitation {
     token: dbInvitation.token,
     status: dbInvitation.status,
     expiresAt: dbInvitation.expires_at,
+    createdAt: dbInvitation.created_at,
+    acceptedAt: dbInvitation.accepted_at,
     customMessage: dbInvitation.custom_message,
     organization: dbInvitation.organizations,
     invitedBy: dbInvitation.invited_by
