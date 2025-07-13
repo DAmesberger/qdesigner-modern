@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { ReactionTest } from '$lib/features/runtime/experiments/ReactionTest';
-  import type { ReactionTestResult, ReactionTestStats } from '$lib/features/runtime/experiments/ReactionTest';
+  import { ReactionTest } from '$lib/experiments/ReactionTest';
+  import type { ReactionTestResult, ReactionTestStats } from '$lib/experiments/ReactionTest';
 
   export let onComplete: (results: ReactionTestResult[]) => void = () => {};
 
@@ -46,7 +46,7 @@
       backgroundColor: [0, 0, 0, 1], // Black
     });
 
-    reactionTest.onComplete = (results) => {
+    reactionTest.onComplete = (results: ReactionTestResult[]) => {
       isRunning = false;
       showResults = true;
       stats = reactionTest!.getStats();

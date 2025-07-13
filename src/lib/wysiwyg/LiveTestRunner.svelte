@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Questionnaire, QuestionnaireTheme, Variable } from '$lib/shared';
+  import type { Questionnaire, QuestionnaireTheme, Variable, Question } from '$lib/shared';
   import { createEventDispatcher, onMount } from 'svelte';
   import { VariableEngine } from '$lib/scripting-engine';
   import QuestionVisualRenderer from './QuestionVisualRenderer.svelte';

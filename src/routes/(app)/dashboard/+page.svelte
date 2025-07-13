@@ -9,7 +9,11 @@
     QuestionnaireListItem 
   } from '$lib/types/dashboard';
   
-  export let data: PageData;
+  interface Props {
+    data: PageData;
+  }
+  
+  let { data }: Props = $props();
   
   const { user, questionnaires, recentActivity, stats } = data;
 

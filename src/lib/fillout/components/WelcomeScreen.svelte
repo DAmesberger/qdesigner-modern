@@ -1,10 +1,10 @@
 <script lang="ts">
 	import Button from '$lib/components/common/Button.svelte';
 	import Card from '$lib/components/common/Card.svelte';
-	import type { QuestionnaireDefinition } from '$lib/types/questionnaire';
+	import type { Questionnaire } from '$lib/shared/types/questionnaire';
 
 	interface Props {
-		questionnaire: QuestionnaireDefinition;
+		questionnaire: Questionnaire;
 		projectName?: string;
 		onStart: () => void;
 		estimatedDuration?: number;
@@ -33,7 +33,7 @@
 				<p class="project-name">{projectName}</p>
 			{/if}
 			
-			<h1 class="welcome-title">{questionnaire.title || 'Welcome'}</h1>
+			<h1 class="welcome-title">{questionnaire.name || 'Welcome'}</h1>
 			
 			{#if questionnaire.description}
 				<p class="welcome-description">{questionnaire.description}</p>
@@ -63,11 +63,11 @@
 				{/if}
 			</div>
 			
-			{#if questionnaire.instructions?.welcome}
+			{#if questionnaire.settings?.requireConsent}
 				<div class="instructions">
 					<h3>Before you begin:</h3>
 					<div class="instructions-content">
-						{@html questionnaire.instructions.welcome}
+						<p>This questionnaire requires your consent to participate. Your responses will be used for research purposes.</p>
 					</div>
 				</div>
 			{/if}
@@ -83,7 +83,7 @@
 				</Button>
 			</div>
 			
-			{#if questionnaire.settings?.showPrivacyNotice}
+			{#if questionnaire.settings?.requireAuthentication || questionnaire.settings?.requireConsent}
 				<p class="privacy-notice">
 					Your responses will be stored securely and used only for research purposes.
 				</p>

@@ -3,7 +3,7 @@
   import Container from '$lib/components/ui/layout/Container.svelte';
   import Card from '$lib/components/common/Card.svelte';
   import Button from '$lib/components/common/Button.svelte';
-  import Badge from '$lib/components/ui/data/Badge.svelte';
+  import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import EmptyState from '$lib/components/common/EmptyState.svelte';
   
   // Mock data - replace with actual API calls

@@ -176,7 +176,7 @@
                 <div animate:flip={{ duration: 300 }}>
                   <QuestionVisualRenderer
                     question={item.question}
-                    {theme}
+                    theme={questionnaireTheme}
                     mode="edit"
                     selected={$designerStore.selectedItemId === item.id}
                     on:select={() => designerStore.selectItem(item.id, 'question')}
@@ -215,7 +215,7 @@
 {#if showTestRunner}
   <LiveTestRunner
     questionnaire={$designerStore.questionnaire}
-    {theme}
+    theme={questionnaireTheme}
     startPageId={$currentPage?.id}
     showDebugInfo={true}
     on:close={() => showTestRunner = false}

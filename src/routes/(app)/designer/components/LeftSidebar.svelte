@@ -24,7 +24,9 @@
     localStorage.setItem('designer-left-sidebar-collapsed', String(isCollapsed));
   }
   
-  const tabs = [
+  type TabId = typeof activeTab;
+  
+  const tabs: Array<{ id: TabId; label: string; icon: string }> = [
     { id: 'blocks', label: 'Blocks', icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z' },
     { id: 'questions', label: 'Questions', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
     { id: 'variables', label: 'Variables', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
@@ -42,6 +44,7 @@
     on:click={toggleCollapse}
     class="absolute -right-3 top-20 z-10 w-6 h-6 {theme.semantic.bgSurface} {theme.semantic.borderDefault} border rounded-full flex items-center justify-center {theme.semantic.interactive.ghost} transition-colors"
     title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+    aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
   >
     <svg 
       class="w-3 h-3 text-gray-600 transition-transform duration-300"

@@ -10,10 +10,14 @@
 	import CompletionScreen from '$lib/fillout/components/CompletionScreen.svelte';
 	import { FilloutRuntime } from '$lib/fillout/runtime/FilloutRuntime';
 	import { WebGLRenderer } from '$lib/renderer/WebGLRenderer';
-	import type { QuestionnaireDefinition } from '$lib/types/questionnaire';
+	import type { Questionnaire } from '$lib/shared/types/questionnaire';
 	import { QuestionnaireAccessService } from '$lib/fillout/services/QuestionnaireAccessService';
 
-	export let data: PageData;
+	interface Props {
+		data: PageData;
+	}
+
+	let { data }: Props = $props();
 
 	let container: HTMLDivElement;
 	let canvas: HTMLCanvasElement;
@@ -28,18 +32,24 @@
 	let completedSession = $state<any>(null);
 
 	// Initialize on mount
-	onMount(async () => {
-		// If we have an existing session, skip welcome/consent
-		if (data.existingSession) {
-			session = data.existingSession;
-			if (session.status === 'in_progress') {
-				currentScreen = 'runtime';
-				await initializeRuntime();
+	onMount(() => {
+		// Handle async initialization
+		const init = async () => {
+			// If we have an existing session, skip welcome/consent
+			if (data.existingSession) {
+				session = data.existingSession;
+				if (session.status === 'in_progress') {
+					currentScreen = 'runtime';
+					await initializeRuntime();
+				}
+			} else if (data.questionnaire.definition.settings?.requireConsent === false) {
+				// Skip consent if not required
+				currentScreen = 'welcome';
 			}
-		} else if (data.questionnaire.definition.settings?.requireConsent === false) {
-			// Skip consent if not required
-			currentScreen = 'welcome';
-		}
+		};
+
+		// Call the async function
+		init();
 
 		// Cleanup on unmount
 		return () => {

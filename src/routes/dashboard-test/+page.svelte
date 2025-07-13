@@ -3,7 +3,11 @@
   import { goto } from '$app/navigation';
   import { formatDistanceToNow } from '$lib/utils/date';
   
-  export let data: PageData;
+  interface Props {
+    data: PageData;
+  }
+  
+  let { data }: Props = $props();
   
   const { user, questionnaires, recentActivity, stats } = data;
 

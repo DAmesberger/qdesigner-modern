@@ -13,6 +13,7 @@ export interface DomainConfig {
   emailWhitelist: string[];
   emailBlacklist: string[];
   welcomeMessage?: string;
+  created_at: string;
 }
 
 export interface VerifyDomainResult {

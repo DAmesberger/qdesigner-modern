@@ -2,6 +2,8 @@
   export let variant: 'info' | 'success' | 'warning' | 'error' = 'info';
   export let title: string = '';
   export let dismissible = false;
+  let className = '';
+  export { className as class };
   
   let visible = true;
   
@@ -28,7 +30,7 @@
 </script>
 
 {#if visible}
-  <div class="rounded-md p-4 {variantClasses[variant]}">
+  <div class="rounded-md p-4 {variantClasses[variant]} {className}">
     <div class="flex">
       <div class="shrink-0">
         <svg class="h-5 w-5 {iconColors[variant]}" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
