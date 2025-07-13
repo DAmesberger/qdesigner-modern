@@ -8,11 +8,14 @@
   import VariableManager from './VariableManager.svelte';
   import PropertiesPanel from './PropertiesPanel.svelte';
   import SaveLoadToolbar from './SaveLoadToolbar.svelte';
+  import ValidationPanel from './ValidationPanel.svelte';
 
   let activeTab: 'questions' | 'variables' | 'flow' = 'questions';
   let showPreview = false;
   let questionnaireName = '';
   let pages: any[] = [];
+  let questionnaire: any = null;
+  let showValidationPanel = false;
   
   // Get user from page data
   $: user = $page.data.user;
@@ -39,6 +42,7 @@
   designerStore.subscribe(state => {
     questionnaireName = state.questionnaire.name;
     pages = state.questionnaire.pages;
+    questionnaire = state.questionnaire;
     showPreview = state.previewMode;
   });
 
@@ -107,6 +111,13 @@
 
   function handleAddPage() {
     designerStore.addPage();
+  }
+  
+  function handleValidationComplete(result: any) {
+    if (!result.valid) {
+      console.log('Validation errors:', result.errors);
+      console.log('Validation warnings:', result.warnings);
+    }
   }
 </script>
 
@@ -262,8 +273,24 @@
       </div>
     </div>
 
-    <!-- Canvas -->
-    <PageCanvas />
+    <!-- Center Column -->
+    <div class="flex-1 flex flex-col">
+      <!-- Canvas -->
+      <div class="flex-1">
+        <PageCanvas />
+      </div>
+      
+      <!-- Validation Panel -->
+      {#if showValidationPanel && questionnaire}
+        <div class="border-t border-gray-200">
+          <ValidationPanel 
+            {questionnaire}
+            autoValidate={true}
+            onValidationComplete={handleValidationComplete}
+          />
+        </div>
+      {/if}
+    </div>
 
     <!-- Right Sidebar (Properties) -->
     <div class="w-80 bg-gray-50 border-l border-gray-200">
@@ -280,10 +307,10 @@
         <span>{pages.reduce((sum, p) => sum + (p.questions ?? []).length, 0)} questions</span>
         <span>•</span>
         <button
-          on:click={() => designerStore.validate()}
+          on:click={() => showValidationPanel = !showValidationPanel}
           class="text-blue-600 hover:text-blue-800"
         >
-          Validate
+          {showValidationPanel ? 'Hide' : 'Show'} Validation
         </button>
       </div>
       

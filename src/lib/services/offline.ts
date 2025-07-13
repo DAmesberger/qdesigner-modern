@@ -20,9 +20,13 @@ function createOfflineStore() {
 
   // Initialize service worker
   async function init() {
-    if (!browser || !('serviceWorker' in navigator)) {
-      console.log('[Offline] Service Worker not supported');
+    if (!browser) {
       return;
+    }
+
+    // Service workers are required - no fallback
+    if (!('serviceWorker' in navigator)) {
+      throw new Error('[Offline] Service Worker not supported - this is a required feature');
     }
 
     try {
@@ -35,7 +39,7 @@ function createOfflineStore() {
 
       // Check for updates
       registration.addEventListener('updatefound', () => {
-        const newWorker = registration.installing;
+        const newWorker = registration!.installing;
         if (newWorker) {
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
@@ -78,12 +82,12 @@ function createOfflineStore() {
     
     // Trigger sync
     if (registration && 'sync' in registration) {
-      registration.sync.register('sync-questionnaire-changes')
+      (registration as any).sync.register('sync-questionnaire-changes')
         .then(() => {
           console.log('[Offline] Sync registered');
           update(state => ({ ...state, syncPending: true }));
         })
-        .catch(error => {
+        .catch((error: any) => {
           console.error('[Offline] Sync registration failed:', error);
         });
     }

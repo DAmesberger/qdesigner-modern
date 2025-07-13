@@ -230,6 +230,15 @@ export class FilloutRuntime {
 	// Public API methods that delegate to runtime
 	
 	async start(): Promise<void> {
+		// Preload all media resources before starting
+		await this.runtime.preload((progress) => {
+			console.log(`Loading resources: ${progress}%`);
+			// Optionally notify UI about loading progress
+			if (this.onSessionUpdate) {
+				this.onSessionUpdate(progress * 0.5); // Use first half of progress bar for loading
+			}
+		});
+		
 		return this.runtime.start();
 	}
 	

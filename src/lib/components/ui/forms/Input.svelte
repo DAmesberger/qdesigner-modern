@@ -8,7 +8,8 @@
   export let error = false;
   export let id: string | undefined = undefined;
   export let name: string | undefined = undefined;
-  export let autocomplete: string | undefined = undefined;
+  // Autocomplete disabled per business decision
+  export let autocomplete: string | undefined = "off";
   
   $: inputClasses = `
     block w-full rounded-md border-0 py-1.5 text-foreground bg-background shadow-sm 

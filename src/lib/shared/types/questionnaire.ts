@@ -2,6 +2,7 @@
 
 export interface Questionnaire {
   id: string;
+  organizationId?: string; // Added for offline sync support
   projectId?: string;
   name: string;
   description?: string;
@@ -94,6 +95,7 @@ export type QuestionType =
   | 'reaction' 
   | 'multimedia'
   | 'instruction'
+  | 'webgl'
   | 'custom';
 
 export interface Stimulus {
@@ -134,6 +136,8 @@ export type ResponseType =
   | { type: 'scale'; min: number; max: number; step?: number; labels?: string[]; minLabel?: string; maxLabel?: string; required?: boolean; timeout?: number; }
   | { type: 'keypress'; keys: string[]; recordAllKeys?: boolean; required?: boolean; timeout?: number; }
   | { type: 'click'; allowedTargets?: string[]; required?: boolean; timeout?: number; }
+  | { type: 'none'; autoAdvance?: boolean; delay?: number; } // For instruction questions
+  | { type: 'webgl'; validKeys?: string[]; validTargets?: string[]; recordAllResponses?: boolean; required?: boolean; timeout?: number; }
   | { type: 'custom'; customType: string; config?: any; required?: boolean; timeout?: number; };
 
 export interface ResponseConfig {

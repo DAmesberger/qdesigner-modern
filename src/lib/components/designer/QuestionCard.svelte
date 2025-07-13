@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
   import { designerStore } from '$lib/stores/designerStore';
+  import { get } from 'svelte/store';
 
   export let question: Question;
   export let index: number;
@@ -61,8 +62,14 @@
         const targetIndex = dropPosition === 'before' ? index : index + 1;
         const adjustedIndex = data.sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
         
-        if (question.page) {
-          designerStore.reorderQuestions(question.page, data.sourceIndex, adjustedIndex);
+        if (question.blockId) {
+          designerStore.reorderQuestionsInBlock(question.blockId, data.sourceIndex, adjustedIndex);
+        } else if (question.page) {
+          // For backward compatibility with questions directly on pages
+          const page = get(designerStore).questionnaire.pages.find(p => p.id === question.page);
+          if (page?.blocks?.[0]) {
+            designerStore.reorderQuestionsInBlock(page.blocks[0].id, data.sourceIndex, adjustedIndex);
+          }
         }
       }
     } catch (error) {
@@ -77,6 +84,7 @@
       text: '📝',
       choice: '☑️',
       scale: '⭐',
+      rating: '⭐',
       reaction: '⚡',
       multimedia: '🎬',
       instruction: '📋',

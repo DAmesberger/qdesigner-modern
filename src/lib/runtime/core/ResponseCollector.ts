@@ -112,10 +112,6 @@ export class ResponseCollector {
       case 'click':
         this.configureClickHandler(responseType);
         break;
-        
-      case 'none':
-        // No response needed, just timing
-        break;
     }
   }
   

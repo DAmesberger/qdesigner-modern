@@ -5,6 +5,7 @@ export { default as TextDisplayQuestion } from './TextDisplayQuestion.svelte';
 export { default as MultipleChoiceQuestion } from './MultipleChoiceQuestion.svelte';
 export { default as ScaleQuestion } from './ScaleQuestion.svelte';
 export { default as TextInputQuestion } from './TextInputQuestion.svelte';
+export { default as WebGLQuestion } from './WebGLQuestion.svelte';
 
 export * from './types';
 
@@ -14,6 +15,7 @@ import TextDisplayQuestion from './TextDisplayQuestion.svelte';
 import MultipleChoiceQuestion from './MultipleChoiceQuestion.svelte';
 import ScaleQuestion from './ScaleQuestion.svelte';
 import TextInputQuestion from './TextInputQuestion.svelte';
+import WebGLQuestion from './WebGLQuestion.svelte';
 
 export const questionRegistry: QuestionComponentRegistry = {
   'text-display': {
@@ -79,6 +81,50 @@ export const questionRegistry: QuestionComponentRegistry = {
     icon: '✏️',
     category: 'Response',
     description: 'Text input for open-ended responses'
+  },
+  
+  'webgl': {
+    component: WebGLQuestion,
+    defaultConfig: {
+      stimulus: {
+        type: 'webgl-shape',
+        content: {
+          type: 'circle',
+          properties: {
+            radius: 50,
+            color: [1, 0, 0, 1]
+          }
+        },
+        fixation: {
+          show: true,
+          duration: 500,
+          type: 'cross',
+          color: '#ffffff'
+        }
+      },
+      response: {
+        type: 'keyboard',
+        validKeys: ['f', 'j'],
+        timeout: 2000,
+        recordAllResponses: false
+      },
+      timing: {
+        preDelay: 1000,
+        fixationDuration: 500,
+        postFixationDelay: 200,
+        stimulusDuration: 0, // Until response
+        responseDuration: 2000,
+        interTrialInterval: 1000
+      },
+      rendering: {
+        targetFPS: 120,
+        vsync: true,
+        backgroundColor: '#000000'
+      }
+    },
+    icon: '🎯',
+    category: 'Precision',
+    description: 'High-precision WebGL stimulus presentation with sub-millisecond timing'
   }
 };
 

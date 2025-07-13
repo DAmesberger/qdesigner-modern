@@ -204,6 +204,59 @@ export interface ReactionResponseConfig {
   recordAllResponses?: boolean;
 }
 
+export interface WebGLQuestionConfig {
+  stimulus: WebGLStimulusConfig;
+  response: WebGLResponseConfig;
+  timing: PrecisionTimingConfig;
+  rendering: {
+    targetFPS: 60 | 120 | 144 | 240;
+    vsync?: boolean;
+    backgroundColor?: string;
+  };
+}
+
+export interface WebGLStimulusConfig {
+  type: 'image' | 'video' | 'webgl-shape' | 'composite';
+  content: string | WebGLContent; // URL for image/video, or WebGL content
+  position?: { x: number; y: number; unit?: 'px' | '%' };
+  size?: { width: number; height: number; unit?: 'px' | '%' };
+  fixation?: {
+    show: boolean;
+    duration: number;
+    type: 'cross' | 'dot' | 'custom';
+    color?: string;
+  };
+}
+
+export interface WebGLContent {
+  type: 'circle' | 'rectangle' | 'text' | 'custom';
+  properties: Record<string, any>;
+}
+
+export interface WebGLResponseConfig {
+  type: 'keyboard' | 'mouse' | 'touch' | 'none';
+  validKeys?: string[];
+  validTargets?: string[];
+  timeout?: number;
+  requireCorrect?: boolean;
+  recordAllResponses?: boolean;
+}
+
+export interface PrecisionTimingConfig {
+  preDelay?: number; // Delay before fixation
+  fixationDuration?: number;
+  postFixationDelay?: number;
+  stimulusDuration?: number; // 0 = until response
+  responseDuration?: number; // Max response time
+  interTrialInterval?: number;
+  jitter?: {
+    target: 'fixation' | 'stimulus' | 'iti';
+    min: number;
+    max: number;
+    distribution: 'uniform' | 'normal';
+  };
+}
+
 // Question registry for extensibility
 export interface QuestionComponentRegistry {
   [key: string]: {

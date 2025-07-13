@@ -54,11 +54,11 @@
       defaultResponseType: 'custom'
     },
     {
-      type: 'statistical-feedback',
+      type: 'custom',
       label: 'Statistical Feedback',
       icon: '📊',
       description: 'Charts and personalized feedback',
-      defaultResponseType: 'none'
+      defaultResponseType: { type: 'custom', customType: 'statistical-feedback' }
     }
   ];
 

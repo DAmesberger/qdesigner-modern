@@ -9,6 +9,8 @@ export interface SyncQueueItem {
   recordId: string;
   data: any;
   userId: string;
+  organizationId: string;  // Added per business decision
+  projectId?: string;      // Added per business decision
   retryCount: number;
   status: 'pending' | 'syncing' | 'failed' | 'synced';
   error?: string;
@@ -63,7 +65,7 @@ class QDesignerDatabase extends Dexie {
   }
 
   // Helper methods
-  async saveQuestionnaire(questionnaire: Questionnaire, userId: string): Promise<void> {
+  async saveQuestionnaire(questionnaire: Questionnaire, userId: string, organizationId?: string, projectId?: string): Promise<void> {
     const offlineQuestionnaire: OfflineQuestionnaire = {
       id: questionnaire.id,
       userId,
@@ -92,7 +94,9 @@ class QDesignerDatabase extends Dexie {
         table: 'questionnaires',
         recordId: questionnaire.id,
         data: questionnaire,
-        userId
+        userId,
+        organizationId: organizationId || questionnaire.organizationId || '',
+        projectId: projectId || questionnaire.projectId
       });
     });
   }

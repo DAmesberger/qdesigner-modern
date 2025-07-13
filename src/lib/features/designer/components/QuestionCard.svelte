@@ -77,6 +77,7 @@
       text: '📝',
       choice: '☑️',
       scale: '⭐',
+      rating: '⭐',
       reaction: '⚡',
       multimedia: '🎬',
       instruction: '📋',

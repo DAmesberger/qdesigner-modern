@@ -20,6 +20,8 @@
 	let runtime: FilloutRuntime | null = null;
 	let renderer: WebGLRenderer | null = null;
 	let loading = $state(false);
+	let loadingMessage = $state('Loading questionnaire...');
+	let loadingProgress = $state(0);
 	let error = $state<string | null>(null);
 	let currentScreen = $state<'welcome' | 'consent' | 'runtime' | 'complete'>('welcome');
 	let session = $state<any>(null);
@@ -96,10 +98,15 @@
 		if (!canvas) return;
 		
 		try {
+			loading = true;
+			loadingMessage = 'Initializing WebGL...';
+			
 			// Initialize WebGL renderer
 			renderer = new WebGLRenderer(canvas);
 			await renderer.initialize();
 
+			loadingMessage = 'Loading questionnaire...';
+			
 			// Initialize runtime with persistence
 			runtime = new FilloutRuntime({
 				canvas,
@@ -112,15 +119,29 @@
 					currentScreen = 'complete';
 				},
 				onSessionUpdate: (progress) => {
-					// Update progress UI if needed
-					console.log(`Progress: ${progress}%`);
+					// First 50% is media loading, last 50% is questionnaire progress
+					if (loading) {
+						loadingProgress = progress;
+						loadingMessage = `Loading media resources... ${Math.round(progress * 2)}%`;
+					} else {
+						console.log(`Progress: ${progress}%`);
+					}
 				}
 			});
 			
+			loadingMessage = 'Starting questionnaire...';
 			await runtime.start();
+			loading = false;
 		} catch (err) {
 			console.error('Failed to initialize runtime:', err);
-			error = err instanceof Error ? err.message : 'Failed to start questionnaire';
+			loading = false;
+			
+			// Format error message for media loading failures
+			let errorMessage = err instanceof Error ? err.message : 'Failed to start questionnaire';
+			if (errorMessage.includes('Failed to preload')) {
+				errorMessage = `Unable to load required media files:\n${errorMessage}`;
+			}
+			error = errorMessage;
 		}
 	}
 
@@ -154,7 +175,12 @@
 	{:else if loading}
 		<div class="loading-container">
 			<Spinner size="lg" />
-			<p class="loading-text">Loading questionnaire...</p>
+			<p class="loading-text">{loadingMessage}</p>
+			{#if loadingProgress > 0}
+				<div class="loading-progress">
+					<div class="progress-bar" style="width: {loadingProgress}%"></div>
+				</div>
+			{/if}
 		</div>
 	{:else if currentScreen === 'welcome'}
 		<WelcomeScreen
@@ -214,6 +240,21 @@
 	.loading-text {
 		color: var(--muted-foreground);
 		font-size: 0.875rem;
+	}
+
+	.loading-progress {
+		width: 200px;
+		height: 4px;
+		background: var(--muted);
+		border-radius: 2px;
+		overflow: hidden;
+		margin-top: 0.5rem;
+	}
+
+	.progress-bar {
+		height: 100%;
+		background: var(--primary);
+		transition: width 0.3s ease;
 	}
 
 	.fillout-canvas {

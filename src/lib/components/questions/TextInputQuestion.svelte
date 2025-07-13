@@ -153,7 +153,7 @@
         max={question.config.inputType === 'number' ? question.config.max : undefined}
         step={question.config.inputType === 'number' ? question.config.step : undefined}
         pattern={question.config.pattern}
-        autocomplete={question.config.autoComplete}
+        autocomplete="off"
         spellcheck={question.config.spellCheck !== false}
         {disabled}
         on:input={handleInput}

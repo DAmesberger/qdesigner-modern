@@ -19,10 +19,15 @@ export class OfflinePersistenceService {
   /**
    * Save questionnaire with offline support
    */
-  static async saveQuestionnaire(questionnaire: Questionnaire, userId: string): Promise<OfflineSaveResult> {
+  static async saveQuestionnaire(
+    questionnaire: Questionnaire, 
+    userId: string,
+    projectId: string,
+    organizationId: string
+  ): Promise<OfflineSaveResult> {
     try {
       // Always save to IndexedDB first (offline-first)
-      await db.saveQuestionnaire(questionnaire, userId);
+      await db.saveQuestionnaire(questionnaire, userId, organizationId, projectId);
       
       // Save draft for recovery
       await db.saveDraft(questionnaire.id, questionnaire, userId, true);
@@ -30,7 +35,12 @@ export class OfflinePersistenceService {
       // If online, sync to server
       if (get(isOnline)) {
         try {
-          const result = await QuestionnairePersistenceService.saveQuestionnaire(questionnaire, userId);
+          const result = await QuestionnairePersistenceService.saveQuestionnaire(
+            questionnaire, 
+            projectId,
+            organizationId,
+            userId
+          );
           
           if (result.success) {
             // Mark as synced in IndexedDB
@@ -248,8 +258,16 @@ export class OfflinePersistenceService {
         switch (item.operation) {
           case 'create':
           case 'update':
+            // Get organizationId and projectId from the questionnaire or sync queue item
+            const projectId = item.data.projectId || item.projectId;
+            const organizationId = item.organizationId;
+            if (!projectId || !organizationId) {
+              throw new Error('Missing projectId or organizationId for sync');
+            }
             return await QuestionnairePersistenceService.saveQuestionnaire(
               item.data,
+              projectId,
+              organizationId,
               item.userId
             );
           case 'delete':

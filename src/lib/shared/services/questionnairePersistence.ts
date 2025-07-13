@@ -52,7 +52,7 @@ export class QuestionnairePersistenceService {
           organization_id: organizationId,
           project_id: projectId,
           name: questionnaire.name,
-          code: questionnaire.settings?.code || null,
+          code: questionnaire.code || null,
           version: questionnaire.version || 1,
           definition, // Store entire questionnaire as JSONB
           variables: questionnaire.variables || [], // Store variables separately for querying

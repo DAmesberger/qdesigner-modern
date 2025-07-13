@@ -12,6 +12,7 @@ import type {
 import { VariableEngine } from '$lib/scripting-engine';
 import { WebGLRenderer } from '$lib/renderer';
 import { ResourceManager } from '../resources/ResourceManager';
+import { MediaValidator } from '../validation/MediaValidator';
 import { QuestionPresenter } from './QuestionPresenter';
 import { ResponseCollector } from './ResponseCollector';
 import { nanoid } from 'nanoid';
@@ -193,6 +194,16 @@ export class QuestionnaireRuntime {
    * Preload all resources
    */
   public async preload(onProgress?: (progress: number) => void): Promise<void> {
+    // First, validate all media URLs are accessible
+    const validator = new MediaValidator();
+    const validationResult = await validator.validateQuestionnaire(this.config.questionnaire);
+    
+    if (!validationResult.valid) {
+      // Throw error with detailed information about what failed
+      throw new Error(MediaValidator.formatErrors(validationResult));
+    }
+    
+    // If validation passes, proceed with resource loading
     // Scan questionnaire for resources
     await this.resourceManager.scanQuestionnaire(this.config.questionnaire);
     
@@ -200,7 +211,7 @@ export class QuestionnaireRuntime {
     const gl = this.renderer.getContext();
     this.resourceManager.setWebGLContext(gl);
     
-    // Preload all resources
+    // Preload all resources (this will throw if any fail to load)
     await this.resourceManager.preloadAll((progress) => {
       onProgress?.(progress.percentage);
     });
@@ -294,7 +305,19 @@ export class QuestionnaireRuntime {
     // Present question using WebGL renderer
     await this.questionPresenter.present(question, this.variableEngine);
     
-    // Set up response collection
+    // Check if this is a 'none' response type (instruction/display only)
+    if (question.responseType.type === 'none') {
+      // Auto-advance after delay if specified
+      const delay = question.responseType.delay || 0;
+      if (question.responseType.autoAdvance !== false) {
+        setTimeout(() => {
+          this.handleResponse(question, 'auto-advanced', onsetTime);
+        }, delay);
+      }
+      return;
+    }
+    
+    // Set up response collection for questions that expect responses
     this.responseCollector.setup(question, {
       onResponse: (value: any) => this.handleResponse(question, value, onsetTime),
       onTimeout: () => this.handleTimeout(question, onsetTime)
@@ -323,8 +346,10 @@ export class QuestionnaireRuntime {
       valid: true
     };
     
-    // Add to session
-    this.session.responses.push(response);
+    // Add to session only if not a 'none' response type
+    if (question.responseType.type !== 'none') {
+      this.session.responses.push(response);
+    }
     
     // Update question variables
     this.variableEngine.setVariable(`${question.id}_value`, value, 'response');

@@ -126,9 +126,9 @@ export class QuestionPresenter {
       }));
     }
     
-    // Add media content
-    for (const media of question.media || []) {
-      const mediaRenderer = await this.createMediaRenderer(media, question.id);
+    // Add media content (single item per business decision)
+    if (question.media) {
+      const mediaRenderer = await this.createMediaRenderer(question.media, question.id);
       if (mediaRenderer) {
         renderers.push(mediaRenderer);
       }

@@ -120,6 +120,7 @@ export class ResourceManager {
     const resources = Array.from(this.resources.values());
     const total = resources.length;
     let loaded = 0;
+    const errors: Array<{ resource: Resource; error: Error }> = [];
 
     // Create loading promises
     const loadPromises = resources.map(async (resource) => {
@@ -151,12 +152,24 @@ export class ResourceManager {
       } catch (error) {
         resource.status = 'error';
         resource.error = error as Error;
+        errors.push({ resource, error: error as Error });
         console.error(`Failed to load resource ${resource.id}:`, error);
       }
     });
 
     // Wait for all resources to load
     await Promise.all(loadPromises);
+
+    // If any resources failed to load, throw an error with details
+    if (errors.length > 0) {
+      const errorMessages = errors.map(({ resource, error }) => 
+        `- ${resource.type} "${resource.id}" (${resource.url}): ${error.message}`
+      ).join('\n');
+      
+      throw new Error(
+        `Failed to preload ${errors.length} resource${errors.length > 1 ? 's' : ''}:\n${errorMessages}`
+      );
+    }
   }
 
   /**
@@ -363,6 +376,20 @@ export class ResourceManager {
       loaded,
       errors
     };
+  }
+
+  /**
+   * Get all failed resources
+   */
+  public getFailedResources(): Array<Resource> {
+    return Array.from(this.resources.values()).filter(r => r.status === 'error');
+  }
+
+  /**
+   * Validate all resources are loaded successfully
+   */
+  public validateAllLoaded(): boolean {
+    return this.getFailedResources().length === 0;
   }
 
   /**
