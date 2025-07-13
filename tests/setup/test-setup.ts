@@ -31,16 +31,20 @@ if (typeof globalThis.performance === 'undefined') {
 }
 globalThis.performance.now = mockPerformanceNow;
 
-// Mock crypto for tests
-globalThis.crypto = {
-  randomUUID: () => `test-uuid-${Math.random().toString(36).substr(2, 9)}`,
-  getRandomValues: (arr: any) => {
-    for (let i = 0; i < arr.length; i++) {
-      arr[i] = Math.floor(Math.random() * 256);
+// Mock crypto for tests - use Object.defineProperty since crypto is read-only
+Object.defineProperty(globalThis, 'crypto', {
+  value: {
+    randomUUID: () => `test-uuid-${Math.random().toString(36).substr(2, 9)}`,
+    getRandomValues: (arr: any) => {
+      for (let i = 0; i < arr.length; i++) {
+        arr[i] = Math.floor(Math.random() * 256);
+      }
+      return arr;
     }
-    return arr;
-  }
-} as any;
+  },
+  writable: true,
+  configurable: true
+});
 
 // Mock IndexedDB for offline storage tests
 import 'fake-indexeddb/auto';

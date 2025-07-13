@@ -1,7 +1,7 @@
 <script lang="ts">
   import MonacoEditor from './MonacoEditor.svelte';
   import { createEventDispatcher, onMount } from 'svelte';
-  import type { editor, languages } from 'monaco-editor';
+  import type * as monaco from 'monaco-editor';
   
   export let value: string = '';
   export let title: string = 'Script Editor';
@@ -16,7 +16,7 @@
   const dispatch = createEventDispatcher();
   
   let monacoEditor: MonacoEditor;
-  let editorInstance: editor.IStandaloneCodeEditor;
+  let editorInstance: monaco.editor.IStandaloneCodeEditor;
   let monacoInstance: any;
   let showHelpPanel = false;
   let searchQuery = '';
@@ -113,7 +113,7 @@ if (elapsed > 30) {
     
     // Register completion provider
     monacoInstance.languages.registerCompletionItemProvider('typescript', {
-      provideCompletionItems: (model: any, position: any) => {
+      provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
         const word = model.getWordUntilPosition(position);
         const range = {
           startLineNumber: position.lineNumber,
@@ -122,7 +122,7 @@ if (elapsed > 30) {
           endColumn: word.endColumn
         };
         
-        const suggestions: languages.CompletionItem[] = [];
+        const suggestions: monaco.languages.CompletionItem[] = [];
         
         // Add variable completions
         variables.forEach(v => {
@@ -181,7 +181,9 @@ if (elapsed > 30) {
   }
   
   function formatCode() {
-    monacoEditor?.format();
+    if (monacoEditor) {
+      monacoEditor.format();
+    }
   }
 </script>
 
@@ -256,7 +258,7 @@ if (elapsed > 30) {
               <h5>Variables</h5>
               <div class="help-items">
                 {#each filteredVariables as variable}
-                  <div class="help-item" on:click={() => monacoEditor?.insertText(variable.name)}>
+                  <div class="help-item" on:click={() => monacoEditor && monacoEditor.insertText(variable.name)}>
                     <span class="help-name">{variable.name}</span>
                     <span class="help-type">{variable.type}</span>
                     {#if variable.description}
@@ -273,7 +275,7 @@ if (elapsed > 30) {
               <h5>Functions</h5>
               <div class="help-items">
                 {#each filteredFunctions as func}
-                  <div class="help-item" on:click={() => monacoEditor?.insertText(func.name + '()')}>
+                  <div class="help-item" on:click={() => monacoEditor && monacoEditor.insertText(func.name + '()')}>
                     <span class="help-name">{func.name}</span>
                     <span class="help-signature">{func.signature}</span>
                     {#if func.description}

@@ -2,7 +2,6 @@
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import * as monaco from 'monaco-editor';
   import { browser } from '$app/environment';
-  import type { editor } from 'monaco-editor';
   
   export let value: string = '';
   export let language: string = 'typescript';
@@ -24,7 +23,7 @@
   const dispatch = createEventDispatcher();
   
   let container: HTMLDivElement;
-  let editor: editor.IStandaloneCodeEditor;
+  let editor: monaco.editor.IStandaloneCodeEditor;
   let monaco_instance: typeof monaco;
   
   // Update editor value when prop changes
@@ -58,7 +57,7 @@
     self.MonacoEnvironment = {
       getWorker: function (workerId, label) {
         const getWorkerModule = (moduleUrl: string, label: string) => {
-          return new Worker(self.MonacoEnvironment.getWorkerUrl(moduleUrl), {
+          return new Worker(self.MonacoEnvironment?.getWorkerUrl?.(moduleUrl) || moduleUrl, {
             name: label,
             type: 'module'
           });

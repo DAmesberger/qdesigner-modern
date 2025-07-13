@@ -169,9 +169,9 @@ export class StimulusFactory {
         const hex = color.slice(1);
         if (hex.length === 3) {
           return [
-            parseInt(hex[0] + hex[0], 16) / 255,
-            parseInt(hex[1] + hex[1], 16) / 255,
-            parseInt(hex[2] + hex[2], 16) / 255,
+            parseInt(hex[0]! + hex[0]!, 16) / 255,
+            parseInt(hex[1]! + hex[1]!, 16) / 255,
+            parseInt(hex[2]! + hex[2]!, 16) / 255,
             1
           ];
         } else if (hex.length === 6) {
@@ -185,7 +185,7 @@ export class StimulusFactory {
       } else if (color.startsWith('rgb')) {
         const match = color.match(/rgba?\(([^)]+)\)/);
         if (match) {
-          const values = match[1].split(',').map(v => parseFloat(v.trim()));
+          const values = match[1]!.split(',').map(v => parseFloat(v.trim()));
           return [
             values[0]! / 255,
             values[1]! / 255,

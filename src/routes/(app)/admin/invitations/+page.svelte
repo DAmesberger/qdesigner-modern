@@ -78,7 +78,8 @@
         return;
       }
       
-      currentOrg = membership.organizations as Organization;
+      // Type assertion needed because Supabase types might be incorrect
+      currentOrg = membership.organizations as unknown as Organization;
       
       // Load invitations
       await loadInvitations();

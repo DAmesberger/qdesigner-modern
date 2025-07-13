@@ -193,21 +193,21 @@
               <Button
                 variant="primary"
                 class="flex-1"
-                on:click={() => goto(`/login?redirect=/invite/${invitation.token}`)}
+                on:click={() => invitation && goto(`/login?redirect=/invite/${invitation.token}`)}
               >
                 Sign In
               </Button>
               <Button
                 variant="secondary"
                 class="flex-1"
-                on:click={() => goto(`/signup?email=${encodeURIComponent(invitation.email)}`)}
+                on:click={() => invitation && goto(`/signup?email=${encodeURIComponent(invitation.email)}`)}
               >
                 Create Account
               </Button>
             </div>
-          {:else if currentUser?.email !== invitation.email}
+          {:else if currentUser?.email !== invitation!.email}
             <Alert variant="warning">
-              This invitation was sent to {invitation.email}, but you're signed in as {currentUser?.email}.
+              This invitation was sent to {invitation!.email}, but you're signed in as {currentUser?.email}.
               Please sign in with the correct account.
             </Alert>
             <Button
@@ -215,7 +215,7 @@
               class="w-full"
               on:click={async () => {
                 await supabase.auth.signOut();
-                goto(`/login?redirect=/invite/${invitation.token}`);
+                invitation && goto(`/login?redirect=/invite/${invitation.token}`);}
               }}
             >
               Switch Account

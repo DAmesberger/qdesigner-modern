@@ -102,7 +102,7 @@
 			loadingMessage = 'Initializing WebGL...';
 			
 			// Initialize WebGL renderer
-			renderer = new WebGLRenderer(canvas);
+			renderer = new WebGLRenderer({ canvas });
 			await renderer.initialize();
 
 			loadingMessage = 'Loading questionnaire...';

@@ -200,7 +200,7 @@
     if (!acc[cmd.category]) {
       acc[cmd.category] = [];
     }
-    acc[cmd.category].push(cmd);
+    acc[cmd.category]!.push(cmd);
     return acc;
   }, {} as Record<string, Command[]>);
   
@@ -277,7 +277,7 @@
       id: `q_${Date.now()}`,
       name: 'New Questionnaire',
       description: '',
-      version: 1,
+      version: '1',
       created: new Date(),
       modified: new Date(),
       pages: [],

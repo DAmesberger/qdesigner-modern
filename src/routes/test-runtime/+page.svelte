@@ -13,11 +13,13 @@
   const testQuestionnaire: Questionnaire = {
     id: 'test-rt',
     version: '1.0.0',
-    title: 'Reaction Time Test',
+    name: 'Reaction Time Test',
+    created: new Date(),
+    modified: new Date(),
     settings: {
       webgl: { targetFPS: 120 },
       allowBackNavigation: false,
-      showProgress: true
+      showProgressBar: true
     },
     variables: [
       {
@@ -162,8 +164,8 @@
         responseType: {
           type: 'single',
           options: [
-            { value: 'circle', label: 'Circle (●)', key: '1' },
-            { value: 'square', label: 'Square (■)', key: '2' }
+            { id: 'opt1', value: 'circle', label: 'Circle (●)', key: '1' },
+            { id: 'opt2', value: 'square', label: 'Square (■)', key: '2' }
           ]
         }
       },

@@ -38,7 +38,7 @@
 	onMount(() => {
 		const observer = new IntersectionObserver(
 			(entries) => {
-				if (entries[0].isIntersecting && !visible) {
+				if (entries[0]?.isIntersecting && !visible) {
 					visible = true;
 					// Animate progress values
 					metrics.forEach((metric, i) => {
@@ -123,7 +123,7 @@
 								fill="none"
 								stroke-linecap="round"
 								stroke-dasharray={`${2 * Math.PI * 56}`}
-								stroke-dashoffset={`${2 * Math.PI * 56 * (1 - progressValues[i] / 100)}`}
+								stroke-dashoffset={`${2 * Math.PI * 56 * (1 - (progressValues[i] ?? 0) / 100)}`}
 								class="transition-all duration-1000"
 							/>
 							<!-- Gradient Definition -->

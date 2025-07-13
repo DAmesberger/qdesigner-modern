@@ -173,13 +173,17 @@
   }
   
   function insertFunction(func: typeof formulaFunctions[0]) {
-    monacoEditor?.insertText(func.name + '()');
-    monacoEditor?.focus();
+    if (monacoEditor) {
+      monacoEditor.insertText(func.name + '()');
+      monacoEditor.focus();
+    }
   }
   
   function insertVariable(variable: Variable) {
-    monacoEditor?.insertText(variable.name);
-    monacoEditor?.focus();
+    if (monacoEditor) {
+      monacoEditor.insertText(variable.name);
+      monacoEditor.focus();
+    }
   }
 </script>
 

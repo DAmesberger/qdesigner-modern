@@ -25,7 +25,7 @@
   
   // Get current page
   $: currentPage = questionnaire.pages[currentPageIndex];
-  $: currentQuestions = currentPage ? 
+  $: currentQuestions = currentPage && currentPage.questions ? 
     currentPage.questions.map(qId => questionnaire.questions.find(q => q.id === qId)).filter((q): q is Question => q !== undefined) : 
     [];
   

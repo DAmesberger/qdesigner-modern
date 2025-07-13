@@ -232,6 +232,10 @@
             }
           }}
           role="slider"
+          aria-valuenow={value ?? question.config.min}
+          aria-valuemin={question.config.min}
+          aria-valuemax={question.config.max}
+          aria-label="Visual analog scale"
           tabindex="0"
         >
           <div class="vas-fill" style="width: {vasPosition}%"></div>

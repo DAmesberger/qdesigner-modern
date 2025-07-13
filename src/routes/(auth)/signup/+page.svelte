@@ -192,8 +192,8 @@
     
     return {
       score: Math.min(score, 5),
-      label: labels[Math.min(score, 5)],
-      color: colors[Math.min(score, 5)]
+      label: labels[Math.min(score, 5)] || '',
+      color: colors[Math.min(score, 5)] || ''
     };
   }
 </script>

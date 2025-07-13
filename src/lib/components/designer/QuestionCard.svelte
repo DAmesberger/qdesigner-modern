@@ -88,6 +88,7 @@
       reaction: '⚡',
       multimedia: '🎬',
       instruction: '📋',
+      webgl: '🎮',
       custom: '🔧'
     };
     return icons[type] || '❓';

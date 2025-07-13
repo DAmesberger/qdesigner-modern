@@ -64,9 +64,11 @@ export type QuestionType =
   | 'text' 
   | 'choice' 
   | 'scale' 
+  | 'rating'
   | 'reaction' 
   | 'multimedia'
   | 'instruction'
+  | 'webgl'
   | 'custom';
 
 export interface Stimulus {

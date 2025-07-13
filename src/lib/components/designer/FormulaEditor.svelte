@@ -69,7 +69,7 @@
       });
       
       // Create editor
-      monacoEditor = monaco.editor.create(container, {
+      const createdEditor = monaco.editor.create(container, {
         value: value || '',
         language,
         theme: theme === 'dark' ? 'qdesigner-dark' : 'qdesigner-light',
@@ -99,10 +99,12 @@
         placeholder
       });
       
+      monacoEditor = createdEditor;
+      
       // Register completion provider for variables
       monaco.languages.registerCompletionItemProvider('javascript', {
         provideCompletionItems: (model: any, position: any) => {
-          const suggestions = [];
+          const suggestions: any[] = [];
           
           // Add variables
           Object.keys(variables).forEach(varName => {
@@ -146,13 +148,13 @@
       });
       
       // Handle changes
-      monacoEditor.onDidChangeModelContent(() => {
-        const newValue = monacoEditor?.getValue() || '';
+      createdEditor.onDidChangeModelContent(() => {
+        const newValue = createdEditor.getValue() || '';
         dispatch('change', newValue);
       });
       
       // Handle blur
-      monacoEditor.onDidBlurEditorText(() => {
+      createdEditor.onDidBlurEditorText(() => {
         dispatch('blur');
       });
       

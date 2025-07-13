@@ -95,11 +95,13 @@
     const page = $designerStore.questionnaire.pages.find(p => p.id === $designerStore.currentPageId);
     if (page && page.blocks && page.blocks.length > 0) {
       const latestBlock = page.blocks[page.blocks.length - 1];
-      designerStore.updateBlock(latestBlock.id, {
-        name: newBlock.name,
-        randomization: newBlock.type === 'randomized' ? { ...newBlock.randomization } : undefined,
-        loop: newBlock.type === 'loop' ? { ...newBlock.loop } : undefined
-      });
+      if (latestBlock) {
+        designerStore.updateBlock(latestBlock.id, {
+          name: newBlock.name,
+          randomization: newBlock.type === 'randomized' ? { ...newBlock.randomization } : undefined,
+          loop: newBlock.type === 'loop' ? { ...newBlock.loop } : undefined
+        });
+      }
     }
     
     // Reset form
@@ -401,11 +403,12 @@
                   value={editingBlock ? editingBlock.loop?.iterations || 1 : newBlock.loop.iterations}
                   on:input={(e) => {
                     const value = e.currentTarget.value;
+                    const numValue = parseInt(value) || 1;
                     if (editingBlock) {
                       if (!editingBlock.loop) editingBlock.loop = { iterations: 1 };
-                      editingBlock.loop.iterations = value;
+                      editingBlock.loop.iterations = numValue;
                     } else {
-                      newBlock.loop.iterations = value;
+                      newBlock.loop.iterations = numValue;
                     }
                   }}
                   class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"

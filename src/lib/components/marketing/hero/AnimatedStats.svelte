@@ -12,18 +12,23 @@
 		{ value: 500, suffix: 'k+', label: 'Data Points/Sec', duration: 3500 }
 	];
 	
-	const counters = stats.map(stat => tweened(0, {
-		duration: stat.duration,
-		easing: cubicOut
-	}));
+	// Create individual counter stores
+	const counter0 = tweened(0, { duration: stats[0].duration, easing: cubicOut });
+	const counter1 = tweened(0, { duration: stats[1].duration, easing: cubicOut });
+	const counter2 = tweened(0, { duration: stats[2].duration, easing: cubicOut });
+	const counter3 = tweened(0, { duration: stats[3].duration, easing: cubicOut });
+	
+	const counters = [counter0, counter1, counter2, counter3];
 	
 	onMount(() => {
 		const observer = new IntersectionObserver(
 			(entries) => {
-				if (entries[0].isIntersecting && !visible) {
+				if (entries[0]?.isIntersecting && !visible) {
 					visible = true;
 					stats.forEach((stat, i) => {
-						counters[i].set(stat.value);
+						if (counters[i]) {
+							counters[i].set(stat.value);
+						}
 					});
 				}
 			},
@@ -42,7 +47,11 @@
 		<div class="text-center lg:text-left">
 			<div class="flex items-baseline justify-center lg:justify-start gap-0.5 sm:gap-1">
 				<span class="text-2xl sm:text-3xl font-bold text-foreground">
-					{Math.floor($counters[i])}
+					{#if i === 0}{Math.floor($counter0)}
+					{:else if i === 1}{Math.floor($counter1)}
+					{:else if i === 2}{Math.floor($counter2)}
+					{:else if i === 3}{Math.floor($counter3)}
+					{/if}
 				</span>
 				<span class="text-lg sm:text-xl font-semibold text-primary">
 					{stat.suffix}

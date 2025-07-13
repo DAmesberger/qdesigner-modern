@@ -193,7 +193,7 @@ declare namespace QuestionAPI {
       });
       
       // Add keyboard shortcuts
-      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KEY_S, () => {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
         // Save shortcut - could trigger save
         console.log('Save triggered');
       });

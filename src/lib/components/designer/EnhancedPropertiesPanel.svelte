@@ -85,7 +85,7 @@
         selectedElement={$designerStore.selectedItemType || 'global'}
         on:update={handleThemeUpdate}
       />
-    {:else if activeTab === 'script' && $selectedItem}
+    {:else if activeTab === 'script' && $selectedItem && $designerStore.selectedItemType === 'question'}
       <ScriptEditor
         question={$selectedItem}
         onUpdate={handleScriptUpdate}

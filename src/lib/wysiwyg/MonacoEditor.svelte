@@ -85,17 +85,21 @@
     
     // Handle content changes
     editor.onDidChangeModelContent(() => {
-      const newValue = editor.getValue();
-      dispatch('change', { value: newValue });
-      value = newValue;
+      if (editor) {
+        const newValue = editor.getValue();
+        dispatch('change', { value: newValue });
+        value = newValue;
+      }
     });
     
     // Handle cursor position changes
     editor.onDidChangeCursorPosition((e) => {
-      dispatch('cursorChange', {
-        position: e.position,
-        selection: editor.getSelection()
-      });
+      if (editor) {
+        dispatch('cursorChange', {
+          position: e.position,
+          selection: editor.getSelection()
+        });
+      }
     });
     
     // Handle focus events

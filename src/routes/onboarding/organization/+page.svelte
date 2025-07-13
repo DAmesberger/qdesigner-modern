@@ -174,7 +174,7 @@
           <FormGroup 
             label="Organization Name" 
             id="org-name"
-            helpText="This is typically your company, university, or research group name"
+            hint="This is typically your company, university, or research group name"
           >
             <Input
               id="org-name"
@@ -182,7 +182,6 @@
               required
               bind:value={organizationName}
               placeholder="e.g., Acme Research Lab"
-              class="text-lg"
             />
           </FormGroup>
         </div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { QuestionType } from '$lib/shared';
+  import type { QuestionType, ResponseType } from '$lib/shared';
   import theme from '$lib/theme';
 
   interface QuestionTemplate {
@@ -7,7 +7,7 @@
     label: string;
     icon: string;
     description: string;
-    defaultResponseType: string;
+    defaultResponseType: ResponseType | string;
   }
 
   const questionTemplates: QuestionTemplate[] = [

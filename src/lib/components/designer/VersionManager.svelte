@@ -12,14 +12,14 @@
   let showVersionModal = false;
   let versions: any[] = [];
   let isLoadingVersions = false;
-  let currentVersion = 1;
+  let currentVersion = '1';
   let newVersionNote = '';
   let isSavingVersion = false;
   let selectedVersions: string[] = [];
   
   $: user = $page.data.user;
   $: questionnaire = $designerStore.questionnaire;
-  $: currentVersion = questionnaire.version || 1;
+  $: currentVersion = questionnaire.version || '1';
 
   async function loadVersions() {
     if (!questionnaireId || isLoadingVersions) return;
@@ -52,7 +52,7 @@
     
     try {
       // Create new version
-      const newVersion = currentVersion + 1;
+      const newVersion = String(parseInt(currentVersion) + 1);
       
       const { data, error } = await supabase
         .from('questionnaire_definitions')
@@ -281,7 +281,7 @@
       </h3>
       
       <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        This will create version {currentVersion + 1} of your questionnaire.
+        This will create version {parseInt(currentVersion) + 1} of your questionnaire.
       </p>
 
       <div class="mb-6">
