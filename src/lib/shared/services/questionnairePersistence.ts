@@ -1,5 +1,5 @@
-import { supabase, type Tables, type Inserts } from './supabase';
-import type { Questionnaire, Question, Page, Variable } from '$lib/shared/types/types';
+import { supabase } from './supabase';
+import type { Questionnaire } from '$lib/shared';
 import { nanoid } from 'nanoid';
 
 export interface SaveResult {
@@ -17,107 +17,54 @@ export interface LoadResult {
 export class QuestionnairePersistenceService {
   /**
    * Save a questionnaire to Supabase
+   * Note: This implementation stores the entire questionnaire as JSONB in questionnaire_definitions table
+   * according to the actual database schema
    */
-  static async saveQuestionnaire(questionnaire: Questionnaire, userId: string): Promise<SaveResult> {
+  static async saveQuestionnaire(
+    questionnaire: Questionnaire, 
+    projectId: string,
+    organizationId: string,
+    userId: string
+  ): Promise<SaveResult> {
     try {
-      // Start a transaction-like operation
       const questionnaireId = questionnaire.id || nanoid();
       
-      // 1. Insert or update the questionnaire
-      const { data: savedQuestionnaire, error: qError } = await supabase
-        .from('questionnaires')
+      // Prepare the questionnaire definition for storage
+      const definition = {
+        id: questionnaireId,
+        name: questionnaire.name,
+        description: questionnaire.description,
+        version: questionnaire.version,
+        pages: questionnaire.pages,
+        questions: questionnaire.questions,
+        variables: questionnaire.variables,
+        settings: questionnaire.settings,
+        flow: questionnaire.flow,
+        created: questionnaire.created,
+        modified: new Date().toISOString()
+      };
+
+      // Insert or update the questionnaire definition
+      const { data, error } = await supabase
+        .from('questionnaire_definitions')
         .upsert({
           id: questionnaireId,
-          user_id: userId,
+          organization_id: organizationId,
+          project_id: projectId,
           name: questionnaire.name,
-          description: questionnaire.description,
-          version: questionnaire.version,
+          code: questionnaire.settings?.code || null,
+          version: questionnaire.version || 1,
+          definition, // Store entire questionnaire as JSONB
+          variables: questionnaire.variables || [], // Store variables separately for querying
+          status: 'draft',
           settings: questionnaire.settings || {},
-          flow_control: questionnaire.flow || [],
-          metadata: {
-            created: questionnaire.created,
-            modified: new Date().toISOString()
-          }
+          created_by: userId,
+          updated_at: new Date().toISOString()
         })
         .select()
         .single();
 
-      if (qError) throw qError;
-
-      // 2. Delete existing pages, questions, and variables (for simplicity)
-      await supabase.from('questions').delete().eq('questionnaire_id', questionnaireId);
-      await supabase.from('pages').delete().eq('questionnaire_id', questionnaireId);
-      await supabase.from('variables').delete().eq('questionnaire_id', questionnaireId);
-
-      // 3. Insert pages
-      if (questionnaire.pages.length > 0) {
-        const pages = questionnaire.pages.map((page, index) => ({
-          id: page.id,
-          questionnaire_id: questionnaireId,
-          name: page.name,
-          order_index: index,
-          layout: page.layout,
-          settings: page.settings || {}
-        }));
-
-        const { error: pagesError } = await supabase
-          .from('pages')
-          .insert(pages);
-
-        if (pagesError) throw pagesError;
-      }
-
-      // 4. Insert questions
-      const allQuestions: Inserts<'questions'>[] = [];
-      questionnaire.pages.forEach((page) => {
-        page.questions.forEach((questionId, index) => {
-          const question = questionnaire.questions.find(q => q.id === questionId);
-          if (question) {
-            allQuestions.push({
-              id: question.id,
-              questionnaire_id: questionnaireId,
-              page_id: page.id,
-              type: question.type,
-              text: question.text,
-              name: question.name,
-              order_index: index,
-              required: question.required || false,
-              settings: question.settings || {},
-              validation: question.validation || {},
-              media: question.media || []
-            });
-          }
-        });
-      });
-
-      if (allQuestions.length > 0) {
-        const { error: questionsError } = await supabase
-          .from('questions')
-          .insert(allQuestions);
-
-        if (questionsError) throw questionsError;
-      }
-
-      // 5. Insert variables
-      if (questionnaire.variables.length > 0) {
-        const variables = questionnaire.variables.map((variable, index) => ({
-          id: variable.id,
-          questionnaire_id: questionnaireId,
-          name: variable.name,
-          type: variable.type,
-          default_value: variable.defaultValue,
-          formula: variable.formula,
-          description: variable.description,
-          order_index: index,
-          metadata: variable.metadata || {}
-        }));
-
-        const { error: variablesError } = await supabase
-          .from('variables')
-          .insert(variables);
-
-        if (variablesError) throw variablesError;
-      }
+      if (error) throw error;
 
       return {
         success: true,
@@ -137,86 +84,34 @@ export class QuestionnairePersistenceService {
    */
   static async loadQuestionnaire(questionnaireId: string): Promise<LoadResult> {
     try {
-      // 1. Load questionnaire
-      const { data: questionnaire, error: qError } = await supabase
-        .from('questionnaires')
+      // Load questionnaire definition
+      const { data, error } = await supabase
+        .from('questionnaire_definitions')
         .select('*')
         .eq('id', questionnaireId)
         .single();
 
-      if (qError) throw qError;
-      if (!questionnaire) throw new Error('Questionnaire not found');
+      if (error) throw error;
+      if (!data) throw new Error('Questionnaire not found');
 
-      // 2. Load pages
-      const { data: pages, error: pagesError } = await supabase
-        .from('pages')
-        .select('*')
-        .eq('questionnaire_id', questionnaireId)
-        .order('order_index');
-
-      if (pagesError) throw pagesError;
-
-      // 3. Load questions
-      const { data: questions, error: questionsError } = await supabase
-        .from('questions')
-        .select('*')
-        .eq('questionnaire_id', questionnaireId);
-
-      if (questionsError) throw questionsError;
-
-      // 4. Load variables
-      const { data: variables, error: variablesError } = await supabase
-        .from('variables')
-        .select('*')
-        .eq('questionnaire_id', questionnaireId)
-        .order('order_index');
-
-      if (variablesError) throw variablesError;
-
-      // 5. Reconstruct the questionnaire object
-      const reconstructedQuestionnaire: Questionnaire = {
-        id: questionnaire.id,
-        name: questionnaire.name,
-        description: questionnaire.description || '',
-        version: questionnaire.version,
-        created: new Date(questionnaire.created_at),
-        modified: new Date(questionnaire.updated_at),
-        settings: questionnaire.settings || {},
-        flow: questionnaire.flow_control || [],
-        variables: variables.map(v => ({
-          id: v.id,
-          name: v.name,
-          type: v.type as Variable['type'],
-          defaultValue: v.default_value,
-          formula: v.formula || undefined,
-          description: v.description || undefined,
-          metadata: v.metadata || {}
-        })),
-        questions: questions.map(q => ({
-          id: q.id,
-          type: q.type as QuestionType,
-          text: q.text,
-          name: q.name,
-          required: q.required,
-          settings: q.settings || {},
-          validation: q.validation || {},
-          media: q.media || []
-        })),
-        pages: pages.map(p => ({
-          id: p.id,
-          name: p.name,
-          questions: questions
-            .filter(q => q.page_id === p.id)
-            .sort((a, b) => a.order_index - b.order_index)
-            .map(q => q.id),
-          layout: p.layout,
-          settings: p.settings || {}
-        }))
+      // Extract questionnaire from the JSONB definition
+      const questionnaire: Questionnaire = {
+        id: data.definition.id || data.id,
+        name: data.definition.name || data.name,
+        description: data.definition.description || '',
+        version: data.definition.version || data.version,
+        pages: data.definition.pages || [],
+        questions: data.definition.questions || [],
+        variables: data.definition.variables || [],
+        settings: data.definition.settings || {},
+        flow: data.definition.flow || [],
+        created: data.definition.created || data.created_at,
+        modified: data.definition.modified || data.updated_at
       };
 
       return {
         success: true,
-        questionnaire: reconstructedQuestionnaire
+        questionnaire
       };
     } catch (error) {
       console.error('Error loading questionnaire:', error);
@@ -228,14 +123,25 @@ export class QuestionnairePersistenceService {
   }
 
   /**
-   * List questionnaires for a user
+   * List questionnaires for a project
    */
-  static async listQuestionnaires(userId: string) {
+  static async listQuestionnaires(projectId: string): Promise<{
+    success: boolean;
+    questionnaires?: Array<{
+      id: string;
+      name: string;
+      version: number;
+      status: string;
+      created_at: string;
+      updated_at: string;
+    }>;
+    error?: string;
+  }> {
     try {
       const { data, error } = await supabase
-        .from('questionnaires')
-        .select('id, name, description, version, created_at, updated_at')
-        .eq('user_id', userId)
+        .from('questionnaire_definitions')
+        .select('id, name, version, status, created_at, updated_at')
+        .eq('project_id', projectId)
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
@@ -248,8 +154,7 @@ export class QuestionnairePersistenceService {
       console.error('Error listing questionnaires:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-        questionnaires: []
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
       };
     }
   }
@@ -257,19 +162,16 @@ export class QuestionnairePersistenceService {
   /**
    * Delete a questionnaire
    */
-  static async deleteQuestionnaire(questionnaireId: string, userId: string) {
+  static async deleteQuestionnaire(questionnaireId: string): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await supabase
-        .from('questionnaires')
-        .delete()
-        .eq('id', questionnaireId)
-        .eq('user_id', userId);
+        .from('questionnaire_definitions')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', questionnaireId);
 
       if (error) throw error;
 
-      return {
-        success: true
-      };
+      return { success: true };
     } catch (error) {
       console.error('Error deleting questionnaire:', error);
       return {

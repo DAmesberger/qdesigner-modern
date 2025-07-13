@@ -3,7 +3,7 @@ import { QuestionnairePersistenceService } from './questionnairePersistence';
 import { isOnline } from './offline';
 import { get } from 'svelte/store';
 import { toast } from '$lib/stores/toast';
-import type { Questionnaire } from '$lib/shared/types/types';
+import type { Questionnaire } from '$lib/shared';
 
 export interface OfflineSaveResult {
   success: boolean;
@@ -131,7 +131,7 @@ export class OfflinePersistenceService {
           if (result.success) {
             // Update local cache with server list
             // This is a simplified approach - in production you'd want more sophisticated sync
-            return result.questionnaires;
+            return result.questionnaires || [];
           }
         } catch (error) {
           console.error('Online list failed, using offline:', error);

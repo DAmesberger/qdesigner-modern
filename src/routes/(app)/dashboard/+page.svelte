@@ -2,6 +2,7 @@
   import type { PageData } from './$types';
   import { goto } from '$app/navigation';
   import { formatDistanceToNow } from '$lib/shared/utils/date';
+  import type { DashboardQuestionnaire, DashboardActivity } from '$lib/types/dashboard';
   
   export let data: PageData;
   

@@ -107,7 +107,7 @@
   <DesignerHeader
     questionnaireName={$designerStore.questionnaire.name}
     pageCount={$designerStore.questionnaire.pages.length}
-    blockCount={$designerStore.questionnaire.pages.reduce((acc, p) => acc + p.blocks.length, 0)}
+    blockCount={$designerStore.questionnaire.pages.reduce((acc, p) => acc + (p.blocks ?? []).length, 0)}
     questionCount={$designerStore.questionnaire.questions.length}
     {viewMode}
     on:viewModeChange={handleViewModeChange}

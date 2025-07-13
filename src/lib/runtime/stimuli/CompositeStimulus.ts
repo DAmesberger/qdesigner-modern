@@ -43,7 +43,11 @@ export class CompositeStimulus extends BaseStimulus {
     
     // Prepare all component stimuli
     this.compositeConfig.components.forEach(component => {
-      component.stimulus.prepare(gl, component.stimulus.config);
+      // Each stimulus maintains its own config
+      component.stimulus.prepare(gl, {
+        id: component.stimulus.id,
+        position: component.offset
+      });
     });
     
     // Create framebuffer for off-screen rendering

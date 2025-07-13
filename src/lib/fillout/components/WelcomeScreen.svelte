@@ -76,7 +76,7 @@
 				<Button 
 					variant="default" 
 					size="lg" 
-					onclick={onStart}
+					on:click={onStart}
 					class="start-button"
 				>
 					Start Questionnaire

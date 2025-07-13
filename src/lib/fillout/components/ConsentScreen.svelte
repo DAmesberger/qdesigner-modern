@@ -100,7 +100,7 @@
 						<label class="checkbox-label">
 							<Checkbox
 								bind:checked={checkboxStates[checkbox.id]}
-								onchange={() => showError = false}
+								on:change={() => showError = false}
 							/>
 							<span class="checkbox-text">
 								{checkbox.label}
@@ -124,7 +124,7 @@
 						bind:value={signature}
 						placeholder="Type your full name"
 						class="signature-input"
-						oninput={() => showError = false}
+						on:input={() => showError = false}
 					/>
 					<p class="signature-note">
 						By typing your name above, you are providing an electronic signature.
@@ -142,14 +142,14 @@
 				<Button 
 					variant="outline" 
 					size="lg"
-					onclick={handleDecline}
+					on:click={handleDecline}
 				>
 					Decline
 				</Button>
 				<Button 
 					variant="default" 
 					size="lg"
-					onclick={handleAccept}
+					on:click={handleAccept}
 					disabled={!canAccept()}
 				>
 					I Agree

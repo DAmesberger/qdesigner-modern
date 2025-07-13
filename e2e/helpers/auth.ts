@@ -154,7 +154,7 @@ export async function mockInvitation(page: Page, invitation: {
             id: 'test-org-id',
             name: invitation.organizationName
           },
-          invited_by: {
+          invitedBy: {
             full_name: invitation.inviterName,
             email: 'inviter@example.com'
           }

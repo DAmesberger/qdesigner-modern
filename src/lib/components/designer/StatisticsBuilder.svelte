@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { designerStore } from '$lib/stores/designerStore';
   import { Chart, registerables } from 'chart.js';
-  import type { Variable } from '$lib/shared/types/variables';
+  import type { Variable } from '$lib/shared';
   
   Chart.register(...registerables);
   

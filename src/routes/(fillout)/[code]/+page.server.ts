@@ -39,7 +39,7 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
 				project_id,
 				project:projects(id, name)
 			`)
-			.eq('access_code', code.toUpperCase())
+			.eq('code', code.toUpperCase())
 			.eq('status', 'published')
 			.single();
 
@@ -80,6 +80,16 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
 			}
 		}
 
+		// Extract project name safely
+		let projectName: string | undefined;
+		if (questionnaire.project) {
+			if (Array.isArray(questionnaire.project) && questionnaire.project.length > 0) {
+				projectName = questionnaire.project[0]?.name;
+			} else if (typeof questionnaire.project === 'object' && 'name' in questionnaire.project) {
+				projectName = (questionnaire.project as any).name;
+			}
+		}
+
 		return {
 			questionnaire: {
 				id: questionnaire.id,
@@ -87,7 +97,7 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
 				definition: questionnaire.definition,
 				variables: questionnaire.variables || {},
 				globalScripts: questionnaire.global_scripts || {},
-				projectName: questionnaire.project?.name
+				projectName
 			},
 			existingSession,
 			code: code.toUpperCase(),

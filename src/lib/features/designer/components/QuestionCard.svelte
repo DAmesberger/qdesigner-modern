@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Question } from '$lib/shared/types/types';
+  import type { Question } from '$lib/shared';
   import { designerStore } from '$lib/features/designer/stores/designerStore';
 
   export let question: Question;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { QuestionType } from '$lib/shared/types/types';
+  import type { QuestionType } from '$lib/shared';
 
   interface QuestionTemplate {
     type: QuestionType;

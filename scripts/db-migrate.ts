@@ -41,13 +41,13 @@ try {
       );
       console.log(`  ✅ ${file} completed`);
     } catch (error) {
-      console.error(`  ❌ ${file} failed:`, error.message);
+      console.error(`  ❌ ${file} failed:`, error instanceof Error ? error.message : String(error));
       // Continue with other migrations
     }
   }
 
   console.log('\n✅ Migrations completed');
 } catch (error) {
-  console.error('❌ Migration error:', error);
+  console.error('❌ Migration error:', error instanceof Error ? error.message : String(error));
   process.exit(1);
 }

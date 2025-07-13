@@ -1,7 +1,7 @@
 <script lang="ts">
   import { designerStore, currentPage, currentPageQuestions } from '$lib/features/designer/stores/designerStore';
   import QuestionCard from './QuestionCard.svelte';
-  import type { Question } from '$lib/shared/types/types';
+  import type { Question } from '$lib/shared';
 
   let isDragOver = false;
   let selectedItemId: string | null = null;

@@ -21,11 +21,9 @@ export interface ExtendedQuestion extends Question {
   placeholder?: string;
   
   // Layout properties
-  layout?: QuestionLayout;
   styling?: QuestionStyling;
   
   // Advanced properties
-  media?: MediaConfig;
   scoring?: ScoringConfig;
   feedback?: FeedbackConfig;
   analytics?: AnalyticsConfig;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { VariableEngine } from '$lib/core/scripting';
-  import type { Variable } from '$lib/shared/types/types';
+  import type { Variable } from '$lib/shared';
 
   let engine: VariableEngine;
   let variables: Record<string, any> = {};

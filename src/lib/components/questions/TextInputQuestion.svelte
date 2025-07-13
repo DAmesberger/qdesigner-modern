@@ -17,7 +17,7 @@
   
   // Filter suggestions based on current input
   $: filteredSuggestions = question.config.suggestions
-    ?.filter(s => s.toLowerCase().includes(value.toLowerCase()))
+    ?.filter((s: string) => s.toLowerCase().includes(value.toLowerCase()))
     .slice(0, 5) || [];
   
   // Validation

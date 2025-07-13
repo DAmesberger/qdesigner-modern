@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { VariableEngine } from './VariableEngine';
-import type { Variable } from '../types/questionnaire';
+import type { Variable } from '$lib/shared';
 
 describe('VariableEngine', () => {
   let engine: VariableEngine;

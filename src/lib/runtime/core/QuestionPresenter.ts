@@ -28,7 +28,7 @@ export class QuestionPresenter {
       id: 'fixation',
       text: '+',
       fontSize: 48,
-      color: [1, 1, 1, 1],
+      color: '#FFFFFF',
       position: { x: 0.5, y: 0.5 }
     });
   }
@@ -47,6 +47,7 @@ export class QuestionPresenter {
     
     // Prepare renderer
     renderer.prepare(gl, {
+      id: question.id,
       position: question.layout?.position || { x: 0.5, y: 0.5 },
       size: question.layout?.size,
       opacity: question.layout?.opacity || 1,
@@ -108,7 +109,7 @@ export class QuestionPresenter {
         id: `${question.id}_text`,
         text: processedText,
         fontSize: question.style?.fontSize || 24,
-        color: this.parseColor(question.style?.color || '#FFFFFF'),
+        color: question.style?.color || '#FFFFFF',
         position: { x: 0.5, y: 0.3 }
       }));
     }
@@ -120,7 +121,7 @@ export class QuestionPresenter {
         id: `${question.id}_instruction`,
         text: processedInstruction,
         fontSize: 18,
-        color: [0.7, 0.7, 0.7, 1],
+        color: 'rgba(178, 178, 178, 1)',
         position: { x: 0.5, y: 0.7 }
       }));
     }
@@ -142,7 +143,7 @@ export class QuestionPresenter {
           id: `${question.id}_option_${index}`,
           text: `${option.value}: ${option.label}`,
           fontSize: 20,
-          color: [0.9, 0.9, 0.9, 1],
+          color: 'rgba(230, 230, 230, 1)',
           position: { x: 0.5, y: yPos }
         }));
       });
@@ -156,64 +157,64 @@ export class QuestionPresenter {
         id: `${question.id}_scale`,
         text: scaleText,
         fontSize: 20,
-        color: [0.8, 0.8, 0.8, 1],
+        color: 'rgba(204, 204, 204, 1)',
         position: { x: 0.5, y: 0.6 }
       }));
     }
     
-    // Return single stimulus or composite
-    if (stimuli.length === 0) {
+    // Return single renderer or composite
+    if (renderers.length === 0) {
       return null;
-    } else if (stimuli.length === 1) {
-      return stimuli[0];
+    } else if (renderers.length === 1) {
+      return renderers[0]!; // Safe because we checked length === 1
     } else {
-      return new CompositeStimulus({
+      return new CompositeRenderer({
         id: question.id,
-        components: stimuli.map((s, i) => ({ stimulus: s, layer: i }))
+        children: renderers
       });
     }
   }
   
   /**
-   * Create media stimulus from definition
+   * Create media renderer from definition
    */
-  private async createMediaStimulus(stimulus: Stimulus, questionId: string): Promise<IStimulus | null> {
-    switch (stimulus.type) {
+  private async createMediaRenderer(media: any, questionId: string): Promise<IQuestionRenderer | null> {
+    switch (media.type) {
       case 'image':
-        return new ImageStimulus({
-          id: `${questionId}_${stimulus.id}`,
-          imageUrl: stimulus.content,
-          position: stimulus.position,
-          size: stimulus.size
+        return new ImageRenderer({
+          id: `${questionId}_${media.id}`,
+          src: media.content,
+          position: media.position,
+          size: media.size
         });
         
       case 'video':
-        return new VideoStimulus({
-          id: `${questionId}_${stimulus.id}`,
-          videoUrl: stimulus.content,
-          autoplay: stimulus.properties?.autoplay !== false,
-          loop: stimulus.properties?.loop || false,
-          muted: stimulus.properties?.muted !== false,
-          position: stimulus.position,
-          size: stimulus.size
+        return new VideoRenderer({
+          id: `${questionId}_${media.id}`,
+          src: media.content,
+          autoplay: media.properties?.autoplay !== false,
+          loop: media.properties?.loop || false,
+          muted: media.properties?.muted !== false,
+          position: media.position,
+          size: media.size
         });
         
       case 'audio':
-        return new AudioStimulus({
-          id: `${questionId}_${stimulus.id}`,
-          audioUrl: stimulus.content,
-          volume: stimulus.properties?.volume || 1,
-          showWaveform: stimulus.properties?.showWaveform || false,
-          position: stimulus.position
+        return new AudioRenderer({
+          id: `${questionId}_${media.id}`,
+          src: media.content,
+          volume: media.properties?.volume || 1,
+          visualizer: media.properties?.showWaveform ? 'waveform' : 'none',
+          position: media.position
         });
         
       case 'text':
-        return new TextStimulus({
-          id: `${questionId}_${stimulus.id}`,
-          text: stimulus.content,
-          fontSize: stimulus.properties?.fontSize || 24,
-          color: this.parseColor(stimulus.properties?.color || '#FFFFFF'),
-          position: stimulus.position
+        return new TextRenderer({
+          id: `${questionId}_${media.id}`,
+          text: media.content,
+          fontSize: media.properties?.fontSize || 24,
+          color: media.properties?.color || '#FFFFFF',
+          position: media.position
         });
         
       default:
@@ -225,18 +226,19 @@ export class QuestionPresenter {
    * Show fixation cross
    */
   private async showFixation(duration: number): Promise<void> {
-    if (!this.fixationStimulus) return;
+    if (!this.fixationRenderer) return;
     
     const gl = this.renderer.getContext();
-    this.fixationStimulus.prepare(gl, {
+    this.fixationRenderer.prepare(gl, {
+      id: 'fixation',
       position: { x: 0.5, y: 0.5 }
     });
     
     this.renderer.addRenderable({
       id: 'fixation',
       render: (gl, context) => {
-        if (this.fixationStimulus) {
-          this.fixationStimulus.render(gl, context);
+        if (this.fixationRenderer) {
+          this.fixationRenderer.render(gl, context);
         }
       },
       layer: 0
@@ -250,10 +252,10 @@ export class QuestionPresenter {
    * Clear current presentation
    */
   public async clear(): Promise<void> {
-    if (this.currentStimulus) {
+    if (this.currentRenderer) {
       const gl = this.renderer.getContext();
-      this.currentStimulus.cleanup(gl);
-      this.currentStimulus = null;
+      this.currentRenderer.cleanup(gl);
+      this.currentRenderer = null;
     }
     
     // Remove all renderables

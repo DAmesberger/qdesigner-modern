@@ -87,7 +87,7 @@
 					<code>{completionCode()}</code>
 					<button 
 						class="copy-button"
-						onclick={() => navigator.clipboard.writeText(completionCode())}
+						on:click={() => navigator.clipboard.writeText(completionCode())}
 						title="Copy to clipboard"
 					>
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -104,7 +104,7 @@
 					<Button 
 						variant="outline" 
 						size="lg"
-						onclick={onDownload}
+						on:click={onDownload}
 					>
 						Download Responses
 					</Button>
@@ -113,7 +113,7 @@
 				<Button 
 					variant="default" 
 					size="lg"
-					onclick={handleClose}
+					on:click={handleClose}
 				>
 					{onClose ? 'Close' : 'Return Home'}
 				</Button>

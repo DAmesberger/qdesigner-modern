@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Question, QuestionnaireTheme } from '$lib/shared/types/types';
+  import type { Question, QuestionnaireTheme } from '$lib/shared';
   import { createEventDispatcher } from 'svelte';
   import { produce } from 'immer';
   

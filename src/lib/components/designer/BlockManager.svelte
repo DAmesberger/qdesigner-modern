@@ -63,7 +63,7 @@
     const blockIds = items.map(item => item.id);
     const page = $designerStore.questionnaire.pages.find(p => p.id === pageId);
     if (page) {
-      page.blocks = page.blocks.sort((a, b) => 
+      page.blocks = (page.blocks ?? []).sort((a, b) => 
         blockIds.indexOf(a.id) - blockIds.indexOf(b.id)
       );
     }
@@ -79,8 +79,8 @@
     const page = $designerStore.questionnaire.pages.find(p => p.id === pageId);
     if (page) {
       const orderedBlocks = blockIds.map(id => 
-        page.blocks.find(b => b.id === id)!
-      );
+        (page.blocks ?? []).find(b => b.id === id)!
+      ).filter(Boolean);
       page.blocks = orderedBlocks;
     }
     dragDisabled = true;
@@ -93,7 +93,7 @@
     
     // Update the newly created block with additional properties
     const page = $designerStore.questionnaire.pages.find(p => p.id === $designerStore.currentPageId);
-    if (page && page.blocks.length > 0) {
+    if (page && page.blocks && page.blocks.length > 0) {
       const latestBlock = page.blocks[page.blocks.length - 1];
       designerStore.updateBlock(latestBlock.id, {
         name: newBlock.name,
@@ -157,14 +157,14 @@
   function getBlockDescription(block: Block): string {
     switch (block.type) {
       case 'randomized':
-        return `${block.questions.length} questions (randomized)`;
+        return `${(block.questions ?? []).length} questions (randomized)`;
       case 'conditional':
-        return `${block.questions.length} questions (conditional)`;
+        return `${(block.questions ?? []).length} questions (conditional)`;
       case 'loop':
         const iterations = block.loop?.iterations || 1;
-        return `${block.questions.length} questions × ${iterations} iterations`;
+        return `${(block.questions ?? []).length} questions × ${iterations} iterations`;
       default:
-        return `${block.questions.length} questions`;
+        return `${(block.questions ?? []).length} questions`;
     }
   }
 </script>

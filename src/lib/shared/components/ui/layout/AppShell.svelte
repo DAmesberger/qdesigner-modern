@@ -1,8 +1,8 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { supabase } from '$lib/shared/types/types/services/supabase';
-  import Button from '../../common/Button.svelte';
+  import { supabase } from '$lib/services/supabase';
+  import Button from '../../Button.svelte';
   
   export let user: any = null;
   

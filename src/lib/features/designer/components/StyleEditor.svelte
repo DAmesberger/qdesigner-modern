@@ -1,14 +1,20 @@
 <script lang="ts">
-  import type { QuestionnaireTheme } from '$lib/shared/types/types';
+  import type { QuestionnaireTheme } from '$lib/shared/types/theme';
   import { createEventDispatcher } from 'svelte';
   
-  export let theme: QuestionnaireTheme;
-  export let selectedElement: 'question' | 'page' | 'global' = 'question';
+  interface Props {
+    theme: QuestionnaireTheme;
+    selectedElement?: 'question' | 'page' | 'global';
+  }
   
-  const dispatch = createEventDispatcher();
+  let { theme, selectedElement = $bindable('question') }: Props = $props();
+  
+  const dispatch = createEventDispatcher<{
+    update: { path: string[]; value: any };
+  }>();
   
   // Color picker state
-  let activeColorPicker: string | null = null;
+  let activeColorPicker = $state<string | null>(null);
   
   // Typography options
   const fontFamilies = [
@@ -38,7 +44,7 @@
   
   // Get nested value from theme
   function getThemeValue(path: string[]): any {
-    return path.reduce((obj, key) => obj?.[key], theme);
+    return path.reduce((obj, key) => obj?.[key], theme as any);
   }
 </script>
 
@@ -48,21 +54,21 @@
     <button
       class="tab"
       class:active={selectedElement === 'global'}
-      on:click={() => selectedElement = 'global'}
+      onclick={() => selectedElement = 'global'}
     >
       Global
     </button>
     <button
       class="tab"
       class:active={selectedElement === 'page'}
-      on:click={() => selectedElement = 'page'}
+      onclick={() => selectedElement = 'page'}
     >
       Page
     </button>
     <button
       class="tab"
       class:active={selectedElement === 'question'}
-      on:click={() => selectedElement = 'question'}
+      onclick={() => selectedElement = 'question'}
     >
       Question
     </button>
@@ -79,12 +85,12 @@
           <div 
             class="color-swatch"
             style="background: {theme.global.colors.primary}"
-            on:click={() => activeColorPicker = 'primary'}
+            onclick={() => activeColorPicker = 'primary'}
           />
           <input
             type="color"
             value={theme.global.colors.primary}
-            on:input={(e) => updateTheme(['global', 'colors', 'primary'], e.currentTarget.value)}
+            oninput={(e) => updateTheme(['global', 'colors', 'primary'], (e.target as HTMLInputElement).value)}
             style="display: none"
           />
         </div>
@@ -94,12 +100,12 @@
           <div 
             class="color-swatch"
             style="background: {theme.global.colors.background}"
-            on:click={() => activeColorPicker = 'background'}
+            onclick={() => activeColorPicker = 'background'}
           />
           <input
             type="color"
             value={theme.global.colors.background}
-            on:input={(e) => updateTheme(['global', 'colors', 'background'], e.currentTarget.value)}
+            oninput={(e) => updateTheme(['global', 'colors', 'background'], (e.target as HTMLInputElement).value)}
             style="display: none"
           />
         </div>
@@ -109,12 +115,12 @@
           <div 
             class="color-swatch"
             style="background: {theme.global.colors.text.primary}"
-            on:click={() => activeColorPicker = 'text.primary'}
+            onclick={() => activeColorPicker = 'text.primary'}
           />
           <input
             type="color"
             value={theme.global.colors.text.primary}
-            on:input={(e) => updateTheme(['global', 'colors', 'text', 'primary'], e.currentTarget.value)}
+            oninput={(e) => updateTheme(['global', 'colors', 'text', 'primary'], (e.target as HTMLInputElement).value)}
             style="display: none"
           />
         </div>
@@ -124,12 +130,12 @@
           <div 
             class="color-swatch"
             style="background: {theme.global.colors.border}"
-            on:click={() => activeColorPicker = 'border'}
+            onclick={() => activeColorPicker = 'border'}
           />
           <input
             type="color"
             value={theme.global.colors.border}
-            on:input={(e) => updateTheme(['global', 'colors', 'border'], e.currentTarget.value)}
+            oninput={(e) => updateTheme(['global', 'colors', 'border'], (e.target as HTMLInputElement).value)}
             style="display: none"
           />
         </div>
@@ -143,7 +149,7 @@
         <label>Font Family</label>
         <select
           value={theme.global.typography.fontFamily.sans}
-          on:change={(e) => updateTheme(['global', 'typography', 'fontFamily', 'sans'], e.currentTarget.value)}
+          onchange={(e) => updateTheme(['global', 'typography', 'fontFamily', 'sans'], (e.target as HTMLSelectElement).value)}
         >
           {#each fontFamilies as font}
             <option value={font.value}>{font.label}</option>
@@ -155,7 +161,7 @@
         <label>Base Font Size</label>
         <select
           value={theme.global.typography.fontSize.base}
-          on:change={(e) => updateTheme(['global', 'typography', 'fontSize', 'base'], e.currentTarget.value)}
+          onchange={(e) => updateTheme(['global', 'typography', 'fontSize', 'base'], (e.target as HTMLSelectElement).value)}
         >
           {#each fontSizes as size}
             <option value={size.value}>{size.label}</option>
@@ -171,12 +177,12 @@
         <label>Shadow</label>
         <select
           value={theme.global.effects.shadows.base}
-          on:change={(e) => updateTheme(['global', 'effects', 'shadows', 'base'], e.currentTarget.value)}
+          onchange={(e) => updateTheme(['global', 'effects', 'shadows', 'base'], (e.target as HTMLSelectElement).value)}
         >
           <option value="none">None</option>
-          <option value="{theme.global.effects.shadows.sm}">Small</option>
-          <option value="{theme.global.effects.shadows.base}">Medium</option>
-          <option value="{theme.global.effects.shadows.lg}">Large</option>
+          <option value={theme.global.effects.shadows.sm}>Small</option>
+          <option value={theme.global.effects.shadows.base}>Medium</option>
+          <option value={theme.global.effects.shadows.lg}>Large</option>
         </select>
       </div>
       
@@ -184,7 +190,7 @@
         <label>Border Radius</label>
         <select
           value={theme.global.borders.radius.base}
-          on:change={(e) => updateTheme(['global', 'borders', 'radius', 'base'], e.currentTarget.value)}
+          onchange={(e) => updateTheme(['global', 'borders', 'radius', 'base'], (e.target as HTMLSelectElement).value)}
         >
           <option value="0">None</option>
           <option value="0.25rem">Small</option>
@@ -206,12 +212,12 @@
         <div 
           class="color-swatch"
           style="background: {theme.components.page.background}"
-          on:click={() => activeColorPicker = 'page.background'}
+          onclick={() => activeColorPicker = 'page.background'}
         />
         <input
           type="color"
-          value={theme.components.page.background}
-          on:input={(e) => updateTheme(['components', 'page', 'background'], e.currentTarget.value)}
+          value={theme.components.page.background || '#FFFFFF'}
+          oninput={(e) => updateTheme(['components', 'page', 'background'], (e.target as HTMLInputElement).value)}
           style="display: none"
         />
       </div>
@@ -223,17 +229,17 @@
           min="0"
           max="128"
           step="8"
-          value={parseInt(theme.components.page.padding)}
-          on:input={(e) => updateTheme(['components', 'page', 'padding'], `${e.currentTarget.value}px`)}
+          value={parseInt(theme.components.page.padding || '32')}
+          oninput={(e) => updateTheme(['components', 'page', 'padding'], `${(e.target as HTMLInputElement).value}px`)}
         />
-        <span>{theme.components.page.padding}</span>
+        <span>{theme.components.page.padding || '32px'}</span>
       </div>
       
       <div class="control-group">
         <label>Max Width</label>
         <select
-          value={theme.components.page.maxWidth}
-          on:change={(e) => updateTheme(['components', 'page', 'maxWidth'], e.currentTarget.value)}
+          value={theme.components.page.maxWidth || '48rem'}
+          onchange={(e) => updateTheme(['components', 'page', 'maxWidth'], (e.target as HTMLSelectElement).value)}
         >
           <option value="32rem">Small (512px)</option>
           <option value="48rem">Medium (768px)</option>
@@ -255,12 +261,12 @@
         <div 
           class="color-swatch"
           style="background: {theme.components.question.container.background}"
-          on:click={() => activeColorPicker = 'question.background'}
+          onclick={() => activeColorPicker = 'question.background'}
         />
         <input
           type="color"
-          value={theme.components.question.container.background}
-          on:input={(e) => updateTheme(['components', 'question', 'container', 'background'], e.currentTarget.value)}
+          value={theme.components.question.container.background || '#FFFFFF'}
+          oninput={(e) => updateTheme(['components', 'question', 'container', 'background'], (e.target as HTMLInputElement).value)}
           style="display: none"
         />
       </div>
@@ -272,10 +278,10 @@
           min="0"
           max="64"
           step="4"
-          value={parseInt(theme.components.question.container.padding)}
-          on:input={(e) => updateTheme(['components', 'question', 'container', 'padding'], `${e.currentTarget.value}px`)}
+          value={parseInt(theme.components.question.container.padding || '24')}
+          oninput={(e) => updateTheme(['components', 'question', 'container', 'padding'], `${(e.target as HTMLInputElement).value}px`)}
         />
-        <span>{theme.components.question.container.padding}</span>
+        <span>{theme.components.question.container.padding || '24px'}</span>
       </div>
       
       <div class="control-group">
@@ -285,22 +291,22 @@
           min="0"
           max="24"
           step="2"
-          value={parseInt(theme.components.question.container.borderRadius)}
-          on:input={(e) => updateTheme(['components', 'question', 'container', 'borderRadius'], `${e.currentTarget.value}px`)}
+          value={parseInt(theme.components.question.container.borderRadius || '8')}
+          oninput={(e) => updateTheme(['components', 'question', 'container', 'borderRadius'], `${(e.target as HTMLInputElement).value}px`)}
         />
-        <span>{theme.components.question.container.borderRadius}</span>
+        <span>{theme.components.question.container.borderRadius || '8px'}</span>
       </div>
       
       <div class="control-group">
         <label>Shadow</label>
         <select
-          value={theme.components.question.container.boxShadow}
-          on:change={(e) => updateTheme(['components', 'question', 'container', 'boxShadow'], e.currentTarget.value)}
+          value={theme.components.question.container.boxShadow || theme.global.effects.shadows.base}
+          onchange={(e) => updateTheme(['components', 'question', 'container', 'boxShadow'], (e.target as HTMLSelectElement).value)}
         >
           <option value="none">None</option>
-          <option value="{theme.global.effects.shadows.sm}">Small</option>
-          <option value="{theme.global.effects.shadows.base}">Medium</option>
-          <option value="{theme.global.effects.shadows.lg}">Large</option>
+          <option value={theme.global.effects.shadows.sm}>Small</option>
+          <option value={theme.global.effects.shadows.base}>Medium</option>
+          <option value={theme.global.effects.shadows.lg}>Large</option>
         </select>
       </div>
     </div>
@@ -311,8 +317,8 @@
       <div class="control-group">
         <label>Font Size</label>
         <select
-          value={theme.components.question.prompt.fontSize}
-          on:change={(e) => updateTheme(['components', 'question', 'prompt', 'fontSize'], e.currentTarget.value)}
+          value={theme.components.question.prompt.fontSize || '1.125rem'}
+          onchange={(e) => updateTheme(['components', 'question', 'prompt', 'fontSize'], (e.target as HTMLSelectElement).value)}
         >
           {#each fontSizes as size}
             <option value={size.value}>{size.label}</option>
@@ -327,10 +333,10 @@
           min="300"
           max="700"
           step="100"
-          value={theme.components.question.prompt.fontWeight}
-          on:input={(e) => updateTheme(['components', 'question', 'prompt', 'fontWeight'], parseInt(e.currentTarget.value))}
+          value={theme.components.question.prompt.fontWeight || 600}
+          oninput={(e) => updateTheme(['components', 'question', 'prompt', 'fontWeight'], parseInt((e.target as HTMLInputElement).value))}
         />
-        <span>{theme.components.question.prompt.fontWeight}</span>
+        <span>{theme.components.question.prompt.fontWeight || 600}</span>
       </div>
       
       <div class="control-group">
@@ -338,12 +344,12 @@
         <div 
           class="color-swatch"
           style="background: {theme.components.question.prompt.color}"
-          on:click={() => activeColorPicker = 'question.prompt.color'}
+          onclick={() => activeColorPicker = 'question.prompt.color'}
         />
         <input
           type="color"
-          value={theme.components.question.prompt.color}
-          on:input={(e) => updateTheme(['components', 'question', 'prompt', 'color'], e.currentTarget.value)}
+          value={theme.components.question.prompt.color || '#111827'}
+          oninput={(e) => updateTheme(['components', 'question', 'prompt', 'color'], (e.target as HTMLInputElement).value)}
           style="display: none"
         />
       </div>
@@ -356,7 +362,7 @@
     <textarea
       placeholder="/* Add custom CSS here */"
       value={theme.customCSS || ''}
-      on:input={(e) => updateTheme(['customCSS'], e.currentTarget.value)}
+      oninput={(e) => updateTheme(['customCSS'], (e.target as HTMLTextAreaElement).value)}
       rows="6"
     />
   </div>

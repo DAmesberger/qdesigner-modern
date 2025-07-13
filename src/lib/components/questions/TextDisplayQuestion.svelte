@@ -30,7 +30,7 @@
     
     // Markdown processing
     if (question.config.markdown) {
-      processed = marked(processed);
+      processed = marked.parseInline(processed) as string;
       // Sanitize HTML to prevent XSS
       processed = DOMPurify.sanitize(processed);
     }

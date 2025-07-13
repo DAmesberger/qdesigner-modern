@@ -60,7 +60,7 @@
 				<Button
 					variant="ghost"
 					size="lg"
-					onclick={onPrevious}
+					on:click={onPrevious}
 					disabled={!canGoPrevious}
 					class="nav-button nav-previous"
 				>
@@ -76,7 +76,7 @@
 					<Button
 						variant="ghost"
 						size="sm"
-						onclick={onExit}
+						on:click={onExit}
 						class="exit-button"
 					>
 						Save & Exit
@@ -88,7 +88,7 @@
 				<Button
 					variant="default"
 					size="lg"
-					onclick={onNext}
+					on:click={onNext}
 					disabled={!canGoNext}
 					class="nav-button nav-next"
 				>
@@ -102,7 +102,7 @@
 			<Button
 				variant="outline"
 				size="lg"
-				onclick={onPrevious}
+				on:click={onPrevious}
 				disabled={!canGoPrevious}
 				class="nav-button nav-previous"
 			>
@@ -116,7 +116,7 @@
 				<Button
 					variant="ghost"
 					size="sm"
-					onclick={onExit}
+					on:click={onExit}
 					class="exit-button"
 				>
 					Save & Exit
@@ -126,7 +126,7 @@
 			<Button
 				variant="default"
 				size="lg"
-				onclick={onNext}
+				on:click={onNext}
 				disabled={!canGoNext}
 				class="nav-button nav-next"
 			>

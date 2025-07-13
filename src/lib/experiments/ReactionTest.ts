@@ -233,7 +233,7 @@ export class ReactionTest {
     reactionTimes.sort((a, b) => a - b);
 
     const mean = reactionTimes.reduce((a, b) => a + b, 0) / reactionTimes.length;
-    const median = reactionTimes[Math.floor(reactionTimes.length / 2)];
+    const median = reactionTimes[Math.floor(reactionTimes.length / 2)] || 0;
     const variance =
       reactionTimes.reduce((acc, rt) => acc + Math.pow(rt - mean, 2), 0) /
       reactionTimes.length;

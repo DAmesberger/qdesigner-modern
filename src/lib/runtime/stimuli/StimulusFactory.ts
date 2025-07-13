@@ -40,7 +40,13 @@ export class StimulusFactory {
     switch (config.type) {
       case 'text':
         return new TextStimulus({
-          ...baseConfig,
+          id: baseConfig.id,
+          duration: baseConfig.duration,
+          delay: baseConfig.delay,
+          transition: baseConfig.transition ? { in: baseConfig.transition, out: baseConfig.transition } : undefined,
+          position: baseConfig.position,
+          size: baseConfig.size,
+          style: baseConfig.style,
           text: config.content.text || '',
           fontSize: config.content.style?.fontSize,
           fontFamily: config.content.style?.fontFamily,
@@ -52,7 +58,13 @@ export class StimulusFactory {
         
       case 'image':
         return new ImageStimulus({
-          ...baseConfig,
+          id: baseConfig.id,
+          duration: baseConfig.duration,
+          delay: baseConfig.delay,
+          transition: baseConfig.transition ? { in: baseConfig.transition, out: baseConfig.transition } : undefined,
+          position: baseConfig.position,
+          size: baseConfig.size,
+          style: baseConfig.style,
           imageUrl: config.content.imageUrl || '',
           fit: config.content.style?.objectFit || 'contain',
           opacity: config.content.style?.opacity
@@ -60,7 +72,13 @@ export class StimulusFactory {
         
       case 'video':
         return new VideoStimulus({
-          ...baseConfig,
+          id: baseConfig.id,
+          duration: baseConfig.duration,
+          delay: baseConfig.delay,
+          transition: baseConfig.transition ? { in: baseConfig.transition, out: baseConfig.transition } : undefined,
+          position: baseConfig.position,
+          size: baseConfig.size,
+          style: baseConfig.style,
           videoUrl: config.content.videoUrl || '',
           autoplay: true,
           loop: config.content.style?.loop,
@@ -70,7 +88,13 @@ export class StimulusFactory {
         
       case 'audio':
         return new AudioStimulus({
-          ...baseConfig,
+          id: baseConfig.id,
+          duration: baseConfig.duration,
+          delay: baseConfig.delay,
+          transition: baseConfig.transition ? { in: baseConfig.transition, out: baseConfig.transition } : undefined,
+          position: baseConfig.position,
+          size: baseConfig.size,
+          style: baseConfig.style,
           audioUrl: config.content.audioUrl || '',
           volume: config.content.style?.volume,
           showWaveform: config.content.style?.showWaveform,
@@ -80,8 +104,14 @@ export class StimulusFactory {
       case 'html':
         // For HTML content, we render it to canvas then display as texture
         return new CanvasStimulus({
-          ...baseConfig,
-          renderFunction: (ctx, width, height) => {
+          id: baseConfig.id,
+          duration: baseConfig.duration,
+          delay: baseConfig.delay,
+          transition: baseConfig.transition ? { in: baseConfig.transition, out: baseConfig.transition } : undefined,
+          position: baseConfig.position,
+          size: baseConfig.size,
+          style: baseConfig.style,
+          renderFunction: (ctx, width, height, time) => {
             // Custom HTML rendering logic
             // This would use a library like html2canvas or custom rendering
           }
@@ -101,7 +131,13 @@ export class StimulusFactory {
         }));
         
         return new CompositeStimulus({
-          ...baseConfig,
+          id: baseConfig.id,
+          duration: baseConfig.duration,
+          delay: baseConfig.delay,
+          transition: baseConfig.transition ? { in: baseConfig.transition, out: baseConfig.transition } : undefined,
+          position: baseConfig.position,
+          size: baseConfig.size,
+          style: baseConfig.style,
           components
         });
         
@@ -133,9 +169,9 @@ export class StimulusFactory {
         const hex = color.slice(1);
         if (hex.length === 3) {
           return [
-            parseInt(hex[0] + hex[0], 16) / 255,
-            parseInt(hex[1] + hex[1], 16) / 255,
-            parseInt(hex[2] + hex[2], 16) / 255,
+            parseInt(hex![0] + hex![0], 16) / 255,
+            parseInt(hex![1] + hex![1], 16) / 255,
+            parseInt(hex![2] + hex![2], 16) / 255,
             1
           ];
         } else if (hex.length === 6) {

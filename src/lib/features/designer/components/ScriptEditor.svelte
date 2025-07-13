@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import * as monaco from 'monaco-editor';
-  import type { Question } from '$lib/shared/types/types';
+  import type { Question } from '$lib/shared';
   
   export let question: Question;
   export let onUpdate: (script: string) => void;

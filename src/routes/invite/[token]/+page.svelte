@@ -161,7 +161,7 @@
         <div class="space-y-4">
           <div class="text-center">
             <p class="text-lg text-muted-foreground">
-              {invitation.invited_by?.full_name || invitation.invited_by?.email} has invited you to join
+              {invitation.invitedBy?.full_name || invitation.invitedBy?.email} has invited you to join
             </p>
             <h3 class="text-xl font-semibold text-foreground mt-2">
               {invitation.organization?.name}

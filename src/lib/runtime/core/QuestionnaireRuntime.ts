@@ -229,7 +229,7 @@ export class QuestionnaireRuntime {
     }
     
     this.currentPageIndex = pageIndex;
-    this.currentPage = this.config.questionnaire.pages[pageIndex];
+    this.currentPage = this.config.questionnaire.pages[pageIndex] || null;
     this.currentQuestionIndex = 0;
     
     // Update page variable
@@ -255,7 +255,7 @@ export class QuestionnaireRuntime {
   private async showNextQuestion(): Promise<void> {
     if (!this.currentPage) return;
     
-    const questionIds = this.currentPage.questions;
+    const questionIds = this.currentPage.questions ?? [];
     if (this.currentQuestionIndex >= questionIds.length) {
       // Page complete, check flow control
       await this.handleFlowControl();
@@ -442,7 +442,7 @@ export class QuestionnaireRuntime {
       f.type === 'branch' && this.evaluateConditions([{formula: f.condition || 'true', action: 'show'}])
     );
     
-    if (flowRules.length > 0) {
+    if (flowRules.length > 0 && flowRules[0]) {
       // Follow first matching branch
       const targetPageId = flowRules[0].target;
       const targetIndex = this.config.questionnaire.pages.findIndex(p => p.id === targetPageId);

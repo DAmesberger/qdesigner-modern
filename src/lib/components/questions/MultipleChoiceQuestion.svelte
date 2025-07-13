@@ -1,8 +1,11 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import BaseQuestion from './BaseQuestion.svelte';
   import type { ExtendedQuestion, MultipleChoiceConfig, ChoiceOption } from './types';
   import { flip } from 'svelte/animate';
   import { fade } from 'svelte/transition';
+  
+  const dispatch = createEventDispatcher();
   
   export let question: ExtendedQuestion & { config: MultipleChoiceConfig };
   export let mode: 'edit' | 'preview' | 'runtime' = 'runtime';
@@ -24,7 +27,7 @@
     const shuffled = [...options];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      [shuffled[i]!, shuffled[j]!] = [shuffled[j]!, shuffled[i]!];
     }
     
     return shuffled;
@@ -57,8 +60,8 @@
       } else {
         // Remove exclusive options if selecting non-exclusive
         const exclusiveValues = question.config.options
-          .filter(o => o.exclusive)
-          .map(o => o.value);
+          .filter((o: ChoiceOption) => o.exclusive)
+          .map((o: ChoiceOption) => o.value);
         const filtered = currentValues.filter(v => !exclusiveValues.includes(v));
         filtered.push(option.value);
         currentValues.length = 0;

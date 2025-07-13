@@ -1,5 +1,5 @@
 <script lang="ts">
-  export let variant: 'primary' | 'secondary' | 'ghost' = 'primary';
+  export let variant: 'primary' | 'secondary' | 'ghost' | 'default' | 'outline' = 'primary';
   export let size: 'xs' | 'sm' | 'md' | 'lg' | 'xl' = 'md';
   export let type: 'button' | 'submit' | 'reset' = 'button';
   export let disabled = false;
@@ -17,7 +17,9 @@
   const variantClasses = {
     primary: 'bg-indigo-600 font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600',
     secondary: 'bg-white font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50',
-    ghost: 'font-semibold text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+    ghost: 'font-semibold text-gray-700 hover:bg-gray-50 hover:text-gray-900',
+    default: 'bg-indigo-600 font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600',
+    outline: 'bg-white font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50'
   };
   
   $: classes = `inline-flex items-center justify-center ${sizeClasses[size]} ${variantClasses[variant]} ${

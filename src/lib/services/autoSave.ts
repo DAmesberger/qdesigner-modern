@@ -3,7 +3,7 @@ import { designerStore } from '$lib/stores/designerStore';
 import { db } from './db/indexeddb';
 import { toast } from '$lib/stores/toast';
 import { isOnline } from './offline';
-import type { Questionnaire } from '$lib/shared/types/types';
+import type { Questionnaire } from '$lib/shared';
 
 interface AutoSaveConfig {
   enabled: boolean;

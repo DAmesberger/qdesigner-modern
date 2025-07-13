@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Questionnaire, Question, Page, Variable } from '$lib/shared/types/types';
+import type { Questionnaire, Question, Page, Variable } from '$lib/shared';
 
 export interface SyncQueueItem {
   id?: string;

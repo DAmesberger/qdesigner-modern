@@ -1,4 +1,4 @@
-import { supabase } from '$lib/shared/types/types/services/supabase';
+import { supabase } from '$lib/services/supabase';
 import type { User } from '@supabase/supabase-js';
 
 /**

@@ -1,4 +1,4 @@
-import type { RendererOptions, FrameStats, RenderCommand } from '../types/renderer';
+import type { RendererOptions, FrameStats, RenderCommand } from '$lib/shared';
 import {
   vertexShaderSource,
   fragmentShaderSource,
@@ -6,7 +6,7 @@ import {
   createProgram,
 } from './shaders';
 
-import type { RenderContext } from '../runtime/stimuli/Stimulus';
+import type { RenderContext } from '$lib/runtime/stimuli/Stimulus';
 
 export interface Renderable {
   id: string;
@@ -15,8 +15,8 @@ export interface Renderable {
 }
 
 export class WebGLRenderer {
-  private gl: WebGL2RenderingContext;
-  private program: WebGLProgram;
+  private gl!: WebGL2RenderingContext;
+  private program!: WebGLProgram;
   private canvas: HTMLCanvasElement;
   private targetFPS: number;
   private frameInterval: number;
@@ -34,12 +34,12 @@ export class WebGLRenderer {
   private stimulusStartTime: number = 0;
 
   // WebGL resources
-  private positionBuffer: WebGLBuffer;
-  private texCoordBuffer: WebGLBuffer;
-  private matrixLocation: WebGLUniformLocation;
-  private colorLocation: WebGLUniformLocation;
-  private textureLocation: WebGLUniformLocation;
-  private useTextureLocation: WebGLUniformLocation;
+  private positionBuffer!: WebGLBuffer;
+  private texCoordBuffer!: WebGLBuffer;
+  private matrixLocation!: WebGLUniformLocation;
+  private colorLocation!: WebGLUniformLocation;
+  private textureLocation!: WebGLUniformLocation;
+  private useTextureLocation!: WebGLUniformLocation;
 
   // Performance monitoring
   private ext: any; // WebGL timer extension

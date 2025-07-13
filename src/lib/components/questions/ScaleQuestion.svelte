@@ -28,7 +28,7 @@
   
   // Get label for a value
   function getLabel(val: number): string {
-    const label = question.config.labels?.find(l => l.value === val);
+    const label = question.config.labels?.find((l: any) => l.value === val);
     return label?.label || val.toString();
   }
   
@@ -97,7 +97,7 @@
     value = question.config.min + (range * percentage);
     
     // Snap to grid if configured
-    if (question.config.step > 0) {
+    if (question.config.step > 0 && value !== null) {
       value = Math.round(value / question.config.step) * question.config.step;
     }
   }
@@ -217,7 +217,20 @@
         <div 
           class="vas-track"
           on:click={handleVASClick}
-          on:keypress={(e) => e.key === 'Enter' && handleVASClick(e)}
+          on:keypress={(e) => {
+            if (e.key === 'Enter') {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              const mockMouseEvent = new MouseEvent('click', {
+                clientX: rect.left + rect.width / 2,
+                clientY: rect.top + rect.height / 2
+              });
+              Object.defineProperty(mockMouseEvent, 'currentTarget', {
+                value: e.currentTarget,
+                configurable: true
+              });
+              handleVASClick(mockMouseEvent);
+            }
+          }}
           role="slider"
           tabindex="0"
         >
@@ -236,9 +249,9 @@
             <span class="vas-label-min">
               {question.config.labels?.[0]?.label || question.config.min}
             </span>
-            {#if question.config.labels?.find(l => l.value === (question.config.min + question.config.max) / 2)}
+            {#if question.config.labels?.find((l: any) => l.value === (question.config.min + question.config.max) / 2)}
               <span class="vas-label-mid">
-                {question.config.labels.find(l => l.value === (question.config.min + question.config.max) / 2)?.label}
+                {question.config.labels.find((l: any) => l.value === (question.config.min + question.config.max) / 2)?.label}
               </span>
             {/if}
             <span class="vas-label-max">

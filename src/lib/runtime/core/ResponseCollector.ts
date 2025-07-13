@@ -325,6 +325,8 @@ export class ResponseCollector {
       
       e.preventDefault();
       const touch = e.touches[0];
+      if (!touch) return;
+      
       const canvas = e.target as HTMLCanvasElement;
       const rect = canvas.getBoundingClientRect();
       

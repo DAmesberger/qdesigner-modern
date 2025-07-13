@@ -1,8 +1,9 @@
-import { create, all } from 'mathjs';
-import type { Variable, VariableType } from '../types/questionnaire';
+import { create, all, type FactoryFunctionMap } from 'mathjs';
+import type { Variable, VariableType } from '$lib/shared';
 
 // Create math.js instance with safe configuration
-const math = create(all);
+const factories = all as FactoryFunctionMap;
+const math = create(factories);
 
 // Configure math.js to be safe (no access to JS internals)
 // We need evaluate and parse for formula evaluation
@@ -10,7 +11,25 @@ math.import({
   'import': function () { throw new Error('Function import is disabled'); },
   'createUnit': function () { throw new Error('Function createUnit is disabled'); },
   'simplify': function () { throw new Error('Function simplify is disabled'); },
-  'derivative': function () { throw new Error('Function derivative is disabled'); }
+  'derivative': function () { throw new Error('Function derivative is disabled'); },
+  // Add custom functions that mathjs needs to recognize
+  'IF': function (condition: boolean, trueValue: any, falseValue: any) {
+    return condition ? trueValue : falseValue;
+  },
+  'NOW': function () { return Date.now(); },
+  'TIME_SINCE': function (timestamp: number) { return Date.now() - timestamp; },
+  'COUNT': function (arr: any[]) { return Array.isArray(arr) ? arr.length : 0; },
+  'SUM': function (arr: number[]) { return Array.isArray(arr) ? arr.reduce((a, b) => a + b, 0) : 0; },
+  'AVG': function (arr: number[]) {
+    if (!Array.isArray(arr) || arr.length === 0) return 0;
+    return arr.reduce((a, b) => a + b, 0) / arr.length;
+  },
+  'CONCAT': function (...args: any[]) { return args.join(''); },
+  'LENGTH': function (str: string) { return str?.length ?? 0; },
+  'RANDOM': function () { return Math.random(); },
+  'RANDINT': function (min: number, max: number) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
 }, { override: true });
 
 export interface VariableValue {
@@ -141,40 +160,11 @@ export class VariableEngine {
         };
       }
 
-      // Create evaluation scope
+      // Create evaluation scope with variable values
       const scope = this.createEvaluationScope(dependencies);
 
-      // Add custom functions
-      const customScope = {
-        ...scope,
-        // Time functions
-        NOW: () => Date.now(),
-        TIME_SINCE: (timestamp: number) => Date.now() - timestamp,
-        
-        // Conditional functions
-        IF: (condition: boolean, trueValue: any, falseValue: any) => 
-          condition ? trueValue : falseValue,
-        
-        // Array functions
-        COUNT: (arr: any[]) => Array.isArray(arr) ? arr.length : 0,
-        SUM: (arr: number[]) => Array.isArray(arr) ? arr.reduce((a, b) => a + b, 0) : 0,
-        AVG: (arr: number[]) => {
-          if (!Array.isArray(arr) || arr.length === 0) return 0;
-          return arr.reduce((a, b) => a + b, 0) / arr.length;
-        },
-        
-        // String functions
-        CONCAT: (...args: any[]) => args.join(''),
-        LENGTH: (str: string) => str?.length ?? 0,
-        
-        // Random functions
-        RANDOM: () => Math.random(),
-        RANDINT: (min: number, max: number) => 
-          Math.floor(Math.random() * (max - min + 1)) + min,
-      };
-
-      // Evaluate formula
-      const value = math.evaluate(formula, customScope);
+      // Evaluate formula with scope
+      const value = math.evaluate(formula, scope);
 
       // Cache result
       const result = { value, dependencies };
@@ -371,6 +361,20 @@ export class VariableEngine {
     }
 
     return result;
+  }
+  
+  /**
+   * Set value by variable name (convenience method)
+   */
+  public setValue(name: string, value: any): void {
+    // Find variable by name
+    for (const [id, variable] of this.variables) {
+      if (variable.name === name) {
+        this.setVariable(id, value, 'runtime');
+        return;
+      }
+    }
+    throw new Error(`Variable with name ${name} not found`);
   }
 
   /**

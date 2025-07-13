@@ -1,7 +1,7 @@
 import type { PageLoad } from './$types';
 import { error } from '@sveltejs/kit';
 
-export const load: PageLoad = async ({ params, url }) => {
+export const load: PageLoad = async ({ params, url, data }) => {
 	const { code } = params;
 	
 	// Validate code format (alphanumeric, 6-12 characters)
@@ -14,7 +14,9 @@ export const load: PageLoad = async ({ params, url }) => {
 	const sessionId = url.searchParams.get('sid');
 	const preview = url.searchParams.get('preview') === 'true';
 
+	// Return merged data from server load and client-side params
 	return {
+		...data, // Include all data from +page.server.ts
 		code,
 		participantId,
 		sessionId,

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { designerStore, selectedItem } from '$lib/features/designer/stores/designerStore';
-  import type { Question, Page, Variable } from '$lib/shared/types/types';
+  import type { Question, Page, Variable } from '$lib/shared';
   import PropertiesPanel from './PropertiesPanel.svelte';
-  import StyleEditor from '../../wysiwyg/StyleEditor.svelte';
-  import ScriptEditor from '../../wysiwyg/ScriptEditor.svelte';
-  import { defaultTheme } from '$lib/shared/types/types';
+  import StyleEditor from './StyleEditor.svelte';
+  import ScriptEditor from './ScriptEditor.svelte';
+  import { defaultTheme } from '$lib/shared/types/theme';
   
   let activeTab: 'properties' | 'style' | 'script' = 'properties';
   let theme = defaultTheme; // In real app, this would come from store

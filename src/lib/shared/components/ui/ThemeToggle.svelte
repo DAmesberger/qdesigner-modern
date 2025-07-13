@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { theme } from '$lib/shared/types/types/stores/theme';
+  import { theme } from '$lib/stores/theme';
   import { onMount } from 'svelte';
   
   let currentTheme = $state<'light' | 'dark'>('light');

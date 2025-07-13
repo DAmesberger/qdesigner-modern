@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { supabase } from '$lib/shared/types/types/services/supabase';
+  import { supabase } from '$lib/services/supabase';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   

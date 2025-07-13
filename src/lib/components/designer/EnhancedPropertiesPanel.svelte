@@ -4,7 +4,7 @@
   import PropertiesPanel from './PropertiesPanel.svelte';
   import StyleEditor from '../../wysiwyg/StyleEditor.svelte';
   import ScriptEditor from '../../wysiwyg/ScriptEditor.svelte';
-  import { defaultTheme } from '$lib/shared';
+  import { defaultTheme } from '$lib/shared/types/theme';
   
   let activeTab: 'properties' | 'style' | 'script' = 'properties';
   let theme = defaultTheme; // In real app, this would come from store

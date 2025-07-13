@@ -96,7 +96,16 @@
       console.error('Error loading invitations:', fetchError);
       error = 'Failed to load invitations';
     } else {
-      invitations = data || [];
+      // Transform snake_case to camelCase for consistency
+      invitations = (data || []).map(inv => ({
+        ...inv,
+        organizationId: inv.organization_id,
+        expiresAt: inv.expires_at,
+        customMessage: inv.custom_message,
+        createdAt: inv.created_at,
+        acceptedAt: inv.accepted_at,
+        invitedBy: inv.invited_by
+      }));
     }
   }
   
@@ -287,17 +296,17 @@
               
               <div class="text-sm text-muted-foreground space-y-1">
                 <p>
-                  Invited by {invitation.invited_by?.full_name || invitation.invited_by?.email}
-                  on {formatDate(invitation.created_at)}
+                  Invited by {invitation.invitedBy?.full_name || invitation.invitedBy?.email}
+                  on {formatDate(invitation.createdAt)}
                 </p>
                 {#if invitation.status === 'pending'}
-                  <p>Expires on {formatDate(invitation.expires_at)}</p>
+                  <p>Expires on {formatDate(invitation.expiresAt)}</p>
                 {/if}
-                {#if invitation.accepted_at}
-                  <p>Accepted on {formatDate(invitation.accepted_at)}</p>
+                {#if invitation.acceptedAt}
+                  <p>Accepted on {formatDate(invitation.acceptedAt)}</p>
                 {/if}
-                {#if invitation.custom_message}
-                  <p class="italic mt-2">"{invitation.custom_message}"</p>
+                {#if invitation.customMessage}
+                  <p class="italic mt-2">"{invitation.customMessage}"</p>
                 {/if}
               </div>
             </div>

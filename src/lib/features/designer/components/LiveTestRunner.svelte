@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Questionnaire, QuestionnaireTheme, Variable } from '$lib/shared/types/types';
+  import type { Questionnaire, QuestionnaireTheme, Variable } from '$lib/shared';
   import { createEventDispatcher, onMount } from 'svelte';
   import { VariableEngine } from '$lib/core/scripting';
   import QuestionVisualRenderer from './QuestionVisualRenderer.svelte';
@@ -26,7 +26,7 @@
   // Get current page
   $: currentPage = questionnaire.pages[currentPageIndex];
   $: currentQuestions = currentPage ? 
-    currentPage.questions.map(qId => questionnaire.questions.find(q => q.id === qId)).filter(Boolean) : 
+    currentPage.questions.map(qId => questionnaire.questions.find(q => q.id === qId)).filter((q): q is Question => q !== undefined) : 
     [];
   
   // Device dimensions

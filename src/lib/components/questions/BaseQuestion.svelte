@@ -99,7 +99,6 @@
   role="group"
   aria-labelledby="question-{question.id}-title"
   aria-describedby={question.helpText ? `question-${question.id}-help` : undefined}
-  aria-invalid={showError}
   in:fade={{ duration: animationDuration, delay: animationDelay }}
   out:fade={{ duration: animationDuration }}
 >
@@ -150,7 +149,9 @@
           controls={question.media.controls}
           autoplay={question.media.autoplay}
           loop={question.media.loop}
-        />
+        >
+          <track kind="captions" />
+        </audio>
       {/if}
       
       {#if question.media.caption}
@@ -160,7 +161,13 @@
   {/if}
   
   <!-- Question Content (provided by child component) -->
-  <div class="question-content" on:click={() => handleInteraction('click')}>
+  <div 
+    class="question-content" 
+    on:click={() => handleInteraction('click')}
+    on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleInteraction('click'); }}
+    role="button"
+    tabindex="0"
+  >
     <slot {value} {handleResponse} {disabled} {mode} />
   </div>
   
@@ -186,6 +193,7 @@
       <button 
         class="edit-btn" 
         title="Edit question"
+        aria-label="Edit question"
         on:click={() => dispatch('edit')}
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -196,6 +204,7 @@
       <button 
         class="edit-btn" 
         title="Duplicate question"
+        aria-label="Duplicate question"
         on:click={() => dispatch('duplicate')}
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -206,6 +215,7 @@
       <button 
         class="edit-btn delete" 
         title="Delete question"
+        aria-label="Delete question"
         on:click={() => dispatch('delete')}
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

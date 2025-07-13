@@ -1,6 +1,6 @@
 <script lang="ts">
   import { designerStore, selectedItem } from '$lib/features/designer/stores/designerStore';
-  import type { Question, Page, Variable } from '$lib/shared/types/types';
+  import type { Question, Page, Variable } from '$lib/shared';
 
   let item: any = null;
   let itemType: string | null = null;

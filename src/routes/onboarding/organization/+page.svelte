@@ -125,7 +125,7 @@
                     {invitation.organization?.name}
                   </h4>
                   <p class="text-sm text-muted-foreground">
-                    Invited by {invitation.invited_by?.full_name || invitation.invited_by?.email}
+                    Invited by {invitation.invitedBy?.full_name || invitation.invitedBy?.email}
                   </p>
                 </div>
                 <Badge variant="primary" size="sm">

@@ -132,7 +132,7 @@
                   {#each $currentPageBlocks as block}
                     <option value={block.id}>
                       {block.name || 'Untitled Block'}
-                      ({block.questions.length} questions)
+                      ({(block.questions ?? []).length} questions)
                     </option>
                   {/each}
                 </select>

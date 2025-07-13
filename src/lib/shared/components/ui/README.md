@@ -45,7 +45,7 @@ This UI library provides a consistent, accessible, and beautiful set of componen
 
 ```svelte
 <script>
-  import { Button, Card, Input, Alert } from '$lib/shared/types/types/components/ui';
+  import { Button, Card, Input, Alert } from '$lib/shared/components/ui';
 </script>
 ```
 

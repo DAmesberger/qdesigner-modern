@@ -211,7 +211,7 @@
                     <div>
                       <h4 class="font-medium">{page.name || `Page ${index + 1}`}</h4>
                       <p class="text-xs text-gray-600">
-                        {page.questions.length} questions
+                        {(page.questions ?? []).length} questions
                       </p>
                     </div>
                     <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -255,7 +255,7 @@
       <div class="flex items-center space-x-4">
         <span>{pages.length} page{pages.length !== 1 ? 's' : ''}</span>
         <span>•</span>
-        <span>{pages.reduce((sum, p) => sum + p.questions.length, 0)} questions</span>
+        <span>{pages.reduce((sum, p) => sum + (p.questions ?? []).length, 0)} questions</span>
         <span>•</span>
         <button
           on:click={() => designerStore.validate()}

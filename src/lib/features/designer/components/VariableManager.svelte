@@ -1,6 +1,6 @@
 <script lang="ts">
   import { designerStore } from '$lib/features/designer/stores/designerStore';
-  import type { Variable, VariableType } from '$lib/shared/types/types';
+  import type { Variable, VariableType } from '$lib/shared';
   
   let showAddVariable = false;
   let editingVariable: Variable | null = null;

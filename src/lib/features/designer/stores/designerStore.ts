@@ -9,7 +9,7 @@ import type {
   FlowControl,
   QuestionType,
   ResponseType 
-} from '$lib/shared/types/types';
+} from '$lib/shared';
 import { VariableEngine } from '$lib/core/scripting';
 import { OfflinePersistenceService } from '$lib/services/offlinePersistence';
 
@@ -146,7 +146,7 @@ function createDesignerStore() {
           // Remove the page
           draft.questionnaire.pages.splice(index, 1);
           // Update current page if needed
-          if (draft.currentPageId === pageId) {
+          if (draft.currentPageId === pageId && draft.questionnaire.pages.length > 0) {
             draft.currentPageId = draft.questionnaire.pages[0].id;
           }
           draft.questionnaire.modified = new Date();
@@ -160,12 +160,52 @@ function createDesignerStore() {
         const page = draft.questionnaire.pages.find(p => p.id === pageId);
         if (!page) return;
 
+        // Create appropriate ResponseType based on question type
+        let responseType: ResponseType;
+        switch (questionType) {
+          case 'choice':
+            responseType = { 
+              type: 'single',
+              options: [
+                { id: 'opt1', value: 'option1', label: 'Option 1' },
+                { id: 'opt2', value: 'option2', label: 'Option 2' }
+              ]
+            };
+            break;
+          case 'scale':
+          case 'rating':
+            responseType = { 
+              type: 'scale',
+              min: 1,
+              max: 5,
+              step: 1
+            };
+            break;
+          case 'text':
+            responseType = { type: 'text' };
+            break;
+          case 'reaction':
+            responseType = { 
+              type: 'keypress',
+              keys: ['f', 'j']
+            };
+            break;
+          case 'instruction':
+            responseType = { 
+              type: 'keypress',
+              keys: [' ']
+            };
+            break;
+          default:
+            responseType = { type: 'custom', customType: questionType };
+        }
+
         const newQuestion: Question = {
           id: `q${nanoid(6)}`,
           type: questionType,
           page: pageId,
           prompt: { text: 'New Question' },
-          responseType: { type: 'single' },
+          responseType,
           variables: []
         };
 
@@ -174,9 +214,9 @@ function createDesignerStore() {
 
         // Add question ID to page
         if (position !== undefined && position >= 0) {
-          page.questions.splice(position, 0, newQuestion.id);
+          page.questions?.splice(position, 0, newQuestion.id);
         } else {
-          page.questions.push(newQuestion.id);
+          page.questions?.push(newQuestion.id);
         }
 
         // Select the new question
@@ -206,9 +246,9 @@ function createDesignerStore() {
 
         // Remove from page
         draft.questionnaire.pages.forEach(page => {
-          const index = page.questions.indexOf(questionId);
+          const index = page.questions?.indexOf(questionId) ?? -1;
           if (index !== -1) {
-            page.questions.splice(index, 1);
+            page.questions?.splice(index, 1);
           }
         });
 
@@ -322,9 +362,11 @@ function createDesignerStore() {
     reorderQuestions: (pageId: string, oldIndex: number, newIndex: number) => update(state =>
       produce(saveUndoState(state), draft => {
         const page = draft.questionnaire.pages.find(p => p.id === pageId);
-        if (page) {
+        if (page && page.questions) {
           const [removed] = page.questions.splice(oldIndex, 1);
-          page.questions.splice(newIndex, 0, removed);
+          if (removed) {
+            page.questions.splice(newIndex, 0, removed);
+          }
           draft.questionnaire.modified = new Date();
         }
       })
@@ -338,15 +380,15 @@ function createDesignerStore() {
 
         // Remove from current page
         draft.questionnaire.pages.forEach(page => {
-          const index = page.questions.indexOf(questionId);
+          const index = page.questions?.indexOf(questionId) ?? -1;
           if (index !== -1) {
-            page.questions.splice(index, 1);
+            page.questions?.splice(index, 1);
           }
         });
 
         // Add to target page
         const targetPage = draft.questionnaire.pages.find(p => p.id === targetPageId);
-        if (targetPage) {
+        if (targetPage && targetPage.questions) {
           if (position !== undefined) {
             targetPage.questions.splice(position, 0, questionId);
           } else {
@@ -596,7 +638,7 @@ export const currentPageQuestions = derived(
     const page = $state.questionnaire.pages.find(p => p.id === $state.currentPageId);
     if (!page) return [];
     
-    return page.questions
+    return (page.questions ?? [])
       .map(qId => $state.questionnaire.questions.find(q => q.id === qId))
       .filter(Boolean) as Question[];
   }

@@ -62,17 +62,17 @@
   // Get current configuration
   $: deviceConfig = deviceConfigs[deviceType];
   $: currentPage = questionnaire?.pages[currentPageIndex];
-  $: currentBlock = currentPage?.blocks[currentBlockIndex];
+  $: currentBlock = currentPage?.blocks?.[currentBlockIndex];
   $: currentQuestions = getQuestionsForCurrentView();
   
   function getQuestionsForCurrentView() {
     if (!questionnaire || !currentBlock) return [];
     
     // Get questions from current block
-    const questionIds = currentBlock.questions;
+    const questionIds = currentBlock.questions ?? [];
     let questions = questionIds
       .map(id => questionnaire.questions.find(q => q.id === id))
-      .filter(Boolean);
+      .filter((q): q is Question => q !== undefined);
     
     // Apply block-level randomization if needed
     if (currentBlock.type === 'randomized' && currentBlock.randomization?.enabled) {
@@ -168,7 +168,7 @@
   }
   
   function navigateNext() {
-    if (currentBlockIndex < currentPage.blocks.length - 1) {
+    if (currentBlockIndex < (currentPage.blocks ?? []).length - 1) {
       currentBlockIndex++;
     } else if (currentPageIndex < questionnaire.pages.length - 1) {
       currentPageIndex++;
@@ -182,7 +182,7 @@
     } else if (currentPageIndex > 0) {
       currentPageIndex--;
       const prevPage = questionnaire.pages[currentPageIndex];
-      currentBlockIndex = prevPage.blocks.length - 1;
+      currentBlockIndex = (prevPage.blocks ?? []).length - 1;
     }
   }
   
@@ -368,15 +368,15 @@
               
               <div class="progress-info">
                 Page {currentPageIndex + 1} of {questionnaire.pages.length}
-                {#if currentPage.blocks.length > 1}
-                  • Block {currentBlockIndex + 1} of {currentPage.blocks.length}
+                {#if (currentPage.blocks ?? []).length > 1}
+                  • Block {currentBlockIndex + 1} of {(currentPage.blocks ?? []).length}
                 {/if}
               </div>
               
               <button
                 class="nav-btn primary"
                 on:click={navigateNext}
-                disabled={!canNavigateNext() || (currentPageIndex === questionnaire.pages.length - 1 && currentBlockIndex === currentPage.blocks.length - 1)}
+                disabled={!canNavigateNext() || (currentPageIndex === questionnaire.pages.length - 1 && currentBlockIndex === ((currentPage?.blocks ?? []).length - 1))}
               >
                 Next
               </button>
@@ -437,7 +437,7 @@
           </div>
           <div class="debug-item">
             <span class="debug-key">Block</span>
-            <span class="debug-value">{currentBlockIndex + 1}/{currentPage?.blocks.length || 0}</span>
+            <span class="debug-value">{currentBlockIndex + 1}/{currentPage?.blocks?.length || 0}</span>
           </div>
           <div class="debug-item">
             <span class="debug-key">Can Navigate</span>

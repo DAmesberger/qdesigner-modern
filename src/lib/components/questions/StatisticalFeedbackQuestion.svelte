@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Question } from '$lib/shared/types/questionnaire';
+  import type { Question } from '$lib/shared';
   import StatisticsBuilder from '../designer/StatisticsBuilder.svelte';
   import FeedbackTemplateBuilder from '../designer/FeedbackTemplateBuilder.svelte';
   

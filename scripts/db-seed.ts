@@ -33,7 +33,7 @@ try {
     );
     
     console.log('✅ Database seeded successfully');
-  } catch (error) {
+  } catch (error: any) {
     if (error.status === 0) {
       // Sometimes psql returns 0 even with notices
       console.log('✅ Database seeded (with notices)');
@@ -42,6 +42,6 @@ try {
     }
   }
 } catch (error) {
-  console.error('❌ Seeding error:', error.message);
+  console.error('❌ Seeding error:', error instanceof Error ? error.message : String(error));
   process.exit(1);
 }

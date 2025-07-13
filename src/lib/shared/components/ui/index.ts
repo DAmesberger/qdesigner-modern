@@ -20,8 +20,8 @@ export { default as Modal } from './feedback/Modal.svelte';
 export { default as Spinner } from './feedback/Spinner.svelte';
 
 // Re-export common components that follow the same pattern
-export { default as Button } from '../common/Button.svelte';
-export { default as Card } from '../common/Card.svelte';
-export { default as EmptyState } from '../common/EmptyState.svelte';
-export { default as Tabs } from '../common/Tabs.svelte';
-export { default as Toggle } from '../common/Toggle.svelte';
+export { default as Button } from '../Button.svelte';
+export { default as Card } from '../Card.svelte';
+export { default as EmptyState } from '../EmptyState.svelte';
+export { default as Tabs } from '../Tabs.svelte';
+export { default as Toggle } from '../Toggle.svelte';

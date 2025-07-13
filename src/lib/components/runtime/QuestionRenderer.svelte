@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { Question } from '$lib/shared/types/questionnaire';
+  import type { Question } from '$lib/shared';
   
   // Question type components
   import TextDisplayQuestion from '../questions/TextDisplayQuestion.svelte';

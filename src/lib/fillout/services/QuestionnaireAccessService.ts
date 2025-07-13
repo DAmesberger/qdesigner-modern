@@ -1,5 +1,5 @@
 import { supabase } from '$lib/services/supabase';
-import type { Questionnaire } from '$lib/shared/types/questionnaire';
+import type { Questionnaire } from '$lib/shared';
 import type { Session } from '$lib/types/session';
 
 export interface QuestionnaireAccess {
@@ -26,7 +26,7 @@ export class QuestionnaireAccessService {
 			const { data: questionnaire, error } = await supabase
 				.from('questionnaire_definitions')
 				.select('*')
-				.eq('access_code', code.toUpperCase())
+				.eq('code', code.toUpperCase())
 				.eq('status', 'published')
 				.single();
 

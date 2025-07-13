@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import MonacoEditor from '$lib/wysiwyg/MonacoEditor.svelte';
-  import type { Variable } from '$lib/shared/types/variables';
+  import type { Variable } from '$lib/shared';
   
   export let template: string = '';
   export let variables: Variable[] = [];

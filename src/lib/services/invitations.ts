@@ -37,6 +37,24 @@ export interface BulkInviteResult {
 }
 
 /**
+ * Transform database invitation to TypeScript interface
+ */
+function transformInvitation(dbInvitation: any): Invitation {
+  return {
+    id: dbInvitation.id,
+    organizationId: dbInvitation.organization_id,
+    email: dbInvitation.email,
+    role: dbInvitation.role,
+    token: dbInvitation.token,
+    status: dbInvitation.status,
+    expiresAt: dbInvitation.expires_at,
+    customMessage: dbInvitation.custom_message,
+    organization: dbInvitation.organizations,
+    invitedBy: dbInvitation.invited_by
+  };
+}
+
+/**
  * Create a single invitation
  */
 export async function createInvitation({
@@ -118,7 +136,7 @@ export async function createInvitation({
         metadata: { email, role }
       });
 
-    return { data: invitation };
+    return { data: transformInvitation(invitation) };
   } catch (error) {
     console.error('Error creating invitation:', error);
     return { error: 'Failed to create invitation' };
@@ -207,7 +225,7 @@ export async function getInvitationByToken(token: string): Promise<{ data?: Invi
         .eq('id', data.id);
     }
 
-    return { data };
+    return { data: transformInvitation(data) };
   } catch (error) {
     console.error('Error getting invitation:', error);
     return { error: 'Failed to retrieve invitation' };
@@ -294,10 +312,21 @@ export async function declineInvitation(token: string, userId: string): Promise<
  */
 export async function getPendingInvitations(email: string): Promise<Invitation[]> {
   try {
-    // Simple query without joins for signup flow
     const { data, error } = await supabase
       .from('organization_invitations')
-      .select('*')
+      .select(`
+        *,
+        organizations (
+          id,
+          name,
+          slug
+        ),
+        invited_by:users!organization_invitations_invited_by_fkey (
+          id,
+          email,
+          full_name
+        )
+      `)
       .eq('email', email)
       .eq('status', 'pending')
       .gt('expires_at', new Date().toISOString())
@@ -307,7 +336,7 @@ export async function getPendingInvitations(email: string): Promise<Invitation[]
       throw error;
     }
 
-    return data || [];
+    return (data || []).map(transformInvitation);
   } catch (error) {
     console.error('Error getting pending invitations:', error);
     return [];

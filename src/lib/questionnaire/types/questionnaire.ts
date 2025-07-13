@@ -163,10 +163,29 @@ export interface Page {
 }
 
 export interface LayoutConfig {
-  type: 'vertical' | 'grid' | 'custom';
+  type: 'vertical' | 'horizontal' | 'grid' | 'custom';
   spacing?: number;
   alignment?: 'left' | 'center' | 'right';
   customCss?: string;
+  
+  // Layout properties
+  width?: string | number;
+  padding?: string | number;
+  margin?: string | number;
+  
+  // Positioning
+  position?: {
+    x: number;
+    y: number;
+  };
+  size?: {
+    width: number;
+    height: number;
+  };
+  
+  // Visual properties
+  opacity?: number;
+  rotation?: number;
 }
 
 export interface PageTransition {
