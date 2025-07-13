@@ -26,10 +26,45 @@
     'text-input': TextInputQuestion,
     'matrix': MatrixQuestion,
     'statistical-feedback': StatisticalFeedbackQuestion
-  };
+  } as const;
+  
+  type ComponentKey = keyof typeof questionComponents;
+  
+  // Map QuestionType enum values to component keys
+  function getComponentKey(type: Question['type']): ComponentKey {
+    const typeMapping: Record<Question['type'], ComponentKey> = {
+      text: 'text-display',
+      choice: 'multiple-choice',
+      scale: 'scale',
+      rating: 'scale', // Use scale component for rating
+      reaction: 'text-display', // Temporarily use text-display
+      multimedia: 'text-display', // Temporarily use text-display
+      instruction: 'text-display', // Use text-display for instructions
+      webgl: 'text-display' // Temporarily use text-display
+    };
+    
+    // Handle special cases based on response type
+    if (type === 'text' && question.responseType?.type === 'text') {
+      return 'text-input';
+    }
+    
+    // Check if it's a matrix question based on response config
+    if (question.responseType?.type === 'custom' && 
+        question.responseType?.customType === 'matrix') {
+      return 'matrix';
+    }
+    
+    // Check if it's statistical feedback
+    if (question.responseType?.type === 'custom' && 
+        question.responseType?.customType === 'statistical-feedback') {
+      return 'statistical-feedback';
+    }
+    
+    return typeMapping[type] || 'text-display';
+  }
   
   // Get the appropriate component
-  $: component = questionComponents[question.type];
+  $: component = questionComponents[getComponentKey(question.type)];
   
   // Handle response
   function handleResponse(event: CustomEvent) {

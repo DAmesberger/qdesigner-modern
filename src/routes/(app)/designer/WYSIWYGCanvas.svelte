@@ -5,7 +5,7 @@
     currentPageBlocks,
     currentBlock,
     currentBlockQuestions 
-  } from '$lib/stores/designerStore';
+  } from '$lib/features/designer/stores/designerStore';
   import QuestionVisualRenderer from '$lib/wysiwyg/QuestionVisualRenderer.svelte';
   import LiveTestRunner from '$lib/wysiwyg/LiveTestRunner.svelte';
   import { defaultTheme } from '$lib/shared';

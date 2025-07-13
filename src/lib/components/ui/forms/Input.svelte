@@ -8,6 +8,7 @@
   export let error = false;
   export let id: string | undefined = undefined;
   export let name: string | undefined = undefined;
+  export let pattern: string | undefined = undefined;
   // Autocomplete disabled per business decision
   export let autocomplete: HTMLInputElement['autocomplete'] = "off";
   
@@ -30,6 +31,7 @@
   {disabled}
   {readonly}
   {required}
+  {pattern}
   {autocomplete}
   bind:value
   class={inputClasses}

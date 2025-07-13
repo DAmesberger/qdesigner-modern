@@ -1,3 +1,3 @@
-export { WebGLRenderer } from './WebGLRenderer';
-export type { Renderable } from './WebGLRenderer';
+export { WebGLRenderer } from '$lib/renderer';
+export type { Renderable } from '$lib/renderer';
 export * from './shaders';

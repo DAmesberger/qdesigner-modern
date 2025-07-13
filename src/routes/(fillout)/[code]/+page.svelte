@@ -44,7 +44,7 @@
 		// Cleanup on unmount
 		return () => {
 			runtime?.dispose();
-			renderer?.dispose();
+			renderer?.destroy();
 			document.body.classList.remove('fillout');
 		};
 	});
@@ -103,7 +103,6 @@
 			
 			// Initialize WebGL renderer
 			renderer = new WebGLRenderer({ canvas });
-			await renderer.initialize();
 
 			loadingMessage = 'Loading questionnaire...';
 			
@@ -166,10 +165,8 @@
 			<EmptyState 
 				title="Unable to load questionnaire" 
 				description={error}
-				action={{
-					label: 'Go back',
-					onClick: () => goto('/')
-				}}
+				buttonText="Go back"
+				onAction={() => goto('/')}
 			/>
 		</div>
 	{:else if loading}

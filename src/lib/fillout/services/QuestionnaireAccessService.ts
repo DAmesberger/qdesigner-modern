@@ -75,7 +75,7 @@ export class QuestionnaireAccessService {
 				}
 			};
 		} catch (error) {
-			console.error('Error validating questionnaire access:', error);
+			console.error('Error validating questionnaire access:', error as Error);
 			return {
 				valid: false,
 				error: 'Failed to validate access'
@@ -139,7 +139,7 @@ export class QuestionnaireAccessService {
 
 			return { session: newSession, isNew: true };
 		} catch (error) {
-			console.error('Error creating/resuming session:', error);
+			console.error('Error creating/resuming session:', error as Error);
 			throw new Error('Failed to initialize session');
 		}
 	}
@@ -162,7 +162,7 @@ export class QuestionnaireAccessService {
 
 			return !error && data && data.length > 0;
 		} catch (error) {
-			console.error('Error checking previous completion:', error);
+			console.error('Error checking previous completion:', error as Error);
 			return false;
 		}
 	}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
-  import { designerStore } from '$lib/stores/designerStore';
+  import { designerStore } from '$lib/features/designer/stores/designerStore';
   import { get } from 'svelte/store';
 
   export let question: Question;
@@ -73,7 +73,7 @@
         }
       }
     } catch (error) {
-      console.error('Failed to handle drop:', error);
+      console.error('Failed to handle drop:', error as Error);
     }
     
     dropPosition = null;
@@ -88,8 +88,7 @@
       reaction: '⚡',
       multimedia: '🎬',
       instruction: '📋',
-      webgl: '🎮',
-      custom: '🔧'
+      webgl: '🎮'
     };
     return icons[type] || '❓';
   }

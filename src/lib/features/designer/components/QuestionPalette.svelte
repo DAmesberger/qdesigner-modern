@@ -46,11 +46,18 @@
       defaultResponseType: 'keypress'
     },
     {
-      type: 'custom',
-      label: 'Custom Question',
+      type: 'text',
+      label: 'Matrix Question',
       icon: '🔧',
-      description: 'Advanced custom logic',
-      defaultResponseType: 'custom'
+      description: 'Grid-based questions',
+      defaultResponseType: 'multiple'
+    },
+    {
+      type: 'scale',
+      label: 'Statistical Feedback',
+      icon: '📊',
+      description: 'Charts and personalized feedback',
+      defaultResponseType: 'scale'
     }
   ];
 

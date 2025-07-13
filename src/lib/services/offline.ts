@@ -65,7 +65,7 @@ function createOfflineStore() {
       }, 60 * 60 * 1000); // Every hour
 
     } catch (error) {
-      console.error('[Offline] Service Worker registration failed:', error);
+      console.error('[Offline] Service Worker registration failed:', error as Error);
     }
 
     // Monitor online/offline status
@@ -88,7 +88,7 @@ function createOfflineStore() {
           update(state => ({ ...state, syncPending: true }));
         })
         .catch((error: any) => {
-          console.error('[Offline] Sync registration failed:', error);
+          console.error('[Offline] Sync registration failed:', error as Error);
         });
     }
   }
@@ -109,7 +109,7 @@ function createOfflineStore() {
     try {
       await registration?.update();
     } catch (error) {
-      console.error('[Offline] Update check failed:', error);
+      console.error('[Offline] Update check failed:', error as Error);
     }
   }
 
@@ -150,7 +150,7 @@ export async function requestPersistentStorage(): Promise<boolean> {
     console.log(`[Offline] Persistent storage ${isPersisted ? 'granted' : 'denied'}`);
     return isPersisted;
   } catch (error) {
-    console.error('[Offline] Persistent storage request failed:', error);
+    console.error('[Offline] Persistent storage request failed:', error as Error);
     return false;
   }
 }
@@ -168,7 +168,7 @@ export async function getStorageEstimate(): Promise<{ usage: number; quota: numb
       quota: estimate.quota || 0
     };
   } catch (error) {
-    console.error('[Offline] Storage estimate failed:', error);
+    console.error('[Offline] Storage estimate failed:', error as Error);
     return null;
   }
 }

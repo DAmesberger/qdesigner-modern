@@ -6,7 +6,7 @@
     currentPage,
     currentPageQuestions,
     selectedItem
-  } from '$lib/stores/designerStore';
+  } from '$lib/features/designer/stores/designerStore';
   import { autoSave } from '$lib/services/autoSave';
   
   // Components

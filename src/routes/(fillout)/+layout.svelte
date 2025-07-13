@@ -19,6 +19,7 @@
 				document.removeEventListener('selectstart', handleSelectStart);
 			};
 		}
+		return () => {}; // Return empty cleanup function for SSR
 	});
 </script>
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { designerStore, isSaving, isLoading, lastSaved, saveError } from '$lib/stores/designerStore';
+  import { designerStore, isSaving, isLoading, lastSaved, saveError } from '$lib/features/designer/stores/designerStore';
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { toast } from '$lib/stores/toast';

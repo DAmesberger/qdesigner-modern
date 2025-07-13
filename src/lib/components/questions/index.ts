@@ -5,6 +5,7 @@ export { default as TextDisplayQuestion } from './TextDisplayQuestion.svelte';
 export { default as MultipleChoiceQuestion } from './MultipleChoiceQuestion.svelte';
 export { default as ScaleQuestion } from './ScaleQuestion.svelte';
 export { default as TextInputQuestion } from './TextInputQuestion.svelte';
+export { default as MatrixQuestion } from './MatrixQuestion.svelte';
 export { default as WebGLQuestion } from './WebGLQuestion.svelte';
 
 export * from './types';
@@ -15,6 +16,7 @@ import TextDisplayQuestion from './TextDisplayQuestion.svelte';
 import MultipleChoiceQuestion from './MultipleChoiceQuestion.svelte';
 import ScaleQuestion from './ScaleQuestion.svelte';
 import TextInputQuestion from './TextInputQuestion.svelte';
+import MatrixQuestion from './MatrixQuestion.svelte';
 import WebGLQuestion from './WebGLQuestion.svelte';
 
 export const questionRegistry: QuestionComponentRegistry = {
@@ -81,6 +83,31 @@ export const questionRegistry: QuestionComponentRegistry = {
     icon: '✏️',
     category: 'Response',
     description: 'Text input for open-ended responses'
+  },
+  
+  'matrix': {
+    component: MatrixQuestion,
+    defaultConfig: {
+      rows: [
+        { id: 'row1', label: 'Item 1', required: false },
+        { id: 'row2', label: 'Item 2', required: false },
+        { id: 'row3', label: 'Item 3', required: false }
+      ],
+      columns: [
+        { id: 'col1', label: 'Strongly Disagree', value: 1 },
+        { id: 'col2', label: 'Disagree', value: 2 },
+        { id: 'col3', label: 'Neutral', value: 3 },
+        { id: 'col4', label: 'Agree', value: 4 },
+        { id: 'col5', label: 'Strongly Agree', value: 5 }
+      ],
+      responseType: 'radio',
+      alternateRowColors: true,
+      stickyHeaders: false,
+      mobileLayout: 'accordion'
+    },
+    icon: '📊',
+    category: 'Response',
+    description: 'Matrix/grid questions for rating multiple items on the same scale'
   },
   
   'webgl': {

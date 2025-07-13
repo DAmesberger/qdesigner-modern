@@ -6,7 +6,7 @@
     isSaving,
     lastSaved,
     saveError
-  } from '$lib/stores/designerStore';
+  } from '$lib/features/designer/stores/designerStore';
   import { goto } from '$app/navigation';
   import { createEventDispatcher } from 'svelte';
   import theme from '$lib/theme';

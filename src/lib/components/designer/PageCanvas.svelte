@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { designerStore, currentPage, currentPageQuestions } from '$lib/stores/designerStore';
+  import { designerStore, currentPage, currentPageQuestions } from '$lib/features/designer/stores/designerStore';
   import QuestionCard from './QuestionCard.svelte';
   import type { Question } from '$lib/shared';
 
@@ -38,7 +38,7 @@
         designerStore.addQuestion(page.id, data.questionType);
       }
     } catch (error) {
-      console.error('Failed to handle drop:', error);
+      console.error('Failed to handle drop:', error as Error);
     }
   }
 
@@ -121,7 +121,7 @@
                   designerStore.addQuestion(page.id, data.questionType);
                 }
               } catch (error) {
-                console.error('Failed to handle drop:', error);
+                console.error('Failed to handle drop:', error as Error);
               }
             }}
             class="mt-4 p-8 border-2 border-dashed border-gray-300 rounded-lg

@@ -5,21 +5,23 @@ import type {
   Questionnaire, 
   Question, 
   Page, 
+  Block,
   Variable, 
   FlowControl,
   QuestionType,
   ResponseType 
 } from '$lib/shared';
-import { VariableEngine } from '$lib/core/scripting';
+import { VariableEngine } from '$lib/scripting-engine';
 import { OfflinePersistenceService } from '$lib/services/offlinePersistence';
 
 export interface DesignerState {
   questionnaire: Questionnaire;
   selectedItemId: string | null;
-  selectedItemType: 'question' | 'page' | 'variable' | 'flow' | null;
+  selectedItemType: 'question' | 'page' | 'variable' | 'flow' | 'block' | null;
   isDragging: boolean;
   previewMode: boolean;
   currentPageId: string | null;
+  currentBlockId: string | null;
   validationErrors: ValidationError[];
   undoStack: Questionnaire[];
   redoStack: Questionnaire[];
@@ -71,6 +73,7 @@ function createDesignerStore() {
     isDragging: false,
     previewMode: false,
     currentPageId: 'page1',
+    currentBlockId: null,
     validationErrors: [],
     undoStack: [],
     redoStack: [],
@@ -154,10 +157,149 @@ function createDesignerStore() {
       })
     ),
 
-    // Question operations
-    addQuestion: (pageId: string, questionType: QuestionType, position?: number) => update(state =>
+    // Block operations
+    addBlock: (pageId: string, blockType: Block['type'] = 'standard') => update(state =>
       produce(saveUndoState(state), draft => {
         const page = draft.questionnaire.pages.find(p => p.id === pageId);
+        if (!page) return;
+
+        const newBlock: Block = {
+          id: `block${nanoid(6)}`,
+          pageId,
+          name: `Block ${(page.blocks?.length ?? 0) + 1}`,
+          type: blockType,
+          questions: [],
+          layout: { type: 'vertical', spacing: 16, alignment: 'center' }
+        };
+
+        if (!page.blocks) page.blocks = [];
+        page.blocks.push(newBlock);
+        
+        // Set as current block
+        draft.currentBlockId = newBlock.id;
+        draft.questionnaire.modified = new Date();
+      })
+    ),
+
+    updateBlock: (blockId: string, updates: Partial<Block>) => update(state =>
+      produce(saveUndoState(state), draft => {
+        const page = draft.questionnaire.pages.find(p => 
+          p.blocks?.some(b => b.id === blockId)
+        );
+        if (!page) return;
+
+        const block = page.blocks?.find(b => b.id === blockId);
+        if (block) {
+          Object.assign(block, updates);
+          draft.questionnaire.modified = new Date();
+        }
+      })
+    ),
+
+    deleteBlock: (blockId: string) => update(state =>
+      produce(saveUndoState(state), draft => {
+        const page = draft.questionnaire.pages.find(p => 
+          p.blocks?.some(b => b.id === blockId)
+        );
+        if (!page || !page.blocks) return;
+
+        const blockIndex = page.blocks.findIndex(b => b.id === blockId);
+        if (blockIndex !== -1) {
+          const block = page.blocks[blockIndex];
+          
+          // Remove all questions in this block
+          if (block) {
+            block.questions.forEach(qId => {
+            const qIndex = draft.questionnaire.questions.findIndex(q => q.id === qId);
+            if (qIndex !== -1) {
+              draft.questionnaire.questions.splice(qIndex, 1);
+            }
+            });
+          }
+
+          // Remove the block
+          page.blocks.splice(blockIndex, 1);
+
+          // Clear current block if it was this one
+          if (draft.currentBlockId === blockId) {
+            draft.currentBlockId = page.blocks[0]?.id || null;
+          }
+
+          // Clear selection if this was selected
+          if (draft.selectedItemId === blockId) {
+            draft.selectedItemId = null;
+            draft.selectedItemType = null;
+          }
+
+          draft.questionnaire.modified = new Date();
+        }
+      })
+    ),
+
+    setCurrentBlock: (blockId: string | null) => update(state =>
+      produce(state, draft => {
+        draft.currentBlockId = blockId;
+      })
+    ),
+
+    reorderQuestionsInBlock: (blockId: string, oldIndex: number, newIndex: number) => update(state =>
+      produce(saveUndoState(state), draft => {
+        const page = draft.questionnaire.pages.find(p => 
+          p.blocks?.some(b => b.id === blockId)
+        );
+        if (!page) return;
+
+        const block = page.blocks?.find(b => b.id === blockId);
+        if (block && block.questions) {
+          const [removed] = block.questions.splice(oldIndex, 1);
+          if (removed) {
+            block.questions.splice(newIndex, 0, removed);
+          }
+          draft.questionnaire.modified = new Date();
+        }
+      })
+    ),
+
+    updateBlockQuestions: (blockId: string, questionIds: string[]) => update(state =>
+      produce(saveUndoState(state), draft => {
+        const page = draft.questionnaire.pages.find(p => 
+          p.blocks?.some(b => b.id === blockId)
+        );
+        if (!page) return;
+
+        const block = page.blocks?.find(b => b.id === blockId);
+        if (block) {
+          block.questions = questionIds;
+          draft.questionnaire.modified = new Date();
+        }
+      })
+    ),
+
+    // Question operations
+    addQuestion: (targetId: string, questionType: QuestionType, position?: number) => update(state =>
+      produce(saveUndoState(state), draft => {
+        // Check if targetId is a block ID
+        let block: Block | undefined;
+        let page: Page | undefined;
+        
+        // First try to find as block
+        for (const p of draft.questionnaire.pages) {
+          if (p.blocks) {
+            const foundBlock = p.blocks.find(b => b.id === targetId);
+            if (foundBlock) {
+              block = foundBlock;
+              page = p;
+              break;
+            }
+          }
+        }
+        
+        // If not found as block, try as page
+        if (!block) {
+          page = draft.questionnaire.pages.find(p => p.id === targetId);
+        }
+        
+        // Exit if no page found
         if (!page) return;
 
         // Create appropriate ResponseType based on question type
@@ -203,7 +345,8 @@ function createDesignerStore() {
         const newQuestion: Question = {
           id: `q${nanoid(6)}`,
           type: questionType,
-          page: pageId,
+          page: page.id,
+          blockId: block?.id,
           prompt: { text: 'New Question' },
           responseType,
           variables: []
@@ -212,11 +355,19 @@ function createDesignerStore() {
         // Add question to questionnaire
         draft.questionnaire.questions.push(newQuestion);
 
-        // Add question ID to page
-        if (position !== undefined && position >= 0) {
-          page.questions?.splice(position, 0, newQuestion.id);
+        // Add question ID to block or page
+        if (block) {
+          if (position !== undefined && position >= 0) {
+            block.questions.splice(position, 0, newQuestion.id);
+          } else {
+            block.questions.push(newQuestion.id);
+          }
         } else {
-          page.questions?.push(newQuestion.id);
+          if (position !== undefined && position >= 0) {
+            page.questions?.splice(position, 0, newQuestion.id);
+          } else {
+            page.questions?.push(newQuestion.id);
+          }
         }
 
         // Select the new question
@@ -499,6 +650,13 @@ function createDesignerStore() {
       const state = get({ subscribe });
       return JSON.parse(JSON.stringify(state.questionnaire));
     },
+    
+    updateQuestionnaire: (updates: Partial<Questionnaire>) => update(state =>
+      produce(saveUndoState(state), draft => {
+        Object.assign(draft.questionnaire, updates);
+        draft.questionnaire.modified = new Date();
+      })
+    ),
 
     // Persistence methods
     setUserId: (userId: string) => {
@@ -660,6 +818,14 @@ export const selectedItem = derived(
         return $state.questionnaire.variables.find(v => v.id === $state.selectedItemId);
       case 'flow':
         return $state.questionnaire.flow.find(f => f.id === $state.selectedItemId);
+      case 'block':
+        for (const page of $state.questionnaire.pages) {
+          if (page.blocks) {
+            const block = page.blocks.find(b => b.id === $state.selectedItemId);
+            if (block) return block;
+          }
+        }
+        return null;
       default:
         return null;
     }
@@ -694,4 +860,39 @@ export const lastSaved = derived(
 export const saveError = derived(
   designerStore,
   $state => $state.saveError
+);
+
+// Block-related derived stores
+export const currentPageBlocks = derived(
+  designerStore,
+  $state => {
+    const page = $state.questionnaire.pages.find(p => p.id === $state.currentPageId);
+    return page?.blocks || [];
+  }
+);
+
+export const currentBlock = derived(
+  designerStore,
+  $state => {
+    if (!$state.currentBlockId) return null;
+    
+    for (const page of $state.questionnaire.pages) {
+      if (page.blocks) {
+        const block = page.blocks.find(b => b.id === $state.currentBlockId);
+        if (block) return block;
+      }
+    }
+    return null;
+  }
+);
+
+export const currentBlockQuestions = derived(
+  [designerStore, currentBlock],
+  ([$state, $currentBlock]) => {
+    if (!$currentBlock) return [];
+    
+    return $currentBlock.questions
+      .map(qId => $state.questionnaire.questions.find(q => q.id === qId))
+      .filter(Boolean) as Question[];
+  }
 );

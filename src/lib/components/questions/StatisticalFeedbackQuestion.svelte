@@ -10,14 +10,22 @@
   export let interactive: boolean = true;
   export let mode: 'design' | 'preview' | 'runtime' = 'design';
   
-  // Extract configuration
+  // Extract configuration - support all scientific chart types
   $: config = question.settings?.feedbackConfig || {
-    chartType: 'bar',
+    chartType: 'bar' as 'bar' | 'line' | 'pie' | 'radar' | 'scatter' | 'distribution' | 'percentile' | 'histogram' | 'boxplot',
     selectedVariables: [],
     showLegend: true,
     showGrid: true,
     template: 'Your score: $\{score}',
-    interpretation: []
+    interpretation: [],
+    // Advanced chart configuration
+    chartOptions: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: {
+        duration: 750
+      }
+    }
   };
   
   // State

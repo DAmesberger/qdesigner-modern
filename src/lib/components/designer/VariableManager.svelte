@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designerStore';
+  import { designerStore } from '$lib/features/designer/stores/designerStore';
   import type { Variable, VariableType } from '$lib/shared';
   import FormulaEditor from './FormulaEditor.svelte';
   import { onMount } from 'svelte';

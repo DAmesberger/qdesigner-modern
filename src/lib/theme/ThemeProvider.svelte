@@ -1,11 +1,15 @@
-<script lang="ts">
-  import { onMount } from 'svelte';
+<script context="module" lang="ts">
   import { writable } from 'svelte/store';
-  import theme from './index';
   
   // Theme store
   export const themeMode = writable<'light' | 'dark'>('light');
   export const customTheme = writable<Record<string, any>>({});
+  
+</script>
+
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import theme from './index';
   
   // Props
   export let defaultMode: 'light' | 'dark' | 'system' = 'system';

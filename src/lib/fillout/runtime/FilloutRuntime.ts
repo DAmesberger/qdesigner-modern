@@ -79,7 +79,7 @@ export class FilloutRuntime {
 		try {
 			await SessionManagementService.startSession(this.sessionId);
 		} catch (error) {
-			console.error('Failed to start session:', error);
+			console.error('Failed to start session:', error as Error);
 		}
 	}
 
@@ -151,7 +151,7 @@ export class FilloutRuntime {
 				}
 			});
 		} catch (error) {
-			console.error('Failed to persist response:', error);
+			console.error('Failed to persist response:', error as Error);
 		}
 	}
 
@@ -223,7 +223,7 @@ export class FilloutRuntime {
 				this.config.onComplete(session);
 			}
 		} catch (error) {
-			console.error('Failed to complete session:', error);
+			console.error('Failed to complete session:', error as Error);
 		}
 	}
 

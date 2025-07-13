@@ -44,7 +44,7 @@ export class SessionManagementService {
 			const newSession = await this.createSession(config);
 			return { session: newSession, isNew: true, canResume: false };
 		} catch (error) {
-			console.error('Failed to initialize session:', error);
+			console.error('Failed to initialize session:', error as Error);
 			throw new Error('Unable to start questionnaire session');
 		}
 	}
@@ -121,7 +121,7 @@ export class SessionManagementService {
 
 			return data;
 		} catch (error) {
-			console.error('Failed to resume session:', error);
+			console.error('Failed to resume session:', error as Error);
 			return null;
 		}
 	}
@@ -292,7 +292,7 @@ export class SessionManagementService {
 				saved_at: Date.now()
 			}));
 		} catch (error) {
-			console.error('Failed to save session to local storage:', error);
+			console.error('Failed to save session to local storage:', error as Error);
 		}
 	}
 
@@ -314,7 +314,7 @@ export class SessionManagementService {
 			
 			return data;
 		} catch (error) {
-			console.error('Failed to read local session:', error);
+			console.error('Failed to read local session:', error as Error);
 			return null;
 		}
 	}
@@ -325,7 +325,7 @@ export class SessionManagementService {
 		try {
 			localStorage.removeItem(this.SESSION_KEY);
 		} catch (error) {
-			console.error('Failed to clear local session:', error);
+			console.error('Failed to clear local session:', error as Error);
 		}
 	}
 }

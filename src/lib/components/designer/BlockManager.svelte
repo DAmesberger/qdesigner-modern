@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { designerStore, currentPageBlocks, currentBlock } from '$lib/stores/designerStore';
+  import { designerStore, currentPageBlocks, currentBlock } from '$lib/features/designer/stores/designerStore';
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
   import type { Block } from '$lib/shared';
@@ -198,7 +198,7 @@
       <div 
         class="space-y-2"
         use:dndzone={{
-          items: $currentPageBlocks.map(b => ({ id: b.id })),
+          items: $currentPageBlocks.map((b: Block) => ({ id: b.id })),
           flipDurationMs: 300,
           dragDisabled,
           dropTargetStyle: {}

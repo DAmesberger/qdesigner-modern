@@ -47,14 +47,14 @@
     }
   ];
   
-  function getCategoryColor(category: string) {
-    const colors: Record<string, string> = {
-      'Feedback': 'blue',
-      'Internal': 'purple',
-      'Research': 'green',
-      'UX': 'yellow'
+  function getCategoryColor(category: string): 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info' {
+    const colors: Record<string, 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info'> = {
+      'Feedback': 'info',
+      'Internal': 'secondary',
+      'Research': 'success',
+      'UX': 'warning'
     };
-    return colors[category] || 'gray';
+    return colors[category] || 'secondary';
   }
 </script>
 

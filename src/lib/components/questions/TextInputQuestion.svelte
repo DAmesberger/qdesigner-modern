@@ -133,7 +133,7 @@
         bind:value
         placeholder={question.config.placeholder}
         rows={question.config.rows || 4}
-        maxlength={question.config.maxLength}
+        maxLength={question.config.maxLength}
         spellcheck={question.config.spellCheck !== false}
         {disabled}
         on:input={handleInput}
@@ -141,14 +141,14 @@
         on:blur={handleBlur}
         class="text-input textarea"
         class:resizable={question.config.autoResize}
-      />
+      ></textarea>
     {:else}
       <input
         bind:this={inputElement}
         type={question.config.inputType}
         bind:value
         placeholder={question.config.placeholder}
-        maxlength={question.config.maxLength}
+        maxLength={question.config.maxLength}
         min={question.config.inputType === 'number' ? question.config.min : undefined}
         max={question.config.inputType === 'number' ? question.config.max : undefined}
         step={question.config.inputType === 'number' ? question.config.step : undefined}
@@ -237,6 +237,7 @@
   /* Number input specific */
   input[type="number"] {
     -moz-appearance: textfield;
+    appearance: textfield;
   }
   
   input[type="number"]::-webkit-outer-spin-button,

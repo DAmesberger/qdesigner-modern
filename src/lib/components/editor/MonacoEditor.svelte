@@ -55,9 +55,9 @@
     
     // Configure Monaco environment
     self.MonacoEnvironment = {
-      getWorker: function (workerId, label) {
+      getWorker: function (_workerId: string, label: string) {
         const getWorkerModule = (moduleUrl: string, label: string) => {
-          return new Worker(self.MonacoEnvironment?.getWorkerUrl?.(moduleUrl) || moduleUrl, {
+          return new Worker(self.MonacoEnvironment?.getWorkerUrl?.(moduleUrl, label) || moduleUrl, {
             name: label,
             type: 'module'
           });
@@ -135,8 +135,8 @@
       overviewRulerBorder: false,
       renderLineHighlight: 'gutter',
       roundedSelection: true,
-      cursorBlinking: 'smooth',
-      cursorSmoothCaretAnimation: true,
+      cursorBlinking: 'blink',
+      cursorSmoothCaretAnimation: 'on',
       contextmenu: true,
       links: true,
       colorDecorators: true,

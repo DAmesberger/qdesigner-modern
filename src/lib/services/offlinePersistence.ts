@@ -55,7 +55,7 @@ export class OfflinePersistenceService {
           
           return result;
         } catch (error) {
-          console.error('Online save failed, data saved offline:', error);
+          console.error('Online save failed, data saved offline:', error as Error);
           // Continue with offline save
         }
       }
@@ -67,7 +67,7 @@ export class OfflinePersistenceService {
         isOffline: true
       };
     } catch (error) {
-      console.error('Error saving questionnaire:', error);
+      console.error('Error saving questionnaire:', error as Error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -106,7 +106,7 @@ export class OfflinePersistenceService {
             return result;
           }
         } catch (error) {
-          console.error('Online load failed, trying offline:', error);
+          console.error('Online load failed, trying offline:', error as Error);
         }
       }
 
@@ -126,7 +126,7 @@ export class OfflinePersistenceService {
         error: 'Questionnaire not found'
       };
     } catch (error) {
-      console.error('Error loading questionnaire:', error);
+      console.error('Error loading questionnaire:', error as Error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -149,7 +149,7 @@ export class OfflinePersistenceService {
             return result.questionnaires || [];
           }
         } catch (error) {
-          console.error('Online list failed, using offline:', error);
+          console.error('Online list failed, using offline:', error as Error);
         }
       }
 
@@ -166,7 +166,7 @@ export class OfflinePersistenceService {
         syncStatus: oq.syncStatus
       }));
     } catch (error) {
-      console.error('Error listing questionnaires:', error);
+      console.error('Error listing questionnaires:', error as Error);
       return [];
     }
   }
@@ -228,7 +228,7 @@ export class OfflinePersistenceService {
           await db.markSyncItemComplete(item.id!);
           successCount++;
         } catch (error) {
-          console.error('Sync failed for item:', item, error);
+          console.error('Sync failed for item:', item, error as Error);
           await db.markSyncItemFailed(item.id!, error instanceof Error ? error.message : 'Unknown error');
           failCount++;
         }
@@ -247,7 +247,7 @@ export class OfflinePersistenceService {
         });
       }
     } catch (error) {
-      console.error('Sync process failed:', error);
+      console.error('Sync process failed:', error as Error);
       toast.error('Sync failed. Will retry when online.');
     } finally {
       this.syncInProgress = false;

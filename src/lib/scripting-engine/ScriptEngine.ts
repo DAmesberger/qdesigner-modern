@@ -106,7 +106,7 @@ export class ScriptEngine {
             self.postMessage({
               id,
               success: false,
-              error: error.message || 'Unknown error'
+              error: (error as Error).message || 'Unknown error'
             });
           }
         };

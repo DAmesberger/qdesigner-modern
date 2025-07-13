@@ -160,7 +160,7 @@
       
       isLoading = false;
     } catch (error) {
-      console.error('Failed to load Monaco Editor:', error);
+      console.error('Failed to load Monaco Editor:', error as Error);
       isLoading = false;
     }
   });

@@ -44,7 +44,8 @@
       
       return () => subscription.unsubscribe();
     } catch (error) {
-      console.error('Error setting up auth listener:', error);
+      console.error('Error setting up auth listener:', error as Error);
+      return () => {}; // Return empty cleanup function
     }
   });
 </script>

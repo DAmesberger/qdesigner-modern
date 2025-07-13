@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { VariableEngine } from './VariableEngine';
+import { VariableEngine } from '$lib/scripting-engine';
 import type { Variable } from '$lib/shared';
 
 describe('VariableEngine', () => {

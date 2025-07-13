@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { designerStore, canUndo, canRedo } from '$lib/stores/designerStore';
+  import { designerStore, canUndo, canRedo } from '$lib/features/designer/stores/designerStore';
   import QuestionPalette from './QuestionPalette.svelte';
   import PageCanvas from './PageCanvas.svelte';
   import VariableManager from './VariableManager.svelte';

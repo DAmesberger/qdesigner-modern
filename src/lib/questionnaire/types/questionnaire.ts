@@ -68,8 +68,7 @@ export type QuestionType =
   | 'reaction' 
   | 'multimedia'
   | 'instruction'
-  | 'webgl'
-  | 'custom';
+  | 'webgl';
 
 export interface Stimulus {
   type: 'text' | 'image' | 'video' | 'audio' | 'html' | 'composite';

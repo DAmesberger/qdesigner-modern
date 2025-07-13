@@ -2,6 +2,7 @@
   import MonacoEditor from './MonacoEditor.svelte';
   import { createEventDispatcher } from 'svelte';
   import type { Variable } from '$lib/shared';
+  import type * as Monaco from 'monaco-editor';
   
   export let formula: string = '';
   export let variables: Variable[] = [];
@@ -106,7 +107,7 @@
       // Simulate async evaluation
       await new Promise(resolve => setTimeout(resolve, 300));
     } catch (error) {
-      previewError = error.message || 'Invalid formula';
+      previewError = error instanceof Error ? error.message : 'Invalid formula';
       previewValue = '';
     } finally {
       isEvaluating = false;
@@ -150,7 +151,7 @@
     
     // Register completion provider
     monaco.languages.registerCompletionItemProvider('formula', {
-      provideCompletionItems: (model, position) => {
+      provideCompletionItems: (model: Monaco.editor.ITextModel, position: Monaco.Position) => {
         const word = model.getWordUntilPosition(position);
         const range = {
           startLineNumber: position.lineNumber,

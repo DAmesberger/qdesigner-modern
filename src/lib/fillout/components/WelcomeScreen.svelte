@@ -17,7 +17,7 @@
 		if (estimatedDuration) return estimatedDuration;
 		
 		const questionCount = questionnaire.pages?.reduce(
-			(total, page) => total + (page.questions?.length || 0), 
+			(total: number, page: any) => total + (page.questions?.length || 0), 
 			0
 		) || 0;
 		

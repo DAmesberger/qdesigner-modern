@@ -1,5 +1,5 @@
 import { derived } from 'svelte/store';
-import { designerStore } from '$lib/stores/designerStore';
+import { designerStore } from '$lib/features/designer/stores/designerStore';
 import { db } from './db/indexeddb';
 import { toast } from '$lib/stores/toast';
 import { isOnline } from './offline';
@@ -107,12 +107,12 @@ class AutoSaveService {
         try {
           await designerStore.saveQuestionnaire();
         } catch (error) {
-          console.error('Auto-save to server failed:', error);
+          console.error('Auto-save to server failed:', error as Error);
           // Draft is still saved locally, so this is not critical
         }
       }
     } catch (error) {
-      console.error('Auto-save failed:', error);
+      console.error('Auto-save failed:', error as Error);
       toast.error('Auto-save failed', { duration: 3000 });
     } finally {
       this.isAutoSaving = false;
@@ -139,7 +139,7 @@ class AutoSaveService {
       await this.performAutoSave(state.questionnaire, state.userId);
       return true;
     } catch (error) {
-      console.error('Manual save failed:', error);
+      console.error('Manual save failed:', error as Error);
       return false;
     }
   }
@@ -169,7 +169,7 @@ class AutoSaveService {
         this.config = { ...this.config, ...JSON.parse(saved) };
       }
     } catch (error) {
-      console.error('Failed to load auto-save config:', error);
+      console.error('Failed to load auto-save config:', error as Error);
     }
   }
 
@@ -180,7 +180,7 @@ class AutoSaveService {
     try {
       localStorage.setItem('qdesigner_autosave_config', JSON.stringify(this.config));
     } catch (error) {
-      console.error('Failed to save auto-save config:', error);
+      console.error('Failed to save auto-save config:', error as Error);
     }
   }
 

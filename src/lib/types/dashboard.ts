@@ -7,6 +7,16 @@ export interface DashboardStats {
   avgCompletionRate: number;
 }
 
+/**
+ * Statistics overview for the dashboard
+ */
+export interface QuestionnaireStats {
+  activeQuestionnaires: number;
+  totalResponses: number;
+  averageCompletionRate: number;
+  activeParticipants: number;
+}
+
 export interface DashboardQuestionnaire {
   questionnaire_id: string;
   name: string;
@@ -37,4 +47,20 @@ export interface DashboardData {
   questionnaires: DashboardQuestionnaire[];
   recentActivity: DashboardActivity[];
   stats: DashboardStats;
+}
+
+/**
+ * Individual questionnaire item for the dashboard list
+ */
+export interface QuestionnaireListItem {
+  questionnaire_id: string;
+  name: string;
+  description?: string;
+  status: 'draft' | 'active' | 'archived';
+  created_at: string;
+  updated_at: string;
+  total_responses: number;
+  completed_responses: number;
+  avg_completion_time?: number;
+  response_rate_7d: number;
 }

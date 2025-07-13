@@ -96,7 +96,7 @@ export async function sendVerificationCode({
       };
     }
   } catch (error) {
-    console.error('Error sending verification code:', error);
+    console.error('Error sending verification code:', error as Error);
     return {
       success: false,
       error: 'Failed to send verification code'
@@ -191,7 +191,7 @@ export async function verifyCode({
       message: 'Email verified successfully'
     };
   } catch (error) {
-    console.error('Error verifying code:', error);
+    console.error('Error verifying code:', error as Error);
     return {
       success: false,
       error: 'Failed to verify code'
@@ -222,7 +222,7 @@ export async function resendVerificationCode(email: string): Promise<Verificatio
     // Send new code
     return await sendVerificationCode({ email });
   } catch (error) {
-    console.error('Error resending verification code:', error);
+    console.error('Error resending verification code:', error as Error);
     return {
       success: false,
       error: 'Failed to resend verification code'
@@ -274,6 +274,6 @@ async function logOnboardingEvent({
         user_agent: navigator.userAgent
       });
   } catch (error) {
-    console.error('Error logging onboarding event:', error);
+    console.error('Error logging onboarding event:', error as Error);
   }
 }

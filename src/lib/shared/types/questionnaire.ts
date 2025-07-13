@@ -95,8 +95,7 @@ export type QuestionType =
   | 'reaction' 
   | 'multimedia'
   | 'instruction'
-  | 'webgl'
-  | 'custom';
+  | 'webgl';
 
 export interface Stimulus {
   id?: string;

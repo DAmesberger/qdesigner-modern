@@ -198,7 +198,7 @@ declare namespace QuestionAPI {
         console.log('Save triggered');
       });
     } catch (error) {
-      console.error('Failed to load Monaco Editor:', error);
+      console.error('Failed to load Monaco Editor:', error as Error);
     }
   });
   

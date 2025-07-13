@@ -160,7 +160,7 @@
       <h2 class="{theme.typography.h2} mb-6">Spacing Scale</h2>
       
       <div class="{theme.spacing.stack.sm}">
-        {#each ['xs', 'sm', 'md', 'lg', 'xl'] as size}
+        {#each (['xs', 'sm', 'md', 'lg', 'xl'] as const) as size}
           <div class="flex items-center gap-4">
             <span class="{theme.typography.code} w-12">{size}</span>
             <div class="{theme.semantic.bgSubtle} h-4 {theme.spacing.stack[size].replace('space-y', 'w')}" />

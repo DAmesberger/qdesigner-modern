@@ -153,7 +153,7 @@ export class ResourceManager {
         resource.status = 'error';
         resource.error = error as Error;
         errors.push({ resource, error: error as Error });
-        console.error(`Failed to load resource ${resource.id}:`, error);
+        console.error(`Failed to load resource ${resource.id}:`, error as Error);
       }
     });
 

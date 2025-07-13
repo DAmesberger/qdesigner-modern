@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { VariableEngine } from '$lib/core/scripting';
+  import { VariableEngine } from '$lib/scripting-engine';
   import type { Variable } from '$lib/shared';
 
   let engine: VariableEngine;

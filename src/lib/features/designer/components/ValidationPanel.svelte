@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Button } from '$lib/shared/components/ui';
-  import { Icon } from '$lib/shared/components/ui';
   import { QuestionnaireValidator, type ValidationResult } from '../utils/questionnaireValidation';
   import type { Questionnaire } from '$lib/shared';
   
@@ -31,7 +30,7 @@
       lastValidated = new Date();
       onValidationComplete(validationResult);
     } catch (error) {
-      console.error('Validation error:', error);
+      console.error('Validation error:', error as Error);
       validationResult = {
         valid: false,
         errors: [{
@@ -60,11 +59,11 @@
     >
       <div class="status-indicator" class:valid={validationResult?.valid} class:invalid={!validationResult?.valid && hasIssues}>
         {#if validating}
-          <Icon name="loader-2" class="animate-spin" />
+          <span class="animate-spin">⟳</span>
         {:else if !hasIssues}
-          <Icon name="check-circle" />
+          <span>✓</span>
         {:else}
-          <Icon name="alert-circle" />
+          <span>⚠</span>
         {/if}
       </div>
       
@@ -82,7 +81,7 @@
       </div>
       
       {#if hasIssues}
-        <Icon name={expanded ? 'chevron-up' : 'chevron-down'} />
+        <span>{expanded ? '▲' : '▼'}</span>
       {/if}
     </button>
     
@@ -107,7 +106,7 @@
           <h4 class="issue-heading">Errors</h4>
           {#each validationResult.errors as error}
             <div class="issue-item error">
-              <Icon name="x-circle" size={16} />
+              <span class="issue-icon">✗</span>
               <div class="issue-content">
                 <div class="issue-message">{error.message}</div>
                 {#if error.type === 'media'}
@@ -124,7 +123,7 @@
           <h4 class="issue-heading">Warnings</h4>
           {#each validationResult.warnings as warning}
             <div class="issue-item warning">
-              <Icon name="alert-triangle" size={16} />
+              <span class="issue-icon">⚠</span>
               <div class="issue-content">
                 <div class="issue-message">{warning.message}</div>
                 {#if warning.type === 'media'}
@@ -257,6 +256,26 @@
   .issue-type {
     font-size: 0.75rem;
     opacity: 0.7;
+  }
+  
+  .issue-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    text-align: center;
+    line-height: 16px;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  
+  .animate-spin {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
   
   .last-validated {

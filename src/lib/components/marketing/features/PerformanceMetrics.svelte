@@ -139,7 +139,7 @@
 						<div class="absolute inset-0 flex items-center justify-center">
 							<div class="text-center">
 								<span class="text-3xl font-bold text-foreground">
-									{Math.floor(progressValues[i])}
+									{Math.floor(progressValues[i] ?? 0)}
 								</span>
 								<span class="text-lg font-semibold text-primary">
 									{metric.unit}

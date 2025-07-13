@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { db } from '$lib/services/db/indexeddb';
-  import { designerStore } from '$lib/stores/designerStore';
+  import { designerStore } from '$lib/features/designer/stores/designerStore';
   import { toast } from '$lib/stores/toast';
   import { page } from '$app/stores';
   import type { DraftData } from '$lib/services/db/indexeddb';
@@ -33,7 +33,7 @@
         }
       }
     } catch (error) {
-      console.error('Failed to check for drafts:', error);
+      console.error('Failed to check for drafts:', error as Error);
     }
   });
 
@@ -65,7 +65,7 @@
       
       showRecoveryDialog = false;
     } catch (error) {
-      console.error('Failed to recover draft:', error);
+      console.error('Failed to recover draft:', error as Error);
       toast.error('Failed to recover draft');
     } finally {
       isLoading = false;

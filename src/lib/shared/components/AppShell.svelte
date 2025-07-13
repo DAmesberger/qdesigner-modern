@@ -49,7 +49,12 @@
   <!-- Mobile sidebar backdrop -->
   {#if sidebarOpen}
     <div class="fixed inset-0 z-50 lg:hidden">
-      <div class="fixed inset-0 bg-gray-900/80" on:click={() => sidebarOpen = false}></div>
+      <button 
+        type="button"
+        class="fixed inset-0 bg-gray-900/80" 
+        on:click={() => sidebarOpen = false}
+        aria-label="Close sidebar"
+      ></button>
     </div>
   {/if}
 

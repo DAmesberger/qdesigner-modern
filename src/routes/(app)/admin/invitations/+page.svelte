@@ -168,7 +168,7 @@
     }
   }
   
-  function getStatusBadge(status: string) {
+  function getStatusBadge(status: string): { variant: 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info'; label: string } {
     switch (status) {
       case 'pending':
         return { variant: 'warning', label: 'Pending' };

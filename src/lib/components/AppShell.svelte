@@ -62,7 +62,12 @@
 <div class="h-screen flex overflow-hidden">
   <!-- Mobile sidebar backdrop -->
   {#if sidebarOpen}
-    <div class="fixed inset-0 z-50 bg-gray-900/80 lg:hidden" on:click={() => sidebarOpen = false}></div>
+    <button 
+      type="button"
+      class="fixed inset-0 z-50 bg-gray-900/80 lg:hidden" 
+      on:click={() => sidebarOpen = false}
+      aria-label="Close sidebar"
+    ></button>
   {/if}
 
   <!-- Mobile sidebar -->
@@ -78,6 +83,7 @@
         type="button"
         class="p-2 text-gray-500 hover:text-gray-700"
         on:click={() => sidebarOpen = false}
+        aria-label="Close sidebar"
       >
         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -182,7 +188,7 @@
           
           <div class="flex items-center gap-4">
             <!-- Notifications -->
-            <button type="button" class="p-2 text-gray-400 hover:text-gray-500">
+            <button type="button" class="p-2 text-gray-400 hover:text-gray-500" aria-label="View notifications">
               <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
               </svg>
@@ -194,6 +200,8 @@
                 type="button"
                 class="flex items-center p-2 text-sm rounded-md hover:bg-gray-100"
                 on:click={() => userMenuOpen = !userMenuOpen}
+                aria-label="User menu"
+                aria-expanded={userMenuOpen}
               >
                 <img
                   class="h-8 w-8 rounded-full"

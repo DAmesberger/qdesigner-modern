@@ -142,7 +142,7 @@ export async function createInvitation({
 
     return { data: transformInvitation(invitation) };
   } catch (error) {
-    console.error('Error creating invitation:', error);
+    console.error('Error creating invitation:', error as Error);
     return { error: 'Failed to create invitation' };
   }
 }
@@ -231,7 +231,7 @@ export async function getInvitationByToken(token: string): Promise<{ data?: Invi
 
     return { data: transformInvitation(data) };
   } catch (error) {
-    console.error('Error getting invitation:', error);
+    console.error('Error getting invitation:', error as Error);
     return { error: 'Failed to retrieve invitation' };
   }
 }
@@ -258,7 +258,7 @@ export async function acceptInvitation(token: string, userId: string): Promise<{
 
     return { success: true };
   } catch (error) {
-    console.error('Error accepting invitation:', error);
+    console.error('Error accepting invitation:', error as Error);
     return { success: false, error: 'Failed to accept invitation' };
   }
 }
@@ -306,7 +306,7 @@ export async function declineInvitation(token: string, userId: string): Promise<
 
     return { success: true };
   } catch (error) {
-    console.error('Error declining invitation:', error);
+    console.error('Error declining invitation:', error as Error);
     return { success: false, error: 'Failed to decline invitation' };
   }
 }
@@ -342,7 +342,7 @@ export async function getPendingInvitations(email: string): Promise<Invitation[]
 
     return (data || []).map(transformInvitation);
   } catch (error) {
-    console.error('Error getting pending invitations:', error);
+    console.error('Error getting pending invitations:', error as Error);
     return [];
   }
 }
@@ -392,7 +392,7 @@ export async function revokeInvitation(invitationId: string, userId: string): Pr
 
     return { success: true };
   } catch (error) {
-    console.error('Error revoking invitation:', error);
+    console.error('Error revoking invitation:', error as Error);
     return { success: false, error: 'Failed to revoke invitation' };
   }
 }

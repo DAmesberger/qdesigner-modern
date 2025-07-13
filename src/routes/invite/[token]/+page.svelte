@@ -24,6 +24,12 @@
   onMount(async () => {
     const token = $page.params.token;
     
+    if (!token) {
+      error = 'Invalid invitation link';
+      loading = false;
+      return;
+    }
+    
     // Check if user is authenticated
     const { data: { user } } = await supabase.auth.getUser();
     isAuthenticated = !!user;
@@ -215,7 +221,7 @@
               class="w-full"
               on:click={async () => {
                 await supabase.auth.signOut();
-                invitation && goto(`/login?redirect=/invite/${invitation.token}`);}
+                invitation && goto(`/login?redirect=/invite/${invitation.token}`);
               }}
             >
               Switch Account

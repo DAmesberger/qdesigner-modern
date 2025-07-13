@@ -236,7 +236,7 @@
             required
             bind:value={newDomain}
             placeholder="example.com"
-            pattern="^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$"
+            pattern={`^([a-z0-9]+(-[a-z0-9]+)*\\.)+[a-z]{2,}$`}
           />
           <p class="text-sm text-muted-foreground mt-1">
             Users with email addresses from this domain can automatically join your organization

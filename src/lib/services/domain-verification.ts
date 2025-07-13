@@ -93,7 +93,7 @@ export async function addDomain({
 
     return { data };
   } catch (error) {
-    console.error('Error adding domain:', error);
+    console.error('Error adding domain:', error as Error);
     return { error: 'Failed to add domain' };
   }
 }
@@ -149,7 +149,7 @@ export async function verifyDomain(
       error: 'Domain verification failed. Please ensure you have added the verification record.' 
     };
   } catch (error) {
-    console.error('Error verifying domain:', error);
+    console.error('Error verifying domain:', error as Error);
     return { success: false, error: 'Failed to verify domain' };
   }
 }
@@ -175,7 +175,7 @@ export async function checkDomainAutoJoin(email: string): Promise<DomainAutoJoin
       welcomeMessage: result.welcome_message
     };
   } catch (error) {
-    console.error('Error checking domain auto-join:', error);
+    console.error('Error checking domain auto-join:', error as Error);
     return { canAutoJoin: false };
   }
 }
@@ -248,7 +248,7 @@ export async function updateDomainConfig({
 
     return { success: true };
   } catch (error) {
-    console.error('Error updating domain config:', error);
+    console.error('Error updating domain config:', error as Error);
     return { success: false, error: 'Failed to update domain configuration' };
   }
 }
@@ -297,7 +297,7 @@ export async function removeDomain(
 
     return { success: true };
   } catch (error) {
-    console.error('Error removing domain:', error);
+    console.error('Error removing domain:', error as Error);
     return { success: false, error: 'Failed to remove domain' };
   }
 }
@@ -329,7 +329,7 @@ async function verifyDNS(domain: string, token: string): Promise<boolean> {
     // Example: Use Cloudflare DNS API or similar service
     return false;
   } catch (error) {
-    console.error('DNS verification error:', error);
+    console.error('DNS verification error:', error as Error);
     return false;
   }
 }
@@ -352,7 +352,7 @@ async function verifyFile(domain: string, token: string): Promise<boolean> {
     const content = await response.text();
     return content.trim() === token;
   } catch (error) {
-    console.error('File verification error:', error);
+    console.error('File verification error:', error as Error);
     return false;
   }
 }

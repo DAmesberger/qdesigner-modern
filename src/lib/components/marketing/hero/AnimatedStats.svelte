@@ -10,7 +10,7 @@
 		{ value: 1, suffix: 'μs', label: 'Time Accuracy', duration: 2500 },
 		{ value: 99.9, suffix: '%', label: 'Uptime SLA', duration: 3000 },
 		{ value: 500, suffix: 'k+', label: 'Data Points/Sec', duration: 3500 }
-	];
+	] as const;
 	
 	// Create individual counter stores
 	const counter0 = tweened(0, { duration: stats[0].duration, easing: cubicOut });

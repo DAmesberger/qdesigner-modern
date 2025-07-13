@@ -2,7 +2,7 @@
   import BaseQuestion from './BaseQuestion.svelte';
   import type { ExtendedQuestion, WebGLQuestionConfig, WebGLContent } from './types';
   import { onMount, onDestroy } from 'svelte';
-  import { WebGLRenderer } from '$lib/core/renderer/WebGLRenderer';
+  import { WebGLRenderer } from '$lib/renderer';
   
   export let question: ExtendedQuestion & { config: WebGLQuestionConfig };
   export let mode: 'edit' | 'preview' | 'runtime' = 'runtime';

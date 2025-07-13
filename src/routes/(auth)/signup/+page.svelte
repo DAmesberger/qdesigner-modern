@@ -259,7 +259,7 @@
               required
               bind:value={password}
               placeholder="Create a strong password"
-              minlength="8"
+              minLength={8}
             />
             {#if password}
               <div class="mt-2">
@@ -342,7 +342,7 @@
               required
               bind:value={verificationCode}
               placeholder="000000"
-              maxlength="6"
+              maxLength={6}
               pattern="[0-9]{6}"
               autocomplete="one-time-code"
               class="text-center text-2xl tracking-widest"

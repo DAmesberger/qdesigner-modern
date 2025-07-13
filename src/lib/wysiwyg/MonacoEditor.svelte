@@ -40,81 +40,87 @@
     ready: { editor: Monaco.editor.IStandaloneCodeEditor; monaco: typeof Monaco };
   }>();
   
-  onMount(async () => {
+  onMount(() => {
+    let mounted = true;
+    
     // Dynamically import Monaco Editor
-    const monacoModule = await import('monaco-editor');
-    monaco = monacoModule;
-    
-    // Configure Monaco environment
-    monacoModule.editor.defineTheme('qdesigner-dark', {
-      base: 'vs-dark',
-      inherit: true,
-      rules: [
-        { token: 'comment', foreground: '6A737D' },
-        { token: 'keyword', foreground: 'F97583' },
-        { token: 'string', foreground: '9ECBFF' },
-        { token: 'number', foreground: '79B8FF' }
-      ],
-      colors: {
-        'editor.background': '#0D1117',
-        'editor.foreground': '#C9D1D9',
-        'editor.lineHighlightBackground': '#161B22',
-        'editor.selectionBackground': '#3392FF44',
-        'editorCursor.foreground': '#58A6FF',
-        'editorWhitespace.foreground': '#484F58'
-      }
+    import('monaco-editor').then((monacoModule) => {
+      if (!mounted) return;
+      
+      monaco = monacoModule;
+      
+      // Configure Monaco environment
+      monacoModule.editor.defineTheme('qdesigner-dark', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [
+          { token: 'comment', foreground: '6A737D' },
+          { token: 'keyword', foreground: 'F97583' },
+          { token: 'string', foreground: '9ECBFF' },
+          { token: 'number', foreground: '79B8FF' }
+        ],
+        colors: {
+          'editor.background': '#0D1117',
+          'editor.foreground': '#C9D1D9',
+          'editor.lineHighlightBackground': '#161B22',
+          'editor.selectionBackground': '#3392FF44',
+          'editorCursor.foreground': '#58A6FF',
+          'editorWhitespace.foreground': '#484F58'
+        }
+      });
+      
+      if (!editorContainer) return;
+      
+      // Create editor instance
+      editor = monacoModule.editor.create(editorContainer, {
+        value,
+        language,
+        theme: theme === 'vs-dark' ? 'qdesigner-dark' : theme,
+        readOnly,
+        minimap: { enabled: minimap },
+        lineNumbers,
+        wordWrap,
+        fontSize,
+        automaticLayout: true,
+        scrollBeyondLastLine: false,
+        padding: { top: 16, bottom: 16 },
+        ...options
+      });
+      
+      // Handle content changes
+      editor.onDidChangeModelContent(() => {
+        if (editor) {
+          const newValue = editor.getValue();
+          dispatch('change', { value: newValue });
+          value = newValue;
+        }
+      });
+      
+      // Handle cursor position changes
+      editor.onDidChangeCursorPosition((e) => {
+        if (editor) {
+          dispatch('cursorChange', {
+            position: e.position,
+            selection: editor.getSelection()
+          });
+        }
+      });
+      
+      // Handle focus events
+      editor.onDidFocusEditorText(() => {
+        dispatch('focus');
+      });
+      
+      editor.onDidBlurEditorText(() => {
+        dispatch('blur');
+      });
+      
+      // Dispatch ready event
+      dispatch('ready', { editor, monaco: monacoModule });
     });
-    
-    if (!editorContainer) return;
-    
-    // Create editor instance
-    editor = monacoModule.editor.create(editorContainer, {
-      value,
-      language,
-      theme: theme === 'vs-dark' ? 'qdesigner-dark' : theme,
-      readOnly,
-      minimap: { enabled: minimap },
-      lineNumbers,
-      wordWrap,
-      fontSize,
-      automaticLayout: true,
-      scrollBeyondLastLine: false,
-      padding: { top: 16, bottom: 16 },
-      ...options
-    });
-    
-    // Handle content changes
-    editor.onDidChangeModelContent(() => {
-      if (editor) {
-        const newValue = editor.getValue();
-        dispatch('change', { value: newValue });
-        value = newValue;
-      }
-    });
-    
-    // Handle cursor position changes
-    editor.onDidChangeCursorPosition((e) => {
-      if (editor) {
-        dispatch('cursorChange', {
-          position: e.position,
-          selection: editor.getSelection()
-        });
-      }
-    });
-    
-    // Handle focus events
-    editor.onDidFocusEditorText(() => {
-      dispatch('focus');
-    });
-    
-    editor.onDidBlurEditorText(() => {
-      dispatch('blur');
-    });
-    
-    // Dispatch ready event
-    dispatch('ready', { editor, monaco: monacoModule });
     
     return () => {
+      mounted = false;
       editor?.dispose();
     };
   });

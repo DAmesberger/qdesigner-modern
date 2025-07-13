@@ -5,6 +5,7 @@
   import StyleEditor from './StyleEditor.svelte';
   import ScriptEditor from './ScriptEditor.svelte';
   import { defaultTheme } from '$lib/shared/types/theme';
+  import { getItemSettings, hasSettings } from '../utils/itemSettings';
   
   let activeTab: 'properties' | 'style' | 'script' = 'properties';
   let theme = defaultTheme; // In real app, this would come from store
@@ -27,7 +28,7 @@
     if ($selectedItem && $designerStore.selectedItemType === 'question') {
       designerStore.updateQuestion($selectedItem.id, {
         settings: {
-          ...$selectedItem.settings,
+          ...getItemSettings($selectedItem),
           script
         }
       });
@@ -82,12 +83,17 @@
     {:else if activeTab === 'style'}
       <StyleEditor
         {theme}
-        selectedElement={$designerStore.selectedItemType || 'global'}
+        selectedElement={
+          (['question', 'page', 'global'] as const).includes($designerStore.selectedItemType as any)
+            ? ($designerStore.selectedItemType as 'question' | 'page' | 'global')
+            : 'global'
+        }
         on:update={handleThemeUpdate}
       />
     {:else if activeTab === 'script' && $selectedItem && $designerStore.selectedItemType === 'question'}
+      {@const question = $selectedItem as Question}
       <ScriptEditor
-        question={$selectedItem}
+        question={question}
         onUpdate={handleScriptUpdate}
       />
     {/if}

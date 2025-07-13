@@ -57,13 +57,13 @@ export class ResponsePersistenceService {
 					.insert(enhancedResponse);
 
 				if (error) {
-					console.error('Failed to save response:', error);
+					console.error('Failed to save response:', error as Error);
 					// Queue for retry
 					this.responseQueue.push(enhancedResponse);
 				}
 			}
 		} catch (error) {
-			console.error('Error saving response:', error);
+			console.error('Error saving response:', error as Error);
 			if (this.enableOffline) {
 				this.responseQueue.push(response);
 				await this.saveToLocalStorage();
@@ -96,7 +96,7 @@ export class ResponsePersistenceService {
 				}
 			}
 		} catch (error) {
-			console.error('Error saving interaction event:', error);
+			console.error('Error saving interaction event:', error as Error);
 			if (this.enableOffline) {
 				this.eventQueue.push(event);
 				await this.saveToLocalStorage();
@@ -125,10 +125,10 @@ export class ResponsePersistenceService {
 				.eq('id', this.sessionId);
 
 			if (error) {
-				console.error('Failed to update session:', error);
+				console.error('Failed to update session:', error as Error);
 			}
 		} catch (error) {
-			console.error('Error updating session:', error);
+			console.error('Error updating session:', error as Error);
 		}
 	}
 
@@ -151,10 +151,10 @@ export class ResponsePersistenceService {
 				.eq('id', this.sessionId);
 
 			if (error) {
-				console.error('Failed to complete session:', error);
+				console.error('Failed to complete session:', error as Error);
 			}
 		} catch (error) {
-			console.error('Error completing session:', error);
+			console.error('Error completing session:', error as Error);
 		}
 	}
 
@@ -176,10 +176,10 @@ export class ResponsePersistenceService {
 				});
 
 			if (error) {
-				console.error('Failed to save variable:', error);
+				console.error('Failed to save variable:', error as Error);
 			}
 		} catch (error) {
-			console.error('Error saving variable:', error);
+			console.error('Error saving variable:', error as Error);
 		}
 	}
 
@@ -238,12 +238,12 @@ export class ResponsePersistenceService {
 			if (error) {
 				// Re-queue failed items
 				this.responseQueue.push(...toSync);
-				console.error('Failed to sync responses:', error);
+				console.error('Failed to sync responses:', error as Error);
 			}
 		} catch (error) {
 			// Re-queue on network error
 			this.responseQueue.push(...toSync);
-			console.error('Error syncing responses:', error);
+			console.error('Error syncing responses:', error as Error);
 		}
 	}
 
@@ -264,12 +264,12 @@ export class ResponsePersistenceService {
 			if (error) {
 				// Re-queue failed items
 				this.eventQueue.push(...toSync);
-				console.error('Failed to sync events:', error);
+				console.error('Failed to sync events:', error as Error);
 			}
 		} catch (error) {
 			// Re-queue on network error
 			this.eventQueue.push(...toSync);
-			console.error('Error syncing events:', error);
+			console.error('Error syncing events:', error as Error);
 		}
 	}
 
@@ -290,7 +290,7 @@ export class ResponsePersistenceService {
 				JSON.stringify(data)
 			);
 		} catch (error) {
-			console.error('Failed to save to local storage:', error);
+			console.error('Failed to save to local storage:', error as Error);
 		}
 	}
 
@@ -322,7 +322,7 @@ export class ResponsePersistenceService {
 				localStorage.removeItem(key);
 			}
 		} catch (error) {
-			console.error('Failed to sync from local storage:', error);
+			console.error('Failed to sync from local storage:', error as Error);
 		}
 	}
 

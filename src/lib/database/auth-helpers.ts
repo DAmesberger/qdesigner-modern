@@ -127,7 +127,7 @@ export async function handleAuthUser(authUser: User) {
       organizations: memberships || []
     };
   } catch (error) {
-    console.error('Error handling auth user:', error);
+    console.error('Error handling auth user:', error as Error);
     throw error;
   }
 }
@@ -159,7 +159,7 @@ async function handlePendingInvitations(email: string, userId?: string) {
       }
     }
   } catch (error) {
-    console.error('Error handling pending invitations:', error);
+    console.error('Error handling pending invitations:', error as Error);
   }
 }
 
@@ -195,7 +195,7 @@ export async function createFirstOrganization(userId: string, orgName: string) {
 
     return org;
   } catch (error) {
-    console.error('Error creating organization:', error);
+    console.error('Error creating organization:', error as Error);
     throw error;
   }
 }
@@ -236,7 +236,7 @@ export async function getUserActiveOrganization(userId: string) {
     .single();
 
   if (error) {
-    console.error('Error getting active organization:', error);
+    console.error('Error getting active organization:', error as Error);
     return null;
   }
 

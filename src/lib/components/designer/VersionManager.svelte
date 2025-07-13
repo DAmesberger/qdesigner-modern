@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fade, fly } from 'svelte/transition';
-  import { designerStore } from '$lib/stores/designerStore';
+  import { designerStore } from '$lib/features/designer/stores/designerStore';
   import { toast } from '$lib/stores/toast';
   import { page } from '$app/stores';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -38,7 +38,7 @@
       
       versions = data || [];
     } catch (error) {
-      console.error('Failed to load versions:', error);
+      console.error('Failed to load versions:', error as Error);
       toast.error('Failed to load version history');
     } finally {
       isLoadingVersions = false;
@@ -94,7 +94,7 @@
       // Reload versions
       await loadVersions();
     } catch (error) {
-      console.error('Failed to save new version:', error);
+      console.error('Failed to save new version:', error as Error);
       toast.error('Failed to save new version');
     } finally {
       isSavingVersion = false;
@@ -117,7 +117,7 @@
         showVersionMenu = false;
       }
     } catch (error) {
-      console.error('Failed to load version:', error);
+      console.error('Failed to load version:', error as Error);
       toast.error('Failed to load version');
     }
   }
@@ -145,7 +145,7 @@
       toast.success('Version published successfully');
       await loadVersions();
     } catch (error) {
-      console.error('Failed to publish version:', error);
+      console.error('Failed to publish version:', error as Error);
       toast.error('Failed to publish version');
     }
   }
@@ -249,12 +249,15 @@
                     </p>
                   </div>
                   {#if !version.is_active}
-                    <button
+                    <div
                       on:click|stopPropagation={() => publishVersion(version.id)}
-                      class="ml-2 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                      on:keypress|stopPropagation={(e) => e.key === 'Enter' && publishVersion(version.id)}
+                      role="button"
+                      tabindex="0"
+                      class="ml-2 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
                     >
                       Publish
-                    </button>
+                    </div>
                   {/if}
                 </div>
               </button>

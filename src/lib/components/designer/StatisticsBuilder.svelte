@@ -1,13 +1,15 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { designerStore } from '$lib/stores/designerStore';
-  import { Chart, registerables } from 'chart.js';
+  import { designerStore } from '$lib/features/designer/stores/designerStore';
+  import { Chart, registerables, type ChartType, type ChartConfiguration } from 'chart.js';
   import type { Variable } from '$lib/shared/types/questionnaire';
+  import { ScientificChartBuilder, type ScientificChartType, type ScientificChartConfig } from './ScientificChartConfig';
   
   Chart.register(...registerables);
   
   export let variableId: string = '';
-  export let type: 'bar' | 'line' | 'pie' | 'radar' | 'distribution' | 'percentile' = 'bar';
+  // Scientific chart types - we support standard Chart.js types plus custom scientific visualizations
+  export let type: ScientificChartType = 'bar';
   export let title: string = '';
   export let showLegend: boolean = true;
   export let showGrid: boolean = true;
@@ -61,24 +63,46 @@
     if (!ctx) return;
     
     const chartData = generateChartData();
-    const chartOptions = generateChartOptions();
     
-    chart = new Chart(ctx, {
-      type: mapChartType(type),
-      data: chartData,
-      options: chartOptions
-    });
+    // Use scientific chart builder for advanced configurations
+    const scientificConfig: ScientificChartConfig = {
+      type,
+      title,
+      showLegend,
+      showGrid,
+      showStatistics: chartConfig.showMean || chartConfig.showSD,
+      normativeData,
+      customOptions: {
+        animation: {
+          duration: chartConfig.animationDuration
+        }
+      }
+    };
+    
+    const config = ScientificChartBuilder.createConfiguration(
+      type,
+      chartData,
+      scientificConfig
+    );
+    
+    chart = new Chart(ctx, config);
   }
   
-  // Map our types to Chart.js types
-  function mapChartType(type: string): any {
+  // Map our scientific chart types to Chart.js base types
+  function mapChartType(type: string): ChartType {
     switch (type) {
       case 'distribution':
-        return 'bar';
+        return 'line'; // Use line chart for smooth distribution curves
       case 'percentile':
         return 'line';
+      case 'histogram':
+        return 'bar';
+      case 'boxplot':
+        return 'bar'; // We'll customize this with error bars
+      case 'scatter':
+        return 'scatter';
       default:
-        return type;
+        return type as ChartType;
     }
   }
   
@@ -133,6 +157,15 @@
       case 'percentile':
         return generatePercentileData();
         
+      case 'histogram':
+        return generateHistogramData();
+        
+      case 'boxplot':
+        return generateBoxplotData();
+        
+      case 'scatter':
+        return generateScatterData();
+        
       default:
         return { labels: [], datasets: [] };
     }
@@ -175,6 +208,7 @@
       case 'bar':
       case 'line':
       case 'distribution':
+      case 'histogram':
         return {
           ...baseOptions,
           scales: {
@@ -188,6 +222,43 @@
                 display: showGrid
               },
               beginAtZero: true
+            }
+          }
+        };
+        
+      case 'scatter':
+        return {
+          ...baseOptions,
+          scales: {
+            x: {
+              type: 'linear',
+              position: 'bottom',
+              grid: {
+                display: showGrid
+              }
+            },
+            y: {
+              type: 'linear',
+              grid: {
+                display: showGrid
+              }
+            }
+          }
+        };
+        
+      case 'boxplot':
+        return {
+          ...baseOptions,
+          scales: {
+            x: {
+              grid: {
+                display: false
+              }
+            },
+            y: {
+              grid: {
+                display: showGrid
+              }
             }
           }
         };
@@ -300,6 +371,116 @@
     };
   }
   
+  function generateHistogramData() {
+    const bins = 15;
+    const data = [];
+    
+    // Generate sample data with normal distribution
+    for (let i = 0; i < bins; i++) {
+      const binStart = i * 10;
+      const binEnd = (i + 1) * 10;
+      const frequency = Math.floor(Math.random() * 50) + 10;
+      data.push({
+        x: `${binStart}-${binEnd}`,
+        y: frequency
+      });
+    }
+    
+    return {
+      labels: data.map(d => d.x),
+      datasets: [{
+        label: 'Frequency',
+        data: data.map(d => d.y),
+        backgroundColor: chartConfig.colors[2] + '66',
+        borderColor: chartConfig.colors[2],
+        borderWidth: 1
+      }]
+    };
+  }
+  
+  function generateBoxplotData() {
+    // Generate box plot data structure
+    const categories = ['Group A', 'Group B', 'Group C', 'Group D'];
+    const datasets: any[] = [];
+    
+    categories.forEach((cat, idx) => {
+      const min = Math.random() * 20;
+      const q1 = min + Math.random() * 20;
+      const median = q1 + Math.random() * 20;
+      const q3 = median + Math.random() * 20;
+      const max = q3 + Math.random() * 20;
+      
+      datasets.push({
+        label: cat,
+        data: [{
+          x: cat,
+          y: [min, q1, median, q3, max]
+        }],
+        backgroundColor: chartConfig.colors[idx % chartConfig.colors.length] + '33',
+        borderColor: chartConfig.colors[idx % chartConfig.colors.length],
+        borderWidth: 2
+      });
+    });
+    
+    return {
+      labels: categories,
+      datasets
+    };
+  }
+  
+  function generateScatterData() {
+    const numPoints = 50;
+    const datasets: any[] = [];
+    
+    // Generate multiple datasets for comparison
+    for (let d = 0; d < 2; d++) {
+      const data: { x: number; y: number }[] = [];
+      for (let i = 0; i < numPoints; i++) {
+        data.push({
+          x: Math.random() * 100,
+          y: Math.random() * 100 + (d * 20) // Slight offset for second dataset
+        });
+      }
+      
+      datasets.push({
+        label: `Dataset ${d + 1}`,
+        data,
+        backgroundColor: chartConfig.colors[d] + '66',
+        borderColor: chartConfig.colors[d],
+        pointRadius: 5,
+        pointHoverRadius: 7
+      });
+    }
+    
+    return {
+      datasets
+    };
+  }
+  
+  // Get custom plugins for scientific chart types
+  function getCustomPlugins(type: string) {
+    switch (type) {
+      case 'boxplot':
+        // Add custom rendering for box plots
+        return [{
+          id: 'boxplotRenderer',
+          afterDatasetDraw: (chart: Chart) => {
+            // Custom box plot rendering logic would go here
+          }
+        }];
+      case 'distribution':
+        // Add normal curve overlay
+        return [{
+          id: 'normalCurve',
+          afterDatasetDraw: (chart: Chart) => {
+            // Add normal distribution curve overlay
+          }
+        }];
+      default:
+        return [];
+    }
+  }
+  
   // Add variable to chart
   function addVariable(varId: string) {
     if (!selectedVariables.includes(varId)) {
@@ -345,11 +526,11 @@
       <div class="config-section">
         <label class="config-label">Chart Type</label>
         <div class="chart-type-grid">
-          {#each ['bar', 'line', 'pie', 'radar', 'distribution', 'percentile'] as chartType}
+          {#each ['bar', 'line', 'pie', 'radar', 'scatter', 'distribution', 'percentile', 'histogram', 'boxplot'] as chartType}
             <button
               class="chart-type-button"
-              class:active={type === chartType as any}
-              on:click={() => { type = chartType; createChart(); }}
+              class:active={type === chartType}
+              on:click={() => { type = chartType as typeof type; createChart(); }}
             >
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {#if chartType === 'bar'}
@@ -527,8 +708,9 @@
   
   .chart-type-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
     gap: 0.5rem;
+    max-width: 600px;
   }
   
   .chart-type-button {

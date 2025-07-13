@@ -71,7 +71,7 @@ export class QuestionnairePersistenceService {
         questionnaireId
       };
     } catch (error) {
-      console.error('Error saving questionnaire:', error);
+      console.error('Error saving questionnaire:', error as Error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -114,7 +114,7 @@ export class QuestionnairePersistenceService {
         questionnaire
       };
     } catch (error) {
-      console.error('Error loading questionnaire:', error);
+      console.error('Error loading questionnaire:', error as Error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -151,7 +151,7 @@ export class QuestionnairePersistenceService {
         questionnaires: data || []
       };
     } catch (error) {
-      console.error('Error listing questionnaires:', error);
+      console.error('Error listing questionnaires:', error as Error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -173,7 +173,7 @@ export class QuestionnairePersistenceService {
 
       return { success: true };
     } catch (error) {
-      console.error('Error deleting questionnaire:', error);
+      console.error('Error deleting questionnaire:', error as Error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'

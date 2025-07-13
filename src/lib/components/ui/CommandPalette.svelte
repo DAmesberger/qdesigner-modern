@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { goto } from '$app/navigation';
-  import { designerStore } from '$lib/stores/designerStore';
+  import { designerStore } from '$lib/features/designer/stores/designerStore';
   import { toast } from '$lib/stores/toast';
   
   export let isOpen = false;
@@ -219,8 +219,9 @@
         break;
       case 'Enter':
         e.preventDefault();
-        if (filteredCommands[selectedIndex]) {
-          executeCommand(filteredCommands[selectedIndex]);
+        const selectedCommand = filteredCommands[selectedIndex];
+        if (selectedCommand) {
+          executeCommand(selectedCommand);
         }
         break;
       case 'Escape':
@@ -240,7 +241,7 @@
     try {
       await command.action();
     } catch (error) {
-      console.error('Command execution failed:', error);
+      console.error('Command execution failed:', error as Error);
       toast.error('Command failed to execute');
     }
   }

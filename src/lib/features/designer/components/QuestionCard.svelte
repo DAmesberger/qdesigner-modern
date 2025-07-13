@@ -66,7 +66,7 @@
         }
       }
     } catch (error) {
-      console.error('Failed to handle drop:', error);
+      console.error('Failed to handle drop:', error as Error);
     }
     
     dropPosition = null;
@@ -81,8 +81,7 @@
       reaction: '⚡',
       multimedia: '🎬',
       instruction: '📋',
-      webgl: '🎮',
-      custom: '🔧'
+      webgl: '🎮'
     };
     return icons[type] || '❓';
   }
