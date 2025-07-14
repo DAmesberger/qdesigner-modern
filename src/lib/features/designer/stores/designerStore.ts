@@ -109,9 +109,9 @@ function createDesignerStore() {
       const state = get({ subscribe });
       variableEngine = new VariableEngine();
       
-      // Register all variables
+      // Register all variables (create plain copies to avoid proxy issues)
       state.questionnaire.variables.forEach(v => {
-        variableEngine!.registerVariable(v);
+        variableEngine!.registerVariable(JSON.parse(JSON.stringify(v)));
       });
     },
 
@@ -424,9 +424,9 @@ function createDesignerStore() {
         };
         draft.questionnaire.variables.push(newVariable);
         
-        // Register with variable engine
+        // Register with variable engine (create a plain copy to avoid proxy issues)
         if (variableEngine) {
-          variableEngine.registerVariable(newVariable);
+          variableEngine.registerVariable(JSON.parse(JSON.stringify(newVariable)));
         }
 
         draft.questionnaire.modified = new Date();
@@ -439,11 +439,11 @@ function createDesignerStore() {
         if (variable) {
           Object.assign(variable, updates);
           
-          // Re-register with variable engine
+          // Re-register with variable engine (create plain copies to avoid proxy issues)
           if (variableEngine) {
             variableEngine.clear();
             draft.questionnaire.variables.forEach(v => {
-              variableEngine!.registerVariable(v);
+              variableEngine!.registerVariable(JSON.parse(JSON.stringify(v)));
             });
           }
 
@@ -458,11 +458,11 @@ function createDesignerStore() {
         if (index !== -1) {
           draft.questionnaire.variables.splice(index, 1);
           
-          // Re-register all variables
+          // Re-register all variables (create plain copies to avoid proxy issues)
           if (variableEngine) {
             variableEngine.clear();
             draft.questionnaire.variables.forEach(v => {
-              variableEngine!.registerVariable(v);
+              variableEngine!.registerVariable(JSON.parse(JSON.stringify(v)));
             });
           }
 
@@ -638,11 +638,11 @@ function createDesignerStore() {
         draft.undoStack = [];
         draft.redoStack = [];
 
-        // Re-register variables
+        // Re-register variables (create plain copies to avoid proxy issues)
         if (variableEngine) {
           variableEngine.clear();
           questionnaire.variables.forEach(v => {
-            variableEngine!.registerVariable(v);
+            variableEngine!.registerVariable(JSON.parse(JSON.stringify(v)));
           });
         }
       })
@@ -695,8 +695,8 @@ function createDesignerStore() {
       const result = await OfflinePersistenceService.saveQuestionnaire(
         state.questionnaire,
         state.userId,
-        state.questionnaire.projectId || 'default-project',
-        state.questionnaire.organizationId || 'default-org'
+        state.questionnaire.projectId || generateUUID(),
+        state.questionnaire.organizationId || generateUUID()
       );
 
       update(s => produce(s, draft => {
@@ -735,11 +735,11 @@ function createDesignerStore() {
           draft.redoStack = [];
           draft.lastSaved = new Date();
           
-          // Re-register variables
+          // Re-register variables (create plain copies to avoid proxy issues)
           if (variableEngine) {
             variableEngine.clear();
             result.questionnaire.variables.forEach(v => {
-              variableEngine!.registerVariable(v);
+              variableEngine!.registerVariable(JSON.parse(JSON.stringify(v)));
             });
           }
         } else {
@@ -758,7 +758,7 @@ function createDesignerStore() {
         return [];
       }
 
-      const projectId = state.questionnaire.projectId || 'default-project';
+      const projectId = state.questionnaire.projectId || generateUUID();
       const questionnaires = await OfflinePersistenceService.listQuestionnaires(state.userId, projectId);
       return questionnaires;
     },

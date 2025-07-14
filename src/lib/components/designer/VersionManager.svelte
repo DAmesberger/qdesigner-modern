@@ -24,6 +24,12 @@
   async function loadVersions() {
     if (!questionnaireId || isLoadingVersions) return;
     
+    // Also check if questionnaire has required fields
+    if (!questionnaire.projectId || !questionnaire.code) {
+      versions = [];
+      return;
+    }
+    
     isLoadingVersions = true;
     
     try {
@@ -38,7 +44,7 @@
       
       versions = data || [];
     } catch (error) {
-      console.error('Failed to load versions:', error as Error);
+      console.error('Failed to load versions:', error);
       toast.error('Failed to load version history');
     } finally {
       isLoadingVersions = false;

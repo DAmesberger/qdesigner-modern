@@ -89,7 +89,9 @@
   </div>
   
   <!-- Version Manager -->
-  <VersionManager questionnaireId={$designerStore.questionnaire.id} />
+  {#if $designerStore.questionnaire.id}
+    <VersionManager questionnaireId={$designerStore.questionnaire.id} />
+  {/if}
   
   <!-- Center Actions -->
   <div class="flex items-center gap-2">

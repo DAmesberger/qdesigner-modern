@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 QDesigner Modern is a high-performance questionnaire platform for psychological and behavioral research, featuring microsecond-accurate reaction time measurements and WebGL 2.0 rendering for 120+ FPS support.
 
+## Test Credentials
+
+For local development, use these credentials to log in:
+- **Email**: `demo@example.com`
+- **Password**: `demo123456`
+
 ## Essential Commands
 
 ```bash

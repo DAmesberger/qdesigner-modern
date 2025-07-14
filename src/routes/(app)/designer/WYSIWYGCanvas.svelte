@@ -18,21 +18,24 @@
   let showTestRunner = false;
   
   // DnD items - show questions from current block
-  $: items = $currentBlockQuestions.map(q => ({ 
+  $: items = $currentBlockQuestions?.map(q => ({ 
     id: q.id, 
     question: q 
-  }));
+  })) || [];
   
   function handleDndConsider(e: CustomEvent) {
+    if (!e.detail?.items || !$currentBlock) return;
+    
     const newItems = e.detail.items;
     // Update order in store
-    const questionIds = newItems.map((item: any) => item.id);
-    if ($currentBlock) {
+    const questionIds = newItems.map((item: any) => item.id).filter(Boolean);
+    if (questionIds.length > 0) {
       designerStore.updateBlockQuestions($currentBlock.id, questionIds);
     }
   }
   
   function handleDndFinalize(e: CustomEvent) {
+    if (!e.detail?.items) return;
     handleDndConsider(e);
   }
   
@@ -143,7 +146,7 @@
         
         <!-- Questions Area -->
         <div class="px-8 py-6">
-          {#if items.length === 0}
+          {#if items.length === 0 || !$currentBlock}
             <!-- Empty State -->
             <div class="flex flex-col items-center justify-center py-20 text-center">
               <div class="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
@@ -158,37 +161,44 @@
             </div>
           {:else}
             <!-- Questions List -->
-            <div
-              class="space-y-4"
-              use:dndzone={{ 
-                items,
-                flipDurationMs: 300,
-                dropTargetStyle: {
-                  outline: '2px dashed #3B82F6',
-                  outlineOffset: '4px',
-                  backgroundColor: 'rgba(59, 130, 246, 0.05)'
-                }
-              }}
-              on:consider={handleDndConsider}
-              on:finalize={handleDndFinalize}
-            >
-              {#each items as item (item.id)}
-                <div animate:flip={{ duration: 300 }}>
-                  <QuestionVisualRenderer
-                    question={item.question}
-                    theme={questionnaireTheme}
-                    mode="edit"
-                    selected={$designerStore.selectedItemId === item.id}
-                    on:select={() => designerStore.selectItem(item.id, 'question')}
-                    on:update={(e) => handleQuestionUpdate(item.id, e.detail)}
-                    on:delete={() => designerStore.deleteQuestion(item.id)}
-                    on:edit-properties={() => {
-                      designerStore.selectItem(item.id, 'question');
-                    }}
-                  />
-                </div>
-              {/each}
-            </div>
+            {#key $currentBlock?.id}
+              <div
+                class="space-y-4"
+                use:dndzone={{ 
+                  items: items || [],
+                  flipDurationMs: 300,
+                  dropTargetStyle: {
+                    outline: '2px dashed #3B82F6',
+                    outlineOffset: '4px',
+                    backgroundColor: 'rgba(59, 130, 246, 0.05)'
+                  },
+                  dropFromOthersDisabled: false,
+                  dragDisabled: false,
+                  type: 'questions'
+                }}
+                on:consider={handleDndConsider}
+                on:finalize={handleDndFinalize}
+              >
+                {#each items as item (item.id)}
+                  <div animate:flip={{ duration: 300 }}>
+                    {#if item && item.question}
+                      <QuestionVisualRenderer
+                        question={item.question}
+                        theme={questionnaireTheme}
+                        mode="edit"
+                        selected={$designerStore.selectedItemId === item.id}
+                        on:select={() => designerStore.selectItem(item.id, 'question')}
+                        on:update={(e) => handleQuestionUpdate(item.id, e.detail)}
+                        on:delete={() => designerStore.deleteQuestion(item.id)}
+                        on:edit-properties={() => {
+                          designerStore.selectItem(item.id, 'question');
+                        }}
+                      />
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/key}
           {/if}
         </div>
       </div>

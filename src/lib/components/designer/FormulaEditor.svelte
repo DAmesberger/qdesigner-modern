@@ -24,6 +24,10 @@
     if (typeof window === 'undefined') return;
     
     try {
+      // Setup Monaco environment
+      const { setupMonacoEnvironment } = await import('$lib/utils/monacoConfig');
+      setupMonacoEnvironment();
+      
       // Dynamically import Monaco
       monaco = await import('monaco-editor');
       

@@ -43,6 +43,11 @@
   onMount(() => {
     let mounted = true;
     
+    // Setup Monaco environment before loading
+    import('$lib/utils/monacoConfig').then(({ setupMonacoEnvironment }) => {
+      setupMonacoEnvironment();
+    });
+    
     // Dynamically import Monaco Editor
     import('monaco-editor').then((monacoModule) => {
       if (!mounted) return;
