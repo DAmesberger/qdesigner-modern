@@ -17,6 +17,24 @@
   let questionnaireTheme = defaultTheme;
   let showTestRunner = false;
   
+  // Zoom state
+  let zoomLevel = 100;
+  const zoomLevels = [50, 75, 90, 100, 110, 125, 150];
+  
+  function zoomIn() {
+    const currentIndex = zoomLevels.indexOf(zoomLevel);
+    if (currentIndex < zoomLevels.length - 1) {
+      zoomLevel = zoomLevels[currentIndex + 1];
+    }
+  }
+  
+  function zoomOut() {
+    const currentIndex = zoomLevels.indexOf(zoomLevel);
+    if (currentIndex > 0) {
+      zoomLevel = zoomLevels[currentIndex - 1];
+    }
+  }
+  
   // DnD items - show questions from current block
   $: items = $currentBlockQuestions?.map(q => ({ 
     id: q.id, 
@@ -61,13 +79,21 @@
     <div class="flex items-center gap-2">
       <!-- Zoom Controls -->
       <div class="flex items-center {uiTheme.semantic.bgSurface} rounded-md {uiTheme.semantic.borderDefault} border">
-        <button class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost}">
+        <button 
+          on:click={zoomOut}
+          disabled={zoomLevel === 50}
+          class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost} disabled:opacity-50"
+        >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
           </svg>
         </button>
-        <span class="px-2 py-1 text-sm {uiTheme.semantic.textPrimary} border-x {uiTheme.semantic.borderDefault}">100%</span>
-        <button class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost}">
+        <span class="px-2 py-1 text-sm {uiTheme.semantic.textPrimary} border-x {uiTheme.semantic.borderDefault}">{zoomLevel}%</span>
+        <button 
+          on:click={zoomIn}
+          disabled={zoomLevel === 150}
+          class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost} disabled:opacity-50"
+        >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
           </svg>
@@ -95,11 +121,14 @@
   </div>
   
   <!-- Canvas Area -->
-  <div class="min-h-full p-8">
-    <div class="max-w-3xl mx-auto">
+  <div class="min-h-full p-8 overflow-auto">
+    <div 
+      class="mx-auto transition-transform duration-200 origin-top"
+      style="transform: scale({zoomLevel / 100}); width: {100 / (zoomLevel / 100)}%; max-width: {300 * 100 / zoomLevel}%;"
+    >
       <!-- Page Background -->
       <div 
-        class="{uiTheme.components.container.card} min-h-[600px]"
+        class="{uiTheme.components.container.card} min-h-[600px] max-w-3xl mx-auto"
         on:drop={handleDrop}
         on:dragover={(e) => e.preventDefault()}
       >

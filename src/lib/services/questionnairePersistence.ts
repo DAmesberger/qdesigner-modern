@@ -53,7 +53,7 @@ export class QuestionnairePersistenceService {
           project_id: projectId,
           name: questionnaire.name,
           code: questionnaire.code || null,
-          version: questionnaire.version || 1,
+          version: parseInt(questionnaire.version?.split('.')[0] || '1', 10),
           definition, // Store entire questionnaire as JSONB
           variables: questionnaire.variables || [], // Store variables separately for querying
           status: 'draft',
@@ -99,7 +99,7 @@ export class QuestionnairePersistenceService {
         id: data.definition.id || data.id,
         name: data.definition.name || data.name,
         description: data.definition.description || '',
-        version: data.definition.version || data.version,
+        version: data.definition.version || `${data.version}.0.0`,
         pages: data.definition.pages || [],
         questions: data.definition.questions || [],
         variables: data.definition.variables || [],
