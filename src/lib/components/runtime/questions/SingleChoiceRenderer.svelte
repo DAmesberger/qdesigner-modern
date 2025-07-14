@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SingleChoiceQuestion } from '$lib/shared/types/questions-v2';
+  import type { SingleChoiceQuestion } from '$lib/shared/types/questionnaire';
   import QuestionHeader from '$lib/components/shared/questions/QuestionHeader.svelte';
   import OptionList from '$lib/components/shared/questions/OptionList.svelte';
   import NavigationButtons from '$lib/components/shared/questions/NavigationButtons.svelte';

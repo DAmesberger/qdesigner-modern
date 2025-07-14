@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/svelte';
 import SingleChoiceRenderer from './SingleChoiceRenderer.svelte';
 import { QuestionFactory } from '$lib/shared/factories/question-factory';
-import { QuestionTypes } from '$lib/shared/types/questions-v2';
-import type { SingleChoiceQuestion } from '$lib/shared/types/questions-v2';
+import { QuestionTypes } from '$lib/shared/types/questionnaire';
+import type { SingleChoiceQuestion } from '$lib/shared/types/questionnaire';
 
 describe('SingleChoiceRenderer', () => {
   const createTestQuestion = (): SingleChoiceQuestion => {

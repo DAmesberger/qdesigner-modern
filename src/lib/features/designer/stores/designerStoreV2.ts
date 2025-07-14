@@ -11,7 +11,7 @@ import type {
 import type { 
   Question as NewQuestion,
   QuestionType as NewQuestionType
-} from '$lib/shared/types/questions-v2';
+} from '$lib/shared/types/questionnaire';
 import { QuestionFactory } from '$lib/shared/factories/question-factory';
 import { migrateQuestion } from '$lib/shared/migration/question-migration';
 import { QuestionValidator } from '$lib/shared/validators/question-validators';

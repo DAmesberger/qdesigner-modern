@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { NavigationConfig } from '$lib/shared/types/questions-v2';
+  import type { NavigationConfig } from '$lib/shared/types/questionnaire';
   
   interface Props {
     config?: NavigationConfig;

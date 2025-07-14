@@ -1,7 +1,8 @@
 <script lang="ts">
   import { designerStore, selectedItem } from '$lib/features/designer/stores/designerStore';
   import type { Question, Page, Variable } from '$lib/shared';
-
+  import { getPropertyEditor } from './properties';
+  
   let item: any = null;
   let itemType: string | null = null;
 
@@ -16,10 +17,10 @@
     }
   });
 
-  // Property update handlers
-  function updateQuestionProperty(property: string, value: any) {
+  // Update handlers
+  function updateQuestion(updates: Partial<Question>) {
     if (item && itemType === 'question') {
-      designerStore.updateQuestion(item.id, { [property]: value });
+      designerStore.updateQuestion(item.id, updates);
     }
   }
 
@@ -35,27 +36,8 @@
     }
   }
 
-  // Response type options
-  const responseTypes = [
-    { value: 'single', label: 'Single Choice' },
-    { value: 'multiple', label: 'Multiple Choice' },
-    { value: 'text', label: 'Text Input' },
-    { value: 'number', label: 'Number Input' },
-    { value: 'scale', label: 'Rating Scale' },
-    { value: 'keypress', label: 'Key Press' },
-    { value: 'click', label: 'Mouse Click' },
-    { value: 'custom', label: 'Custom' }
-  ];
-
-  // Stimulus types
-  const stimulusTypes = [
-    { value: 'text', label: 'Text' },
-    { value: 'image', label: 'Image' },
-    { value: 'video', label: 'Video' },
-    { value: 'audio', label: 'Audio' },
-    { value: 'html', label: 'HTML' },
-    { value: 'composite', label: 'Composite' }
-  ];
+  // Get the appropriate property editor component
+  $: propertyEditor = item && itemType === 'question' ? getPropertyEditor(item.type) : null;
 </script>
 
 <div class="h-full flex flex-col">
@@ -67,6 +49,7 @@
     {#if item && itemType === 'question'}
       <!-- Question Properties -->
       <div class="p-4 space-y-4">
+        <!-- Common Properties -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Question ID</label>
           <input
@@ -79,210 +62,78 @@
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Question Type</label>
-          <select
+          <input
+            type="text"
             value={item.type}
-            on:change={(e) => updateQuestionProperty('type', e.currentTarget.value)}
-            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="text">Text/Instruction</option>
-            <option value="choice">Multiple Choice</option>
-            <option value="scale">Rating Scale</option>
-            <option value="reaction">Reaction Test</option>
-            <option value="multimedia">Media Stimulus</option>
-            <option value="custom">Custom</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Prompt Text</label>
-          <textarea
-            value={item.prompt?.text || ''}
-            on:input={(e) => updateQuestionProperty('prompt', { text: e.currentTarget.value })}
-            rows="3"
-            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter question text..."
+            disabled
+            class="w-full px-3 py-2 border rounded-md bg-gray-50 text-gray-500"
           />
+          <p class="text-xs text-gray-500 mt-1">
+            To change the type, delete this question and create a new one
+          </p>
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Response Type</label>
-          <select
-            value={item.responseType?.type || 'single'}
-            on:change={(e) => updateQuestionProperty('responseType', { 
-              ...item.responseType,
-              type: e.currentTarget.value 
-            })}
-            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
-          >
-            {#each responseTypes as type}
-              <option value={type.value}>{type.label}</option>
-            {/each}
-          </select>
-        </div>
-
-        <!-- Choice Options Section -->
-        {#if item.type === 'choice' && (item.responseType?.type === 'single' || item.responseType?.type === 'multiple')}
+        <!-- Type-specific Properties -->
+        {#if propertyEditor}
           <div class="border-t pt-4">
-            <h4 class="text-sm font-medium text-gray-700 mb-2">Choice Options</h4>
-            
-            <div class="space-y-2">
-              {#each item.responseType?.options || [] as option, index}
-                <div class="flex gap-2">
-                  <input
-                    type="text"
-                    value={option.label || option.value}
-                    on:input={(e) => {
-                      const newOptions = [...(item.responseType?.options || [])];
-                      newOptions[index] = {
-                        ...newOptions[index],
-                        label: e.currentTarget.value,
-                        value: e.currentTarget.value.toLowerCase().replace(/\s+/g, '_')
-                      };
-                      updateQuestionProperty('responseType', {
-                        ...item.responseType,
-                        options: newOptions
-                      });
-                    }}
-                    class="flex-1 px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500"
-                    placeholder="Option text..."
-                  />
-                  <button
-                    on:click={() => {
-                      const newOptions = item.responseType?.options?.filter((_, i) => i !== index) || [];
-                      updateQuestionProperty('responseType', {
-                        ...item.responseType,
-                        options: newOptions
-                      });
-                    }}
-                    class="px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
-                    title="Remove option"
-                  >
-                    ✕
-                  </button>
-                </div>
-              {/each}
-              
-              <button
-                on:click={() => {
-                  const currentOptions = item.responseType?.options || [];
-                  const newOption = {
-                    id: `opt${currentOptions.length + 1}`,
-                    value: `option${currentOptions.length + 1}`,
-                    label: `Option ${currentOptions.length + 1}`
-                  };
-                  updateQuestionProperty('responseType', {
-                    ...item.responseType,
-                    options: [...currentOptions, newOption]
-                  });
-                }}
-                class="w-full px-2 py-1 text-sm text-blue-600 border border-dashed border-blue-300 rounded hover:bg-blue-50"
-              >
-                + Add Option
-              </button>
+            <svelte:component 
+              this={propertyEditor} 
+              question={item} 
+              onUpdate={updateQuestion} 
+            />
+          </div>
+        {:else}
+          <div class="border-t pt-4">
+            <div class="bg-yellow-50 p-3 rounded-md">
+              <p class="text-sm text-yellow-800">
+                Property editor for {item.type} is not yet implemented.
+              </p>
             </div>
           </div>
         {/if}
 
-        <!-- Stimulus Section -->
+        <!-- Common Optional Properties -->
         <div class="border-t pt-4">
-          <h4 class="text-sm font-medium text-gray-700 mb-2">Stimulus (Optional)</h4>
+          <h4 class="text-sm font-medium text-gray-700 mb-2">Advanced Settings</h4>
           
           <div class="space-y-3">
             <div>
-              <label class="block text-xs text-gray-600 mb-1">Type</label>
-              <select
-                value={item.stimulus?.type || ''}
-                on:change={(e) => {
-                  const type = e.currentTarget.value;
-                  if (type) {
-                    updateQuestionProperty('stimulus', { 
-                      ...item.stimulus,
-                      type,
-                      content: item.stimulus?.content || {}
-                    });
-                  } else {
-                    updateQuestionProperty('stimulus', null);
-                  }
-                }}
-                class="w-full px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">None</option>
-                {#each stimulusTypes as type}
-                  <option value={type.value}>{type.label}</option>
-                {/each}
-              </select>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Internal Name</label>
+              <input
+                type="text"
+                value={item.name || ''}
+                on:input={(e) => updateQuestion({ name: e.currentTarget.value || undefined })}
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                placeholder="Optional internal identifier"
+              />
             </div>
 
-            {#if item.stimulus}
-              <div>
-                <label class="block text-xs text-gray-600 mb-1">Duration (ms)</label>
-                <input
-                  type="number"
-                  value={item.stimulus.duration || ''}
-                  on:input={(e) => updateQuestionProperty('stimulus', {
-                    ...item.stimulus,
-                    duration: parseInt(e.currentTarget.value) || undefined
-                  })}
-                  class="w-full px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500"
-                  placeholder="Leave empty for manual advance"
-                />
-              </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+              <input
+                type="text"
+                value={item.tags?.join(', ') || ''}
+                on:input={(e) => {
+                  const tags = e.currentTarget.value
+                    .split(',')
+                    .map(t => t.trim())
+                    .filter(t => t.length > 0);
+                  updateQuestion({ tags: tags.length > 0 ? tags : undefined });
+                }}
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                placeholder="tag1, tag2, tag3"
+              />
+            </div>
 
-              <div>
-                <label class="block text-xs text-gray-600 mb-1">Delay (ms)</label>
-                <input
-                  type="number"
-                  value={item.stimulus.delay || ''}
-                  on:input={(e) => updateQuestionProperty('stimulus', {
-                    ...item.stimulus,
-                    delay: parseInt(e.currentTarget.value) || undefined
-                  })}
-                  class="w-full px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500"
-                  placeholder="0"
-                />
-              </div>
-            {/if}
-          </div>
-        </div>
-
-        <!-- Timing Section -->
-        <div class="border-t pt-4">
-          <h4 class="text-sm font-medium text-gray-700 mb-2">Timing (Optional)</h4>
-          
-          <div class="space-y-3">
             <label class="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={!!item.timing}
-                on:change={(e) => {
-                  if (e.currentTarget.checked) {
-                    updateQuestionProperty('timing', {
-                      fixationDuration: 500,
-                      responseDuration: 5000
-                    });
-                  } else {
-                    updateQuestionProperty('timing', null);
-                  }
-                }}
+                checked={item.required}
+                on:change={(e) => updateQuestion({ required: e.currentTarget.checked })}
                 class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
-              <span class="text-sm text-gray-700">Enable timing constraints</span>
+              <span class="text-sm text-gray-700">Required question</span>
             </label>
-
-            {#if item.timing}
-              <div>
-                <label class="block text-xs text-gray-600 mb-1">Response Duration (ms)</label>
-                <input
-                  type="number"
-                  value={item.timing.responseDuration || ''}
-                  on:input={(e) => updateQuestionProperty('timing', {
-                    ...item.timing,
-                    responseDuration: parseInt(e.currentTarget.value) || undefined
-                  })}
-                  class="w-full px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            {/if}
           </div>
         </div>
       </div>
@@ -322,15 +173,15 @@
             class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
           >
             <option value="vertical">Vertical</option>
+            <option value="horizontal">Horizontal</option>
             <option value="grid">Grid</option>
-            <option value="custom">Custom</option>
           </select>
         </div>
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Questions</label>
           <p class="text-sm text-gray-600">
-            This page contains {item.questions?.length || 0} questions
+            This page contains {item.blocks?.reduce((sum, block) => sum + (block.questions?.length || 0), 0) || 0} questions
           </p>
         </div>
       </div>

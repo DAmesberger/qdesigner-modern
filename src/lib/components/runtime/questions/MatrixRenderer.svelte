@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { MatrixQuestion } from '$lib/shared/types/questions-v2';
+  import type { MatrixQuestion } from '$lib/shared/types/questionnaire';
   import QuestionHeader from '$lib/components/shared/questions/QuestionHeader.svelte';
   import NavigationButtons from '$lib/components/shared/questions/NavigationButtons.svelte';
   import ValidationMessage from '$lib/components/shared/questions/ValidationMessage.svelte';

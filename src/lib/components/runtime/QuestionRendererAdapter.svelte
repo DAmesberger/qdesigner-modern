@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Question as OldQuestion } from '$lib/shared/types/questionnaire';
-  import type { Question as NewQuestion } from '$lib/shared/types/questions-v2';
+  import type { Question as NewQuestion } from '$lib/shared/types/questionnaire';
   import { migrateQuestion } from '$lib/shared/migration/question-migration';
   import QuestionRendererV2 from './QuestionRendererV2.svelte';
   import QuestionRenderer from './QuestionRenderer.svelte';

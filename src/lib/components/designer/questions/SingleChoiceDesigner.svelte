@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SingleChoiceQuestion, ChoiceOption } from '$lib/shared/types/questions-v2';
+  import type { SingleChoiceQuestion, ChoiceOption } from '$lib/shared/types/questionnaire';
   import { QuestionValidator } from '$lib/shared/validators/question-validators';
   import ValidationMessage from '$lib/components/shared/questions/ValidationMessage.svelte';
   import { nanoid } from 'nanoid';
@@ -46,10 +46,16 @@
   
   function updateOption(index: number, field: keyof ChoiceOption, value: any) {
     const newOptions = [...question.display.options];
-    newOptions[index] = {
+    const updatedOption = {
       ...newOptions[index],
       [field]: value
     };
+    // Ensure required fields are present
+    if (!updatedOption.id) updatedOption.id = nanoid(12);
+    if (!updatedOption.label) updatedOption.label = '';
+    if (!updatedOption.value) updatedOption.value = '';
+    
+    newOptions[index] = updatedOption as ChoiceOption;
     updateDisplay('options', newOptions);
   }
   
@@ -70,10 +76,16 @@
   
   function duplicateOption(index: number) {
     const original = question.display.options[index];
+    if (!original) return;
+    
     const duplicate: ChoiceOption = {
-      ...original,
       id: nanoid(12),
-      label: `${original.label} (copy)`
+      label: `${original.label} (copy)`,
+      value: original.value,
+      code: original.code,
+      image: original.image,
+      hotkey: original.hotkey,
+      exclusive: original.exclusive
     };
     const newOptions = [...question.display.options];
     newOptions.splice(index + 1, 0, duplicate);

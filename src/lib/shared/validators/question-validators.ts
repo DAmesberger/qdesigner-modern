@@ -25,7 +25,7 @@ import type {
   ValidationRule,
   TimingConfig,
   NavigationConfig
-} from '../types/questions-v2';
+} from '../types/questionnaire';
 
 // ============================================================================
 // Validation Result Types
@@ -526,10 +526,6 @@ export class DisplayValidators {
     
     if (config.step !== undefined) {
       errors.push(...BaseValidators.validateNumber(config.step, 'step', 0));
-    }
-    
-    if (config.decimals !== undefined) {
-      errors.push(...BaseValidators.validateNumber(config.decimals, 'decimals', 0, 10));
     }
     
     return { valid: errors.length === 0, errors, warnings };

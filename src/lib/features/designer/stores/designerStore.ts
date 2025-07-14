@@ -14,6 +14,7 @@ import type {
 } from '$lib/shared';
 import { VariableEngine } from '$lib/scripting-engine';
 import { OfflinePersistenceService } from '$lib/services/offlinePersistence';
+import { QuestionFactory } from '$lib/shared/factories/question-factory';
 
 export interface DesignerState {
   questionnaire: Questionnaire;
@@ -298,61 +299,47 @@ function createDesignerStore() {
         // If not found as block, try as page
         if (!block) {
           page = draft.questionnaire.pages.find(p => p.id === targetId);
+          
+          // If page found but has no blocks, create a default block
+          if (page) {
+            if (!page.blocks || page.blocks.length === 0) {
+              const newBlock: Block = {
+                id: `block${nanoid(6)}`,
+                pageId: page.id,
+                name: `Block 1`,
+                type: 'standard',
+                questions: [],
+                layout: { type: 'vertical', spacing: 16, alignment: 'center' }
+              };
+              if (!page.blocks) page.blocks = [];
+              page.blocks.push(newBlock);
+              block = newBlock;
+              
+              // Set as current block
+              draft.currentBlockId = newBlock.id;
+            } else {
+              // Use the first block if page has blocks but none was selected
+              block = page.blocks[0];
+            }
+          }
         }
         
         // Exit if no page found
         if (!page) return;
 
-        // Create appropriate ResponseType based on question type
-        let responseType: ResponseType;
-        switch (questionType) {
-          case 'choice':
-            responseType = { 
-              type: 'single',
-              options: [
-                { id: 'opt1', value: 'option1', label: 'Option 1' },
-                { id: 'opt2', value: 'option2', label: 'Option 2' },
-                { id: 'opt3', value: 'option3', label: 'Option 3' }
-              ]
-            };
-            break;
-          case 'scale':
-          case 'rating':
-            responseType = { 
-              type: 'scale',
-              min: 1,
-              max: 5,
-              step: 1
-            };
-            break;
-          case 'text':
-            responseType = { type: 'text' };
-            break;
-          case 'reaction':
-            responseType = { 
-              type: 'keypress',
-              keys: ['f', 'j']
-            };
-            break;
-          case 'instruction':
-            responseType = { 
-              type: 'keypress',
-              keys: [' ']
-            };
-            break;
-          default:
-            responseType = { type: 'custom', customType: questionType };
+        // Create new question using factory
+        const newQuestion = QuestionFactory.create(questionType);
+        
+        // Update order based on position
+        if (block && position !== undefined) {
+          newQuestion.order = position;
+        } else if (block) {
+          newQuestion.order = block.questions.length;
+        } else if (page && position !== undefined) {
+          newQuestion.order = position;
+        } else if (page) {
+          newQuestion.order = page.questions?.length || 0;
         }
-
-        const newQuestion: Question = {
-          id: `q${nanoid(6)}`,
-          type: questionType,
-          page: page.id,
-          blockId: block?.id,
-          prompt: { text: 'New Question' },
-          responseType,
-          variables: []
-        };
 
         // Add question to questionnaire
         draft.questionnaire.questions.push(newQuestion);
@@ -365,10 +352,13 @@ function createDesignerStore() {
             block.questions.push(newQuestion.id);
           }
         } else {
+          if (!page.questions) {
+            page.questions = [];
+          }
           if (position !== undefined && position >= 0) {
-            page.questions?.splice(position, 0, newQuestion.id);
+            page.questions.splice(position, 0, newQuestion.id);
           } else {
-            page.questions?.push(newQuestion.id);
+            page.questions.push(newQuestion.id);
           }
         }
 

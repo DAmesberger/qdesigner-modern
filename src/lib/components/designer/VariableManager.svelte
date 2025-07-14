@@ -524,8 +524,8 @@
                 }
               }}
               height="150px"
-              placeholder="e.g., age * 10 + reactionTime"
               variables={Object.fromEntries(variables.map(v => [v.name, v.type]))}
+              placeholder="e.g., age * 10 + reactionTime"
             />
           {:else}
             <textarea

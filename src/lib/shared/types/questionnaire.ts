@@ -1,12 +1,19 @@
-// Core questionnaire data model
+/**
+ * Unified Question Type System
+ * Comprehensive type-safe question system with proper configuration structure
+ */
+
+// ============================================================================
+// Core Questionnaire Types
+// ============================================================================
 
 export interface Questionnaire {
   id: string;
-  organizationId?: string; // Added for offline sync support
+  organizationId?: string;
   projectId?: string;
   name: string;
   description?: string;
-  code?: string; // Questionnaire code/identifier
+  code?: string;
   version: string;
   created: Date;
   modified: Date;
@@ -23,8 +30,8 @@ export interface Variable {
   type: VariableType;
   scope: 'global' | 'local' | 'temporary';
   defaultValue?: any;
-  formula?: string; // Mathematical expression
-  dependencies?: string[]; // Other variable IDs this depends on
+  formula?: string;
+  dependencies?: string[];
   validation?: ValidationRule[];
   description?: string;
   metadata?: Record<string, any>;
@@ -41,189 +48,12 @@ export type VariableType =
   | 'reaction_time'
   | 'stimulus_onset';
 
-export interface ValidationRule {
-  type: 'required' | 'min' | 'max' | 'minLength' | 'maxLength' | 'pattern' | 'custom';
-  value?: any;
-  message?: string;
-  condition?: string; // Formula that must evaluate to true
-}
-
-export interface Question {
-  id: string;
-  type: QuestionType;
-  page?: string; // Page ID (deprecated, use blockId)
-  blockId?: string; // Block ID this question belongs to
-  name?: string; // Question name/identifier
-  text?: string; // Question text
-  content?: string; // Alternative content field
-  instruction?: string; // Instruction text
-  required?: boolean; // Whether question is required
-  settings?: QuestionSettings; // Question-specific settings
-  layout?: LayoutConfig; // Layout configuration
-  media?: MediaContent; // Media content
-  stimulus?: Stimulus;
-  stimuli?: any[]; // Array of stimuli for complex questions
-  prompt?: TextContent;
-  responseType: ResponseType;
-  responseOptions?: ResponseOption[];
-  variables?: QuestionVariable[]; // Variables to set based on response
-  timing?: TimingConfig;
-  conditions?: DisplayCondition[];
-  validation?: ValidationRule[];
-  randomize?: boolean;
-  config?: any; // Additional configuration
-  style?: {
-    fontSize?: number;
-    color?: string;
-    fontFamily?: string;
-    fontWeight?: string;
-    textAlign?: string;
-    lineHeight?: number;
-    backgroundColor?: string;
-    padding?: string | number;
-    margin?: string | number;
-    [key: string]: any;
-  }; // Style configuration
-  code?: string; // Question code/identifier
-}
-
-export type QuestionType = 
-  | 'text' 
-  | 'choice' 
-  | 'scale' 
-  | 'rating'
-  | 'reaction' 
-  | 'multimedia'
-  | 'instruction'
-  | 'webgl';
-
-export interface Stimulus {
-  id?: string;
-  type: 'text' | 'image' | 'video' | 'audio' | 'html' | 'composite';
-  content: StimulusContent;
-  properties?: Record<string, any>;
-  position?: Position;
-  size?: Size; // Size of the stimulus
-  duration?: number; // ms
-  delay?: number; // ms before showing
-  transition?: TransitionConfig;
-}
-
-export interface StimulusContent {
-  text?: string;
-  imageUrl?: string;
-  videoUrl?: string;
-  audioUrl?: string;
-  html?: string;
-  components?: Stimulus[]; // For composite stimuli
-  position?: Position;
-  size?: Size;
-  style?: Record<string, any>;
-}
-
-export interface TextContent {
-  text: string;
-  html?: boolean;
-  variables?: string[]; // Variable names to interpolate
-}
-
-export type ResponseType = 
-  | { type: 'single'; options: ResponseOption[]; required?: boolean; timeout?: number; }
-  | { type: 'multiple'; options: ResponseOption[]; required?: boolean; timeout?: number; minChoices?: number; maxChoices?: number; }
-  | { type: 'text'; minLength?: number; maxLength?: number; pattern?: string; required?: boolean; timeout?: number; }
-  | { type: 'number'; min?: number; max?: number; step?: number; required?: boolean; timeout?: number; }
-  | { type: 'scale'; min: number; max: number; step?: number; labels?: string[]; minLabel?: string; maxLabel?: string; required?: boolean; timeout?: number; }
-  | { type: 'keypress'; keys: string[]; recordAllKeys?: boolean; required?: boolean; timeout?: number; }
-  | { type: 'click'; allowedTargets?: string[]; required?: boolean; timeout?: number; }
-  | { type: 'none'; autoAdvance?: boolean; delay?: number; } // For instruction questions
-  | { type: 'webgl'; validKeys?: string[]; validTargets?: string[]; recordAllResponses?: boolean; required?: boolean; timeout?: number; }
-  | { type: 'custom'; customType: string; config?: any; required?: boolean; timeout?: number; };
-
-export interface ResponseConfig {
-  // For keypress
-  allowedKeys?: string[];
-  recordAllKeys?: boolean;
-  
-  // For scale
-  min?: number;
-  max?: number;
-  step?: number;
-  labels?: string[];
-  
-  // For text/number
-  maxLength?: number;
-  pattern?: string;
-  
-  // General
-  timeout?: number; // Max response time in ms
-  required?: boolean;
-}
-
-export interface ResponseOption {
-  id: string;
-  value: any;
-  label?: string;
-  key?: string; // Keyboard shortcut key
-  hotkey?: string;
-  position?: Position;
-}
-
-export interface QuestionVariable {
-  variableId: string;
-  source: 'response' | 'reaction_time' | 'stimulus_onset' | 'custom';
-  transform?: string; // Formula to transform the value
-}
-
-export interface TimingConfig {
-  fixationDuration?: number;
-  preDelay?: number;
-  stimulusDuration?: number;
-  responseDuration?: number;
-  postDelay?: number; // Delay after stimulus before next question
-  interTrialInterval?: number;
-  jitter?: JitterConfig;
-}
-
-export interface JitterConfig {
-  min: number;
-  max: number;
-  distribution: 'uniform' | 'normal';
-}
-
-export interface QuestionSettings {
-  [key: string]: any;
-}
-
-export interface PageSettings {
-  [key: string]: any;
-}
-
-export interface MediaContent {
-  type: 'image' | 'video' | 'audio';
-  source: string;
-  alt?: string;
-  caption?: string;
-  size?: 'small' | 'medium' | 'large';
-  position?: 'above' | 'below' | 'left' | 'right';
-  controls?: boolean;
-  autoplay?: boolean;
-  loop?: boolean;
-}
-
-export interface DisplayCondition {
-  formula: string; // Expression that must evaluate to true
-  action: 'show' | 'hide' | 'skip';
-}
-
 export interface Page {
   id: string;
   name?: string;
-  title?: string; // Page title
-  settings?: PageSettings; // Page-specific settings
-  blocks?: Block[]; // Blocks containing questions
-  questions?: string[]; // Direct question IDs (for backward compatibility)
+  questions?: string[]; // Question IDs
+  blocks?: Block[];
   layout?: LayoutConfig;
-  transitions?: PageTransition;
   conditions?: DisplayCondition[];
 }
 
@@ -232,118 +62,147 @@ export interface Block {
   pageId: string;
   name?: string;
   type: 'standard' | 'randomized' | 'conditional' | 'loop';
-  questions: string[]; // Question IDs in this block
+  questions: string[]; // Question IDs
   layout?: LayoutConfig;
-  conditions?: DisplayCondition[];
   randomization?: RandomizationConfig;
   loop?: LoopConfig;
-  metadata?: Record<string, any>;
-}
-
-export interface RandomizationConfig {
-  enabled: boolean;
-  preserveFirst?: number; // Keep first N questions in order
-  preserveLast?: number; // Keep last N questions in order
-  grouping?: string[][]; // Groups of question IDs that stay together
-}
-
-export interface LoopConfig {
-  iterations: number | string; // Number or formula
-  iterationVariable?: string; // Variable to store current iteration
-  exitCondition?: string; // Formula to break loop early
-}
-
-export interface LayoutConfig {
-  type: 'vertical' | 'horizontal' | 'grid' | 'custom';
-  spacing?: number;
-  alignment?: 'left' | 'center' | 'right';
-  customCss?: string;
-  
-  // Layout properties
-  width?: string | number;
-  padding?: string | number;
-  margin?: string | number;
-  
-  // Positioning
-  position?: {
-    x: number;
-    y: number;
-  };
-  size?: {
-    width: number;
-    height: number;
-  };
-  
-  // Visual properties
-  opacity?: number;
-  rotation?: number;
-}
-
-export interface PageTransition {
-  in?: TransitionConfig;
-  out?: TransitionConfig;
-}
-
-export interface TransitionConfig {
-  type: 'fade' | 'slide' | 'none';
-  duration: number;
-  easing?: string;
+  conditions?: DisplayCondition[];
 }
 
 export interface FlowControl {
   id: string;
-  type: 'branch' | 'loop' | 'randomize' | 'terminate';
-  condition?: string; // Formula
-  target?: string; // Page or question ID
-  config?: FlowConfig;
-}
-
-export interface FlowConfig {
-  // For loops
-  iterations?: number;
-  iterationVariable?: string;
-  
-  // For randomization
-  randomizePages?: string[];
-  randomizeQuestions?: string[];
-  
-  // For branching
-  branches?: Branch[];
-}
-
-export interface Branch {
-  condition: string;
-  target: string;
+  type: 'skip' | 'branch' | 'loop' | 'terminate';
+  condition: string; // Formula
+  target?: string; // Page/Question ID for skip/branch
+  iterations?: number; // For loops
 }
 
 export interface QuestionnaireSettings {
   allowBackNavigation?: boolean;
   showProgressBar?: boolean;
-  randomizePages?: boolean;
-  randomizeQuestions?: boolean;
-  timeLimit?: number; // Total time in ms
-  autoAdvance?: boolean;
   saveProgress?: boolean;
+  randomizationSeed?: string;
+  timeZone?: string;
   language?: string;
-  theme?: ThemeConfig;
-  webgl?: WebGLConfig;
-  requireAuthentication?: boolean; // Require user authentication
-  requireConsent?: boolean; // Require consent form
-  allowAnonymous?: boolean; // Allow anonymous participation
+  webgl?: WebGLSettings;
+  metadata?: Record<string, any>;
 }
 
-export interface ThemeConfig {
-  primaryColor?: string;
-  backgroundColor?: string;
-  textColor?: string;
-  fontFamily?: string;
-  fontSize?: string;
-  customCss?: string;
+// ============================================================================
+// Question Types and Enums
+// ============================================================================
+
+export const QuestionTypes = {
+  // Display-only questions
+  TEXT_DISPLAY: 'text-display',
+  INSTRUCTION: 'instruction',
+  MEDIA_DISPLAY: 'media-display',
+  WEBGL: 'webgl',
+  
+  // Input questions
+  TEXT_INPUT: 'text-input',
+  NUMBER_INPUT: 'number-input',
+  
+  // Choice questions
+  SINGLE_CHOICE: 'single-choice',
+  MULTIPLE_CHOICE: 'multiple-choice',
+  
+  // Scale questions
+  SCALE: 'scale',
+  RATING: 'rating',
+  
+  // Advanced questions
+  MATRIX: 'matrix',
+  RANKING: 'ranking',
+  
+  // Time-based questions
+  REACTION_TIME: 'reaction-time',
+  DATE_TIME: 'date-time',
+  
+  // File questions
+  FILE_UPLOAD: 'file-upload',
+  MEDIA_RESPONSE: 'media-response',
+  
+  // Statistical
+  STATISTICAL_FEEDBACK: 'statistical-feedback'
+} as const;
+
+export type QuestionType = typeof QuestionTypes[keyof typeof QuestionTypes];
+
+// ============================================================================
+// Common Configuration Types
+// ============================================================================
+
+export interface TimingConfig {
+  minTime?: number;
+  maxTime?: number;
+  showTimer?: boolean;
+  warningTime?: number;
 }
 
-export interface WebGLConfig {
-  targetFPS: 60 | 120 | 144 | 240;
-  vsync?: boolean;
+export interface NavigationConfig {
+  showPrevious?: boolean;
+  showNext?: boolean;
+  autoAdvance?: boolean;
+  advanceDelay?: number;
+}
+
+export interface MediaConfig {
+  url: string;
+  type: 'image' | 'video' | 'audio';
+  alt?: string;
+  width?: number;
+  height?: number;
+  autoplay?: boolean;
+  loop?: boolean;
+  controls?: boolean;
+}
+
+export interface StimulusConfig {
+  content: string | MediaConfig;
+  duration?: number;
+  position?: 'above' | 'below' | 'left' | 'right' | 'background';
+}
+
+export interface ValidationRule {
+  type: 'required' | 'min' | 'max' | 'minLength' | 'maxLength' | 'pattern' | 'custom';
+  value?: any;
+  message?: string;
+  condition?: string;
+}
+
+export interface ConditionalLogic {
+  show?: string;
+  enable?: string;
+  require?: string;
+}
+
+export interface LayoutConfig {
+  type: 'vertical' | 'horizontal' | 'grid';
+  columns?: number;
+  spacing?: number;
+  alignment?: 'left' | 'center' | 'right';
+}
+
+export interface DisplayCondition {
+  formula: string;
+  target?: 'show' | 'hide' | 'enable' | 'disable';
+}
+
+export interface RandomizationConfig {
+  type: 'all' | 'subset' | 'latin-square';
+  subset?: number;
+  fixedPositions?: Record<string, number>;
+}
+
+export interface LoopConfig {
+  variable: string;
+  values: any[];
+  shuffle?: boolean;
+}
+
+export interface WebGLSettings {
+  targetFPS?: number;
   antialias?: boolean;
   pixelRatio?: number;
 }
@@ -352,11 +211,537 @@ export interface Position {
   x: number;
   y: number;
   z?: number;
-  unit?: 'px' | '%' | 'vw' | 'vh';
 }
 
-export interface Size {
-  width: number;
-  height: number;
-  unit?: 'px' | '%' | 'vw' | 'vh';
+// ============================================================================
+// Display Configuration Types
+// ============================================================================
+
+export interface TextDisplayConfig {
+  content: string;
+  format: 'text' | 'markdown' | 'html';
+  variables?: boolean;
+  styling?: {
+    fontSize?: string;
+    fontWeight?: string;
+    textAlign?: 'left' | 'center' | 'right';
+    color?: string;
+  };
 }
+
+export interface MediaDisplayConfig {
+  media: MediaConfig;
+  caption?: string;
+  showControls?: boolean;
+  clickToEnlarge?: boolean;
+}
+
+export interface ChoiceOption {
+  id: string;
+  label: string;
+  value: string | number;
+  code?: string | number; // For statistical encoding
+  image?: MediaConfig;
+  hotkey?: string;
+  exclusive?: boolean;
+}
+
+export interface SingleChoiceDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  options: ChoiceOption[];
+  layout: 'vertical' | 'horizontal' | 'grid';
+  columns?: number;
+  showOther?: boolean;
+  otherLabel?: string;
+  randomizeOptions?: boolean;
+}
+
+export interface MultipleChoiceDisplayConfig extends SingleChoiceDisplayConfig {
+  minSelections?: number;
+  maxSelections?: number;
+  selectAllOption?: boolean;
+}
+
+export interface ScaleDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  min: number;
+  max: number;
+  step?: number;
+  labels?: {
+    min?: string;
+    max?: string;
+    midpoint?: string;
+  };
+  showValue?: boolean;
+  orientation?: 'horizontal' | 'vertical';
+  style?: 'slider' | 'buttons' | 'visual-analog';
+}
+
+export interface RatingDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  levels: number;
+  style: 'stars' | 'hearts' | 'thumbs' | 'numeric';
+  allowHalf?: boolean;
+  labels?: string[];
+}
+
+export interface TextInputDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  placeholder?: string;
+  multiline?: boolean;
+  rows?: number;
+  maxLength?: number;
+  showCharCount?: boolean;
+}
+
+export interface NumberInputDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  prefix?: string;
+  suffix?: string;
+  showSpinButtons?: boolean;
+}
+
+export interface MatrixDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  rows: Array<{ id: string; label: string }>;
+  columns: Array<{ id: string; label: string; value?: any }>;
+  responseType: 'single' | 'multiple' | 'text' | 'number';
+  required?: 'all' | 'any' | string[];
+}
+
+export interface ReactionTimeDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  stimulus: StimulusConfig;
+  fixationDuration?: number;
+  fixationSymbol?: string;
+  keys: string[];
+  correctKey?: string;
+  showFeedback?: boolean;
+  practice?: boolean;
+  practiceTrials?: number;
+}
+
+export interface DateTimeDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  mode: 'date' | 'time' | 'datetime';
+  minDate?: string;
+  maxDate?: string;
+  format?: string;
+  showCalendar?: boolean;
+}
+
+export interface FileUploadDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  accept?: string[];
+  maxSize?: number;
+  maxFiles?: number;
+  dragDrop?: boolean;
+}
+
+export interface RankingDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  items: Array<{ id: string; label: string }>;
+  allowPartial?: boolean;
+  tieBreaking?: boolean;
+}
+
+export interface WebGLDisplayConfig {
+  prompt?: string;
+  sceneConfig: Record<string, any>;
+  interactionMode?: 'click' | 'drag' | 'keyboard' | 'custom';
+}
+
+export interface StatisticalFeedbackConfig {
+  prompt: string;
+  chartType: 'bar' | 'line' | 'pie' | 'scatter' | 'histogram';
+  dataSource: string;
+  compareWith?: string;
+  showPercentile?: boolean;
+  customization?: Record<string, any>;
+}
+
+// ============================================================================
+// Response Configuration Types
+// ============================================================================
+
+export interface BaseResponseConfig {
+  saveAs: string;
+  trackTiming?: boolean;
+  trackChanges?: boolean;
+}
+
+export interface SingleChoiceResponseConfig extends BaseResponseConfig {
+  valueType: 'value' | 'label' | 'index';
+  allowDeselect?: boolean;
+  saveOtherAs?: string;
+}
+
+export interface MultipleChoiceResponseConfig extends BaseResponseConfig {
+  valueType: 'array' | 'object' | 'binary';
+  saveOtherAs?: string;
+}
+
+export interface ScaleResponseConfig extends BaseResponseConfig {
+  valueType: 'number' | 'string';
+  savePositionAs?: string;
+}
+
+export interface TextInputResponseConfig extends BaseResponseConfig {
+  transform?: 'none' | 'lowercase' | 'uppercase' | 'trim';
+  saveMetadata?: boolean;
+}
+
+export interface MatrixResponseConfig extends BaseResponseConfig {
+  saveFormat: 'nested' | 'flat' | 'separate';
+  rowPrefix?: string;
+}
+
+export interface ReactionTimeResponseConfig extends BaseResponseConfig {
+  saveAccuracy?: boolean;
+  savePractice?: boolean;
+  metrics?: ('rt' | 'accuracy' | 'anticipation')[];
+}
+
+export interface FileUploadResponseConfig extends BaseResponseConfig {
+  storage: 'base64' | 'url' | 'reference';
+  saveMetadata?: boolean;
+}
+
+// ============================================================================
+// Validation Configuration Types
+// ============================================================================
+
+export interface TextValidation {
+  required?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: RegExp;
+  customRules?: ValidationRule[];
+}
+
+export interface NumberValidation {
+  required?: boolean;
+  min?: number;
+  max?: number;
+  integer?: boolean;
+  customRules?: ValidationRule[];
+}
+
+export interface ChoiceValidation {
+  required?: boolean;
+  customRules?: ValidationRule[];
+}
+
+export interface FileValidation {
+  required?: boolean;
+  maxSize?: number;
+  allowedTypes?: string[];
+  customRules?: ValidationRule[];
+}
+
+// ============================================================================
+// Base Question Interface
+// ============================================================================
+
+export interface BaseQuestion {
+  id: string;
+  type: QuestionType;
+  order: number;
+  required: boolean;
+  
+  // Optional common properties
+  randomize?: boolean;
+  timing?: TimingConfig;
+  navigation?: NavigationConfig;
+  conditions?: ConditionalLogic;
+  
+  // Metadata
+  name?: string;
+  tags?: string[];
+}
+
+// ============================================================================
+// Question Type Definitions
+// ============================================================================
+
+// Display-only questions
+export interface TextDisplayQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.TEXT_DISPLAY;
+  display: TextDisplayConfig;
+}
+
+export interface InstructionQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.INSTRUCTION;
+  display: TextDisplayConfig;
+}
+
+export interface MediaDisplayQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.MEDIA_DISPLAY;
+  display: MediaDisplayConfig;
+}
+
+export interface WebGLQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.WEBGL;
+  display: WebGLDisplayConfig;
+  response?: BaseResponseConfig;
+}
+
+// Input questions
+export interface TextInputQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.TEXT_INPUT;
+  display: TextInputDisplayConfig;
+  response: TextInputResponseConfig;
+  validation?: TextValidation;
+}
+
+export interface NumberInputQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.NUMBER_INPUT;
+  display: NumberInputDisplayConfig;
+  response: BaseResponseConfig;
+  validation?: NumberValidation;
+}
+
+// Choice questions
+export interface SingleChoiceQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.SINGLE_CHOICE;
+  display: SingleChoiceDisplayConfig;
+  response: SingleChoiceResponseConfig;
+  validation?: ChoiceValidation;
+}
+
+export interface MultipleChoiceQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.MULTIPLE_CHOICE;
+  display: MultipleChoiceDisplayConfig;
+  response: MultipleChoiceResponseConfig;
+  validation?: ChoiceValidation;
+}
+
+// Scale questions
+export interface ScaleQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.SCALE;
+  display: ScaleDisplayConfig;
+  response: ScaleResponseConfig;
+  validation?: NumberValidation;
+}
+
+export interface RatingQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.RATING;
+  display: RatingDisplayConfig;
+  response: BaseResponseConfig;
+  validation?: ChoiceValidation;
+}
+
+// Advanced questions
+export interface MatrixQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.MATRIX;
+  display: MatrixDisplayConfig;
+  response: MatrixResponseConfig;
+  validation?: ChoiceValidation;
+}
+
+export interface RankingQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.RANKING;
+  display: RankingDisplayConfig;
+  response: BaseResponseConfig;
+  validation?: ChoiceValidation;
+}
+
+// Time-based questions
+export interface ReactionTimeQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.REACTION_TIME;
+  display: ReactionTimeDisplayConfig;
+  response: ReactionTimeResponseConfig;
+  validation?: ChoiceValidation;
+}
+
+export interface DateTimeQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.DATE_TIME;
+  display: DateTimeDisplayConfig;
+  response: BaseResponseConfig;
+  validation?: TextValidation;
+}
+
+// File questions
+export interface FileUploadQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.FILE_UPLOAD;
+  display: FileUploadDisplayConfig;
+  response: FileUploadResponseConfig;
+  validation?: FileValidation;
+}
+
+export interface MediaResponseQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.MEDIA_RESPONSE;
+  display: FileUploadDisplayConfig;
+  response: FileUploadResponseConfig;
+  validation?: FileValidation;
+}
+
+export interface StatisticalFeedbackQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.STATISTICAL_FEEDBACK;
+  display: StatisticalFeedbackConfig;
+}
+
+// ============================================================================
+// Union Type
+// ============================================================================
+
+export type Question = 
+  | TextDisplayQuestion
+  | InstructionQuestion
+  | MediaDisplayQuestion
+  | WebGLQuestion
+  | TextInputQuestion
+  | NumberInputQuestion
+  | SingleChoiceQuestion
+  | MultipleChoiceQuestion
+  | ScaleQuestion
+  | RatingQuestion
+  | MatrixQuestion
+  | RankingQuestion
+  | ReactionTimeQuestion
+  | DateTimeQuestion
+  | FileUploadQuestion
+  | MediaResponseQuestion
+  | StatisticalFeedbackQuestion;
+
+// ============================================================================
+// Type Guards
+// ============================================================================
+
+export function isTextDisplayQuestion(q: Question): q is TextDisplayQuestion {
+  return q.type === QuestionTypes.TEXT_DISPLAY;
+}
+
+export function isInstructionQuestion(q: Question): q is InstructionQuestion {
+  return q.type === QuestionTypes.INSTRUCTION;
+}
+
+export function isMediaDisplayQuestion(q: Question): q is MediaDisplayQuestion {
+  return q.type === QuestionTypes.MEDIA_DISPLAY;
+}
+
+export function isWebGLQuestion(q: Question): q is WebGLQuestion {
+  return q.type === QuestionTypes.WEBGL;
+}
+
+export function isTextInputQuestion(q: Question): q is TextInputQuestion {
+  return q.type === QuestionTypes.TEXT_INPUT;
+}
+
+export function isNumberInputQuestion(q: Question): q is NumberInputQuestion {
+  return q.type === QuestionTypes.NUMBER_INPUT;
+}
+
+export function isSingleChoiceQuestion(q: Question): q is SingleChoiceQuestion {
+  return q.type === QuestionTypes.SINGLE_CHOICE;
+}
+
+export function isMultipleChoiceQuestion(q: Question): q is MultipleChoiceQuestion {
+  return q.type === QuestionTypes.MULTIPLE_CHOICE;
+}
+
+export function isScaleQuestion(q: Question): q is ScaleQuestion {
+  return q.type === QuestionTypes.SCALE;
+}
+
+export function isRatingQuestion(q: Question): q is RatingQuestion {
+  return q.type === QuestionTypes.RATING;
+}
+
+export function isMatrixQuestion(q: Question): q is MatrixQuestion {
+  return q.type === QuestionTypes.MATRIX;
+}
+
+export function isRankingQuestion(q: Question): q is RankingQuestion {
+  return q.type === QuestionTypes.RANKING;
+}
+
+export function isReactionTimeQuestion(q: Question): q is ReactionTimeQuestion {
+  return q.type === QuestionTypes.REACTION_TIME;
+}
+
+export function isDateTimeQuestion(q: Question): q is DateTimeQuestion {
+  return q.type === QuestionTypes.DATE_TIME;
+}
+
+export function isFileUploadQuestion(q: Question): q is FileUploadQuestion {
+  return q.type === QuestionTypes.FILE_UPLOAD;
+}
+
+export function isMediaResponseQuestion(q: Question): q is MediaResponseQuestion {
+  return q.type === QuestionTypes.MEDIA_RESPONSE;
+}
+
+export function isStatisticalFeedbackQuestion(q: Question): q is StatisticalFeedbackQuestion {
+  return q.type === QuestionTypes.STATISTICAL_FEEDBACK;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+export function hasResponseConfig(q: Question): boolean {
+  return 'response' in q && q.response !== undefined;
+}
+
+export function isDisplayOnlyQuestion(q: Question): boolean {
+  const displayOnlyTypes: QuestionType[] = [
+    QuestionTypes.TEXT_DISPLAY,
+    QuestionTypes.INSTRUCTION,
+    QuestionTypes.MEDIA_DISPLAY,
+    QuestionTypes.STATISTICAL_FEEDBACK
+  ];
+  return displayOnlyTypes.includes(q.type);
+}
+
+export function requiresUserInput(q: Question): boolean {
+  return !isDisplayOnlyQuestion(q) && q.type !== QuestionTypes.WEBGL;
+}
+
+export function getQuestionVariable(q: Question): string | undefined {
+  if (hasResponseConfig(q) && 'response' in q) {
+    return q.response?.saveAs;
+  }
+  return undefined;
+}
+
+// ============================================================================
+// Legacy Type Mapping (for migration)
+// ============================================================================
+
+export type LegacyQuestionType = 
+  | 'text'
+  | 'instruction'
+  | 'choice'
+  | 'scale'
+  | 'rating'
+  | 'reaction'
+  | 'multimedia'
+  | 'statistical_feedback'
+  | 'webgl';
+
+export const LEGACY_TYPE_MAP: Record<LegacyQuestionType, QuestionType> = {
+  'text': QuestionTypes.TEXT_INPUT,
+  'instruction': QuestionTypes.INSTRUCTION,
+  'choice': QuestionTypes.SINGLE_CHOICE,
+  'scale': QuestionTypes.SCALE,
+  'rating': QuestionTypes.RATING,
+  'reaction': QuestionTypes.REACTION_TIME,
+  'multimedia': QuestionTypes.MEDIA_DISPLAY,
+  'statistical_feedback': QuestionTypes.STATISTICAL_FEEDBACK,
+  'webgl': QuestionTypes.WEBGL
+};

@@ -15,8 +15,8 @@ import type {
   TextInputQuestion,
   MatrixQuestion,
   WebGLQuestion
-} from '../types/questions-v2';
-import { QuestionTypes } from '../types/questions-v2';
+} from '../types/questionnaire';
+import { QuestionTypes } from '../types/questionnaire';
 import { QuestionFactory } from '../factories/question-factory';
 import { nanoid } from 'nanoid';
 

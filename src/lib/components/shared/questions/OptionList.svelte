@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ChoiceOption } from '$lib/shared/types/questions-v2';
+  import type { ChoiceOption } from '$lib/shared/types/questionnaire';
   
   interface Props {
     options: ChoiceOption[];

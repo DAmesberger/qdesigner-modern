@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Question } from '$lib/shared/types/questions-v2';
+  import type { Question } from '$lib/shared/types/questionnaire';
   import { getRuntimeComponent } from './questions';
   
   interface Props {

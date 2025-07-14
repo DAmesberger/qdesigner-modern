@@ -3,6 +3,7 @@
   import { defaultTheme } from '$lib/shared';
   import { createEventDispatcher } from 'svelte';
   import { produce } from 'immer';
+  import { marked } from 'marked';
   
   export let question: Question;
   export let theme: QuestionnaireTheme = defaultTheme;
@@ -27,9 +28,26 @@
     };
   }
   
+  // Get question text based on type
+  function getQuestionText(question: Question): string {
+    if (question.display?.content) {
+      return question.display.content;
+    }
+    if (question.display?.prompt) {
+      return question.display.prompt;
+    }
+    // Fallback for old format
+    return question.text || '';
+  }
+  
+  // Check if question is display-only (no input)
+  function isDisplayOnly(question: Question): boolean {
+    return ['instruction', 'text-display', 'media-display', 'webgl'].includes(question.type);
+  }
+  
   // Handle inline editing
   let isEditingPrompt = false;
-  let promptText = question.text;
+  let promptText = getQuestionText(question);
   
   function handlePromptClick() {
     if (mode === 'edit' && !isEditingPrompt) {
@@ -39,32 +57,61 @@
   
   function handlePromptBlur() {
     isEditingPrompt = false;
-    if (promptText !== question.text) {
-      dispatch('update', { text: promptText });
+    const currentText = getQuestionText(question);
+    if (promptText !== currentText) {
+      // Update based on question type
+      if (question.display?.content !== undefined) {
+        dispatch('update', { display: { ...question.display, content: promptText } });
+      } else if (question.display?.prompt !== undefined) {
+        dispatch('update', { display: { ...question.display, prompt: promptText } });
+      } else {
+        // Fallback for old format
+        dispatch('update', { text: promptText });
+      }
     }
   }
   
   // Response rendering based on question type
   function renderResponse(question: Question, theme: QuestionnaireTheme) {
+    // Display-only questions have no response area
+    if (isDisplayOnly(question)) {
+      return null;
+    }
+    
     switch (question.type) {
+      case 'single-choice':
+      case 'multiple-choice':
+        return renderChoiceQuestion(question, theme);
+      case 'text-input':
+      case 'number-input':
+        return renderTextQuestion(question, theme);
+      case 'scale':
+      case 'likert':
+        return renderScaleQuestion(question, theme);
+      case 'rating':
+        return renderRatingQuestion(question, theme);
+      // Fallback for old format
       case 'choice':
         return renderChoiceQuestion(question, theme);
       case 'text':
         return renderTextQuestion(question, theme);
-      case 'scale':
-        return renderScaleQuestion(question, theme);
       default:
         return null;
     }
   }
   
   function renderChoiceQuestion(question: Question, theme: QuestionnaireTheme) {
-    // Get options from responseType if it exists, otherwise use defaults
+    // Get options from display.options for new format
+    const displayOptions = question.display?.options || [];
     const responseOptions = question.responseType?.options || [];
-    const options = responseOptions.length > 0 
+    
+    const options = displayOptions.length > 0
+      ? displayOptions.map(opt => opt.label || opt.value)
+      : responseOptions.length > 0 
       ? responseOptions.map(opt => opt.label || opt.value)
       : ['Option 1', 'Option 2', 'Option 3'];
-    const multipleChoice = question.responseType?.type === 'multiple';
+      
+    const multipleChoice = question.type === 'multiple-choice' || question.responseType?.type === 'multiple';
     const styles = theme.components.response.choice;
     
     return {
@@ -89,9 +136,10 @@
   }
   
   function renderScaleQuestion(question: Question, theme: QuestionnaireTheme) {
-    const min = question.settings?.min || 1;
-    const max = question.settings?.max || 5;
-    const labels = question.settings?.labels || {};
+    const scale = question.response?.scale || {};
+    const min = scale.min || question.settings?.min || 1;
+    const max = scale.max || question.settings?.max || 5;
+    const labels = scale.labels || question.settings?.labels || {};
     const styles = theme.components.response.scale;
     
     return {
@@ -103,8 +151,23 @@
     };
   }
   
+  function renderRatingQuestion(question: Question, theme: QuestionnaireTheme) {
+    const rating = question.response?.rating || {};
+    const max = rating.max || 5;
+    const type = rating.type || 'star';
+    const styles = theme.components.response.scale;
+    
+    return {
+      component: 'rating' as const,
+      max,
+      type,
+      styles
+    };
+  }
+  
   $: questionStyles = getQuestionStyles();
   $: responseConfig = renderResponse(question, theme);
+  $: promptText = getQuestionText(question);
 </script>
 
 <div 
@@ -137,17 +200,21 @@
       role={mode === 'edit' ? 'button' : undefined}
       tabindex={mode === 'edit' ? 0 : undefined}
     >
-      {question.text}
+      {#if question.type === 'instruction' && question.display?.content}
+        {@html marked(question.display.content)}
+      {:else}
+        {getQuestionText(question)}
+      {/if}
     </div>
   {/if}
   
   <!-- Question Description -->
-  {#if question.settings?.description}
+  {#if question.display?.description || question.settings?.description}
     <div
       class="description"
       style={Object.entries(questionStyles.description).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ')}
     >
-      {question.settings.description}
+      {question.display?.description || question.settings?.description}
     </div>
   {/if}
   
@@ -217,6 +284,23 @@
               </div>
             {/if}
           </label>
+        {/each}
+      </div>
+    {:else if responseConfig?.component === 'rating'}
+      {@const ratingConfig = responseConfig}
+      <div 
+        class="rating-options"
+        style="display: flex; gap: {theme.global.spacing[2]}"
+      >
+        {#each Array(ratingConfig.max) as _, i}
+          {@const value = i + 1}
+          <button
+            class="rating-star"
+            style="font-size: 24px; background: none; border: none; cursor: pointer; color: {value <= 3 ? '#FFB800' : '#E0E0E0'}; transition: all 150ms"
+            disabled={mode === 'edit'}
+          >
+            {ratingConfig.type === 'star' ? '★' : value}
+          </button>
         {/each}
       </div>
     {/if}

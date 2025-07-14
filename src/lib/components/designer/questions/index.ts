@@ -4,8 +4,8 @@
  */
 
 import type { ComponentType } from 'svelte';
-import type { Question, QuestionType } from '$lib/shared/types/questions-v2';
-import { QuestionTypes } from '$lib/shared/types/questions-v2';
+import type { Question, QuestionType } from '$lib/shared/types/questionnaire';
+import { QuestionTypes } from '$lib/shared/types/questionnaire';
 
 // Import designer components
 import TextDisplayDesigner from './TextDisplayDesigner.svelte';

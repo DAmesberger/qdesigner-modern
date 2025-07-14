@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ScaleQuestion } from '$lib/shared/types/questions-v2';
+  import type { ScaleQuestion } from '$lib/shared/types/questionnaire';
   import QuestionHeader from '$lib/components/shared/questions/QuestionHeader.svelte';
   import ScaleInput from '$lib/components/shared/questions/ScaleInput.svelte';
   import NavigationButtons from '$lib/components/shared/questions/NavigationButtons.svelte';

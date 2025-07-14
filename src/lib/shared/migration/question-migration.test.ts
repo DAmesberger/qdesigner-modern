@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { migrateQuestion, migrateQuestions } from './question-migration';
 import type { Question as OldQuestion } from '../types/questionnaire';
-import { QuestionTypes } from '../types/questions-v2';
+import { QuestionTypes } from '../types/questionnaire';
 import { QuestionValidator } from '../validators/question-validators';
 
 describe('Question Migration', () => {

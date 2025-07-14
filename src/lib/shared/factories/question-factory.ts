@@ -24,8 +24,8 @@ import type {
   FileUploadQuestion,
   MediaResponseQuestion,
   StatisticalFeedbackQuestion
-} from '../types/questions-v2';
-import { QuestionTypes } from '../types/questions-v2';
+} from '../types/questionnaire';
+import { QuestionTypes } from '../types/questionnaire';
 
 /**
  * Generate a unique ID for questions and related entities

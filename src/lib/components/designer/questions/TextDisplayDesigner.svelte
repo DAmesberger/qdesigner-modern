@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TextDisplayQuestion } from '$lib/shared/types/questions-v2';
+  import type { TextDisplayQuestion } from '$lib/shared/types/questionnaire';
   import { QuestionValidator } from '$lib/shared/validators/question-validators';
   import ValidationMessage from '$lib/components/shared/questions/ValidationMessage.svelte';
   

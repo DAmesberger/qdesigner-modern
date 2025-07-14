@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { QuestionFactory } from './question-factory';
-import { QuestionTypes } from '../types/questions-v2';
+import { QuestionTypes } from '../types/questionnaire';
 import { QuestionValidator } from '../validators/question-validators';
-import type { Question } from '../types/questions-v2';
+import type { Question } from '../types/questionnaire';
 
 describe('QuestionFactory', () => {
   describe('create', () => {

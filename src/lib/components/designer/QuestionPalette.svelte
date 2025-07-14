@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { QuestionType, ResponseType } from '$lib/shared';
+  import { QuestionTypes, type QuestionType } from '$lib/shared/types/questionnaire';
   import theme from '$lib/theme';
   import { designerStore, currentBlock } from '$lib/features/designer/stores/designerStore';
   import { get } from 'svelte/store';
@@ -9,58 +9,68 @@
     label: string;
     icon: string;
     description: string;
-    defaultResponseType: ResponseType | string;
   }
 
   const questionTemplates: QuestionTemplate[] = [
     {
-      type: 'text',
-      label: 'Text/Instruction',
+      type: QuestionTypes.INSTRUCTION,
+      label: 'Instruction',
       icon: '📝',
-      description: 'Display text or instructions',
-      defaultResponseType: 'none'
+      description: 'Display instructions or information'
     },
     {
-      type: 'choice',
+      type: QuestionTypes.TEXT_DISPLAY,
+      label: 'Text Display',
+      icon: '📄',
+      description: 'Show formatted text'
+    },
+    {
+      type: QuestionTypes.SINGLE_CHOICE,
+      label: 'Single Choice',
+      icon: '⭕',
+      description: 'Select one option'
+    },
+    {
+      type: QuestionTypes.MULTIPLE_CHOICE,
       label: 'Multiple Choice',
       icon: '☑️',
-      description: 'Single or multiple selection',
-      defaultResponseType: 'single'
+      description: 'Select multiple options'
     },
     {
-      type: 'scale',
-      label: 'Rating Scale',
-      icon: '⭐',
-      description: 'Likert scale or slider',
-      defaultResponseType: 'scale'
-    },
-    {
-      type: 'reaction',
-      label: 'Reaction Test',
-      icon: '⚡',
-      description: 'Measure reaction time',
-      defaultResponseType: 'keypress'
-    },
-    {
-      type: 'multimedia',
-      label: 'Media Stimulus',
-      icon: '🎬',
-      description: 'Image, video, or audio',
-      defaultResponseType: 'keypress'
-    },
-    {
-      type: 'text',
-      label: 'Matrix Question',
-      icon: '🔧',
-      description: 'Grid-based questions',
-      defaultResponseType: 'multiple'
-    },
-    {
-      type: 'scale',
-      label: 'Statistical Feedback',
+      type: QuestionTypes.SCALE,
+      label: 'Scale',
       icon: '📊',
-      description: 'Charts and personalized feedback',
-      defaultResponseType: 'scale'
+      description: 'Sliding scale or range'
+    },
+    {
+      type: QuestionTypes.RATING,
+      label: 'Rating',
+      icon: '⭐',
+      description: 'Star or numeric rating'
+    },
+    {
+      type: QuestionTypes.TEXT_INPUT,
+      label: 'Text Input',
+      icon: '✏️',
+      description: 'Free text response'
+    },
+    {
+      type: QuestionTypes.NUMBER_INPUT,
+      label: 'Number Input',
+      icon: '🔢',
+      description: 'Numeric response'
+    },
+    {
+      type: QuestionTypes.REACTION_TIME,
+      label: 'Reaction Time',
+      icon: '⚡',
+      description: 'Measure response time'
+    },
+    {
+      type: QuestionTypes.STATISTICAL_FEEDBACK,
+      label: 'Statistical Feedback',
+      icon: '📈',
+      description: 'Show participant results'
     }
   ];
 
@@ -81,32 +91,22 @@
   }
   
   function handleQuestionClick(template: QuestionTemplate) {
+    const state = get(designerStore);
     const block = get(currentBlock);
+    
     if (block) {
       // Add question to the current block
       designerStore.addQuestion(block.id, template.type);
-    } else {
-      // No block selected, show a message or create a default block
-      const state = get(designerStore);
-      const currentPageId = state.currentPageId;
-      if (currentPageId) {
-        // Create a default block first
-        designerStore.addBlock(currentPageId);
-        // Then add the question (the new block will be set as current)
-        setTimeout(() => {
-          const newBlock = get(currentBlock);
-          if (newBlock) {
-            designerStore.addQuestion(newBlock.id, template.type);
-          }
-        }, 100);
-      }
+    } else if (state.currentPageId) {
+      // Add question to the current page - store will create block if needed
+      designerStore.addQuestion(state.currentPageId, template.type);
     }
   }
 </script>
 
-<div class="{theme.components.container.card} p-4">
+<div class="{theme.components.container.card} p-4 flex flex-col h-full">
   <h3 class="{theme.typography.h4} mb-4 {theme.semantic.textPrimary}">Question Types</h3>
-  <div class="space-y-2">
+  <div class="space-y-2 flex-1 overflow-y-auto" style="max-height: calc(100vh - 300px);">
     {#each questionTemplates as template}
       <div
         draggable="true"
