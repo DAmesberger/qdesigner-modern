@@ -29,17 +29,21 @@
   let otherValue = $state('');
   let touched = $state(false);
   
-  $: validation = showValidation && touched ? 
-    QuestionValidator.validateQuestion({
-      ...question,
-      response: {
-        ...question.response,
-        saveAs: question.response.saveAs || 'temp'
-      }
-    }) : { valid: true, errors: [], warnings: [] };
+  let validation = $derived(
+    showValidation && touched ? 
+      QuestionValidator.validateQuestion({
+        ...question,
+        response: {
+          ...question.response,
+          saveAs: question.response.saveAs || 'temp'
+        }
+      }) : { valid: true, errors: [], warnings: [] }
+  );
   
-  $: fieldErrors = validation.errors.filter(e => 
-    !e.field.startsWith('response.') && !e.field.startsWith('display.')
+  let fieldErrors = $derived(
+    validation.errors.filter(e => 
+      !e.field.startsWith('response.') && !e.field.startsWith('display.')
+    )
   );
   
   function handleChange(newValue: string | string[]) {
@@ -125,9 +129,11 @@
     rafId = requestAnimationFrame(fn);
   }
   
-  $: if (question.display.randomizeOptions && !disabled) {
-    // TODO: Implement option randomization on mount
-  }
+  $effect(() => {
+    if (question.display.randomizeOptions && !disabled) {
+      // TODO: Implement option randomization on mount
+    }
+  });
 </script>
 
 <svelte:window on:keydown={handleKeyDown} />

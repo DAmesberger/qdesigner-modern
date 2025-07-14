@@ -28,12 +28,16 @@
   
   let touched = $state(false);
   
-  $: validation = showValidation && touched ? 
-    QuestionValidator.validateQuestion(question) : 
-    { valid: true, errors: [], warnings: [] };
+  let validation = $derived(
+    showValidation && touched ? 
+      QuestionValidator.validateQuestion(question) : 
+      { valid: true, errors: [], warnings: [] }
+  );
   
-  $: fieldErrors = validation.errors.filter(e => 
-    !e.field.startsWith('response.') && !e.field.startsWith('display.')
+  let fieldErrors = $derived(
+    validation.errors.filter(e => 
+      !e.field.startsWith('response.') && !e.field.startsWith('display.')
+    )
   );
   
   function handleChange(newValue: number) {

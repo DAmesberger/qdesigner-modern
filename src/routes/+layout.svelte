@@ -23,18 +23,8 @@
     // Request persistent storage for better offline experience
     requestPersistentStorage();
     
-    // Check initial session
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        user = session?.user ?? null;
-      })
-      .catch((error) => {
-        console.error('Error checking auth session:', error);
-        user = null;
-      })
-      .finally(() => {
-        loading = false;
-      });
+    // For client-side routes, auth is handled in their own layouts
+    loading = false;
     
     // Listen for auth changes
     try {

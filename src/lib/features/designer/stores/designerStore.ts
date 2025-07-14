@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { produce } from 'immer';
 import { nanoid } from 'nanoid';
+import { generateUUID } from '$lib/utils/uuid';
 import type { 
   Questionnaire, 
   Question, 
@@ -41,7 +42,7 @@ export interface ValidationError {
 
 // Initial empty questionnaire
 const createEmptyQuestionnaire = (): Questionnaire => ({
-  id: nanoid(),
+  id: generateUUID(),
   name: 'New Questionnaire',
   description: '',
   version: '1.0.0',
@@ -310,7 +311,8 @@ function createDesignerStore() {
               type: 'single',
               options: [
                 { id: 'opt1', value: 'option1', label: 'Option 1' },
-                { id: 'opt2', value: 'option2', label: 'Option 2' }
+                { id: 'opt2', value: 'option2', label: 'Option 2' },
+                { id: 'opt3', value: 'option3', label: 'Option 3' }
               ]
             };
             break;

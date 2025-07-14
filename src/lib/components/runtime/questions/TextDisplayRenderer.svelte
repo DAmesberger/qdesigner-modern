@@ -53,22 +53,22 @@
     return processed;
   }
   
-  $: processedContent = processContent(
+  let processedContent = $derived(processContent(
     question.display.content,
     question.display.format
-  );
+  ));
   
-  $: styles = question.display.styling ? {
+  let styles = $derived(question.display.styling ? {
     fontSize: question.display.styling.fontSize,
     fontWeight: question.display.styling.fontWeight,
     textAlign: question.display.styling.textAlign,
     color: question.display.styling.color
-  } : {};
+  } : {});
   
-  $: cssVars = Object.entries(styles)
+  let cssVars = $derived(Object.entries(styles)
     .filter(([_, value]) => value !== undefined)
     .map(([key, value]) => `--${key}: ${value}`)
-    .join('; ');
+    .join('; '));
 </script>
 
 <article 

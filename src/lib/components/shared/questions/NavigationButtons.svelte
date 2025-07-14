@@ -21,8 +21,8 @@
     class: className = ''
   }: Props = $props();
   
-  $: showPrevious = config.showPrevious !== false && canGoBack;
-  $: showNext = config.showNext !== false && canGoNext;
+  let showPrevious = $derived(config.showPrevious !== false);
+  let showNext = $derived(config.showNext !== false);
 </script>
 
 {#if showPrevious || showNext}
@@ -32,7 +32,7 @@
         type="button"
         class="nav-button previous"
         onclick={onPrevious}
-        {disabled}
+        disabled={disabled || !canGoBack}
       >
         <svg class="button-icon" viewBox="0 0 20 20" fill="currentColor">
           <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
@@ -48,7 +48,7 @@
         type="button"
         class="nav-button next primary"
         onclick={onNext}
-        {disabled}
+        disabled={disabled || !canGoNext}
       >
         Next
         <svg class="button-icon" viewBox="0 0 20 20" fill="currentColor">

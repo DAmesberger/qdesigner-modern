@@ -3,6 +3,7 @@
 
 const CACHE_NAME = 'qdesigner-v1';
 const RUNTIME_CACHE = 'qdesigner-runtime';
+const PROGRESS_CHANNEL = new BroadcastChannel('sw-progress');
 
 // Files to cache immediately on install
 const STATIC_CACHE_URLS = [
@@ -10,6 +11,13 @@ const STATIC_CACHE_URLS = [
   '/manifest.json',
   '/offline.html',
   // Add app shell resources that should be cached
+];
+
+// Critical resources for offline apps
+const OFFLINE_APP_URLS = [
+  '/designer',
+  '/fillout',
+  // Add critical JS/CSS bundles here after build
 ];
 
 // Dynamic cache configuration
@@ -31,15 +39,45 @@ const CACHE_STRATEGIES = {
   ]
 };
 
-// Install event - cache static assets
+// Install event - cache static assets with progress
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing service worker...');
   
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => {
+      .then(async (cache) => {
         console.log('[SW] Caching app shell');
-        return cache.addAll(STATIC_CACHE_URLS);
+        
+        const allUrls = [...STATIC_CACHE_URLS, ...OFFLINE_APP_URLS];
+        const total = allUrls.length;
+        let loaded = 0;
+        
+        // Send initial progress
+        PROGRESS_CHANNEL.postMessage({
+          type: 'cache-progress',
+          loaded,
+          total,
+          stage: 'caching'
+        });
+        
+        // Cache each URL and report progress
+        for (const url of allUrls) {
+          try {
+            await cache.add(url);
+            loaded++;
+            PROGRESS_CHANNEL.postMessage({
+              type: 'cache-progress',
+              loaded,
+              total,
+              stage: 'caching',
+              resource: url
+            });
+          } catch (error) {
+            console.error(`[SW] Failed to cache ${url}:`, error);
+          }
+        }
+        
+        return Promise.resolve();
       })
       .then(() => {
         console.log('[SW] Service worker installed');
@@ -47,6 +85,10 @@ self.addEventListener('install', (event) => {
       })
       .catch((error) => {
         console.error('[SW] Cache installation failed:', error);
+        PROGRESS_CHANNEL.postMessage({
+          type: 'cache-error',
+          error: error.message
+        });
       })
   );
 });

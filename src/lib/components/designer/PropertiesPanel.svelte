@@ -108,7 +108,10 @@
           <label class="block text-sm font-medium text-gray-700 mb-1">Response Type</label>
           <select
             value={item.responseType?.type || 'single'}
-            on:change={(e) => updateQuestionProperty('responseType', { type: e.currentTarget.value })}
+            on:change={(e) => updateQuestionProperty('responseType', { 
+              ...item.responseType,
+              type: e.currentTarget.value 
+            })}
             class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
           >
             {#each responseTypes as type}
@@ -116,6 +119,69 @@
             {/each}
           </select>
         </div>
+
+        <!-- Choice Options Section -->
+        {#if item.type === 'choice' && (item.responseType?.type === 'single' || item.responseType?.type === 'multiple')}
+          <div class="border-t pt-4">
+            <h4 class="text-sm font-medium text-gray-700 mb-2">Choice Options</h4>
+            
+            <div class="space-y-2">
+              {#each item.responseType?.options || [] as option, index}
+                <div class="flex gap-2">
+                  <input
+                    type="text"
+                    value={option.label || option.value}
+                    on:input={(e) => {
+                      const newOptions = [...(item.responseType?.options || [])];
+                      newOptions[index] = {
+                        ...newOptions[index],
+                        label: e.currentTarget.value,
+                        value: e.currentTarget.value.toLowerCase().replace(/\s+/g, '_')
+                      };
+                      updateQuestionProperty('responseType', {
+                        ...item.responseType,
+                        options: newOptions
+                      });
+                    }}
+                    class="flex-1 px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500"
+                    placeholder="Option text..."
+                  />
+                  <button
+                    on:click={() => {
+                      const newOptions = item.responseType?.options?.filter((_, i) => i !== index) || [];
+                      updateQuestionProperty('responseType', {
+                        ...item.responseType,
+                        options: newOptions
+                      });
+                    }}
+                    class="px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
+                    title="Remove option"
+                  >
+                    ✕
+                  </button>
+                </div>
+              {/each}
+              
+              <button
+                on:click={() => {
+                  const currentOptions = item.responseType?.options || [];
+                  const newOption = {
+                    id: `opt${currentOptions.length + 1}`,
+                    value: `option${currentOptions.length + 1}`,
+                    label: `Option ${currentOptions.length + 1}`
+                  };
+                  updateQuestionProperty('responseType', {
+                    ...item.responseType,
+                    options: [...currentOptions, newOption]
+                  });
+                }}
+                class="w-full px-2 py-1 text-sm text-blue-600 border border-dashed border-blue-300 rounded hover:bg-blue-50"
+              >
+                + Add Option
+              </button>
+            </div>
+          </div>
+        {/if}
 
         <!-- Stimulus Section -->
         <div class="border-t pt-4">

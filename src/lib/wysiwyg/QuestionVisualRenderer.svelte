@@ -59,8 +59,12 @@
   }
   
   function renderChoiceQuestion(question: Question, theme: QuestionnaireTheme) {
-    const options = question.settings?.options || ['Option 1', 'Option 2', 'Option 3'];
-    const multipleChoice = question.settings?.multipleChoice || false;
+    // Get options from responseType if it exists, otherwise use defaults
+    const responseOptions = question.responseType?.options || [];
+    const options = responseOptions.length > 0 
+      ? responseOptions.map(opt => opt.label || opt.value)
+      : ['Option 1', 'Option 2', 'Option 3'];
+    const multipleChoice = question.responseType?.type === 'multiple';
     const styles = theme.components.response.choice;
     
     return {

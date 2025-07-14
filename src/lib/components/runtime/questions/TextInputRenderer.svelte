@@ -30,17 +30,21 @@
   let typingStartTime: number | null = null;
   let keystrokes = 0;
   
-  $: validation = showValidation && touched ? 
-    QuestionValidator.validateQuestion(question) : 
-    { valid: true, errors: [], warnings: [] };
-  
-  $: fieldErrors = validation.errors.filter(e => 
-    !e.field.startsWith('response.') && !e.field.startsWith('display.')
+  let validation = $derived(
+    showValidation && touched ? 
+      QuestionValidator.validateQuestion(question) : 
+      { valid: true, errors: [], warnings: [] }
   );
   
-  $: charCount = value.length;
-  $: maxLength = question.display.maxLength;
-  $: showCharCount = question.display.showCharCount && (maxLength || focused);
+  let fieldErrors = $derived(
+    validation.errors.filter(e => 
+      !e.field.startsWith('response.') && !e.field.startsWith('display.')
+    )
+  );
+  
+  let charCount = $derived(value.length);
+  let maxLength = $derived(question.display.maxLength);
+  let showCharCount = $derived(question.display.showCharCount && (maxLength || focused));
   
   function transformValue(val: string): string {
     switch (question.response.transform) {

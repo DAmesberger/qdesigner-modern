@@ -1,7 +1,8 @@
 import type { LayoutLoad } from './$types';
 import { browser } from '$app/environment';
 
-export const ssr = true;
+// Disable SSR for fillout - it needs to run fully client-side for offline support
+export const ssr = false;
 export const prerender = false;
 
 export const load: LayoutLoad = async ({ params, url }) => {

@@ -13,6 +13,7 @@
     otherValue?: string;
     onOtherChange?: (value: string) => void;
     class?: string;
+    name?: string;
   }
   
   let {
@@ -26,7 +27,8 @@
     showOther = false,
     otherValue = $bindable(''),
     onOtherChange,
-    class: className = ''
+    class: className = '',
+    name = 'default'
   }: Props = $props();
   
   function handleSingleChange(optionValue: string | number) {
@@ -69,8 +71,8 @@
     return value === stringValue;
   }
   
-  $: gridClass = layout === 'grid' ? `grid-cols-${columns}` : '';
-  $: containerClass = `option-list ${layout} ${gridClass} ${className}`;
+  let gridClass = $derived(layout === 'grid' ? `grid-cols-${columns}` : '');
+  let containerClass = $derived(`option-list ${layout} ${gridClass} ${className}`);
 </script>
 
 <div class={containerClass} role="group">
@@ -78,7 +80,7 @@
     <label class="option-item" class:disabled>
       <input
         type={multiselect ? 'checkbox' : 'radio'}
-        name={multiselect ? undefined : `option-group-${$$restProps.name || 'default'}`}
+        name={multiselect ? undefined : `option-group-${name}`}
         value={option.value}
         checked={isChecked(option.value)}
         {disabled}
@@ -108,7 +110,7 @@
     <label class="option-item other-option" class:disabled>
       <input
         type={multiselect ? 'checkbox' : 'radio'}
-        name={multiselect ? undefined : `option-group-${$$restProps.name || 'default'}`}
+        name={multiselect ? undefined : `option-group-${name}`}
         value="__other__"
         checked={isChecked('__other__')}
         {disabled}

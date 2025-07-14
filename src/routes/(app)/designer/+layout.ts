@@ -1,16 +1,10 @@
-import { redirect } from '@sveltejs/kit';
 import type { LayoutLoad } from './$types';
-import { supabase } from '$lib/services/supabase';
 
-export const load: LayoutLoad = async ({ url }) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  
-  if (!session) {
-    throw redirect(303, '/login');
-  }
+export const load: LayoutLoad = async ({ parent }) => {
+  // Get auth data from parent layout
+  const parentData = await parent();
   
   return {
-    session,
-    user: session.user
+    ...parentData
   };
 };

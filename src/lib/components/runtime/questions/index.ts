@@ -13,6 +13,9 @@ import SingleChoiceRenderer from './SingleChoiceRenderer.svelte';
 import MultipleChoiceRenderer from './MultipleChoiceRenderer.svelte';
 import ScaleRenderer from './ScaleRenderer.svelte';
 import TextInputRenderer from './TextInputRenderer.svelte';
+import NumberInputRenderer from './NumberInputRenderer.svelte';
+import RatingRenderer from './RatingRenderer.svelte';
+import MatrixRenderer from './MatrixRenderer.svelte';
 // TODO: Import additional renderers as they are created
 
 // Component registry
@@ -23,6 +26,9 @@ const componentRegistry: Partial<Record<QuestionType, ComponentType>> = {
   [QuestionTypes.MULTIPLE_CHOICE]: MultipleChoiceRenderer,
   [QuestionTypes.SCALE]: ScaleRenderer,
   [QuestionTypes.TEXT_INPUT]: TextInputRenderer,
+  [QuestionTypes.NUMBER_INPUT]: NumberInputRenderer,
+  [QuestionTypes.RATING]: RatingRenderer,
+  [QuestionTypes.MATRIX]: MatrixRenderer,
   // TODO: Add more mappings as components are created
 };
 
@@ -56,5 +62,8 @@ export {
   SingleChoiceRenderer,
   MultipleChoiceRenderer,
   ScaleRenderer,
-  TextInputRenderer
+  TextInputRenderer,
+  NumberInputRenderer,
+  RatingRenderer,
+  MatrixRenderer
 };

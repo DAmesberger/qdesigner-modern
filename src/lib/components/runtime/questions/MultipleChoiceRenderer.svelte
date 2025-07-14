@@ -29,22 +29,26 @@
   let otherValue = $state('');
   let touched = $state(false);
   
-  $: validation = showValidation && touched ? 
-    QuestionValidator.validateQuestion(question) : 
-    { valid: true, errors: [], warnings: [] };
-  
-  $: fieldErrors = validation.errors.filter(e => 
-    !e.field.startsWith('response.') && !e.field.startsWith('display.')
+  let validation = $derived(
+    showValidation && touched ? 
+      QuestionValidator.validateQuestion(question) : 
+      { valid: true, errors: [], warnings: [] }
   );
   
-  $: selectionCount = value.length;
-  $: minSelections = question.display.minSelections || 0;
-  $: maxSelections = question.display.maxSelections || Infinity;
+  let fieldErrors = $derived(
+    validation.errors.filter(e => 
+      !e.field.startsWith('response.') && !e.field.startsWith('display.')
+    )
+  );
   
-  $: canSelectMore = selectionCount < maxSelections;
-  $: hasEnoughSelections = selectionCount >= minSelections;
+  let selectionCount = $derived(value.length);
+  let minSelections = $derived(question.display.minSelections || 0);
+  let maxSelections = $derived(question.display.maxSelections || Infinity);
   
-  $: selectionMessage = (() => {
+  let canSelectMore = $derived(selectionCount < maxSelections);
+  let hasEnoughSelections = $derived(selectionCount >= minSelections);
+  
+  let selectionMessage = $derived(() => {
     if (minSelections && maxSelections && maxSelections !== Infinity) {
       if (minSelections === maxSelections) {
         return `Select exactly ${minSelections} option${minSelections > 1 ? 's' : ''}`;
@@ -56,7 +60,7 @@
       return `Select up to ${maxSelections} option${maxSelections > 1 ? 's' : ''}`;
     }
     return null;
-  })();
+  });
   
   function handleChange(newValue: string | string[]) {
     touched = true;
