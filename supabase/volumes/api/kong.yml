@@ -31,7 +31,6 @@ services:
         config:
           origins:
             - http://localhost:5173
-            - http://localhost:5174
             - http://localhost:3000
           credentials: true
           exposed_headers:
@@ -68,7 +67,6 @@ services:
         config:
           origins:
             - http://localhost:5173
-            - http://localhost:5174
             - http://localhost:3000
           credentials: true
           exposed_headers:
@@ -108,7 +106,6 @@ services:
         config:
           origins:
             - http://localhost:5173
-            - http://localhost:5174
             - http://localhost:3000
           credentials: true
           exposed_headers:
@@ -149,7 +146,6 @@ services:
         config:
           origins:
             - http://localhost:5173
-            - http://localhost:5174
             - http://localhost:3000
           credentials: true
           exposed_headers:
@@ -189,7 +185,6 @@ services:
         config:
           origins:
             - http://localhost:5173
-            - http://localhost:5174
             - http://localhost:3000
           credentials: true
           exposed_headers:
@@ -231,7 +226,7 @@ plugins:
     config:
       origins:
         - http://localhost:5173
-        - http://localhost:5174
+        - http://localhost:5175
         - http://localhost:3000
       credentials: true
       exposed_headers:

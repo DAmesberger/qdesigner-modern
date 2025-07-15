@@ -49,8 +49,8 @@
     return condition;
   }
   
-  $: displayCondition = formatCondition(data.condition);
-  $: edgeColor = selected ? '#3B82F6' : '#F59E0B';
+  const displayCondition = $derived(formatCondition(data.condition));
+  const edgeColor = $derived(selected ? '#3B82F6' : '#F59E0B');
 </script>
 
 <g class="conditional-edge">

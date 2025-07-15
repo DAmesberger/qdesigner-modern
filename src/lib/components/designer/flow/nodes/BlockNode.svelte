@@ -18,7 +18,7 @@
     loop: { bg: '#D1FAE5', border: '#10B981', icon: '#059669' }
   };
   
-  $: colors = blockTypeColors[data.type as keyof typeof blockTypeColors] || blockTypeColors.standard;
+  const colors = $derived(blockTypeColors[data.type as keyof typeof blockTypeColors] || blockTypeColors.standard);
 </script>
 
 <div class="block-node {selected ? 'selected' : ''}" style="border-color: {colors.border}; background: {colors.bg};">

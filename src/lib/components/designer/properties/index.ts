@@ -2,15 +2,15 @@ import { QuestionTypes, type QuestionType } from '$lib/shared/types/questionnair
 import type { PropertyEditorComponent } from './types';
 
 // Import all property editors
-import InstructionPropertiesWithMedia from './InstructionPropertiesWithMedia.svelte';
+import InstructionProperties from './InstructionProperties.svelte';
 import StatisticalFeedbackProperties from './StatisticalFeedbackProperties.svelte';
 import SingleChoiceProperties from './SingleChoiceProperties.svelte';
 import MediaDisplayProperties from './MediaDisplayProperties.svelte';
 
 // Registry of property editors by question type
 export const propertyEditors: Record<QuestionType, PropertyEditorComponent | null> = {
-  [QuestionTypes.INSTRUCTION]: InstructionPropertiesWithMedia,
-  [QuestionTypes.TEXT_DISPLAY]: InstructionPropertiesWithMedia, // Reuse for now
+  [QuestionTypes.INSTRUCTION]: InstructionProperties,
+  [QuestionTypes.TEXT_DISPLAY]: InstructionProperties, // Reuse for now
   [QuestionTypes.STATISTICAL_FEEDBACK]: StatisticalFeedbackProperties,
   [QuestionTypes.SINGLE_CHOICE]: SingleChoiceProperties,
   [QuestionTypes.MULTIPLE_CHOICE]: SingleChoiceProperties, // Can reuse with minor tweaks

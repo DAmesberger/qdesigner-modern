@@ -5,7 +5,27 @@
 -- including multi-tenant architecture, flexible roles, and runtime data
 
 -- =====================================================
--- 0. SUPABASE REQUIRED SCHEMAS
+-- 0. ROLES SETUP (Required for Supabase)
+-- =====================================================
+-- Create roles needed for Supabase services
+CREATE ROLE authenticator LOGIN PASSWORD 'postgres';
+CREATE ROLE anon NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
+CREATE ROLE service_role NOLOGIN;
+
+-- Grant permissions
+GRANT anon TO authenticator;
+GRANT authenticated TO authenticator;
+GRANT service_role TO authenticator;
+
+-- Grant usage on public schema
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_role;
+
+-- =====================================================
+-- 0b. SUPABASE REQUIRED SCHEMAS
 -- =====================================================
 -- Create schemas required by Supabase services
 CREATE SCHEMA IF NOT EXISTS auth;
@@ -33,6 +53,9 @@ STABLE
 AS $$
   SELECT NULLIF(current_setting('request.jwt.claims', true), '')::jsonb
 $$;
+
+-- Note: The auth.users table will be created by Supabase Auth service
+-- We'll add fixes for it after the database is initialized
 
 -- =====================================================
 -- 1. EXTENSIONS
@@ -685,6 +708,101 @@ CREATE TABLE data_retention_logs (
 );
 
 -- =====================================================
+-- 7b. MEDIA MANAGEMENT TABLES
+-- =====================================================
+
+-- Media Assets
+CREATE TABLE media_assets (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  uploaded_by UUID NOT NULL REFERENCES users(id),
+  
+  -- File information
+  filename TEXT NOT NULL,
+  original_filename TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size_bytes BIGINT NOT NULL,
+  storage_path TEXT NOT NULL UNIQUE,
+  
+  -- Media metadata
+  width INTEGER,
+  height INTEGER,
+  duration_seconds NUMERIC,
+  thumbnail_path TEXT,
+  metadata JSONB DEFAULT '{}',
+  
+  -- Access control
+  is_public BOOLEAN DEFAULT false,
+  access_level TEXT DEFAULT 'organization' CHECK (access_level IN ('private', 'organization', 'public')),
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Constraints
+  CONSTRAINT valid_mime_type CHECK (mime_type ~ '^(image|video|audio)/'),
+  CONSTRAINT valid_size CHECK (size_bytes > 0 AND size_bytes <= 52428800) -- 50MB max
+);
+
+-- Media Usage tracking
+CREATE TABLE media_usage (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  media_id UUID NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
+  questionnaire_id UUID REFERENCES questionnaire_definitions(id) ON DELETE CASCADE,
+  question_id TEXT,
+  usage_type TEXT NOT NULL CHECK (usage_type IN ('stimulus', 'instruction', 'feedback', 'background', 'option')),
+  usage_context JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(media_id, questionnaire_id, question_id, usage_type)
+);
+
+-- Media Permissions
+CREATE TABLE media_permissions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  media_id UUID NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  organization_role VARCHAR(50), -- 'owner', 'admin', 'member', 'viewer'
+  permission TEXT NOT NULL CHECK (permission IN ('view', 'edit', 'delete')),
+  granted_by UUID NOT NULL REFERENCES users(id),
+  granted_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ,
+  
+  CONSTRAINT permission_target CHECK (
+    (user_id IS NOT NULL AND organization_role IS NULL) OR 
+    (user_id IS NULL AND organization_role IS NOT NULL)
+  ),
+  
+  UNIQUE(media_id, user_id, permission),
+  UNIQUE(media_id, organization_role, permission)
+);
+
+-- Media Collections
+CREATE TABLE media_collections (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  created_by UUID NOT NULL REFERENCES users(id),
+  is_shared BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(organization_id, name)
+);
+
+-- Media Collection Items
+CREATE TABLE media_collection_items (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  collection_id UUID NOT NULL REFERENCES media_collections(id) ON DELETE CASCADE,
+  media_id UUID NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
+  added_by UUID NOT NULL REFERENCES users(id),
+  added_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(collection_id, media_id)
+);
+
+-- =====================================================
 -- 8. SYSTEM TABLES
 -- =====================================================
 
@@ -886,6 +1004,11 @@ FOR EACH ROW EXECUTE FUNCTION update_group_size();
 -- ALTER TABLE sync_queue ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE role_definitions ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE media_assets ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE media_usage ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE media_permissions ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE media_collections ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE media_collection_items ENABLE ROW LEVEL SECURITY;
 
 -- RLS POLICIES (Commented out during development)
 /*
@@ -1112,6 +1235,18 @@ CREATE INDEX idx_interaction_event_data ON interaction_events USING GIN (event_d
 -- Text search indexes
 CREATE INDEX idx_projects_search ON projects USING GIN (to_tsvector('english', name || ' ' || COALESCE(description, '')));
 CREATE INDEX idx_questionnaires_search ON questionnaire_definitions USING GIN (to_tsvector('english', name));
+
+-- Media management indexes
+CREATE INDEX idx_media_assets_organization ON media_assets(organization_id);
+CREATE INDEX idx_media_assets_uploaded_by ON media_assets(uploaded_by);
+CREATE INDEX idx_media_assets_mime_type ON media_assets(mime_type);
+CREATE INDEX idx_media_assets_created_at ON media_assets(created_at DESC);
+CREATE INDEX idx_media_usage_questionnaire ON media_usage(questionnaire_id);
+CREATE INDEX idx_media_usage_media ON media_usage(media_id);
+CREATE INDEX idx_media_permissions_media ON media_permissions(media_id);
+CREATE INDEX idx_media_permissions_user ON media_permissions(user_id);
+CREATE INDEX idx_media_permissions_role ON media_permissions(organization_role);
+CREATE INDEX idx_media_collections_organization ON media_collections(organization_id);
 
 -- =====================================================
 -- 12. DEFAULT SYSTEM ROLES
@@ -1479,6 +1614,16 @@ CREATE TRIGGER update_organization_domains_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_media_assets_updated_at
+  BEFORE UPDATE ON media_assets
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_media_collections_updated_at
+  BEFORE UPDATE ON media_collections
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
 -- Function to expire old invitations
 CREATE OR REPLACE FUNCTION expire_old_invitations()
 RETURNS void AS $$
@@ -1491,19 +1636,119 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function to handle new user creation
+-- This will be used by Supabase Auth hooks
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
   INSERT INTO public.users (auth_id, email, full_name)
-  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
+  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name')
+  ON CONFLICT (auth_id) DO UPDATE
+  SET email = EXCLUDED.email,
+      full_name = EXCLUDED.full_name;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger for new user creation
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- =====================================================
+-- 13b. MEDIA MANAGEMENT FUNCTIONS
+-- =====================================================
+
+-- Function to clean up unused media
+CREATE OR REPLACE FUNCTION cleanup_unused_media()
+RETURNS TABLE(deleted_count INTEGER) AS $$
+DECLARE
+  count INTEGER;
+BEGIN
+  DELETE FROM media_assets
+  WHERE created_at < NOW() - INTERVAL '30 days'
+  AND NOT EXISTS (
+    SELECT 1 FROM media_usage
+    WHERE media_id = media_assets.id
+  );
+  
+  GET DIAGNOSTICS count = ROW_COUNT;
+  RETURN QUERY SELECT count;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to get media access level for a user
+CREATE OR REPLACE FUNCTION get_media_access_level(
+  p_media_id UUID,
+  p_user_id UUID DEFAULT auth.uid()
+)
+RETURNS TEXT AS $$
+DECLARE
+  v_access_level TEXT;
+BEGIN
+  -- Check if user owns the media
+  IF EXISTS (
+    SELECT 1 FROM media_assets
+    WHERE id = p_media_id AND uploaded_by = p_user_id
+  ) THEN
+    RETURN 'owner';
+  END IF;
+  
+  -- Check explicit permissions
+  SELECT permission INTO v_access_level
+  FROM media_permissions
+  WHERE media_id = p_media_id
+  AND user_id = p_user_id
+  AND (expires_at IS NULL OR expires_at > NOW())
+  ORDER BY 
+    CASE permission 
+      WHEN 'delete' THEN 1
+      WHEN 'edit' THEN 2
+      WHEN 'view' THEN 3
+    END
+  LIMIT 1;
+  
+  IF v_access_level IS NOT NULL THEN
+    RETURN v_access_level;
+  END IF;
+  
+  -- Check role-based permissions
+  SELECT mp.permission INTO v_access_level
+  FROM media_permissions mp
+  JOIN organization_members om ON mp.organization_role = om.role
+  JOIN media_assets ma ON mp.media_id = ma.id
+  WHERE mp.media_id = p_media_id
+  AND om.user_id = p_user_id
+  AND om.organization_id = ma.organization_id
+  AND (mp.expires_at IS NULL OR mp.expires_at > NOW())
+  ORDER BY 
+    CASE mp.permission 
+      WHEN 'delete' THEN 1
+      WHEN 'edit' THEN 2
+      WHEN 'view' THEN 3
+    END
+  LIMIT 1;
+  
+  IF v_access_level IS NOT NULL THEN
+    RETURN v_access_level;
+  END IF;
+  
+  -- Check organization membership
+  IF EXISTS (
+    SELECT 1 FROM media_assets ma
+    JOIN organization_members om ON ma.organization_id = om.organization_id
+    WHERE ma.id = p_media_id
+    AND om.user_id = p_user_id
+    AND ma.access_level IN ('organization', 'public')
+  ) THEN
+    RETURN 'view';
+  END IF;
+  
+  -- Check if media is public
+  IF EXISTS (
+    SELECT 1 FROM media_assets
+    WHERE id = p_media_id AND is_public = true
+  ) THEN
+    RETURN 'view';
+  END IF;
+  
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =====================================================
 -- 14. GRANT PERMISSIONS
@@ -1517,9 +1762,169 @@ GRANT EXECUTE ON FUNCTION calculate_session_analytics(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION check_domain_auto_join(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION generate_verification_code() TO authenticated;
 GRANT EXECUTE ON FUNCTION accept_invitation(UUID, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION cleanup_unused_media() TO authenticated;
+GRANT EXECUTE ON FUNCTION get_media_access_level(UUID, UUID) TO authenticated;
 
 -- Grant permissions on onboarding tables
 GRANT ALL ON organization_invitations TO anon, authenticated;
 GRANT ALL ON organization_domains TO anon, authenticated;
 GRANT ALL ON email_verifications TO anon, authenticated;
 GRANT ALL ON onboarding_events TO anon, authenticated;
+
+-- Grant permissions on media tables
+GRANT ALL ON media_assets TO authenticated;
+GRANT ALL ON media_usage TO authenticated;
+GRANT ALL ON media_permissions TO authenticated;
+GRANT ALL ON media_collections TO authenticated;
+GRANT ALL ON media_collection_items TO authenticated;
+
+-- =====================================================
+-- 15. TEST HELPERS (Development Only)
+-- =====================================================
+-- Create helper functions for testing
+-- These functions allow test suites to create isolated schemas
+
+-- Function to create a test schema
+CREATE OR REPLACE FUNCTION create_schema(schema_name text)
+RETURNS void AS $$
+BEGIN
+  EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', schema_name);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to drop a test schema
+CREATE OR REPLACE FUNCTION drop_schema(schema_name text)
+RETURNS void AS $$
+BEGIN
+  EXECUTE format('DROP SCHEMA IF EXISTS %I CASCADE', schema_name);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to execute arbitrary SQL (for testing only)
+-- This should be restricted to test environments
+CREATE OR REPLACE FUNCTION exec_sql(sql_query text)
+RETURNS void AS $$
+BEGIN
+  -- Only allow in test/development environments
+  IF current_setting('app.environment', true) NOT IN ('test', 'development', '') THEN
+    RAISE EXCEPTION 'exec_sql is not allowed in production';
+  END IF;
+  
+  EXECUTE sql_query;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permissions to authenticated users (for testing)
+GRANT EXECUTE ON FUNCTION create_schema(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION drop_schema(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION exec_sql(text) TO authenticated;
+
+-- Create a test helper table for tracking test runs
+CREATE TABLE IF NOT EXISTS test_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  test_name TEXT NOT NULL,
+  schema_name TEXT NOT NULL,
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  status TEXT CHECK (status IN ('running', 'completed', 'failed', 'cleaned'))
+);
+
+-- Index for cleanup queries
+CREATE INDEX idx_test_runs_status ON test_runs(status);
+CREATE INDEX idx_test_runs_started_at ON test_runs(started_at);
+
+-- Function to register a test run
+CREATE OR REPLACE FUNCTION register_test_run(
+  p_test_name TEXT,
+  p_schema_name TEXT
+) RETURNS UUID AS $$
+DECLARE
+  v_test_id UUID;
+BEGIN
+  INSERT INTO test_runs (test_name, schema_name, status)
+  VALUES (p_test_name, p_schema_name, 'running')
+  RETURNING id INTO v_test_id;
+  
+  RETURN v_test_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to mark test as completed
+CREATE OR REPLACE FUNCTION complete_test_run(
+  p_test_id UUID,
+  p_status TEXT DEFAULT 'completed'
+) RETURNS void AS $$
+BEGIN
+  UPDATE test_runs
+  SET 
+    completed_at = NOW(),
+    status = p_status
+  WHERE id = p_test_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to clean up old test schemas
+CREATE OR REPLACE FUNCTION cleanup_old_test_schemas(
+  p_older_than INTERVAL DEFAULT '1 hour'
+) RETURNS INTEGER AS $$
+DECLARE
+  v_count INTEGER := 0;
+  v_schema TEXT;
+BEGIN
+  -- Find and clean up old test schemas
+  FOR v_schema IN
+    SELECT schema_name
+    FROM test_runs
+    WHERE 
+      status IN ('completed', 'failed')
+      AND completed_at < NOW() - p_older_than
+  LOOP
+    PERFORM drop_schema(v_schema);
+    
+    UPDATE test_runs
+    SET status = 'cleaned'
+    WHERE schema_name = v_schema;
+    
+    v_count := v_count + 1;
+  END LOOP;
+  
+  -- Also clean up any orphaned test schemas
+  FOR v_schema IN
+    SELECT schema_name
+    FROM information_schema.schemata
+    WHERE 
+      schema_name LIKE 'test_%'
+      AND schema_name NOT IN (
+        SELECT DISTINCT schema_name 
+        FROM test_runs 
+        WHERE status IN ('running', 'completed')
+      )
+  LOOP
+    PERFORM drop_schema(v_schema);
+    v_count := v_count + 1;
+  END LOOP;
+  
+  RETURN v_count;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant permissions
+GRANT ALL ON test_runs TO authenticated;
+GRANT EXECUTE ON FUNCTION register_test_run(TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION complete_test_run(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION cleanup_old_test_schemas(INTERVAL) TO authenticated;
+
+-- =====================================================
+-- 16. DEMO DATA (Optional)
+-- =====================================================
+-- Insert a demo user in public.users table
+-- The actual auth user will be created through Supabase Auth
+INSERT INTO public.users (auth_id, email, full_name, created_at, updated_at)
+VALUES ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'demo@example.com', 'Demo User', NOW(), NOW())
+ON CONFLICT (auth_id) DO NOTHING;
+
+-- =====================================================
+-- END OF INIT.SQL
+-- =====================================================
+-- Note: The trigger to sync auth.users to public.users should be
+-- configured in Supabase Dashboard under Authentication > Hooks

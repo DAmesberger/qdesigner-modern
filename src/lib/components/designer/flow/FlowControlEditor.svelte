@@ -30,8 +30,12 @@
   // Custom edge component
   import ConditionalEdge from './edges/ConditionalEdge.svelte';
   
-  export let flowControls: FlowControl[] = [];
-  export let onUpdate: (flowControls: FlowControl[]) => void;
+  interface Props {
+    flowControls?: FlowControl[];
+    onUpdate: (flowControls: FlowControl[]) => void;
+  }
+  
+  const { flowControls = [], onUpdate }: Props = $props();
   
   // Node and edge types
   const nodeTypes: NodeTypes = {
@@ -339,10 +343,10 @@
   }
   
   // Initialize nodes and edges
-  $: {
+  $effect(() => {
     nodes = generateFlowNodes();
     edges = generateFlowEdges(nodes);
-  }
+  });
 </script>
 
 <div class="flow-control-editor h-full {theme.components.container.base}">
@@ -370,7 +374,7 @@
       <div class="flex items-center gap-2">
         <button
           class="{theme.components.button.variants.outline} {theme.components.button.sizes.xs} rounded"
-          on:click={() => {
+          onclick={() => {
             // Auto-layout functionality
           }}
         >
@@ -378,7 +382,7 @@
         </button>
         <button
           class="{theme.components.button.variants.outline} {theme.components.button.sizes.xs} rounded"
-          on:click={() => {
+          onclick={() => {
             // Export as image
           }}
         >
