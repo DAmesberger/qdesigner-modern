@@ -12,6 +12,12 @@
   
   const dispatch = createEventDispatcher();
   
+  // Configure marked for safe rendering
+  marked.use({
+    breaks: true,
+    gfm: true
+  });
+  
   // Generate CSS from theme
   function getQuestionStyles() {
     const styles = theme.components.question;
@@ -168,6 +174,21 @@
   $: questionStyles = getQuestionStyles();
   $: responseConfig = renderResponse(question, theme);
   $: promptText = getQuestionText(question);
+  
+  // Parse markdown content for instruction questions
+  $: parsedMarkdown = (() => {
+    if (question.type === 'instruction' && question.display?.content) {
+      try {
+        // marked.parse is synchronous in v16
+        const parsed = marked.parse(question.display.content);
+        return parsed;
+      } catch (error) {
+        console.error('Error parsing markdown:', error);
+        return question.display.content;
+      }
+    }
+    return null;
+  })();
 </script>
 
 <div 
@@ -200,8 +221,10 @@
       role={mode === 'edit' ? 'button' : undefined}
       tabindex={mode === 'edit' ? 0 : undefined}
     >
-      {#if question.type === 'instruction' && question.display?.content}
-        {@html marked(question.display.content)}
+      {#if parsedMarkdown}
+        <div class="markdown-content">
+          {@html parsedMarkdown}
+        </div>
       {:else}
         {getQuestionText(question)}
       {/if}
@@ -363,5 +386,103 @@
   :global(.question-container input[type="radio"]),
   :global(.question-container input[type="checkbox"]) {
     cursor: pointer;
+  }
+  
+  /* Markdown content styling */
+  :global(.markdown-content) {
+    line-height: 1.6;
+  }
+  
+  :global(.markdown-content h1),
+  :global(.markdown-content h2),
+  :global(.markdown-content h3),
+  :global(.markdown-content h4),
+  :global(.markdown-content h5),
+  :global(.markdown-content h6) {
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+  }
+  
+  :global(.markdown-content h1) { font-size: 1.5em; }
+  :global(.markdown-content h2) { font-size: 1.3em; }
+  :global(.markdown-content h3) { font-size: 1.1em; }
+  
+  :global(.markdown-content p) {
+    margin-bottom: 0.75em;
+  }
+  
+  :global(.markdown-content ul),
+  :global(.markdown-content ol) {
+    margin-left: 1.5em;
+    margin-bottom: 0.75em;
+  }
+  
+  :global(.markdown-content li) {
+    margin-bottom: 0.25em;
+  }
+  
+  :global(.markdown-content strong) {
+    font-weight: 600;
+  }
+  
+  :global(.markdown-content em) {
+    font-style: italic;
+  }
+  
+  :global(.markdown-content code) {
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 0.125em 0.25em;
+    border-radius: 0.25em;
+    font-family: monospace;
+    font-size: 0.9em;
+  }
+  
+  :global(.markdown-content pre) {
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 1em;
+    border-radius: 0.5em;
+    overflow-x: auto;
+    margin-bottom: 0.75em;
+  }
+  
+  :global(.markdown-content pre code) {
+    background-color: transparent;
+    padding: 0;
+  }
+  
+  :global(.markdown-content blockquote) {
+    border-left: 4px solid #ddd;
+    padding-left: 1em;
+    margin-left: 0;
+    color: #666;
+    font-style: italic;
+  }
+  
+  :global(.markdown-content a) {
+    color: #3B82F6;
+    text-decoration: underline;
+  }
+  
+  :global(.markdown-content a:hover) {
+    color: #2563EB;
+  }
+  
+  :global(.markdown-content table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 0.75em;
+  }
+  
+  :global(.markdown-content th),
+  :global(.markdown-content td) {
+    border: 1px solid #ddd;
+    padding: 0.5em;
+    text-align: left;
+  }
+  
+  :global(.markdown-content th) {
+    background-color: rgba(0, 0, 0, 0.05);
+    font-weight: 600;
   }
 </style>

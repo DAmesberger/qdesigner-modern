@@ -17,6 +17,10 @@
     }
   });
 
+  // Get organizationId and userId from store
+  $: organizationId = $designerStore.questionnaire.organizationId || '';
+  $: userId = $designerStore.userId || '';
+
   // Update handlers
   function updateQuestion(updates: Partial<Question>) {
     if (item && itemType === 'question') {
@@ -79,7 +83,9 @@
             <svelte:component 
               this={propertyEditor} 
               question={item} 
-              onUpdate={updateQuestion} 
+              onUpdate={updateQuestion}
+              {organizationId}
+              {userId}
             />
           </div>
         {:else}

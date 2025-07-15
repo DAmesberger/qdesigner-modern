@@ -27,6 +27,7 @@ export type {
   RenderCommand
 } from './types/renderer';
 export * from './types/theme';
+export * from './types/media';
 
 // Export common utilities
 export { generateId } from './utils/id';

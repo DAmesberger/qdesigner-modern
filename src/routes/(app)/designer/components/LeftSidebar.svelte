@@ -4,6 +4,7 @@
   import QuestionPalette from '$lib/components/designer/QuestionPalette.svelte';
   import BlockManager from '$lib/components/designer/BlockManager.svelte';
   import VariableManager from '$lib/components/designer/VariableManager.svelte';
+  import FlowControlManager from '$lib/components/designer/FlowControlManager.svelte';
   import theme from '$lib/theme';
   
   export let activeTab: 'blocks' | 'questions' | 'variables' | 'flow' = 'blocks';
@@ -85,16 +86,8 @@
           <QuestionPalette />
         {:else if activeTab === 'variables'}
           <VariableManager />
-        {:else}
-          <div class="p-4">
-            <div class="text-center py-8">
-              <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              <p class="text-gray-600 text-sm">Flow control coming soon</p>
-              <p class="text-gray-500 text-xs mt-1">Design conditional logic and branching</p>
-            </div>
-          </div>
+        {:else if activeTab === 'flow'}
+          <FlowControlManager />
         {/if}
       </div>
     </div>

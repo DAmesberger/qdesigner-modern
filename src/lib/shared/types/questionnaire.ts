@@ -148,14 +148,23 @@ export interface NavigationConfig {
 }
 
 export interface MediaConfig {
-  url: string;
-  type: 'image' | 'video' | 'audio';
+  // Legacy direct URL support
+  url?: string;
+  type?: 'image' | 'video' | 'audio';
+  
+  // New media management system
+  mediaId?: string; // Reference to media asset
+  
+  // Display options
   alt?: string;
+  caption?: string;
   width?: number;
   height?: number;
   autoplay?: boolean;
   loop?: boolean;
   controls?: boolean;
+  position?: 'above' | 'below' | 'left' | 'right' | 'background';
+  size?: 'small' | 'medium' | 'large' | 'full';
 }
 
 export interface StimulusConfig {
@@ -217,7 +226,13 @@ export interface Position {
 // Display Configuration Types
 // ============================================================================
 
-export interface TextDisplayConfig {
+// Base display configuration with media support
+export interface BaseDisplayConfig {
+  media?: MediaConfig[];
+  mediaPosition?: 'above' | 'below' | 'left' | 'right' | 'split';
+}
+
+export interface TextDisplayConfig extends BaseDisplayConfig {
   content: string;
   format: 'text' | 'markdown' | 'html';
   variables?: boolean;
@@ -229,7 +244,7 @@ export interface TextDisplayConfig {
   };
 }
 
-export interface MediaDisplayConfig {
+export interface MediaDisplayConfig extends BaseDisplayConfig {
   media: MediaConfig;
   caption?: string;
   showControls?: boolean;
@@ -246,7 +261,7 @@ export interface ChoiceOption {
   exclusive?: boolean;
 }
 
-export interface SingleChoiceDisplayConfig {
+export interface SingleChoiceDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   options: ChoiceOption[];
@@ -263,7 +278,7 @@ export interface MultipleChoiceDisplayConfig extends SingleChoiceDisplayConfig {
   selectAllOption?: boolean;
 }
 
-export interface ScaleDisplayConfig {
+export interface ScaleDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   min: number;
@@ -279,7 +294,7 @@ export interface ScaleDisplayConfig {
   style?: 'slider' | 'buttons' | 'visual-analog';
 }
 
-export interface RatingDisplayConfig {
+export interface RatingDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   levels: number;
@@ -288,7 +303,7 @@ export interface RatingDisplayConfig {
   labels?: string[];
 }
 
-export interface TextInputDisplayConfig {
+export interface TextInputDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   placeholder?: string;
@@ -298,7 +313,7 @@ export interface TextInputDisplayConfig {
   showCharCount?: boolean;
 }
 
-export interface NumberInputDisplayConfig {
+export interface NumberInputDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   placeholder?: string;
@@ -310,7 +325,7 @@ export interface NumberInputDisplayConfig {
   showSpinButtons?: boolean;
 }
 
-export interface MatrixDisplayConfig {
+export interface MatrixDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   rows: Array<{ id: string; label: string }>;
@@ -319,7 +334,7 @@ export interface MatrixDisplayConfig {
   required?: 'all' | 'any' | string[];
 }
 
-export interface ReactionTimeDisplayConfig {
+export interface ReactionTimeDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   stimulus: StimulusConfig;
@@ -332,7 +347,7 @@ export interface ReactionTimeDisplayConfig {
   practiceTrials?: number;
 }
 
-export interface DateTimeDisplayConfig {
+export interface DateTimeDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   mode: 'date' | 'time' | 'datetime';
@@ -342,7 +357,7 @@ export interface DateTimeDisplayConfig {
   showCalendar?: boolean;
 }
 
-export interface FileUploadDisplayConfig {
+export interface FileUploadDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   accept?: string[];
@@ -351,7 +366,7 @@ export interface FileUploadDisplayConfig {
   dragDrop?: boolean;
 }
 
-export interface RankingDisplayConfig {
+export interface RankingDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   items: Array<{ id: string; label: string }>;
@@ -359,7 +374,7 @@ export interface RankingDisplayConfig {
   tieBreaking?: boolean;
 }
 
-export interface WebGLDisplayConfig {
+export interface WebGLDisplayConfig extends BaseDisplayConfig {
   prompt?: string;
   sceneConfig: Record<string, any>;
   interactionMode?: 'click' | 'drag' | 'keyboard' | 'custom';
