@@ -27,7 +27,7 @@
   let showCommandPalette = false;
   
   // Get user from page data
-  $: user = $page.data.user;
+  $: user = $page.data?.user;
   
   // Initialize
   onMount(() => {

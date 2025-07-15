@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { browser } from '$app/environment';
   import Button from '$lib/components/common/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
@@ -39,11 +40,11 @@
         if (userInfo.organizations.length === 0) {
           console.log('No organizations, redirecting to onboarding');
           // Redirect to organization setup
-          await goto('/onboarding/organization');
+          window.location.href = '/onboarding/organization';
         } else {
           console.log('Has organizations, redirecting to dashboard');
           // Redirect to dashboard
-          await goto('/dashboard');
+          window.location.href = '/dashboard';
         }
       }
     } catch (err) {

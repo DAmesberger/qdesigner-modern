@@ -4,8 +4,16 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
+  optimizeDeps: {
+    exclude: ['@sveltejs/kit', 'svelte']
+  },
   server: {
     port: 5173,
+    strictPort: true,
+    host: true,
+    hmr: {
+      overlay: false // Disable error overlay since HMR isn't working
+    },
     proxy: {
       '/auth': {
         target: 'http://localhost:54321',
