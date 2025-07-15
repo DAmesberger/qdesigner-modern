@@ -12,7 +12,8 @@ export default defineConfig({
     strictPort: true,
     host: true,
     hmr: {
-      overlay: false // Disable error overlay since HMR isn't working
+      port: 5173,
+      host: 'localhost'
     },
     proxy: {
       '/auth': {
