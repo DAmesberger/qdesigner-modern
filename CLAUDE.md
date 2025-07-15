@@ -137,4 +137,5 @@ The variable system (`packages/scripting-engine`) supports:
 
 ## Code Guidance
 
+- Do not use tests scripts, simplifications or workarounds, ask when in doubt
 - Never use simpler approaches without asking

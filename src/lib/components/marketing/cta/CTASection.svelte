@@ -21,11 +21,11 @@
 <section id="cta-section" class="py-24 relative overflow-hidden">
 	<!-- Animated Background -->
 	<div class="absolute inset-0">
-		<div class="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/10" />
+		<div class="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/10"></div>
 		<div
 			class="absolute w-[500px] h-[500px] bg-primary/20 rounded-full blur-3xl"
 			style="left: {mouseX * 100}%; top: {mouseY * 100}%; transform: translate(-50%, -50%);"
-		/>
+		></div>
 	</div>
 	
 	<div class="container mx-auto px-4 sm:px-6 lg:px-8 relative">
@@ -58,7 +58,7 @@
 					href="/signup"
 					class="group relative inline-flex items-center justify-center px-6 sm:px-8 py-3 sm:py-4 text-sm sm:text-base font-medium text-primary-foreground bg-primary rounded-lg overflow-hidden transition-all hover:scale-105"
 				>
-					<span class="absolute inset-0 bg-gradient-to-r from-primary to-primary-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+					<span class="absolute inset-0 bg-gradient-to-r from-primary to-primary-foreground opacity-0 group-hover:opacity-100 transition-opacity"></span>
 					<span class="relative z-10">Start Free 14-Day Trial</span>
 				</a>
 				<a

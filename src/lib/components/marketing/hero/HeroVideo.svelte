@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	
 	let showVideo = $state(false);
-	let videoRef: HTMLVideoElement;
+	let videoRef = $state<HTMLVideoElement | undefined>(undefined);
 	
 	onMount(() => {
 		// Preload video
@@ -26,9 +26,9 @@
 			<!-- Browser Chrome -->
 			<div class="flex items-center gap-2 border-b border-border bg-muted/50 px-4 py-3">
 				<div class="flex gap-2">
-					<div class="h-3 w-3 rounded-full bg-red-500" />
-					<div class="h-3 w-3 rounded-full bg-yellow-500" />
-					<div class="h-3 w-3 rounded-full bg-green-500" />
+					<div class="h-3 w-3 rounded-full bg-red-500"></div>
+					<div class="h-3 w-3 rounded-full bg-yellow-500"></div>
+					<div class="h-3 w-3 rounded-full bg-green-500"></div>
 				</div>
 				<div class="flex-1 mx-4">
 					<div class="bg-background/50 rounded-md px-3 py-1 text-xs text-muted-foreground">
@@ -47,7 +47,7 @@
 							class="group relative"
 							aria-label="Play demo video"
 						>
-							<div class="absolute inset-0 bg-primary/20 rounded-full blur-xl group-hover:bg-primary/30 transition-colors" />
+							<div class="absolute inset-0 bg-primary/20 rounded-full blur-xl group-hover:bg-primary/30 transition-colors"></div>
 							<div class="relative flex items-center justify-center w-20 h-20 bg-primary rounded-full shadow-lg group-hover:scale-110 transition-transform">
 								<svg class="w-8 h-8 text-primary-foreground ml-1" fill="currentColor" viewBox="0 0 24 24">
 									<path d="M8 5v14l11-7z" />
@@ -83,6 +83,7 @@
 					>
 						<source src="/demo-video.mp4" type="video/mp4" />
 						<source src="/demo-video.webm" type="video/webm" />
+						<track kind="captions" />
 						Your browser does not support the video tag.
 					</video>
 				{/if}
@@ -90,8 +91,8 @@
 		</div>
 		
 		<!-- Decorative Elements -->
-		<div class="absolute -top-4 -right-4 w-24 h-24 bg-primary/10 rounded-full blur-2xl" />
-		<div class="absolute -bottom-4 -left-4 w-32 h-32 bg-primary/10 rounded-full blur-2xl" />
+		<div class="absolute -top-4 -right-4 w-24 h-24 bg-primary/10 rounded-full blur-2xl"></div>
+		<div class="absolute -bottom-4 -left-4 w-32 h-32 bg-primary/10 rounded-full blur-2xl"></div>
 	</div>
 	
 	<!-- Feature Pills -->

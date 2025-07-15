@@ -71,7 +71,7 @@
 
 <section id="performance-metrics" class="py-24 bg-muted/30 relative overflow-hidden">
 	<!-- Background Pattern -->
-	<div class="absolute inset-0 bg-[url('/grid.svg')] bg-center opacity-5" />
+	<div class="absolute inset-0 bg-[url('/grid.svg')] bg-center opacity-5"></div>
 	
 	<div class="container mx-auto px-4 sm:px-6 lg:px-8 relative">
 		<!-- Section Header -->
@@ -98,7 +98,7 @@
 			{#each metrics as metric, i}
 				<div class="bg-card border border-border rounded-xl p-6 relative overflow-hidden group hover:shadow-lg transition-all">
 					<!-- Background Gradient -->
-					<div class="absolute inset-0 bg-gradient-to-br {metric.color} opacity-5 group-hover:opacity-10 transition-opacity" />
+					<div class="absolute inset-0 bg-gradient-to-br {metric.color} opacity-5 group-hover:opacity-10 transition-opacity"></div>
 					
 					<!-- Circular Progress -->
 					<div class="relative mb-4">

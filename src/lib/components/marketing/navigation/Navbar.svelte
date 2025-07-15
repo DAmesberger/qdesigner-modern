@@ -96,7 +96,7 @@
 			<div class="flex-shrink-0 flex items-center">
 				<a href="/" class="flex items-center gap-2 group">
 					<div class="relative">
-						<div class="absolute inset-0 bg-gradient-to-r from-primary to-primary-foreground blur-lg opacity-75 group-hover:opacity-100 transition-opacity" />
+						<div class="absolute inset-0 bg-gradient-to-r from-primary to-primary-foreground blur-lg opacity-75 group-hover:opacity-100 transition-opacity"></div>
 						<svg
 							class="relative w-8 h-8 text-primary"
 							viewBox="0 0 32 32"
@@ -128,10 +128,11 @@
 					
 					{#if showProductMenu}
 						<div
-							class="absolute top-full -left-4 pt-2"
+							class="absolute top-full -left-4 pt-2 product-menu"
 							onmouseenter={() => (showProductMenu = true)}
 							onmouseleave={() => (showProductMenu = false)}
 							transition:fly={{ y: -10, duration: 200 }}
+							role="region"
 						>
 							<div class="bg-background/95 backdrop-blur-xl border border-border rounded-xl shadow-xl p-4 min-w-[280px]">
 								{#each navigation.product as item}
@@ -173,10 +174,11 @@
 					
 					{#if showResourcesMenu}
 						<div
-							class="absolute top-full -left-4 pt-2"
+							class="absolute top-full -left-4 pt-2 resources-menu"
 							onmouseenter={() => (showResourcesMenu = true)}
 							onmouseleave={() => (showResourcesMenu = false)}
 							transition:fly={{ y: -10, duration: 200 }}
+							role="region"
 						>
 							<div class="bg-background/95 backdrop-blur-xl border border-border rounded-xl shadow-xl p-2 min-w-[200px]">
 								{#each navigation.resources as item}
@@ -225,7 +227,9 @@
 								class="absolute right-0 mt-2 w-48 bg-background border border-border rounded-lg shadow-lg py-1 z-50"
 								transition:fly={{ y: -10, duration: 200 }}
 								role="menu"
+								tabindex="-1"
 								onclick={(e) => e.stopPropagation()}
+								onkeydown={(e) => e.key === 'Escape' && (showUserMenu = false)}
 							>
 								<div class="px-4 py-2 border-b border-border">
 									<p class="text-sm font-medium text-foreground">{user.email}</p>
@@ -271,7 +275,7 @@
 						class="relative inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 transition-all hover:shadow-lg hover:shadow-primary/25 hover:-translate-y-0.5"
 					>
 						<span class="relative z-10">Start Free Trial</span>
-						<div class="absolute inset-0 bg-gradient-to-r from-primary to-primary-foreground rounded-lg opacity-0 hover:opacity-100 transition-opacity" />
+						<div class="absolute inset-0 bg-gradient-to-r from-primary to-primary-foreground rounded-lg opacity-0 hover:opacity-100 transition-opacity"></div>
 					</a>
 				{/if}
 			</div>

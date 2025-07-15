@@ -657,13 +657,88 @@ function createDesignerStore() {
           draft.userId = userId;
         })
       );
-      
-      // Start offline sync when user is set
-      if (userId) {
-        OfflinePersistenceService.startSync(userId);
-      } else {
-        OfflinePersistenceService.stopSync();
-      }
+    },
+    
+    setOrganizationId: (organizationId: string) => {
+      update(state =>
+        produce(state, draft => {
+          draft.questionnaire.organizationId = organizationId;
+        })
+      );
+    },
+    
+    setProjectId: (projectId: string) => {
+      update(state =>
+        produce(state, draft => {
+          draft.questionnaire.projectId = projectId;
+        })
+      );
+    },
+    
+    createNewQuestionnaire: (options: { name: string; description?: string; projectId: string; organizationId: string }) => {
+      update(state =>
+        produce(state, draft => {
+          const newQuestionnaire = createEmptyQuestionnaire();
+          newQuestionnaire.name = options.name;
+          newQuestionnaire.description = options.description || '';
+          newQuestionnaire.projectId = options.projectId;
+          newQuestionnaire.organizationId = options.organizationId;
+          draft.questionnaire = newQuestionnaire;
+          draft.currentPageId = newQuestionnaire.pages[0]?.id || null;
+          draft.selectedItemId = null;
+          draft.selectedItemType = null;
+          draft.undoStack = [];
+          draft.redoStack = [];
+        })
+      );
+    },
+    
+    loadQuestionnaireFromDefinition: (definition: any) => {
+      update(state =>
+        produce(state, draft => {
+          // Transform the database definition to the internal format
+          const questionnaire: Questionnaire = {
+            id: definition.id,
+            name: definition.name,
+            description: definition.description || '',
+            version: definition.version || '1.0.0',
+            created: new Date(definition.created_at),
+            modified: new Date(definition.updated_at),
+            projectId: definition.project_id,
+            organizationId: definition.organization_id,
+            variables: definition.content?.variables || [],
+            questions: definition.content?.questions || [],
+            pages: definition.content?.pages || [{
+              id: 'page1',
+              name: 'Page 1',
+              questions: [],
+              layout: { type: 'vertical', spacing: 16, alignment: 'center' }
+            }],
+            flow: definition.content?.flow || [],
+            settings: definition.content?.settings || {
+              allowBackNavigation: true,
+              showProgressBar: true,
+              saveProgress: true,
+              webgl: { targetFPS: 120 }
+            }
+          };
+          
+          draft.questionnaire = questionnaire;
+          draft.currentPageId = questionnaire.pages[0]?.id || null;
+          draft.selectedItemId = null;
+          draft.selectedItemType = null;
+          draft.undoStack = [];
+          draft.redoStack = [];
+          
+          // Re-register variables if any
+          if (variableEngine && questionnaire.variables.length > 0) {
+            variableEngine.clear();
+            questionnaire.variables.forEach(v => {
+              variableEngine!.registerVariable(JSON.parse(JSON.stringify(v)));
+            });
+          }
+        })
+      );
     },
 
     saveQuestionnaire: async () => {
@@ -682,11 +757,19 @@ function createDesignerStore() {
         draft.saveError = null;
       }));
 
+      if (!state.questionnaire.projectId || !state.questionnaire.organizationId) {
+        console.error('Missing project or organization context');
+        update(s => produce(s, draft => {
+          draft.saveError = 'Missing project or organization context';
+        }));
+        return false;
+      }
+
       const result = await OfflinePersistenceService.saveQuestionnaire(
         state.questionnaire,
         state.userId,
-        state.questionnaire.projectId || generateUUID(),
-        state.questionnaire.organizationId || generateUUID()
+        state.questionnaire.projectId,
+        state.questionnaire.organizationId
       );
 
       update(s => produce(s, draft => {

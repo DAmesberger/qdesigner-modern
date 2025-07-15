@@ -40,11 +40,11 @@
         if (userInfo.organizations.length === 0) {
           console.log('No organizations, redirecting to onboarding');
           // Redirect to organization setup
-          window.location.href = '/onboarding/organization';
+          await goto('/onboarding/organization');
         } else {
           console.log('Has organizations, redirecting to dashboard');
           // Redirect to dashboard
-          window.location.href = '/dashboard';
+          await goto('/dashboard');
         }
       }
     } catch (err) {

@@ -24,7 +24,7 @@
 	<!-- Animated Background -->
 	<div class="absolute inset-0 bg-gradient-to-br from-background via-background to-primary/5">
 		<!-- Grid Pattern -->
-		<div class="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]" />
+		<div class="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]"></div>
 		
 		<!-- Floating Particles -->
 		<div class="absolute inset-0">
@@ -37,7 +37,7 @@
 						animation-delay: {Math.random() * 5}s;
 						animation-duration: {10 + Math.random() * 10}s;
 					"
-				/>
+				></div>
 			{/each}
 		</div>
 
@@ -45,11 +45,11 @@
 		<div
 			class="absolute top-1/4 -left-1/4 w-96 h-96 bg-primary/30 rounded-full blur-3xl animate-pulse-light"
 			style="transform: translate({mouseX}px, {mouseY}px)"
-		/>
+		></div>
 		<div
 			class="absolute bottom-1/4 -right-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl animate-pulse-light"
 			style="transform: translate({-mouseX}px, {-mouseY}px)"
-		/>
+		></div>
 	</div>
 
 	<!-- Content -->
@@ -89,7 +89,7 @@
 									href="/signup"
 									class="group relative inline-flex items-center justify-center px-6 sm:px-8 py-2.5 sm:py-3 text-sm sm:text-base font-medium text-primary-foreground bg-primary rounded-lg overflow-hidden transition-all hover:scale-105"
 								>
-									<span class="absolute inset-0 bg-gradient-to-r from-primary to-primary-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+									<span class="absolute inset-0 bg-gradient-to-r from-primary to-primary-foreground opacity-0 group-hover:opacity-100 transition-opacity"></span>
 									<span class="relative z-10 flex items-center gap-2">
 										Start Free Trial
 										<svg class="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">

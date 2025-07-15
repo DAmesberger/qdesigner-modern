@@ -16,6 +16,8 @@ import TextInputRenderer from './TextInputRenderer.svelte';
 import NumberInputRenderer from './NumberInputRenderer.svelte';
 import RatingRenderer from './RatingRenderer.svelte';
 import MatrixRenderer from './MatrixRenderer.svelte';
+import DateTimeRenderer from './DateTimeRenderer.svelte';
+import RankingRenderer from './RankingRenderer.svelte';
 // TODO: Import additional renderers as they are created
 
 // Component registry
@@ -29,6 +31,8 @@ const componentRegistry: Partial<Record<QuestionType, ComponentType>> = {
   [QuestionTypes.NUMBER_INPUT]: NumberInputRenderer,
   [QuestionTypes.RATING]: RatingRenderer,
   [QuestionTypes.MATRIX]: MatrixRenderer,
+  [QuestionTypes.DATE_TIME]: DateTimeRenderer,
+  [QuestionTypes.RANKING]: RankingRenderer,
   // TODO: Add more mappings as components are created
 };
 
@@ -65,5 +69,7 @@ export {
   TextInputRenderer,
   NumberInputRenderer,
   RatingRenderer,
-  MatrixRenderer
+  MatrixRenderer,
+  DateTimeRenderer,
+  RankingRenderer
 };

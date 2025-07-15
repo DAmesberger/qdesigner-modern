@@ -99,6 +99,7 @@
 						transition:fly={{ y: 20, duration: 500, delay: i * 100 }}
 						onmouseenter={() => (hoveredCard = feature.id)}
 						onmouseleave={() => (hoveredCard = null)}
+						role="article"
 					>
 						<!-- Card Background -->
 						<div class="absolute inset-0 bg-gradient-to-br {feature.gradient} opacity-5 group-hover:opacity-10 transition-opacity rounded-2xl"></div>

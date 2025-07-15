@@ -10,6 +10,15 @@ import { QuestionTypes } from '$lib/shared/types/questionnaire';
 // Import designer components
 import TextDisplayDesigner from './TextDisplayDesigner.svelte';
 import SingleChoiceDesigner from './SingleChoiceDesigner.svelte';
+import MultipleChoiceDesigner from './MultipleChoiceDesigner.svelte';
+import ScaleDesigner from './ScaleDesigner.svelte';
+import TextInputDesigner from './TextInputDesigner.svelte';
+import NumberInputDesigner from './NumberInputDesigner.svelte';
+import RatingDesigner from './RatingDesigner.svelte';
+import MatrixDesigner from './MatrixDesigner.svelte';
+import WebGLDesigner from './WebGLDesigner.svelte';
+import DateTimeDesigner from './DateTimeDesigner.svelte';
+import RankingDesigner from './RankingDesigner.svelte';
 // TODO: Import additional designers as they are created
 
 // Props interface for designer components
@@ -23,6 +32,15 @@ const componentRegistry: Partial<Record<QuestionType, ComponentType>> = {
   [QuestionTypes.TEXT_DISPLAY]: TextDisplayDesigner,
   [QuestionTypes.INSTRUCTION]: TextDisplayDesigner, // Reuse text display
   [QuestionTypes.SINGLE_CHOICE]: SingleChoiceDesigner,
+  [QuestionTypes.MULTIPLE_CHOICE]: MultipleChoiceDesigner,
+  [QuestionTypes.SCALE]: ScaleDesigner,
+  [QuestionTypes.TEXT_INPUT]: TextInputDesigner,
+  [QuestionTypes.NUMBER_INPUT]: NumberInputDesigner,
+  [QuestionTypes.RATING]: RatingDesigner,
+  [QuestionTypes.MATRIX]: MatrixDesigner,
+  [QuestionTypes.WEBGL]: WebGLDesigner,
+  [QuestionTypes.DATE_TIME]: DateTimeDesigner,
+  [QuestionTypes.RANKING]: RankingDesigner,
   // TODO: Add more mappings as components are created
 };
 
@@ -53,5 +71,14 @@ export function getAvailableTypes(): QuestionType[] {
 // Export individual components for direct use
 export {
   TextDisplayDesigner,
-  SingleChoiceDesigner
+  SingleChoiceDesigner,
+  MultipleChoiceDesigner,
+  ScaleDesigner,
+  TextInputDesigner,
+  NumberInputDesigner,
+  RatingDesigner,
+  MatrixDesigner,
+  WebGLDesigner,
+  DateTimeDesigner,
+  RankingDesigner
 };
