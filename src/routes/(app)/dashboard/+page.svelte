@@ -53,11 +53,14 @@
   }
 
   function navigateToQuestionnaire(id: string) {
-    goto(`/designer?id=${id}`);
+    // This should navigate through the proper project route
+    // For now, go to projects page as questionnaires need project context
+    goto('/projects');
   }
 
   function createNewQuestionnaire() {
-    goto('/designer');
+    // Navigate to projects page to select/create project first
+    goto('/projects');
   }
 </script>
 
@@ -178,7 +181,7 @@
           <p class="mt-1 text-sm text-gray-500">Get started by creating a new questionnaire.</p>
           <div class="mt-6">
             <button
-              on:click={createNewQuestionnaire}
+              onclick={createNewQuestionnaire}
               class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
             >
               <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -191,8 +194,10 @@
       {:else}
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {#each questionnaires as questionnaire}
-            <div class="bg-white shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer" 
-                 on:click={() => navigateToQuestionnaire(questionnaire.questionnaire_id)}>
+            <button
+              type="button"
+              class="bg-white shadow rounded-lg hover:shadow-lg transition-shadow cursor-pointer w-full text-left" 
+              onclick={() => navigateToQuestionnaire(questionnaire.questionnaire_id)}>
               <div class="p-6">
                 <div class="flex items-start justify-between">
                   <div class="flex-1">
@@ -235,7 +240,7 @@
                   {/if}
                 </div>
               </div>
-            </div>
+            </button>
           {/each}
         </div>
       {/if}

@@ -25,11 +25,14 @@
   
   function updateOption(index: number, field: keyof ChoiceOption, value: any) {
     const newOptions = [...question.display.options];
-    newOptions[index] = {
-      ...newOptions[index],
-      [field]: value
-    };
-    updateDisplay('options', newOptions);
+    const option = newOptions[index];
+    if (option) {
+      newOptions[index] = {
+        ...option,
+        [field]: value
+      };
+      updateDisplay('options', newOptions);
+    }
   }
   
   function addOption() {

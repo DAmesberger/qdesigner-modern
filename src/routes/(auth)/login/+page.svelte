@@ -155,7 +155,7 @@
       <div class="mt-6">
         <div class="relative">
           <div class="absolute inset-0 flex items-center">
-            <div class="w-full border-t border-border" />
+            <div class="w-full border-t border-border"></div>
           </div>
           <div class="relative flex justify-center text-sm">
             <span class="bg-background px-2 text-muted-foreground">Or</span>

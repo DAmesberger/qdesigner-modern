@@ -85,7 +85,26 @@ export interface QuestionnaireSettings {
   timeZone?: string;
   language?: string;
   webgl?: WebGLSettings;
+  requireConsent?: boolean;
+  requireAuthentication?: boolean;
+  allowAnonymous?: boolean;
   metadata?: Record<string, any>;
+}
+
+export interface QuestionSettings {
+  required?: boolean;
+  hidden?: boolean;
+  readOnly?: boolean;
+  showNumber?: boolean;
+  randomize?: boolean;
+}
+
+export interface PageSettings {
+  showTitle?: boolean;
+  showProgressBar?: boolean;
+  allowNavigation?: boolean;
+  autoAdvance?: boolean;
+  timeLimit?: number;
 }
 
 // ============================================================================
@@ -148,22 +167,25 @@ export interface NavigationConfig {
 }
 
 export interface MediaConfig {
-  // Legacy direct URL support
-  url?: string;
+  // Media reference - either URL or media asset ID
+  mediaId?: string; // Reference to media asset in media management system
+  url?: string; // Direct URL (legacy support or external URLs)
+  
+  // How this media is referenced in markdown content
+  // e.g., ![alt text](media:my-ref-id) would use refId: "my-ref-id"
+  refId?: string;
+  
+  // Media metadata
   type?: 'image' | 'video' | 'audio';
-  
-  // New media management system
-  mediaId?: string; // Reference to media asset
-  
-  // Display options
   alt?: string;
   caption?: string;
+  
+  // Display options (can be overridden in markdown)
   width?: number;
   height?: number;
   autoplay?: boolean;
   loop?: boolean;
   controls?: boolean;
-  position?: 'above' | 'below' | 'left' | 'right' | 'background';
   size?: 'small' | 'medium' | 'large' | 'full';
 }
 
@@ -226,16 +248,24 @@ export interface Position {
 // Display Configuration Types
 // ============================================================================
 
-// Base display configuration with media support
+// IMPORTANT: All text fields (prompt, content, instruction, etc.) in display configs
+// support markdown by default. Media can be embedded using markdown syntax:
+// - Standard URL: ![alt text](https://example.com/image.jpg)
+// - Media reference: ![alt text](media:refId) where refId matches a MediaConfig.refId
+// - Variables: {{variableName}} can be used in any text field
+
+// Base display configuration with media support - ALL questions can have media
 export interface BaseDisplayConfig {
+  // Available media assets that can be referenced in markdown content
   media?: MediaConfig[];
-  mediaPosition?: 'above' | 'below' | 'left' | 'right' | 'split';
+  // Whether to process markdown in prompt/content fields (default: true)
+  enableMarkdown?: boolean;
 }
 
 export interface TextDisplayConfig extends BaseDisplayConfig {
-  content: string;
+  content: string; // Supports markdown with embedded media references
   format: 'text' | 'markdown' | 'html';
-  variables?: boolean;
+  variables?: boolean; // Enable variable substitution in content
   styling?: {
     fontSize?: string;
     fontWeight?: string;
@@ -245,7 +275,7 @@ export interface TextDisplayConfig extends BaseDisplayConfig {
 }
 
 export interface MediaDisplayConfig extends BaseDisplayConfig {
-  media: MediaConfig;
+  media: MediaConfig[];
   caption?: string;
   showControls?: boolean;
   clickToEnlarge?: boolean;
@@ -380,7 +410,7 @@ export interface WebGLDisplayConfig extends BaseDisplayConfig {
   interactionMode?: 'click' | 'drag' | 'keyboard' | 'custom';
 }
 
-export interface StatisticalFeedbackConfig {
+export interface StatisticalFeedbackConfig extends BaseDisplayConfig {
   prompt: string;
   chartType: 'bar' | 'line' | 'pie' | 'scatter' | 'histogram';
   dataSource: string;
@@ -487,6 +517,60 @@ export interface BaseQuestion {
   // Metadata
   name?: string;
   tags?: string[];
+}
+
+// ============================================================================
+// Common Types
+// ============================================================================
+
+export interface Position {
+  x: number;
+  y: number;
+  z?: number;
+  unit?: 'px' | '%' | 'vw' | 'vh';
+}
+
+export interface Size {
+  width: number;
+  height: number;
+  unit?: 'px' | '%' | 'vw' | 'vh';
+}
+
+// ============================================================================
+// Response Types
+// ============================================================================
+
+export interface ResponseType {
+  type: 'single' | 'multiple' | 'text' | 'number' | 'scale' | 'keypress' | 'click' | 'custom';
+  config?: ResponseConfig;
+}
+
+export interface ResponseConfig {
+  // For keypress
+  allowedKeys?: string[];
+  recordAllKeys?: boolean;
+  
+  // For scale
+  min?: number;
+  max?: number;
+  step?: number;
+  labels?: string[];
+  
+  // For text/number
+  maxLength?: number;
+  pattern?: string;
+  
+  // General
+  timeout?: number; // Max response time in ms
+  required?: boolean;
+}
+
+export interface ResponseOption {
+  id: string;
+  value: any;
+  label?: string;
+  hotkey?: string;
+  position?: Position;
 }
 
 // ============================================================================

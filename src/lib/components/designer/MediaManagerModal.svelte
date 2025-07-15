@@ -100,7 +100,7 @@
               <button
                 on:click={handleConfirm}
                 disabled={selectedMedia.length === 0}
-                class="{theme.components.button.variants.primary} {theme.components.button.sizes.sm} rounded-md disabled:opacity-50"
+                class="{theme.components.button.variants.default} {theme.components.button.sizes.sm} rounded-md disabled:opacity-50"
               >
                 Confirm Selection
               </button>

@@ -109,7 +109,9 @@
     
     const newOptions = [...question.display.options];
     const [removed] = newOptions.splice(draggedIndex, 1);
-    newOptions.splice(dropIndex, 0, removed);
+    if (removed) {
+      newOptions.splice(dropIndex, 0, removed);
+    }
     
     updateDisplay('options', newOptions);
     draggedIndex = null;

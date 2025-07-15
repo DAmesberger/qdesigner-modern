@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Question, MediaConfig } from '$lib/shared/types/questionnaire';
+  import type { Question, MediaConfig, TextDisplayQuestion, InstructionQuestion, TextDisplayConfig } from '$lib/shared/types/questionnaire';
   import { createEventDispatcher } from 'svelte';
   import theme from '$lib/theme';
   import { marked } from 'marked';
@@ -11,6 +11,11 @@
   export let organizationId: string;
   export let userId: string;
   export let onUpdate: (updates: Partial<Question>) => void;
+  
+  // Type guards for questions with content field
+  function hasContentField(display: any): display is TextDisplayConfig {
+    return display && 'content' in display;
+  }
   
   const dispatch = createEventDispatcher();
   
@@ -25,8 +30,8 @@
   });
   
   // Initialize media URLs on mount
-  $: if (question.display?.media) {
-    loadMediaUrls(question.display.media);
+  $: if (question.display && 'media' in question.display && question.display.media) {
+    loadMediaUrls(question.display.media as MediaConfig[]);
   }
   
   async function loadMediaUrls(mediaConfigs: MediaConfig[]) {
@@ -46,7 +51,7 @@
         ...question.display,
         [field]: value
       }
-    });
+    } as any);
   }
   
   function handleMediaSelect(event: CustomEvent<{ media: any[] }>) {
@@ -85,11 +90,33 @@
     updateDisplay('media', media);
   }
   
-  // Parse markdown for preview
+  // Parse markdown for preview with media URL substitution
   $: parsedContent = (() => {
-    if (question.display?.content) {
+    if (question.display && hasContentField(question.display)) {
       try {
-        return marked.parse(question.display.content);
+        let content = question.display.content;
+        
+        // Replace media references with actual URLs
+        if (question.display.media) {
+          question.display.media.forEach((media, index) => {
+            if (media.mediaId && mediaUrls[media.mediaId]) {
+              // Replace by refId if available
+              if (media.refId) {
+                content = content.replace(
+                  new RegExp(`\\(media:${media.refId}\\)`, 'g'),
+                  `(${mediaUrls[media.mediaId]})`
+                );
+              }
+              // Also replace by index
+              content = content.replace(
+                new RegExp(`\\(media:${index}\\)`, 'g'),
+                `(${mediaUrls[media.mediaId]})`
+              );
+            }
+          });
+        }
+        
+        return marked.parse(content);
       } catch (error) {
         console.error('Error parsing markdown:', error);
         return question.display.content;
@@ -115,7 +142,7 @@
       Instruction Content
     </label>
     <textarea
-      value={question.display?.content || ''}
+      value={question.display && hasContentField(question.display) ? question.display.content : ''}
       on:input={(e) => updateDisplay('content', e.currentTarget.value)}
       rows="8"
       class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 font-mono text-sm"
@@ -134,7 +161,7 @@
       </label>
       <button
         on:click={() => showMediaManager = true}
-        class="{theme.components.button.variants.outline} {theme.components.button.sizes.xs} rounded-md"
+        class="{theme.components.button.variants.outline} {theme.components.button.sizes.sm} rounded-md"
       >
         <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -195,17 +222,6 @@
                     <option value="large">Large</option>
                     <option value="full">Full Width</option>
                   </select>
-                  
-                  <select
-                    value={media.position || 'below'}
-                    on:change={(e) => updateMediaConfig(index, 'position', e.currentTarget.value)}
-                    class="flex-1 px-2 py-1 text-sm border rounded {theme.semantic.bgSurface}"
-                  >
-                    <option value="above">Above Text</option>
-                    <option value="below">Below Text</option>
-                    <option value="left">Left</option>
-                    <option value="right">Right</option>
-                  </select>
                 </div>
                 
                 <!-- Video/Audio Options -->
@@ -263,132 +279,40 @@
     {/if}
   </div>
   
-  <!-- Media Position -->
+  <!-- Media Usage Instructions -->
   {#if question.display?.media && question.display.media.length > 0}
-    <div>
-      <label class="{theme.typography.label} {theme.semantic.textPrimary} mb-2 block">
-        Default Media Position
-      </label>
-      <select
-        value={question.display?.mediaPosition || 'below'}
-        on:change={(e) => updateDisplay('mediaPosition', e.currentTarget.value)}
-        class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
-      >
-        <option value="above">Above Content</option>
-        <option value="below">Below Content</option>
-        <option value="split">Side by Side</option>
-      </select>
+    <div class="{theme.semantic.bgSubtle} p-3 rounded-md">
+      <p class="{theme.typography.caption} {theme.semantic.textSecondary}">
+        <strong>Media Usage:</strong> Reference media in your markdown content using:
+      </p>
+      <ul class="{theme.typography.caption} {theme.semantic.textSecondary} mt-1 ml-4 list-disc">
+        {#each question.display.media as media, i}
+          <li>
+            {#if media.refId}
+              <code class="{theme.typography.code}">![{media.alt || 'Image'}](media:{media.refId})</code>
+            {:else}
+              <code class="{theme.typography.code}">![{media.alt || 'Image'}](media:{i})</code> (index {i})
+            {/if}
+          </li>
+        {/each}
+      </ul>
     </div>
   {/if}
   
-  <!-- Text Alignment -->
-  <div>
-    <label class="{theme.typography.label} {theme.semantic.textPrimary} mb-2 block">
-      Text Alignment
-    </label>
-    <select
-      value={question.display?.alignment || 'left'}
-      on:change={(e) => updateDisplay('alignment', e.currentTarget.value)}
-      class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
-    >
-      <option value="left">Left</option>
-      <option value="center">Center</option>
-      <option value="right">Right</option>
-    </select>
-  </div>
+  <!-- Text alignment can be controlled through markdown/styling -->
 </div>
 
 <!-- Markdown Preview -->
-{#if question.display?.content}
+{#if question.display && hasContentField(question.display)}
   <div class="border-t pt-4">
     <label class="{theme.typography.label} {theme.semantic.textPrimary} mb-2 block">
       Preview
     </label>
     <div class="markdown-preview {theme.semantic.bgSubtle} p-4 rounded-md border {theme.semantic.borderDefault}">
-      <!-- Media above content -->
-      {#if question.display.mediaPosition === 'above' && question.display.media}
-        <div class="mb-4 space-y-2">
-          {#each question.display.media as media}
-            {#if media.mediaId && mediaUrls[media.mediaId]}
-              <div class="media-preview" data-size={media.size || 'large'}>
-                {#if media.type === 'image'}
-                  <img 
-                    src={mediaUrls[media.mediaId]} 
-                    alt={media.alt || ''}
-                    class="rounded"
-                  />
-                {:else if media.type === 'video'}
-                  <video 
-                    src={mediaUrls[media.mediaId]}
-                    controls={media.controls !== false}
-                    autoplay={media.autoplay}
-                    loop={media.loop}
-                    class="rounded w-full"
-                  />
-                {:else if media.type === 'audio'}
-                  <audio
-                    src={mediaUrls[media.mediaId]}
-                    controls={media.controls !== false}
-                    autoplay={media.autoplay}
-                    loop={media.loop}
-                    class="w-full"
-                  />
-                {/if}
-                {#if media.caption}
-                  <p class="{theme.typography.caption} {theme.semantic.textSecondary} mt-1 text-center">
-                    {media.caption}
-                  </p>
-                {/if}
-              </div>
-            {/if}
-          {/each}
-        </div>
-      {/if}
-      
-      <!-- Content -->
-      <div class="text-align-{question.display.alignment || 'left'}">
+      <!-- Content with embedded media -->
+      <div class="prose prose-sm max-w-none">
         {@html parsedContent}
       </div>
-      
-      <!-- Media below content -->
-      {#if question.display.mediaPosition !== 'above' && question.display.media}
-        <div class="mt-4 space-y-2">
-          {#each question.display.media as media}
-            {#if media.mediaId && mediaUrls[media.mediaId]}
-              <div class="media-preview" data-size={media.size || 'large'}>
-                {#if media.type === 'image'}
-                  <img 
-                    src={mediaUrls[media.mediaId]} 
-                    alt={media.alt || ''}
-                    class="rounded"
-                  />
-                {:else if media.type === 'video'}
-                  <video 
-                    src={mediaUrls[media.mediaId]}
-                    controls={media.controls !== false}
-                    autoplay={media.autoplay}
-                    loop={media.loop}
-                    class="rounded w-full"
-                  />
-                {:else if media.type === 'audio'}
-                  <audio
-                    src={mediaUrls[media.mediaId]}
-                    controls={media.controls !== false}
-                    autoplay={media.autoplay}
-                    loop={media.loop}
-                    class="w-full"
-                  />
-                {/if}
-                {#if media.caption}
-                  <p class="{theme.typography.caption} {theme.semantic.textSecondary} mt-1 text-center">
-                    {media.caption}
-                  </p>
-                {/if}
-              </div>
-            {/if}
-          {/each}
-        </div>
-      {/if}
     </div>
   </div>
 {/if}

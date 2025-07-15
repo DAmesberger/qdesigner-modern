@@ -204,12 +204,19 @@ export class MediaService {
     }
     
     if (filter.collectionId) {
-      query = query.in('id', 
-        supabase
-          .from('media_collection_items')
-          .select('media_id')
-          .eq('collection_id', filter.collectionId)
-      );
+      // First get the media IDs from the collection
+      const { data: collectionItems } = await supabase
+        .from('media_collection_items')
+        .select('media_id')
+        .eq('collection_id', filter.collectionId);
+      
+      if (collectionItems && collectionItems.length > 0) {
+        const mediaIds = collectionItems.map(item => item.media_id);
+        query = query.in('id', mediaIds);
+      } else {
+        // No items in collection, return empty result
+        query = query.in('id', []);
+      }
     }
     
     if (filter.uploadedBy) {

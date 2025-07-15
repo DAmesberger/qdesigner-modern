@@ -38,7 +38,7 @@
         ...question.display,
         [field]: value
       }
-    });
+    } as any);
   }
   
   function handleMediaSelect(event: CustomEvent<{ media: any[] }>) {
@@ -85,6 +85,11 @@
   
   $: currentMedia = question.display?.media?.[0];
   $: isWebGL = question.type === 'webgl';
+  
+  // Type guard for WebGL display config
+  function getWebGLConfig(display: any): any {
+    return isWebGL && display ? (display as any).webglConfig : undefined;
+  }
 </script>
 
 <div class="space-y-4">
@@ -97,7 +102,7 @@
       {#if !currentMedia}
         <button
           on:click={() => showMediaManager = true}
-          class="{theme.components.button.variants.primary} {theme.components.button.sizes.xs} rounded-md"
+          class="{theme.components.button.variants.default} {theme.components.button.sizes.sm} rounded-md"
         >
           <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -194,7 +199,7 @@
             <!-- Remove Button -->
             <button
               on:click={removeMedia}
-              class="{theme.components.button.variants.outline} {theme.components.button.sizes.xs} rounded-md text-red-600 border-red-600 hover:bg-red-50"
+              class="{theme.components.button.variants.outline} {theme.components.button.sizes.sm} rounded-md text-red-600 border-red-600 hover:bg-red-50"
             >
               <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -243,9 +248,9 @@
             Render Mode
           </label>
           <select
-            value={question.display?.webglConfig?.renderMode || '2d'}
+            value={getWebGLConfig(question.display)?.renderMode || '2d'}
             on:change={(e) => updateDisplay('webglConfig', {
-              ...question.display?.webglConfig,
+              ...getWebGLConfig(question.display),
               renderMode: e.currentTarget.value
             })}
             class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
@@ -259,9 +264,9 @@
         <label class="flex items-center">
           <input
             type="checkbox"
-            checked={question.display?.webglConfig?.interactive || false}
+            checked={getWebGLConfig(question.display)?.interactive || false}
             on:change={(e) => updateDisplay('webglConfig', {
-              ...question.display?.webglConfig,
+              ...getWebGLConfig(question.display),
               interactive: e.currentTarget.checked
             })}
             class="mr-2"
@@ -272,9 +277,9 @@
         <label class="flex items-center">
           <input
             type="checkbox"
-            checked={question.display?.webglConfig?.highPerformance || false}
+            checked={getWebGLConfig(question.display)?.highPerformance || false}
             on:change={(e) => updateDisplay('webglConfig', {
-              ...question.display?.webglConfig,
+              ...getWebGLConfig(question.display),
               highPerformance: e.currentTarget.checked
             })}
             class="mr-2"
@@ -309,5 +314,4 @@
   {userId}
   allowMultiple={false}
   on:select={handleMediaSelect}
-  acceptedTypes={isWebGL ? ['image/*', 'application/json', 'text/html'] : ['image/*', 'video/*', 'audio/*']}
 />
