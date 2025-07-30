@@ -7,7 +7,7 @@
 
 ## Quick Start
 
-### Option 1: Full Supabase Stack with Kong (Recommended)
+### Quick Start (Recommended)
 
 1. **Clone the repository**
    ```bash
@@ -17,21 +17,23 @@
 
 2. **Set up environment variables**
    ```bash
-   cp .env.example .env
+   # Create .env.local file with the configuration shown below
+   touch .env.local
+   # Copy the environment variables from the section below
    ```
 
-3. **Start all Supabase services with Kong**
+3. **Start all Supabase services**
    ```bash
-   docker-compose -f docker-compose.kong.yml up -d
+   docker-compose up -d
    ```
 
 4. **Wait for services to initialize**
    ```bash
    # Check all services are running
-   docker-compose -f docker-compose.kong.yml ps
+   docker-compose ps
    
    # View logs if needed
-   docker-compose -f docker-compose.kong.yml logs -f kong
+   docker-compose logs -f
    ```
 
 5. **Install dependencies**
@@ -44,53 +46,53 @@
    pnpm dev
    ```
 
-### Option 2: Minimal Setup (Without Kong)
-
-1. **Use the simplified docker-compose**
-   ```bash
-   docker-compose up -d supabase-db supabase-auth
-   ```
-
-2. **Update .env to use port 54321**
-   ```env
-   VITE_SUPABASE_URL=http://localhost:54321
-   ```
-
-3. **Note**: This setup requires the custom fetch configuration in `supabase.ts`
+7. **Access the application**
+   - Application: http://localhost:5173
+   - Login with demo credentials:
+     - Email: `demo@example.com`
+     - Password: `demo123456`
 
 ## Environment Configuration
 
 ### Required Environment Variables
 
-Create a `.env` file with these variables:
+Create a `.env.local` file with these variables:
 
 ```env
-# Vite requires VITE_ prefix for client-side env vars
-VITE_SUPABASE_URL=http://localhost:54321
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
-
-# Database
+# Database Configuration
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=postgres
 
 # JWT Secret (must be at least 32 characters)
 JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
 
-# Supabase Keys
+# Supabase Keys (these are example keys for local development)
+ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
 SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
 SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
 
-# URLs
-API_EXTERNAL_URL=http://localhost:54321
+# Frontend Environment Variables (VITE_ prefix required)
+VITE_SUPABASE_URL=http://localhost:8000
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+
+# API Configuration
+API_EXTERNAL_URL=http://localhost:8000
 SITE_URL=http://localhost:5173
 
-# Email Configuration (using mailhog for dev)
+# Realtime Configuration
+APP_NAME=realtime
+SECRET_KEY_BASE=your-super-secret-key-base-that-is-at-least-64-bytes-long-for-realtime
+
+# Email Configuration (for development using MailHog)
 ENABLE_EMAIL_SIGNUP=true
 ENABLE_EMAIL_AUTOCONFIRM=true
 SMTP_ADMIN_EMAIL=admin@qdesigner.local
 SMTP_HOST=mailhog
 SMTP_PORT=1025
 SMTP_SENDER_NAME=QDesigner Dev
+SMTP_USER=
+SMTP_PASS=
 ```
 
 ## Key Benefits of Kong Setup

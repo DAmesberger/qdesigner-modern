@@ -24,10 +24,7 @@ export const load: PageLoad = async ({ params, parent }) => {
   // Fetch questionnaires for this project
   const { data: questionnaires, error: questionnairesError } = await supabase
     .from('questionnaire_definitions')
-    .select(`
-      *,
-      questionnaire_responses(count)
-    `)
+    .select('*')
     .eq('project_id', params.projectId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
@@ -37,11 +34,27 @@ export const load: PageLoad = async ({ params, parent }) => {
     throw error(500, 'Failed to load questionnaires');
   }
   
-  // Transform the data to include response count
-  const questionnairesWithCount = questionnaires?.map(q => ({
-    ...q,
-    response_count: q.questionnaire_responses?.[0]?.count || 0
-  })) || [];
+  // Get response counts separately
+  let questionnairesWithCount = questionnaires || [];
+  
+  if (questionnaires && questionnaires.length > 0) {
+    const questionnaireIds = questionnaires.map(q => q.id);
+    
+    const { data: responseCounts } = await supabase
+      .from('questionnaire_responses')
+      .select('questionnaire_id, completion_percentage')
+      .in('questionnaire_id', questionnaireIds);
+      
+    // Add response counts to questionnaires
+    questionnairesWithCount = questionnaires.map(q => ({
+      ...q,
+      response_count: responseCounts?.filter(r => r.questionnaire_id === q.id).length || 0,
+      avg_completion: responseCounts
+        ?.filter(r => r.questionnaire_id === q.id)
+        .reduce((sum, r) => sum + (r.completion_percentage || 0), 0) / 
+        (responseCounts?.filter(r => r.questionnaire_id === q.id).length || 1) || 0
+    }));
+  }
   
   return {
     project,

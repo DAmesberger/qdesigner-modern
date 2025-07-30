@@ -1,0 +1,112 @@
+-- Add demo user to auth schema
+-- This runs after GoTrue has created its schema
+
+-- Create demo user with all required fields
+INSERT INTO auth.users (
+    id,
+    email,
+    encrypted_password,
+    email_confirmed_at,
+    raw_user_meta_data,
+    raw_app_meta_data,
+    aud,
+    role,
+    created_at,
+    updated_at,
+    instance_id,
+    is_sso_user,
+    -- These fields MUST be empty strings, not NULL
+    confirmation_token,
+    recovery_token,
+    email_change_token_new,
+    email_change,
+    phone,
+    phone_change,
+    phone_change_token,
+    reauthentication_token,
+    is_super_admin,
+    phone_confirmed_at,
+    invited_at,
+    confirmation_sent_at,
+    email_change_sent_at,
+    last_sign_in_at
+) VALUES (
+    'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    'demo@example.com',
+    '$2a$10$PnnIgfMwKMPiSK.vKs9MkuN0q5VU.REkILl7mdQGXmh/mzNhm2Lfy', -- bcrypt of 'demo123456'
+    now(),
+    '{"full_name": "Demo User"}'::jsonb,
+    '{"provider": "email", "providers": ["email"]}'::jsonb,
+    'authenticated',
+    'authenticated',
+    now(),
+    now(),
+    '00000000-0000-0000-0000-000000000000',
+    false,
+    -- Required empty strings instead of NULL
+    '', -- confirmation_token
+    '', -- recovery_token
+    '', -- email_change_token_new
+    '', -- email_change
+    '', -- phone
+    '', -- phone_change
+    '', -- phone_change_token
+    '', -- reauthentication_token
+    false, -- is_super_admin
+    NULL, -- phone_confirmed_at
+    NULL, -- invited_at
+    NULL, -- confirmation_sent_at
+    NULL, -- email_change_sent_at
+    now() -- last_sign_in_at
+) ON CONFLICT (id) DO NOTHING;
+
+-- Create identity for the demo user
+INSERT INTO auth.identities (
+    user_id,
+    provider_id,
+    provider,
+    identity_data,
+    last_sign_in_at,
+    created_at,
+    updated_at
+) VALUES (
+    'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+    'demo@example.com',
+    'email',
+    '{"sub": "f47ac10b-58cc-4372-a567-0e02b2c3d479", "email": "demo@example.com", "email_verified": true}'::jsonb,
+    now(),
+    now(),
+    now()
+) ON CONFLICT (provider_id, provider) DO NOTHING;
+
+-- Ensure public.users record exists
+INSERT INTO public.users (auth_id, email, full_name, created_at, updated_at)
+VALUES ('f47ac10b-58cc-4372-a567-0e02b2c3d479', 'demo@example.com', 'Demo User', now(), now())
+ON CONFLICT (auth_id) DO NOTHING;
+
+-- Create demo organization
+DO $$
+DECLARE
+    v_user_id uuid;
+    v_org_id uuid;
+BEGIN
+    -- Get the user ID
+    SELECT id INTO v_user_id FROM public.users WHERE auth_id = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+    
+    IF v_user_id IS NOT NULL THEN
+        -- Check if demo organization exists
+        SELECT id INTO v_org_id FROM public.organizations WHERE slug = 'demo-org';
+        
+        IF v_org_id IS NULL THEN
+            -- Create organization
+            INSERT INTO public.organizations (name, slug, created_by)
+            VALUES ('Demo Organization', 'demo-org', v_user_id)
+            RETURNING id INTO v_org_id;
+            
+            -- Add user as owner
+            INSERT INTO public.organization_members (organization_id, user_id, role, status)
+            VALUES (v_org_id, v_user_id, 'owner', 'active')
+            ON CONFLICT DO NOTHING;
+        END IF;
+    END IF;
+END$$;

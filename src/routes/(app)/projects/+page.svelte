@@ -186,7 +186,7 @@
                   rows="3"
                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   placeholder="Brief description of your research project..."
-                />
+                ></textarea>
               </div>
             </div>
           </div>

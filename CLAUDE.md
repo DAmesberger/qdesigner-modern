@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-QDesigner Modern is a high-performance questionnaire platform for psychological and behavioral research, featuring microsecond-accurate reaction time measurements and WebGL 2.0 rendering for 120+ FPS support.
+QDesigner Modern is a high-performance questionnaire platform for psychological and behavioral research, featuring microsecond-accurate reaction time measurements and WebGL 2.0 rendering for 120+ FPS support combined with standard questionnaire features. It is built using Svelte 5, SvelteKit, and TypeScript, with a focus on performance, extensibility, and user experience with the goal of having FAANG level UI/UX.
 
 ## Test Credentials
 
-For local development, use these credentials to log in:
+For local development, use these credentials to log in (use playwright MCP to create the user after bootstrapping):
 
 - **Email**: `demo@example.com`
 - **Password**: `demo123456`
@@ -139,3 +139,5 @@ The variable system (`packages/scripting-engine`) supports:
 
 - Do not use tests scripts, simplifications or workarounds, ask when in doubt
 - Never use simpler approaches without asking
+- For development, we do not user docker containers directly, and we do not use Kong. Instead we use npx supabase start to run the Supabase local development environment, which includes the database and API server.
+- When using Playwright MCP, prefer using html, only use screenshots if interpreting html is not possible.
