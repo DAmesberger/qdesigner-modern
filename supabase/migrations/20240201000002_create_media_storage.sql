@@ -5,7 +5,7 @@ VALUES (
     'media',
     false,
     false,
-    ARRAY['image/*', 'video/*', 'audio/*']::text[],
+    ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'video/mp4', 'video/webm', 'audio/mpeg', 'audio/wav', 'audio/ogg']::text[],
     52428800 -- 50MB
 ) ON CONFLICT (id) DO NOTHING;
 
@@ -16,7 +16,8 @@ CREATE POLICY "media_bucket_select" ON storage.objects
         EXISTS (
             SELECT 1 FROM organization_members om
             JOIN media_assets ma ON ma.organization_id = om.organization_id
-            WHERE om.user_id = auth.uid()
+            JOIN users u ON u.id = om.user_id
+            WHERE u.auth_id = auth.uid()
             AND ma.storage_path = storage.objects.name
         )
     );
@@ -26,7 +27,8 @@ CREATE POLICY "media_bucket_insert" ON storage.objects
         bucket_id = 'media' AND
         EXISTS (
             SELECT 1 FROM organization_members om
-            WHERE om.user_id = auth.uid()
+            JOIN users u ON u.id = om.user_id
+            WHERE u.auth_id = auth.uid()
             AND om.role IN ('owner', 'admin', 'editor')
         )
     );
@@ -37,7 +39,8 @@ CREATE POLICY "media_bucket_update" ON storage.objects
         EXISTS (
             SELECT 1 FROM organization_members om
             JOIN media_assets ma ON ma.organization_id = om.organization_id
-            WHERE om.user_id = auth.uid()
+            JOIN users u ON u.id = om.user_id
+            WHERE u.auth_id = auth.uid()
             AND om.role IN ('owner', 'admin', 'editor')
             AND ma.storage_path = storage.objects.name
         )
@@ -49,8 +52,9 @@ CREATE POLICY "media_bucket_delete" ON storage.objects
         EXISTS (
             SELECT 1 FROM organization_members om
             JOIN media_assets ma ON ma.organization_id = om.organization_id
-            WHERE om.user_id = auth.uid()
-            AND (om.role IN ('owner', 'admin') OR ma.uploaded_by = auth.uid())
+            JOIN users u ON u.id = om.user_id
+            WHERE u.auth_id = auth.uid()
+            AND (om.role IN ('owner', 'admin') OR ma.uploaded_by = u.id)
             AND ma.storage_path = storage.objects.name
         )
     );

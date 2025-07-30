@@ -177,5 +177,53 @@ ALTER TABLE public.responses ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own profile" ON public.users
   FOR SELECT USING (auth_id = auth.uid());
 
+-- Questionnaire definitions policies
+CREATE POLICY "Users can view their organization questionnaires" ON public.questionnaire_definitions
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM projects p
+            JOIN organization_members om ON om.organization_id = p.organization_id
+            JOIN users u ON u.id = om.user_id
+            WHERE p.id = questionnaire_definitions.project_id
+            AND u.auth_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Users can create questionnaires" ON public.questionnaire_definitions
+    FOR INSERT WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM projects p
+            JOIN organization_members om ON om.organization_id = p.organization_id
+            JOIN users u ON u.id = om.user_id
+            WHERE p.id = project_id
+            AND u.auth_id = auth.uid()
+            AND om.role IN ('owner', 'admin', 'editor')
+        )
+    );
+
+CREATE POLICY "Users can update their questionnaires" ON public.questionnaire_definitions
+    FOR UPDATE USING (
+        EXISTS (
+            SELECT 1 FROM projects p
+            JOIN organization_members om ON om.organization_id = p.organization_id
+            JOIN users u ON u.id = om.user_id
+            WHERE p.id = questionnaire_definitions.project_id
+            AND u.auth_id = auth.uid()
+            AND om.role IN ('owner', 'admin', 'editor')
+        )
+    );
+
+CREATE POLICY "Users can delete their questionnaires" ON public.questionnaire_definitions
+    FOR DELETE USING (
+        EXISTS (
+            SELECT 1 FROM projects p
+            JOIN organization_members om ON om.organization_id = p.organization_id
+            JOIN users u ON u.id = om.user_id
+            WHERE p.id = questionnaire_definitions.project_id
+            AND u.auth_id = auth.uid()
+            AND om.role IN ('owner', 'admin')
+        )
+    );
+
 CREATE POLICY "Users can update own profile" ON public.users
   FOR UPDATE USING (auth_id = auth.uid());

@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS public.media_assets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    uploaded_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    uploaded_by UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     
     -- File information
     filename VARCHAR(255) NOT NULL,
@@ -43,8 +43,9 @@ CREATE POLICY "media_assets_select_policy" ON public.media_assets
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM organization_members om
+            JOIN users u ON u.id = om.user_id
             WHERE om.organization_id = media_assets.organization_id
-            AND om.user_id = auth.uid()
+            AND u.auth_id = auth.uid()
         )
     );
 
@@ -52,19 +53,21 @@ CREATE POLICY "media_assets_insert_policy" ON public.media_assets
     FOR INSERT WITH CHECK (
         EXISTS (
             SELECT 1 FROM organization_members om
+            JOIN users u ON u.id = om.user_id
             WHERE om.organization_id = media_assets.organization_id
-            AND om.user_id = auth.uid()
+            AND u.auth_id = auth.uid()
             AND om.role IN ('owner', 'admin', 'editor')
         )
-        AND uploaded_by = auth.uid()
+        AND uploaded_by = (SELECT id FROM users WHERE auth_id = auth.uid())
     );
 
 CREATE POLICY "media_assets_update_policy" ON public.media_assets
     FOR UPDATE USING (
         EXISTS (
             SELECT 1 FROM organization_members om
+            JOIN users u ON u.id = om.user_id
             WHERE om.organization_id = media_assets.organization_id
-            AND om.user_id = auth.uid()
+            AND u.auth_id = auth.uid()
             AND om.role IN ('owner', 'admin', 'editor')
         )
     );
@@ -73,11 +76,12 @@ CREATE POLICY "media_assets_delete_policy" ON public.media_assets
     FOR DELETE USING (
         EXISTS (
             SELECT 1 FROM organization_members om
+            JOIN users u ON u.id = om.user_id
             WHERE om.organization_id = media_assets.organization_id
-            AND om.user_id = auth.uid()
+            AND u.auth_id = auth.uid()
             AND om.role IN ('owner', 'admin')
         )
-        OR uploaded_by = auth.uid()
+        OR uploaded_by = (SELECT id FROM users WHERE auth_id = auth.uid())
     );
 
 -- Create function to update updated_at
