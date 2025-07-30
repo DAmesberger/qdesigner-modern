@@ -1,5 +1,5 @@
 <script lang="ts">
-  export let variant: 'primary' | 'secondary' | 'ghost' | 'default' | 'outline' = 'primary';
+  export let variant: 'primary' | 'secondary' | 'ghost' | 'default' | 'outline' | 'destructive' = 'primary';
   export let size: 'xs' | 'sm' | 'md' | 'lg' | 'xl' = 'md';
   export let type: 'button' | 'submit' | 'reset' = 'button';
   export let disabled = false;
@@ -7,23 +7,24 @@
   export let loading = false;
   
   const sizeClasses = {
-    xs: 'rounded px-2 py-1 text-xs',
-    sm: 'rounded px-2 py-1 text-sm',
-    md: 'rounded-md px-2.5 py-1.5 text-sm',
-    lg: 'rounded-md px-3 py-2 text-sm',
-    xl: 'rounded-md px-3.5 py-2.5 text-sm'
+    xs: 'h-7 rounded px-2 text-xs',
+    sm: 'h-8 rounded px-3 text-xs',
+    md: 'h-9 rounded-md px-4 text-sm',
+    lg: 'h-10 rounded-md px-6 text-sm',
+    xl: 'h-11 rounded-md px-8 text-base'
   };
   
   const variantClasses = {
-    primary: 'bg-indigo-600 font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600',
-    secondary: 'bg-white font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50',
-    ghost: 'font-semibold text-gray-700 hover:bg-gray-50 hover:text-gray-900',
-    default: 'bg-indigo-600 font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600',
-    outline: 'bg-white font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50'
+    primary: 'bg-primary font-medium text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+    secondary: 'bg-secondary font-medium text-secondary-foreground shadow-sm hover:bg-secondary/80',
+    ghost: 'font-medium hover:bg-accent hover:text-accent-foreground',
+    default: 'bg-primary font-medium text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+    outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+    destructive: 'bg-destructive font-medium text-destructive-foreground shadow-sm hover:bg-destructive/90'
   };
   
-  $: classes = `inline-flex items-center justify-center ${sizeClasses[size]} ${variantClasses[variant]} ${
-    disabled || loading ? 'opacity-50 cursor-not-allowed' : ''
+  $: classes = `inline-flex items-center justify-center transition-colors ${sizeClasses[size]} ${variantClasses[variant]} ${
+    disabled || loading ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''
   } ${$$props.class || ''}`;
 </script>
 

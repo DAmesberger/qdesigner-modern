@@ -27,7 +27,7 @@
 {/if}
 
 <!-- Full screen container for designer -->
-<div class="designer-container" class:visible={showApp}>
+<div class="designer-container bg-background" class:visible={showApp}>
   <slot />
 </div>
 

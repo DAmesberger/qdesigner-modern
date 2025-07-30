@@ -203,7 +203,7 @@
   }
 </script>
 
-<div class="{theme.components.container.card} h-full flex flex-col">
+<div class="bg-layer-surface border border-border rounded-lg h-full flex flex-col">
   <!-- Header -->
   <div class="p-4 border-b {theme.semantic.borderDefault}">
     <div class="flex items-center justify-between mb-4">
@@ -264,7 +264,7 @@
           type="search"
           bind:value={searchQuery}
           placeholder="Search media..."
-          class="w-full px-3 py-2 {theme.semantic.bgSurface} border {theme.semantic.borderDefault} rounded-md focus:ring-2 focus:ring-blue-500"
+          class="w-full px-3 py-2 {theme.semantic.bgSurface} border {theme.semantic.borderDefault} rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
         />
       </div>
       
@@ -284,7 +284,7 @@
   <!-- Upload area -->
   {#if showUploadArea}
     <div
-      class="p-8 border-b {theme.semantic.borderDefault} {dragActive ? 'bg-blue-50' : theme.semantic.bgSubtle}"
+      class="p-8 border-b {theme.semantic.borderDefault} {dragActive ? 'bg-primary/5' : theme.semantic.bgSubtle}"
       on:drop={handleDrop}
       on:dragover={handleDragOver}
       on:dragleave={handleDragLeave}
@@ -328,9 +328,9 @@
                 <span class="{theme.typography.caption}">{fileId.split('-').pop()}</span>
                 <span class="{theme.typography.caption}">{progress.percentage}%</span>
               </div>
-              <div class="w-full bg-gray-200 rounded-full h-2">
+              <div class="w-full bg-muted rounded-full h-2">
                 <div 
-                  class="bg-blue-600 h-2 rounded-full transition-all"
+                  class="bg-primary h-2 rounded-full transition-all"
                   style="width: {progress.percentage}%"
                 />
               </div>
@@ -368,8 +368,8 @@
             on:click={() => toggleSelection(asset)}
             class="group relative aspect-square {theme.semantic.bgSurface} rounded-lg overflow-hidden border-2 transition-all
                    {selectedMedia.some(m => m.id === asset.id) || selectedIds.has(asset.id) 
-                     ? 'border-blue-500 ring-2 ring-blue-200' 
-                     : theme.semantic.borderDefault + ' hover:border-gray-400'}"
+                     ? 'border-primary ring-2 ring-primary/20' 
+                     : theme.semantic.borderDefault + ' hover:border-muted-foreground'}"
           >
             {#if isImageMedia(asset)}
               <img 
@@ -385,8 +385,8 @@
             {/if}
             
             <!-- Overlay info -->
-            <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-              <div class="absolute bottom-0 left-0 right-0 p-2 text-white">
+            <div class="absolute inset-0 bg-gradient-to-t from-foreground/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+              <div class="absolute bottom-0 left-0 right-0 p-2 text-background">
                 <p class="text-xs truncate">{asset.originalFilename}</p>
                 <p class="text-xs opacity-75">{formatFileSize(asset.sizeBytes)}</p>
               </div>
@@ -394,8 +394,8 @@
             
             <!-- Selection indicator -->
             {#if selectedMedia.some(m => m.id === asset.id) || selectedIds.has(asset.id)}
-              <div class="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div class="absolute top-2 right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+                <svg class="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
                 </svg>
               </div>
@@ -411,8 +411,8 @@
             on:click={() => toggleSelection(asset)}
             class="w-full flex items-center gap-4 p-3 {theme.semantic.bgSurface} rounded-lg border transition-all
                    {selectedMedia.some(m => m.id === asset.id) || selectedIds.has(asset.id)
-                     ? 'border-blue-500 bg-blue-50' 
-                     : theme.semantic.borderDefault + ' hover:border-gray-400'}"
+                     ? 'border-primary bg-primary/5' 
+                     : theme.semantic.borderDefault + ' hover:border-muted-foreground'}"
           >
             <!-- Thumbnail -->
             <div class="w-16 h-16 flex-shrink-0 {theme.semantic.bgSubtle} rounded overflow-hidden">
@@ -443,7 +443,7 @@
             <!-- Selection indicator -->
             {#if selectedMedia.some(m => m.id === asset.id) || selectedIds.has(asset.id)}
               <div class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
                 </svg>
               </div>

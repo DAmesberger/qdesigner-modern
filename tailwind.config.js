@@ -44,11 +44,23 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        layer: {
+          base: "hsl(var(--layer-base))",
+          surface: "hsl(var(--layer-surface))",
+          overlay: "hsl(var(--layer-overlay))",
+          modal: "hsl(var(--layer-modal))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      boxShadow: {
+        'sm': 'var(--shadow-sm)',
+        'md': 'var(--shadow-md)',
+        'lg': 'var(--shadow-lg)',
+        'xl': 'var(--shadow-xl)',
       },
       animation: {
         marquee: "marquee 30s linear infinite",

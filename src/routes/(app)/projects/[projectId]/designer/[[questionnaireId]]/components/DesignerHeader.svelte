@@ -125,18 +125,18 @@
     <div class="flex items-center {theme.semantic.bgSubtle} rounded-md p-0.5">
       <button
         class="px-2 py-1 text-xs font-medium rounded transition-colors"
-        class:bg-white={viewMode === 'structural'}
-        class:text-gray-900={viewMode === 'structural'}
-        class:text-gray-600={viewMode !== 'structural'}
+        class:bg-background={viewMode === 'structural'}
+        class:text-foreground={viewMode === 'structural'}
+        class:text-muted-foreground={viewMode !== 'structural'}
         on:click={() => dispatch('viewModeChange', 'structural')}
       >
         Structure
       </button>
       <button
         class="px-2 py-1 text-xs font-medium rounded transition-colors"
-        class:bg-white={viewMode === 'wysiwyg'}
-        class:text-gray-900={viewMode === 'wysiwyg'}
-        class:text-gray-600={viewMode !== 'wysiwyg'}
+        class:bg-background={viewMode === 'wysiwyg'}
+        class:text-foreground={viewMode === 'wysiwyg'}
+        class:text-muted-foreground={viewMode !== 'wysiwyg'}
         on:click={() => dispatch('viewModeChange', 'wysiwyg')}
       >
         Visual
@@ -147,7 +147,7 @@
   <!-- Right Actions -->
   <div class="flex items-center gap-2">
     <!-- Save Status -->
-    <div class="text-xs text-gray-500 min-w-[100px] text-right">
+    <div class="text-xs text-muted-foreground min-w-[100px] text-right">
       {#if $isSaving}
         <span class="text-blue-600">Saving...</span>
       {:else if $saveError}
@@ -160,7 +160,7 @@
     <!-- Preview Button -->
     <button
       on:click={() => dispatch('togglePreview')}
-      class="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+      class="px-3 py-1.5 text-sm text-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
     >
       Preview
     </button>
@@ -169,7 +169,7 @@
     <div class="relative">
       <button
         on:click={() => showMenu = !showMenu}
-        class="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+        class="p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -178,11 +178,11 @@
       </button>
       
       {#if showMenu}
-        <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+        <div class="absolute right-0 mt-2 w-48 bg-popover rounded-md shadow-lg ring-1 ring-border z-50">
           <div class="py-1">
             <button
               on:click={handleSave}
-              class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+              class="w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -192,7 +192,7 @@
             </button>
             <button
               on:click={handleLoad}
-              class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+              class="w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -202,7 +202,7 @@
             </button>
             <button
               on:click={handleExport}
-              class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+              class="w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -210,10 +210,10 @@
               </svg>
               Export
             </button>
-            <div class="border-t border-gray-100"></div>
+            <div class="border-t border-border"></div>
             <button
               on:click={() => designerStore.validate()}
-              class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+              class="w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -223,7 +223,7 @@
             </button>
             <button
               on:click={toggleFullscreen}
-              class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+              class="w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -231,10 +231,10 @@
               </svg>
               Fullscreen
             </button>
-            <div class="border-t border-gray-100"></div>
+            <div class="border-t border-border"></div>
             <button
               on:click={() => showKeyboardShortcuts = true}
-              class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+              class="w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -251,20 +251,20 @@
 
 <!-- Keyboard Shortcuts Modal -->
 {#if showKeyboardShortcuts}
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg p-6 max-w-md w-full">
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-popover rounded-lg p-6 max-w-md w-full border border-border shadow-xl">
       <h3 class="text-lg font-semibold mb-4">Keyboard Shortcuts</h3>
       <div class="space-y-2">
         {#each shortcuts as shortcut}
           <div class="flex justify-between">
-            <span class="text-gray-600">{shortcut.action}</span>
-            <kbd class="px-2 py-1 text-xs bg-gray-100 rounded font-mono">{shortcut.key}</kbd>
+            <span class="text-muted-foreground">{shortcut.action}</span>
+            <kbd class="px-2 py-1 text-xs bg-muted rounded font-mono">{shortcut.key}</kbd>
           </div>
         {/each}
       </div>
       <button
         on:click={() => showKeyboardShortcuts = false}
-        class="mt-6 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        class="mt-6 w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
       >
         Close
       </button>

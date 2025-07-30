@@ -3,12 +3,17 @@ import { redirect } from '@sveltejs/kit';
 import { supabase } from '$lib/services/supabase';
 import type { DashboardData, DashboardQuestionnaire, DashboardActivity } from '$lib/types/dashboard';
 
-export const load: PageLoad = async () => {
-  // Get the current user session (client-side)
-  const { data: { session } } = await supabase.auth.getSession();
+export const load: PageLoad = async ({ parent }) => {
+  // Get data from parent layout
+  const { organizationId, user } = await parent();
   
-  if (!session?.user) {
+  if (!user) {
     throw redirect(302, '/login');
+  }
+  
+  // Check if user has an organization
+  if (!organizationId) {
+    throw redirect(302, '/onboarding/organization');
   }
 
   // Mock data with proper types for now
@@ -62,7 +67,7 @@ export const load: PageLoad = async () => {
   ];
 
   const dashboardData: DashboardData = {
-    user: session.user,
+    user: user,
     questionnaires: mockQuestionnaires,
     recentActivity: mockActivity,
     stats: {

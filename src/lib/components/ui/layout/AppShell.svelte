@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/services/supabase';
   import Button from '../../common/Button.svelte';
+  import ThemeToggle from '../ThemeToggle.svelte';
   import { onMount } from 'svelte';
   
   export let user: any = null;
@@ -49,7 +50,7 @@
 
 <svelte:window on:click={handleClickOutside} />
 
-<div class="h-screen flex overflow-hidden bg-gray-50">
+<div class="h-screen flex overflow-hidden bg-layer-base">
   {#if !isMinimalLayout}
     <!-- Standard layout for regular pages -->
     
@@ -57,19 +58,19 @@
     {#if sidebarOpen}
       <button 
         type="button"
-        class="fixed inset-0 z-50 bg-gray-900/80 lg:hidden" 
+        class="fixed inset-0 z-50 bg-black/[var(--backdrop-opacity)] backdrop-blur-sm lg:hidden" 
         on:click={() => sidebarOpen = false}
         aria-label="Close sidebar"
       ></button>
     {/if}
     
     <!-- Mobile sidebar -->
-    <div class="mobile-sidebar fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl lg:hidden transform transition-transform duration-300 ease-in-out {sidebarOpen ? 'translate-x-0' : '-translate-x-full'}">
-      <div class="flex h-16 items-center justify-between px-4 border-b border-gray-200">
-        <h1 class="text-xl font-bold text-gray-900">QDesigner</h1>
+    <div class="mobile-sidebar fixed inset-y-0 left-0 z-50 w-64 bg-layer-surface shadow-xl border-r border-border lg:hidden transform transition-transform duration-300 ease-in-out {sidebarOpen ? 'translate-x-0' : '-translate-x-full'}">
+      <div class="flex h-16 items-center justify-between px-4 border-b border-border">
+        <h1 class="text-xl font-bold text-foreground">QDesigner</h1>
         <button
           type="button"
-          class="p-2 text-gray-500 hover:text-gray-700"
+          class="p-2 text-muted-foreground hover:text-foreground transition-colors"
           on:click={() => sidebarOpen = false}
           aria-label="Close sidebar"
         >
@@ -82,10 +83,10 @@
         {#each navigation as item}
           <a
             href={item.href}
-            class="group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors {currentPath.startsWith(item.href) ? 'bg-indigo-100 text-indigo-900' : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'}"
+            class="group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors {currentPath.startsWith(item.href) ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-accent hover:text-accent-foreground'}"
             on:click={() => sidebarOpen = false}
           >
-            <svg class="mr-3 h-5 w-5 {currentPath.startsWith(item.href) ? 'text-indigo-500' : 'text-gray-400 group-hover:text-gray-500'}" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <svg class="mr-3 h-5 w-5 {currentPath.startsWith(item.href) ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
             </svg>
             {item.name}
@@ -97,12 +98,12 @@
     <!-- Main content area -->
     <div class="flex-1 flex flex-col overflow-hidden">
       <!-- Top bar -->
-      <header class="bg-white border-b border-gray-200 h-16">
+      <header class="bg-layer-surface border-b border-border h-16">
         <div class="h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <div class="flex items-center">
             <button
               type="button"
-              class="sidebar-toggle p-2 text-gray-500 hover:text-gray-700 lg:hidden"
+              class="sidebar-toggle p-2 text-muted-foreground hover:text-foreground transition-colors lg:hidden"
               on:click={() => sidebarOpen = true}
               aria-label="Open sidebar"
             >
@@ -113,7 +114,7 @@
             
             <!-- Logo for desktop -->
             <div class="hidden lg:flex items-center">
-              <h1 class="text-xl font-bold text-gray-900">QDesigner</h1>
+              <h1 class="text-xl font-bold text-foreground">QDesigner</h1>
             </div>
           </div>
           
@@ -124,8 +125,8 @@
                 href={item.href}
                 class="inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium transition-colors {
                   currentPath.startsWith(item.href)
-                    ? 'border-indigo-500 text-gray-900'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    ? 'border-primary text-foreground'
+                    : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
                 }"
               >
                 <svg class="mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -137,11 +138,12 @@
           </nav>
           
           <!-- User menu -->
-          <div class="flex items-center gap-4">
+          <div class="flex items-center gap-3">
+            <ThemeToggle />
             <div class="relative user-menu">
               <button
                 type="button"
-                class="flex items-center p-2 text-sm rounded-md hover:bg-gray-100"
+                class="flex items-center p-2 text-sm rounded-md hover:bg-accent transition-colors"
                 on:click={() => userMenuOpen = !userMenuOpen}
                 aria-label="User menu"
                 aria-expanded={userMenuOpen}
@@ -153,23 +155,23 @@
                     alt="Profile"
                   />
                 {/if}
-                <span class="hidden sm:block ml-3 text-gray-700">{user?.email || 'Loading...'}</span>
-                <svg class="ml-2 h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                <span class="hidden sm:block ml-3 text-foreground">{user?.email || 'Loading...'}</span>
+                <svg class="ml-2 h-5 w-5 text-muted-foreground" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
                 </svg>
               </button>
               
               {#if userMenuOpen}
-                <div class="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5">
-                  <a href="/settings" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                <div class="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md bg-popover border border-border py-1 shadow-lg">
+                  <a href="/settings" class="block px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors">
                     Your Profile
                   </a>
-                  <a href="/settings" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                  <a href="/settings" class="block px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors">
                     Settings
                   </a>
                   <button
                     type="button"
-                    class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    class="block w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors"
                     on:click={handleSignOut}
                   >
                     Sign out

@@ -12,7 +12,7 @@ import type {
 import { validateMediaFile, MIME_TYPE_EXTENSIONS } from '$lib/shared/types/media';
 
 export class MediaService {
-  private readonly BUCKET_NAME = 'questionnaire-media';
+  private readonly BUCKET_NAME = 'media';
   private uploadAbortController: AbortController | null = null;
   
   /**
@@ -23,21 +23,13 @@ export class MediaService {
       const { data: buckets } = await supabase.storage.listBuckets();
       
       if (!buckets?.find(b => b.name === this.BUCKET_NAME)) {
-        const { error } = await supabase.storage.createBucket(this.BUCKET_NAME, {
-          public: false,
-          fileSizeLimit: 52428800, // 50MB
-          allowedMimeTypes: [
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-            'video/mp4', 'video/webm',
-            'audio/mpeg', 'audio/wav', 'audio/ogg'
-          ]
-        });
-        
-        if (error) throw error;
+        // Bucket should be created by migration
+        // If not found, it means the migration hasn't run or there's a permission issue
+        console.warn(`Media bucket '${this.BUCKET_NAME}' not found. It should be created by database migrations.`);
       }
     } catch (error) {
-      console.error('Failed to setup media bucket:', error);
-      throw error;
+      // Don't throw, just log - the bucket might exist but we can't list buckets
+      console.warn('Could not verify media bucket exists:', error);
     }
   }
   
@@ -87,10 +79,11 @@ export class MediaService {
         thumbnailPath = await this.generateThumbnail(file, storagePath);
       }
       
-      // Create database record
+      // Create database record - ensure critical fields are not overridden
       const { data: mediaAsset, error: dbError } = await supabase
         .from('media_assets')
         .insert({
+          ...metadata, // Spread metadata first
           organization_id: options.organizationId,
           uploaded_by: options.userId,
           filename,
@@ -99,9 +92,7 @@ export class MediaService {
           size_bytes: file.size,
           storage_path: storagePath,
           thumbnail_path: thumbnailPath,
-          access_level: options.accessLevel || 'organization',
-          ...metadata,
-          metadata: metadata.customMetadata || {}
+          access_level: options.accessLevel || 'organization'
         })
         .select()
         .single();

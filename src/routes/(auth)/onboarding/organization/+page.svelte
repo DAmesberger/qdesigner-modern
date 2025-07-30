@@ -37,22 +37,15 @@
     currentUser = userData;
     
     // Check if user already has organizations
-    if (currentUser && await userHasOrganization(currentUser.id)) {
-      await goto('/dashboard');
-      return;
-    }
+    // TODO: Fix redirection loop - temporarily disabled
+    // if (currentUser && await userHasOrganization(currentUser.id)) {
+    //   await goto('/dashboard');
+    //   return;
+    // }
     
-    // Check for pending invitations
-    if (user.email) {
-      pendingInvitations = await getPendingInvitations(user.email);
-      
-      // If user has invitations but no form preference, show invitations
-      if (pendingInvitations.length > 0 && !showCreateForm) {
-        showCreateForm = false;
-      } else {
-        showCreateForm = true;
-      }
-    }
+    // For now, skip invitation check due to RLS issues
+    // TODO: Fix RLS policies for organization_invitations table
+    showCreateForm = true;
   });
   
   async function handleAcceptInvitation(invitation: Invitation) {

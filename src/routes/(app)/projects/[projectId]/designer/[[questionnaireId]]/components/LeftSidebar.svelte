@@ -48,7 +48,7 @@
     aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
   >
     <svg 
-      class="w-3 h-3 text-gray-600 transition-transform duration-300"
+      class="w-3 h-3 text-muted-foreground transition-transform duration-300"
       class:rotate-180={!isCollapsed}
       fill="none" 
       stroke="currentColor" 

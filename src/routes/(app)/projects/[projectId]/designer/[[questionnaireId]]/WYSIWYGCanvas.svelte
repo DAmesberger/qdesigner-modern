@@ -141,7 +141,7 @@
               </h2>
               {#if $currentBlock}
                 <p class="{uiTheme.typography.bodySmall} {uiTheme.semantic.textSecondary} mt-1 flex items-center">
-                  <span class="text-gray-400 mr-1">›</span>
+                  <span class="text-muted-foreground mr-1">›</span>
                   {$currentBlock.name || 'Untitled Block'}
                   {#if $currentBlock.type !== 'standard'}
                     <span class="ml-2 {uiTheme.components.badge.default} {uiTheme.components.badge.outline}">
@@ -155,11 +155,11 @@
             <!-- Block selector -->
             {#if $currentPageBlocks.length > 1}
               <div class="flex items-center space-x-2">
-                <label class="text-sm text-gray-600">Block:</label>
+                <label class="text-sm text-muted-foreground">Block:</label>
                 <select
                   value={$currentBlock?.id}
                   on:change={(e) => designerStore.setCurrentBlock(e.currentTarget.value)}
-                  class="text-sm px-3 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  class="text-sm px-3 py-1 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
                 >
                   {#each $currentPageBlocks as block}
                     <option value={block.id}>
@@ -178,13 +178,13 @@
           {#if items.length === 0 || !$currentBlock}
             <!-- Empty State -->
             <div class="flex flex-col items-center justify-center py-20 text-center">
-              <div class="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                <svg class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div class="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-4">
+                <svg class="w-10 h-10 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </div>
-              <h3 class="text-base font-medium text-gray-900 mb-1">Add your first question</h3>
-              <p class="text-sm text-gray-500 max-w-sm">
+              <h3 class="text-base font-medium text-foreground mb-1">Add your first question</h3>
+              <p class="text-sm text-muted-foreground max-w-sm">
                 Drag a question type from the left sidebar or click the + button to get started
               </p>
             </div>
@@ -239,7 +239,7 @@
             <button
               class="w-2 h-2 rounded-full transition-colors"
               class:bg-blue-600={page.id === $currentPage?.id}
-              class:bg-gray-300={page.id !== $currentPage?.id}
+              class:bg-muted={page.id !== $currentPage?.id}
               on:click={() => designerStore.setCurrentPage(page.id)}
               title="Page {index + 1}"
             />

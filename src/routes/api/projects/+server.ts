@@ -4,10 +4,19 @@ import { supabase } from '$lib/services/supabase';
 import { generateUUID } from '$lib/utils/uuid';
 import { handleAPIError } from '$lib/utils/errorHandler';
 
-export const GET: RequestHandler = async ({ locals, url }) => {
+export const GET: RequestHandler = async ({ request, locals, url }) => {
   try {
-    const session = await locals.getSession();
-    if (!session?.user) {
+    // Get auth header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader) {
+      return json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    // Get user from the auth token
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
     
@@ -15,7 +24,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     const { data: publicUser } = await supabase
       .from('users')
       .select('id')
-      .eq('auth_id', session.user.id)
+      .eq('auth_id', user.id)
       .single();
       
     if (!publicUser) {
@@ -56,9 +65,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   try {
     const data = await request.json();
     
-    // Get the user from locals (set by hooks)
-    const session = await locals.getSession();
-    if (!session?.user) {
+    // Get auth header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader) {
+      return json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    // Get user from the auth token
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
     
@@ -66,7 +83,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     const { data: publicUser } = await supabase
       .from('users')
       .select('id')
-      .eq('auth_id', session.user.id)
+      .eq('auth_id', user.id)
       .single();
       
     if (!publicUser) {

@@ -45,14 +45,14 @@
   >
     <!-- Backdrop -->
     <div 
-      class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+      class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
       on:click={handleClose}
     />
     
     <!-- Modal -->
     <div class="flex min-h-full items-center justify-center p-4">
       <div 
-        class="{theme.components.container.card} relative max-w-6xl w-full max-h-[90vh] flex flex-col"
+        class="bg-layer-modal border border-border shadow-xl rounded-lg relative max-w-6xl w-full max-h-[90vh] flex flex-col"
         on:click|stopPropagation
       >
         <!-- Header -->

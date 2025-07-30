@@ -1,0 +1,250 @@
+_format_version: "3.0"
+
+###
+### Consumers / Users
+###
+consumers:
+  - username: anon
+    keyauth_credentials:
+      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+
+  - username: service_role
+    keyauth_credentials:
+      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+
+###
+### Services
+###
+services:
+  # Auth Service - Open routes (no auth required)
+  - name: auth-v1-open
+    url: http://supabase-auth:9999/
+    routes:
+      - name: auth-v1-open
+        strip_path: true
+        paths:
+          - /auth/v1/verify
+          - /auth/v1/callback
+          - /auth/v1/authorize
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:5173
+            - http://localhost:3000
+          credentials: true
+          exposed_headers:
+            - Authorization
+            - x-client-info
+          headers:
+            - Accept
+            - Accept-Profile
+            - Authorization
+            - Content-Type
+            - Content-Profile
+            - Prefer
+            - x-client-info
+            - x-supabase-api-version
+            - apikey
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+
+  # Auth Service - Secure routes (API key required)
+  - name: auth-v1
+    url: http://supabase-auth:9999/
+    routes:
+      - name: auth-v1
+        strip_path: true
+        paths:
+          - /auth/v1/
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:5173
+            - http://localhost:3000
+          credentials: true
+          exposed_headers:
+            - Authorization
+            - x-client-info
+          headers:
+            - Accept
+            - Accept-Profile
+            - Authorization
+            - Content-Type
+            - Content-Profile
+            - Prefer
+            - x-client-info
+            - x-supabase-api-version
+            - apikey
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+      - name: key-auth
+        config:
+          hide_credentials: false
+
+  # REST API Service
+  - name: rest-v1
+    url: http://supabase-rest:3000/
+    routes:
+      - name: rest-v1
+        strip_path: true
+        paths:
+          - /rest/v1/
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:5173
+            - http://localhost:3000
+          credentials: true
+          exposed_headers:
+            - Authorization
+            - Content-Range
+            - x-client-info
+          headers:
+            - Accept
+            - Accept-Profile
+            - Authorization
+            - Content-Type
+            - Content-Profile
+            - Prefer
+            - x-client-info
+            - apikey
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+            - HEAD
+      - name: key-auth
+        config:
+          hide_credentials: false
+
+  # Realtime Service
+  - name: realtime-v1
+    url: http://supabase-realtime:4000/
+    routes:
+      - name: realtime-v1
+        strip_path: true
+        paths:
+          - /realtime/v1/
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:5173
+            - http://localhost:3000
+          credentials: true
+          exposed_headers:
+            - Authorization
+            - x-client-info
+          headers:
+            - Accept
+            - Accept-Profile
+            - Authorization
+            - Content-Type
+            - Content-Profile
+            - Prefer
+            - x-client-info
+            - x-supabase-api-version
+            - apikey
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+      - name: key-auth
+        config:
+          hide_credentials: false
+
+  # Storage Service
+  - name: storage-v1
+    url: http://supabase-storage:5000/
+    routes:
+      - name: storage-v1
+        strip_path: true
+        paths:
+          - /storage/v1/
+    plugins:
+      - name: cors
+        config:
+          origins:
+            - http://localhost:5173
+            - http://localhost:3000
+          credentials: true
+          exposed_headers:
+            - Authorization
+            - Content-Range
+            - x-client-info
+          headers:
+            - Accept
+            - Accept-Profile
+            - Authorization
+            - Content-Type
+            - Content-Profile
+            - Prefer
+            - x-client-info
+            - x-supabase-api-version
+            - apikey
+          methods:
+            - GET
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+            - HEAD
+      - name: key-auth
+        config:
+          hide_credentials: false
+
+###
+### Plugins
+###
+plugins:
+  - name: request-transformer
+    config:
+      add:
+        headers:
+          - x-forwarded-host:$(headers.host)
+  - name: cors
+    config:
+      origins:
+        - http://localhost:5173
+        - http://localhost:5175
+        - http://localhost:3000
+      credentials: true
+      exposed_headers:
+        - Authorization
+      headers:
+        - Accept
+        - Accept-Profile
+        - Authorization
+        - Content-Type
+        - Content-Profile
+        - Prefer
+        - x-client-info
+        - x-supabase-api-version
+        - apikey
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS

@@ -123,7 +123,7 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<div class="h-screen flex flex-col bg-gray-50">
+<div class="h-screen flex flex-col bg-background">
   <!-- Header -->
   <DesignerHeader
     questionnaireName={$designerStore.questionnaire.name}
@@ -141,7 +141,7 @@
     <LeftSidebar bind:activeTab />
     
     <!-- Canvas Area -->
-    <main class="flex-1 overflow-hidden bg-gray-50 relative flex">
+    <main class="flex-1 overflow-hidden bg-muted/30 relative flex">
       <!-- Designer Canvas -->
       <div 
         class="flex-1 overflow-hidden"
@@ -157,14 +157,14 @@
       <!-- Preview Panel -->
       {#if showPreview}
         <div 
-          class="preview-panel overflow-hidden border-l border-gray-300"
+          class="preview-panel overflow-hidden border-l border-border"
           style="width: {100 - previewSplitPosition}%"
         >
           <div class="preview-header">
-            <h3 class="text-sm font-semibold text-gray-700">Live Preview</h3>
+            <h3 class="text-sm font-semibold text-foreground">Live Preview</h3>
             <button
               on:click={() => showPreview = false}
-              class="p-1 hover:bg-gray-100 rounded"
+              class="p-1 hover:bg-accent hover:text-accent-foreground rounded"
               title="Close preview (Ctrl+P)"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -141,3 +141,4 @@ The variable system (`packages/scripting-engine`) supports:
 - Never use simpler approaches without asking
 - For development, we do not user docker containers directly, and we do not use Kong. Instead we use npx supabase start to run the Supabase local development environment, which includes the database and API server.
 - When using Playwright MCP, prefer using html, only use screenshots if interpreting html is not possible.
+- Users should not be created via script, only using the playwright MCP to test the actual user flow

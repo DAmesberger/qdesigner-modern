@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { goto } from '$app/navigation';
-  import Modal from '../common/Modal.svelte';
+  import Dialog from '../ui/overlays/Dialog.svelte';
   import Button from '../common/Button.svelte';
   import LoadingButton from '../common/LoadingButton.svelte';
   import { toast } from '$lib/stores/toast';
@@ -130,36 +130,36 @@
   }
 </script>
 
-<Modal bind:open on:close={handleClose}>
-  <div slot="header">
-    <h3 class="text-lg font-semibold text-gray-900">Create New Project</h3>
-    <p class="mt-1 text-sm text-gray-500">
-      Start a new research project to organize your questionnaires and data collection.
-    </p>
-  </div>
-  
+<Dialog 
+  bind:open 
+  title="Create New Project"
+  description="Start a new research project to organize your questionnaires and data collection."
+  size="lg"
+  on:close={handleClose}
+>
   <form on:submit|preventDefault={handleSubmit} class="space-y-6">
     <div>
-      <label for="name" class="block text-sm font-medium text-gray-700">
-        Project Name <span class="text-red-500">*</span>
+      <label for="name" class="block text-sm font-medium text-foreground">
+        Project Name <span class="text-destructive">*</span>
       </label>
       <input
         type="text"
         id="name"
         bind:value={formData.name}
         disabled={loading}
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm 
-               focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm
-               {errors.name ? 'border-red-300' : ''}"
+        class="mt-1 block w-full rounded-md border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors
+               placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring
+               disabled:cursor-not-allowed disabled:opacity-50
+               {errors.name ? 'border-destructive focus:ring-destructive' : ''}"
         placeholder="My Research Project"
       />
       {#if errors.name}
-        <p class="mt-1 text-sm text-red-600">{errors.name}</p>
+        <p class="mt-1 text-sm text-destructive">{errors.name}</p>
       {/if}
     </div>
     
     <div>
-      <label for="description" class="block text-sm font-medium text-gray-700">
+      <label for="description" class="block text-sm font-medium text-foreground">
         Description
       </label>
       <textarea
@@ -167,14 +167,15 @@
         bind:value={formData.description}
         disabled={loading}
         rows={3}
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm 
-               focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+        class="mt-1 block w-full rounded-md border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors
+               placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring
+               disabled:cursor-not-allowed disabled:opacity-50"
         placeholder="Brief description of your research project..."
       ></textarea>
     </div>
     
     <div>
-      <label for="code" class="block text-sm font-medium text-gray-700">
+      <label for="code" class="block text-sm font-medium text-foreground">
         Project Code
       </label>
       <input
@@ -182,15 +183,16 @@
         id="code"
         bind:value={formData.code}
         disabled={loading}
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm 
-               focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm
-               {errors.code ? 'border-red-300' : ''}"
+        class="mt-1 block w-full rounded-md border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors
+               placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring
+               disabled:cursor-not-allowed disabled:opacity-50
+               {errors.code ? 'border-destructive focus:ring-destructive' : ''}"
         placeholder="my-project"
       />
       {#if errors.code}
-        <p class="mt-1 text-sm text-red-600">{errors.code}</p>
+        <p class="mt-1 text-sm text-destructive">{errors.code}</p>
       {:else}
-        <p class="mt-1 text-sm text-gray-500">
+        <p class="mt-1 text-sm text-muted-foreground">
           Short identifier for URLs and participant access
         </p>
       {/if}
@@ -198,7 +200,7 @@
     
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label for="startDate" class="block text-sm font-medium text-gray-700">
+        <label for="startDate" class="block text-sm font-medium text-foreground">
           Start Date
         </label>
         <input
@@ -206,13 +208,14 @@
           id="startDate"
           bind:value={formData.startDate}
           disabled={loading}
-          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm 
-                 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          class="mt-1 block w-full rounded-md border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors
+                 focus:outline-none focus:ring-1 focus:ring-ring
+                 disabled:cursor-not-allowed disabled:opacity-50"
         />
       </div>
       
       <div>
-        <label for="endDate" class="block text-sm font-medium text-gray-700">
+        <label for="endDate" class="block text-sm font-medium text-foreground">
           End Date
         </label>
         <input
@@ -220,18 +223,19 @@
           id="endDate"
           bind:value={formData.endDate}
           disabled={loading}
-          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm 
-                 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm
-                 {errors.endDate ? 'border-red-300' : ''}"
+          class="mt-1 block w-full rounded-md border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors
+                 focus:outline-none focus:ring-1 focus:ring-ring
+                 disabled:cursor-not-allowed disabled:opacity-50
+                 {errors.endDate ? 'border-destructive focus:ring-destructive' : ''}"
         />
         {#if errors.endDate}
-          <p class="mt-1 text-sm text-red-600">{errors.endDate}</p>
+          <p class="mt-1 text-sm text-destructive">{errors.endDate}</p>
         {/if}
       </div>
     </div>
     
     <div>
-      <label for="maxParticipants" class="block text-sm font-medium text-gray-700">
+      <label for="maxParticipants" class="block text-sm font-medium text-foreground">
         Maximum Participants
       </label>
       <input
@@ -240,17 +244,18 @@
         bind:value={formData.maxParticipants}
         disabled={loading}
         min="1"
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm 
-               focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+        class="mt-1 block w-full rounded-md border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors
+               focus:outline-none focus:ring-1 focus:ring-ring
+               disabled:cursor-not-allowed disabled:opacity-50"
         placeholder="No limit"
       />
-      <p class="mt-1 text-sm text-gray-500">
+      <p class="mt-1 text-sm text-muted-foreground">
         Leave empty for unlimited participants
       </p>
     </div>
     
     <div>
-      <label for="irbNumber" class="block text-sm font-medium text-gray-700">
+      <label for="irbNumber" class="block text-sm font-medium text-foreground">
         IRB Number
       </label>
       <input
@@ -258,11 +263,12 @@
         id="irbNumber"
         bind:value={formData.irbNumber}
         disabled={loading}
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm 
-               focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+        class="mt-1 block w-full rounded-md border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors
+               focus:outline-none focus:ring-1 focus:ring-ring
+               disabled:cursor-not-allowed disabled:opacity-50"
         placeholder="IRB-2024-001"
       />
-      <p class="mt-1 text-sm text-gray-500">
+      <p class="mt-1 text-sm text-muted-foreground">
         Institutional Review Board approval number
       </p>
     </div>
@@ -273,31 +279,32 @@
         id="isPublic"
         bind:checked={formData.isPublic}
         disabled={loading}
-        class="h-4 w-4 rounded border-gray-300 text-indigo-600 
-               focus:ring-indigo-500"
+        class="h-4 w-4 rounded border-input text-primary 
+               focus:ring-ring focus:ring-offset-2"
       />
-      <label for="isPublic" class="ml-2 block text-sm text-gray-900">
+      <label for="isPublic" class="ml-2 block text-sm text-foreground">
         Make this project publicly accessible
       </label>
     </div>
-    
-    <div class="flex justify-end gap-3 pt-4 border-t">
-      <Button
-        variant="secondary"
-        on:click={handleClose}
-        disabled={loading}
-      >
-        Cancel
-      </Button>
-      
-      <LoadingButton
-        type="submit"
-        variant="primary"
-        {loading}
-        loadingText="Creating..."
-      >
-        Create Project
-      </LoadingButton>
-    </div>
   </form>
-</Modal>
+  
+  {#snippet footer()}
+    <Button
+      variant="ghost"
+      on:click={handleClose}
+      disabled={loading}
+    >
+      Cancel
+    </Button>
+    
+    <LoadingButton
+      type="button"
+      variant="primary"
+      {loading}
+      loadingText="Creating..."
+      on:click={handleSubmit}
+    >
+      Create Project
+    </LoadingButton>
+  {/snippet}
+</Dialog>

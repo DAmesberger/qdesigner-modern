@@ -30,6 +30,21 @@
   --ring: 262.1 83.3% 57.8%;
   
   --radius: 0.5rem;
+  
+  /* Layering System */
+  --layer-base: 0 0% 98%;
+  --layer-surface: 0 0% 100%;
+  --layer-overlay: 0 0% 100%;
+  --layer-modal: 0 0% 100%;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  
+  /* Backdrop */
+  --backdrop-opacity: 0.5;
 }
 
 .dark {
@@ -40,10 +55,10 @@
   --muted: 217.2 32.6% 17.5%;
   --muted-foreground: 215 20.2% 65.1%;
   
-  --popover: 222.2 84% 4.9%;
+  --popover: 222.2 47% 11.2%;
   --popover-foreground: 210 40% 98%;
   
-  --card: 222.2 84% 4.9%;
+  --card: 222.2 47% 11.2%;
   --card-foreground: 210 40% 98%;
   
   --border: 217.2 32.6% 17.5%;
@@ -62,6 +77,21 @@
   --destructive-foreground: 210 40% 98%;
   
   --ring: 263.4 70% 50.4%;
+  
+  /* Layering System */
+  --layer-base: 222.2 84% 4.9%;
+  --layer-surface: 222.2 47% 11.2%;
+  --layer-overlay: 217.2 32.6% 17.5%;
+  --layer-modal: 222.2 47% 11.2%;
+  
+  /* Shadows - Enhanced for dark mode */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.25);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
+  
+  /* Backdrop */
+  --backdrop-opacity: 0.7;
 }
 
 /* Removed @media (prefers-color-scheme: dark) to prevent system theme override.

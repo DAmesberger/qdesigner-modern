@@ -168,32 +168,23 @@ async function handlePendingInvitations(email: string, userId?: string) {
  */
 export async function createFirstOrganization(userId: string, orgName: string) {
   try {
-    // Create organization
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .insert({
-        name: orgName,
-        slug: orgName.toLowerCase().replace(/\s+/g, '-')
-      })
-      .select()
-      .single();
-
-    if (orgError) throw orgError;
-
-    // Add user as owner
-    const { error: memberError } = await supabase
-      .from('organization_members')
-      .insert({
-        organization_id: org.id,
-        user_id: userId,
-        role: 'owner',
-        status: 'active',
-        joined_at: new Date().toISOString()
+    const orgSlug = orgName.toLowerCase().replace(/\s+/g, '-');
+    
+    // Use the RPC function to avoid RLS recursion
+    const { data, error } = await supabase
+      .rpc('create_organization_with_owner', {
+        org_name: orgName,
+        org_slug: orgSlug,
+        owner_id: userId
       });
 
-    if (memberError) throw memberError;
+    if (error) throw error;
+    
+    if (!data || !data[0] || !data[0].success) {
+      throw new Error(data?.[0]?.error_message || 'Failed to create organization');
+    }
 
-    return org;
+    return { id: data[0].organization_id };
   } catch (error) {
     console.error('Error creating organization:', error as Error);
     throw error;

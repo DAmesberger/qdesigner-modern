@@ -49,13 +49,11 @@ export class QuestionnairePersistenceService {
         .from('questionnaire_definitions')
         .upsert({
           id: questionnaireId,
-          organization_id: organizationId,
           project_id: projectId,
           name: questionnaire.name,
-          code: questionnaire.code || null,
+          description: questionnaire.description,
           version: parseInt(questionnaire.version?.split('.')[0] || '1', 10),
-          definition, // Store entire questionnaire as JSONB
-          variables: questionnaire.variables || [], // Store variables separately for querying
+          content: definition, // Store entire questionnaire as JSONB in content field
           status: 'draft',
           settings: questionnaire.settings || {},
           created_by: userId,
@@ -94,19 +92,20 @@ export class QuestionnairePersistenceService {
       if (error) throw error;
       if (!data) throw new Error('Questionnaire not found');
 
-      // Extract questionnaire from the JSONB definition
+      // Extract questionnaire from the JSONB content
+      const content = data.content || {};
       const questionnaire: Questionnaire = {
-        id: data.definition.id || data.id,
-        name: data.definition.name || data.name,
-        description: data.definition.description || '',
-        version: data.definition.version || `${data.version}.0.0`,
-        pages: data.definition.pages || [],
-        questions: data.definition.questions || [],
-        variables: data.definition.variables || [],
-        settings: data.definition.settings || {},
-        flow: data.definition.flow || [],
-        created: data.definition.created || data.created_at,
-        modified: data.definition.modified || data.updated_at
+        id: content.id || data.id,
+        name: content.name || data.name,
+        description: content.description || data.description || '',
+        version: content.version || `${data.version}.0.0`,
+        pages: content.pages || [],
+        questions: content.questions || [],
+        variables: content.variables || [],
+        settings: content.settings || data.settings || {},
+        flow: content.flow || [],
+        created: content.created || data.created_at,
+        modified: content.modified || data.updated_at
       };
 
       return {

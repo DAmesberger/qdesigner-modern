@@ -214,7 +214,7 @@
             <div
               on:click={() => handleSelectBlock(block.id)}
               class="p-3 border rounded-lg cursor-pointer transition-all
-                     {$currentBlock?.id === block.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}"
+                     {$currentBlock?.id === block.id ? 'border-primary bg-primary/10' : 'border-border hover:border-border/80'}"
             >
               <div class="flex items-start justify-between">
                 <div class="flex items-start space-x-2 flex-1">
@@ -224,13 +224,13 @@
                   
                   <div class="flex-1">
                     <div class="flex items-center space-x-2">
-                      <h4 class="font-medium text-gray-900">{block.name || 'Untitled Block'}</h4>
-                      <span class="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600">
+                      <h4 class="font-medium text-foreground">{block.name || 'Untitled Block'}</h4>
+                      <span class="text-xs px-2 py-0.5 bg-muted rounded text-muted-foreground">
                         {block.type}
                       </span>
                     </div>
                     
-                    <p class="text-sm text-gray-600 mt-1">
+                    <p class="text-sm text-muted-foreground mt-1">
                       {getBlockDescription(block)}
                     </p>
                     
@@ -248,7 +248,7 @@
                 <div class="flex items-center space-x-1 ml-2">
                   {#if !dragDisabled}
                     <div class="drag-handle p-1 cursor-move">
-                      <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="w-4 h-4 text-muted-foreground/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
                       </svg>
                     </div>
@@ -256,10 +256,10 @@
                   
                   <button
                     on:click|stopPropagation={() => handleEditBlock(block)}
-                    class="p-1 hover:bg-gray-100 rounded"
+                    class="p-1 hover:bg-accent hover:text-accent-foreground rounded"
                     title="Edit"
                   >
-                    <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                             d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
@@ -282,7 +282,7 @@
         {/each}
       </div>
     {:else}
-      <p class="text-sm text-gray-500 text-center py-8">
+      <p class="text-sm text-muted-foreground text-center py-8">
         No blocks yet. Add blocks to organize your questions.
       </p>
     {/if}
@@ -291,15 +291,15 @@
 
 <!-- Add/Edit Block Modal -->
 {#if showAddBlock || editingBlock}
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-layer-modal rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-border">
       <h3 class="text-lg font-semibold mb-4">
         {editingBlock ? 'Edit Block' : 'Add Block'}
       </h3>
 
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <label class="block text-sm font-medium text-foreground mb-1">Name</label>
           <input
             type="text"
             value={editingBlock ? editingBlock.name : newBlock.name}
@@ -311,13 +311,13 @@
                 newBlock.name = value;
               }
             }}
-            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
             placeholder="e.g., Demographics, Pre-test Questions"
           />
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
+          <label class="block text-sm font-medium text-foreground mb-1">Type</label>
           <div class="grid grid-cols-2 gap-2">
             {#each blockTypes as blockType}
               <button
@@ -330,14 +330,14 @@
                 }}
                 class="p-3 border rounded-lg text-left transition-all
                        {(editingBlock ? editingBlock.type : newBlock.type) === blockType.type 
-                         ? 'border-blue-500 bg-blue-50' 
-                         : 'border-gray-200 hover:border-gray-300'}"
+                         ? 'border-primary bg-primary/10' 
+                         : 'border-border hover:border-border/80'}"
               >
                 <div class="flex items-start space-x-2">
                   <span class="text-lg">{blockType.icon}</span>
                   <div>
                     <h4 class="font-medium text-sm">{blockType.name}</h4>
-                    <p class="text-xs text-gray-600 mt-0.5">{blockType.description}</p>
+                    <p class="text-xs text-muted-foreground mt-0.5">{blockType.description}</p>
                   </div>
                 </div>
               </button>
@@ -351,7 +351,7 @@
             
             <div class="space-y-3">
               <div>
-                <label class="block text-sm text-gray-600 mb-1">Preserve First N Questions</label>
+                <label class="block text-sm text-muted-foreground mb-1">Preserve First N Questions</label>
                 <input
                   type="number"
                   min="0"
@@ -365,12 +365,12 @@
                       newBlock.randomization.preserveFirst = value;
                     }
                   }}
-                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
                 />
               </div>
               
               <div>
-                <label class="block text-sm text-gray-600 mb-1">Preserve Last N Questions</label>
+                <label class="block text-sm text-muted-foreground mb-1">Preserve Last N Questions</label>
                 <input
                   type="number"
                   min="0"
@@ -384,7 +384,7 @@
                       newBlock.randomization.preserveLast = value;
                     }
                   }}
-                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
                 />
               </div>
             </div>
@@ -397,7 +397,7 @@
             
             <div class="space-y-3">
               <div>
-                <label class="block text-sm text-gray-600 mb-1">Number of Iterations</label>
+                <label class="block text-sm text-muted-foreground mb-1">Number of Iterations</label>
                 <input
                   type="text"
                   value={editingBlock ? editingBlock.loop?.iterations || 1 : newBlock.loop.iterations}
@@ -411,13 +411,13 @@
                       newBlock.loop.iterations = numValue;
                     }
                   }}
-                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
                   placeholder="Number or formula (e.g., 5 or numTrials)"
                 />
               </div>
               
               <div>
-                <label class="block text-sm text-gray-600 mb-1">Iteration Variable (optional)</label>
+                <label class="block text-sm text-muted-foreground mb-1">Iteration Variable (optional)</label>
                 <input
                   type="text"
                   value={editingBlock ? editingBlock.loop?.iterationVariable || '' : newBlock.loop.iterationVariable}
@@ -430,13 +430,13 @@
                       newBlock.loop.iterationVariable = value;
                     }
                   }}
-                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
                   placeholder="e.g., currentTrial"
                 />
               </div>
               
               <div>
-                <label class="block text-sm text-gray-600 mb-1">Exit Condition (optional)</label>
+                <label class="block text-sm text-muted-foreground mb-1">Exit Condition (optional)</label>
                 <input
                   type="text"
                   value={editingBlock ? editingBlock.loop?.exitCondition || '' : newBlock.loop.exitCondition}
@@ -449,7 +449,7 @@
                       newBlock.loop.exitCondition = value;
                     }
                   }}
-                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
                   placeholder="e.g., score > 100"
                 />
               </div>
@@ -464,13 +464,13 @@
             showAddBlock = false;
             editingBlock = null;
           }}
-          class="px-4 py-2 text-gray-700 hover:text-gray-900"
+          class="px-4 py-2 text-muted-foreground hover:text-foreground"
         >
           Cancel
         </button>
         <button
           on:click={editingBlock ? handleUpdateBlock : handleAddBlock}
-          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
           {editingBlock ? 'Update' : 'Add'} Block
         </button>
