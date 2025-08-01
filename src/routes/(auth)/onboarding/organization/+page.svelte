@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import { goto, invalidateAll } from '$app/navigation';
   import { onMount } from 'svelte';
   import Button from '$lib/components/common/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
@@ -37,11 +37,10 @@
     currentUser = userData;
     
     // Check if user already has organizations
-    // TODO: Fix redirection loop - temporarily disabled
-    // if (currentUser && await userHasOrganization(currentUser.id)) {
-    //   await goto('/dashboard');
-    //   return;
-    // }
+    if (currentUser && await userHasOrganization(currentUser.id)) {
+      await goto('/dashboard');
+      return;
+    }
     
     // For now, skip invitation check due to RLS issues
     // TODO: Fix RLS policies for organization_invitations table
@@ -82,6 +81,10 @@
       }
       
       await createFirstOrganization(currentUser.id, organizationName);
+      // Invalidate all load functions to refresh organization data
+      await invalidateAll();
+      // Small delay to ensure data propagation
+      await new Promise(resolve => setTimeout(resolve, 100));
       await goto('/dashboard');
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to create organization';

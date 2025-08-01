@@ -3,15 +3,19 @@ import { redirect } from '@sveltejs/kit';
 import { supabase } from '$lib/services/supabase';
 import type { DashboardData, DashboardQuestionnaire, DashboardActivity } from '$lib/types/dashboard';
 
-export const load: PageLoad = async ({ parent }) => {
-  // Get data from parent layout
-  const { organizationId, user } = await parent();
+export const load: PageLoad = async ({ parent, depends }) => {
+  // This ensures the load function re-runs when invalidateAll() is called
+  depends('app:organization');
   
-  if (!user) {
+  // Get data from parent layout
+  const { organizationId, user, session } = await parent();
+  
+  // If no session at all, redirect to login
+  if (!session || !user) {
     throw redirect(302, '/login');
   }
   
-  // Check if user has an organization
+  // If authenticated but no organization, redirect to onboarding
   if (!organizationId) {
     throw redirect(302, '/onboarding/organization');
   }
