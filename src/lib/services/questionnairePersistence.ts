@@ -52,7 +52,7 @@ export class QuestionnairePersistenceService {
           project_id: projectId,
           name: questionnaire.name,
           description: questionnaire.description,
-          version: parseInt(questionnaire.version?.split('.')[0] || '1', 10),
+          version: parseInt((questionnaire.version || '1.0.0').split('.')[0], 10),
           content: definition, // Store entire questionnaire as JSONB in content field
           status: 'draft',
           settings: questionnaire.settings || {},

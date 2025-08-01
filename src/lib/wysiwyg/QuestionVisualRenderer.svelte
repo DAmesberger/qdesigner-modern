@@ -4,6 +4,7 @@
   import { createEventDispatcher } from 'svelte';
   import { produce } from 'immer';
   import { marked } from 'marked';
+  import { mediaService } from '$lib/services/mediaService';
   
   export let question: Question;
   export let theme: QuestionnaireTheme = defaultTheme;
@@ -17,6 +18,27 @@
     breaks: true,
     gfm: true
   });
+  
+  // Media handling for instruction questions
+  let mediaUrls: Record<string, string> = {};
+  
+  // Reactive media loading - when question changes, reload media
+  $: if (question.type === 'instruction' && question.display?.media) {
+    loadMediaUrls();
+  }
+  
+  async function loadMediaUrls() {
+    if (!question.display?.media) return;
+    
+    const mediaIds = question.display.media
+      .filter((m: any) => m.mediaId)
+      .map((m: any) => m.mediaId);
+    
+    if (mediaIds.length > 0) {
+      const urls = await mediaService.getSignedUrls(mediaIds);
+      mediaUrls = urls;
+    }
+  }
   
   // Generate CSS from theme
   function getQuestionStyles() {
@@ -175,13 +197,33 @@
   $: responseConfig = renderResponse(question, theme);
   $: promptText = getQuestionText(question);
   
-  // Parse markdown content for instruction questions
+  // Parse markdown content for instruction questions with media URL substitution
   $: parsedMarkdown = (() => {
     if (question.type === 'instruction' && question.display?.content) {
       try {
-        // marked.parse is synchronous in v16
-        const parsed = marked.parse(question.display.content);
-        return parsed;
+        let content = question.display.content;
+        
+        // Replace media references with actual URLs
+        if (question.display.media) {
+          question.display.media.forEach((media: any, index: number) => {
+            if (media.mediaId && mediaUrls[media.mediaId]) {
+              // Replace by refId if available
+              if (media.refId) {
+                content = content.replace(
+                  new RegExp(`\\(media:${media.refId}\\)`, 'g'),
+                  `(${mediaUrls[media.mediaId]})`
+                );
+              }
+              // Also replace by index
+              content = content.replace(
+                new RegExp(`\\(media:${index}\\)`, 'g'),
+                `(${mediaUrls[media.mediaId]})`
+              );
+            }
+          });
+        }
+        
+        return marked.parse(content);
       } catch (error) {
         console.error('Error parsing markdown:', error);
         return question.display.content;
@@ -457,6 +499,13 @@
     margin-left: 0;
     color: #666;
     font-style: italic;
+  }
+  
+  :global(.markdown-content img) {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 1rem auto;
   }
   
   :global(.markdown-content a) {

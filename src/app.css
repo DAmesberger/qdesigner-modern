@@ -38,6 +38,25 @@
   }
 }
 
+/* Layer background utilities */
+@layer utilities {
+  .bg-layer-base {
+    background-color: hsl(var(--layer-base));
+  }
+  
+  .bg-layer-surface {
+    background-color: hsl(var(--layer-surface));
+  }
+  
+  .bg-layer-overlay {
+    background-color: hsl(var(--layer-overlay));
+  }
+  
+  .bg-layer-modal {
+    background-color: hsl(var(--layer-modal));
+  }
+}
+
 /* Fix autofill styling for dark mode */
 @layer base {
   input:-webkit-autofill,

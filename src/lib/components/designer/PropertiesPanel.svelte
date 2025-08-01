@@ -20,6 +20,12 @@
   // Get organizationId and userId from store
   $: organizationId = $designerStore.questionnaire.organizationId || '';
   $: userId = $designerStore.userId || '';
+  
+  $: console.log('[PropertiesPanel] Store state:', {
+    organizationId,
+    userId,
+    questionnaire: $designerStore.questionnaire
+  });
 
   // Update handlers
   function updateQuestion(updates: Partial<Question>) {

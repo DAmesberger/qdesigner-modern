@@ -39,8 +39,11 @@
       .filter(m => m.mediaId)
       .map(m => m.mediaId!);
     
+    console.log('[InstructionProperties] Loading media URLs for:', mediaIds);
+    
     if (mediaIds.length > 0) {
       const urls = await mediaService.getSignedUrls(mediaIds);
+      console.log('[InstructionProperties] Loaded media URLs:', urls);
       mediaUrls = urls;
     }
   }
@@ -96,6 +99,10 @@
       try {
         let content = question.display.content;
         
+        console.log('[InstructionProperties] Original content:', content);
+        console.log('[InstructionProperties] Media URLs available:', mediaUrls);
+        console.log('[InstructionProperties] Question display media:', question.display.media);
+        
         // Replace media references with actual URLs
         if (question.display.media) {
           question.display.media.forEach((media, index) => {
@@ -112,9 +119,12 @@
                 new RegExp(`\\(media:${index}\\)`, 'g'),
                 `(${mediaUrls[media.mediaId]})`
               );
+              console.log(`[InstructionProperties] Replaced media:${index} with ${mediaUrls[media.mediaId]}`);
             }
           });
         }
+        
+        console.log('[InstructionProperties] Content after replacements:', content);
         
         return marked.parse(content);
       } catch (error) {

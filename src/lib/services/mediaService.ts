@@ -14,22 +14,35 @@ import { validateMediaFile, MIME_TYPE_EXTENSIONS } from '$lib/shared/types/media
 export class MediaService {
   private readonly BUCKET_NAME = 'media';
   private uploadAbortController: AbortController | null = null;
+  private currentUserId: string | null = null;
+  
+  /**
+   * Set the current user ID for access checks
+   */
+  setUserId(userId: string | null) {
+    this.currentUserId = userId;
+  }
   
   /**
    * Initialize storage bucket if it doesn't exist
    */
   async setupBucket(): Promise<void> {
     try {
-      const { data: buckets } = await supabase.storage.listBuckets();
+      const { data: buckets, error } = await supabase.storage.listBuckets();
+      
+      if (error) {
+        // Don't log - authenticated users might not have permission to list buckets
+        // The bucket can still exist and be usable
+        return;
+      }
       
       if (!buckets?.find(b => b.name === this.BUCKET_NAME)) {
         // Bucket should be created by migration
-        // If not found, it means the migration hasn't run or there's a permission issue
         console.warn(`Media bucket '${this.BUCKET_NAME}' not found. It should be created by database migrations.`);
       }
     } catch (error) {
-      // Don't throw, just log - the bucket might exist but we can't list buckets
-      console.warn('Could not verify media bucket exists:', error);
+      // Don't throw or log - the bucket might exist but we can't list buckets
+      // This is expected for normal authenticated users
     }
   }
   
@@ -108,7 +121,26 @@ export class MediaService {
         await this.addToCollection(mediaAsset.id, options.collectionId, options.userId);
       }
       
-      return mediaAsset;
+      // Transform snake_case to camelCase
+      return {
+        id: mediaAsset.id,
+        organizationId: mediaAsset.organization_id,
+        uploadedBy: mediaAsset.uploaded_by,
+        filename: mediaAsset.filename,
+        originalFilename: mediaAsset.original_filename,
+        mimeType: mediaAsset.mime_type,
+        sizeBytes: mediaAsset.size_bytes,
+        storagePath: mediaAsset.storage_path,
+        width: mediaAsset.width,
+        height: mediaAsset.height,
+        durationSeconds: mediaAsset.duration_seconds,
+        thumbnailPath: mediaAsset.thumbnail_path,
+        metadata: mediaAsset.metadata,
+        isPublic: mediaAsset.access_level === 'public',
+        accessLevel: mediaAsset.access_level,
+        createdAt: new Date(mediaAsset.created_at),
+        updatedAt: new Date(mediaAsset.updated_at)
+      };
     } catch (error) {
       console.error('Media upload failed:', error);
       throw error;
@@ -131,8 +163,12 @@ export class MediaService {
    * Get a signed URL for media access
    */
   async getSignedUrl(mediaId: string, expiresIn = 3600): Promise<string> {
+    console.log(`[MediaService] Getting signed URL for media: ${mediaId}`);
+    
     // Check access permissions
     const accessLevel = await this.checkAccess(mediaId);
+    console.log(`[MediaService] Access level for ${mediaId}: ${accessLevel}`);
+    
     if (!accessLevel) {
       throw new Error('Access denied');
     }
@@ -140,11 +176,14 @@ export class MediaService {
     // Get media record
     const { data: media, error } = await supabase
       .from('media_assets')
-      .select('storage_path, is_public')
+      .select('storage_path, access_level')
       .eq('id', mediaId)
       .single();
     
+    console.log(`[MediaService] Media query result:`, { media, error });
+    
     if (error || !media) {
+      console.error(`[MediaService] Failed to fetch media record:`, error);
       throw new Error('Media not found');
     }
     
@@ -238,7 +277,26 @@ export class MediaService {
     
     if (error) throw error;
     
-    return data || [];
+    // Transform snake_case to camelCase
+    return (data || []).map(item => ({
+      id: item.id,
+      organizationId: item.organization_id,
+      uploadedBy: item.uploaded_by,
+      filename: item.filename,
+      originalFilename: item.original_filename,
+      mimeType: item.mime_type,
+      sizeBytes: item.size_bytes,
+      storagePath: item.storage_path,
+      width: item.width,
+      height: item.height,
+      durationSeconds: item.duration_seconds,
+      thumbnailPath: item.thumbnail_path,
+      metadata: item.metadata,
+      isPublic: item.access_level === 'public',
+      accessLevel: item.access_level,
+      createdAt: new Date(item.created_at),
+      updatedAt: new Date(item.updated_at)
+    }));
   }
   
   /**
@@ -404,18 +462,47 @@ export class MediaService {
    * Check user's access level for a media asset
    */
   async checkAccess(mediaId: string, userId?: string): Promise<MediaAccessLevel> {
-    const { data, error } = await supabase
-      .rpc('get_media_access_level', {
-        p_media_id: mediaId,
-        p_user_id: userId
-      });
-    
-    if (error) {
-      console.error('Failed to check media access:', error);
+    try {
+      // Get the current auth user if no userId provided
+      let authUserId = userId;
+      if (!authUserId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        authUserId = user?.id || null;
+      }
+      
+      // If still no user ID, try to use the stored currentUserId
+      if (!authUserId && this.currentUserId) {
+        // currentUserId is the public user ID, we need to get the auth ID
+        const { data: userData } = await supabase
+          .from('users')
+          .select('auth_id')
+          .eq('id', this.currentUserId)
+          .single();
+        
+        authUserId = userData?.auth_id || null;
+      }
+      
+      if (!authUserId) {
+        console.error('No user ID available for access check');
+        return null;
+      }
+      
+      const { data, error } = await supabase
+        .rpc('get_media_access_level', {
+          p_media_id: mediaId,
+          p_user_id: authUserId
+        });
+      
+      if (error) {
+        console.error('Failed to check media access:', error);
+        return null;
+      }
+      
+      return data as MediaAccessLevel;
+    } catch (err) {
+      console.error('Error checking media access:', err);
       return null;
     }
-    
-    return data as MediaAccessLevel;
   }
   
   /**

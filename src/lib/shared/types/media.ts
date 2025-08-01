@@ -104,20 +104,20 @@ export type MediaAccessLevel = 'owner' | 'delete' | 'edit' | 'view' | null;
 
 // Helper type guards
 export function isImageMedia(media: MediaAsset): boolean {
-  return media.mimeType.startsWith('image/');
+  return media?.mimeType?.startsWith('image/') || false;
 }
 
 export function isVideoMedia(media: MediaAsset): boolean {
-  return media.mimeType.startsWith('video/');
+  return media?.mimeType?.startsWith('video/') || false;
 }
 
 export function isAudioMedia(media: MediaAsset): boolean {
-  return media.mimeType.startsWith('audio/');
+  return media?.mimeType?.startsWith('audio/') || false;
 }
 
 // File size formatters
-export function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 Bytes';
+export function formatFileSize(bytes: number | undefined | null): string {
+  if (!bytes || bytes === 0) return '0 Bytes';
   
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];

@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { Question, QuestionnaireTheme } from '$lib/shared';
   import { defaultTheme } from '$lib/shared';
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import { produce } from 'immer';
+  import { marked } from 'marked';
+  import { mediaService } from '$lib/services/mediaService';
   
   export let question: Question;
   export let theme: QuestionnaireTheme = defaultTheme;
@@ -10,6 +12,60 @@
   export let selected = false;
   
   const dispatch = createEventDispatcher();
+  
+  // Media handling for instruction questions
+  let mediaUrls: Record<string, string> = {};
+  let parsedInstructionContent = '';
+  
+  // Reactive media loading - when question changes, reload media
+  $: if (question.type === 'instruction' && question.display?.media) {
+    loadMediaUrls();
+  }
+  
+  async function loadMediaUrls() {
+    if (!question.display?.media) return;
+    
+    const mediaIds = question.display.media
+      .filter((m: any) => m.mediaId)
+      .map((m: any) => m.mediaId);
+    
+    if (mediaIds.length > 0) {
+      const urls = await mediaService.getSignedUrls(mediaIds);
+      mediaUrls = urls;
+      // Trigger reactive update
+      parsedInstructionContent = parsedInstructionContent;
+    }
+  }
+  
+  // Make content parsing reactive to both question changes and media URL updates
+  $: parsedInstructionContent = (() => {
+    if (question.type === 'instruction' && question.display?.content) {
+      let content = question.display.content;
+      
+      // Replace media references with actual URLs
+      if (question.display.media) {
+        question.display.media.forEach((media: any, index: number) => {
+          if (media.mediaId && mediaUrls[media.mediaId]) {
+            // Replace by refId if available
+            if (media.refId) {
+              content = content.replace(
+                new RegExp(`\\(media:${media.refId}\\)`, 'g'),
+                `(${mediaUrls[media.mediaId]})`
+              );
+            }
+            // Also replace by index
+            content = content.replace(
+              new RegExp(`\\(media:${index}\\)`, 'g'),
+              `(${mediaUrls[media.mediaId]})`
+            );
+          }
+        });
+      }
+      
+      return marked.parse(content);
+    }
+    return '';
+  })()
   
   // Generate CSS from theme
   function getQuestionStyles() {
@@ -53,6 +109,8 @@
         return renderTextQuestion(question, theme);
       case 'scale':
         return renderScaleQuestion(question, theme);
+      case 'instruction':
+        return { component: 'instruction' as const };
       default:
         return null;
     }
@@ -110,8 +168,9 @@
   role="button"
   tabindex="0"
 >
-  <!-- Question Prompt -->
-  {#if mode === 'edit' && isEditingPrompt}
+  <!-- Question Prompt (hide for instruction questions with content) -->
+  {#if !(question.type === 'instruction' && question.display?.content)}
+    {#if mode === 'edit' && isEditingPrompt}
     <div
       contenteditable="true"
       class="prompt-editor"
@@ -135,6 +194,7 @@
     >
       {question.text}
     </div>
+    {/if}
   {/if}
   
   <!-- Question Description -->
@@ -187,6 +247,11 @@
           disabled={mode === 'edit'}
         />
       {/if}
+    {:else if responseConfig?.component === 'instruction'}
+      <!-- Instruction content with markdown and media -->
+      <div class="instruction-content prose prose-sm max-w-none">
+        {@html parsedInstructionContent}
+      </div>
     {:else if responseConfig?.component === 'scale'}
       {@const scaleConfig = responseConfig}
       <div 
@@ -255,6 +320,29 @@
     background: rgba(59, 130, 246, 0.05);
     padding: 2px 4px;
     border-radius: 2px;
+  }
+  
+  .instruction-content {
+    line-height: 1.6;
+  }
+  
+  .instruction-content :global(img) {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 1rem auto;
+  }
+  
+  .instruction-content :global(h1),
+  .instruction-content :global(h2),
+  .instruction-content :global(h3) {
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+  }
+  
+  .instruction-content :global(p) {
+    margin-bottom: 0.75em;
   }
   
   .choice-option {

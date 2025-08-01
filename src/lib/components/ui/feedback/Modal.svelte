@@ -66,7 +66,7 @@
       <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
         <div 
           bind:this={modalElement}
-          class="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 border border-border text-left shadow-xl transition-all animate-in fade-in zoom-in-95 duration-200 sm:my-8 sm:w-full {sizeClasses[size]}"
+          class="relative transform overflow-hidden rounded-lg bg-layer-modal border border-border text-left shadow-xl transition-all animate-in fade-in zoom-in-95 duration-200 sm:my-8 sm:w-full {sizeClasses[size]}"
         >
           {#if title || $$slots.header}
             <div class="border-b border-border px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
@@ -83,7 +83,7 @@
           </div>
           
           {#if $$slots.footer}
-            <div class="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-border">
+            <div class="bg-muted/30 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 border-t border-border">
               <slot name="footer" />
             </div>
           {/if}

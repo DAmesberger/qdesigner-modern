@@ -65,7 +65,7 @@ export const load: LayoutLoad = async ({ url, route, depends }) => {
     
     return {
       session,
-      user: session?.user, // Temporarily revert to auth user
+      user: publicUser || session?.user, // Use public user if available
       publicUser, // Also provide public user
       organizationId
     };

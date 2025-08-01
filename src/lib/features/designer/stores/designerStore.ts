@@ -705,7 +705,7 @@ function createDesignerStore() {
             created: new Date(definition.created_at),
             modified: new Date(definition.updated_at),
             projectId: definition.project_id,
-            organizationId: definition.organization_id,
+            organizationId: definition.organizationId || definition.organization_id,
             variables: definition.content?.variables || [],
             questions: definition.content?.questions || [],
             pages: definition.content?.pages || [{

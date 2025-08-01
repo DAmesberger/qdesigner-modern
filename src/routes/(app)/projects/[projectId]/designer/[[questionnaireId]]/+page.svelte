@@ -28,6 +28,7 @@
   
   // Get data from page
   $: user = $page.data?.user;
+  $: publicUser = $page.data?.publicUser;
   $: organizationId = $page.data?.organizationId;
   $: projectId = $page.data?.projectId;
   $: questionnaire = $page.data?.questionnaire;
@@ -35,10 +36,22 @@
   
   // Initialize
   onMount(() => {
+    console.log('[Designer Page] Mounting with data:', {
+      organizationId,
+      projectId,
+      userId: publicUser?.id || user?.id,
+      questionnaire: questionnaire
+    });
+    
     designerStore.initVariableEngine();
     
     // Initialize store with context
-    if (user?.id) {
+    // Use public user ID for database operations
+    if (publicUser?.id) {
+      designerStore.setUserId(publicUser.id);
+    } else if (user?.id) {
+      // Fallback to auth user ID if public user not available
+      console.warn('Public user not available, using auth user ID');
       designerStore.setUserId(user.id);
     }
     

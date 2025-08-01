@@ -39,6 +39,13 @@
   let fileInput: HTMLInputElement;
   
   onMount(() => {
+    console.log('[MediaManager] Mounted with props:', { organizationId, userId });
+    
+    // Set the current user ID in the media service
+    if (userId) {
+      mediaService.setUserId(userId);
+    }
+    
     loadMedia();
     // Initialize storage bucket
     mediaService.setupBucket().catch(console.error);
@@ -52,17 +59,24 @@
         search: searchQuery || undefined
       });
       
-      // Get signed URLs for thumbnails
-      const mediaIds = mediaAssets.map(m => m.id);
-      const urls = await mediaService.getSignedUrls(mediaIds, 3600);
+      console.log('[MediaManager] Loaded media assets:', mediaAssets);
       
-      // Update assets with URLs
-      mediaAssets = mediaAssets.map(asset => ({
-        ...asset,
-        thumbnailUrl: urls[asset.id]
-      }));
+      // Get signed URLs for thumbnails only if we have media
+      if (mediaAssets.length > 0) {
+        const mediaIds = mediaAssets.map(m => m.id);
+        console.log('[MediaManager] Getting signed URLs for:', mediaIds);
+        const urls = await mediaService.getSignedUrls(mediaIds, 3600);
+        
+        // Update assets with URLs
+        mediaAssets = mediaAssets.map(asset => ({
+          ...asset,
+          thumbnailUrl: urls[asset.id]
+        }));
+      }
     } catch (error) {
       console.error('Failed to load media:', error);
+      // Set empty array on error to show empty state
+      mediaAssets = [];
     } finally {
       loading = false;
     }
@@ -77,6 +91,12 @@
   }
   
   async function uploadFiles(files: File[]) {
+    if (!organizationId || !userId) {
+      console.error('[MediaManager] Missing organizationId or userId for upload');
+      alert('Unable to upload: Missing organization or user context');
+      return;
+    }
+    
     uploading = true;
     
     for (const file of files) {
@@ -187,7 +207,8 @@
     loading = false;
   }
   
-  function getMediaIcon(mimeType: string): string {
+  function getMediaIcon(mimeType: string | undefined): string {
+    if (!mimeType) return '📄';
     if (mimeType.startsWith('image/')) return '🖼️';
     if (mimeType.startsWith('video/')) return '🎬';
     if (mimeType.startsWith('audio/')) return '🎵';

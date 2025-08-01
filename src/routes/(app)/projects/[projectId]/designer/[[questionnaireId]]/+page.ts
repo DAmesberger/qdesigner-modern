@@ -66,7 +66,10 @@ export const load: PageLoad = async ({ params, parent, url }) => {
           .single();
         
         if (networkQuestionnaire) {
-          questionnaire = networkQuestionnaire;
+          questionnaire = {
+            ...networkQuestionnaire,
+            organizationId: parentData.organizationId || project.organization_id
+          };
           // Cache for offline use
           await offlineData.cacheQuestionnaire(questionnaire);
         }
@@ -77,13 +80,17 @@ export const load: PageLoad = async ({ params, parent, url }) => {
     
     // Fall back to cache
     if (!questionnaire) {
-      questionnaire = await offlineData.getCachedData('questionnaire', questionnaireId);
-      if (!questionnaire) {
+      const cachedQuestionnaire = await offlineData.getCachedData('questionnaire', questionnaireId);
+      if (!cachedQuestionnaire) {
         throw error(404, isOnline
           ? 'Questionnaire not found'
           : 'Questionnaire not available offline. Please connect to internet and try again.'
         );
       }
+      questionnaire = {
+        ...cachedQuestionnaire,
+        organizationId: parentData.organizationId || project.organization_id
+      };
     }
   } else if (questionnaireId === 'new') {
     // Creating a new questionnaire
