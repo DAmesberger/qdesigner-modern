@@ -4,6 +4,7 @@
   
   // Question type components
   import TextDisplayQuestion from '../questions/TextDisplayQuestion.svelte';
+  import InstructionQuestion from '../questions/InstructionQuestion.svelte';
   import MultipleChoiceQuestion from '../questions/MultipleChoiceQuestion.svelte';
   import ScaleQuestion from '../questions/ScaleQuestion.svelte';
   import TextInputQuestion from '../questions/TextInputQuestion.svelte';
@@ -21,6 +22,7 @@
   // Map question types to components
   const questionComponents = {
     'text-display': TextDisplayQuestion,
+    'instruction': InstructionQuestion,
     'multiple-choice': MultipleChoiceQuestion,
     'scale': ScaleQuestion,
     'text-input': TextInputQuestion,
@@ -39,7 +41,7 @@
       rating: 'scale', // Use scale component for rating
       reaction: 'text-display', // Temporarily use text-display
       multimedia: 'text-display', // Temporarily use text-display
-      instruction: 'text-display', // Use text-display for instructions
+      instruction: 'instruction', // Use instruction component
       webgl: 'text-display' // Temporarily use text-display
     };
     

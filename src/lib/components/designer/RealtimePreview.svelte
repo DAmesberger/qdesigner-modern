@@ -16,7 +16,6 @@
   // State
   let questionnaire: Questionnaire;
   let currentPageIndex = 0;
-  let currentBlockIndex = 0;
   let responses = writable<Record<string, any>>({});
   let variables = writable<Record<string, any>>({});
   let variableEngine: VariableEngine;
@@ -62,22 +61,16 @@
   // Get current configuration
   $: deviceConfig = deviceConfigs[deviceType];
   $: currentPage = questionnaire?.pages[currentPageIndex];
-  $: currentBlock = currentPage?.blocks?.[currentBlockIndex];
   $: currentQuestions = getQuestionsForCurrentView();
   
   function getQuestionsForCurrentView() {
-    if (!questionnaire || !currentBlock) return [];
+    if (!questionnaire || !currentPage) return [];
     
-    // Get questions from current block
-    const questionIds = currentBlock.questions ?? [];
+    // Get questions from current page
+    const questionIds = currentPage.questions ?? [];
     let questions = questionIds
       .map(id => questionnaire.questions.find(q => q.id === id))
       .filter((q): q is Question => q !== undefined);
-    
-    // Apply block-level randomization if needed
-    if (currentBlock.type === 'randomized' && currentBlock.randomization?.enabled) {
-      questions = randomizeQuestions(questions, currentBlock.randomization);
-    }
     
     // Apply visibility conditions
     questions = questions.filter(q => evaluateVisibility(q));
@@ -168,21 +161,14 @@
   }
   
   function navigateNext() {
-    if (currentPage && currentBlockIndex < (currentPage.blocks ?? []).length - 1) {
-      currentBlockIndex++;
-    } else if (currentPageIndex < questionnaire.pages.length - 1) {
+    if (currentPageIndex < questionnaire.pages.length - 1) {
       currentPageIndex++;
-      currentBlockIndex = 0;
     }
   }
   
   function navigatePrevious() {
-    if (currentBlockIndex > 0) {
-      currentBlockIndex--;
-    } else if (currentPageIndex > 0) {
+    if (currentPageIndex > 0) {
       currentPageIndex--;
-      const prevPage = questionnaire.pages[currentPageIndex];
-      currentBlockIndex = prevPage ? (prevPage.blocks ?? []).length - 1 : 0;
     }
   }
   
@@ -199,16 +185,17 @@
   
   function resetPreview() {
     currentPageIndex = 0;
-    currentBlockIndex = 0;
     responses.set({});
+    variables.set({});
     
-    // Reset variables to defaults
-    const initialVars: Record<string, any> = {};
-    questionnaire?.variables.forEach(v => {
-      initialVars[v.name] = v.defaultValue;
-      variableEngine?.setValue(v.name, v.defaultValue);
-    });
-    variables.set(initialVars);
+    // Re-initialize variables
+    if (questionnaire && variableEngine) {
+      const initialVars: Record<string, any> = {};
+      questionnaire.variables.forEach(v => {
+        initialVars[v.name] = v.defaultValue;
+      });
+      variables.set(initialVars);
+    }
   }
   
   onMount(() => {
@@ -331,9 +318,6 @@
           {#if currentPage}
             <div class="page-header">
               <h2>{currentPage.name || currentPage.title || `Page ${currentPageIndex + 1}`}</h2>
-              {#if currentBlock}
-                <p class="block-info">{currentBlock.name || `Block ${currentBlockIndex + 1}`}</p>
-              {/if}
             </div>
             
             <div class="questions-container">
@@ -351,7 +335,7 @@
               
               {#if currentQuestions.length === 0}
                 <div class="empty-block">
-                  <p>No questions in this block</p>
+                  <p>No questions on this page</p>
                 </div>
               {/if}
             </div>
@@ -360,22 +344,19 @@
               <button
                 class="nav-btn secondary"
                 on:click={navigatePrevious}
-                disabled={currentPageIndex === 0 && currentBlockIndex === 0}
+                disabled={currentPageIndex === 0}
               >
                 Previous
               </button>
               
               <div class="progress-info">
                 Page {currentPageIndex + 1} of {questionnaire.pages.length}
-                {#if (currentPage.blocks ?? []).length > 1}
-                  • Block {currentBlockIndex + 1} of {(currentPage.blocks ?? []).length}
-                {/if}
               </div>
               
               <button
                 class="nav-btn primary"
                 on:click={navigateNext}
-                disabled={!canNavigateNext() || (currentPageIndex === questionnaire.pages.length - 1 && currentBlockIndex === ((currentPage?.blocks ?? []).length - 1))}
+                disabled={!canNavigateNext() || currentPageIndex === questionnaire.pages.length - 1}
               >
                 Next
               </button>

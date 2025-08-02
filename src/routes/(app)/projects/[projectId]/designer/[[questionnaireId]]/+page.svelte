@@ -15,7 +15,7 @@
   import RightSidebar from './components/RightSidebar.svelte';
   import WYSIWYGCanvas from './WYSIWYGCanvas.svelte';
   import StructuralCanvas from './StructuralCanvas.svelte';
-  import RealtimePreview from '$lib/components/designer/RealtimePreview.svelte';
+  import PreviewModal from '$lib/components/designer/PreviewModal.svelte';
   import CrashRecovery from '$lib/components/ui/CrashRecovery.svelte';
   import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
   
@@ -23,7 +23,6 @@
   let viewMode: 'structural' | 'wysiwyg' = 'wysiwyg';
   let activeTab: 'blocks' | 'questions' | 'variables' | 'flow' = 'blocks';
   let showPreview = false;
-  let previewSplitPosition = 50; // percentage
   let showCommandPalette = false;
   
   // Get data from page
@@ -75,6 +74,13 @@
     } else if (questionnaire && !questionnaire.isNew) {
       // Load existing questionnaire
       designerStore.loadQuestionnaireFromDefinition(questionnaire);
+      // Ensure context is set from page data
+      if (organizationId) {
+        designerStore.setOrganizationId(organizationId);
+      }
+      if (projectId) {
+        designerStore.setProjectId(projectId);
+      }
     }
     
     // Start auto-save
@@ -154,46 +160,11 @@
     <LeftSidebar bind:activeTab />
     
     <!-- Canvas Area -->
-    <main class="flex-1 overflow-hidden bg-muted/30 relative flex">
-      <!-- Designer Canvas -->
-      <div 
-        class="flex-1 overflow-hidden"
-        style="width: {showPreview ? previewSplitPosition : 100}%"
-      >
-        {#if viewMode === 'structural'}
-          <StructuralCanvas />
-        {:else}
-          <WYSIWYGCanvas />
-        {/if}
-      </div>
-      
-      <!-- Preview Panel -->
-      {#if showPreview}
-        <div 
-          class="preview-panel overflow-hidden border-l border-border"
-          style="width: {100 - previewSplitPosition}%"
-        >
-          <div class="preview-header">
-            <h3 class="text-sm font-semibold text-foreground">Live Preview</h3>
-            <button
-              on:click={() => showPreview = false}
-              class="p-1 hover:bg-accent hover:text-accent-foreground rounded"
-              title="Close preview (Ctrl+P)"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div class="preview-content">
-            <RealtimePreview 
-              autoUpdate={true}
-              updateDelay={300}
-              showDebugPanel={false}
-              interactive={true}
-            />
-          </div>
-        </div>
+    <main class="flex-1 overflow-hidden bg-muted/30 relative">
+      {#if viewMode === 'structural'}
+        <StructuralCanvas />
+      {:else}
+        <WYSIWYGCanvas />
       {/if}
     </main>
     
@@ -207,6 +178,13 @@
 
 <!-- Command Palette -->
 <CommandPalette bind:isOpen={showCommandPalette} />
+
+<!-- Preview Modal -->
+<PreviewModal 
+  bind:isOpen={showPreview}
+  questionnaire={$designerStore.questionnaire}
+  on:close={() => showPreview = false}
+/>
 
 <style>
   .preview-panel {
