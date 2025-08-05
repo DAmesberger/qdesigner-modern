@@ -65,7 +65,12 @@ export const load: PageLoad = async ({ params, parent, url }) => {
           .eq('project_id', params.projectId)
           .single();
         
+        if (qError) {
+          console.error('[DEBUG] Error fetching questionnaire:', qError);
+        }
+        
         if (networkQuestionnaire) {
+          console.log('[DEBUG] Fetched questionnaire from network:', networkQuestionnaire);
           questionnaire = {
             ...networkQuestionnaire,
             organizationId: parentData.organizationId || project.organization_id

@@ -3,7 +3,7 @@
   import { defaultTheme } from '$lib/shared';
   import { createEventDispatcher } from 'svelte';
   import { produce } from 'immer';
-  import { marked } from 'marked';
+  import { processMarkdownContentSync } from '$lib/services/markdownProcessor';
   import { mediaService } from '$lib/services/mediaService';
   
   export let question: Question;
@@ -13,18 +13,22 @@
   
   const dispatch = createEventDispatcher();
   
-  // Configure marked for safe rendering
-  marked.use({
-    breaks: true,
-    gfm: true
-  });
-  
   // Media handling for instruction questions
   let mediaUrls: Record<string, string> = {};
   
   // Reactive media loading - when question changes, reload media
-  $: if (question.type === 'instruction' && question.display?.media) {
-    loadMediaUrls();
+  $: {
+    console.log('[QuestionVisualRenderer] Question data:', {
+      type: question.type,
+      hasDisplay: !!question.display,
+      hasMedia: !!question.display?.media,
+      media: question.display?.media,
+      content: question.display?.content?.substring(0, 100)
+    });
+    
+    if (question.type === 'instruction' && question.display?.media) {
+      loadMediaUrls();
+    }
   }
   
   async function loadMediaUrls() {
@@ -70,7 +74,7 @@
   
   // Check if question is display-only (no input)
   function isDisplayOnly(question: Question): boolean {
-    return ['instruction', 'text-display', 'media-display', 'webgl'].includes(question.type);
+    return ['instruction', 'text-instruction', 'text-display', 'media-display', 'webgl'].includes(question.type);
   }
   
   // Handle inline editing
@@ -232,36 +236,23 @@
   $: responseConfig = renderResponse(question, theme);
   $: promptText = getQuestionText(question);
   
-  // Parse markdown content for instruction questions with media URL substitution
+  // Parse markdown content for instruction questions using the centralized processor
   $: parsedMarkdown = (() => {
-    if (question.type === 'instruction' && question.display?.content) {
+    if ((question.type === 'instruction' || question.type === 'text-instruction')) {
+      const content = question.display?.content || question.text;
+      if (!content) return null;
+      
       try {
-        let content = question.display.content;
-        
-        // Replace media references with actual URLs
-        if (question.display.media) {
-          question.display.media.forEach((media: any, index: number) => {
-            if (media.mediaId && mediaUrls[media.mediaId]) {
-              // Replace by refId if available
-              if (media.refId) {
-                content = content.replace(
-                  new RegExp(`\\(media:${media.refId}\\)`, 'g'),
-                  `(${mediaUrls[media.mediaId]})`
-                );
-              }
-              // Also replace by index
-              content = content.replace(
-                new RegExp(`\\(media:${index}\\)`, 'g'),
-                `(${mediaUrls[media.mediaId]})`
-              );
-            }
-          });
-        }
-        
-        return marked.parse(content);
+        // Use the centralized markdown processor with media URL replacement
+        return processMarkdownContentSync(content, {
+          media: question.display?.media || [],
+          mediaUrls: mediaUrls,
+          format: 'markdown',
+          processVariables: false
+        });
       } catch (error) {
         console.error('Error parsing markdown:', error);
-        return question.display.content;
+        return content;
       }
     }
     return null;
@@ -414,8 +405,7 @@
     {:else if responseConfig?.component === 'drawing'}
       {@const drawingConfig = responseConfig}
       <div 
-        class="drawing-canvas"
-        class="border-2 border-dashed border-border rounded-lg bg-card relative overflow-hidden"
+        class="drawing-canvas border-2 border-dashed border-border rounded-lg bg-card relative overflow-hidden"
       >
         <div style="width: {drawingConfig.canvas.width}px; height: {drawingConfig.canvas.height}px; display: flex; align-items: center; justify-content: center">
           <div class="text-center text-muted-foreground">

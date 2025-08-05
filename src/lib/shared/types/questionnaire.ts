@@ -142,6 +142,9 @@ export const QuestionTypes = {
   FILE_UPLOAD: 'file-upload',
   MEDIA_RESPONSE: 'media-response',
   
+  // Drawing
+  DRAWING: 'drawing',
+  
   // Statistical
   STATISTICAL_FEEDBACK: 'statistical-feedback'
 } as const;
@@ -396,6 +399,20 @@ export interface FileUploadDisplayConfig extends BaseDisplayConfig {
   dragDrop?: boolean;
 }
 
+export interface DrawingDisplayConfig extends BaseDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  canvas?: {
+    width?: number;
+    height?: number;
+    background?: string;
+  };
+  tools?: Array<'pen' | 'eraser' | 'line' | 'shape'>;
+  colors?: string[];
+  defaultColor?: string;
+  defaultTool?: 'pen' | 'eraser' | 'line' | 'shape';
+}
+
 export interface RankingDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
@@ -464,6 +481,17 @@ export interface ReactionTimeResponseConfig extends BaseResponseConfig {
 export interface FileUploadResponseConfig extends BaseResponseConfig {
   storage: 'base64' | 'url' | 'reference';
   saveMetadata?: boolean;
+}
+
+export interface DrawingResponseConfig extends BaseResponseConfig {
+  storage: 'base64' | 'url' | 'reference';
+  saveMetadata?: boolean;
+  analysis?: {
+    extractFeatures?: boolean;
+    detectShapes?: boolean;
+    measurePressure?: boolean;
+    trackTiming?: boolean;
+  };
 }
 
 // ============================================================================
@@ -689,6 +717,13 @@ export interface MediaResponseQuestion extends BaseQuestion {
   validation?: FileValidation;
 }
 
+export interface DrawingQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.DRAWING;
+  display: DrawingDisplayConfig;
+  response: DrawingResponseConfig;
+  validation?: BaseValidation;
+}
+
 export interface StatisticalFeedbackQuestion extends BaseQuestion {
   type: typeof QuestionTypes.STATISTICAL_FEEDBACK;
   display: StatisticalFeedbackConfig;
@@ -715,6 +750,7 @@ export type Question =
   | DateTimeQuestion
   | FileUploadQuestion
   | MediaResponseQuestion
+  | DrawingQuestion
   | StatisticalFeedbackQuestion;
 
 // ============================================================================
@@ -783,6 +819,10 @@ export function isFileUploadQuestion(q: Question): q is FileUploadQuestion {
 
 export function isMediaResponseQuestion(q: Question): q is MediaResponseQuestion {
   return q.type === QuestionTypes.MEDIA_RESPONSE;
+}
+
+export function isDrawingQuestion(q: Question): q is DrawingQuestion {
+  return q.type === QuestionTypes.DRAWING;
 }
 
 export function isStatisticalFeedbackQuestion(q: Question): q is StatisticalFeedbackQuestion {

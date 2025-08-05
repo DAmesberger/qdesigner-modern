@@ -3,7 +3,7 @@
   import { designerStore } from '$lib/features/designer/stores/designerStore';
   import type { Questionnaire, Question, QuestionnaireTheme, Variable } from '$lib/shared';
   import { VariableEngine } from '$lib/scripting-engine';
-  import QuestionRenderer from '../runtime/QuestionRenderer.svelte';
+  import QuestionRenderer from '../questions/QuestionRenderer.svelte';
   import { writable } from 'svelte/store';
   
   export let autoUpdate: boolean = true;

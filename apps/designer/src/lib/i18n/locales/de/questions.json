@@ -1,0 +1,31 @@
+{
+  "types": {
+    "multipleChoice": "Multiple Choice",
+    "textInput": "Texteingabe",
+    "scale": "Skala",
+    "matrix": "Matrix",
+    "reactionTime": "Reaktionszeit",
+    "fileUpload": "Datei-Upload",
+    "drawing": "Zeichnung",
+    "ranking": "Rangfolge",
+    "dateTime": "Datum & Uhrzeit"
+  },
+  "properties": {
+    "title": "Fragentitel",
+    "description": "Beschreibung",
+    "required": "Erforderlich",
+    "randomize": "Optionen zufällig anordnen",
+    "multiSelect": "Mehrfachauswahl erlauben",
+    "minSelections": "Mindestauswahl",
+    "maxSelections": "Maximalauswahl",
+    "placeholder": "Platzhaltertext",
+    "minLength": "Mindestlänge",
+    "maxLength": "Maximale Länge",
+    "minValue": "Mindestwert",
+    "maxValue": "Maximalwert",
+    "step": "Schrittweite",
+    "labels": "Beschriftungen",
+    "rows": "Zeilen",
+    "columns": "Spalten"
+  }
+}

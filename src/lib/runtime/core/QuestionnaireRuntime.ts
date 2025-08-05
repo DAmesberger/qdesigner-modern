@@ -9,6 +9,8 @@ import type {
   Response,
   VariableState 
 } from '$lib/shared';
+import type { ModuleCategory } from '$lib/modules/types';
+import { moduleRegistry } from '$lib/modules/registry';
 import { VariableEngine } from '$lib/scripting-engine';
 import { WebGLRenderer } from '$lib/renderer';
 import { ResourceManager } from '../resources/ResourceManager';
@@ -38,6 +40,7 @@ export class QuestionnaireRuntime {
   private currentQuestionIndex: number = 0;
   private currentPage: Page | null = null;
   private currentQuestion: Question | null = null;
+  private currentItemIndex: number = 0;
   
   private isRunning: boolean = false;
   private isPaused: boolean = false;
@@ -90,7 +93,11 @@ export class QuestionnaireRuntime {
     
     // Create automatic variables for each question
     for (const question of this.config.questionnaire.questions) {
-      this.createQuestionVariables(question);
+      // Only create variables for actual questions, not instructions or analytics
+      const metadata = moduleRegistry.get(question.type);
+      if (metadata?.category === 'question') {
+        this.createQuestionVariables(question);
+      }
     }
     
     // System variables
@@ -242,6 +249,7 @@ export class QuestionnaireRuntime {
     this.currentPageIndex = pageIndex;
     this.currentPage = this.config.questionnaire.pages[pageIndex] || null;
     this.currentQuestionIndex = 0;
+    this.currentItemIndex = 0;
     
     // Update page variable
     this.variableEngine.setVariable('_currentPage', pageIndex + 1, 'system');
@@ -256,47 +264,90 @@ export class QuestionnaireRuntime {
     // Progress callback
     this.config.onProgress?.(pageIndex, this.config.questionnaire.pages.length);
     
-    // Show first question on page
-    await this.showNextQuestion();
+    // Reset item index
+    this.currentItemIndex = 0;
+    
+    // Show first item on page
+    await this.showNextItem();
   }
   
   /**
-   * Show next question on current page
+   * Show next item (question/instruction/analytics) on current page
    */
-  private async showNextQuestion(): Promise<void> {
+  private async showNextItem(): Promise<void> {
     if (!this.currentPage) return;
     
-    const questionIds = this.currentPage?.questions ?? [];
-    if (this.currentQuestionIndex >= questionIds.length) {
+    // Get all items for the page (questions, instructions, analytics)
+    const items = this.getAllPageItems();
+    if (this.currentItemIndex >= items.length) {
       // Page complete, check flow control
       await this.handleFlowControl();
       return;
     }
     
-    // Get question
-    const questionId = questionIds[this.currentQuestionIndex];
-    if (!questionId) {
-      this.currentQuestionIndex++;
-      await this.showNextQuestion();
-      return;
-    }
-    this.currentQuestion = this.config.questionnaire.questions.find(q => q.id === questionId) || null;
-    
-    if (!this.currentQuestion) {
-      this.currentQuestionIndex++;
-      await this.showNextQuestion();
+    // Get current item
+    const currentItem = items[this.currentItemIndex];
+    if (!currentItem) {
+      this.currentItemIndex++;
+      await this.showNextItem();
       return;
     }
     
-    // Check question conditions
-    if (!this.evaluateConditions(this.currentQuestion.conditions)) {
-      this.currentQuestionIndex++;
-      await this.showNextQuestion();
+    // Check item conditions
+    if (!this.evaluateConditions(currentItem.conditions)) {
+      this.currentItemIndex++;
+      await this.showNextItem();
       return;
     }
     
-    // Present question
-    await this.presentQuestion(this.currentQuestion);
+    // Get module metadata to determine category
+    const metadata = moduleRegistry.get(currentItem.type);
+    if (!metadata) {
+      console.warn(`Module type not found: ${currentItem.type}`);
+      this.currentItemIndex++;
+      await this.showNextItem();
+      return;
+    }
+    
+    // Present item based on category
+    switch (metadata.category) {
+      case 'question':
+        this.currentQuestion = currentItem as Question;
+        await this.presentQuestion(currentItem as Question);
+        break;
+      case 'instruction':
+        await this.presentInstruction(currentItem);
+        break;
+      case 'analytics':
+        await this.presentAnalytics(currentItem);
+        break;
+      default:
+        this.currentItemIndex++;
+        await this.showNextItem();
+    }
+  }
+  
+  /**
+   * Get all items for the current page in order
+   */
+  private getAllPageItems(): any[] {
+    if (!this.currentPage) return [];
+    
+    const items: any[] = [];
+    const questionIds = this.currentPage.questions || [];
+    
+    // Get all questions for this page
+    for (const qId of questionIds) {
+      const question = this.config.questionnaire.questions.find(q => q.id === qId);
+      if (question) {
+        items.push(question);
+      }
+    }
+    
+    // Sort by order if available
+    items.sort((a, b) => (a.order || 0) - (b.order || 0));
+    
+    return items;
   }
   
   /**
@@ -330,6 +381,82 @@ export class QuestionnaireRuntime {
     
     // Start response collection
     this.responseCollector.start();
+  }
+  
+  /**
+   * Present an instruction (display only)
+   */
+  private async presentInstruction(instruction: any): Promise<void> {
+    // Instructions are display-only, no response collection
+    const onsetTime = performance.now();
+    
+    // Present using the modular presenter
+    await this.questionPresenter.presentModular(instruction, this.variableEngine);
+    
+    // Auto-advance after display duration
+    const duration = instruction.displayDuration || instruction.config?.duration || 3000;
+    const autoAdvance = instruction.autoAdvance !== false;
+    
+    if (autoAdvance) {
+      setTimeout(() => {
+        this.handleInstructionComplete(instruction);
+      }, duration);
+    }
+  }
+  
+  /**
+   * Present analytics visualization
+   */
+  private async presentAnalytics(analytics: any): Promise<void> {
+    // Analytics are visualization-only, no response collection
+    const onsetTime = performance.now();
+    
+    // Compute data for analytics from variables
+    const analyticsData = this.computeAnalyticsData(analytics);
+    
+    // Present using the modular presenter with computed data
+    await this.questionPresenter.presentModular({
+      ...analytics,
+      data: analyticsData
+    }, this.variableEngine);
+    
+    // Auto-advance after display duration
+    const duration = analytics.displayDuration || analytics.config?.duration || 5000;
+    const autoAdvance = analytics.autoAdvance !== false;
+    
+    if (autoAdvance) {
+      setTimeout(() => {
+        this.handleAnalyticsComplete(analytics);
+      }, duration);
+    }
+  }
+  
+  /**
+   * Compute data for analytics visualization
+   */
+  private computeAnalyticsData(analytics: any): any[] {
+    // Get data configuration
+    const dataConfig = analytics.config?.data || analytics.data;
+    if (!dataConfig) return [];
+    
+    // If data source is a variable, get its value
+    if (dataConfig.source === 'variable' && dataConfig.variableName) {
+      const value = this.variableEngine.getVariable(dataConfig.variableName);
+      return Array.isArray(value) ? value : [];
+    }
+    
+    // If data source is a formula, evaluate it
+    if (dataConfig.source === 'formula' && dataConfig.formula) {
+      const result = this.variableEngine.evaluateFormula(dataConfig.formula);
+      return Array.isArray(result.value) ? result.value : [];
+    }
+    
+    // If data is directly provided
+    if (dataConfig.values) {
+      return dataConfig.values;
+    }
+    
+    return [];
   }
   
   /**
@@ -383,9 +510,33 @@ export class QuestionnaireRuntime {
     // Clear presentation
     await this.questionPresenter.clear();
     
-    // Move to next question
-    this.currentQuestionIndex++;
-    await this.showNextQuestion();
+    // Move to next item
+    this.currentItemIndex++;
+    await this.showNextItem();
+  }
+  
+  /**
+   * Handle instruction completion
+   */
+  private async handleInstructionComplete(instruction: any): Promise<void> {
+    // Clear presentation
+    await this.questionPresenter.clear();
+    
+    // Move to next item
+    this.currentItemIndex++;
+    await this.showNextItem();
+  }
+  
+  /**
+   * Handle analytics completion
+   */
+  private async handleAnalyticsComplete(analytics: any): Promise<void> {
+    // Clear presentation
+    await this.questionPresenter.clear();
+    
+    // Move to next item
+    this.currentItemIndex++;
+    await this.showNextItem();
   }
   
   /**
@@ -412,9 +563,9 @@ export class QuestionnaireRuntime {
     this.variableEngine.setVariable(`${question.id}_delta`, null, 'timeout');
     this.variableEngine.setVariable(`${question.id}_correct`, false, 'timeout');
     
-    // Move to next question
-    this.currentQuestionIndex++;
-    await this.showNextQuestion();
+    // Move to next item
+    this.currentItemIndex++;
+    await this.showNextItem();
   }
   
   /**

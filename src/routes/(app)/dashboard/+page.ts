@@ -1,5 +1,6 @@
 import type { PageLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
+import { browser } from '$app/environment';
 import { supabase } from '$lib/services/supabase';
 import type { DashboardData, DashboardQuestionnaire, DashboardActivity } from '$lib/types/dashboard';
 
@@ -9,6 +10,21 @@ export const load: PageLoad = async ({ parent, depends }) => {
   
   // Get data from parent layout
   const { organizationId, user, session } = await parent();
+  
+  // During SSR, don't redirect - the client-side layout will handle it
+  if (!browser) {
+    return {
+      user: null,
+      questionnaires: [],
+      recentActivity: [],
+      stats: {
+        totalQuestionnaires: 0,
+        totalResponses: 0,
+        activeQuestionnaires: 0,
+        avgCompletionRate: 0
+      }
+    };
+  }
   
   // If no session at all, redirect to login
   if (!session || !user) {

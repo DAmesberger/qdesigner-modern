@@ -467,7 +467,7 @@ export class MediaService {
       let authUserId = userId;
       if (!authUserId) {
         const { data: { user } } = await supabase.auth.getUser();
-        authUserId = user?.id || null;
+        authUserId = user?.id || undefined;
       }
       
       // If still no user ID, try to use the stored currentUserId

@@ -235,22 +235,10 @@
 									<p class="text-sm font-medium text-foreground">{user.email}</p>
 								</div>
 								<a
-									href="/designer"
+									href="/dashboard"
 									class="block px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
 								>
-									Designer
-								</a>
-								<a
-									href="/questionnaires"
-									class="block px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-								>
-									My Questionnaires
-								</a>
-								<a
-									href="/settings"
-									class="block px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-								>
-									Settings
+									Dashboard
 								</a>
 								<div class="border-t border-border mt-1 pt-1">
 									<button
@@ -337,22 +325,10 @@
 									<p class="text-sm font-medium text-foreground">{user.email}</p>
 								</div>
 								<a
-									href="/designer"
+									href="/dashboard"
 									class="block px-3 py-2 text-base font-medium text-foreground hover:bg-muted rounded-md"
 								>
-									Designer
-								</a>
-								<a
-									href="/questionnaires"
-									class="block px-3 py-2 text-base font-medium text-foreground hover:bg-muted rounded-md"
-								>
-									My Questionnaires
-								</a>
-								<a
-									href="/settings"
-									class="block px-3 py-2 text-base font-medium text-foreground hover:bg-muted rounded-md"
-								>
-									Settings
+									Dashboard
 								</a>
 								<button
 									onclick={handleSignOut}

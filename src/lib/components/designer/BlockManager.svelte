@@ -142,8 +142,13 @@
   }
   
   function handleDeleteBlock(blockId: string) {
+    console.log('[DEBUG] handleDeleteBlock called with blockId:', blockId);
     if (confirm('Delete this block? All questions in this block will be deleted.')) {
+      console.log('[DEBUG] User confirmed deletion, calling designerStore.deleteBlock');
       designerStore.deleteBlock(blockId);
+      console.log('[DEBUG] deleteBlock called');
+    } else {
+      console.log('[DEBUG] User cancelled deletion');
     }
   }
   

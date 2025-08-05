@@ -1,0 +1,52 @@
+{
+  "general": {
+    "unknown": "An unknown error occurred",
+    "tryAgain": "Please try again",
+    "contactSupport": "If the problem persists, contact support"
+  },
+  "network": {
+    "offline": "No internet connection",
+    "timeout": "Request timed out",
+    "serverError": "Server error",
+    "notFound": "Resource not found",
+    "forbidden": "Access denied",
+    "unauthorized": "Authentication required"
+  },
+  "validation": {
+    "required": "This field is required",
+    "invalid": "Invalid value",
+    "tooShort": "Value is too short",
+    "tooLong": "Value is too long",
+    "invalidFormat": "Invalid format",
+    "duplicate": "This value already exists"
+  },
+  "auth": {
+    "invalidCredentials": "Invalid credentials",
+    "sessionExpired": "Session expired",
+    "accessDenied": "Access denied",
+    "accountLocked": "Account locked",
+    "emailNotVerified": "Email not verified",
+    "tooManyAttempts": "Too many attempts, please try again later"
+  },
+  "data": {
+    "loadFailed": "Failed to load data",
+    "saveFailed": "Failed to save data",
+    "deleteFailed": "Failed to delete data",
+    "exportFailed": "Failed to export data",
+    "importFailed": "Failed to import data",
+    "processingFailed": "Failed to process data"
+  },
+  "file": {
+    "uploadFailed": "File upload failed",
+    "tooLarge": "File is too large",
+    "invalidType": "Invalid file type",
+    "readFailed": "Failed to read file",
+    "downloadFailed": "Failed to download file"
+  },
+  "questionnaire": {
+    "notFound": "Questionnaire not found",
+    "expired": "Questionnaire has expired",
+    "notPublished": "Questionnaire is not published",
+    "alreadySubmitted": "Response already submitted",
+    "submissionFailed": "Failed to submit response"
+  }

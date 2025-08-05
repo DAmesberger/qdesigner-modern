@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './e2e',
+  testDir: './tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -14,19 +14,37 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { 
+        ...devices['Desktop Chrome'],
+        // Allow dynamic viewport resizing
+        viewport: null,
+        deviceScaleFactor: undefined,
+        launchOptions: {
+          args: ['--start-maximized']
+        }
+      },
     },
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: { 
+        ...devices['Desktop Firefox'],
+        // Allow dynamic viewport resizing
+        viewport: null,
+        deviceScaleFactor: undefined
+      },
     },
     {
       name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      use: { 
+        ...devices['Desktop Safari'],
+        // Allow dynamic viewport resizing
+        viewport: null,
+        deviceScaleFactor: undefined
+      },
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    command: 'pnpm dev',
     port: 5173,
     reuseExistingServer: !process.env.CI,
   },

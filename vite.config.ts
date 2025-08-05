@@ -4,6 +4,10 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
+  build: {
+    sourcemap: true,
+    minify: false // Disable minification for better debugging
+  },
   optimizeDeps: {
     exclude: ['@sveltejs/kit', 'svelte']
   },

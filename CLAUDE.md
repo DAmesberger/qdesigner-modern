@@ -13,6 +13,27 @@ For local development, use these credentials to log in (use playwright MCP to cr
 - **Email**: `demo@example.com`
 - **Password**: `demo123456`
 
+### Auto-Login Test Mode
+
+For faster development, you can enable test mode to automatically log in as the demo user:
+
+1. **Enable test mode** (in browser console):
+   ```javascript
+   window.testMode.enable()
+   ```
+
+2. **Or set directly in localStorage**:
+   ```javascript
+   localStorage.setItem('qdesigner-test-mode', 'true')
+   ```
+
+3. **Disable test mode**:
+   ```javascript
+   window.testMode.disable()
+   ```
+
+When enabled, navigating to any protected route (e.g., `/dashboard`, `/designer`) will automatically log you in as `demo@example.com`. This only works in development mode.
+
 ## Essential Commands
 
 ```bash

@@ -8,32 +8,24 @@
   import { defaultTheme } from '$lib/shared/types/theme';
   import { getItemSettings } from '$lib/utils/itemSettings';
   
-  let item: any = null;
-  let itemType: string | null = null;
   let activeTab: 'properties' | 'style' | 'script' = 'properties';
   let theme = defaultTheme; // In real app, this would come from store
 
-  // Subscribe to selected item
-  selectedItem.subscribe(value => {
-    item = value;
-    if (value) {
-      const state = $designerStore;
-      itemType = state.selectedItemType;
-    } else {
-      itemType = null;
-    }
-  });
+  // Use reactive declarations instead of manual subscription
+  $: item = $selectedItem;
+  $: itemType = item ? $designerStore.selectedItemType : null;
 
   // Get organizationId and userId from store
   $: organizationId = $designerStore.questionnaire.organizationId || '';
   $: userId = $designerStore.userId || '';
   $: showScriptTab = item && itemType === 'question';
   
-  $: console.log('[PropertiesPanel] Store state:', {
-    organizationId,
-    userId,
-    questionnaire: $designerStore.questionnaire
-  });
+  // Debug logging - commented out to prevent performance issues
+  // $: console.log('[PropertiesPanel] Store state:', {
+  //   organizationId,
+  //   userId,
+  //   questionnaire: $designerStore.questionnaire
+  // });
 
   // Update handlers
   function updateQuestion(updates: Partial<Question>) {
@@ -58,10 +50,16 @@
   let designerComponent: ComponentType | null = null;
   let loadingComponent = false;
   let moduleCategory: string | null = null;
+  let lastLoadedType: string | null = null;
   
+  // Only reload component if the type changes
   $: if (item && itemType === 'question') {
-    loadModuleDesigner(item.type);
+    if (item.type !== lastLoadedType) {
+      lastLoadedType = item.type;
+      loadModuleDesigner(item.type);
+    }
   } else {
+    lastLoadedType = null;
     designerComponent = null;
     moduleCategory = null;
   }
@@ -191,34 +189,36 @@
           </div>
         {:else if designerComponent}
           <div class="border-t pt-4">
-            {#if moduleCategory === 'instruction'}
-              <svelte:component 
-                this={designerComponent} 
-                instruction={item} 
-                mode="edit"
-                onUpdate={updateQuestion}
-                {organizationId}
-                {userId}
-              />
-            {:else if moduleCategory === 'analytics'}
-              <svelte:component 
-                this={designerComponent} 
-                block={item} 
-                mode="edit"
-                onUpdate={updateQuestion}
-                {organizationId}
-                {userId}
-              />
-            {:else if moduleCategory === 'question'}
-              <svelte:component 
-                this={designerComponent} 
-                question={item} 
-                mode="edit"
-                onUpdate={updateQuestion}
-                {organizationId}
-                {userId}
-              />
-            {/if}
+            {#key item.id}
+              {#if moduleCategory === 'instruction'}
+                <svelte:component 
+                  this={designerComponent} 
+                  instruction={item} 
+                  mode="edit"
+                  onUpdate={updateQuestion}
+                  {organizationId}
+                  {userId}
+                />
+              {:else if moduleCategory === 'analytics'}
+                <svelte:component 
+                  this={designerComponent} 
+                  block={item} 
+                  mode="edit"
+                  onUpdate={updateQuestion}
+                  {organizationId}
+                  {userId}
+                />
+              {:else if moduleCategory === 'question'}
+                <svelte:component 
+                  this={designerComponent} 
+                  question={item} 
+                  mode="edit"
+                  onUpdate={updateQuestion}
+                  {organizationId}
+                  {userId}
+                />
+              {/if}
+            {/key}
           </div>
         {:else}
           <div class="border-t pt-4">

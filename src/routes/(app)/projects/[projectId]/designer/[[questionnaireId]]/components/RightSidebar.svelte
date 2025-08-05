@@ -1,7 +1,7 @@
 <script lang="ts">
   import { slide } from 'svelte/transition';
   import { onMount } from 'svelte';
-  import EnhancedPropertiesPanel from '$lib/components/designer/EnhancedPropertiesPanel.svelte';
+  import PropertiesPanel from '$lib/components/designer/PropertiesPanel.svelte';
   
   let isCollapsed = false;
   
@@ -45,7 +45,7 @@
   {#if !isCollapsed}
     <!-- Full Sidebar -->
     <div transition:slide={{ duration: 300, axis: 'x' }} class="flex-1 overflow-hidden">
-      <EnhancedPropertiesPanel />
+      <PropertiesPanel />
     </div>
   {:else}
     <!-- Collapsed Sidebar -->

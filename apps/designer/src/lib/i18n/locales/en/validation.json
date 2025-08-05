@@ -1,0 +1,49 @@
+{
+  "rules": {
+    "required": "Required field",
+    "email": "Valid email required",
+    "url": "Valid URL required",
+    "number": "Must be a number",
+    "integer": "Must be a whole number",
+    "positive": "Must be positive",
+    "negative": "Must be negative",
+    "min": "Minimum value: {{min}}",
+    "max": "Maximum value: {{max}}",
+    "between": "Must be between {{min}} and {{max}}",
+    "length": "Must be {{length}} characters",
+    "minLength": "Minimum {{min}} characters",
+    "maxLength": "Maximum {{max}} characters",
+    "pattern": "Invalid format",
+    "unique": "Must be unique",
+    "date": "Valid date required",
+    "time": "Valid time required",
+    "datetime": "Valid date and time required",
+    "before": "Must be before {{date}}",
+    "after": "Must be after {{date}}",
+    "phone": "Valid phone number required",
+    "creditCard": "Valid credit card required",
+    "postalCode": "Valid postal code required"
+  },
+  "messages": {
+    "validating": "Validating...",
+    "valid": "Valid",
+    "invalid": "Invalid",
+    "checking": "Checking...",
+    "fixed": "Fixed",
+    "warning": "Warning",
+    "error": "Error"
+  },
+  "questionnaire": {
+    "titleRequired": "Questionnaire title is required",
+    "descriptionRequired": "Questionnaire description is required",
+    "atLeastOneQuestion": "At least one question is required",
+    "uniqueQuestionIds": "Question IDs must be unique",
+    "validDateRange": "End date must be after start date",
+    "validParticipantLimit": "Participant limit must be positive"
+  },
+  "response": {
+    "allRequiredAnswered": "All required questions must be answered",
+    "validResponseFormat": "Response must be in valid format",
+    "withinTimeLimit": "Response must be within time limit",
+    "validReactionTime": "Reaction time must be realistic"
+  }

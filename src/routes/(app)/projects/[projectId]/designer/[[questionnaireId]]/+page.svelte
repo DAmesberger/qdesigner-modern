@@ -15,9 +15,10 @@
   import RightSidebar from './components/RightSidebar.svelte';
   import WYSIWYGCanvas from './WYSIWYGCanvas.svelte';
   import StructuralCanvas from './StructuralCanvas.svelte';
-  import PreviewModal from '$lib/components/designer/PreviewModal.svelte';
-  import CrashRecovery from '$lib/components/ui/CrashRecovery.svelte';
-  import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
+  // TODO: Create these components
+  // import PreviewModal from '$lib/components/designer/PreviewModal.svelte';
+  // import CrashRecovery from '$lib/components/ui/CrashRecovery.svelte';
+  // import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
   
   // State
   let viewMode: 'structural' | 'wysiwyg' = 'wysiwyg';
@@ -41,6 +42,8 @@
       userId: publicUser?.id || user?.id,
       questionnaire: questionnaire
     });
+    console.log('[DEBUG] Full questionnaire data:', questionnaire);
+    console.log('[DEBUG] Page data:', $page.data);
     
     designerStore.initVariableEngine();
     
@@ -73,6 +76,7 @@
       });
     } else if (questionnaire && !questionnaire.isNew) {
       // Load existing questionnaire
+      console.log('[DEBUG] Loading questionnaire from definition:', questionnaire);
       designerStore.loadQuestionnaireFromDefinition(questionnaire);
       // Ensure context is set from page data
       if (organizationId) {
@@ -173,18 +177,19 @@
   </div>
 </div>
 
+<!-- TODO: Uncomment when components are created -->
 <!-- Crash Recovery Dialog -->
-<CrashRecovery />
+<!-- <CrashRecovery /> -->
 
 <!-- Command Palette -->
-<CommandPalette bind:isOpen={showCommandPalette} />
+<!-- <CommandPalette bind:isOpen={showCommandPalette} /> -->
 
 <!-- Preview Modal -->
-<PreviewModal 
+<!-- <PreviewModal 
   bind:isOpen={showPreview}
   questionnaire={$designerStore.questionnaire}
   on:close={() => showPreview = false}
-/>
+/> -->
 
 <style>
   .preview-panel {

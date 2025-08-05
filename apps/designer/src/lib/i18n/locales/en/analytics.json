@@ -1,0 +1,87 @@
+{
+  "dashboard": {
+    "title": "Analytics Dashboard",
+    "overview": "Overview",
+    "responses": "Responses",
+    "completion": "Completion Rate",
+    "avgTime": "Average Time",
+    "participants": "Participants",
+    "lastUpdate": "Last Updated"
+  },
+  "statistics": {
+    "descriptive": "Descriptive Statistics",
+    "mean": "Mean",
+    "median": "Median",
+    "mode": "Mode",
+    "stdDev": "Standard Deviation",
+    "variance": "Variance",
+    "min": "Minimum",
+    "max": "Maximum",
+    "range": "Range",
+    "percentiles": "Percentiles",
+    "skewness": "Skewness",
+    "kurtosis": "Kurtosis",
+    "count": "Count",
+    "missing": "Missing",
+    "valid": "Valid"
+  },
+  "tests": {
+    "title": "Statistical Tests",
+    "tTest": "T-Test",
+    "anova": "ANOVA",
+    "correlation": "Correlation",
+    "regression": "Regression",
+    "chiSquare": "Chi-Square",
+    "reliability": "Reliability",
+    "pValue": "P-Value",
+    "significance": "Significance",
+    "coefficient": "Coefficient",
+    "cronbachAlpha": "Cronbach's Alpha",
+    "effect": "Effect Size",
+    "power": "Statistical Power"
+  },
+  "charts": {
+    "bar": "Bar Chart",
+    "line": "Line Chart",
+    "pie": "Pie Chart",
+    "scatter": "Scatter Plot",
+    "histogram": "Histogram",
+    "boxplot": "Box Plot",
+    "heatmap": "Heat Map",
+    "distribution": "Distribution"
+  },
+  "export": {
+    "title": "Export Data",
+    "format": "Format",
+    "csv": "CSV",
+    "excel": "Excel",
+    "spss": "SPSS",
+    "r": "R Script",
+    "python": "Python Script",
+    "json": "JSON",
+    "includeHeaders": "Include Headers",
+    "dateRange": "Date Range",
+    "allData": "All Data",
+    "filtered": "Filtered Data",
+    "download": "Download"
+  },
+  "filters": {
+    "title": "Filters",
+    "dateRange": "Date Range",
+    "questionnaire": "Questionnaire",
+    "question": "Question",
+    "participant": "Participant",
+    "status": "Status",
+    "apply": "Apply Filters",
+    "clear": "Clear Filters"
+  },
+  "realtime": {
+    "title": "Real-time Analytics",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "reconnecting": "Reconnecting...",
+    "liveResponses": "Live Responses",
+    "activeParticipants": "Active Participants",
+    "responseRate": "Response Rate",
+    "stream": "Data Stream"
+  }

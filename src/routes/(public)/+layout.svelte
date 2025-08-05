@@ -24,7 +24,7 @@
 
 <div class="min-h-screen flex flex-col bg-background text-foreground">
 	<!-- Scroll Progress Indicator -->
-	{#if showScrollProgress}
+	{#if showScrollProgress && typeof window !== 'undefined' && document.body}
 		<div
 			class="fixed top-0 left-0 h-1 bg-gradient-to-r from-primary to-primary-foreground z-50 transition-all duration-300"
 			style="width: {(scrollY / (document.body.scrollHeight - window.innerHeight)) * 100}%"

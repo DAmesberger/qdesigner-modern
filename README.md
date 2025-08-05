@@ -79,6 +79,18 @@ For local development, you can use the following test account:
 - **Email**: `demo@example.com`
 - **Password**: `demo123456`
 
+#### Auto-Login Test Mode
+
+For faster development, enable test mode to automatically log in as the demo user:
+
+```javascript
+// In browser console (dev mode only):
+window.testMode.enable()   // Enable auto-login
+window.testMode.disable()  // Disable auto-login
+```
+
+When enabled, navigating to protected routes automatically logs you in.
+
 ## 📝 Variable System
 
 The variable system supports complex formulas with:

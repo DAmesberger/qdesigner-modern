@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import HeroSection from '$lib/components/marketing/hero/HeroSection.svelte';
 	import SocialProofBar from '$lib/components/marketing/social-proof/SocialProofBar.svelte';
 	import FeatureBento from '$lib/components/marketing/features/FeatureBento.svelte';
@@ -8,6 +11,13 @@
 	import TestimonialSection from '$lib/components/marketing/social-proof/TestimonialSection.svelte';
 	import PricingSection from '$lib/components/marketing/pricing/PricingSection.svelte';
 	import CTASection from '$lib/components/marketing/cta/CTASection.svelte';
+
+	// Redirect logged-in users to dashboard
+	onMount(() => {
+		if ($page.data?.user) {
+			goto('/dashboard');
+		}
+	});
 </script>
 
 <svelte:head>

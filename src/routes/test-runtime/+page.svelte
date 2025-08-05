@@ -58,123 +58,146 @@
       {
         id: 'q2',
         type: 'instruction',
-        text: 'You will see a red circle appear on screen.',
-        instruction: 'Press F or J as quickly as possible when you see it. Press SPACE to begin practice.',
-        responseType: { type: 'keypress', keys: [' '] }
+        display: {
+          content: 'You will see a red circle appear on screen.\n\nPress F or J as quickly as possible when you see it. Press SPACE to begin practice.',
+          format: 'markdown'
+        }
       },
       {
         id: 'q3',
-        type: 'reaction',
-        text: 'Practice 1',
-        stimuli: [{
-          id: 'circle1',
-          type: 'text',
-          content: '●',
-          position: { x: 0.5, y: 0.5 },
-          properties: { fontSize: 100, color: '#FF0000' }
-        }],
-        responseType: { type: 'keypress', keys: ['f', 'j'] },
-        timing: {
+        type: 'reaction-time',
+        display: {
+          prompt: 'Practice 1',
+          stimulus: {
+            content: '●',
+            position: 'center'
+          },
           fixationDuration: 1000,
-          preDelay: 500 + Math.random() * 2000,
-          responseDuration: 2000
+          keys: ['f', 'j'],
+          practice: true
+        },
+        response: {
+          type: 'keyboard',
+          validKeys: ['f', 'j']
+        },
+        timing: {
+          minTime: 500,
+          maxTime: 2500
         }
       },
       {
         id: 'q4',
-        type: 'reaction',
-        text: 'Practice 2',
-        stimuli: [{
-          id: 'circle2',
-          type: 'text',
-          content: '●',
-          position: { x: 0.5, y: 0.5 },
-          properties: { fontSize: 100, color: '#00FF00' }
-        }],
-        responseType: { type: 'keypress', keys: ['f', 'j'] },
-        timing: {
+        type: 'reaction-time',
+        display: {
+          prompt: 'Practice 2',
+          stimulus: {
+            content: '●',
+            position: 'center'
+          },
           fixationDuration: 1000,
-          preDelay: 500 + Math.random() * 2000,
-          responseDuration: 2000
+          keys: ['f', 'j'],
+          practice: true
+        },
+        response: {
+          type: 'keyboard',
+          validKeys: ['f', 'j']
+        },
+        timing: {
+          minTime: 500,
+          maxTime: 2500
         }
       },
       {
         id: 'q5',
         type: 'instruction',
-        text: 'Good job! Now for the real test.',
-        instruction: 'Press SPACE when ready',
-        responseType: { type: 'keypress', keys: [' '] }
+        display: {
+          content: 'Good job! Now for the real test.\n\nPress SPACE when ready',
+          format: 'markdown'
+        }
       },
       {
         id: 'q6',
-        type: 'reaction',
-        text: '',
-        stimuli: [{
-          id: 'target1',
-          type: 'text',
-          content: '●',
-          position: { x: 0.5, y: 0.5 },
-          properties: { fontSize: 80, color: '#FF0000' }
-        }],
-        responseType: { type: 'keypress', keys: ['f', 'j'] },
-        timing: {
+        type: 'reaction-time',
+        display: {
+          prompt: '',
+          stimulus: {
+            content: '●',
+            position: 'center'
+          },
           fixationDuration: 1000,
-          preDelay: 1000 + Math.random() * 3000,
-          responseDuration: 2000
+          keys: ['f', 'j']
+        },
+        response: {
+          type: 'keyboard',
+          validKeys: ['f', 'j']
+        },
+        timing: {
+          minTime: 1000,
+          maxTime: 4000
         }
       },
       {
         id: 'q7',
-        type: 'reaction',
-        text: '',
-        stimuli: [{
-          id: 'target2',
-          type: 'text',
-          content: '■',
-          position: { x: 0.5, y: 0.5 },
-          properties: { fontSize: 80, color: '#0000FF' }
-        }],
-        responseType: { type: 'keypress', keys: ['f', 'j'] },
-        timing: {
+        type: 'reaction-time',
+        display: {
+          prompt: '',
+          stimulus: {
+            content: '■',
+            position: 'center'
+          },
           fixationDuration: 1000,
-          preDelay: 1000 + Math.random() * 3000,
-          responseDuration: 2000
+          keys: ['f', 'j'],
+          correctKey: 'f'
         },
-        validation: [{
-          type: 'custom',
-          value: 'q7_value === "f"'
-        }]
+        response: {
+          type: 'keyboard',
+          validKeys: ['f', 'j']
+        },
+        timing: {
+          minTime: 1000,
+          maxTime: 4000
+        },
+        validation: {
+          type: 'choice',
+          correct: 'f'
+        }
       },
       {
         id: 'q8',
         type: 'rating',
-        text: 'How difficult was that?',
-        responseType: {
-          type: 'scale',
-          min: 1,
-          max: 7,
-          minLabel: 'Very Easy',
-          maxLabel: 'Very Difficult'
+        display: {
+          prompt: 'How difficult was that?',
+          levels: 7,
+          style: 'numeric',
+          labels: ['Very Easy', '', '', '', '', '', 'Very Difficult']
+        },
+        response: {
+          type: 'rating'
         }
       },
       {
         id: 'q9',
-        type: 'choice',
-        text: 'Which shape did you prefer responding to?',
-        responseType: {
-          type: 'single',
+        type: 'single-choice',
+        display: {
+          prompt: 'Which shape did you prefer responding to?',
           options: [
-            { id: 'opt1', value: 'circle', label: 'Circle (●)', key: '1' },
-            { id: 'opt2', value: 'square', label: 'Square (■)', key: '2' }
-          ]
+            { id: 'opt1', value: 'circle', label: 'Circle (●)' },
+            { id: 'opt2', value: 'square', label: 'Square (■)' }
+          ],
+          layout: 'vertical'
+        },
+        response: {
+          type: 'single-choice'
         }
       },
       {
         id: 'q10',
         type: 'instruction',
-        text: 'Thank you for completing the test!',
-        instruction: 'Your average reaction time was {((q6_delta + q7_delta) / 2).toFixed(0)}ms',
-        responseType: { type: 'keypress', keys: [' '] }
+        display: {
+          content: 'Thank you for completing the test!\n\nYour average reaction time was {{((q6_delta + q7_delta) / 2).toFixed(0)}}ms',
+          format: 'markdown',
+          variables: true
+        }
       }
     ],
     flow: []

@@ -394,7 +394,7 @@
           >
             {#if isImageMedia(asset)}
               <img 
-                src={(asset as any).url || '/placeholder-image.svg'} 
+                src={(asset as any).thumbnailUrl || (asset as any).url || '/placeholder-image.svg'} 
                 alt={asset.originalFilename}
                 class="w-full h-full object-cover"
                 loading="lazy"
@@ -439,7 +439,7 @@
             <div class="w-16 h-16 flex-shrink-0 {theme.semantic.bgSubtle} rounded overflow-hidden">
               {#if isImageMedia(asset)}
                 <img 
-                  src={(asset as any).url || '/placeholder-image.svg'} 
+                  src={(asset as any).thumbnailUrl || (asset as any).url || '/placeholder-image.svg'} 
                   alt={asset.originalFilename}
                   class="w-full h-full object-cover"
                   loading="lazy"

@@ -1,6 +1,15 @@
 // Question Component Architecture Types
 
-import type { Question, QuestionType, ResponseType, ResponseOption, ValidationRule } from '$lib/shared';
+import type { 
+  Question, 
+  QuestionType, 
+  ResponseType, 
+  ResponseOption, 
+  ValidationRule,
+  TimingConfig,
+  NavigationConfig,
+  ConditionalLogic 
+} from '$lib/shared';
 
 // Base interface for all question components
 export interface BaseQuestionComponent {
@@ -13,7 +22,23 @@ export interface BaseQuestionComponent {
 }
 
 // Extended question types for rich functionality
-export interface ExtendedQuestion extends Question {
+export interface ExtendedQuestion {
+  // All base question properties
+  id: string;
+  type: QuestionType;
+  order: number;
+  required: boolean;
+  
+  // Optional common properties from BaseQuestion
+  randomize?: boolean;
+  timing?: TimingConfig;
+  navigation?: NavigationConfig;
+  conditions?: ConditionalLogic;
+  
+  // Metadata
+  name?: string;
+  tags?: string[];
+  
   // Display properties
   title?: string;
   description?: string;
@@ -27,6 +52,9 @@ export interface ExtendedQuestion extends Question {
   scoring?: ScoringConfig;
   feedback?: FeedbackConfig;
   analytics?: AnalyticsConfig;
+  
+  // Config can be any of the specific question configs
+  config?: any;
 }
 
 export interface QuestionLayout {
@@ -240,6 +268,55 @@ export interface WebGLResponseConfig {
   timeout?: number;
   requireCorrect?: boolean;
   recordAllResponses?: boolean;
+}
+
+export interface FileUploadConfig {
+  prompt?: string;
+  instruction?: string;
+  accept?: string[];
+  maxSize?: number;
+  maxFiles?: number;
+  dragDrop?: boolean;
+  storage?: 'base64' | 'url' | 'reference';
+  saveMetadata?: boolean;
+}
+
+export interface DateTimeConfig {
+  prompt?: string;
+  instruction?: string;
+  mode: 'date' | 'time' | 'datetime';
+  minDate?: string;
+  maxDate?: string;
+  format?: string;
+  showCalendar?: boolean;
+}
+
+export interface DrawingConfig {
+  prompt?: string;
+  instruction?: string;
+  canvas?: {
+    width?: number;
+    height?: number;
+    background?: string | ImageData;
+  };
+  tools?: Array<'pen' | 'eraser' | 'line' | 'shape'>;
+  colors?: string[];
+  analysis?: {
+    extractFeatures?: boolean;
+    detectShapes?: boolean;
+    measurePressure?: boolean;
+    trackTiming?: boolean;
+  };
+}
+
+export interface RankingConfig {
+  prompt?: string;
+  instruction?: string;
+  items: Array<{ id: string; label: string }>;
+  layout?: 'vertical' | 'horizontal';
+  animation?: boolean;
+  allowPartial?: boolean;
+  tieBreaking?: boolean;
 }
 
 export interface PrecisionTimingConfig {

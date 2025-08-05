@@ -2,6 +2,8 @@
   import { createEventDispatcher } from 'svelte';
   import MediaManager from './MediaManager.svelte';
   import type { MediaAsset } from '$lib/shared/types/media';
+  import type { MediaConfig } from '$lib/shared/types/questionnaire';
+  import { generateMediaRefId } from '$lib/services/markdownProcessor';
   import theme from '$lib/theme';
   
   export let isOpen = false;
@@ -9,15 +11,21 @@
   export let userId: string;
   export let allowMultiple = false;
   export let selectedMedia: MediaAsset[] = [];
+  export let title = 'Select Media';
   
-  const dispatch = createEventDispatcher();
+  const dispatch = createEventDispatcher<{
+    select: { assets: MediaAsset[]; asset: MediaAsset };
+    confirm: { media: MediaConfig[]; markdown: string };
+    close: void;
+  }>();
   
   function handleSelect(event: CustomEvent<{ media: MediaAsset[]; asset: MediaAsset }>) {
+    selectedMedia = event.detail.media;
     dispatch('select', event.detail);
     
     // Auto-close if single selection
     if (!allowMultiple) {
-      isOpen = false;
+      handleConfirmInternal();
     }
   }
   
@@ -27,7 +35,38 @@
   }
   
   function handleConfirm() {
-    dispatch('confirm', { media: selectedMedia });
+    handleConfirmInternal();
+  }
+  
+  function handleConfirmInternal() {
+    if (selectedMedia.length === 0) return;
+    
+    // Convert MediaAssets to MediaConfig with generated refIds
+    const mediaConfigs: MediaConfig[] = selectedMedia.map(asset => {
+      const refId = generateMediaRefId();
+      return {
+        mediaId: asset.id,
+        refId,
+        alt: asset.originalFilename || 'Image',
+        caption: '',
+        display: {
+          width: asset.width,
+          height: asset.height,
+          fit: 'contain' as const
+        }
+      };
+    });
+    
+    // Generate markdown for selected media
+    const markdownSnippets = mediaConfigs.map(config => 
+      `![${config.alt}](media:${config.refId})`
+    );
+    
+    const markdown = allowMultiple 
+      ? markdownSnippets.join('\n')
+      : markdownSnippets[0] || '';
+    
+    dispatch('confirm', { media: mediaConfigs, markdown });
     isOpen = false;
   }
   
@@ -58,7 +97,7 @@
         <!-- Header -->
         <div class="flex items-center justify-between p-4 border-b {theme.semantic.borderDefault}">
           <h2 class="{theme.typography.h3} {theme.semantic.textPrimary}">
-            {allowMultiple ? 'Select Media' : 'Select Media File'}
+            {title}
           </h2>
           
           <button
