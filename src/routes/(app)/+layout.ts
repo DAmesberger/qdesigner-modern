@@ -9,7 +9,28 @@ export const load: LayoutLoad = async ({ url, route, depends }) => {
   
   // Only check auth on client side
   if (browser) {
-    const { data: { session } } = await supabase.auth.getSession();
+    let { data: { session } } = await supabase.auth.getSession();
+    
+    // Check for test mode auto-login
+    if (!session && import.meta.env.DEV) {
+      const testMode = localStorage.getItem('qdesigner-test-mode');
+      if (testMode === 'true') {
+        console.log('🧪 Test mode enabled - auto-logging in as demo user');
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: 'demo@example.com',
+          password: 'demo123456'
+        });
+        
+        if (error) {
+          console.error('Test mode auto-login failed:', error);
+          // Clear test mode on failure
+          localStorage.removeItem('qdesigner-test-mode');
+        } else {
+          session = data.session;
+          console.log('✅ Test mode auto-login successful');
+        }
+      }
+    }
     
     // Special handling for routes that need client-side auth
     const protectedRoutes = ['/designer', '/admin', '/dashboard'];

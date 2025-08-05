@@ -118,6 +118,10 @@
         return renderScaleQuestion(question, theme);
       case 'rating':
         return renderRatingQuestion(question, theme);
+      case 'ranking':
+        return renderRankingQuestion(question, theme);
+      case 'drawing':
+        return renderDrawingQuestion(question, theme);
       // Fallback for old format
       case 'choice':
         return renderChoiceQuestion(question, theme);
@@ -193,6 +197,37 @@
     };
   }
   
+  function renderRankingQuestion(question: Question, theme: QuestionnaireTheme) {
+    const items = question.display?.items || [
+      { id: '1', label: 'Item A' },
+      { id: '2', label: 'Item B' },
+      { id: '3', label: 'Item C' },
+      { id: '4', label: 'Item D' }
+    ];
+    const styles = theme.components.response.choice;
+    
+    return {
+      component: 'ranking' as const,
+      items,
+      styles
+    };
+  }
+  
+  function renderDrawingQuestion(question: Question, theme: QuestionnaireTheme) {
+    const canvas = question.display?.canvas || {
+      width: 600,
+      height: 400,
+      background: 'hsl(var(--card))'
+    };
+    const styles = theme.components.response.text.textarea;
+    
+    return {
+      component: 'drawing' as const,
+      canvas,
+      styles
+    };
+  }
+  
   $: questionStyles = getQuestionStyles();
   $: responseConfig = renderResponse(question, theme);
   $: promptText = getQuestionText(question);
@@ -234,8 +269,7 @@
 </script>
 
 <div 
-  class="question-container"
-  style={Object.entries(questionStyles.container).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ')}
+  class="question-container p-6 bg-card rounded-lg shadow-sm border border-border {selected && mode === 'edit' ? 'ring-2 ring-primary ring-offset-2' : ''}"
   on:click={() => dispatch('select')}
   role="button"
   tabindex="0"
@@ -244,8 +278,7 @@
   {#if mode === 'edit' && isEditingPrompt}
     <div
       contenteditable="true"
-      class="prompt-editor"
-      style={Object.entries(questionStyles.prompt).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ')}
+      class="prompt-editor text-lg font-semibold text-foreground mb-3"
       bind:textContent={promptText}
       on:blur={handlePromptBlur}
       on:keydown={(e) => {
@@ -257,8 +290,7 @@
     />
   {:else}
     <div
-      class="prompt"
-      style={Object.entries(questionStyles.prompt).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ')}
+      class="prompt text-lg font-semibold text-foreground mb-3"
       on:click={handlePromptClick}
       role={mode === 'edit' ? 'button' : undefined}
       tabindex={mode === 'edit' ? 0 : undefined}
@@ -276,25 +308,22 @@
   <!-- Question Description -->
   {#if question.display?.description || question.settings?.description}
     <div
-      class="description"
-      style={Object.entries(questionStyles.description).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ')}
+      class="description text-sm text-muted-foreground mb-4"
     >
       {question.display?.description || question.settings?.description}
     </div>
   {/if}
   
   <!-- Response Area -->
-  <div class="response-area" style="margin-top: {theme.global.spacing[4]}">
+  <div class="response-area mt-4">
     {#if responseConfig?.component === 'choice'}
       {@const choiceConfig = responseConfig}
       <div 
-        class="choices"
-        style="display: flex; flex-direction: column; gap: {theme.components.question.response.gap}"
+        class="choices flex flex-col gap-3"
       >
         {#each choiceConfig.options as option, index}
           <label
-            class="choice-option"
-            style={Object.entries(choiceConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ')}
+            class="choice-option flex items-center p-3 border-2 border-input rounded-md bg-background hover:bg-accent hover:border-primary transition-all cursor-pointer"
           >
             <input
               type={choiceConfig.multipleChoice ? 'checkbox' : 'radio'}
@@ -302,7 +331,7 @@
               value={option}
               disabled={mode === 'edit'}
             />
-            <span style="margin-left: {theme.global.spacing[2]}">{option}</span>
+            <span class="ml-2">{option}</span>
           </label>
         {/each}
       </div>
@@ -312,39 +341,37 @@
         <textarea
           placeholder="Enter your response..."
           rows="4"
-          style={Object.entries(textConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ') + '; width: 100%'}
+          class="w-full p-2 border border-input rounded-md bg-background text-foreground"
           disabled={mode === 'edit'}
         />
       {:else}
         <input
           type="text"
           placeholder="Enter your response..."
-          style={Object.entries(textConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ') + '; width: 100%'}
+          class="w-full p-2 border border-input rounded-md bg-background text-foreground"
           disabled={mode === 'edit'}
         />
       {/if}
     {:else if responseConfig?.component === 'scale'}
       {@const scaleConfig = responseConfig}
       <div 
-        class="scale-options"
-        style="display: flex; gap: {theme.global.spacing[2]}; justify-content: space-between"
+        class="scale-options flex gap-2 justify-between"
       >
         {#each Array(scaleConfig.max - scaleConfig.min + 1) as _, i}
           {@const value = scaleConfig.min + i}
           <label
-            class="scale-option"
-            style={Object.entries(scaleConfig.styles.base).map(([k, v]) => `${k.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${v}`).join('; ') + '; cursor: pointer; text-align: center; flex: 1'}
+            class="scale-option flex-1 p-2 border-2 border-input rounded bg-background hover:bg-accent hover:border-primary transition-all cursor-pointer text-center"
           >
             <input
               type="radio"
               name={`question-${question.id}`}
               value={value}
               disabled={mode === 'edit'}
-              style="display: block; margin: 0 auto {theme.global.spacing[1]}"
+              class="block mx-auto mb-1"
             />
             <span>{value}</span>
             {#if (value === scaleConfig.min && scaleConfig.labels.min) || (value === scaleConfig.max && scaleConfig.labels.max)}
-              <div style="font-size: {theme.global.typography.fontSize.sm}; color: {theme.global.colors.text.secondary}; margin-top: {theme.global.spacing[1]}">
+              <div class="text-sm text-muted-foreground mt-1">
                 {value === scaleConfig.min ? scaleConfig.labels.min : scaleConfig.labels.max}
               </div>
             {/if}
@@ -354,8 +381,7 @@
     {:else if responseConfig?.component === 'rating'}
       {@const ratingConfig = responseConfig}
       <div 
-        class="rating-options"
-        style="display: flex; gap: {theme.global.spacing[2]}"
+        class="rating-options flex gap-2"
       >
         {#each Array(ratingConfig.max) as _, i}
           {@const value = i + 1}
@@ -367,6 +393,40 @@
             {ratingConfig.type === 'star' ? '★' : value}
           </button>
         {/each}
+      </div>
+    {:else if responseConfig?.component === 'ranking'}
+      {@const rankingConfig = responseConfig}
+      <div 
+        class="ranking-items flex flex-col gap-2"
+      >
+        <div class="text-muted-foreground text-sm mb-2">
+          {question.display?.instruction || 'Drag items to rank them'}
+        </div>
+        {#each rankingConfig.items as item, index}
+          <div
+            class="ranking-item p-3 bg-card border border-border rounded-md cursor-move flex items-center gap-3"
+          >
+            <span class="text-muted-foreground font-semibold">{index + 1}.</span>
+            <span>{item.label}</span>
+          </div>
+        {/each}
+      </div>
+    {:else if responseConfig?.component === 'drawing'}
+      {@const drawingConfig = responseConfig}
+      <div 
+        class="drawing-canvas"
+        class="border-2 border-dashed border-border rounded-lg bg-card relative overflow-hidden"
+      >
+        <div style="width: {drawingConfig.canvas.width}px; height: {drawingConfig.canvas.height}px; display: flex; align-items: center; justify-content: center">
+          <div class="text-center text-muted-foreground">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mx-auto mb-2">
+              <path d="M12 2L2 7L2 12C2 16.4183 5.58172 20 10 20C10 20 14 20 14 20C18.4183 20 22 16.4183 22 12L22 7L12 2Z"/>
+              <path d="M12 7L12 15"/>
+              <path d="M8 11L16 11"/>
+            </svg>
+            <p class="text-sm">{question.display?.instruction || 'Drawing canvas would appear here'}</p>
+          </div>
+        </div>
       </div>
     {/if}
   </div>

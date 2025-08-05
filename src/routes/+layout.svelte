@@ -14,6 +14,14 @@
   let loading = true;
   
   onMount(() => {
+    // Import modules on client-side only
+    import('$lib/modules');
+    
+    // Import test mode utilities in development
+    if (import.meta.env.DEV) {
+      import('$lib/utils/testMode');
+    }
+    
     // Initialize theme
     theme.init();
     
