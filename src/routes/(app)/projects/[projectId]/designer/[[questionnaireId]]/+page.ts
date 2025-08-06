@@ -97,8 +97,17 @@ export const load: PageLoad = async ({ params, parent, url }) => {
         
         if (networkQuestionnaire) {
           console.log('[DEBUG] Fetched questionnaire from network:', networkQuestionnaire);
+          // Ensure we have a definition field with the correct structure
+          const definition = networkQuestionnaire.definition || networkQuestionnaire.content || {
+            pages: [],
+            questions: [],
+            blocks: [],
+            settings: {}
+          };
           questionnaire = {
             ...networkQuestionnaire,
+            definition,
+            content: definition, // Also provide as content for compatibility
             organizationId: parentData.organizationId || project.organization_id
           };
           // Cache for offline use
@@ -144,11 +153,21 @@ export const load: PageLoad = async ({ params, parent, url }) => {
     organizationId: parentData.organizationId || project.organization_id
   });
   
-  return {
+  const result = {
     ...parentData,
     project,
     questionnaire,
     projectId: params.projectId,
     isOffline: !isOnline
   };
+  
+  console.log('[DEBUG] Returning from load function:', {
+    hasParentData: !!parentData,
+    hasProject: !!project,
+    hasQuestionnaire: !!questionnaire,
+    projectId: params.projectId,
+    questionnaireId: params.questionnaireId
+  });
+  
+  return result;
 };
