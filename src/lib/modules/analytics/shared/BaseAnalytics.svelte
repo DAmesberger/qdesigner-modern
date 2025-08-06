@@ -31,7 +31,7 @@
   
   let isVisible = $state(true);
   let computedData = $state<any[]>([]);
-  let element: HTMLDivElement;
+  let element = $state<HTMLDivElement | undefined>();
   
   // Check conditional visibility
   $effect(() => {
@@ -134,7 +134,7 @@
   
   // Base classes for consistent styling
   const baseClasses = `analytics-block analytics-${analytics.type} mode-${mode}`;
-  const containerClasses = `${baseClasses} ${className} ${!isVisible ? 'hidden' : ''}`;
+  const containerClasses = $derived(`${baseClasses} ${className} ${!isVisible ? 'hidden' : ''}`);
 </script>
 
 {#if isVisible || mode === 'edit'}
@@ -157,21 +157,21 @@
         <div class="analytics-actions">
           <button
             class="action-button"
-            on:click={() => dispatch('edit')}
+            onclick={() => dispatch('edit')}
             title="Configure"
           >
             ⚙️
           </button>
           <button
             class="action-button"
-            on:click={() => dispatch('duplicate')}
+            onclick={() => dispatch('duplicate')}
             title="Duplicate"
           >
             📋
           </button>
           <button
             class="action-button danger"
-            on:click={() => dispatch('delete')}
+            onclick={() => dispatch('delete')}
             title="Delete"
           >
             🗑️

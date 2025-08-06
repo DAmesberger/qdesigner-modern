@@ -32,7 +32,7 @@
   }>();
   
   let isVisible = $state(true);
-  let element: HTMLDivElement;
+  let element = $state<HTMLDivElement | undefined>();
   let mediaUrls = $state<Record<string, string>>({});
   
   // Check conditional visibility
@@ -109,7 +109,7 @@
   
   // Base classes for consistent styling
   const baseClasses = `instruction-block instruction-${instruction.type} mode-${mode}`;
-  const containerClasses = `${baseClasses} ${className} ${!isVisible ? 'hidden' : ''}`;
+  const containerClasses = $derived(`${baseClasses} ${className} ${!isVisible ? 'hidden' : ''}`);
 </script>
 
 {#if isVisible || mode === 'edit'}
@@ -130,21 +130,21 @@
         <div class="instruction-actions">
           <button
             class="action-button"
-            on:click={() => dispatch('edit')}
+            onclick={() => dispatch('edit')}
             title="Edit"
           >
             ✏️
           </button>
           <button
             class="action-button"
-            on:click={() => dispatch('duplicate')}
+            onclick={() => dispatch('duplicate')}
             title="Duplicate"
           >
             📋
           </button>
           <button
             class="action-button danger"
-            on:click={() => dispatch('delete')}
+            onclick={() => dispatch('delete')}
             title="Delete"
           >
             🗑️

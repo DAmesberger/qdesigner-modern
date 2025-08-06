@@ -141,7 +141,7 @@
       <label>Prompt</label>
       <textarea
         value={question.display?.prompt || question.text || ''}
-        on:input={(e) => {
+        oninput={(e) => {
           const updatedQuestion = {
             ...question,
             display: {
@@ -163,7 +163,7 @@
       <input
         type="text"
         value={question.display?.description || ''}
-        on:input={(e) => {
+        oninput={(e) => {
           const updatedQuestion = {
             ...question,
             display: {
@@ -188,7 +188,7 @@
           name="responseType"
           value="single"
           checked={question.config?.responseType?.type === 'single'}
-          on:change={() => updateResponseType('single')}
+          onchange={() => updateResponseType('single')}
         />
         <span>Single Choice (Radio Buttons)</span>
       </label>
@@ -198,7 +198,7 @@
           name="responseType"
           value="multiple"
           checked={question.config?.responseType?.type === 'multiple'}
-          on:change={() => updateResponseType('multiple')}
+          onchange={() => updateResponseType('multiple')}
         />
         <span>Multiple Choice (Checkboxes)</span>
       </label>
@@ -215,7 +215,7 @@
             <div class="option-controls">
               <button
                 class="icon-button"
-                on:click={() => moveOption(index, 'up')}
+                onclick={() => moveOption(index, 'up')}
                 disabled={index === 0}
                 title="Move up"
               >
@@ -223,7 +223,7 @@
               </button>
               <button
                 class="icon-button"
-                on:click={() => moveOption(index, 'down')}
+                onclick={() => moveOption(index, 'down')}
                 disabled={index === (question.config?.options?.length || 0) - 1}
                 title="Move down"
               >
@@ -231,7 +231,7 @@
               </button>
               <button
                 class="icon-button danger"
-                on:click={() => removeOption(index)}
+                onclick={() => removeOption(index)}
                 disabled={(question.config?.options?.length || 0) <= 2}
                 title="Remove option"
               >
@@ -247,7 +247,7 @@
                 <input
                   type="text"
                   value={option.label}
-                  on:input={(e) => updateOption(index, { label: e.currentTarget.value })}
+                  oninput={(e) => updateOption(index, { label: e.currentTarget.value })}
                   placeholder="Option label"
                 />
               </div>
@@ -257,7 +257,7 @@
                 <input
                   type="text"
                   value={option.value}
-                  on:input={(e) => updateOption(index, { value: e.currentTarget.value })}
+                  oninput={(e) => updateOption(index, { value: e.currentTarget.value })}
                   placeholder="Value"
                 />
               </div>
@@ -267,7 +267,7 @@
                 <input
                   type="text"
                   value={option.icon || ''}
-                  on:input={(e) => updateOption(index, { icon: e.currentTarget.value || undefined })}
+                  oninput={(e) => updateOption(index, { icon: e.currentTarget.value || undefined })}
                   placeholder="🔷"
                 />
               </div>
@@ -278,7 +278,7 @@
               <input
                 type="text"
                 value={option.description || ''}
-                on:input={(e) => updateOption(index, { description: e.currentTarget.value || undefined })}
+                oninput={(e) => updateOption(index, { description: e.currentTarget.value || undefined })}
                 placeholder="Additional description for this option"
               />
             </div>
@@ -289,7 +289,7 @@
                 <input
                   type="url"
                   value={option.image || ''}
-                  on:input={(e) => updateOption(index, { image: e.currentTarget.value || undefined })}
+                  oninput={(e) => updateOption(index, { image: e.currentTarget.value || undefined })}
                   placeholder="https://example.com/image.jpg"
                 />
               </div>
@@ -299,7 +299,7 @@
                 <input
                   type="color"
                   value={option.color || '#3b82f6'}
-                  on:input={(e) => updateOption(index, { color: e.currentTarget.value })}
+                  oninput={(e) => updateOption(index, { color: e.currentTarget.value })}
                 />
               </div>
               
@@ -308,7 +308,7 @@
                 <input
                   type="text"
                   value={option.hotkey || ''}
-                  on:input={(e) => updateOption(index, { hotkey: e.currentTarget.value || undefined })}
+                  oninput={(e) => updateOption(index, { hotkey: e.currentTarget.value || undefined })}
                   placeholder="1"
                   maxlength="1"
                 />
@@ -320,7 +320,7 @@
                 <input
                   type="checkbox"
                   checked={option.exclusive || false}
-                  on:change={() => toggleExclusive(index)}
+                  onchange={() => toggleExclusive(index)}
                 />
                 <span>Exclusive option (deselects others when selected)</span>
               </label>
@@ -330,7 +330,7 @@
       {/each}
     </div>
     
-    <button class="add-button" on:click={addOption}>
+    <button class="add-button" onclick={addOption}>
       + Add Option
     </button>
   </div>
@@ -344,7 +344,7 @@
           name="layout"
           value="vertical"
           checked={(question.config?.layout || 'vertical') === 'vertical'}
-          on:change={() => updateConfig({ layout: 'vertical' })}
+          onchange={() => updateConfig({ layout: 'vertical' })}
         />
         <span>Vertical</span>
       </label>
@@ -354,7 +354,7 @@
           name="layout"
           value="horizontal"
           checked={question.config?.layout === 'horizontal'}
-          on:change={() => updateConfig({ layout: 'horizontal' })}
+          onchange={() => updateConfig({ layout: 'horizontal' })}
         />
         <span>Horizontal</span>
       </label>
@@ -364,7 +364,7 @@
           name="layout"
           value="grid"
           checked={question.config?.layout === 'grid'}
-          on:change={() => updateConfig({ layout: 'grid' })}
+          onchange={() => updateConfig({ layout: 'grid' })}
         />
         <span>Grid</span>
       </label>
@@ -378,7 +378,7 @@
           min="2"
           max="4"
           value={question.config?.columns || 2}
-          on:input={(e) => updateConfig({ columns: parseInt(e.currentTarget.value) || 2 })}
+          oninput={(e) => updateConfig({ columns: parseInt(e.currentTarget.value) || 2 })}
         />
       </div>
     {/if}
@@ -390,7 +390,7 @@
       <input
         type="checkbox"
         checked={question.config?.randomizeOptions || false}
-        on:change={(e) => updateConfig({ randomizeOptions: e.currentTarget.checked })}
+        onchange={(e) => updateConfig({ randomizeOptions: e.currentTarget.checked })}
       />
       <span>Randomize option order</span>
     </label>
@@ -399,7 +399,7 @@
       <input
         type="checkbox"
         checked={question.config?.otherOption || false}
-        on:change={(e) => updateConfig({ otherOption: e.currentTarget.checked })}
+        onchange={(e) => updateConfig({ otherOption: e.currentTarget.checked })}
       />
       <span>Include "Other" option with text input</span>
     </label>

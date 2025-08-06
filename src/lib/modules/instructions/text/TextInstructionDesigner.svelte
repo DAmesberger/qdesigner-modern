@@ -255,7 +255,7 @@
       <label for="content">Content</label>
       <button
         type="button"
-        on:click={() => showMediaManager = true}
+        onclick={() => showMediaManager = true}
         class="media-button"
         title="Insert Media"
       >
@@ -269,7 +269,7 @@
       bind:this={contentTextarea}
       id="content"
       value={localContent}
-      on:input={handleContentChange}
+      oninput={handleContentChange}
       rows="10"
       placeholder="Enter your instruction text here..."
       class="content-input"
@@ -303,7 +303,7 @@
         <input
           type="checkbox"
           checked={instruction.display?.enableMarkdown ?? true}
-          on:change={handleMarkdownToggle}
+          onchange={handleMarkdownToggle}
         />
         <span>Enable Markdown</span>
       </label>
@@ -315,7 +315,7 @@
         <input
           type="checkbox"
           checked={instruction.display?.variables ?? true}
-          on:change={handleVariablesToggle}
+          onchange={handleVariablesToggle}
         />
         <span>Enable Variables</span>
       </label>
@@ -327,7 +327,7 @@
         <input
           type="checkbox"
           checked={instruction.navigation?.showNext ?? true}
-          on:change={handleInteractiveToggle}
+          onchange={handleInteractiveToggle}
         />
         <span>Interactive</span>
       </label>
@@ -343,7 +343,7 @@
         <input
           type="checkbox"
           checked={instruction.navigation?.autoAdvance ?? false}
-          on:change={handleAutoAdvanceToggle}
+          onchange={handleAutoAdvanceToggle}
         />
         <span>Enable Auto-Advance</span>
       </label>
@@ -358,7 +358,7 @@
           min="1"
           max="300"
           value={(instruction.navigation?.advanceDelay || 5000) / 1000}
-          on:input={handleDelayChange}
+          oninput={handleDelayChange}
           class="delay-input"
         />
       </div>

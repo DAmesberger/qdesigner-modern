@@ -41,7 +41,7 @@
   let isVisible = $state(true);
   let validationResult = $state<ValidationResult | null>(null);
   let hasInteracted = $state(false);
-  let element: HTMLDivElement;
+  let element = $state<HTMLDivElement | undefined>();
   let mediaUrls = $state<Record<string, string>>({});
   let processedTitle = $state('');
   let processedDescription = $state('');
@@ -198,7 +198,7 @@
   
   // Base classes for consistent styling
   const baseClasses = `question-block question-${question.type} mode-${mode}`;
-  const containerClasses = `${baseClasses} ${className} ${!isVisible ? 'hidden' : ''} ${validationResult && !validationResult.valid ? 'has-error' : ''}`;
+  const containerClasses = $derived(`${baseClasses} ${className} ${!isVisible ? 'hidden' : ''} ${validationResult && !validationResult.valid ? 'has-error' : ''}`);
 </script>
 
 {#if isVisible || mode === 'edit'}
@@ -207,11 +207,11 @@
     class={containerClasses}
     data-question-id={question.id}
     data-question-type={question.type}
-    role="group"
+    role="region"
     aria-labelledby="question-{question.id}-title"
     aria-describedby={question.description ? `question-${question.id}-description` : undefined}
-    aria-required={question.required}
-    aria-invalid={validationResult && !validationResult.valid}
+    aria-required={question.required ? 'true' : undefined}
+    aria-invalid={validationResult && !validationResult.valid ? 'true' : undefined}
     {...restProps}
   >
     {#if mode === 'edit'}
@@ -226,21 +226,21 @@
         <div class="question-actions">
           <button
             class="action-button"
-            on:click={() => dispatch('edit')}
+            onclick={() => dispatch('edit')}
             title="Edit"
           >
             ✏️
           </button>
           <button
             class="action-button"
-            on:click={() => dispatch('duplicate')}
+            onclick={() => dispatch('duplicate')}
             title="Duplicate"
           >
             📋
           </button>
           <button
             class="action-button danger"
-            on:click={() => dispatch('delete')}
+            onclick={() => dispatch('delete')}
             title="Delete"
           >
             🗑️

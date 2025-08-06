@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
   import { scriptingEngine } from '$lib/services/scriptingEngine';
+  import { moduleRegistry } from '$lib/modules/registry';
   
   interface BarChartConfig {
     orientation: 'vertical' | 'horizontal';
@@ -32,10 +33,24 @@
   }
   
   interface Props {
-    block: Question & { config: BarChartConfig };
+    block: Question & { config?: BarChartConfig };
+    onUpdate?: (updates: any) => void;
   }
   
-  let { block = $bindable() }: Props = $props();
+  let { block, onUpdate }: Props = $props();
+  
+  // Initialize config if it doesn't exist
+  $effect(() => {
+    if (!block.config) {
+      const metadata = moduleRegistry.get('bar-chart');
+      if (metadata?.defaultConfig) {
+        onUpdate?.({
+          ...block,
+          config: metadata.defaultConfig
+        });
+      }
+    }
+  });
   
   // Available variables from scripting engine
   let availableVariables = $state<Array<{ id: string; name: string; type: string }>>([]);
@@ -43,8 +58,8 @@
   // UI state
   let activeTab = $state<'data' | 'appearance' | 'axes'>('data');
   let newColor = $state('#3b82f6');
-  let yMinInput = $state(block.config.axes.y.min === 'auto' ? '' : String(block.config.axes.y.min));
-  let yMaxInput = $state(block.config.axes.y.max === 'auto' ? '' : String(block.config.axes.y.max));
+  let yMinInput = $state(block.config?.axes?.y?.min === 'auto' ? '' : String(block.config?.axes?.y?.min || ''));
+  let yMaxInput = $state(block.config?.axes?.y?.max === 'auto' ? '' : String(block.config?.axes?.y?.max || ''));
   
   // Color scheme options
   const colorSchemes = [
@@ -66,64 +81,118 @@
   
   // Update y-axis bounds
   $effect(() => {
-    if (yMinInput === '') {
-      block.config.axes.y.min = 'auto';
-    } else {
-      const num = parseFloat(yMinInput);
-      if (!isNaN(num)) {
-        block.config.axes.y.min = num;
-      }
+    if (!block.config) return;
+    
+    const newMin = yMinInput === '' ? 'auto' : parseFloat(yMinInput);
+    if (block.config.axes?.y?.min !== newMin && (newMin === 'auto' || !isNaN(newMin as number))) {
+      onUpdate?.({
+        ...block,
+        config: {
+          ...block.config,
+          axes: {
+            ...block.config.axes,
+            y: {
+              ...block.config.axes.y,
+              min: newMin
+            }
+          }
+        }
+      });
     }
   });
   
   $effect(() => {
-    if (yMaxInput === '') {
-      block.config.axes.y.max = 'auto';
-    } else {
-      const num = parseFloat(yMaxInput);
-      if (!isNaN(num)) {
-        block.config.axes.y.max = num;
-      }
+    if (!block.config) return;
+    
+    const newMax = yMaxInput === '' ? 'auto' : parseFloat(yMaxInput);
+    if (block.config.axes?.y?.max !== newMax && (newMax === 'auto' || !isNaN(newMax as number))) {
+      onUpdate?.({
+        ...block,
+        config: {
+          ...block.config,
+          axes: {
+            ...block.config.axes,
+            y: {
+              ...block.config.axes.y,
+              max: newMax
+            }
+          }
+        }
+      });
     }
   });
   
   function toggleVariable(varId: string) {
-    if (!block.dataSource) {
-      block.dataSource = { variables: [] };
-    }
+    const current = block.dataSource?.variables || [];
+    const newVariables = current.includes(varId)
+      ? current.filter(v => v !== varId)
+      : [...current, varId];
     
-    const current = block.dataSource.variables;
-    if (current.includes(varId)) {
-      block.dataSource.variables = current.filter(v => v !== varId);
-    } else {
-      block.dataSource.variables = [...current, varId];
-    }
+    onUpdate?.({
+      ...block,
+      dataSource: {
+        ...block.dataSource,
+        variables: newVariables
+      }
+    });
   }
   
   function addCustomColor() {
-    if (!newColor) return;
+    if (!newColor || !block.config) return;
     
-    block.config.colors.customColors = [
-      ...block.config.colors.customColors,
-      newColor
-    ];
+    onUpdate?.({
+      ...block,
+      config: {
+        ...block.config,
+        colors: {
+          ...block.config.colors,
+          customColors: [
+            ...(block.config.colors?.customColors || []),
+            newColor
+          ]
+        }
+      }
+    });
     
     // Generate new random color for next addition
     newColor = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
   }
   
   function removeCustomColor(index: number) {
-    block.config.colors.customColors = block.config.colors.customColors.filter((_, i) => i !== index);
+    if (!block.config) return;
+    
+    onUpdate?.({
+      ...block,
+      config: {
+        ...block.config,
+        colors: {
+          ...block.config.colors,
+          customColors: block.config.colors?.customColors?.filter((_, i) => i !== index) || []
+        }
+      }
+    });
   }
   
   function reorderCustomColor(index: number, direction: 'up' | 'down') {
-    const colors = [...block.config.colors.customColors];
+    if (!block.config) return;
+    
+    const colors = [...(block.config.colors?.customColors || [])];
     const newIndex = direction === 'up' ? index - 1 : index + 1;
     
     if (newIndex < 0 || newIndex >= colors.length) return;
     
     [colors[index], colors[newIndex]] = [colors[newIndex], colors[index]];
-    block.config.colors.customColors = colors;
+    
+    onUpdate?.({
+      ...block,
+      config: {
+        ...block.config,
+        colors: {
+          ...block.config.colors,
+          customColors: colors
+        }
+      }
+    });
   }
 </script>
 
@@ -133,21 +202,21 @@
     <button
       class="tab"
       class:active={activeTab === 'data'}
-      on:click={() => activeTab = 'data'}
+      onclick={() => activeTab = 'data'}
     >
       📊 Data
     </button>
     <button
       class="tab"
       class:active={activeTab === 'appearance'}
-      on:click={() => activeTab = 'appearance'}
+      onclick={() => activeTab = 'appearance'}
     >
       🎨 Appearance
     </button>
     <button
       class="tab"
       class:active={activeTab === 'axes'}
-      on:click={() => activeTab = 'axes'}
+      onclick={() => activeTab = 'axes'}
     >
       📏 Axes
     </button>
@@ -168,7 +237,7 @@
                 <input
                   type="checkbox"
                   checked={block.dataSource?.variables?.includes(variable.id)}
-                  on:change={() => toggleVariable(variable.id)}
+                  onchange={() => toggleVariable(variable.id)}
                 />
                 <span class="variable-name">{variable.name}</span>
                 <span class="variable-type">{variable.type}</span>
@@ -184,7 +253,16 @@
           <label for="aggregation">Aggregation</label>
           <select
             id="aggregation"
-            bind:value={block.dataSource.aggregation}
+            value={block.dataSource?.aggregation || 'none'}
+            onchange={(e) => {
+              onUpdate?.({
+                ...block,
+                dataSource: {
+                  ...block.dataSource,
+                  aggregation: e.currentTarget.value
+                }
+              });
+            }}
             class="select"
           >
             <option value="none">None</option>
@@ -210,7 +288,17 @@
                 type="radio"
                 name="orientation"
                 value="vertical"
-                bind:group={block.config.orientation}
+                checked={block.config?.orientation === 'vertical'}
+                onchange={() => {
+                  if (!block.config) return;
+                  onUpdate?.({
+                    ...block,
+                    config: {
+                      ...block.config,
+                      orientation: 'vertical'
+                    }
+                  });
+                }}
               />
               <span>Vertical</span>
             </label>
@@ -219,7 +307,17 @@
                 type="radio"
                 name="orientation"
                 value="horizontal"
-                bind:group={block.config.orientation}
+                checked={block.config?.orientation === 'horizontal'}
+                onchange={() => {
+                  if (!block.config) return;
+                  onUpdate?.({
+                    ...block,
+                    config: {
+                      ...block.config,
+                      orientation: 'horizontal'
+                    }
+                  });
+                }}
               />
               <span>Horizontal</span>
             </label>
@@ -230,7 +328,17 @@
           <label class="checkbox-label">
             <input
               type="checkbox"
-              bind:checked={block.config.stacked}
+              checked={block.config?.stacked || false}
+              onchange={(e) => {
+                if (!block.config) return;
+                onUpdate?.({
+                  ...block,
+                  config: {
+                    ...block.config,
+                    stacked: e.currentTarget.checked
+                  }
+                });
+              }}
             />
             <span>Stacked bars</span>
           </label>
@@ -240,7 +348,17 @@
           <label class="checkbox-label">
             <input
               type="checkbox"
-              bind:checked={block.config.showValues}
+              checked={block.config?.showValues || false}
+              onchange={(e) => {
+                if (!block.config) return;
+                onUpdate?.({
+                  ...block,
+                  config: {
+                    ...block.config,
+                    showValues: e.currentTarget.checked
+                  }
+                });
+              }}
             />
             <span>Show values on bars</span>
           </label>
@@ -250,7 +368,17 @@
           <label class="checkbox-label">
             <input
               type="checkbox"
-              bind:checked={block.config.showDataLabels}
+              checked={block.config?.showDataLabels || false}
+              onchange={(e) => {
+                if (!block.config) return;
+                onUpdate?.({
+                  ...block,
+                  config: {
+                    ...block.config,
+                    showDataLabels: e.currentTarget.checked
+                  }
+                });
+              }}
             />
             <span>Show data labels</span>
           </label>
@@ -260,7 +388,17 @@
           <label class="checkbox-label">
             <input
               type="checkbox"
-              bind:checked={block.config.showErrorBars}
+              checked={block.config?.showErrorBars || false}
+              onchange={(e) => {
+                if (!block.config) return;
+                onUpdate?.({
+                  ...block,
+                  config: {
+                    ...block.config,
+                    showErrorBars: e.currentTarget.checked
+                  }
+                });
+              }}
             />
             <span>Show error bars</span>
           </label>
@@ -271,7 +409,17 @@
             <label for="error-type">Error Type</label>
             <select
               id="error-type"
-              bind:value={block.config.errorType}
+              value={block.config?.errorType || 'standardError'}
+              onchange={(e) => {
+                if (!block.config) return;
+                onUpdate?.({
+                  ...block,
+                  config: {
+                    ...block.config,
+                    errorType: e.currentTarget.value
+                  }
+                });
+              }}
               class="select"
             >
               <option value="standardError">Standard Error</option>
@@ -287,13 +435,23 @@
             <input
               id="bar-width"
               type="range"
-              bind:value={block.config.barWidth}
+              value={block.config?.barWidth || 0.8}
+              oninput={(e) => {
+                if (!block.config) return;
+                onUpdate?.({
+                  ...block,
+                  config: {
+                    ...block.config,
+                    barWidth: parseFloat(e.currentTarget.value)
+                  }
+                });
+              }}
               min="0.1"
               max="1"
               step="0.1"
               class="slider"
             />
-            <span class="value">{block.config.barWidth}</span>
+            <span class="value">{block.config?.barWidth || 0.8}</span>
           </div>
           
           <div class="form-group">
@@ -301,13 +459,23 @@
             <input
               id="bar-spacing"
               type="range"
-              bind:value={block.config.barSpacing}
+              value={block.config?.barSpacing || 0.2}
+              oninput={(e) => {
+                if (!block.config) return;
+                onUpdate?.({
+                  ...block,
+                  config: {
+                    ...block.config,
+                    barSpacing: parseFloat(e.currentTarget.value)
+                  }
+                });
+              }}
               min="0"
               max="0.5"
               step="0.1"
               class="slider"
             />
-            <span class="value">{block.config.barSpacing}</span>
+            <span class="value">{block.config?.barSpacing || 0.2}</span>
           </div>
         </div>
         
@@ -320,7 +488,20 @@
                   type="radio"
                   name="colorScheme"
                   value={scheme.value}
-                  bind:group={block.config.colors.scheme}
+                  checked={block.config?.colors?.scheme === scheme.value}
+                  onchange={() => {
+                    if (!block.config) return;
+                    onUpdate?.({
+                      ...block,
+                      config: {
+                        ...block.config,
+                        colors: {
+                          ...block.config.colors,
+                          scheme: scheme.value
+                        }
+                      }
+                    });
+                  }}
                 />
                 <span class="scheme-name">{scheme.label}</span>
                 <div class="scheme-preview">
@@ -336,14 +517,14 @@
         <div class="form-group">
           <label>Custom Colors</label>
           <div class="custom-colors">
-            {#each block.config.colors.customColors as color, index}
+            {#each (block.config?.colors?.customColors || []) as color, index}
               <div class="custom-color-item">
                 <div class="color-display" style="background-color: {color}"></div>
                 <span class="color-value">{color}</span>
                 <div class="color-actions">
                   <button
                     class="icon-btn"
-                    on:click={() => reorderCustomColor(index, 'up')}
+                    onclick={() => reorderCustomColor(index, 'up')}
                     disabled={index === 0}
                     title="Move up"
                   >
@@ -351,15 +532,15 @@
                   </button>
                   <button
                     class="icon-btn"
-                    on:click={() => reorderCustomColor(index, 'down')}
-                    disabled={index === block.config.colors.customColors.length - 1}
+                    onclick={() => reorderCustomColor(index, 'down')}
+                    disabled={index === (block.config?.colors?.customColors?.length || 0) - 1}
                     title="Move down"
                   >
                     ↓
                   </button>
                   <button
                     class="icon-btn danger"
-                    on:click={() => removeCustomColor(index)}
+                    onclick={() => removeCustomColor(index)}
                     title="Remove"
                   >
                     ✕
@@ -376,7 +557,7 @@
               />
               <button
                 class="btn btn-secondary"
-                on:click={addCustomColor}
+                onclick={addCustomColor}
               >
                 Add Color
               </button>
@@ -398,7 +579,23 @@
             <input
               id="x-label"
               type="text"
-              bind:value={block.config.axes.x.label}
+              value={block.config?.axes?.x?.label || ''}
+              oninput={(e) => {
+                if (!block.config) return;
+                onUpdate?.({
+                  ...block,
+                  config: {
+                    ...block.config,
+                    axes: {
+                      ...block.config.axes,
+                      x: {
+                        ...block.config.axes.x,
+                        label: e.currentTarget.value
+                      }
+                    }
+                  }
+                });
+              }}
               placeholder="X-axis label"
               class="input"
             />
@@ -408,7 +605,23 @@
             <label class="checkbox-label">
               <input
                 type="checkbox"
-                bind:checked={block.config.axes.x.showGrid}
+                checked={block.config?.axes?.x?.showGrid || false}
+                onchange={(e) => {
+                  if (!block.config) return;
+                  onUpdate?.({
+                    ...block,
+                    config: {
+                      ...block.config,
+                      axes: {
+                        ...block.config.axes,
+                        x: {
+                          ...block.config.axes.x,
+                          showGrid: e.currentTarget.checked
+                        }
+                      }
+                    }
+                  });
+                }}
               />
               <span>Show grid lines</span>
             </label>
@@ -418,7 +631,23 @@
             <label class="checkbox-label">
               <input
                 type="checkbox"
-                bind:checked={block.config.axes.x.showTicks}
+                checked={block.config?.axes?.x?.showTicks || false}
+                onchange={(e) => {
+                  if (!block.config) return;
+                  onUpdate?.({
+                    ...block,
+                    config: {
+                      ...block.config,
+                      axes: {
+                        ...block.config.axes,
+                        x: {
+                          ...block.config.axes.x,
+                          showTicks: e.currentTarget.checked
+                        }
+                      }
+                    }
+                  });
+                }}
               />
               <span>Show tick marks</span>
             </label>
@@ -433,7 +662,23 @@
             <input
               id="y-label"
               type="text"
-              bind:value={block.config.axes.y.label}
+              value={block.config?.axes?.y?.label || ''}
+              oninput={(e) => {
+                if (!block.config) return;
+                onUpdate?.({
+                  ...block,
+                  config: {
+                    ...block.config,
+                    axes: {
+                      ...block.config.axes,
+                      y: {
+                        ...block.config.axes.y,
+                        label: e.currentTarget.value
+                      }
+                    }
+                  }
+                });
+              }}
               placeholder="Y-axis label"
               class="input"
             />
@@ -467,7 +712,23 @@
             <label class="checkbox-label">
               <input
                 type="checkbox"
-                bind:checked={block.config.axes.y.showGrid}
+                checked={block.config?.axes?.y?.showGrid || false}
+                onchange={(e) => {
+                  if (!block.config) return;
+                  onUpdate?.({
+                    ...block,
+                    config: {
+                      ...block.config,
+                      axes: {
+                        ...block.config.axes,
+                        y: {
+                          ...block.config.axes.y,
+                          showGrid: e.currentTarget.checked
+                        }
+                      }
+                    }
+                  });
+                }}
               />
               <span>Show grid lines</span>
             </label>
@@ -477,7 +738,23 @@
             <label class="checkbox-label">
               <input
                 type="checkbox"
-                bind:checked={block.config.axes.y.showTicks}
+                checked={block.config?.axes?.y?.showTicks || false}
+                onchange={(e) => {
+                  if (!block.config) return;
+                  onUpdate?.({
+                    ...block,
+                    config: {
+                      ...block.config,
+                      axes: {
+                        ...block.config.axes,
+                        y: {
+                          ...block.config.axes.y,
+                          showTicks: e.currentTarget.checked
+                        }
+                      }
+                    }
+                  });
+                }}
               />
               <span>Show tick marks</span>
             </label>

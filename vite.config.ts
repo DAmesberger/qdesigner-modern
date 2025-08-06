@@ -9,7 +9,7 @@ export default defineConfig({
     minify: false // Disable minification for better debugging
   },
   optimizeDeps: {
-    exclude: ['@sveltejs/kit', 'svelte']
+    include: ['svelte', '@sveltejs/kit']
   },
   server: {
     port: 5173,
