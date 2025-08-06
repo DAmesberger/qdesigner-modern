@@ -80,7 +80,7 @@
       <!-- Zoom Controls -->
       <div class="flex items-center {uiTheme.semantic.bgSurface} rounded-md {uiTheme.semantic.borderDefault} border">
         <button 
-          on:click={zoomOut}
+          onclick={zoomOut}
           disabled={zoomLevel === 50}
           class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost} disabled:opacity-50"
         >
@@ -90,7 +90,7 @@
         </button>
         <span class="px-2 py-1 text-sm {uiTheme.semantic.textPrimary} border-x {uiTheme.semantic.borderDefault}">{zoomLevel}%</span>
         <button 
-          on:click={zoomIn}
+          onclick={zoomIn}
           disabled={zoomLevel === 150}
           class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost} disabled:opacity-50"
         >
@@ -109,7 +109,7 @@
     </div>
     
     <button
-      on:click={() => showTestRunner = true}
+      onclick={() => showTestRunner = true}
       class="flex items-center gap-1.5 px-3 py-1.5 {uiTheme.components.button.variants.outline} {uiTheme.components.button.sizes.sm} rounded-md"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -129,8 +129,8 @@
       <!-- Page Background -->
       <div 
         class="{uiTheme.components.container.card} min-h-[600px] max-w-3xl mx-auto"
-        on:drop={handleDrop}
-        on:dragover={(e) => e.preventDefault()}
+        ondrop={handleDrop}
+        ondragover={(e) => e.preventDefault()}
       >
         <!-- Page Header -->
         <div class="px-8 pt-8 pb-4 border-b {uiTheme.semantic.borderDefault}">
@@ -158,7 +158,7 @@
                 <label class="text-sm text-muted-foreground">Block:</label>
                 <select
                   value={$currentBlock?.id}
-                  on:change={(e) => designerStore.setCurrentBlock(e.currentTarget.value)}
+                  onchange={(e) => designerStore.setCurrentBlock(e.currentTarget.value)}
                   class="text-sm px-3 py-1 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
                 >
                   {#each $currentPageBlocks as block}
@@ -205,8 +205,8 @@
                   dragDisabled: false,
                   type: 'questions'
                 }}
-                on:consider={handleDndConsider}
-                on:finalize={handleDndFinalize}
+                onconsider={handleDndConsider}
+                onfinalize={handleDndFinalize}
               >
                 {#each items as item (item.id)}
                   <div animate:flip={{ duration: 300 }}>
@@ -216,10 +216,10 @@
                         theme={questionnaireTheme}
                         mode="edit"
                         selected={$designerStore.selectedItemId === item.id}
-                        on:select={() => designerStore.selectItem(item.id, 'question')}
-                        on:update={(e) => handleQuestionUpdate(item.id, e.detail)}
-                        on:delete={() => designerStore.deleteQuestion(item.id)}
-                        on:edit-properties={() => {
+                        onselect={() => designerStore.selectItem(item.id, 'question')}
+                        onupdate={(updates) => handleQuestionUpdate(item.id, updates)}
+                        ondelete={() => designerStore.deleteQuestion(item.id)}
+                        oneditproperties={() => {
                           designerStore.selectItem(item.id, 'question');
                         }}
                       />
@@ -240,7 +240,7 @@
               class="w-2 h-2 rounded-full transition-colors"
               class:bg-blue-600={page.id === $currentPage?.id}
               class:bg-muted={page.id !== $currentPage?.id}
-              on:click={() => designerStore.setCurrentPage(page.id)}
+              onclick={() => designerStore.setCurrentPage(page.id)}
               title="Page {index + 1}"
             />
           {/each}
@@ -257,9 +257,7 @@
     theme={questionnaireTheme}
     startPageId={$currentPage?.id}
     showDebugInfo={true}
-    on:close={() => showTestRunner = false}
-    on:response={(e) => console.log('Test response:', e.detail)}
-    on:complete={(e) => console.log('Test complete:', e.detail)}
+    onclose={() => showTestRunner = false}
   />
 {/if}
 

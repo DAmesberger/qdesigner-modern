@@ -18,7 +18,9 @@
     if (!questionnaireName.trim()) return;
     
     // Navigate to designer with new questionnaire context
-    goto(`/projects/${data.project.id}/designer/new?name=${encodeURIComponent(questionnaireName)}&description=${encodeURIComponent(questionnaireDescription)}`);
+    if (typeof window !== 'undefined') {
+      window.location.href = `/projects/${data.project.id}/designer/new?name=${encodeURIComponent(questionnaireName)}&description=${encodeURIComponent(questionnaireDescription)}`;
+    }
   }
   
   function formatDate(date: string | Date) {
@@ -130,7 +132,11 @@
                     <div class="flex items-center space-x-2">
                       {#if questionnaire.status === 'published'}
                         <button
-                          onclick={() => goto(`/projects/${data.project.id}/questionnaires/${questionnaire.id}/run`)}
+                          onclick={() => {
+                            if (typeof window !== 'undefined') {
+                              window.location.href = `/projects/${data.project.id}/questionnaires/${questionnaire.id}/run`;
+                            }
+                          }}
                           class="text-gray-600 hover:text-gray-900"
                           title="Run questionnaire"
                         >
@@ -138,7 +144,11 @@
                         </button>
                       {/if}
                       <button
-                        onclick={() => goto(`/projects/${data.project.id}/designer/${questionnaire.id}`)}
+                        onclick={() => {
+                          if (typeof window !== 'undefined') {
+                            window.location.href = `/projects/${data.project.id}/designer/${questionnaire.id}`;
+                          }
+                        }}
                         class="text-gray-600 hover:text-gray-900"
                         title="Edit questionnaire"
                       >

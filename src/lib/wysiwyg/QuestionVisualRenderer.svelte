@@ -1,46 +1,71 @@
 <script lang="ts">
   import type { Question, QuestionnaireTheme } from '$lib/shared';
   import { defaultTheme } from '$lib/shared';
-  import { createEventDispatcher } from 'svelte';
   import { produce } from 'immer';
-  import { processMarkdownContentSync } from '$lib/services/markdownProcessor';
-  import { mediaService } from '$lib/services/mediaService';
+  import { 
+    loadMediaUrls, 
+    processContentWithMediaSync,
+    extractMediaFromDisplay 
+  } from '$lib/services/mediaHandling';
   
-  export let question: Question;
-  export let theme: QuestionnaireTheme = defaultTheme;
-  export let mode: 'edit' | 'preview' = 'preview';
-  export let selected = false;
+  interface Props {
+    question: Question;
+    theme?: QuestionnaireTheme;
+    mode?: 'edit' | 'preview';
+    selected?: boolean;
+    onselect?: () => void;
+    onupdate?: (updates: any) => void;
+    oneditproperties?: () => void;
+    ondelete?: () => void;
+  }
   
-  const dispatch = createEventDispatcher();
+  let { 
+    question, 
+    theme = defaultTheme,
+    mode = 'preview',
+    selected = false,
+    onselect,
+    onupdate,
+    oneditproperties,
+    ondelete
+  }: Props = $props();
   
-  // Media handling for instruction questions
+  // Media handling for all question types
   let mediaUrls: Record<string, string> = {};
+  let media = extractMediaFromDisplay(question.display);
   
   // Reactive media loading - when question changes, reload media
-  $: {
+  $effect(() => {
+    // Extract media from display object
+    const newMedia = extractMediaFromDisplay(question.display);
+    
     console.log('[QuestionVisualRenderer] Question data:', {
       type: question.type,
       hasDisplay: !!question.display,
-      hasMedia: !!question.display?.media,
-      media: question.display?.media,
+      hasMedia: newMedia.length > 0,
+      mediaCount: newMedia.length,
+      media: newMedia,
       content: question.display?.content?.substring(0, 100)
     });
     
-    if (question.type === 'instruction' && question.display?.media) {
-      loadMediaUrls();
+    // Update media if changed
+    if (JSON.stringify(media) !== JSON.stringify(newMedia)) {
+      media = newMedia;
+      loadMediaUrlsForQuestion();
     }
-  }
+  });
   
-  async function loadMediaUrls() {
-    if (!question.display?.media) return;
+  async function loadMediaUrlsForQuestion() {
+    if (!media || media.length === 0) return;
     
-    const mediaIds = question.display.media
-      .filter((m: any) => m.mediaId)
-      .map((m: any) => m.mediaId);
+    console.log('[QuestionVisualRenderer] Loading media URLs for:', media);
     
-    if (mediaIds.length > 0) {
-      const urls = await mediaService.getSignedUrls(mediaIds);
+    try {
+      const urls = await loadMediaUrls(media);
+      console.log('[QuestionVisualRenderer] Fetched URLs:', urls);
       mediaUrls = urls;
+    } catch (error) {
+      console.error('[QuestionVisualRenderer] Failed to load media URLs:', error);
     }
   }
   
@@ -79,7 +104,6 @@
   
   // Handle inline editing
   let isEditingPrompt = false;
-  let promptText = getQuestionText(question);
   
   function handlePromptClick() {
     if (mode === 'edit' && !isEditingPrompt) {
@@ -93,12 +117,12 @@
     if (promptText !== currentText) {
       // Update based on question type
       if (question.display?.content !== undefined) {
-        dispatch('update', { display: { ...question.display, content: promptText } });
+        onupdate?.({ display: { ...question.display, content: promptText } });
       } else if (question.display?.prompt !== undefined) {
-        dispatch('update', { display: { ...question.display, prompt: promptText } });
+        onupdate?.({ display: { ...question.display, prompt: promptText } });
       } else {
         // Fallback for old format
-        dispatch('update', { text: promptText });
+        onupdate?.({ text: promptText });
       }
     }
   }
@@ -232,36 +256,44 @@
     };
   }
   
-  $: questionStyles = getQuestionStyles();
-  $: responseConfig = renderResponse(question, theme);
-  $: promptText = getQuestionText(question);
+  let questionStyles = $derived(getQuestionStyles());
+  let responseConfig = $derived(renderResponse(question, theme));
+  let promptText = $state(getQuestionText(question));
+  
+  // Update prompt text when question changes
+  $effect(() => {
+    promptText = getQuestionText(question);
+  });
   
   // Parse markdown content for instruction questions using the centralized processor
-  $: parsedMarkdown = (() => {
+  let parsedMarkdown = $derived.by(() => {
     if ((question.type === 'instruction' || question.type === 'text-instruction')) {
       const content = question.display?.content || question.text;
       if (!content) return null;
       
       try {
-        // Use the centralized markdown processor with media URL replacement
-        return processMarkdownContentSync(content, {
-          media: question.display?.media || [],
-          mediaUrls: mediaUrls,
-          format: 'markdown',
-          processVariables: false
-        });
+        // Use the centralized content processor with media
+        return processContentWithMediaSync(
+          content,
+          media,
+          mediaUrls,
+          {
+            format: 'markdown',
+            processVariables: false
+          }
+        );
       } catch (error) {
         console.error('Error parsing markdown:', error);
         return content;
       }
     }
     return null;
-  })();
+  });
 </script>
 
 <div 
   class="question-container p-6 bg-card rounded-lg shadow-sm border border-border {selected && mode === 'edit' ? 'ring-2 ring-primary ring-offset-2' : ''}"
-  on:click={() => dispatch('select')}
+  onclick={() => onselect?.()}
   role="button"
   tabindex="0"
 >
@@ -271,8 +303,8 @@
       contenteditable="true"
       class="prompt-editor text-lg font-semibold text-foreground mb-3"
       bind:textContent={promptText}
-      on:blur={handlePromptBlur}
-      on:keydown={(e) => {
+      onblur={handlePromptBlur}
+      onkeydown={(e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           handlePromptBlur();
@@ -282,7 +314,7 @@
   {:else}
     <div
       class="prompt text-lg font-semibold text-foreground mb-3"
-      on:click={handlePromptClick}
+      onclick={handlePromptClick}
       role={mode === 'edit' ? 'button' : undefined}
       tabindex={mode === 'edit' ? 0 : undefined}
     >
@@ -427,14 +459,14 @@
       <button 
         class="edit-btn"
         style="padding: 4px 8px; background: #3B82F6; color: white; border-radius: 4px; font-size: 12px"
-        on:click|stopPropagation={() => dispatch('edit-properties')}
+        onclick={(e) => { e.stopPropagation(); oneditproperties?.(); }}
       >
         Properties
       </button>
       <button 
         class="edit-btn"
         style="padding: 4px 8px; background: #EF4444; color: white; border-radius: 4px; font-size: 12px"
-        on:click|stopPropagation={() => dispatch('delete')}
+        onclick={(e) => { e.stopPropagation(); ondelete?.(); }}
       >
         Delete
       </button>

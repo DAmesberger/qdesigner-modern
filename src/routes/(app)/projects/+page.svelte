@@ -68,7 +68,9 @@
         });
       
       showCreateModal = false;
-      goto(`/projects/${project.id}`);
+      if (typeof window !== 'undefined') {
+        window.location.href = `/projects/${project.id}`;
+      }
     } catch (error) {
       console.error('Error in createProject:', error);
     }
@@ -129,7 +131,16 @@
         {#each data.projects as project}
           <div class="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow">
             <button
-              onclick={() => goto(`/projects/${project.id}`)}
+              onclick={() => {
+                const url = `/projects/${project.id}`;
+                console.log('Navigating to:', url, 'project.id:', project.id);
+                if (project.id) {
+                  // Use window.location as a workaround for the goto issue
+                  window.location.href = url;
+                } else {
+                  console.error('Project ID is undefined');
+                }
+              }}
               class="block w-full text-left p-6 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               <div class="flex items-center justify-between">

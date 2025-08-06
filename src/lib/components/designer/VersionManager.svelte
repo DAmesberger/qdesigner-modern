@@ -17,7 +17,7 @@
   let isSavingVersion = false;
   let selectedVersions: string[] = [];
   
-  $: user = $page.data.user;
+  $: user = $page.data?.user;
   $: questionnaire = $designerStore.questionnaire;
   $: currentVersion = questionnaire.version || '1';
 

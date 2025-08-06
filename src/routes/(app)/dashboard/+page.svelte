@@ -53,14 +53,23 @@
   }
 
   function navigateToQuestionnaire(id: string) {
-    // This should navigate through the proper project route
-    // For now, go to projects page as questionnaires need project context
-    goto('/projects');
+    // Navigate to the designer with a test project ID
+    // Using a test project ID for now
+    const testProjectId = 'test-project-1';
+    const url = `/projects/${testProjectId}/designer/${id}`;
+    console.log('Navigating to:', url, 'with id:', id);
+    
+    // Use window.location for now to bypass the goto issue
+    if (typeof window !== 'undefined') {
+      window.location.href = url;
+    }
   }
 
   function createNewQuestionnaire() {
     // Navigate to projects page to select/create project first
-    goto('/projects');
+    if (typeof window !== 'undefined') {
+      window.location.href = '/projects';
+    }
   }
 </script>
 
@@ -79,7 +88,11 @@
         </div>
         <div class="mt-4 flex md:mt-0 md:ml-4">
           <button
-            onclick={() => goto('/projects')}
+            onclick={() => {
+              if (typeof window !== 'undefined') {
+                window.location.href = '/projects';
+              }
+            }}
             class="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

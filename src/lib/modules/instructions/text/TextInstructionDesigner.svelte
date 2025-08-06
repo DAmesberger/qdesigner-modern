@@ -40,7 +40,17 @@
   
   // Load media URLs if media is present
   $effect(() => {
-    if (instruction.display?.media && instruction.display.media.length > 0) {
+    // Check for media in both old (root) and new (display.media) locations
+    if (instruction.media && instruction.media.length > 0 && (!instruction.display?.media || instruction.display.media.length === 0)) {
+      // Migrate from old location to new
+      console.log('[TextInstructionDesigner] Migrating media from root to display.media');
+      onUpdate?.({
+        display: {
+          ...instruction.display,
+          media: instruction.media
+        }
+      });
+    } else if (instruction.display?.media && instruction.display.media.length > 0) {
       loadMediaUrls();
     }
   });
@@ -48,6 +58,11 @@
   // Update preview content
   $effect(() => {
     updatePreview();
+  });
+  
+  // Sync orphaned media references with media array
+  $effect(() => {
+    syncOrphanedMediaReferences();
   });
   
   // Cleanup timer on unmount
@@ -153,6 +168,43 @@
       });
     } else {
       previewContent = localContent.replace(/\n/g, '<br>');
+    }
+  }
+  
+  function syncOrphanedMediaReferences() {
+    // Find all media references in content
+    const mediaPattern = /!\[[^\]]*\]\(media:([a-z0-9_]+)\)/gi;
+    const matches = [...localContent.matchAll(mediaPattern)];
+    
+    if (matches.length === 0) return;
+    
+    const currentMedia = instruction.display?.media || [];
+    const currentRefIds = new Set(currentMedia.map(m => m.refId));
+    const contentRefIds = matches.map(m => m[1]);
+    
+    // Find orphaned references (in content but not in media array)
+    const orphanedRefIds = contentRefIds.filter(refId => !currentRefIds.has(refId));
+    
+    if (orphanedRefIds.length > 0) {
+      console.log('[TextInstructionDesigner] Found orphaned media references, removing them:', orphanedRefIds);
+      
+      // Remove orphaned references from content
+      let cleanedContent = localContent;
+      orphanedRefIds.forEach(refId => {
+        const pattern = new RegExp(`!\\[[^\\]]*\\]\\(media:${refId}\\)`, 'g');
+        cleanedContent = cleanedContent.replace(pattern, '[Broken media reference - please re-insert]');
+      });
+      
+      if (cleanedContent !== localContent) {
+        localContent = cleanedContent;
+        // Update the content
+        onUpdate?.({
+          display: {
+            ...instruction.display,
+            content: cleanedContent
+          }
+        });
+      }
     }
   }
   

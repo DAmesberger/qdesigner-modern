@@ -6,11 +6,16 @@
   import ThemeToggle from '../ThemeToggle.svelte';
   import { onMount } from 'svelte';
   
-  export let user: any = null;
+  interface Props {
+    user?: any;
+    children?: any;
+  }
   
-  let sidebarOpen = false;
-  let userMenuOpen = false;
-  let profileImageUrl = '';
+  let { user = null, children }: Props = $props();
+  
+  let sidebarOpen = $state(false);
+  let userMenuOpen = $state(false);
+  let profileImageUrl = $state('');
   
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -20,10 +25,10 @@
   ];
   
   // Check if current route needs minimal layout
-  $: isDesignerRoute = $page.url.pathname.includes('/designer/');
-  $: isMinimalLayout = isDesignerRoute;
+  let isDesignerRoute = $derived($page?.url?.pathname?.includes('/designer/') || false);
+  let isMinimalLayout = $derived(isDesignerRoute);
   
-  $: currentPath = $page.url.pathname;
+  let currentPath = $derived($page?.url?.pathname || '/');
   
   onMount(() => {
     if (user?.email) {
@@ -48,7 +53,7 @@
   }
 </script>
 
-<svelte:window on:click={handleClickOutside} />
+<svelte:window onclick={handleClickOutside} />
 
 <div class="h-screen flex overflow-hidden bg-layer-base">
   {#if !isMinimalLayout}
@@ -59,7 +64,7 @@
       <button 
         type="button"
         class="fixed inset-0 z-50 bg-black/[var(--backdrop-opacity)] backdrop-blur-sm lg:hidden" 
-        on:click={() => sidebarOpen = false}
+        onclick={() => sidebarOpen = false}
         aria-label="Close sidebar"
       ></button>
     {/if}
@@ -71,7 +76,7 @@
         <button
           type="button"
           class="p-2 text-muted-foreground hover:text-foreground transition-colors"
-          on:click={() => sidebarOpen = false}
+          onclick={() => sidebarOpen = false}
           aria-label="Close sidebar"
         >
           <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -84,7 +89,7 @@
           <a
             href={item.href}
             class="group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors {currentPath.startsWith(item.href) ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-accent hover:text-accent-foreground'}"
-            on:click={() => sidebarOpen = false}
+            onclick={() => sidebarOpen = false}
           >
             <svg class="mr-3 h-5 w-5 {currentPath.startsWith(item.href) ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
@@ -104,7 +109,7 @@
             <button
               type="button"
               class="sidebar-toggle p-2 text-muted-foreground hover:text-foreground transition-colors lg:hidden"
-              on:click={() => sidebarOpen = true}
+              onclick={() => sidebarOpen = true}
               aria-label="Open sidebar"
             >
               <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -144,7 +149,7 @@
               <button
                 type="button"
                 class="flex items-center p-2 text-sm rounded-md hover:bg-accent transition-colors"
-                on:click={() => userMenuOpen = !userMenuOpen}
+                onclick={() => userMenuOpen = !userMenuOpen}
                 aria-label="User menu"
                 aria-expanded={userMenuOpen}
               >
@@ -172,7 +177,7 @@
                   <button
                     type="button"
                     class="block w-full text-left px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors"
-                    on:click={handleSignOut}
+                    onclick={handleSignOut}
                   >
                     Sign out
                   </button>
@@ -186,14 +191,14 @@
       <!-- Page content -->
       <main class="flex-1 overflow-auto">
         <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-          <slot />
+          {#if children}{@render children()}{/if}
         </div>
       </main>
     </div>
   {:else}
     <!-- Minimal layout for designer -->
     <div class="flex-1 overflow-hidden">
-      <slot />
+      {#if children}{@render children()}{/if}
     </div>
   {/if}
 </div>

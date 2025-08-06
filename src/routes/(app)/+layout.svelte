@@ -17,10 +17,12 @@
   $effect(() => {
     // Only redirect if we're on a protected route and user has no organization
     const protectedPaths = ['/dashboard', '/projects', '/admin'];
-    const isProtectedPath = protectedPaths.some(path => $page.url.pathname.startsWith(path));
+    const isProtectedPath = protectedPaths.some(path => $page?.url?.pathname?.startsWith(path));
     
     if (data.user && !data.organizationId && isProtectedPath) {
-      goto('/onboarding/organization');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/onboarding/organization';
+      }
     }
   });
 </script>

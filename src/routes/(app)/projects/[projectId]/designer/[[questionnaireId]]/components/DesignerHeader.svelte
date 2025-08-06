@@ -66,7 +66,11 @@
 <header class="h-14 flex items-center px-4 gap-4 {theme.semantic.bgSurface} {theme.semantic.borderDefault} border-b">
   <!-- Logo/Back Button -->
   <button
-    on:click={() => goto('/dashboard')}
+    on:click={() => {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard';
+      }
+    }}
     class="flex items-center gap-2 {theme.semantic.textSecondary} {theme.semantic.interactive.ghost} px-2 py-1 rounded-md transition-colors"
     title="Back to Dashboard"
   >

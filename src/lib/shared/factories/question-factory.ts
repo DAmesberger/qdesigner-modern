@@ -61,19 +61,22 @@ export class QuestionFactory {
       question.responseType = { type: 'none' };
     }
     
-    // Handle display configuration
+    // Handle display configuration (including media)
     if (item.config?.display) {
       question.display = item.config.display;
+    }
+    
+    // Handle media - should be in display.media for consistency
+    if (item.config?.media || item.media) {
+      if (!question.display) {
+        question.display = {};
+      }
+      question.display.media = item.config?.media || item.media;
     }
     
     // Handle navigation configuration
     if (item.config?.navigation) {
       question.navigation = item.config.navigation;
-    }
-    
-    // Handle media
-    if (item.config?.media || item.media) {
-      question.media = item.config?.media || item.media;
     }
     
     // Copy any additional configuration
@@ -145,9 +148,17 @@ export class QuestionFactory {
       moduleItem.config.response = question.responseType;
     }
     
-    // Extract media
-    if (question.media) {
-      moduleItem.config.media = question.media;
+    // Extract display configuration (including media)
+    if (question.display) {
+      moduleItem.config.display = question.display;
+    }
+    
+    // Handle legacy media location (backward compatibility)
+    if (question.media && !question.display?.media) {
+      if (!moduleItem.config.display) {
+        moduleItem.config.display = {};
+      }
+      moduleItem.config.display.media = question.media;
     }
     
     // Clone using ModuleFactory

@@ -198,7 +198,6 @@
                 {question}
                 {theme}
                 mode="preview"
-                on:response={(e) => handleResponse(question.id, e.detail)}
               />
               
               {#if showDebugInfo && responses[question.id]}
