@@ -7,7 +7,11 @@
   import FlowControlManager from '$lib/components/designer/FlowControlManager.svelte';
   import theme from '$lib/theme';
   
-  export let activeTab: 'blocks' | 'questions' | 'variables' | 'flow' = 'blocks';
+  interface Props {
+    activeTab: 'blocks' | 'questions' | 'variables' | 'flow';
+  }
+  
+  let { activeTab = $bindable('blocks') }: Props = $props();
   
   let isCollapsed = false;
   

@@ -42,10 +42,10 @@
   const project = $derived(data?.project);
   
   // State
-  let viewMode: 'structural' | 'wysiwyg' = 'wysiwyg';
-  let activeTab: 'blocks' | 'questions' | 'variables' | 'flow' = 'blocks';
-  let showPreview = false;
-  let showCommandPalette = false;
+  let viewMode = $state<'structural' | 'wysiwyg'>('wysiwyg');
+  let activeTab = $state<'blocks' | 'questions' | 'variables' | 'flow'>('blocks');
+  let showPreview = $state(false);
+  let showCommandPalette = $state(false);
   
   // Initialize
   onMount(() => {
