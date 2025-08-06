@@ -136,6 +136,50 @@
 
 <div class="multiple-choice-designer">
   <div class="form-section">
+    <h3>Question Text</h3>
+    <div class="field">
+      <label>Prompt</label>
+      <textarea
+        value={question.display?.prompt || question.text || ''}
+        on:input={(e) => {
+          const updatedQuestion = {
+            ...question,
+            display: {
+              ...question.display,
+              prompt: e.currentTarget.value
+            },
+            text: e.currentTarget.value
+          };
+          (onResponse || onUpdate)?.(updatedQuestion);
+        }}
+        rows="2"
+        placeholder="Enter your question text here"
+        class="w-full"
+      />
+    </div>
+    
+    <div class="field">
+      <label>Description (optional)</label>
+      <input
+        type="text"
+        value={question.display?.description || ''}
+        on:input={(e) => {
+          const updatedQuestion = {
+            ...question,
+            display: {
+              ...question.display,
+              description: e.currentTarget.value || undefined
+            }
+          };
+          (onResponse || onUpdate)?.(updatedQuestion);
+        }}
+        placeholder="Additional context or instructions"
+        class="w-full"
+      />
+    </div>
+  </div>
+  
+  <div class="form-section">
     <h3>Response Type</h3>
     <div class="radio-group">
       <label>
@@ -476,7 +520,8 @@
     color: hsl(var(--foreground));
   }
   
-  .field input {
+  .field input,
+  .field textarea {
     padding: 0.5rem;
     border: 1px solid hsl(var(--input));
     border-radius: 0.375rem;
@@ -485,10 +530,16 @@
     color: hsl(var(--foreground));
   }
   
-  .field input:focus {
+  .field input:focus,
+  .field textarea:focus {
     outline: none;
     border-color: hsl(var(--primary));
     box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
+  }
+  
+  .field textarea {
+    resize: vertical;
+    min-height: 3rem;
   }
   
   .checkbox-label {

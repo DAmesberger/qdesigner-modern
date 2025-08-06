@@ -148,7 +148,7 @@
   }
 </script>
 
-<div class="h-full flex flex-col">
+<div class="h-full flex flex-col overflow-hidden">
   <!-- Tabs -->
   <div class="flex border-b border-border">
     <button
@@ -191,7 +191,7 @@
   <!-- Tab Content -->
   <div class="flex-1 overflow-hidden">
     {#if activeTab === 'properties'}
-      <div class="flex-1 overflow-y-auto">
+      <div class="h-full overflow-y-auto">
     {#if item && itemType === 'question'}
       <!-- Question Properties -->
       <div class="p-4 space-y-4">

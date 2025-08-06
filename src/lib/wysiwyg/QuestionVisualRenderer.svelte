@@ -343,7 +343,10 @@
     <div
       class="description text-sm text-muted-foreground mb-4"
     >
-      {question.display?.description || question.settings?.description}
+      {@html processContentWithMediaSync(
+        question.display?.description || question.settings?.description || '',
+        [], {}, { format: 'markdown', processVariables: false }
+      )}
     </div>
   {/if}
   
@@ -364,7 +367,9 @@
               value={option}
               disabled={mode === 'edit'}
             />
-            <span class="ml-2">{option}</span>
+            <span class="ml-2">
+              {@html processContentWithMediaSync(option, [], {}, { format: 'markdown', processVariables: false })}
+            </span>
           </label>
         {/each}
       </div>
@@ -405,7 +410,10 @@
             <span>{value}</span>
             {#if (value === scaleConfig.min && scaleConfig.labels.min) || (value === scaleConfig.max && scaleConfig.labels.max)}
               <div class="text-sm text-muted-foreground mt-1">
-                {value === scaleConfig.min ? scaleConfig.labels.min : scaleConfig.labels.max}
+                {@html processContentWithMediaSync(
+                  value === scaleConfig.min ? scaleConfig.labels.min : scaleConfig.labels.max,
+                  [], {}, { format: 'markdown', processVariables: false }
+                )}
               </div>
             {/if}
           </label>
@@ -433,14 +441,19 @@
         class="ranking-items flex flex-col gap-2"
       >
         <div class="text-muted-foreground text-sm mb-2">
-          {question.display?.instruction || 'Drag items to rank them'}
+          {@html processContentWithMediaSync(
+            question.display?.instruction || 'Drag items to rank them',
+            [], {}, { format: 'markdown', processVariables: false }
+          )}
         </div>
         {#each rankingConfig.items as item, index}
           <div
             class="ranking-item p-3 bg-card border border-border rounded-md cursor-move flex items-center gap-3"
           >
             <span class="text-muted-foreground font-semibold">{index + 1}.</span>
-            <span>{item.label}</span>
+            <span>
+              {@html processContentWithMediaSync(item.label, [], {}, { format: 'markdown', processVariables: false })}
+            </span>
           </div>
         {/each}
       </div>
@@ -456,7 +469,12 @@
               <path d="M12 7L12 15"/>
               <path d="M8 11L16 11"/>
             </svg>
-            <p class="text-sm">{question.display?.instruction || 'Drawing canvas would appear here'}</p>
+            <div class="text-sm">
+              {@html processContentWithMediaSync(
+                question.display?.instruction || 'Drawing canvas would appear here',
+                [], {}, { format: 'markdown', processVariables: false }
+              )}
+            </div>
           </div>
         </div>
       </div>
