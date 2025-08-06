@@ -27,71 +27,77 @@
   
   let { data }: Props = $props();
   
+  console.log('[INIT] Props received:', { hasData: !!data, dataType: typeof data });
+  if (data) {
+    console.log('[INIT] Data keys:', Object.keys(data));
+    console.log('[INIT] Full data:', data);
+  }
+  
+  // Extract data with derived (reactive in Svelte 5)
+  const user = $derived(data?.user);
+  const publicUser = $derived(data?.publicUser);
+  const organizationId = $derived(data?.organizationId);
+  const projectId = $derived(data?.projectId);
+  const questionnaire = $derived(data?.questionnaire);
+  const project = $derived(data?.project);
+  
   // State
   let viewMode: 'structural' | 'wysiwyg' = 'wysiwyg';
   let activeTab: 'blocks' | 'questions' | 'variables' | 'flow' = 'blocks';
   let showPreview = false;
   let showCommandPalette = false;
   
-  // Get data from props
-  $: user = data?.user;
-  $: publicUser = data?.publicUser;
-  $: organizationId = data?.organizationId;
-  $: projectId = data?.projectId;
-  $: questionnaire = data?.questionnaire;
-  $: project = data?.project;
-  
   // Initialize
   onMount(() => {
     console.log('[Designer Page] Mounting with data:', {
-      organizationId: data?.organizationId,
-      projectId: data?.projectId,
-      userId: data?.publicUser?.id || data?.user?.id,
-      questionnaire: data?.questionnaire,
+      organizationId,
+      projectId,
+      userId: publicUser?.id || user?.id,
+      questionnaire,
       dataKeys: data ? Object.keys(data) : 'no data'
     });
-    console.log('[DEBUG] Full questionnaire data:', data?.questionnaire);
+    console.log('[DEBUG] Full questionnaire data:', questionnaire);
     console.log('[DEBUG] Page data:', data);
     
     designerStore.initVariableEngine();
     
     // Initialize store with context
     // Use public user ID for database operations
-    if (data?.publicUser?.id) {
-      designerStore.setUserId(data.publicUser.id);
-    } else if (data?.user?.id) {
+    if (publicUser?.id) {
+      designerStore.setUserId(publicUser.id);
+    } else if (user?.id) {
       // Fallback to auth user ID if public user not available
       console.warn('Public user not available, using auth user ID');
-      designerStore.setUserId(data.user.id);
+      designerStore.setUserId(user.id);
     }
     
-    if (data?.organizationId) {
-      designerStore.setOrganizationId(data.organizationId);
+    if (organizationId) {
+      designerStore.setOrganizationId(organizationId);
     }
     
-    if (data?.projectId) {
-      designerStore.setProjectId(data.projectId);
+    if (projectId) {
+      designerStore.setProjectId(projectId);
     }
     
     // Load existing questionnaire or create new
-    if (data?.questionnaire?.isNew) {
+    if (questionnaire?.isNew) {
       // Create new questionnaire with project context
       designerStore.createNewQuestionnaire({
-        name: data.questionnaire.name,
-        description: data.questionnaire.description,
-        projectId: data.projectId,
-        organizationId: data.organizationId
+        name: questionnaire.name,
+        description: questionnaire.description,
+        projectId: projectId,
+        organizationId: organizationId
       });
-    } else if (data?.questionnaire && !data?.questionnaire.isNew) {
+    } else if (questionnaire && !questionnaire.isNew) {
       // Load existing questionnaire
-      console.log('[DEBUG] Loading questionnaire from definition:', data.questionnaire);
-      designerStore.loadQuestionnaireFromDefinition(data.questionnaire);
+      console.log('[DEBUG] Loading questionnaire from definition:', questionnaire);
+      designerStore.loadQuestionnaireFromDefinition(questionnaire);
       // Ensure context is set from page data
-      if (data?.organizationId) {
-        designerStore.setOrganizationId(data.organizationId);
+      if (organizationId) {
+        designerStore.setOrganizationId(organizationId);
       }
-      if (data?.projectId) {
-        designerStore.setProjectId(data.projectId);
+      if (projectId) {
+        designerStore.setProjectId(projectId);
       }
     }
     
