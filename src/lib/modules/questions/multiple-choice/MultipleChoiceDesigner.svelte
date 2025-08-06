@@ -48,12 +48,29 @@
   });
   
   function updateConfig(updates: Partial<MultipleChoiceConfig>) {
+    const updatedConfig = {
+      ...question.config,
+      ...updates
+    };
+    
+    // Sync display.options with config.options
+    const updatedDisplay = {
+      ...question.display,
+      options: updatedConfig.options?.map((opt: ChoiceOption) => ({
+        id: opt.id,
+        label: opt.label,
+        value: opt.value,
+        description: opt.description,
+        icon: opt.icon,
+        image: opt.image,
+        color: opt.color
+      })) || question.display?.options || []
+    };
+    
     const updatedQuestion = {
       ...question,
-      config: {
-        ...question.config,
-        ...updates
-      }
+      config: updatedConfig,
+      display: updatedDisplay
     };
     
     // Use onResponse if available, otherwise use onUpdate

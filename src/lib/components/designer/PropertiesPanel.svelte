@@ -30,6 +30,46 @@
   // Update handlers
   function updateQuestion(updates: Partial<Question>) {
     if (item && itemType === 'question') {
+      // Sync config with display for questions that have options
+      if (updates.config) {
+        const questionTypesWithOptions = ['multiple-choice', 'single-choice', 'ranking', 'scale'];
+        
+        if (questionTypesWithOptions.includes(item.type)) {
+          // Sync options between config and display
+          if (updates.config.options) {
+            updates.display = {
+              ...item.display,
+              options: updates.config.options.map((opt: any) => ({
+                id: opt.id,
+                label: opt.label,
+                value: opt.value,
+                description: opt.description,
+                icon: opt.icon,
+                image: opt.image,
+                color: opt.color
+              }))
+            };
+          }
+          
+          // Sync other display properties
+          if (updates.config.prompt !== undefined) {
+            updates.display = {
+              ...updates.display || item.display,
+              prompt: updates.config.prompt
+            };
+          }
+        }
+      }
+      
+      // Also handle direct display updates
+      if (updates.display) {
+        // Ensure display has all necessary properties
+        updates.display = {
+          ...item.display,
+          ...updates.display
+        };
+      }
+      
       designerStore.updateQuestion(item.id, updates);
     }
   }

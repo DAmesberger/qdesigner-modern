@@ -66,7 +66,7 @@ export const load: PageLoad = async ({ params, parent, url }) => {
   // Load questionnaire data
   if (questionnaireId && questionnaireId !== 'new') {
     // Use mock data for test questionnaires
-    if (questionnaireId === '1' || questionnaireId === '2') {
+    if (questionnaireId === '1' || questionnaireId === '2' || questionnaireId === 'test-questionnaire-1') {
       questionnaire = {
         id: questionnaireId,
         name: `Test Questionnaire ${questionnaireId}`,
