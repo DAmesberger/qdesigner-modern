@@ -31,8 +31,13 @@
   }: Props = $props();
   
   // Media handling for all question types
-  let mediaUrls: Record<string, string> = {};
+  let mediaUrls: Record<string, string> = $state({});
   let media = extractMediaFromDisplay(question.display);
+  
+  // Load media URLs on initialization if media exists
+  if (media && media.length > 0) {
+    loadMediaUrlsForQuestion();
+  }
   
   // Reactive media loading - when question changes, reload media
   $effect(() => {
@@ -56,16 +61,21 @@
   });
   
   async function loadMediaUrlsForQuestion() {
-    if (!media || media.length === 0) return;
+    if (!media || media.length === 0) {
+      mediaUrls = {};
+      return;
+    }
     
     console.log('[QuestionVisualRenderer] Loading media URLs for:', media);
     
     try {
       const urls = await loadMediaUrls(media);
       console.log('[QuestionVisualRenderer] Fetched URLs:', urls);
-      mediaUrls = urls;
+      // Update the state to trigger re-render
+      mediaUrls = { ...urls };
     } catch (error) {
       console.error('[QuestionVisualRenderer] Failed to load media URLs:', error);
+      mediaUrls = {};
     }
   }
   
