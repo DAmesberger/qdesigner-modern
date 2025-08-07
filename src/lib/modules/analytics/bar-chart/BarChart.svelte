@@ -3,7 +3,7 @@
   import type { AnalyticsProps } from '../shared/types';
   import type { Question } from '$lib/shared';
   import { Chart, registerables } from 'chart.js';
-  import { untrack } from 'svelte';
+  import { untrack, tick } from 'svelte';
   
   // Register Chart.js components
   Chart.register(...registerables);
@@ -48,7 +48,7 @@
     onInteraction
   }: Props = $props();
   
-  let chartCanvas: HTMLCanvasElement;
+  let chartCanvas = $state<HTMLCanvasElement>();
   let chart: Chart | null = null;
   
   const config = $derived(analytics.config);
@@ -68,11 +68,22 @@
     const labels = [];
     
     // Process data based on structure
-    if (data.length > 0) {
+    if (data && data.length > 0) {
       // Check if data is grouped
       const firstItem = data[0];
       
-      if (Array.isArray(firstItem.value)) {
+      // For simple single values, use the variable name/id as label
+      if (firstItem && typeof firstItem.value === 'number') {
+        // Simple numeric values - most common case for variables
+        labels.push(...data.map(d => d.id || 'Variable'));
+        datasets.push({
+          label: 'Value',
+          data: data.map(d => d.value || 0),
+          backgroundColor: data.map((_, i) => getColor(i)),
+          borderColor: data.map((_, i) => getColor(i)),
+          borderWidth: 1
+        });
+      } else if (Array.isArray(firstItem.value)) {
         // Multiple series data
         labels.push(...firstItem.value.map((_, i) => `Item ${i + 1}`));
         
@@ -150,14 +161,39 @@
     return scheme[index % scheme.length];
   }
   
-  // Create/update chart
-  $effect(() => {
-    if (chartCanvas && mode === 'runtime') {
-      untrack(() => {
-        createChart(data);
-      });
+
+  
+
+  
+
+  
+  // Action to initialize chart when canvas is ready
+  function initChart(node: HTMLCanvasElement, data: any[]) {
+    chartCanvas = node;
+    // Create chart when we have data or show placeholder
+    if (data && data.length > 0) {
+      setTimeout(() => createChart(data), 0);
+    } else {
+      // Create empty chart with placeholder
+      setTimeout(() => createChart([{ id: 'No Data', value: 0 }]), 0);
     }
-  });
+    
+    return {
+      update(newData: any[]) {
+        if (newData && newData.length > 0) {
+          createChart(newData);
+        } else {
+          createChart([{ id: 'No Data', value: 0 }]);
+        }
+      },
+      destroy() {
+        if (chart) {
+          chart.destroy();
+          chart = null;
+        }
+      }
+    };
+  }
   
   // Cleanup chart on unmount
   $effect(() => {
@@ -275,11 +311,11 @@
   {mode}
   {variables}
   {onInteraction}
-  let:data
 >
+  {#snippet children({ data })}
   <div class="bar-chart">
     {#if mode === 'runtime'}
-      <canvas bind:this={chartCanvas} class="chart-canvas"></canvas>
+      <canvas bind:this={chartCanvas} class="chart-canvas" use:initChart={data}></canvas>
     {:else if mode === 'preview'}
       <div class="preview-container">
         <svg viewBox="0 0 400 300" class="preview-svg">
@@ -317,6 +353,7 @@
       </div>
     {/if}
   </div>
+  {/snippet}
 </BaseAnalytics>
 
 <style>

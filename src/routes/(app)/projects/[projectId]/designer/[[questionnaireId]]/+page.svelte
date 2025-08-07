@@ -14,6 +14,7 @@
   import DesignerHeader from './components/DesignerHeader.svelte';
   import LeftSidebar from './components/LeftSidebar.svelte';
   import RightSidebar from './components/RightSidebar.svelte';
+  import PreviewModal from '$lib/components/designer/PreviewModal.svelte';
   import WYSIWYGCanvas from './WYSIWYGCanvas.svelte';
   import StructuralCanvas from './StructuralCanvas.svelte';
   // TODO: Create these components
@@ -199,11 +200,11 @@
 <!-- <CommandPalette bind:isOpen={showCommandPalette} /> -->
 
 <!-- Preview Modal -->
-<!-- <PreviewModal 
+<PreviewModal 
   bind:isOpen={showPreview}
   questionnaire={$designerStore.questionnaire}
   on:close={() => showPreview = false}
-/> -->
+/>
 
 <style>
   .preview-panel {

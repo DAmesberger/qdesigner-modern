@@ -21,6 +21,18 @@
     ...restProps
   }: Props = $props();
   
+  // Debug what we're receiving
+  $effect(() => {
+    console.log('[BaseAnalytics] Props received:', {
+      analyticsId: analytics?.id,
+      mode,
+      hasDataSource: !!analytics?.dataSource,
+      selectedVariables: analytics?.dataSource?.variables,
+      variablesReceived: variables,
+      variableKeys: Object.keys(variables)
+    });
+  });
+  
   const dispatch = createEventDispatcher<{
     interaction: AnalyticsInteractionEvent;
     update: Partial<AnalyticsModuleConfig>;
@@ -42,7 +54,10 @@
   
   // Compute data from variables
   $effect(() => {
-    if (mode === 'runtime' && analytics.dataSource.variables.length > 0) {
+    if (mode === 'runtime' && analytics.dataSource?.variables?.length > 0) {
+      computeData();
+    } else if (mode === 'preview' && analytics.dataSource?.variables?.length > 0) {
+      // Also compute data in preview mode for testing
       computeData();
     }
   });
@@ -64,11 +79,21 @@
   
   async function computeData() {
     try {
+      console.log('[BaseAnalytics] computeData called');
+      console.log('[BaseAnalytics] dataSource.variables:', analytics.dataSource?.variables);
+      console.log('[BaseAnalytics] variables object:', variables);
+      
       // Get data for each variable
-      const variableData = analytics.dataSource.variables.map(varId => ({
-        id: varId,
-        value: variables[varId]
-      }));
+      const variableData = analytics.dataSource.variables.map(varId => {
+        const value = variables[varId];
+        console.log(`[BaseAnalytics] Mapping variable ${varId}, value: ${value}`);
+        return {
+          id: varId,
+          value: value !== undefined ? value : 0  // Default to 0 if undefined
+        };
+      });
+      
+      console.log('[BaseAnalytics] variableData result:', variableData);
       
       // Apply aggregation if needed
       if (analytics.dataSource.aggregation && analytics.dataSource.aggregation !== 'none') {
@@ -77,6 +102,8 @@
       } else {
         computedData = variableData;
       }
+      
+      console.log('[BaseAnalytics] Final computedData:', computedData);
       
       handleInteraction({
         type: 'view',

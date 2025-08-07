@@ -162,18 +162,24 @@ export class ModuleFactory {
    * Apply analytics-specific defaults
    */
   private static applyAnalyticsDefaults(module: ModuleItem, metadata: any): ModuleItem {
-    // Analytics need data configuration
-    if (!module.config.data) {
-      module.config.data = {
-        source: 'variable',
-        variableName: '',
+    // Analytics need data source configuration
+    if (!module.dataSource) {
+      module.dataSource = {
+        variables: [], // Empty array of variable IDs to visualize
         aggregation: 'none'
       };
     }
     
-    // Visualization defaults
-    if (!module.title) {
-      module.title = 'Data Visualization';
+    // Visualization configuration
+    if (!module.visualization) {
+      module.visualization = {
+        title: 'Data Visualization',
+        subtitle: '',
+        showLegend: true,
+        showGrid: true,
+        showTooltips: true,
+        colorScheme: 'default'
+      };
     }
     
     // Display duration for analytics
@@ -183,15 +189,6 @@ export class ModuleFactory {
     
     if (module.autoAdvance === undefined) {
       module.autoAdvance = false; // Analytics typically don't auto-advance
-    }
-    
-    // Chart configuration defaults
-    if (!module.config.chart) {
-      module.config.chart = {
-        showLegend: true,
-        showGrid: true,
-        animated: true
-      };
     }
     
     return module;

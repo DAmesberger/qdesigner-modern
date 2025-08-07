@@ -210,8 +210,6 @@
     role="region"
     aria-labelledby="question-{question.id}-title"
     aria-describedby={question.description ? `question-${question.id}-description` : undefined}
-    aria-required={question.required ? 'true' : undefined}
-    aria-invalid={validationResult && !validationResult.valid ? 'true' : undefined}
     {...restProps}
   >
     {#if mode === 'edit'}

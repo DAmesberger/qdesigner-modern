@@ -164,3 +164,7 @@ The variable system (`packages/scripting-engine`) supports:
 - When using Playwright MCP, prefer using html, only use screenshots if interpreting html is not possible.
 - Users should not be created via script, only using the playwright MCP to test the actual user flow
 - Never fix things quick and dirty. We always want to fix the underlying issue, in a way that it also works when the app is bootstrapped.
+
+## Navigation Guidance
+
+- Never guess URLs, navigate from the landing page

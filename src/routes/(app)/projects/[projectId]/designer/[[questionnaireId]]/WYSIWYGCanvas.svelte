@@ -7,6 +7,7 @@
     currentBlockQuestions 
   } from '$lib/features/designer/stores/designerStore';
   import QuestionVisualRenderer from '$lib/wysiwyg/QuestionVisualRenderer.svelte';
+  import QuestionRenderer from '$lib/components/questions/QuestionRenderer.svelte';
   import LiveTestRunner from '$lib/wysiwyg/LiveTestRunner.svelte';
   import { defaultTheme } from '$lib/shared';
   import { dndzone } from 'svelte-dnd-action';
@@ -16,6 +17,14 @@
   // Theme management - in real app would come from store
   let questionnaireTheme = defaultTheme;
   let showTestRunner = false;
+  
+  // Get variables from the store for analytics components
+  $: questionnaire = $designerStore.questionnaire;
+  $: variables = questionnaire.variables.reduce((acc, v) => {
+    acc[v.id] = v.defaultValue;
+    acc[v.name] = v.defaultValue; // Index by both ID and name
+    return acc;
+  }, {} as Record<string, any>);
   
   // Zoom state
   let zoomLevel = 100;
@@ -211,18 +220,36 @@
                 {#each items as item (item.id)}
                   <div animate:flip={{ duration: 300 }}>
                     {#if item && item.question}
-                      <QuestionVisualRenderer
-                        question={item.question}
-                        theme={questionnaireTheme}
-                        mode="edit"
-                        selected={$designerStore.selectedItemId === item.id}
-                        onselect={() => designerStore.selectItem(item.id, 'question')}
-                        onupdate={(updates) => handleQuestionUpdate(item.id, updates)}
-                        ondelete={() => designerStore.deleteQuestion(item.id)}
-                        oneditproperties={() => {
-                          designerStore.selectItem(item.id, 'question');
-                        }}
-                      />
+                      {#if item.question.type === 'bar-chart' || item.question.category === 'analytics'}
+                        <!-- Use QuestionRenderer for analytics components -->
+                        <div
+                          class="analytics-wrapper"
+                          class:selected={$designerStore.selectedItemId === item.id}
+                          onclick={() => designerStore.selectItem(item.id, 'question')}
+                        >
+                          <QuestionRenderer
+                            question={item.question}
+                            mode="preview"
+                            {variables}
+                          />
+
+                        </div>
+                      {:else}
+                        <!-- Use QuestionVisualRenderer for regular questions and instructions -->
+                        <QuestionVisualRenderer
+                          question={item.question}
+                          theme={questionnaireTheme}
+                          mode="edit"
+                          selected={$designerStore.selectedItemId === item.id}
+                          onselect={() => designerStore.selectItem(item.id, 'question')}
+                          onupdate={(updates) => handleQuestionUpdate(item.id, updates)}
+                          ondelete={() => designerStore.deleteQuestion(item.id)}
+                          oneditproperties={() => {
+                            designerStore.selectItem(item.id, 'question');
+                          }}
+                          {variables}
+                        />
+                      {/if}
                     {/if}
                   </div>
                 {/each}
@@ -289,5 +316,37 @@
   
   :global(.questions-container > div:hover) {
     transform: translateY(-1px);
+  }
+  
+  .analytics-wrapper {
+    position: relative;
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+  }
+  
+  .analytics-wrapper.selected {
+    outline: 2px solid #3B82F6;
+    outline-offset: 2px;
+  }
+  
+  .analytics-wrapper .edit-controls {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .analytics-wrapper .edit-controls button {
+    padding: 0.25rem 0.5rem;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+  
+  .analytics-wrapper .edit-controls button:hover {
+    background: #f3f4f6;
   }
 </style>

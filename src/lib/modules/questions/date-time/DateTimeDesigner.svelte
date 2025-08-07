@@ -90,7 +90,7 @@
         {#each formatExamples[question.config.mode] as example}
           <button 
             class="example-chip"
-            on:click={() => question.config.format = example}
+            onclick={() => question.config.format = example}
           >
             {example}
           </button>
@@ -185,7 +185,7 @@
           />
           <button 
             class="btn btn-secondary"
-            on:click={addDisabledDate}
+            onclick={addDisabledDate}
             disabled={!newDisabledDate}
           >
             Add
@@ -199,7 +199,7 @@
                 <span>{date}</span>
                 <button 
                   class="remove-btn"
-                  on:click={() => removeDisabledDate(date)}
+                  onclick={() => removeDisabledDate(date)}
                   aria-label="Remove date"
                 >
                   ✕

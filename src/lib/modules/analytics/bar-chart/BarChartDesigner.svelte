@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
-  import { scriptingEngine } from '$lib/services/scriptingEngine';
   import { moduleRegistry } from '$lib/modules/registry';
+  import { designerStore } from '$lib/features/designer/stores/designerStore';
   
   interface BarChartConfig {
     orientation: 'vertical' | 'horizontal';
@@ -69,14 +69,22 @@
     { value: 'diverging', label: 'Diverging', preview: ['#d7191c', '#ffffbf', '#1a9641'] }
   ];
   
-  // Load available variables
+  // Load available variables from designer store
   $effect(() => {
-    const variables = scriptingEngine.getAllVariables();
-    availableVariables = variables.map(v => ({
-      id: v.name,
-      name: v.name,
-      type: v.type || 'any'
-    }));
+    // Subscribe to designer store to get variables
+    const unsubscribe = designerStore.subscribe((state) => {
+      if (state?.questionnaire?.variables) {
+        availableVariables = state.questionnaire.variables.map((v) => ({
+          id: v.id || v.name,
+          name: v.name,
+          type: v.type || 'any'
+        }));
+      }
+    });
+    
+    return () => {
+      unsubscribe();
+    };
   });
   
   // Update y-axis bounds

@@ -104,11 +104,11 @@
         bind:value={newAcceptType}
         placeholder="e.g., .jpg, image/*, .pdf"
         class="input"
-        on:keydown={(e) => e.key === 'Enter' && addAcceptType()}
+        onkeydown={(e) => e.key === 'Enter' && addAcceptType()}
       />
       <button 
         class="btn btn-secondary"
-        on:click={addAcceptType}
+        onclick={addAcceptType}
         disabled={!newAcceptType}
       >
         Add
@@ -128,7 +128,7 @@
       </select>
       <button 
         class="btn btn-secondary btn-small"
-        on:click={applyPreset}
+        onclick={applyPreset}
         disabled={!selectedPreset}
       >
         Apply
@@ -142,7 +142,7 @@
             <span>{type}</span>
             <button 
               class="remove-btn"
-              on:click={() => removeAcceptType(type)}
+              onclick={() => removeAcceptType(type)}
               aria-label="Remove type"
             >
               ✕

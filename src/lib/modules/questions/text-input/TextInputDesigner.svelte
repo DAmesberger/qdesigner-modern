@@ -228,11 +228,11 @@
         bind:value={newSuggestion}
         placeholder="Add a suggestion..."
         class="input"
-        on:keydown={(e) => e.key === 'Enter' && addSuggestion()}
+        onkeydown={(e) => e.key === 'Enter' && addSuggestion()}
       />
       <button 
         class="btn btn-secondary"
-        on:click={addSuggestion}
+        onclick={addSuggestion}
         disabled={!newSuggestion.trim()}
       >
         Add
@@ -246,7 +246,7 @@
             <span>{suggestion}</span>
             <button 
               class="remove-btn"
-              on:click={() => removeSuggestion(i)}
+              onclick={() => removeSuggestion(i)}
               aria-label="Remove suggestion"
             >
               <X size={16} />

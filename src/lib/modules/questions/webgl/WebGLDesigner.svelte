@@ -221,7 +221,7 @@
             </select>
             <button 
               class="btn btn-secondary"
-              on:click={applyShapePreset}
+              onclick={applyShapePreset}
               disabled={!selectedShapePreset}
             >
               Apply
@@ -249,7 +249,7 @@
               id="radius"
               type="number"
               value={shapeContent.properties.radius || 50}
-              on:input={(e) => updateShapeProperty('radius', Number(e.currentTarget.value))}
+              oninput={(e) => updateShapeProperty('radius', Number(e.currentTarget.value))}
               min="1"
               max="300"
               class="input"
@@ -262,7 +262,7 @@
               id="width"
               type="number"
               value={shapeContent.properties.width || 100}
-              on:input={(e) => updateShapeProperty('width', Number(e.currentTarget.value))}
+              oninput={(e) => updateShapeProperty('width', Number(e.currentTarget.value))}
               min="1"
               max="500"
               class="input"
@@ -276,7 +276,7 @@
                 id="height"
                 type="number"
                 value={shapeContent.properties.height || 100}
-                on:input={(e) => updateShapeProperty('height', Number(e.currentTarget.value))}
+                oninput={(e) => updateShapeProperty('height', Number(e.currentTarget.value))}
                 min="1"
                 max="500"
                 class="input"
@@ -295,7 +295,7 @@
                 <input
                   type="range"
                   value={value}
-                  on:input={(e) => updateColor(i, Number(e.currentTarget.value))}
+                  oninput={(e) => updateColor(i, Number(e.currentTarget.value))}
                   min="0"
                   max="1"
                   step="0.01"
@@ -401,11 +401,11 @@
             bind:value={newValidKey}
             placeholder="Enter key (e.g., 'a', 'Enter')"
             class="input"
-            on:keydown={(e) => e.key === 'Enter' && addValidKey()}
+            onkeydown={(e) => e.key === 'Enter' && addValidKey()}
           />
           <button 
             class="btn btn-secondary"
-            on:click={addValidKey}
+            onclick={addValidKey}
             disabled={!newValidKey}
           >
             Add
@@ -419,7 +419,7 @@
                 <span class="key-label">{key === ' ' ? 'SPACE' : key.toUpperCase()}</span>
                 <button 
                   class="remove-btn"
-                  on:click={() => removeValidKey(key)}
+                  onclick={() => removeValidKey(key)}
                   aria-label="Remove key"
                 >
                   ✕
@@ -477,7 +477,7 @@
         </select>
         <button 
           class="btn btn-secondary"
-          on:click={applyTimingPreset}
+          onclick={applyTimingPreset}
           disabled={!selectedTimingPreset}
         >
           Apply

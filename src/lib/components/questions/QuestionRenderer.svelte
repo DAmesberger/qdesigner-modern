@@ -3,10 +3,21 @@
   import type { ComponentType } from 'svelte';
   import { moduleRegistry } from '$lib/modules/registry';
   
-  export let question: ExtendedQuestion;
-  export let mode: 'edit' | 'preview' | 'runtime' = 'runtime';
-  export let value: any = undefined;
-  export let disabled: boolean = false;
+  interface Props {
+    question: ExtendedQuestion;
+    mode?: 'edit' | 'preview' | 'runtime';
+    value?: any;
+    disabled?: boolean;
+    variables?: Record<string, any>;
+  }
+  
+  let { 
+    question, 
+    mode = 'runtime',
+    value = undefined,
+    disabled = false,
+    variables = {}
+  }: Props = $props();
   
   let QuestionComponent: ComponentType | null = null;
   let loading = false;
@@ -21,11 +32,16 @@
     loading = true;
     error = null;
     
+    console.log('[QuestionRenderer] Loading component:', type);
+    
     try {
       // Check module registry for question or instruction
       const metadata = moduleRegistry.get(type);
-      if (metadata && (metadata.category === 'question' || metadata.category === 'instruction')) {
-        QuestionComponent = await moduleRegistry.loadComponent(type, 'runtime');
+      console.log('[QuestionRenderer] Metadata found:', metadata);
+      
+      if (metadata && (metadata.category === 'question' || metadata.category === 'instruction' || metadata.category === 'analytics')) {
+        QuestionComponent = await moduleRegistry.loadComponent(type, mode);
+        console.log('[QuestionRenderer] Component loaded successfully');
       } else {
         console.error(`Component not found in module registry: ${type}`);
         error = `Component not found: ${type}`;
@@ -59,9 +75,11 @@
   <svelte:component 
     this={QuestionComponent}
     question={fullQuestion}
+    analytics={fullQuestion}
     {mode}
     bind:value
     {disabled}
+    {variables}
     on:edit
     on:delete
     on:duplicate

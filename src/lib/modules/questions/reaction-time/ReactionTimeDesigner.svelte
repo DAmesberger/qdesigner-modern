@@ -215,11 +215,11 @@
           bind:value={newKey}
           placeholder="Enter key (e.g., 'a', 'Enter')"
           class="input"
-          on:keydown={(e) => e.key === 'Enter' && addKey()}
+          onkeydown={(e) => e.key === 'Enter' && addKey()}
         />
         <button 
           class="btn btn-secondary"
-          on:click={addKey}
+          onclick={addKey}
           disabled={!newKey}
         >
           Add Key
@@ -239,7 +239,7 @@
         </select>
         <button 
           class="btn btn-secondary btn-small"
-          on:click={applyKeyPreset}
+          onclick={applyKeyPreset}
           disabled={!selectedKeyPreset}
         >
           Apply
@@ -254,7 +254,7 @@
               <span class="key-label">{key === ' ' ? 'SPACE' : key.toUpperCase()}</span>
               <button 
                 class="remove-btn"
-                on:click={() => removeKey(key)}
+                onclick={() => removeKey(key)}
                 aria-label="Remove key"
               >
                 ✕
@@ -396,7 +396,7 @@
         </select>
         <button 
           class="btn btn-secondary"
-          on:click={applyTimingPreset}
+          onclick={applyTimingPreset}
           disabled={!selectedTimingPreset}
         >
           Apply

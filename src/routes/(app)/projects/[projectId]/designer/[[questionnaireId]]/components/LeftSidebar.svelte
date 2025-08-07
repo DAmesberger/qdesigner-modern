@@ -46,7 +46,7 @@
 >
   <!-- Collapse Toggle -->
   <button
-    on:click={toggleCollapse}
+    onclick={toggleCollapse}
     class="absolute -right-3 top-20 z-10 w-6 h-6 {theme.semantic.bgSurface} {theme.semantic.borderDefault} border rounded-full flex items-center justify-center {theme.semantic.interactive.ghost} transition-colors"
     title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
     aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -72,7 +72,7 @@
             class="flex-1 px-4 py-3 text-sm font-medium transition-colors relative {theme.semantic.interactive.ghost}"
             class:text-foreground={activeTab === tab.id}
             class:text-muted-foreground={activeTab !== tab.id}
-            on:click={() => activeTab = tab.id}
+            onclick={() => activeTab = tab.id}
           >
             {tab.label}
             {#if activeTab === tab.id}
@@ -104,7 +104,7 @@
           class:bg-muted={activeTab === tab.id}
           class:text-foreground={activeTab === tab.id}
           class:text-muted-foreground={activeTab !== tab.id}
-          on:click={() => activeTab = tab.id}
+          onclick={() => activeTab = tab.id}
           title={tab.label}
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

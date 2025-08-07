@@ -13,6 +13,7 @@
     theme?: QuestionnaireTheme;
     mode?: 'edit' | 'preview';
     selected?: boolean;
+    variables?: Record<string, any>;
     onselect?: () => void;
     onupdate?: (updates: any) => void;
     oneditproperties?: () => void;
@@ -24,6 +25,7 @@
     theme = defaultTheme,
     mode = 'preview',
     selected = false,
+    variables = {},
     onselect,
     onupdate,
     oneditproperties,
@@ -289,7 +291,8 @@
           mediaUrls,
           {
             format: 'markdown',
-            processVariables: false
+            processVariables: true,
+            variables
           }
         );
       } catch (error) {
@@ -345,7 +348,7 @@
     >
       {@html processContentWithMediaSync(
         question.display?.description || question.settings?.description || '',
-        [], {}, { format: 'markdown', processVariables: false }
+        [], {}, { format: 'markdown', processVariables: true, variables }
       )}
     </div>
   {/if}
@@ -368,7 +371,7 @@
               disabled={mode === 'edit'}
             />
             <span class="ml-2">
-              {@html processContentWithMediaSync(option, [], {}, { format: 'markdown', processVariables: false })}
+              {@html processContentWithMediaSync(option, [], {}, { format: 'markdown', processVariables: true, variables })}
             </span>
           </label>
         {/each}
@@ -412,7 +415,7 @@
               <div class="text-sm text-muted-foreground mt-1">
                 {@html processContentWithMediaSync(
                   value === scaleConfig.min ? scaleConfig.labels.min : scaleConfig.labels.max,
-                  [], {}, { format: 'markdown', processVariables: false }
+                  [], {}, { format: 'markdown', processVariables: true, variables }
                 )}
               </div>
             {/if}
@@ -443,7 +446,7 @@
         <div class="text-muted-foreground text-sm mb-2">
           {@html processContentWithMediaSync(
             question.display?.instruction || 'Drag items to rank them',
-            [], {}, { format: 'markdown', processVariables: false }
+            [], {}, { format: 'markdown', processVariables: true, variables }
           )}
         </div>
         {#each rankingConfig.items as item, index}
@@ -452,7 +455,7 @@
           >
             <span class="text-muted-foreground font-semibold">{index + 1}.</span>
             <span>
-              {@html processContentWithMediaSync(item.label, [], {}, { format: 'markdown', processVariables: false })}
+              {@html processContentWithMediaSync(item.label, [], {}, { format: 'markdown', processVariables: true, variables })}
             </span>
           </div>
         {/each}
@@ -472,7 +475,7 @@
             <div class="text-sm">
               {@html processContentWithMediaSync(
                 question.display?.instruction || 'Drawing canvas would appear here',
-                [], {}, { format: 'markdown', processVariables: false }
+                [], {}, { format: 'markdown', processVariables: true, variables }
               )}
             </div>
           </div>

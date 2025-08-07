@@ -89,18 +89,18 @@
               bind:value={editingItem.label}
               class="input"
               placeholder="Item label"
-              on:keydown={(e) => e.key === 'Enter' && updateItem(editingItem!)}
+              onkeydown={(e) => e.key === 'Enter' && updateItem(editingItem!)}
             />
             <div class="edit-actions">
               <button 
                 class="btn btn-primary"
-                on:click={() => updateItem(editingItem!)}
+                onclick={() => updateItem(editingItem!)}
               >
                 Save
               </button>
               <button 
                 class="btn btn-secondary"
-                on:click={() => editingItem = null}
+                onclick={() => editingItem = null}
               >
                 Cancel
               </button>
@@ -115,7 +115,7 @@
             <div class="item-actions">
               <button 
                 class="action-btn"
-                on:click={() => moveItem(index, 'up')}
+                onclick={() => moveItem(index, 'up')}
                 disabled={index === 0}
                 aria-label="Move up"
               >
@@ -123,7 +123,7 @@
               </button>
               <button 
                 class="action-btn"
-                on:click={() => moveItem(index, 'down')}
+                onclick={() => moveItem(index, 'down')}
                 disabled={index === question.config.items.length - 1}
                 aria-label="Move down"
               >
@@ -131,21 +131,21 @@
               </button>
               <button 
                 class="action-btn"
-                on:click={() => editingItem = {...item}}
+                onclick={() => editingItem = {...item}}
                 aria-label="Edit"
               >
                 <Edit size={16} />
               </button>
               <button 
                 class="action-btn"
-                on:click={() => duplicateItem(item)}
+                onclick={() => duplicateItem(item)}
                 aria-label="Duplicate"
               >
                 <Copy size={16} />
               </button>
               <button 
                 class="action-btn delete"
-                on:click={() => deleteItem(item)}
+                onclick={() => deleteItem(item)}
                 aria-label="Delete"
               >
                 <Trash size={16} />
@@ -162,11 +162,11 @@
         bind:value={newItemLabel}
         placeholder="Add new item..."
         class="input"
-        on:keydown={(e) => e.key === 'Enter' && addItem()}
+        onkeydown={(e) => e.key === 'Enter' && addItem()}
       />
       <button 
         class="btn btn-secondary"
-        on:click={addItem}
+        onclick={addItem}
         disabled={!newItemLabel.trim()}
       >
         Add Item

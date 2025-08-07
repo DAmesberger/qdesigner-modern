@@ -27,7 +27,7 @@
 >
   <!-- Collapse Toggle -->
   <button
-    on:click={toggleCollapse}
+    onclick={toggleCollapse}
     class="absolute -left-3 top-20 z-10 w-6 h-6 bg-layer-surface border border-border rounded-full flex items-center justify-center hover:bg-accent hover:text-accent-foreground transition-colors"
     title={isCollapsed ? 'Expand properties' : 'Collapse properties'}
   >

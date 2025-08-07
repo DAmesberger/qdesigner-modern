@@ -66,11 +66,11 @@
   function getQuestionsForCurrentView() {
     if (!questionnaire || !currentPage) return [];
     
-    // Get questions from current page
+    // Get questions from current page (includes questions, instructions, and analytics)
     const questionIds = currentPage.questions ?? [];
     let questions = questionIds
       .map(id => questionnaire.questions.find(q => q.id === id))
-      .filter((q): q is Question => q !== undefined);
+      .filter((q): q is any => q !== undefined); // Allow any type, not just Question
     
     // Apply visibility conditions
     questions = questions.filter(q => evaluateVisibility(q));
@@ -125,6 +125,8 @@
       
       questionnaire.variables.forEach(v => {
         variableEngine.registerVariable(v);
+        // Use both ID and name as keys for compatibility
+        initialVars[v.id] = v.defaultValue;
         initialVars[v.name] = v.defaultValue;
       });
       
@@ -192,6 +194,8 @@
     if (questionnaire && variableEngine) {
       const initialVars: Record<string, any> = {};
       questionnaire.variables.forEach(v => {
+        // Use both ID and name as keys for compatibility
+        initialVars[v.id] = v.defaultValue;
         initialVars[v.name] = v.defaultValue;
       });
       variables.set(initialVars);
@@ -325,6 +329,7 @@
                 <div class="question-preview">
                   <QuestionRenderer
                     {question}
+                    mode="runtime"
                     value={$responses[question.id]}
                     variables={$variables}
                     on:response={(e) => handleResponse(question.id, e.detail)}

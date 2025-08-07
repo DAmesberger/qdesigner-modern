@@ -115,7 +115,7 @@
         <input
           type="number"
           value={question.config?.min || 1}
-          on:input={(e) => updateConfig({ min: parseInt(e.currentTarget.value) || 0 })}
+          oninput={(e) => updateConfig({ min: parseInt(e.currentTarget.value) || 0 })}
         />
       </div>
       
@@ -124,7 +124,7 @@
         <input
           type="number"
           value={question.config?.max || 10}
-          on:input={(e) => updateConfig({ max: parseInt(e.currentTarget.value) || 10 })}
+          oninput={(e) => updateConfig({ max: parseInt(e.currentTarget.value) || 10 })}
         />
       </div>
       
@@ -135,7 +135,7 @@
           min="0.1"
           step="0.1"
           value={question.config?.step || 1}
-          on:input={(e) => updateConfig({ step: parseFloat(e.currentTarget.value) || 1 })}
+          oninput={(e) => updateConfig({ step: parseFloat(e.currentTarget.value) || 1 })}
         />
       </div>
     </div>
@@ -151,7 +151,7 @@
           name="displayType"
           value="buttons"
           checked={question.config?.displayType === 'buttons'}
-          on:change={() => updateConfig({ displayType: 'buttons' })}
+          onchange={() => updateConfig({ displayType: 'buttons' })}
         />
         <span>Buttons</span>
       </label>
@@ -162,7 +162,7 @@
           name="displayType"
           value="slider"
           checked={question.config?.displayType === 'slider'}
-          on:change={() => updateConfig({ displayType: 'slider' })}
+          onchange={() => updateConfig({ displayType: 'slider' })}
         />
         <span>Slider</span>
       </label>
@@ -173,7 +173,7 @@
           name="displayType"
           value="stars"
           checked={question.config?.displayType === 'stars'}
-          on:change={() => updateConfig({ displayType: 'stars' })}
+          onchange={() => updateConfig({ displayType: 'stars' })}
         />
         <span>Stars</span>
       </label>
@@ -184,7 +184,7 @@
           name="displayType"
           value="visual-analog"
           checked={question.config?.displayType === 'visual-analog'}
-          on:change={() => updateConfig({ displayType: 'visual-analog' })}
+          onchange={() => updateConfig({ displayType: 'visual-analog' })}
         />
         <span>Visual Analog Scale</span>
       </label>
@@ -202,7 +202,7 @@
             name="orientation"
             value="horizontal"
             checked={(question.config?.orientation || 'horizontal') === 'horizontal'}
-            on:change={() => updateConfig({ orientation: 'horizontal' })}
+            onchange={() => updateConfig({ orientation: 'horizontal' })}
           />
           <span>Horizontal</span>
         </label>
@@ -213,7 +213,7 @@
             name="orientation"
             value="vertical"
             checked={question.config?.orientation === 'vertical'}
-            on:change={() => updateConfig({ orientation: 'vertical' })}
+            onchange={() => updateConfig({ orientation: 'vertical' })}
           />
           <span>Vertical</span>
         </label>
@@ -228,7 +228,7 @@
       <input
         type="checkbox"
         checked={question.config?.showValue ?? true}
-        on:change={(e) => updateConfig({ showValue: e.currentTarget.checked })}
+        onchange={(e) => updateConfig({ showValue: e.currentTarget.checked })}
       />
       <span>Show selected value</span>
     </label>
@@ -237,7 +237,7 @@
       <input
         type="checkbox"
         checked={question.config?.showLabels ?? true}
-        on:change={(e) => updateConfig({ showLabels: e.currentTarget.checked })}
+        onchange={(e) => updateConfig({ showLabels: e.currentTarget.checked })}
       />
       <span>Show labels</span>
     </label>
@@ -251,7 +251,7 @@
         step={question.config.step}
         placeholder="No default"
         value={question.config?.defaultValue || ''}
-        on:input={(e) => updateConfig({ 
+        oninput={(e) => updateConfig({ 
           defaultValue: e.currentTarget.value ? parseFloat(e.currentTarget.value) : undefined 
         })}
       />
@@ -274,7 +274,7 @@
                 max={question.config.max}
                 step={question.config.step}
                 value={label.value}
-                on:input={(e) => updateLabel(index, 'value', parseFloat(e.currentTarget.value) || 0)}
+                oninput={(e) => updateLabel(index, 'value', parseFloat(e.currentTarget.value) || 0)}
               />
             </div>
             
@@ -283,14 +283,14 @@
               <input
                 type="text"
                 value={label.label}
-                on:input={(e) => updateLabel(index, 'label', e.currentTarget.value)}
+                oninput={(e) => updateLabel(index, 'label', e.currentTarget.value)}
                 placeholder="Label text"
               />
             </div>
             
             <button
               class="remove-button"
-              on:click={() => removeLabel(index)}
+              onclick={() => removeLabel(index)}
               title="Remove label"
             >
               ×
@@ -302,7 +302,7 @@
             <input
               type="text"
               value={label.description || ''}
-              on:input={(e) => updateLabel(index, 'description', e.currentTarget.value || undefined)}
+              oninput={(e) => updateLabel(index, 'description', e.currentTarget.value || undefined)}
               placeholder="Additional description for this value"
             />
           </div>
@@ -310,7 +310,7 @@
       {/each}
     </div>
     
-    <button class="add-button" on:click={addLabel}>
+    <button class="add-button" onclick={addLabel}>
       + Add Label
     </button>
   </div>

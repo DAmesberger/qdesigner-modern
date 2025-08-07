@@ -210,13 +210,13 @@
             <div class="edit-actions">
               <button 
                 class="btn btn-primary"
-                on:click={() => updateRow(editingRow!)}
+                onclick={() => updateRow(editingRow!)}
               >
                 Save
               </button>
               <button 
                 class="btn btn-secondary"
-                on:click={() => editingRow = null}
+                onclick={() => editingRow = null}
               >
                 Cancel
               </button>
@@ -236,7 +236,7 @@
             <div class="item-actions">
               <button 
                 class="action-btn"
-                on:click={() => moveRow(index, 'up')}
+                onclick={() => moveRow(index, 'up')}
                 disabled={index === 0}
                 aria-label="Move up"
               >
@@ -244,7 +244,7 @@
               </button>
               <button 
                 class="action-btn"
-                on:click={() => moveRow(index, 'down')}
+                onclick={() => moveRow(index, 'down')}
                 disabled={index === question.config.rows.length - 1}
                 aria-label="Move down"
               >
@@ -252,14 +252,14 @@
               </button>
               <button 
                 class="action-btn"
-                on:click={() => editingRow = {...row}}
+                onclick={() => editingRow = {...row}}
                 aria-label="Edit"
               >
                 <Edit size={16} />
               </button>
               <button 
                 class="action-btn delete"
-                on:click={() => deleteRow(row)}
+                onclick={() => deleteRow(row)}
                 aria-label="Delete"
               >
                 <Trash size={16} />
@@ -276,11 +276,11 @@
         bind:value={newRowLabel}
         placeholder="Add new row..."
         class="input"
-        on:keydown={(e) => e.key === 'Enter' && addRow()}
+        onkeydown={(e) => e.key === 'Enter' && addRow()}
       />
       <button 
         class="btn btn-secondary"
-        on:click={addRow}
+        onclick={addRow}
         disabled={!newRowLabel.trim()}
       >
         Add Row
@@ -319,13 +319,13 @@
             <div class="edit-actions">
               <button 
                 class="btn btn-primary"
-                on:click={() => updateColumn(editingColumn!)}
+                onclick={() => updateColumn(editingColumn!)}
               >
                 Save
               </button>
               <button 
                 class="btn btn-secondary"
-                on:click={() => editingColumn = null}
+                onclick={() => editingColumn = null}
               >
                 Cancel
               </button>
@@ -343,7 +343,7 @@
             <div class="item-actions">
               <button 
                 class="action-btn"
-                on:click={() => moveColumn(index, 'left')}
+                onclick={() => moveColumn(index, 'left')}
                 disabled={index === 0}
                 aria-label="Move left"
               >
@@ -351,7 +351,7 @@
               </button>
               <button 
                 class="action-btn"
-                on:click={() => moveColumn(index, 'right')}
+                onclick={() => moveColumn(index, 'right')}
                 disabled={index === question.config.columns.length - 1}
                 aria-label="Move right"
               >
@@ -359,14 +359,14 @@
               </button>
               <button 
                 class="action-btn"
-                on:click={() => editingColumn = {...column}}
+                onclick={() => editingColumn = {...column}}
                 aria-label="Edit"
               >
                 <Edit size={16} />
               </button>
               <button 
                 class="action-btn delete"
-                on:click={() => deleteColumn(column)}
+                onclick={() => deleteColumn(column)}
                 aria-label="Delete"
               >
                 <Trash size={16} />
@@ -383,7 +383,7 @@
         bind:value={newColumnLabel}
         placeholder="Column label..."
         class="input"
-        on:keydown={(e) => e.key === 'Enter' && addColumn()}
+        onkeydown={(e) => e.key === 'Enter' && addColumn()}
       />
       {#if question.config.responseType !== 'scale'}
         <input
@@ -391,12 +391,12 @@
           bind:value={newColumnValue}
           placeholder="Value (optional)"
           class="input"
-          on:keydown={(e) => e.key === 'Enter' && addColumn()}
+          onkeydown={(e) => e.key === 'Enter' && addColumn()}
         />
       {/if}
       <button 
         class="btn btn-secondary"
-        on:click={addColumn}
+        onclick={addColumn}
         disabled={!newColumnLabel.trim()}
       >
         Add Column

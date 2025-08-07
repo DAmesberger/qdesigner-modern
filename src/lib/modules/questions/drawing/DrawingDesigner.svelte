@@ -126,7 +126,7 @@
         <input 
           type="checkbox" 
           checked={question.config.tools?.includes('pen')}
-          on:change={() => toggleTool('pen')}
+          onchange={() => toggleTool('pen')}
         />
         <span>✏️ Pen</span>
       </label>
@@ -135,7 +135,7 @@
         <input 
           type="checkbox" 
           checked={question.config.tools?.includes('eraser')}
-          on:change={() => toggleTool('eraser')}
+          onchange={() => toggleTool('eraser')}
         />
         <span>🧹 Eraser</span>
       </label>
@@ -144,7 +144,7 @@
         <input 
           type="checkbox" 
           checked={question.config.tools?.includes('line')}
-          on:change={() => toggleTool('line')}
+          onchange={() => toggleTool('line')}
         />
         <span>📏 Line</span>
       </label>
@@ -153,7 +153,7 @@
         <input 
           type="checkbox" 
           checked={question.config.tools?.includes('shape')}
-          on:change={() => toggleTool('shape')}
+          onchange={() => toggleTool('shape')}
         />
         <span>⬜ Shapes</span>
       </label>
@@ -180,7 +180,7 @@
       />
       <button 
         class="btn btn-secondary"
-        on:click={addColor}
+        onclick={addColor}
       >
         Add Color
       </button>
@@ -199,7 +199,7 @@
       </select>
       <button 
         class="btn btn-secondary btn-small"
-        on:click={applyColorPreset}
+        onclick={applyColorPreset}
         disabled={!selectedColorPreset}
       >
         Apply
@@ -218,7 +218,7 @@
             <span class="color-value">{color}</span>
             <button 
               class="remove-btn"
-              on:click={() => removeColor(color)}
+              onclick={() => removeColor(color)}
               aria-label="Remove color"
             >
               ✕
@@ -248,7 +248,7 @@
         </select>
         <button 
           class="btn btn-secondary"
-          on:click={applySizePreset}
+          onclick={applySizePreset}
           disabled={!selectedSizePreset}
         >
           Apply
