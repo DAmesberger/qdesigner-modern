@@ -13,9 +13,14 @@
   let user: any = null;
   let loading = true;
   
-  onMount(() => {
+  onMount(async () => {
     // Import modules on client-side only
-    import('$lib/modules');
+    try {
+      const { registerAllModules } = await import('$lib/modules');
+      await registerAllModules();
+    } catch (err) {
+      console.error('Failed to load modules:', err);
+    }
     
     // Import test mode utilities in development
     if (import.meta.env.DEV) {

@@ -3,7 +3,7 @@
 import type { BaseModuleConfig, ModuleCategory } from '$lib/modules/types';
 
 export interface AnalyticsModuleConfig extends BaseModuleConfig {
-  category: 'analytics';
+  category: 'display';
   dataSource: {
     variables: string[]; // Variable IDs to visualize
     aggregation?: 'none' | 'mean' | 'sum' | 'count' | 'min' | 'max';

@@ -91,9 +91,8 @@ class ModuleRegistryImpl implements IModuleRegistry {
    */
   getCategorySummary(): Record<ModuleCategory, number> {
     const summary: Record<ModuleCategory, number> = {
-      instruction: 0,
-      question: 0,
-      analytics: 0
+      display: 0,
+      question: 0
     };
     
     this.modules.forEach(module => {

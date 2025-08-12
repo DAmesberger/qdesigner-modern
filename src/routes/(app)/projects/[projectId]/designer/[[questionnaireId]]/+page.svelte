@@ -49,7 +49,7 @@
   let showCommandPalette = $state(false);
   
   // Initialize
-  onMount(() => {
+  onMount(async () => {
     console.log('[Designer Page] Mounting with data:', {
       organizationId,
       projectId,
@@ -59,6 +59,15 @@
     });
     console.log('[DEBUG] Full questionnaire data:', questionnaire);
     console.log('[DEBUG] Page data:', data);
+    
+    // Import and register modules
+    try {
+      const { registerAllModules } = await import('$lib/modules');
+      await registerAllModules();
+      console.log('[Designer Page] Modules registered');
+    } catch (err) {
+      console.error('[Designer Page] Failed to load modules:', err);
+    }
     
     designerStore.initVariableEngine();
     

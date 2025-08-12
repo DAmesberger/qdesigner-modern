@@ -220,8 +220,8 @@
                 {#each items as item (item.id)}
                   <div animate:flip={{ duration: 300 }}>
                     {#if item && item.question}
-                      {#if item.question.type === 'bar-chart' || item.question.category === 'analytics'}
-                        <!-- Use QuestionRenderer for analytics components -->
+                      {#if item.question.type === 'bar-chart' || item.question.category === 'display'}
+                        <!-- Use QuestionRenderer for display components -->
                         <div
                           class="analytics-wrapper"
                           class:selected={$designerStore.selectedItemId === item.id}

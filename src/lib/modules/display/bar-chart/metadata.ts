@@ -1,11 +1,11 @@
-// Bar chart analytics metadata
+// Bar chart display metadata
 
 import type { ModuleMetadata } from '$lib/modules/types';
 import { AnswerTypes } from '../../questions/shared/answerTypes';
 
 export const metadata: ModuleMetadata = {
   type: 'bar-chart',
-  category: 'analytics',
+  category: 'display',
   name: 'Bar Chart',
   icon: '📊',
   description: 'Visualize data as vertical or horizontal bars with optional error bars',
@@ -49,5 +49,5 @@ export const metadata: ModuleMetadata = {
       }
     }
   },
-  answerType: AnswerTypes.NONE // Analytics don't produce answers
+  answerType: AnswerTypes.NONE // Display modules don't produce answers
 };

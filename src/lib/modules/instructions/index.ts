@@ -1,11 +1,10 @@
 // Instructions module exports
 
 // Import all instruction modules to register them
-import './text';
-import './text-display';
+// NOTE: text and text-display modules have been moved to display directory
 // import './media';
 // import './timed';
 
-// Export shared components
-export * from './shared/types';
-export { default as BaseInstruction } from './shared/BaseInstruction.svelte';
+// Export shared components - these have been moved to display/shared/base/
+export * from '../display/shared/base/types';
+export { default as BaseInstruction } from '../display/shared/base/BaseInstruction.svelte';

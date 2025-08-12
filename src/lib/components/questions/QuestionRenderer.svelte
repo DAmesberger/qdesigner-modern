@@ -39,8 +39,10 @@
       const metadata = moduleRegistry.get(type);
       console.log('[QuestionRenderer] Metadata found:', metadata);
       
-      if (metadata && (metadata.category === 'question' || metadata.category === 'instruction' || metadata.category === 'analytics')) {
-        QuestionComponent = await moduleRegistry.loadComponent(type, mode);
+      if (metadata && (metadata.category === 'question' || metadata.category === 'display')) {
+        // Map preview mode to runtime for loading components
+        const loadMode = mode === 'preview' ? 'runtime' : mode;
+        QuestionComponent = await moduleRegistry.loadComponent(type, loadMode);
         console.log('[QuestionRenderer] Component loaded successfully');
       } else {
         console.error(`Component not found in module registry: ${type}`);

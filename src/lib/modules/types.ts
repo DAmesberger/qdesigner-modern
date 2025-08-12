@@ -4,7 +4,9 @@ import type { ComponentType } from 'svelte';
 import type { Question, ConditionalLogic } from '$lib/shared';
 
 // Module categories
-export type ModuleCategory = 'instruction' | 'question' | 'analytics';
+// - display: Components that only show content (no user response)
+// - question: Interactive components that collect user responses
+export type ModuleCategory = 'display' | 'question';
 
 // Base module metadata
 export interface ModuleMetadata {
@@ -225,5 +227,5 @@ export interface ModuleRegistry {
   get(type: string): ModuleMetadata | undefined;
   getByCategory(category: ModuleCategory): ModuleMetadata[];
   getAllTypes(): string[];
-  loadComponent(type: string, variant: 'runtime' | 'designer' | 'analytics'): Promise<ComponentType>;
+  loadComponent(type: string, variant: 'runtime' | 'designer'): Promise<ComponentType>;
 }

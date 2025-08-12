@@ -113,13 +113,20 @@ export class DataVisualization {
         plugins: {
           title: {
             display: true,
-            text: 'Response Time Distribution'
+            text: 'Response Time Distribution',
+            position: 'top' as const
           },
           tooltip: {
+            enabled: true,
+            mode: 'index' as const,
+            intersect: false,
             callbacks: {
               title: (context) => {
-                const index = context[0].dataIndex;
-                return `${bins.binRanges[index].min.toFixed(0)}ms - ${bins.binRanges[index].max.toFixed(0)}ms`;
+                const index = context[0]?.dataIndex;
+                if (index !== undefined && bins.binRanges[index]) {
+                  return `${bins.binRanges[index].min.toFixed(0)}ms - ${bins.binRanges[index].max.toFixed(0)}ms`;
+                }
+                return '';
               },
               label: (context) => `Frequency: ${context.parsed.y}`
             }
@@ -135,7 +142,7 @@ export class DataVisualization {
       type: 'bar',
       data: config.data,
       options: config.options
-    });
+    }) as any;
 
     this.charts.set(chartId, chart);
     return chart;

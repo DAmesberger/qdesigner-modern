@@ -1,6 +1,6 @@
 /**
  * Module Factory
- * Creates questions, instructions, and analytics with proper default configurations
+ * Creates questions, instructions, and display modules with proper default configurations
  */
 
 import { nanoid } from 'nanoid';
@@ -86,8 +86,8 @@ export class ModuleFactory {
       case 'instruction':
         return this.applyInstructionDefaults(baseModule, metadata);
         
-      case 'analytics':
-        return this.applyAnalyticsDefaults(baseModule, metadata);
+      case 'display':
+        return this.applyDisplayDefaults(baseModule, metadata);
         
       default:
         return baseModule;
@@ -159,10 +159,10 @@ export class ModuleFactory {
   }
   
   /**
-   * Apply analytics-specific defaults
+   * Apply display-specific defaults
    */
-  private static applyAnalyticsDefaults(module: ModuleItem, metadata: any): ModuleItem {
-    // Analytics need data source configuration
+  private static applyDisplayDefaults(module: ModuleItem, metadata: any): ModuleItem {
+    // Display modules need data source configuration
     if (!module.dataSource) {
       module.dataSource = {
         variables: [], // Empty array of variable IDs to visualize
@@ -182,13 +182,13 @@ export class ModuleFactory {
       };
     }
     
-    // Display duration for analytics
+    // Display duration for display modules
     if (!module.displayDuration) {
       module.displayDuration = 5000; // 5 seconds default
     }
     
     if (module.autoAdvance === undefined) {
-      module.autoAdvance = false; // Analytics typically don't auto-advance
+      module.autoAdvance = false; // Display modules typically don't auto-advance
     }
     
     return module;

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import BaseAnalytics from '../shared/BaseAnalytics.svelte';
-  import type { AnalyticsProps } from '../shared/types';
+  import BaseAnalytics from '../shared/analytics/BaseAnalytics.svelte';
+  import type { AnalyticsProps } from '../shared/analytics/types';
   import type { Question } from '$lib/shared';
   import { Chart, registerables } from 'chart.js';
   import { untrack, tick } from 'svelte';

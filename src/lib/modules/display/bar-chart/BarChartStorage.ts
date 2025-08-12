@@ -1,6 +1,6 @@
 // Bar chart analytics storage
 
-import { BaseAnalyticsStorage } from '../shared/BaseStorage';
+import { BaseAnalyticsStorage } from '../shared/analytics/BaseStorage';
 
 export class BarChartStorage extends BaseAnalyticsStorage {
   /**

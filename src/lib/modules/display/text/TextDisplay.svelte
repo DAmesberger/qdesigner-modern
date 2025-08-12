@@ -1,5 +1,5 @@
 <script lang="ts">
-  import BaseInstruction from '../shared/BaseInstruction.svelte';
+  import BaseInstruction from '../shared/base/BaseInstruction.svelte';
   import type { InstructionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
   import { marked } from 'marked';

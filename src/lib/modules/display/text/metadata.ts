@@ -4,7 +4,7 @@ import type { ModuleMetadata } from '$lib/modules/types';
 
 export const metadata: ModuleMetadata = {
   type: 'text-display',
-  category: 'instruction',
+  category: 'display',
   name: 'Text Display',
   icon: '📄',
   description: 'Display formatted text with markdown and variable support',

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import BaseInstruction from '../shared/BaseInstruction.svelte';
+  import BaseInstruction from '../shared/base/BaseInstruction.svelte';
   import type { InstructionProps } from '$lib/modules/types';
-  import type { InstructionModuleConfig } from '../shared/types';
+  import type { InstructionModuleConfig } from '../shared/base/types';
   import type { MediaConfig } from '$lib/shared/types/questionnaire';
   import { processMarkdownContent } from '$lib/services/markdownProcessor';
   import { mediaService } from '$lib/services/mediaService';

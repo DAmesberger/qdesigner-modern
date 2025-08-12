@@ -1,4 +1,4 @@
-// Bar chart analytics module registration
+// Bar chart display module registration
 
 import { registerModule } from '$lib/modules/registry';
 import { metadata } from './metadata';
