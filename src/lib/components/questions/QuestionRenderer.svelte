@@ -19,9 +19,9 @@
     variables = {}
   }: Props = $props();
   
-  let QuestionComponent: ComponentType | null = null;
-  let loading = false;
-  let error: string | null = null;
+  let QuestionComponent = $state<ComponentType | null>(null);
+  let loading = $state(false);
+  let error = $state<string | null>(null);
   
   // Load component from module registry
   $effect(() => {
@@ -66,6 +66,35 @@
       ...(question as any) // Type-specific properties
     }
   });
+  
+  // Transform question to analytics format for display modules
+  const analyticsData = $derived(() => {
+    const metadata = moduleRegistry.get(question.type);
+    if (metadata?.category === 'display') {
+      // Transform question data to analytics format
+      return {
+        ...question,
+        dataSource: {
+          variables: question.variables || [],
+          aggregation: 'none' as const
+        },
+        visualization: {
+          title: question.prompt || question.text || '',
+          subtitle: question.description || '',
+          showLegend: true,
+          showGrid: true,
+          showTooltips: true,
+          colorScheme: 'default' as const
+        },
+        config: {
+          ...metadata.defaultConfig,
+          ...question.config,
+          ...(question as any)
+        }
+      };
+    }
+    return fullQuestion;
+  });
 </script>
 
 {#if loading}
@@ -74,22 +103,37 @@
     <span>Loading question...</span>
   </div>
 {:else if QuestionComponent}
-  <svelte:component 
-    this={QuestionComponent}
-    question={fullQuestion}
-    analytics={fullQuestion}
-    {mode}
-    bind:value
-    {disabled}
-    {variables}
-    on:edit
-    on:delete
-    on:duplicate
-    on:response
-    on:interaction
-    on:mount
-    on:change
-  />
+  {@const metadata = moduleRegistry.get(question.type)}
+  {#if metadata?.category === 'display'}
+    <!-- Display modules (analytics, instructions) use analytics prop -->
+    <svelte:component 
+      this={QuestionComponent}
+      analytics={analyticsData()}
+      {mode}
+      {variables}
+      on:edit
+      on:delete
+      on:duplicate
+      on:interaction
+    />
+  {:else}
+    <!-- Question modules use question prop -->
+    <svelte:component 
+      this={QuestionComponent}
+      question={fullQuestion}
+      {mode}
+      bind:value
+      {disabled}
+      {variables}
+      on:edit
+      on:delete
+      on:duplicate
+      on:response
+      on:interaction
+      on:mount
+      on:change
+    />
+  {/if}
 {:else}
   <div class="unknown-question-type">
     <div class="error-icon">❓</div>

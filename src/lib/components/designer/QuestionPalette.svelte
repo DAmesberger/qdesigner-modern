@@ -8,9 +8,8 @@
   
   // Module categories with display configuration
   const categories = [
-    { id: 'instruction', label: 'Instructions', icon: '📝' },
-    { id: 'question', label: 'Questions', icon: '❓' },
-    { id: 'analytics', label: 'Analytics', icon: '📊' }
+    { id: 'display', label: 'Display', icon: '📊' },
+    { id: 'question', label: 'Questions', icon: '❓' }
   ] as const;
   
   // State
@@ -68,16 +67,8 @@
     const state = get(designerStore);
     const block = get(currentBlock);
     
-    if (module.category === 'analytics') {
-      // Analytics go to a special analytics section
-      // For now, add as a regular question until analytics support is added
-      if (block) {
-        designerStore.addQuestion(block.id, module.type as any);
-      } else if (state.currentPageId) {
-        designerStore.addQuestion(state.currentPageId, module.type as any);
-      }
-    } else if (module.category === 'instruction') {
-      // Instructions are added as questions with instruction type
+    if (module.category === 'display') {
+      // Display modules (instructions, analytics, etc.)
       if (block) {
         designerStore.addQuestion(block.id, module.type as any);
       } else if (state.currentPageId) {
@@ -183,7 +174,7 @@
     <ul class="{theme.typography.caption} {theme.spacing.stack.xs}">
       <li>• Click or drag modules to add</li>
       <li>• Use tabs to switch categories</li>
-      <li>• Analytics appear in a separate section</li>
+      <li>• Display modules include instructions and analytics</li>
       <li>• Search by name or description</li>
     </ul>
   </div>

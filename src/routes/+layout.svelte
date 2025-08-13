@@ -15,11 +15,19 @@
   
   onMount(async () => {
     // Import modules on client-side only
+    console.log('[Layout] Starting module registration...');
     try {
-      const { registerAllModules } = await import('$lib/modules');
-      await registerAllModules();
+      const moduleExports = await import('$lib/modules');
+      console.log('[Layout] Module exports:', Object.keys(moduleExports));
+      
+      if (moduleExports.registerAllModules) {
+        await moduleExports.registerAllModules();
+        console.log('[Layout] Modules registered successfully');
+      } else {
+        console.error('[Layout] registerAllModules not found in module exports');
+      }
     } catch (err) {
-      console.error('Failed to load modules:', err);
+      console.error('[Layout] Failed to load modules:', err);
     }
     
     // Import test mode utilities in development
