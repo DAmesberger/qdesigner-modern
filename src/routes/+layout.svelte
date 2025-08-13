@@ -10,8 +10,8 @@
   import { theme } from '$lib/stores/theme';
   import { offline, requestPersistentStorage } from '$lib/services/offline';
   
-  let user: any = null;
-  let loading = true;
+  let user = $state<any>(null);
+  let loading = $state(true);
   
   onMount(async () => {
     // Import modules on client-side only
