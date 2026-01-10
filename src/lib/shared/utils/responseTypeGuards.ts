@@ -43,77 +43,78 @@ export function isCustomResponse(responseType: ResponseType): responseType is Ex
 
 // Helper to safely access response type properties
 export function getResponseTypeProperties(responseType: ResponseType) {
+  const rt = responseType as any;
   switch (responseType.type) {
     case 'scale':
       return {
-        min: responseType.min,
-        max: responseType.max,
-        step: responseType.step,
-        labels: responseType.labels,
-        minLabel: responseType.minLabel,
-        maxLabel: responseType.maxLabel,
-        required: responseType.required,
-        timeout: responseType.timeout
+        min: rt.min,
+        max: rt.max,
+        step: rt.step,
+        labels: rt.labels,
+        minLabel: rt.minLabel,
+        maxLabel: rt.maxLabel,
+        required: rt.required,
+        timeout: rt.timeout
       };
     case 'single':
     case 'multiple':
       return {
-        options: responseType.options,
-        required: responseType.required,
-        timeout: responseType.timeout,
+        options: rt.options,
+        required: rt.required,
+        timeout: rt.timeout,
         ...(responseType.type === 'multiple' ? {
-          minChoices: responseType.minChoices,
-          maxChoices: responseType.maxChoices
+          minChoices: rt.minChoices,
+          maxChoices: rt.maxChoices
         } : {})
       };
     case 'text':
       return {
-        minLength: responseType.minLength,
-        maxLength: responseType.maxLength,
-        pattern: responseType.pattern,
-        required: responseType.required,
-        timeout: responseType.timeout
+        minLength: rt.minLength,
+        maxLength: rt.maxLength,
+        pattern: rt.pattern,
+        required: rt.required,
+        timeout: rt.timeout
       };
     case 'number':
       return {
-        min: responseType.min,
-        max: responseType.max,
-        step: responseType.step,
-        required: responseType.required,
-        timeout: responseType.timeout
+        min: rt.min,
+        max: rt.max,
+        step: rt.step,
+        required: rt.required,
+        timeout: rt.timeout
       };
     case 'keypress':
       return {
-        keys: responseType.keys,
-        recordAllKeys: responseType.recordAllKeys,
-        required: responseType.required,
-        timeout: responseType.timeout
+        keys: rt.keys,
+        recordAllKeys: rt.recordAllKeys,
+        required: rt.required,
+        timeout: rt.timeout
       };
     case 'click':
       return {
-        allowedTargets: responseType.allowedTargets,
-        required: responseType.required,
-        timeout: responseType.timeout
+        allowedTargets: rt.allowedTargets,
+        required: rt.required,
+        timeout: rt.timeout
       };
     case 'none':
       return {
-        autoAdvance: responseType.autoAdvance,
-        delay: responseType.delay
+        autoAdvance: rt.autoAdvance,
+        delay: rt.delay
       };
     case 'webgl':
       return {
-        validKeys: responseType.validKeys,
-        validTargets: responseType.validTargets,
-        recordAllResponses: responseType.recordAllResponses,
-        required: responseType.required,
-        timeout: responseType.timeout
+        validKeys: rt.validKeys,
+        validTargets: rt.validTargets,
+        recordAllResponses: rt.recordAllResponses,
+        required: rt.required,
+        timeout: rt.timeout
       };
     case 'custom':
       return {
-        customType: responseType.customType,
-        config: responseType.config,
-        required: responseType.required,
-        timeout: responseType.timeout
+        customType: rt.customType,
+        config: rt.config,
+        required: rt.required,
+        timeout: rt.timeout
       };
     default:
       return {};

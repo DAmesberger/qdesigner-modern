@@ -326,8 +326,9 @@ export class StreamingService {
       return;
     }
 
+    let messages: StreamMessage[] = [];
     try {
-      const messages = this.messageBuffer.splice(0);
+      messages = this.messageBuffer.splice(0);
       this.queueSize = 0;
       
       // Reset backpressure status
@@ -436,14 +437,14 @@ export class StreamingService {
       case 'question':
         return this.matchesFilterValue(
           message.data?.response?.questionId, 
-          filter.value, 
+          filter.value as string | RegExp, 
           filter.operator
         );
         
       case 'responseType':
         return this.matchesFilterValue(
           message.data?.response?.type, 
-          filter.value, 
+          filter.value as string | RegExp, 
           filter.operator
         );
         

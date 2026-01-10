@@ -1,41 +1,51 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { Plus, FileText, Users, Calendar, MoreVertical, Play, Edit, Copy, Archive } from 'lucide-svelte';
+  import {
+    Plus,
+    FileText,
+    Users,
+    Calendar,
+    MoreVertical,
+    Play,
+    Edit,
+    Copy,
+    Archive,
+  } from 'lucide-svelte';
   import { Modal } from '$lib/components/ui';
   import type { PageData } from './$types';
-  
+
   interface Props {
     data: PageData;
   }
-  
+
   let { data }: Props = $props();
   let showCreateModal = $state(false);
   let questionnaireName = $state('');
   let questionnaireDescription = $state('');
-  
+
   async function createQuestionnaire() {
     if (!questionnaireName.trim()) return;
-    
+
     // Navigate to designer with new questionnaire context
     if (typeof window !== 'undefined') {
       window.location.href = `/projects/${data.project.id}/designer/new?name=${encodeURIComponent(questionnaireName)}&description=${encodeURIComponent(questionnaireDescription)}`;
     }
   }
-  
+
   function formatDate(date: string | Date) {
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     });
   }
-  
+
   function getStatusBadge(status: string) {
-    const classes = {
-      'draft': 'bg-yellow-100 text-yellow-800',
-      'published': 'bg-green-100 text-green-800',
-      'archived': 'bg-gray-100 text-gray-800'
+    const classes: Record<string, string> = {
+      draft: 'bg-yellow-100 text-yellow-800',
+      published: 'bg-green-100 text-green-800',
+      archived: 'bg-gray-100 text-gray-800',
     };
     return classes[status] || classes['draft'];
   }
@@ -52,14 +62,22 @@
               <a href="/projects" class="text-gray-500 hover:text-gray-700">Projects</a>
             </li>
             <li class="flex items-center">
-              <svg class="flex-shrink-0 h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+              <svg
+                class="flex-shrink-0 h-5 w-5 text-gray-400"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                  clip-rule="evenodd"
+                />
               </svg>
               <span class="ml-4 text-gray-700 font-medium">{data.project.name}</span>
             </li>
           </ol>
         </nav>
-        
+
         <!-- Header -->
         <div class="md:flex md:items-center md:justify-between">
           <div class="flex-1 min-w-0">
@@ -77,7 +95,7 @@
           </div>
           <div class="mt-4 flex md:mt-0 md:ml-4">
             <button
-              onclick={() => showCreateModal = true}
+              onclick={() => (showCreateModal = true)}
               class="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               <Plus class="-ml-1 mr-2 h-5 w-5" />
@@ -97,7 +115,7 @@
         <p class="mt-1 text-sm text-gray-500">Get started by creating a new questionnaire.</p>
         <div class="mt-6">
           <button
-            onclick={() => showCreateModal = true}
+            onclick={() => (showCreateModal = true)}
             class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <Plus class="-ml-1 mr-2 h-5 w-5" />
@@ -126,7 +144,9 @@
                     </div>
                   </div>
                   <div class="flex items-center space-x-4">
-                    <span class={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(questionnaire.status)}`}>
+                    <span
+                      class={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadge(questionnaire.status)}`}
+                    >
                       {questionnaire.status}
                     </span>
                     <div class="flex items-center space-x-2">
@@ -154,10 +174,7 @@
                       >
                         <Edit class="h-5 w-5" />
                       </button>
-                      <button
-                        class="text-gray-600 hover:text-gray-900"
-                        title="More options"
-                      >
+                      <button class="text-gray-600 hover:text-gray-900" title="More options">
                         <MoreVertical class="h-5 w-5" />
                       </button>
                     </div>
@@ -199,7 +216,7 @@
         placeholder="My Questionnaire"
       />
     </div>
-    
+
     <div>
       <label for="questionnaire-description" class="block text-sm font-medium text-foreground mb-1">
         Description (optional)
@@ -213,20 +230,22 @@
       ></textarea>
     </div>
   </div>
-  
-  <div slot="footer" class="flex flex-row-reverse gap-3">
-    <button
-      onclick={createQuestionnaire}
-      disabled={!questionnaireName.trim()}
-      class="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary text-base font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      Create & Edit
-    </button>
-    <button
-      onclick={() => showCreateModal = false}
-      class="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:text-sm"
-    >
-      Cancel
-    </button>
-  </div>
+
+  {#snippet footer()}
+    <div class="flex flex-row-reverse gap-3">
+      <button
+        onclick={createQuestionnaire}
+        disabled={!questionnaireName.trim()}
+        class="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary text-base font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Create & Edit
+      </button>
+      <button
+        onclick={() => (showCreateModal = false)}
+        class="inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:text-sm"
+      >
+        Cancel
+      </button>
+    </div>
+  {/snippet}
 </Modal>

@@ -1,4 +1,4 @@
-import type { Questionnaire, Question, Stimulus } from '$lib/shared';
+import type { Questionnaire, Question, StimulusConfig as Stimulus } from '$lib/shared';
 
 export interface Resource {
   id: string;
@@ -49,8 +49,9 @@ export class ResourceManager {
     }
 
     // Scan any global resources in settings
-    if (questionnaire.settings.theme?.customCss) {
-      this.registerResource('theme.css', 'text', questionnaire.settings.theme.customCss);
+    const settings = questionnaire.settings as any;
+    if (settings.theme?.customCss) {
+      this.registerResource('theme.css', 'text', settings.theme.customCss);
     }
   }
 
@@ -60,7 +61,8 @@ export class ResourceManager {
   private scanQuestion(question: Question) {
     // Scan stimulus
     if (question.stimulus) {
-      this.scanStimulus(question.stimulus);
+      // Cast to any since the type might not fully match StimulusConfig strictness in shared types yet
+      this.scanStimulus(question.stimulus as any);
     }
 
     // Scan response options for images
@@ -77,7 +79,9 @@ export class ResourceManager {
    * Scan stimulus for resources
    */
   private scanStimulus(stimulus: Stimulus) {
-    const content = stimulus.content;
+    const content = stimulus.content as any;
+
+    if (typeof content === 'string') return;
 
     if (content.imageUrl) {
       this.registerResource(content.imageUrl, 'image', content.imageUrl);

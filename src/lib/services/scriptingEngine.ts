@@ -26,11 +26,14 @@ class ScriptingEngineService {
    * Evaluate conditional logic
    */
   async evaluateCondition(condition: ConditionalLogic): Promise<boolean> {
-    if (!condition.enabled) return true;
+    const cond = condition as any;
+    if (cond.enabled === false) return true; // Default to true if disabled
     
     try {
-      const result = await this.evaluate(condition.expression);
-      return Boolean(result);
+      if (cond.expression) {
+        const result = await this.evaluate(cond.expression);
+        return Boolean(result);
+      }
     } catch (error) {
       console.error('Error evaluating condition:', error);
       return true; // Default to showing on error

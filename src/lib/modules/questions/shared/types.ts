@@ -4,7 +4,7 @@ import type { Question, ValidationRule } from '$lib/shared';
 import type { AnswerType, ResponseData } from '$lib/modules/types';
 
 // Extended question configuration
-export interface QuestionModuleConfig extends Question {
+export type QuestionModuleConfig = Question & {
   // Answer type information
   answerType?: AnswerType;
   
@@ -19,7 +19,15 @@ export interface QuestionModuleConfig extends Question {
   // Response handling
   responseFormat?: 'raw' | 'processed' | 'normalized';
   responseTransform?: string; // Formula to transform response
-}
+
+  // Logic
+  conditions?: any; // Should be ConditionalLogic but avoiding recursive import issues for now
+
+  // Common/Legacy Text Properties (for BaseQuestion compatibility)
+  title?: string;
+  description?: string;
+  text?: string;
+};
 
 // Question response structure
 export interface QuestionResponse extends ResponseData {

@@ -1,9 +1,25 @@
 // Date/Time question storage with specialized aggregations
 
 import { BaseQuestionStorage } from '../shared/BaseStorage';
-import type { StorageData } from '$lib/services/localStorage';
+import type { QuestionResponse } from '../shared/types';
 
 export class DateTimeStorage extends BaseQuestionStorage {
+  getAnswerType(): string {
+    return 'date-time';
+  }
+
+  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+    return this.getAllForSession();
+  }
+
+  /**
+   * Parse stored value
+   */
+  protected parseValue(value: any): string | number {
+    if (value === null || value === undefined) return '';
+    return value;
+  }
+
   /**
    * Get the earliest date response
    */
@@ -56,7 +72,7 @@ export class DateTimeStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const distribution: Record<string | number, number> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const date = new Date(this.parseValue(response.value));
       if (isNaN(date.getTime())) return;
       
@@ -92,7 +108,7 @@ export class DateTimeStorage extends BaseQuestionStorage {
     let totalMinutes = 0;
     let validCount = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const date = new Date(this.parseValue(response.value));
       if (!isNaN(date.getTime())) {
         totalMinutes += date.getHours() * 60 + date.getMinutes();
@@ -116,11 +132,16 @@ export class DateTimeStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const dateCounts: Record<string, number> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const date = new Date(this.parseValue(response.value));
       if (!isNaN(date.getTime())) {
-        const dateStr = date.toISOString().split('T')[0];
-        dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+        const validDate = date.toISOString();
+        if (validDate) {
+          const dateStr = validDate.split('T')[0];
+          if (dateStr) {
+            dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+          }
+        }
       }
     });
     
@@ -137,7 +158,7 @@ export class DateTimeStorage extends BaseQuestionStorage {
     questionId: string, 
     startDate: Date, 
     endDate: Date
-  ): Promise<StorageData[]> {
+  ): Promise<QuestionResponse[]> {
     const responses = await this.getResponses(questionId);
     
     return responses.filter(response => {
@@ -165,7 +186,7 @@ export class DateTimeStorage extends BaseQuestionStorage {
     let weekday = 0;
     let weekend = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const date = new Date(this.parseValue(response.value));
       if (!isNaN(date.getTime())) {
         const dayOfWeek = date.getDay();
@@ -198,7 +219,7 @@ export class DateTimeStorage extends BaseQuestionStorage {
       case 'weekdayWeekend':
         return `Weekday: ${value.weekday}, Weekend: ${value.weekend}`;
       default:
-        return super.formatAggregation(type, value);
+        return JSON.stringify(value);
     }
   }
   
@@ -206,8 +227,7 @@ export class DateTimeStorage extends BaseQuestionStorage {
    * Get all available aggregations for date/time questions
    */
   async getAllAggregations(questionId: string): Promise<Record<string, any>> {
-    const [base, earliest, latest, range, daySpan, avgTime, weekdayWeekend] = await Promise.all([
-      super.getAllAggregations(questionId),
+    const [earliest, latest, range, daySpan, avgTime, weekdayWeekend] = await Promise.all([
       this.getEarliestDate(questionId),
       this.getLatestDate(questionId),
       this.getDateRange(questionId),
@@ -217,7 +237,6 @@ export class DateTimeStorage extends BaseQuestionStorage {
     ]);
     
     return {
-      ...base,
       earliest,
       latest,
       range,

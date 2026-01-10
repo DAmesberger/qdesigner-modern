@@ -22,7 +22,7 @@
     onCreateBranch,
     onRestoreVersion,
     onCompareTo,
-    showDiff = false
+    showDiff = false,
   }: Props = $props();
 
   // Local state
@@ -36,13 +36,14 @@
 
   // Reactive computations
   const filteredVersions = $derived(
-    versions.filter(v => !selectedBranch || v.branchName === selectedBranch)
+    versions
+      .filter((v) => !selectedBranch || v.branchName === selectedBranch)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   );
 
   const branchOptions = $derived([
-    ...branches.filter(b => b.isActive),
-    ...(branches.length === 0 ? [{ name: 'main', isDefault: true }] : [])
+    ...branches.filter((b) => b.isActive),
+    ...(branches.length === 0 ? [{ name: 'main', isDefault: true }] : []),
   ]);
 
   // Methods
@@ -65,7 +66,11 @@
   }
 
   function restoreVersion(versionId: string) {
-    if (confirm('Are you sure you want to restore to this version? This will create a new version with the restored content.')) {
+    if (
+      confirm(
+        'Are you sure you want to restore to this version? This will create a new version with the restored content.'
+      )
+    ) {
       onRestoreVersion?.(versionId);
     }
   }
@@ -120,10 +125,13 @@
   }
 
   function getOperationSummary(version: Version): string {
-    const opCounts = version.operations.reduce((acc, op) => {
-      acc[op.type] = (acc[op.type] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const opCounts = version.operations.reduce(
+      (acc, op) => {
+        acc[op.type] = (acc[op.type] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
     const parts: string[] = [];
     if (opCounts.insert) parts.push(`${opCounts.insert} added`);
@@ -144,12 +152,14 @@
         {#if showDiff && onCompareTo}
           <button
             onclick={toggleCompareMode}
-            class="px-3 py-1 text-sm rounded {compareMode ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'} hover:bg-opacity-80 transition-colors"
+            class="px-3 py-1 text-sm rounded {compareMode
+              ? 'bg-blue-100 text-blue-800'
+              : 'bg-gray-100 text-gray-700'} hover:bg-opacity-80 transition-colors"
           >
             {compareMode ? 'Exit Compare' : 'Compare'}
           </button>
         {/if}
-        
+
         <!-- Branch selector -->
         {#if branchOptions.length > 1}
           <select
@@ -158,7 +168,8 @@
           >
             {#each branchOptions as branch}
               <option value={branch.name}>
-                {branch.name} {branch.isDefault ? '(default)' : ''}
+                {branch.name}
+                {branch.isDefault ? '(default)' : ''}
               </option>
             {/each}
           </select>
@@ -189,12 +200,19 @@
       </div>
     {:else}
       {#each filteredVersions as version (version.id)}
-        <div 
+        <div
           class="px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer
                  {version.id === currentVersion ? 'bg-blue-50 border-blue-200' : ''}
-                 {compareMode && compareFromVersion === version.id ? 'bg-green-50 border-green-200' : ''}
-                 {compareMode && compareToVersion === version.id ? 'bg-orange-50 border-orange-200' : ''}"
+                 {compareMode && compareFromVersion === version.id
+            ? 'bg-green-50 border-green-200'
+            : ''}
+                 {compareMode && compareToVersion === version.id
+            ? 'bg-orange-50 border-orange-200'
+            : ''}"
           onclick={() => selectVersion(version.id)}
+          role="button"
+          tabindex="0"
+          onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && selectVersion(version.id)}
         >
           <div class="flex items-start justify-between">
             <!-- Version info -->
@@ -238,23 +256,39 @@
             <div class="flex items-center gap-1 ml-2">
               {#if !compareMode}
                 <button
-                  onclick|stopPropagation={() => restoreVersion(version.id)}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    restoreVersion(version.id);
+                  }}
                   class="p-1 text-gray-400 hover:text-blue-600 transition-colors"
                   title="Restore to this version"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/>
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                    />
                   </svg>
                 </button>
-                
+
                 {#if onCreateBranch}
                   <button
-                    onclick|stopPropagation={() => startCreateBranch(version.id)}
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      startCreateBranch(version.id);
+                    }}
                     class="p-1 text-gray-400 hover:text-green-600 transition-colors"
                     title="Create branch from this version"
                   >
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                      />
                     </svg>
                   </button>
                 {/if}
@@ -272,11 +306,9 @@
   <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
     <div class="bg-white rounded-lg shadow-xl p-6 w-96">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Create New Branch</h3>
-      
+
       <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2">
-          Branch Name
-        </label>
+        <label class="block text-sm font-medium text-gray-700 mb-2"> Branch Name </label>
         <input
           type="text"
           bind:value={newBranchName}

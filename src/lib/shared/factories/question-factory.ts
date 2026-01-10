@@ -134,18 +134,18 @@ export class QuestionFactory {
       category: this.getModuleCategory(question),
       order: question.order || 0,
       config: {},
-      text: question.text,
-      instruction: question.instruction,
-      conditions: question.conditions,
-      variables: question.variables,
-      validation: question.validation,
-      layout: question.layout,
-      timing: question.timing
+      text: (question as any).text,
+      instruction: (question as any).instruction,
+      conditions: (question as any).conditions,
+      variables: (question as any).variables,
+      validation: (question as any).validation,
+      layout: (question as any).layout,
+      timing: (question as any).timing
     };
     
     // Extract response configuration
-    if (question.responseType) {
-      moduleItem.config.response = question.responseType;
+    if ((question as any).responseType) {
+      moduleItem.config.response = (question as any).responseType;
     }
     
     // Extract display configuration (including media)
@@ -173,6 +173,6 @@ export class QuestionFactory {
    */
   private static getModuleCategory(question: Question): 'question' | 'instruction' | 'analytics' {
     const metadata = ModuleFactory.getMetadata(question.type);
-    return metadata?.category || 'question';
+    return (metadata?.category || 'question') as 'question' | 'instruction' | 'analytics';
   }
 }

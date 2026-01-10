@@ -83,7 +83,7 @@ export class TransformationPipeline {
       const stagesToRun = pipeline?.stages || this.stages;
 
       for (let i = 0; i < stagesToRun.length; i++) {
-        const stage = stagesToRun[i];
+        const stage = stagesToRun[i]!;
         context.stage = i;
 
         // Check stage condition
@@ -126,7 +126,7 @@ export class TransformationPipeline {
         }
       };
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         errors: [`Pipeline execution failed: ${error.message}`],
@@ -198,7 +198,7 @@ export class TransformationPipeline {
 
     try {
       return await transformer.transform(data, context);
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         errors: [`Stage '${stage.name}' failed: ${error.message}`]
@@ -217,7 +217,7 @@ export class TransformationPipeline {
       transform: async (data: QuestionnaireSession, context: TransformationContext) => {
         return this.normalizeData(data, context);
       }
-    });
+    } as Transformer);
 
     // Computed variables transformer
     this.registerTransformer({
@@ -226,7 +226,7 @@ export class TransformationPipeline {
       transform: async (data: QuestionnaireSession, context: TransformationContext) => {
         return this.computeVariables(data, context);
       }
-    });
+    } as Transformer);
 
     // Aggregation transformer
     this.registerTransformer({
@@ -235,7 +235,7 @@ export class TransformationPipeline {
       transform: async (data: QuestionnaireSession, context: TransformationContext) => {
         return this.aggregateData(data, context);
       }
-    });
+    } as Transformer);
 
     // Response filtering transformer
     this.registerTransformer({
@@ -244,7 +244,7 @@ export class TransformationPipeline {
       transform: async (data: QuestionnaireSession, context: TransformationContext) => {
         return this.filterResponses(data, context);
       }
-    });
+    } as Transformer);
 
     // Data cleaning transformer
     this.registerTransformer({
@@ -253,7 +253,7 @@ export class TransformationPipeline {
       transform: async (data: QuestionnaireSession, context: TransformationContext) => {
         return this.cleanData(data, context);
       }
-    });
+    } as Transformer);
   }
 
   /**
@@ -302,7 +302,7 @@ export class TransformationPipeline {
         }
       };
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         errors: [`Normalization failed: ${error.message}`]
@@ -329,7 +329,7 @@ export class TransformationPipeline {
         try {
           const result = await this.variableEngine.evaluate(variable.formula, variableContext);
           computed[variable.name] = result;
-        } catch (error) {
+        } catch (error: any) {
           errors.push(`Failed to compute variable '${variable.name}': ${error.message}`);
         }
       }
@@ -349,7 +349,7 @@ export class TransformationPipeline {
         }
       };
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         errors: [`Variable computation failed: ${error.message}`]

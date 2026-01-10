@@ -79,7 +79,10 @@ export const load: LayoutLoad = async ({ url, route, depends }) => {
           console.error('Error fetching organization member:', orgError);
         } else if (orgMembers && orgMembers.length > 0) {
           console.log('Organization member data:', orgMembers[0]);
-          organizationId = orgMembers[0].organization_id;
+          const firstMember = orgMembers[0];
+          if (firstMember) {
+            organizationId = firstMember.organization_id;
+          }
         }
       }
     }

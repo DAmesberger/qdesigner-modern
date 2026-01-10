@@ -141,7 +141,7 @@ export class BatchProcessor {
       return false; // Cannot cancel completed jobs
     }
 
-    job.status = 'cancelled';
+    job.status = 'failed';
     this.emitEvent('job.cancelled', { job });
     
     return true;
@@ -208,7 +208,7 @@ export class BatchProcessor {
     job: BatchJob<T>,
     processor: IBatchProcessor<T, R>
   ): Promise<void> {
-    if (job.status === 'cancelled') {
+    if (job.status === 'failed') {
       return;
     }
 
@@ -233,15 +233,19 @@ export class BatchProcessor {
       const batches = this.createBatches(job.data, job.config.batchSize);
       
       for (let i = 0; i < batches.length; i++) {
-        if (job.status === 'cancelled' || job.status === 'paused') {
+        const currentStatus = (job as BatchJob<T>).status;
+        if (currentStatus === 'failed' || currentStatus === 'paused') {
           break;
         }
 
         context.batch = i + 1;
         
         try {
+          const currentBatch = batches[i];
+          if (!currentBatch) continue;
+
           const batchResults = await this.processBatch(
-            batches[i], 
+            currentBatch, 
             processor, 
             context, 
             i
@@ -250,10 +254,11 @@ export class BatchProcessor {
           results.push(...batchResults);
           job.progress.succeeded += batchResults.length;
           
-        } catch (error) {
-          const batchErrors = this.createBatchErrors(batches[i], i, error.message);
+        } catch (error: any) {
+          const failedBatch = batches[i] || [];
+          const batchErrors = this.createBatchErrors(failedBatch, i, error.message);
           errors.push(...batchErrors);
-          job.progress.failed += batches[i].length;
+          job.progress.failed += failedBatch.length;
           
           if (job.config.stopOnError) {
             break;
@@ -301,7 +306,7 @@ export class BatchProcessor {
         { job, result: job.result }
       );
 
-    } catch (error) {
+    } catch (error: any) {
       job.status = 'failed';
       job.completed = Date.now();
       
@@ -323,7 +328,7 @@ export class BatchProcessor {
         warnings: []
       };
 
-      this.emitEvent('job.failed', { job, error: error.message });
+      this.emitEvent('job.failed', { job, error: (error as any).message });
     }
   }
 
@@ -370,7 +375,7 @@ export class BatchProcessor {
 
       return results;
 
-    } catch (error) {
+    } catch (error: any) {
       const batchDuration = Date.now() - batchStartTime;
       
       this.emitEvent('batch.failed', { 
@@ -427,7 +432,7 @@ export class BatchProcessor {
 
       return results;
 
-    } catch (error) {
+    } catch (error: any) {
       this.emitEvent('batch.retry.failed', { 
         context, 
         batchIndex, 

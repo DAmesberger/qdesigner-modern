@@ -1,7 +1,8 @@
 // Reaction Time question storage with specialized aggregations
 
 import { BaseQuestionStorage } from '../shared/BaseStorage';
-import type { StorageData } from '$lib/services/localStorage';
+import { StatisticalEngine } from '$lib/analytics/StatisticalEngine';
+import type { QuestionResponse } from '../shared/types';
 
 interface ReactionResponse {
   key: string | null;
@@ -21,6 +22,14 @@ interface ReactionTimeValue {
 }
 
 export class ReactionTimeStorage extends BaseQuestionStorage {
+  getAnswerType(): string {
+    return 'reaction-time';
+  }
+
+  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+    return this.getAllForSession();
+  }
+
   /**
    * Get reaction time statistics
    */
@@ -35,11 +44,11 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const reactionTimes: number[] = [];
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: ReactionTimeValue = this.parseValue(response.value);
       if (value.responses) {
         value.responses.forEach(r => {
-          if (r.reactionTime && !r.timeout && !r.isPractice) {
+          if (r.reactionTime != null && !r.timeout && !r.isPractice) {
             reactionTimes.push(r.reactionTime);
           }
         });
@@ -50,31 +59,15 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
       return { mean: 0, median: 0, stdDev: 0, min: 0, max: 0, iqr: 0 };
     }
     
-    // Sort for median and IQR calculation
-    const sorted = [...reactionTimes].sort((a, b) => a - b);
-    const mean = reactionTimes.reduce((a, b) => a + b, 0) / reactionTimes.length;
-    const median = sorted.length % 2 === 0
-      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-      : sorted[Math.floor(sorted.length / 2)];
-    
-    // Standard deviation
-    const variance = reactionTimes.reduce((sum, rt) => sum + Math.pow(rt - mean, 2), 0) / reactionTimes.length;
-    const stdDev = Math.sqrt(variance);
-    
-    // IQR (Interquartile range)
-    const q1Index = Math.floor(sorted.length * 0.25);
-    const q3Index = Math.floor(sorted.length * 0.75);
-    const q1 = sorted[q1Index];
-    const q3 = sorted[q3Index];
-    const iqr = q3 - q1;
+    const stats = StatisticalEngine.getInstance().calculateDescriptiveStats(reactionTimes);
     
     return {
-      mean,
-      median,
-      stdDev,
-      min: Math.min(...reactionTimes),
-      max: Math.max(...reactionTimes),
-      iqr
+      mean: stats.mean,
+      median: stats.median,
+      stdDev: stats.standardDeviation,
+      min: stats.min,
+      max: stats.max,
+      iqr: stats.quartiles.q3 - stats.quartiles.q1
     };
   }
   
@@ -94,7 +87,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     let testCorrect = 0;
     let testTotal = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: ReactionTimeValue = this.parseValue(response.value);
       if (value.responses) {
         value.responses.forEach(r => {
@@ -103,9 +96,11 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
             if (!trialAccuracy[r.trialNumber]) {
               trialAccuracy[r.trialNumber] = { correct: 0, total: 0 };
             }
-            trialAccuracy[r.trialNumber].total++;
-            if (r.isCorrect) {
-              trialAccuracy[r.trialNumber].correct++;
+            if (trialAccuracy[r.trialNumber]) {
+              trialAccuracy[r.trialNumber]!.total++;
+              if (r.isCorrect) {
+                trialAccuracy[r.trialNumber]!.correct++;
+              }
             }
             
             // Track practice vs test
@@ -149,7 +144,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     let totalTimeouts = 0;
     let totalTrials = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: ReactionTimeValue = this.parseValue(response.value);
       if (value.responses) {
         value.responses.forEach(r => {
@@ -160,11 +155,15 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
               totalByTrial[r.trialNumber] = 0;
               timeoutsByTrial[r.trialNumber] = 0;
             }
-            totalByTrial[r.trialNumber]++;
+            if (totalByTrial[r.trialNumber] !== undefined) {
+              totalByTrial[r.trialNumber]!++;
+            }
             
             if (r.timeout) {
               totalTimeouts++;
-              timeoutsByTrial[r.trialNumber]++;
+            if (timeoutsByTrial[r.trialNumber] !== undefined) {
+              timeoutsByTrial[r.trialNumber]!++;
+            }
             }
           }
         });
@@ -175,7 +174,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     const byTrial: Record<number, number> = {};
     Object.keys(totalByTrial).forEach(trial => {
       const t = parseInt(trial);
-      byTrial[t] = totalByTrial[t] > 0 ? timeoutsByTrial[t] / totalByTrial[t] : 0;
+      byTrial[t] = (totalByTrial[t] || 0) > 0 ? (timeoutsByTrial[t] || 0) / (totalByTrial[t] || 1) : 0;
     });
     
     return {
@@ -198,7 +197,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const trialData: Array<{ trial: number; rt: number; correct: boolean }> = [];
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: ReactionTimeValue = this.parseValue(response.value);
       if (value.responses) {
         value.responses.forEach(r => {
@@ -269,7 +268,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const keyCount: Record<string, number> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: ReactionTimeValue = this.parseValue(response.value);
       if (value.responses) {
         value.responses.forEach(r => {
@@ -295,7 +294,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     const allResponses: ReactionResponse[] = [];
     const reactionTimes: number[] = [];
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: ReactionTimeValue = this.parseValue(response.value);
       if (value.responses) {
         value.responses.forEach(r => {
@@ -315,16 +314,16 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     const sorted = [...reactionTimes].sort((a, b) => a - b);
     const q1Index = Math.floor(sorted.length * 0.25);
     const q3Index = Math.floor(sorted.length * 0.75);
-    const q1 = sorted[q1Index];
-    const q3 = sorted[q3Index];
+    const q1 = sorted[q1Index] ?? 0;
+    const q3 = sorted[q3Index] ?? 0;
     const iqr = q3 - q1;
     
     // Identify outliers (1.5 * IQR rule)
-    const lowerBound = q1 - 1.5 * iqr;
-    const upperBound = q3 + 1.5 * iqr;
+    const lowerBound = (q1 ?? 0) - 1.5 * iqr;
+    const upperBound = (q3 ?? 0) + 1.5 * iqr;
     
     const outliers = allResponses.filter(r => 
-      r.reactionTime! < lowerBound || r.reactionTime! > upperBound
+      (r.reactionTime ?? 0) < lowerBound || (r.reactionTime ?? 0) > upperBound
     );
     
     return {
@@ -337,6 +336,21 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
   /**
    * Format aggregation results for display
    */
+  /**
+   * Parse stored value
+   */
+  protected parseValue(value: any): ReactionTimeValue {
+    if (!value) return { responses: [] };
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return { responses: [] };
+      }
+    }
+    return value;
+  }
+
   formatAggregation(type: string, value: any): string {
     switch (type) {
       case 'rtStats':
@@ -350,7 +364,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
       case 'outliers':
         return `${value.count} outliers (${value.percentage.toFixed(1)}%)`;
       default:
-        return super.formatAggregation(type, value);
+        return JSON.stringify(value);
     }
   }
   
@@ -358,8 +372,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
    * Get all available aggregations for reaction time questions
    */
   async getAllAggregations(questionId: string): Promise<Record<string, any>> {
-    const [base, rtStats, accuracy, timeouts, learning, keyDist, outliers] = await Promise.all([
-      super.getAllAggregations(questionId),
+    const [rtStats, accuracy, timeouts, learning, keyDist, outliers] = await Promise.all([
       this.getReactionTimeStats(questionId),
       this.getAccuracyStats(questionId),
       this.getTimeoutStats(questionId),
@@ -369,7 +382,6 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     ]);
     
     return {
-      ...base,
       rtStats,
       accuracy,
       timeouts,

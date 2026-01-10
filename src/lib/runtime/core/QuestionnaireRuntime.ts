@@ -182,7 +182,8 @@ export class QuestionnaireRuntime {
    * Get appropriate variable type for question response
    */
   private getVariableTypeForQuestion(question: Question): Variable['type'] {
-    switch (question.responseType.type) {
+    const q = question as any;
+    switch (q.responseType.type) {
       case 'number':
       case 'scale':
         return 'number';
@@ -362,10 +363,11 @@ export class QuestionnaireRuntime {
     await this.questionPresenter.present(question, this.variableEngine);
     
     // Check if this is a 'none' response type (instruction/display only)
-    if (question.responseType.type === 'none') {
+    const q = question as any;
+    if (q.responseType.type === 'none') {
       // Auto-advance after delay if specified
-      const delay = question.responseType.delay || 0;
-      if (question.responseType.autoAdvance !== false) {
+      const delay = q.responseType.delay || 0;
+      if (q.responseType.autoAdvance !== false) {
         setTimeout(() => {
           this.handleResponse(question, 'auto-advanced', onsetTime);
         }, delay);
@@ -479,7 +481,8 @@ export class QuestionnaireRuntime {
     };
     
     // Add to session only if not a 'none' response type
-    if (question.responseType.type !== 'none') {
+    const q = question as any;
+    if (q.responseType.type !== 'none') {
       this.session.responses.push(response);
     }
     
@@ -498,8 +501,9 @@ export class QuestionnaireRuntime {
     }
     
     // Update any custom variables defined for this question
-    if (question.variables) {
-      for (const qVar of question.variables) {
+    const q = question as any;
+    if (q.variables) {
+      for (const qVar of q.variables) {
         this.updateQuestionVariable(qVar, response);
       }
     }

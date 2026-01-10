@@ -27,7 +27,7 @@ export const load: PageLoad = async ({ params, parent }) => {
         .eq('status', 'active')
         .limit(1);
         
-      if (orgMembers && orgMembers.length > 0) {
+      if (orgMembers && orgMembers.length > 0 && orgMembers[0]) {
         actualOrganizationId = orgMembers[0].organization_id;
       }
     }
@@ -76,11 +76,12 @@ export const load: PageLoad = async ({ params, parent }) => {
     // Add response counts to questionnaires
     questionnairesWithCount = questionnaires.map(q => ({
       ...q,
-      response_count: responseCounts?.filter(r => r.questionnaire_id === q.id).length || 0,
-      avg_completion: responseCounts
-        ?.filter(r => r.questionnaire_id === q.id)
-        .reduce((sum, r) => sum + (r.completion_percentage || 0), 0) / 
-        (responseCounts?.filter(r => r.questionnaire_id === q.id).length || 1) || 0
+      response_count: responseCounts ? responseCounts.filter(r => r.questionnaire_id === q.id).length : 0,
+      avg_completion: (function() {
+        const counts = responseCounts?.filter(r => r.questionnaire_id === q.id) || [];
+        if (counts.length === 0) return 0;
+        return counts.reduce((sum, r) => sum + (r.completion_percentage || 0), 0) / counts.length;
+      })()
     }));
   }
   

@@ -15,12 +15,11 @@ export const metadata: ModuleMetadata = {
     supportsValidation: false,
     supportsAnalytics: true,
     supportsTiming: true,
-    supportsVariables: true,
-    requiresInteraction: true
+    supportsVariables: true
   },
   components: {
-    runtime: () => import('./ReactionTime.svelte'),
-    designer: () => import('./ReactionTimeDesigner.svelte')
+    runtime: () => import('./ReactionTime.svelte') as any,
+    designer: () => import('./ReactionTimeDesigner.svelte') as any
   },
   defaultConfig: {
     stimulus: {

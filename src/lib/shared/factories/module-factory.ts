@@ -249,10 +249,10 @@ export class ModuleFactory {
    * Get all available module types by category
    */
   static getAvailableTypes(category?: ModuleCategory): Array<{ type: string; name: string; description: string }> {
+    const allModules = Object.entries(moduleRegistry.export());
     const modules = category 
-      ? Array.from(moduleRegistry.entries())
-          .filter(([_, metadata]) => metadata.category === category)
-      : Array.from(moduleRegistry.entries());
+      ? allModules.filter(([_, metadata]) => metadata.category === category)
+      : allModules;
     
     return modules.map(([type, metadata]) => ({
       type,
@@ -265,7 +265,7 @@ export class ModuleFactory {
    * Check if a module type exists
    */
   static typeExists(type: string): boolean {
-    return moduleRegistry.has(type);
+    return !!moduleRegistry.get(type);
   }
   
   /**

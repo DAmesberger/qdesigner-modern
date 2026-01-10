@@ -1,5 +1,12 @@
-import type { IStimulus } from './Stimulus';
-import type { Stimulus as StimulusConfig } from '$lib/shared';
+import type { IStimulus, StimulusConfig, TransitionConfig } from './Stimulus';
+
+interface StimulusDefinition {
+  type: string;
+  content: any;
+  duration?: number;
+  delay?: number;
+  transition?: TransitionConfig;
+}
 import { TextStimulus } from './TextStimulus';
 import { ImageStimulus } from './ImageStimulus';
 import { VideoStimulus } from './VideoStimulus';
@@ -26,7 +33,7 @@ export class StimulusFactory {
   /**
    * Create a stimulus instance from configuration
    */
-  public static createStimulus(config: StimulusConfig): IStimulus {
+  public static createStimulus(config: StimulusDefinition): IStimulus {
     const baseConfig = {
       id: `stimulus_${Date.now()}`,
       duration: config.duration,
@@ -122,7 +129,7 @@ export class StimulusFactory {
           throw new Error('Composite stimulus must have components');
         }
         
-        const components = config.content.components.map((component, index) => ({
+        const components = config.content.components.map((component: StimulusDefinition, index: number) => ({
           stimulus: this.createStimulus(component),
           offset: component.content.position,
           scale: component.content.style?.scale,

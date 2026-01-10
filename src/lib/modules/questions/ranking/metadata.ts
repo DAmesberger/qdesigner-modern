@@ -18,8 +18,8 @@ export const metadata: ModuleMetadata = {
     supportsVariables: true
   },
   components: {
-    runtime: () => import('./Ranking.svelte'),
-    designer: () => import('./RankingDesigner.svelte')
+    runtime: () => import('./Ranking.svelte') as any,
+    designer: () => import('./RankingDesigner.svelte') as any
   },
   defaultConfig: {
     items: [
@@ -35,5 +35,5 @@ export const metadata: ModuleMetadata = {
     showNumbers: true,
     dragHandlePosition: 'left'
   },
-  answerType: AnswerTypes.ARRAY
+  answerType: AnswerTypes.RANKING
 };

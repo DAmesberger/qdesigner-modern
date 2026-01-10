@@ -42,7 +42,9 @@ export type CollaborationMessage =
   | CommentMessage
   | PresenceUpdateMessage
   | AckMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | HeartbeatMessage
+  | HeartbeatResponseMessage;
 
 export interface BaseMessage {
   id: string;
@@ -81,7 +83,7 @@ export interface SelectionUpdateMessage extends BaseMessage {
 export interface CommentMessage extends BaseMessage {
   type: 'comment';
   action: 'create' | 'update' | 'delete' | 'resolve';
-  comment: Comment;
+  comment: DeepPartial<Comment>; 
 }
 
 export interface PresenceUpdateMessage extends BaseMessage {
@@ -100,6 +102,14 @@ export interface ErrorMessage extends BaseMessage {
   type: 'error';
   error: string;
   code?: string;
+}
+
+export interface HeartbeatMessage extends BaseMessage {
+  type: 'heartbeat';
+}
+
+export interface HeartbeatResponseMessage extends BaseMessage {
+  type: 'heartbeat_response';
 }
 
 // ============================================================================

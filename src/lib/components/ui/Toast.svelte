@@ -25,8 +25,9 @@
   }
 
   function getStyles(type: Toast['type']) {
-    const base = 'pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg shadow-lg ring-1 ring-black ring-opacity-5';
-    
+    const base =
+      'pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg shadow-lg ring-1 ring-black ring-opacity-5';
+
     switch (type) {
       case 'success':
         return `${base} bg-white dark:bg-gray-800`;
@@ -54,7 +55,7 @@
 </script>
 
 <!-- Toast Container -->
-<div 
+<div
   class="fixed bottom-0 right-0 z-50 p-4 sm:p-6 pointer-events-none"
   aria-live="polite"
   aria-atomic="true"
@@ -86,7 +87,7 @@
                 <div class="mt-3">
                   <button
                     type="button"
-                    on:click={item.action.onClick}
+                    onclick={item.action.onClick}
                     class="text-sm font-medium text-primary-600 hover:text-primary-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
                     {item.action.label}
@@ -98,12 +99,16 @@
               <div class="ml-4 flex-shrink-0 flex">
                 <button
                   type="button"
-                  on:click={() => toast.remove(item.id)}
+                  onclick={() => toast.remove(item.id)}
                   class="inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 rounded-md"
                 >
                   <span class="sr-only">Close</span>
                   <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    <path
+                      fill-rule="evenodd"
+                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                      clip-rule="evenodd"
+                    />
                   </svg>
                 </button>
               </div>

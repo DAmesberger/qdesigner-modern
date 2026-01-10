@@ -1,9 +1,17 @@
 import { BaseQuestionStorage } from '../shared/BaseStorage';
-import type { QuestionResponse } from '$lib/shared';
+import type { QuestionResponse } from '../shared/types';
 
 export class MatrixStorage extends BaseQuestionStorage {
   constructor() {
-    super('matrix');
+    super();
+  }
+
+  getAnswerType(): string {
+    return 'matrix';
+  }
+
+  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+    return this.getAllForSession();
   }
   
   parseValue(value: any): Record<string, any> {
@@ -16,8 +24,7 @@ export class MatrixStorage extends BaseQuestionStorage {
   }
   
   validateResponse(response: QuestionResponse): boolean {
-    if (!super.validateResponse(response)) return false;
-    
+
     const value = response.value;
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       console.warn('Matrix response must be an object');
@@ -32,7 +39,7 @@ export class MatrixStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const rowCompletions: Record<string, { total: number; completed: number }> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       Object.keys(value).forEach(rowId => {
         if (!rowCompletions[rowId]) {
@@ -52,8 +59,11 @@ export class MatrixStorage extends BaseQuestionStorage {
     
     const completionRates: Record<string, number> = {};
     Object.keys(rowCompletions).forEach(rowId => {
-      const { total, completed } = rowCompletions[rowId];
-      completionRates[rowId] = total > 0 ? completed / total : 0;
+      const completion = rowCompletions[rowId];
+      if (completion) {
+        const { total, completed } = completion;
+        completionRates[rowId] = total > 0 ? completed / total : 0;
+      }
     });
     
     return completionRates;
@@ -63,7 +73,7 @@ export class MatrixStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const distribution: Record<any, number> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       const rowValue = value[rowId];
       
@@ -87,7 +97,7 @@ export class MatrixStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const heatmap = new Map<string, number>();
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       
       Object.entries(value).forEach(([rowId, rowValue]) => {
@@ -114,7 +124,9 @@ export class MatrixStorage extends BaseQuestionStorage {
     });
     
     return Array.from(heatmap.entries()).map(([key, count]) => {
-      const [rowId, columnId] = key.split(':');
+      const parts = key.split(':');
+      const rowId = parts[0] || '';
+      const columnId = parts[1] || '';
       return { rowId, columnId, count };
     });
   }
@@ -123,7 +135,7 @@ export class MatrixStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const rowSums: Record<string, { sum: number; count: number }> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       
       Object.entries(value).forEach(([rowId, rowValue]) => {
@@ -152,7 +164,7 @@ export class MatrixStorage extends BaseQuestionStorage {
     let totalVariance = 0;
     let validResponses = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       const rowValues = Object.values(value).filter(v => typeof v === 'number') as number[];
       

@@ -1,42 +1,42 @@
 <script lang="ts">
-  import { designerStore, currentPageBlocks, currentBlock } from '$lib/features/designer/stores/designerStore';
+  import { designerStore } from '$lib/stores/designer.svelte';
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
   import type { Block } from '$lib/shared';
   import theme from '$lib/theme';
-  
+
   let showAddBlock = false;
   let editingBlock: Block | null = null;
   let dragDisabled = true;
-  
+
   // Block types with descriptions
   const blockTypes = [
-    { 
-      type: 'standard' as const, 
+    {
+      type: 'standard' as const,
       name: 'Standard Block',
       icon: '📄',
-      description: 'Questions appear in order'
+      description: 'Questions appear in order',
     },
-    { 
-      type: 'randomized' as const, 
+    {
+      type: 'randomized' as const,
       name: 'Randomized Block',
       icon: '🔀',
-      description: 'Questions appear in random order'
+      description: 'Questions appear in random order',
     },
-    { 
-      type: 'conditional' as const, 
+    {
+      type: 'conditional' as const,
       name: 'Conditional Block',
       icon: '🔄',
-      description: 'Block shown based on conditions'
+      description: 'Block shown based on conditions',
     },
-    { 
-      type: 'loop' as const, 
+    {
+      type: 'loop' as const,
       name: 'Loop Block',
       icon: '🔁',
-      description: 'Repeat questions multiple times'
-    }
+      description: 'Repeat questions multiple times',
+    },
   ];
-  
+
   // Form state for new block
   let newBlock = {
     name: '',
@@ -44,66 +44,80 @@
     conditions: [] as any[],
     randomization: {
       enabled: false,
-      preserveFirst: 0,
-      preserveLast: 0
-    },
+      // Extended properties
+      preserveLast: 0,
+    } as any,
     loop: {
+      variable: '',
+      values: [],
+      // Extended properties for UI
       iterations: 1,
       iterationVariable: '',
-      exitCondition: ''
-    }
+      exitCondition: '',
+    } as any, // Cast to allow extended properties
   };
-  
+
+  // Helper interface for UI loop config
+  interface ExtendedLoopConfig {
+    iterations?: number;
+    iterationVariable?: string;
+    exitCondition?: string;
+    variable?: string;
+    values?: any[];
+  }
+
   function handleDndConsider(e: CustomEvent) {
-    const items = e.detail.items as Array<{id: string}>;
-    const pageId = $designerStore.currentPageId;
+    const items = e.detail.items as Array<{ id: string }>;
+    const pageId = designerStore.currentPageId;
     if (!pageId) return;
-    
+
     // Update block order
-    const blockIds = items.map(item => item.id);
-    const page = $designerStore.questionnaire.pages.find(p => p.id === pageId);
+    const blockIds = items.map((item) => item.id);
+    const page = designerStore.questionnaire.pages.find((p) => p.id === pageId);
     if (page) {
-      page.blocks = (page.blocks ?? []).sort((a, b) => 
-        blockIds.indexOf(a.id) - blockIds.indexOf(b.id)
+      page.blocks = (page.blocks ?? []).sort(
+        (a, b) => blockIds.indexOf(a.id) - blockIds.indexOf(b.id)
       );
     }
   }
-  
+
   function handleDndFinalize(e: CustomEvent) {
-    const items = e.detail.items as Array<{id: string}>;
-    const pageId = $designerStore.currentPageId;
+    const items = e.detail.items as Array<{ id: string }>;
+    const pageId = designerStore.currentPageId;
     if (!pageId) return;
-    
+
     // Finalize block order
-    const blockIds = items.map(item => item.id);
-    const page = $designerStore.questionnaire.pages.find(p => p.id === pageId);
+    const blockIds = items.map((item) => item.id);
+    const page = designerStore.questionnaire.pages.find((p) => p.id === pageId);
     if (page) {
-      const orderedBlocks = blockIds.map(id => 
-        (page.blocks ?? []).find(b => b.id === id)!
-      ).filter(Boolean);
+      const orderedBlocks = blockIds
+        .map((id) => (page.blocks ?? []).find((b) => b.id === id)!)
+        .filter(Boolean);
       page.blocks = orderedBlocks;
     }
     dragDisabled = true;
   }
-  
+
   function handleAddBlock() {
-    if (!newBlock.name || !$designerStore.currentPageId) return;
-    
-    designerStore.addBlock($designerStore.currentPageId, newBlock.type);
-    
+    if (!newBlock.name || !designerStore.currentPageId) return;
+
+    designerStore.addBlock(designerStore.currentPageId, newBlock.type);
+
     // Update the newly created block with additional properties
-    const page = $designerStore.questionnaire.pages.find(p => p.id === $designerStore.currentPageId);
+    const page = designerStore.questionnaire.pages.find(
+      (p) => p.id === designerStore.currentPageId
+    );
     if (page && page.blocks && page.blocks.length > 0) {
       const latestBlock = page.blocks[page.blocks.length - 1];
       if (latestBlock) {
         designerStore.updateBlock(latestBlock.id, {
           name: newBlock.name,
           randomization: newBlock.type === 'randomized' ? { ...newBlock.randomization } : undefined,
-          loop: newBlock.type === 'loop' ? { ...newBlock.loop } : undefined
+          loop: newBlock.type === 'loop' ? { ...newBlock.loop } : undefined,
         });
       }
     }
-    
+
     // Reset form
     newBlock = {
       name: '',
@@ -111,36 +125,35 @@
       conditions: [],
       randomization: {
         enabled: false,
-        preserveFirst: 0,
-        preserveLast: 0
-      },
+        preserveLast: 0,
+      } as any,
       loop: {
         iterations: 1,
         iterationVariable: '',
-        exitCondition: ''
-      }
+        exitCondition: '',
+      },
     };
     showAddBlock = false;
   }
-  
+
   function handleEditBlock(block: Block) {
     editingBlock = { ...block };
   }
-  
+
   function handleUpdateBlock() {
     if (!editingBlock) return;
-    
+
     designerStore.updateBlock(editingBlock.id, {
       name: editingBlock.name,
       type: editingBlock.type,
       conditions: editingBlock.conditions,
       randomization: editingBlock.randomization,
-      loop: editingBlock.loop
+      loop: editingBlock.loop as any,
     });
-    
+
     editingBlock = null;
   }
-  
+
   function handleDeleteBlock(blockId: string) {
     console.log('[DEBUG] handleDeleteBlock called with blockId:', blockId);
     if (confirm('Delete this block? All questions in this block will be deleted.')) {
@@ -151,16 +164,16 @@
       console.log('[DEBUG] User cancelled deletion');
     }
   }
-  
+
   function handleSelectBlock(blockId: string) {
     designerStore.selectItem(blockId, 'block');
     designerStore.setCurrentBlock(blockId);
   }
-  
+
   function getBlockIcon(type: Block['type']): string {
-    return blockTypes.find(t => t.type === type)?.icon || '📄';
+    return blockTypes.find((t) => t.type === type)?.icon || '📄';
   }
-  
+
   function getBlockDescription(block: Block): string {
     switch (block.type) {
       case 'randomized':
@@ -168,7 +181,7 @@
       case 'conditional':
         return `${(block.questions ?? []).length} questions (conditional)`;
       case 'loop':
-        const iterations = block.loop?.iterations || 1;
+        const iterations = (block.loop as any)?.iterations || 1;
         return `${(block.questions ?? []).length} questions × ${iterations} iterations`;
       default:
         return `${(block.questions ?? []).length} questions`;
@@ -176,21 +189,23 @@
   }
 </script>
 
-<div class="{theme.components.container.card}">
+<div class={theme.components.container.card}>
   <div class="p-4 border-b {theme.semantic.borderDefault}">
     <div class="flex items-center justify-between">
       <h3 class="{theme.typography.h4} {theme.semantic.textPrimary}">Blocks</h3>
       <div class="flex items-center space-x-2">
         <button
-          on:click={() => dragDisabled = !dragDisabled}
-          class="{theme.components.button.variants.secondary} {theme.components.button.sizes.sm} rounded-md"
+          on:click={() => (dragDisabled = !dragDisabled)}
+          class="{theme.components.button.variants.secondary} {theme.components.button.sizes
+            .sm} rounded-md"
           title={dragDisabled ? 'Enable reordering' : 'Disable reordering'}
         >
           {dragDisabled ? '🔒' : '🔓'} Reorder
         </button>
         <button
-          on:click={() => showAddBlock = true}
-          class="{theme.components.button.variants.default} {theme.components.button.sizes.sm} rounded-md"
+          on:click={() => (showAddBlock = true)}
+          class="{theme.components.button.variants.default} {theme.components.button.sizes
+            .sm} rounded-md"
         >
           Add Block
         </button>
@@ -199,34 +214,36 @@
   </div>
 
   <div class="p-4">
-    {#if $currentPageBlocks.length > 0}
-      <div 
+    {#if designerStore.currentPageBlocks.length > 0}
+      <div
         class="space-y-2"
         use:dndzone={{
-          items: $currentPageBlocks.map((b: Block) => ({ id: b.id })),
+          items: designerStore.currentPageBlocks.map((b: Block) => ({ id: b.id })),
           flipDurationMs: 300,
           dragDisabled,
-          dropTargetStyle: {}
+          dropTargetStyle: {},
         }}
         on:consider={handleDndConsider}
         on:finalize={handleDndFinalize}
       >
-        {#each $currentPageBlocks as block (block.id)}
-          <div
-            animate:flip={{duration: 300}}
-            class="block-item"
-          >
+        {#each designerStore.currentPageBlocks as block (block.id)}
+          <div animate:flip={{ duration: 300 }} class="block-item">
             <div
+              role="button"
+              tabindex="0"
               on:click={() => handleSelectBlock(block.id)}
-              class="p-3 border rounded-lg cursor-pointer transition-all
-                     {$currentBlock?.id === block.id ? 'border-primary bg-primary/10' : 'border-border hover:border-border/80'}"
+              on:keydown={(e) => e.key === 'Enter' && handleSelectBlock(block.id)}
+              class="w-full text-left p-3 border rounded-lg cursor-pointer transition-all
+                     {designerStore.currentBlock?.id === block.id
+                ? 'border-primary bg-primary/10'
+                : 'border-border hover:border-border/80'}"
             >
               <div class="flex items-start justify-between">
                 <div class="flex items-start space-x-2 flex-1">
                   <span class="text-lg mt-0.5" role="img" aria-label={block.type}>
                     {getBlockIcon(block.type)}
                   </span>
-                  
+
                   <div class="flex-1">
                     <div class="flex items-center space-x-2">
                       <h4 class="font-medium text-foreground">{block.name || 'Untitled Block'}</h4>
@@ -234,15 +251,19 @@
                         {block.type}
                       </span>
                     </div>
-                    
+
                     <p class="text-sm text-muted-foreground mt-1">
                       {getBlockDescription(block)}
                     </p>
-                    
+
                     {#if block.conditions && block.conditions.length > 0}
                       <div class="flex items-center mt-2 text-xs text-yellow-600">
                         <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                          <path
+                            fill-rule="evenodd"
+                            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                            clip-rule="evenodd"
+                          />
                         </svg>
                         Has conditions
                       </div>
@@ -253,31 +274,61 @@
                 <div class="flex items-center space-x-1 ml-2">
                   {#if !dragDisabled}
                     <div class="drag-handle p-1 cursor-move">
-                      <svg class="w-4 h-4 text-muted-foreground/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
+                      <svg
+                        class="w-4 h-4 text-muted-foreground/60"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M4 8h16M4 16h16"
+                        />
                       </svg>
                     </div>
                   {/if}
-                  
+
                   <button
                     on:click|stopPropagation={() => handleEditBlock(block)}
                     class="p-1 hover:bg-accent hover:text-accent-foreground rounded"
                     title="Edit"
+                    aria-label="Edit block"
                   >
-                    <svg class="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    <svg
+                      class="w-4 h-4 text-muted-foreground"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                      />
                     </svg>
                   </button>
-                  
+
                   <button
                     on:click|stopPropagation={() => handleDeleteBlock(block.id)}
                     class="p-1 hover:bg-red-100 rounded"
                     title="Delete"
+                    aria-label="Delete block"
                   >
-                    <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    <svg
+                      class="w-4 h-4 text-red-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
                     </svg>
                   </button>
                 </div>
@@ -297,15 +348,19 @@
 <!-- Add/Edit Block Modal -->
 {#if showAddBlock || editingBlock}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div class="bg-layer-modal rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-border">
+    <div
+      class="bg-layer-modal rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-border"
+    >
       <h3 class="text-lg font-semibold mb-4">
         {editingBlock ? 'Edit Block' : 'Add Block'}
       </h3>
 
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Name</label>
+          <label for="block-name" class="block text-sm font-medium text-foreground mb-1">Name</label
+          >
           <input
+            id="block-name"
             type="text"
             value={editingBlock ? editingBlock.name : newBlock.name}
             on:input={(e) => {
@@ -322,8 +377,10 @@
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Type</label>
-          <div class="grid grid-cols-2 gap-2">
+          <span id="block-type-label" class="block text-sm font-medium text-foreground mb-1"
+            >Type</span
+          >
+          <div role="group" aria-labelledby="block-type-label" class="grid grid-cols-2 gap-2">
             {#each blockTypes as blockType}
               <button
                 on:click={() => {
@@ -334,9 +391,9 @@
                   }
                 }}
                 class="p-3 border rounded-lg text-left transition-all
-                       {(editingBlock ? editingBlock.type : newBlock.type) === blockType.type 
-                         ? 'border-primary bg-primary/10' 
-                         : 'border-border hover:border-border/80'}"
+                       {(editingBlock ? editingBlock.type : newBlock.type) === blockType.type
+                  ? 'border-primary bg-primary/10'
+                  : 'border-border hover:border-border/80'}"
               >
                 <div class="flex items-start space-x-2">
                   <span class="text-lg">{blockType.icon}</span>
@@ -353,40 +410,52 @@
         {#if (editingBlock ? editingBlock.type : newBlock.type) === 'randomized'}
           <div class="border-t pt-4">
             <h4 class="text-sm font-medium text-gray-700 mb-2">Randomization Settings</h4>
-            
+
             <div class="space-y-3">
               <div>
-                <label class="block text-sm text-muted-foreground mb-1">Preserve First N Questions</label>
+                <label for="preserve-first" class="block text-sm text-muted-foreground mb-1"
+                  >Preserve First N Questions</label
+                >
                 <input
+                  id="preserve-first"
                   type="number"
                   min="0"
-                  value={editingBlock ? editingBlock.randomization?.preserveFirst || 0 : newBlock.randomization.preserveFirst}
+                  value={editingBlock
+                    ? (editingBlock.randomization as any)?.preserveFirst || 0
+                    : (newBlock.randomization as any).preserveFirst}
                   on:input={(e) => {
                     const value = parseInt(e.currentTarget.value) || 0;
                     if (editingBlock) {
-                      if (!editingBlock.randomization) editingBlock.randomization = { enabled: true };
-                      editingBlock.randomization.preserveFirst = value;
+                      if (!editingBlock.randomization)
+                        editingBlock.randomization = { enabled: true } as any;
+                      (editingBlock.randomization as any).preserveFirst = value;
                     } else {
-                      newBlock.randomization.preserveFirst = value;
+                      (newBlock.randomization as any).preserveFirst = value;
                     }
                   }}
                   class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
                 />
               </div>
-              
+
               <div>
-                <label class="block text-sm text-muted-foreground mb-1">Preserve Last N Questions</label>
+                <label for="preserve-last" class="block text-sm text-muted-foreground mb-1"
+                  >Preserve Last N Questions</label
+                >
                 <input
+                  id="preserve-last"
                   type="number"
                   min="0"
-                  value={editingBlock ? editingBlock.randomization?.preserveLast || 0 : newBlock.randomization.preserveLast}
+                  value={editingBlock
+                    ? (editingBlock.randomization as any)?.preserveLast || 0
+                    : (newBlock.randomization as any).preserveLast}
                   on:input={(e) => {
                     const value = parseInt(e.currentTarget.value) || 0;
                     if (editingBlock) {
-                      if (!editingBlock.randomization) editingBlock.randomization = { enabled: true };
-                      editingBlock.randomization.preserveLast = value;
+                      if (!editingBlock.randomization)
+                        editingBlock.randomization = { enabled: true } as any;
+                      (editingBlock.randomization as any).preserveLast = value;
                     } else {
-                      newBlock.randomization.preserveLast = value;
+                      (newBlock.randomization as any).preserveLast = value;
                     }
                   }}
                   class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
@@ -399,59 +468,74 @@
         {#if (editingBlock ? editingBlock.type : newBlock.type) === 'loop'}
           <div class="border-t pt-4">
             <h4 class="text-sm font-medium text-gray-700 mb-2">Loop Settings</h4>
-            
+
             <div class="space-y-3">
               <div>
-                <label class="block text-sm text-muted-foreground mb-1">Number of Iterations</label>
+                <label for="loop-iterations" class="block text-sm text-muted-foreground mb-1"
+                  >Number of Iterations</label
+                >
                 <input
+                  id="loop-iterations"
                   type="text"
-                  value={editingBlock ? editingBlock.loop?.iterations || 1 : newBlock.loop.iterations}
+                  value={editingBlock
+                    ? (editingBlock.loop as any)?.iterations || 1
+                    : (newBlock.loop as any).iterations}
                   on:input={(e) => {
                     const value = e.currentTarget.value;
                     const numValue = parseInt(value) || 1;
                     if (editingBlock) {
-                      if (!editingBlock.loop) editingBlock.loop = { iterations: 1 };
-                      editingBlock.loop.iterations = numValue;
+                      if (!editingBlock.loop) editingBlock.loop = { iterations: 1 } as any;
+                      (editingBlock.loop as any).iterations = numValue;
                     } else {
-                      newBlock.loop.iterations = numValue;
+                      (newBlock.loop as any).iterations = numValue;
                     }
                   }}
                   class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
                   placeholder="Number or formula (e.g., 5 or numTrials)"
                 />
               </div>
-              
+
               <div>
-                <label class="block text-sm text-muted-foreground mb-1">Iteration Variable (optional)</label>
+                <label for="loop-variable" class="block text-sm text-muted-foreground mb-1"
+                  >Iteration Variable (optional)</label
+                >
                 <input
+                  id="loop-variable"
                   type="text"
-                  value={editingBlock ? editingBlock.loop?.iterationVariable || '' : newBlock.loop.iterationVariable}
+                  value={editingBlock
+                    ? (editingBlock.loop as any)?.iterationVariable || ''
+                    : (newBlock.loop as any).iterationVariable}
                   on:input={(e) => {
                     const value = e.currentTarget.value;
                     if (editingBlock) {
-                      if (!editingBlock.loop) editingBlock.loop = { iterations: 1 };
-                      editingBlock.loop.iterationVariable = value;
+                      if (!editingBlock.loop) editingBlock.loop = { iterations: 1 } as any;
+                      (editingBlock.loop as any).iterationVariable = value;
                     } else {
-                      newBlock.loop.iterationVariable = value;
+                      (newBlock.loop as any).iterationVariable = value;
                     }
                   }}
                   class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
                   placeholder="e.g., currentTrial"
                 />
               </div>
-              
+
               <div>
-                <label class="block text-sm text-muted-foreground mb-1">Exit Condition (optional)</label>
+                <label for="loop-condition" class="block text-sm text-muted-foreground mb-1"
+                  >Exit Condition (optional)</label
+                >
                 <input
+                  id="loop-condition"
                   type="text"
-                  value={editingBlock ? editingBlock.loop?.exitCondition || '' : newBlock.loop.exitCondition}
+                  value={editingBlock
+                    ? (editingBlock.loop as any)?.exitCondition || ''
+                    : (newBlock.loop as any).exitCondition}
                   on:input={(e) => {
                     const value = e.currentTarget.value;
                     if (editingBlock) {
-                      if (!editingBlock.loop) editingBlock.loop = { iterations: 1 };
-                      editingBlock.loop.exitCondition = value;
+                      if (!editingBlock.loop) editingBlock.loop = { iterations: 1 } as any;
+                      (editingBlock.loop as any).exitCondition = value;
                     } else {
-                      newBlock.loop.exitCondition = value;
+                      (newBlock.loop as any).exitCondition = value;
                     }
                   }}
                   class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
@@ -488,11 +572,11 @@
   .block-item {
     transition: transform 0.2s;
   }
-  
+
   .drag-handle {
     cursor: move;
   }
-  
+
   :global(.block-item.gu-mirror) {
     transform: rotate(2deg);
     opacity: 0.8;

@@ -6,7 +6,7 @@
     thread: CommentThread;
     currentUser: CollaborationUser;
     onAddComment?: (content: string, mentions: string[]) => void;
-    onUpdateComment?: (commentId: string, content: string) => void;  
+    onUpdateComment?: (commentId: string, content: string) => void;
     onDeleteComment?: (commentId: string) => void;
     onResolveThread?: (threadId: string) => void;
     onReaction?: (commentId: string, emoji: string) => void;
@@ -17,9 +17,9 @@
     currentUser,
     onAddComment,
     onUpdateComment,
-    onDeleteComment, 
+    onDeleteComment,
     onResolveThread,
-    onReaction
+    onReaction,
   }: Props = $props();
 
   const dispatch = createEventDispatcher();
@@ -37,9 +37,9 @@
   );
 
   const canResolve = $derived(
-    currentUser.role === 'owner' || 
-    currentUser.role === 'admin' || 
-    thread.comments.some(c => c.author.id === currentUser.id)
+    currentUser.role === 'owner' ||
+      currentUser.role === 'admin' ||
+      thread.comments.some((c) => c.author.id === currentUser.id)
   );
 
   // Methods
@@ -87,20 +87,17 @@
     const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
     const mentions: string[] = [];
     let match;
-    
+
     while ((match = mentionRegex.exec(content)) !== null) {
-      mentions.push(match[2]); // Extract user ID
+      mentions.push(match[2]!); // Extract user ID
     }
-    
+
     return mentions;
   }
 
   function formatCommentContent(content: string): string {
     // Replace mentions with highlighted text
-    return content.replace(
-      /@\[([^\]]+)\]\(([^)]+)\)/g,
-      '<span class="mention">@$1</span>'
-    );
+    return content.replace(/@\[([^\]]+)\]\(([^)]+)\)/g, '<span class="mention">@$1</span>');
   }
 
   function getRelativeTime(date: Date): string {
@@ -114,22 +111,22 @@
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    
+
     return date.toLocaleDateString();
   }
 
   function getUserColor(userId: string): string {
     const colors = [
       'bg-blue-100 text-blue-800',
-      'bg-green-100 text-green-800', 
+      'bg-green-100 text-green-800',
       'bg-purple-100 text-purple-800',
       'bg-pink-100 text-pink-800',
       'bg-yellow-100 text-yellow-800',
-      'bg-indigo-100 text-indigo-800'
+      'bg-indigo-100 text-indigo-800',
     ];
-    
+
     const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
+    return colors[hash % colors.length] ?? colors[0]!;
   }
 
   // Handle keyboard events
@@ -145,15 +142,18 @@
   <!-- Thread Header -->
   <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
     <div class="flex items-center gap-2">
-      <div class="w-2 h-2 rounded-full {thread.isResolved ? 'bg-green-500' : 'bg-yellow-500'}"></div>
+      <div
+        class="w-2 h-2 rounded-full {thread.isResolved ? 'bg-green-500' : 'bg-yellow-500'}"
+      ></div>
       <span class="text-sm font-medium text-gray-700">
-        {thread.comments.length} {thread.comments.length === 1 ? 'comment' : 'comments'}
+        {thread.comments.length}
+        {thread.comments.length === 1 ? 'comment' : 'comments'}
       </span>
       {#if thread.isResolved}
         <span class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Resolved</span>
       {/if}
     </div>
-    
+
     {#if canResolve && !thread.isResolved}
       <button
         onclick={resolveThread}
@@ -171,13 +171,17 @@
         <!-- Avatar -->
         <div class="flex-shrink-0">
           {#if comment.author.avatar}
-            <img 
-              src={comment.author.avatar} 
+            <img
+              src={comment.author.avatar}
               alt={comment.author.name}
               class="w-8 h-8 rounded-full"
             />
           {:else}
-            <div class="w-8 h-8 rounded-full {getUserColor(comment.author.id)} flex items-center justify-center text-sm font-medium">
+            <div
+              class="w-8 h-8 rounded-full {getUserColor(
+                comment.author.id
+              )} flex items-center justify-center text-sm font-medium"
+            >
               {comment.author.name.charAt(0).toUpperCase()}
             </div>
           {/if}
@@ -232,7 +236,9 @@
                   <button
                     onclick={() => addReaction(comment.id, reaction.emoji)}
                     class="px-2 py-1 text-xs bg-gray-100 rounded-full hover:bg-gray-200 transition-colors flex items-center gap-1
-                           {reaction.users.includes(currentUser.id) ? 'bg-blue-100 text-blue-800' : 'text-gray-600'}"
+                           {reaction.users.includes(currentUser.id)
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'text-gray-600'}"
                   >
                     <span>{reaction.emoji}</span>
                     <span>{reaction.users.length}</span>
@@ -290,7 +296,7 @@
             rows="3"
             onkeydown={(e) => handleKeydown(e, addComment)}
           ></textarea>
-          
+
           <div class="flex items-center justify-between">
             <span class="text-xs text-gray-500">Ctrl+Enter to send</span>
             <div class="flex gap-2">
@@ -302,7 +308,10 @@
                 Comment
               </button>
               <button
-                onclick={() => { showReplyForm = false; newCommentContent = ''; }}
+                onclick={() => {
+                  showReplyForm = false;
+                  newCommentContent = '';
+                }}
                 class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
               >
                 Cancel
@@ -312,7 +321,7 @@
         </div>
       {:else}
         <button
-          onclick={() => showReplyForm = true}
+          onclick={() => (showReplyForm = true)}
           class="w-full py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors text-left"
         >
           Add a comment...

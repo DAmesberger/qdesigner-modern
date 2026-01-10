@@ -15,7 +15,8 @@
     ExportFormat,
     RealtimeConfig,
     StatisticalSummary,
-    PerformanceMetrics
+    PerformanceMetrics,
+    RealtimeEvent,
   } from '../types';
 
   // Props
@@ -35,14 +36,8 @@
   let selectedTimeRange = $state<TimeRange>({
     start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Last 7 days
     end: new Date(),
-    preset: 'last_7_days'
+    preset: 'last_7_days',
   });
-  let selectedMetrics = $state<DisplayMetric[]>([
-    'response_count',
-    'completion_rate',
-    'average_response_time',
-    'median_response_time'
-  ]);
   let activeFilters = $state<FilterConfig[]>([]);
   let showExportDialog = $state(false);
   let showFilterPanel = $state(false);
@@ -50,10 +45,11 @@
   let autoRefresh = $state(false);
 
   // Analytics instances
-  let statisticalEngine: StatisticalEngine;
-  let realtimeAnalytics: RealtimeAnalytics | null = null;
-  let dataViz: DataVisualization;
-  let exportService: ExportService;
+  // These need to be state if they are used in the template (e.g. {#if realtimeAnalytics})
+  let statisticalEngine = $state<StatisticalEngine>();
+  let realtimeAnalytics = $state<RealtimeAnalytics | null>(null);
+  let dataViz = $state<DataVisualization>();
+  let exportService = $state<ExportService>();
 
   // Chart references
   let responseTimeChartCanvas = $state<HTMLCanvasElement>();
@@ -62,38 +58,40 @@
   let correlationChartCanvas = $state<HTMLCanvasElement>();
 
   // Computed statistics
-  let statistics = $derived(() => {
-    if (filteredData.length === 0) return null;
-    
-    const responseTimes = filteredData.flatMap(session => 
-      session.responses
-        .filter(r => r.responseTime !== undefined)
-        .map(r => r.responseTime!)
+  // Use $derived.by so 'statistics' is the object value, not a function
+  let statistics = $derived.by(() => {
+    if (filteredData.length === 0 || !statisticalEngine) return null;
+
+    const responseTimes = filteredData.flatMap((session) =>
+      session.responses.filter((r) => r.responseTime !== undefined).map((r) => r.responseTime!)
     );
 
-    const reactionTimes = filteredData.flatMap(session => 
-      session.responses
-        .filter(r => r.reactionTime !== undefined)
-        .map(r => r.reactionTime!)
+    const reactionTimes = filteredData.flatMap((session) =>
+      session.responses.filter((r) => r.reactionTime !== undefined).map((r) => r.reactionTime!)
     );
 
     return {
-      responseTimeStats: responseTimes.length > 0 
-        ? statisticalEngine.calculateDescriptiveStats(responseTimes)
-        : null,
-      reactionTimeStats: reactionTimes.length > 0 
-        ? statisticalEngine.calculateDescriptiveStats(reactionTimes)
-        : null,
+      responseTimeStats:
+        responseTimes.length > 0
+          ? statisticalEngine.calculateDescriptiveStats(responseTimes)
+          : null,
+      reactionTimeStats:
+        reactionTimes.length > 0
+          ? statisticalEngine.calculateDescriptiveStats(reactionTimes)
+          : null,
       sessionCount: filteredData.length,
-      completedSessions: filteredData.filter(s => s.endTime).length,
-      completionRate: filteredData.filter(s => s.endTime).length / filteredData.length,
-      totalResponses: filteredData.reduce((sum, s) => sum + s.responses.length, 0)
+      completedSessions: filteredData.filter((s) => s.endTime).length,
+      completionRate:
+        filteredData.length > 0
+          ? filteredData.filter((s) => s.endTime).length / filteredData.length
+          : 0,
+      totalResponses: filteredData.reduce((sum, s) => sum + s.responses.length, 0),
     };
   });
 
-  let performanceMetrics = $derived<PerformanceMetrics | null>(() => {
+  let performanceMetrics = $derived.by<PerformanceMetrics | null>(() => {
     if (!statistics?.responseTimeStats) return null;
-    
+
     return {
       responseTime: {
         mean: statistics.responseTimeStats.mean,
@@ -101,32 +99,32 @@
         p95: statistics.responseTimeStats.percentiles[95] || 0,
         p99: statistics.responseTimeStats.percentiles[99] || 0,
         min: statistics.responseTimeStats.min,
-        max: statistics.responseTimeStats.max
+        max: statistics.responseTimeStats.max,
       },
       renderingPerformance: {
         frameRate: 60, // Would be measured from actual performance data
         averageFrameTime: 16.67,
         droppedFrames: 0,
-        renderTime: 10
+        renderTime: 10,
       },
       memoryUsage: {
         heapUsed: 50 * 1024 * 1024,
         heapTotal: 100 * 1024 * 1024,
         external: 5 * 1024 * 1024,
-        arrayBuffers: 2 * 1024 * 1024
+        arrayBuffers: 2 * 1024 * 1024,
       },
       networkMetrics: {
         latency: 50,
         bandwidth: 1000,
         packetsLost: 0,
-        reconnections: 0
+        reconnections: 0,
       },
       userEngagement: {
         timeOnPage: 300000, // 5 minutes
         interactionCount: 25,
         scrollDepth: 80,
-        focusTime: 250000 // 4 minutes 10 seconds
-      }
+        focusTime: 250000, // 4 minutes 10 seconds
+      },
     };
   });
 
@@ -143,12 +141,11 @@
       }
 
       await loadData();
-      setupCharts();
-      
+      // Charts will be setup via effect
+
       if (config.autoRefresh) {
         setupAutoRefresh();
       }
-
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to initialize analytics';
     } finally {
@@ -159,7 +156,7 @@
   onDestroy(() => {
     // Clean up chart instances
     dataViz?.destroyAllCharts();
-    
+
     // Disconnect realtime analytics
     realtimeAnalytics?.disconnect();
   });
@@ -168,14 +165,16 @@
   async function loadData() {
     try {
       // In a real implementation, this would fetch from your API
-      const response = await fetch(`/api/analytics/questionnaire/${questionnaireId}?` + 
-        new URLSearchParams({
-          start: selectedTimeRange.start.toISOString(),
-          end: selectedTimeRange.end.toISOString()
-        }));
-      
+      const response = await fetch(
+        `/api/analytics/questionnaire/${questionnaireId}?` +
+          new URLSearchParams({
+            start: selectedTimeRange.start.toISOString(),
+            end: selectedTimeRange.end.toISOString(),
+          })
+      );
+
       if (!response.ok) throw new Error('Failed to load analytics data');
-      
+
       dashboardData = await response.json();
       applyFilters();
     } catch (err) {
@@ -184,7 +183,7 @@
   }
 
   function applyFilters() {
-    filteredData = dashboardData.filter(session => {
+    filteredData = dashboardData.filter((session) => {
       // Apply time range filter
       const sessionStart = new Date(session.startTime);
       if (sessionStart < selectedTimeRange.start || sessionStart > selectedTimeRange.end) {
@@ -192,7 +191,7 @@
       }
 
       // Apply active filters
-      return activeFilters.every(filter => {
+      return activeFilters.every((filter) => {
         const value = getFilterValue(session, filter.field);
         return evaluateFilter(value, filter);
       });
@@ -203,11 +202,11 @@
     // Extract field value from session data
     const fieldParts = field.split('.');
     let value: any = session;
-    
+
     for (const part of fieldParts) {
       value = value?.[part];
     }
-    
+
     return value;
   }
 
@@ -238,18 +237,18 @@
   function setupRealtimeAnalytics() {
     if (!realtimeAnalytics) return;
 
-    realtimeAnalytics.on('response_submitted', (event) => {
+    realtimeAnalytics.on('response_submitted', (event: RealtimeEvent) => {
       // Update dashboard with new response
       updateDashboardWithNewData(event.data);
     });
 
-    realtimeAnalytics.on('session_completed', (event) => {
+    realtimeAnalytics.on('session_completed', (event: RealtimeEvent) => {
       // Update completion metrics
       loadData(); // Refresh data
     });
 
-    realtimeAnalytics.on('error', (error) => {
-      console.error('Realtime analytics error:', error);
+    realtimeAnalytics.on('error', (err: Error) => {
+      console.error('Realtime analytics error:', err);
     });
   }
 
@@ -261,27 +260,25 @@
 
   // Chart setup and management
   function setupCharts() {
-    if (!statistics) return;
+    if (!statistics || !dataViz) return;
 
     // Response time histogram
     if (responseTimeChartCanvas && statistics.responseTimeStats) {
-      const responseTimes = filteredData.flatMap(session => 
-        session.responses
-          .filter(r => r.responseTime !== undefined)
-          .map(r => r.responseTime!)
+      const responseTimes = filteredData.flatMap((session) =>
+        session.responses.filter((r) => r.responseTime !== undefined).map((r) => r.responseTime!)
       );
-      
+
       dataViz.createResponseTimeHistogram(responseTimeChartCanvas, responseTimes);
     }
 
     // Time series chart
     if (timeSeriesChartCanvas) {
-      const timeSeriesData = filteredData.map(session => ({
+      const timeSeriesData = filteredData.map((session) => ({
         timestamp: new Date(session.startTime),
         value: session.responses.length,
-        label: 'Responses per Session'
+        label: 'Responses per Session',
       }));
-      
+
       dataViz.createTimeSeriesChart(timeSeriesChartCanvas, timeSeriesData);
     }
 
@@ -292,16 +289,12 @@
 
     // Correlation analysis
     if (correlationChartCanvas && statistics.responseTimeStats && statistics.reactionTimeStats) {
-      const responseTimes = filteredData.flatMap(session => 
-        session.responses
-          .filter(r => r.responseTime !== undefined)
-          .map(r => r.responseTime!)
+      const responseTimes = filteredData.flatMap((session) =>
+        session.responses.filter((r) => r.responseTime !== undefined).map((r) => r.responseTime!)
       );
-      
-      const reactionTimes = filteredData.flatMap(session => 
-        session.responses
-          .filter(r => r.reactionTime !== undefined)
-          .map(r => r.reactionTime!)
+
+      const reactionTimes = filteredData.flatMap((session) =>
+        session.responses.filter((r) => r.reactionTime !== undefined).map((r) => r.reactionTime!)
       );
 
       if (responseTimes.length === reactionTimes.length && responseTimes.length > 0) {
@@ -319,29 +312,15 @@
     }, config.refreshInterval || 30000);
   }
 
-  // Event handlers
-  function handleTimeRangeChange(newRange: TimeRange) {
-    selectedTimeRange = newRange;
-    loadData();
-  }
-
-  function handleFilterAdd(filter: FilterConfig) {
-    activeFilters = [...activeFilters, filter];
-    applyFilters();
-  }
-
-  function handleFilterRemove(index: number) {
-    activeFilters = activeFilters.filter((_, i) => i !== index);
-    applyFilters();
-  }
-
   async function handleExport(format: ExportFormat) {
+    if (!exportService) return;
+
     try {
       const result = await exportService.exportData(filteredData, {
         format,
         includeMetadata: true,
         includeRawData: true,
-        includeStatistics: true
+        includeStatistics: true,
       });
 
       if (result.success && result.downloadUrl) {
@@ -350,7 +329,7 @@
         link.href = result.downloadUrl;
         link.download = result.filename;
         link.click();
-        
+
         // Clean up URL
         URL.revokeObjectURL(result.downloadUrl);
       } else {
@@ -359,25 +338,35 @@
     } catch (err) {
       error = err instanceof Error ? err.message : 'Export failed';
     }
-    
+
     showExportDialog = false;
   }
 
   function toggleRealtime() {
     if (!realtimeAnalytics) return;
-    
+
     if (realtimeEnabled) {
       realtimeAnalytics.disconnect();
     } else {
       realtimeAnalytics.connect();
     }
-    
+
     realtimeEnabled = !realtimeEnabled;
+  }
+
+  function handleBackdropClick(e: MouseEvent) {
+    if (e.target === e.currentTarget) {
+      showExportDialog = false;
+    }
+  }
+
+  function handleBackdropKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') showExportDialog = false;
   }
 
   // Refresh charts when data changes
   $effect(() => {
-    if (filteredData && !loading) {
+    if (filteredData && !loading && dataViz) {
       setupCharts();
     }
   });
@@ -393,26 +382,28 @@
           Questionnaire: {questionnaireId}
         </p>
       </div>
-      
+
       <div class="flex items-center space-x-4">
         <!-- Real-time toggle -->
         {#if realtimeAnalytics}
           <button
-            on:click={toggleRealtime}
-            class="flex items-center px-3 py-2 text-sm font-medium rounded-lg {realtimeEnabled 
-              ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' 
+            onclick={toggleRealtime}
+            class="flex items-center px-3 py-2 text-sm font-medium rounded-lg {realtimeEnabled
+              ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
               : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}"
           >
-            <div class="w-2 h-2 rounded-full mr-2 {realtimeEnabled ? 'bg-green-500' : 'bg-gray-400'}"></div>
+            <div
+              class="w-2 h-2 rounded-full mr-2 {realtimeEnabled ? 'bg-green-500' : 'bg-gray-400'}"
+            ></div>
             {realtimeEnabled ? 'Live' : 'Offline'}
           </button>
         {/if}
 
         <!-- Auto-refresh toggle -->
         <button
-          on:click={() => autoRefresh = !autoRefresh}
-          class="flex items-center px-3 py-2 text-sm font-medium rounded-lg {autoRefresh 
-            ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100' 
+          onclick={() => (autoRefresh = !autoRefresh)}
+          class="flex items-center px-3 py-2 text-sm font-medium rounded-lg {autoRefresh
+            ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
             : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}"
         >
           Auto-refresh {autoRefresh ? 'On' : 'Off'}
@@ -420,7 +411,7 @@
 
         <!-- Export button -->
         <button
-          on:click={() => showExportDialog = true}
+          onclick={() => (showExportDialog = true)}
           class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           Export Data
@@ -428,7 +419,7 @@
 
         <!-- Filter button -->
         <button
-          on:click={() => showFilterPanel = !showFilterPanel}
+          onclick={() => (showFilterPanel = !showFilterPanel)}
           class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
         >
           Filters ({activeFilters.length})
@@ -446,11 +437,17 @@
   </div>
 {:else if error}
   <!-- Error state -->
-  <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 m-6">
+  <div
+    class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 m-6"
+  >
     <div class="flex">
       <div class="flex-shrink-0">
         <svg class="h-5 w-5 text-red-400 dark:text-red-300" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+          <path
+            fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+            clip-rule="evenodd"
+          />
         </svg>
       </div>
       <div class="ml-3">
@@ -458,7 +455,10 @@
         <div class="mt-2 text-sm text-red-700 dark:text-red-300">{error}</div>
         <div class="mt-4">
           <button
-            on:click={() => { error = null; loadData(); }}
+            onclick={() => {
+              error = null;
+              loadData();
+            }}
             class="bg-red-100 dark:bg-red-800 px-3 py-2 rounded-md text-sm font-medium text-red-800 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-700"
           >
             Try Again
@@ -480,7 +480,7 @@
           trend={null}
           icon="users"
         />
-        
+
         <StatisticsCard
           title="Completion Rate"
           value="{(statistics.completionRate * 100).toFixed(1)}%"
@@ -488,7 +488,7 @@
           trend={null}
           icon="check-circle"
         />
-        
+
         <StatisticsCard
           title="Avg Response Time"
           value="{statistics.responseTimeStats?.mean.toFixed(0) || 'N/A'}ms"
@@ -496,7 +496,7 @@
           trend={null}
           icon="clock"
         />
-        
+
         <StatisticsCard
           title="Total Responses"
           value={statistics.totalResponses}
@@ -511,7 +511,9 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
       <!-- Response Time Histogram -->
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Response Time Distribution</h3>
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">
+          Response Time Distribution
+        </h3>
         <div class="h-64">
           <canvas bind:this={responseTimeChartCanvas} class="w-full h-full"></canvas>
         </div>
@@ -535,7 +537,9 @@
 
       <!-- Correlation Analysis -->
       <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Response vs Reaction Time</h3>
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">
+          Response vs Reaction Time
+        </h3>
         <div class="h-64">
           <canvas bind:this={correlationChartCanvas} class="w-full h-full"></canvas>
         </div>
@@ -555,19 +559,37 @@
 {/if}
 
 <!-- Export Dialog -->
-{#if showExportDialog}
-  <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" on:click={() => showExportDialog = false}></div>
-      
-      <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+{#if showExportDialog && exportService}
+  <div
+    class="fixed inset-0 z-50 overflow-y-auto"
+    aria-labelledby="modal-title"
+    role="dialog"
+    aria-modal="true"
+  >
+    <div
+      class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
+    >
+      <div
+        class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+        onclick={handleBackdropClick}
+        onkeydown={handleBackdropKeydown}
+        role="button"
+        tabindex="0"
+        aria-label="Close modal"
+      ></div>
+
+      <div
+        class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+      >
         <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">Export Analytics Data</h3>
-          
+          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+            Export Analytics Data
+          </h3>
+
           <div class="grid grid-cols-2 gap-3">
             {#each exportService.getSupportedFormats() as format}
               <button
-                on:click={() => handleExport(format)}
+                onclick={() => handleExport(format)}
                 class="flex items-center justify-center px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {format.toUpperCase()}
@@ -575,10 +597,10 @@
             {/each}
           </div>
         </div>
-        
+
         <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
           <button
-            on:click={() => showExportDialog = false}
+            onclick={() => (showExportDialog = false)}
             class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
           >
             Cancel

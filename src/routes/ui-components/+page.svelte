@@ -12,11 +12,11 @@
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Modal from '$lib/components/ui/feedback/Modal.svelte';
   import Spinner from '$lib/components/ui/feedback/Spinner.svelte';
-  
+
   let modalOpen = false;
   let checkboxChecked = false;
   let selectValue = '';
-  
+
   const selectOptions = [
     { value: 'option1', label: 'Option 1' },
     { value: 'option2', label: 'Option 2' },
@@ -24,8 +24,8 @@
   ];
 </script>
 
-<PageHeader 
-  title="UI Components" 
+<PageHeader
+  title="UI Components"
   description="A showcase of all UI components available in QDesigner"
 />
 
@@ -43,7 +43,7 @@
             <Button variant="primary" size="lg">Large</Button>
             <Button variant="primary" size="xl">Extra Large</Button>
           </div>
-          
+
           <div class="flex flex-wrap gap-3">
             <Button variant="primary">Primary</Button>
             <Button variant="secondary">Secondary</Button>
@@ -54,7 +54,7 @@
         </div>
       </Card>
     </section>
-    
+
     <!-- Badges -->
     <section>
       <h2 class="text-2xl font-bold mb-4">Badges</h2>
@@ -70,7 +70,7 @@
             <Badge variant="purple">Purple</Badge>
             <Badge variant="pink">Pink</Badge>
           </div>
-          
+
           <div class="flex flex-wrap gap-3">
             <Badge variant="green" dot>With Dot</Badge>
             <Badge variant="blue" size="sm">Small</Badge>
@@ -79,7 +79,7 @@
         </div>
       </Card>
     </section>
-    
+
     <!-- Form Components -->
     <section>
       <h2 class="text-2xl font-bold mb-4">Form Components</h2>
@@ -88,32 +88,40 @@
           <FormGroup label="Text Input" hint="This is a hint text">
             <Input placeholder="Enter some text" />
           </FormGroup>
-          
+
           <FormGroup label="Email Input" required>
             <Input type="email" placeholder="email@example.com" />
           </FormGroup>
-          
+
           <FormGroup label="Password Input">
             <Input type="password" placeholder="Enter password" />
           </FormGroup>
-          
+
           <FormGroup label="Select Input">
-            <Select bind:value={selectValue} options={selectOptions} placeholder="Choose an option" />
+            <Select
+              bind:value={selectValue}
+              options={selectOptions}
+              placeholder="Choose an option"
+            />
           </FormGroup>
-          
+
           <FormGroup label="Textarea">
             <TextArea placeholder="Enter multiple lines of text" rows={4} />
           </FormGroup>
-          
-          <Checkbox bind:checked={checkboxChecked} label="Checkbox Label" description="This is a description for the checkbox" />
-          
+
+          <Checkbox
+            bind:checked={checkboxChecked}
+            label="Checkbox Label"
+            description="This is a description for the checkbox"
+          />
+
           <FormGroup label="Error State" error="This field has an error">
             <Input error placeholder="This input has an error" />
           </FormGroup>
         </div>
       </Card>
     </section>
-    
+
     <!-- Alerts -->
     <section>
       <h2 class="text-2xl font-bold mb-4">Alerts</h2>
@@ -121,21 +129,21 @@
         <Alert variant="info" title="Info Alert">
           This is an informational message that provides helpful context.
         </Alert>
-        
+
         <Alert variant="success" title="Success Alert">
           Your action was completed successfully!
         </Alert>
-        
+
         <Alert variant="warning" title="Warning Alert">
           Please be aware of this important information.
         </Alert>
-        
+
         <Alert variant="error" title="Error Alert" dismissible>
           Something went wrong. Please try again.
         </Alert>
       </div>
     </section>
-    
+
     <!-- Spinners -->
     <section>
       <h2 class="text-2xl font-bold mb-4">Spinners</h2>
@@ -162,22 +170,24 @@
         </div>
       </Card>
     </section>
-    
+
     <!-- Modal -->
     <section>
       <h2 class="text-2xl font-bold mb-4">Modal</h2>
       <Card>
         <div class="p-6">
-          <Button on:click={() => modalOpen = true}>Open Modal</Button>
-          
+          <Button onclick={() => (modalOpen = true)}>Open Modal</Button>
+
           <Modal bind:open={modalOpen} title="Example Modal" size="md">
             <p class="text-gray-600">
               This is an example modal dialog. You can put any content here.
             </p>
-            <div slot="footer" class="flex gap-3">
-              <Button variant="secondary" on:click={() => modalOpen = false}>Cancel</Button>
-              <Button variant="primary" on:click={() => modalOpen = false}>Confirm</Button>
-            </div>
+            {#snippet footer()}
+              <div class="flex gap-3">
+                <Button variant="secondary" onclick={() => (modalOpen = false)}>Cancel</Button>
+                <Button variant="primary" onclick={() => (modalOpen = false)}>Confirm</Button>
+              </div>
+            {/snippet}
           </Modal>
         </div>
       </Card>

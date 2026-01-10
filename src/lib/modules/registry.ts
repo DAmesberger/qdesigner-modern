@@ -92,7 +92,9 @@ class ModuleRegistryImpl implements IModuleRegistry {
   getCategorySummary(): Record<ModuleCategory, number> {
     const summary: Record<ModuleCategory, number> = {
       display: 0,
-      question: 0
+      question: 0,
+      instruction: 0,
+      analytics: 0 
     };
     
     this.modules.forEach(module => {
@@ -182,19 +184,20 @@ export function createModuleRegistration(metadata: ModuleMetadata): void {
     registerModule(metadata);
   } else {
     // SSR environment - defer registration
-    if (!globalThis.__moduleRegistrations) {
-      globalThis.__moduleRegistrations = [];
+    if (!(globalThis as any).__moduleRegistrations) {
+      (globalThis as any).__moduleRegistrations = [];
     }
-    globalThis.__moduleRegistrations.push(metadata);
+    
+    (globalThis as any).__moduleRegistrations.push(metadata);
   }
 }
 
 // Initialize deferred registrations (call this on client-side mount)
 export function initializeDeferredRegistrations(): void {
-  if (globalThis.__moduleRegistrations) {
-    globalThis.__moduleRegistrations.forEach((metadata: ModuleMetadata) => {
+  if ((globalThis as any).__moduleRegistrations) {
+    (globalThis as any).__moduleRegistrations.forEach((metadata: ModuleMetadata) => {
       registerModule(metadata);
     });
-    delete globalThis.__moduleRegistrations;
+    delete (globalThis as any).__moduleRegistrations;
   }
 }

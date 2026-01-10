@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
   import { X } from 'lucide-svelte';
-  
+
   interface TextInputConfig {
     inputType: 'text' | 'number' | 'email' | 'tel' | 'url' | 'password';
     placeholder?: string;
@@ -17,34 +17,34 @@
     max?: number; // for number type
     step?: number; // for number type
   }
-  
+
   interface Props {
     question: Question & { config: TextInputConfig };
   }
-  
+
   let { question = $bindable() }: Props = $props();
-  
+
   let newSuggestion = $state('');
-  
+
   function addSuggestion() {
     if (!newSuggestion.trim()) return;
-    
+
     if (!question.config.suggestions) {
       question.config.suggestions = [];
     }
-    
+
     if (!question.config.suggestions.includes(newSuggestion.trim())) {
       question.config.suggestions = [...question.config.suggestions, newSuggestion.trim()];
     }
-    
+
     newSuggestion = '';
   }
-  
+
   function removeSuggestion(index: number) {
     if (!question.config.suggestions) return;
     question.config.suggestions = question.config.suggestions.filter((_, i) => i !== index);
   }
-  
+
   // Update validation based on input type
   $effect(() => {
     if (question.config.inputType === 'email' && !question.config.pattern) {
@@ -61,11 +61,7 @@
   <!-- Input Type Selection -->
   <div class="form-group">
     <label for="input-type">Input Type</label>
-    <select 
-      id="input-type"
-      bind:value={question.config.inputType}
-      class="select"
-    >
+    <select id="input-type" bind:value={question.config.inputType} class="select">
       <option value="text">Text</option>
       <option value="number">Number</option>
       <option value="email">Email</option>
@@ -74,7 +70,7 @@
       <option value="password">Password</option>
     </select>
   </div>
-  
+
   <!-- Placeholder -->
   <div class="form-group">
     <label for="placeholder">Placeholder Text</label>
@@ -86,20 +82,16 @@
       class="input"
     />
   </div>
-  
+
   <!-- Text-specific options -->
   {#if question.config.inputType === 'text'}
     <div class="form-group">
       <label class="checkbox-label">
-        <input 
-          type="checkbox" 
-          bind:checked={question.config.multiline}
-          class="checkbox"
-        />
+        <input type="checkbox" bind:checked={question.config.multiline} class="checkbox" />
         <span>Multi-line input (textarea)</span>
       </label>
     </div>
-    
+
     {#if question.config.multiline}
       <div class="form-group">
         <label for="rows">Number of Rows</label>
@@ -112,44 +104,30 @@
           class="input"
         />
       </div>
-      
+
       <div class="form-group">
         <label class="checkbox-label">
-          <input 
-            type="checkbox" 
-            bind:checked={question.config.autoResize}
-            class="checkbox"
-          />
+          <input type="checkbox" bind:checked={question.config.autoResize} class="checkbox" />
           <span>Auto-resize height</span>
         </label>
       </div>
     {/if}
   {/if}
-  
+
   <!-- Number-specific options -->
   {#if question.config.inputType === 'number'}
     <div class="form-row">
       <div class="form-group">
         <label for="min">Min Value</label>
-        <input
-          id="min"
-          type="number"
-          bind:value={question.config.min}
-          class="input"
-        />
+        <input id="min" type="number" bind:value={question.config.min} class="input" />
       </div>
-      
+
       <div class="form-group">
         <label for="max">Max Value</label>
-        <input
-          id="max"
-          type="number"
-          bind:value={question.config.max}
-          class="input"
-        />
+        <input id="max" type="number" bind:value={question.config.max} class="input" />
       </div>
     </div>
-    
+
     <div class="form-group">
       <label for="step">Step</label>
       <input
@@ -162,7 +140,7 @@
       />
     </div>
   {/if}
-  
+
   <!-- Length constraints -->
   <div class="section">
     <h4 class="section-title">Length Constraints</h4>
@@ -177,7 +155,7 @@
           class="input"
         />
       </div>
-      
+
       <div class="form-group">
         <label for="max-length">Max Length</label>
         <input
@@ -190,7 +168,7 @@
       </div>
     </div>
   </div>
-  
+
   <!-- Pattern validation -->
   {#if question.config.inputType !== 'email' && question.config.inputType !== 'url' && question.config.inputType !== 'tel'}
     <div class="form-group">
@@ -205,23 +183,19 @@
       <p class="help-text">Regular expression for custom validation</p>
     </div>
   {/if}
-  
+
   <!-- Spell Check -->
   <div class="form-group">
     <label class="checkbox-label">
-      <input 
-        type="checkbox" 
-        bind:checked={question.config.spellCheck}
-        class="checkbox"
-      />
+      <input type="checkbox" bind:checked={question.config.spellCheck} class="checkbox" />
       <span>Enable spell check</span>
     </label>
   </div>
-  
+
   <!-- Suggestions -->
   <div class="section">
     <h4 class="section-title">Auto-complete Suggestions</h4>
-    
+
     <div class="suggestions-input">
       <input
         type="text"
@@ -230,21 +204,17 @@
         class="input"
         onkeydown={(e) => e.key === 'Enter' && addSuggestion()}
       />
-      <button 
-        class="btn btn-secondary"
-        onclick={addSuggestion}
-        disabled={!newSuggestion.trim()}
-      >
+      <button class="btn btn-secondary" onclick={addSuggestion} disabled={!newSuggestion.trim()}>
         Add
       </button>
     </div>
-    
+
     {#if question.config.suggestions?.length}
       <div class="suggestions-list">
         {#each question.config.suggestions as suggestion, i}
           <div class="suggestion-item">
             <span>{suggestion}</span>
-            <button 
+            <button
               class="remove-btn"
               onclick={() => removeSuggestion(i)}
               aria-label="Remove suggestion"
@@ -261,20 +231,22 @@
 <style>
   .designer-panel {
     padding: 1.5rem;
-    space-y: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
   }
-  
+
   .form-group {
     margin-bottom: 1rem;
   }
-  
+
   .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
     margin-bottom: 1rem;
   }
-  
+
   label {
     display: block;
     margin-bottom: 0.375rem;
@@ -282,7 +254,7 @@
     font-weight: 500;
     color: #374151;
   }
-  
+
   .input,
   .select {
     width: 100%;
@@ -293,42 +265,42 @@
     background: white;
     transition: all 0.15s;
   }
-  
+
   .input:hover,
   .select:hover {
     border-color: #d1d5db;
   }
-  
+
   .input:focus,
   .select:focus {
     outline: none;
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
-  
+
   .font-mono {
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   }
-  
+
   .checkbox-label {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     cursor: pointer;
   }
-  
+
   .checkbox {
     width: 1rem;
     height: 1rem;
     cursor: pointer;
   }
-  
+
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
     border-top: 1px solid #e5e7eb;
   }
-  
+
   .section-title {
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
@@ -337,23 +309,23 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
-  
+
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
     color: #6b7280;
   }
-  
+
   .suggestions-input {
     display: flex;
     gap: 0.5rem;
     margin-bottom: 0.75rem;
   }
-  
+
   .suggestions-input .input {
     flex: 1;
   }
-  
+
   .btn {
     padding: 0.5rem 1rem;
     border: none;
@@ -363,25 +335,27 @@
     cursor: pointer;
     transition: all 0.15s;
   }
-  
+
   .btn-secondary {
     background: #f3f4f6;
     color: #374151;
   }
-  
+
   .btn-secondary:hover:not(:disabled) {
     background: #e5e7eb;
   }
-  
+
   .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  
+
   .suggestions-list {
-    space-y: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
-  
+
   .suggestion-item {
     display: flex;
     align-items: center;
@@ -392,7 +366,7 @@
     border-radius: 0.375rem;
     font-size: 0.875rem;
   }
-  
+
   .remove-btn {
     padding: 0.25rem;
     border: none;
@@ -402,7 +376,7 @@
     border-radius: 0.25rem;
     transition: all 0.15s;
   }
-  
+
   .remove-btn:hover {
     background: #e5e7eb;
     color: #374151;

@@ -1,5 +1,5 @@
 import type { Question } from '$lib/shared';
-import type { Stimulus } from '../stimuli/Stimulus';
+import type { IStimulus } from '../stimuli/Stimulus';
 import type { VariableEngine } from '$lib/scripting-engine';
 import type { WebGLRenderer } from '$lib/renderer';
 import type { ResourceManager } from '../resources/ResourceManager';
@@ -48,17 +48,20 @@ export class QuestionPresenter {
     
     this.currentRenderer = renderer;
     
+    // Safe access for optional/missing properties
+    const q: any = question;
+
     // Prepare renderer
     renderer.prepare(gl, {
       id: question.id,
-      position: question.layout?.position || { x: 0.5, y: 0.5 },
-      size: question.layout?.size,
-      opacity: question.layout?.opacity || 1,
-      rotation: question.layout?.rotation || 0
+      position: q.layout?.position || { x: 0.5, y: 0.5 },
+      size: q.layout?.size,
+      opacity: q.layout?.opacity || 1,
+      rotation: q.layout?.rotation || 0
     });
     
     // Handle timing phases
-    const timing = question.timing || {};
+    const timing: any = question.timing || {};
     
     // 1. Fixation phase
     if (timing.fixationDuration && timing.fixationDuration > 0) {
@@ -104,22 +107,23 @@ export class QuestionPresenter {
    */
   private async buildQuestionRenderer(question: Question, variableEngine: VariableEngine): Promise<IQuestionRenderer | null> {
     const renderers: IQuestionRenderer[] = [];
+    const q = question as any;
     
     // Add question text if present
-    if (question.text) {
-      const processedText = this.processVariables(question.text, variableEngine);
+    if (q.text) {
+      const processedText = this.processVariables(q.text, variableEngine);
       renderers.push(new TextRenderer({
         id: `${question.id}_text`,
         text: processedText,
-        fontSize: question.style?.fontSize || 24,
-        color: question.style?.color || '#FFFFFF',
+        fontSize: q.style?.fontSize || 24,
+        color: q.style?.color || '#FFFFFF',
         position: { x: 0.5, y: 0.3 }
       }));
     }
     
     // Add instruction if present
-    if (question.instruction) {
-      const processedInstruction = this.processVariables(question.instruction, variableEngine);
+    if (q.instruction) {
+      const processedInstruction = this.processVariables(q.instruction, variableEngine);
       renderers.push(new TextRenderer({
         id: `${question.id}_instruction`,
         text: processedInstruction,
@@ -138,9 +142,9 @@ export class QuestionPresenter {
     }
     
     // Add response options for choice questions
-    if (question.responseType.type === 'single' || question.responseType.type === 'multiple') {
-      const options = question.responseType.options || [];
-      options.forEach((option, index) => {
+    if (q.responseType.type === 'single' || q.responseType.type === 'multiple') {
+      const options = q.responseType.options || [];
+      options.forEach((option: any, index: number) => {
         const yPos = 0.4 + (index * 0.08);
         renderers.push(new TextRenderer({
           id: `${question.id}_option_${index}`,
@@ -153,8 +157,8 @@ export class QuestionPresenter {
     }
     
     // Add scale visualization for scale questions
-    if (question.responseType.type === 'scale') {
-      const scale = question.responseType;
+    if (q.responseType.type === 'scale') {
+      const scale = q.responseType;
       const scaleText = `${scale.min} ${scale.minLabel || ''} ──────── ${scale.maxLabel || ''} ${scale.max}`;
       renderers.push(new TextRenderer({
         id: `${question.id}_scale`,

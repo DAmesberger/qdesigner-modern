@@ -2,31 +2,31 @@
   import { createEventDispatcher } from 'svelte';
   import MonacoEditor from '$lib/wysiwyg/MonacoEditor.svelte';
   import type { Variable } from '$lib/shared';
-  
+
   export let template: string = '';
   export let variables: Variable[] = [];
   export let showPreview: boolean = true;
-  
+
   const dispatch = createEventDispatcher();
-  
+
   // Example templates
   const templates = [
     {
       name: 'Simple Score',
-      template: 'Your score: $\{score} out of $\{maxScore} ($\{Math.round(score/maxScore*100)}%)'
+      template: 'Your score: $\{score} out of $\{maxScore} ($\{Math.round(score/maxScore*100)}%)',
     },
     {
       name: 'Performance Feedback',
       template: `$\{IF(score >= 80, "Excellent performance!", IF(score >= 60, "Good job!", "Keep practicing!"))}
       
 Your score: $\{score} points
-Time taken: $\{Math.round(responseTime/1000)} seconds`
+Time taken: $\{Math.round(responseTime/1000)} seconds`,
     },
     {
       name: 'Comparative',
       template: `Your result: $\{score}
 Average: $\{avgScore}
-$\{IF(score > avgScore, "You performed above average!", "You performed below average.")}`
+$\{IF(score > avgScore, "You performed above average!", "You performed below average.")}`,
     },
     {
       name: 'Detailed Analysis',
@@ -40,19 +40,19 @@ $\{IF(score > avgScore, "You performed above average!", "You performed below ave
 - Category C: $\{categoryC} ($\{IF(categoryC >= 8, "Strong", "Needs improvement")})
 
 ### Interpretation:
-$\{IF(score >= 80, "You have demonstrated excellent understanding of the material. Your performance across all categories shows strong comprehension.", IF(score >= 60, "You have a good grasp of the material. Consider reviewing areas where you scored lower.", "There's room for improvement. We recommend reviewing the material and practicing more."))}`
-    }
+$\{IF(score >= 80, "You have demonstrated excellent understanding of the material. Your performance across all categories shows strong comprehension.", IF(score >= 60, "You have a good grasp of the material. Consider reviewing areas where you scored lower.", "There's room for improvement. We recommend reviewing the material and practicing more."))}`,
+    },
   ];
-  
+
   // State
   let selectedTemplate = '';
   let previewVariables: Record<string, any> = {};
   let showVariableList = false;
-  
+
   // Initialize preview variables with mock data
   $: {
     previewVariables = {};
-    variables.forEach(v => {
+    variables.forEach((v) => {
       switch (v.type) {
         case 'number':
           previewVariables[v.name] = Math.round(Math.random() * 100);
@@ -76,7 +76,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     previewVariables.categoryB = 7;
     previewVariables.categoryC = 6;
   }
-  
+
   // Render template with variables
   function renderTemplate(template: string): string {
     try {
@@ -86,7 +86,10 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
         (match, condition, trueVal, falseVal1, falseVal2) => {
           const falseVal = falseVal1 || falseVal2;
           try {
-            const evalCondition = new Function(...Object.keys(previewVariables), `return ${condition}`);
+            const evalCondition = new Function(
+              ...Object.keys(previewVariables),
+              `return ${condition}`
+            );
             const result = evalCondition(...Object.values(previewVariables));
             return result ? trueVal : falseVal || '';
           } catch (e) {
@@ -94,7 +97,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
           }
         }
       );
-      
+
       // Replace variable references
       processed = processed.replace(/\$\{([^}]+)\}/g, (match, expression) => {
         try {
@@ -105,30 +108,30 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
           return match;
         }
       });
-      
+
       return processed;
     } catch (e) {
       return template;
     }
   }
-  
+
   // Insert variable at cursor
   function insertVariable(varName: string) {
     const insertion = `$\{${varName}}`;
     dispatch('insertText', insertion);
   }
-  
+
   // Insert function at cursor
   function insertFunction(func: string) {
     dispatch('insertText', func);
   }
-  
+
   // Load template
-  function loadTemplate(t: typeof templates[0]) {
+  function loadTemplate(t: (typeof templates)[0]) {
     template = t.template;
     selectedTemplate = t.name;
   }
-  
+
   $: renderedTemplate = renderTemplate(template);
 </script>
 
@@ -136,11 +139,11 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
   <!-- Toolbar -->
   <div class="toolbar">
     <div class="toolbar-section">
-      <label class="toolbar-label">Template:</label>
+      <span class="toolbar-label">Template:</span>
       <select
         bind:value={selectedTemplate}
         on:change={(e) => {
-          const t = templates.find(t => t.name === e.currentTarget.value);
+          const t = templates.find((t) => t.name === e.currentTarget.value);
           if (t) loadTemplate(t);
         }}
         class="toolbar-select"
@@ -151,56 +154,59 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
         {/each}
       </select>
     </div>
-    
+
     <div class="toolbar-section">
-      <button
-        on:click={() => showVariableList = !showVariableList}
-        class="toolbar-button"
-      >
+      <button on:click={() => (showVariableList = !showVariableList)} class="toolbar-button">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
+          />
         </svg>
         Variables
       </button>
-      
-      <button
-        on:click={() => showPreview = !showPreview}
-        class="toolbar-button"
-      >
+
+      <button on:click={() => (showPreview = !showPreview)} class="toolbar-button">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+          />
         </svg>
         Preview
       </button>
     </div>
   </div>
-  
+
   <!-- Main Content -->
   <div class="content">
     <!-- Variable List -->
     {#if showVariableList}
       <div class="variable-panel">
         <h4 class="panel-title">Variables</h4>
-        
+
         <div class="variable-section">
           <h5 class="section-title">Custom Variables</h5>
           <div class="variable-list">
             {#each variables as variable}
-              <button
-                on:click={() => insertVariable(variable.name)}
-                class="variable-item"
-              >
+              <button on:click={() => insertVariable(variable.name)} class="variable-item">
                 <span class="var-name">{variable.name}</span>
                 <span class="var-type">{variable.type}</span>
               </button>
             {/each}
           </div>
         </div>
-        
+
         <div class="variable-section">
           <h5 class="section-title">System Variables</h5>
           <div class="variable-list">
@@ -222,7 +228,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
             </button>
           </div>
         </div>
-        
+
         <div class="variable-section">
           <h5 class="section-title">Functions</h5>
           <div class="function-list">
@@ -232,29 +238,20 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
             >
               IF(condition, true, false)
             </button>
-            <button
-              on:click={() => insertFunction('$\{Math.round(value)}')}
-              class="function-item"
-            >
+            <button on:click={() => insertFunction('$\{Math.round(value)}')} class="function-item">
               Math.round(value)
             </button>
-            <button
-              on:click={() => insertFunction('$\{Math.floor(value)}')}
-              class="function-item"
-            >
+            <button on:click={() => insertFunction('$\{Math.floor(value)}')} class="function-item">
               Math.floor(value)
             </button>
-            <button
-              on:click={() => insertFunction('$\{value.toFixed(2)}')}
-              class="function-item"
-            >
+            <button on:click={() => insertFunction('$\{value.toFixed(2)}')} class="function-item">
               toFixed(decimals)
             </button>
           </div>
         </div>
       </div>
     {/if}
-    
+
     <!-- Editor -->
     <div class="editor-container">
       <MonacoEditor
@@ -271,22 +268,25 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
           lineNumbersMinChars: 0,
           renderLineHighlight: 'none',
           scrollBeyondLastLine: false,
-          fontSize: 14
+          fontSize: 14,
         }}
         on:insertText={(e) => {
           // Monaco editor will handle the insertion
         }}
       />
     </div>
-    
+
     <!-- Preview -->
     {#if showPreview}
       <div class="preview-panel">
         <h4 class="panel-title">Preview</h4>
         <div class="preview-content">
-          {@html renderedTemplate.replace(/\n/g, '<br>').replace(/##\s+(.+)/g, '<h2>$1</h2>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}
+          {@html renderedTemplate
+            .replace(/\n/g, '<br>')
+            .replace(/##\s+(.+)/g, '<h2>$1</h2>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}
         </div>
-        
+
         <div class="preview-variables">
           <h5 class="section-title">Preview Data</h5>
           <div class="preview-var-list">
@@ -313,7 +313,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     border: 1px solid #e5e7eb;
     overflow: hidden;
   }
-  
+
   .toolbar {
     display: flex;
     justify-content: space-between;
@@ -322,18 +322,18 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     background: #f9fafb;
     border-bottom: 1px solid #e5e7eb;
   }
-  
+
   .toolbar-section {
     display: flex;
     align-items: center;
     gap: 0.5rem;
   }
-  
+
   .toolbar-label {
     font-size: 0.875rem;
     color: #374151;
   }
-  
+
   .toolbar-select {
     padding: 0.375rem 0.75rem;
     border: 1px solid #d1d5db;
@@ -341,7 +341,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     font-size: 0.875rem;
     background: white;
   }
-  
+
   .toolbar-button {
     display: flex;
     align-items: center;
@@ -354,25 +354,25 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     color: #374151;
     transition: all 150ms;
   }
-  
+
   .toolbar-button:hover {
     background: #f3f4f6;
     border-color: #9ca3af;
   }
-  
+
   .content {
     flex: 1;
     display: flex;
     overflow: hidden;
   }
-  
+
   .variable-panel {
     width: 250px;
     border-right: 1px solid #e5e7eb;
     background: #f9fafb;
     overflow-y: auto;
   }
-  
+
   .panel-title {
     font-size: 0.875rem;
     font-weight: 600;
@@ -380,12 +380,12 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     padding: 1rem;
     border-bottom: 1px solid #e5e7eb;
   }
-  
+
   .variable-section {
     padding: 1rem;
     border-bottom: 1px solid #e5e7eb;
   }
-  
+
   .section-title {
     font-size: 0.75rem;
     font-weight: 500;
@@ -393,14 +393,14 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     text-transform: uppercase;
     margin-bottom: 0.5rem;
   }
-  
+
   .variable-list,
   .function-list {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
   }
-  
+
   .variable-item,
   .function-item {
     display: flex;
@@ -414,34 +414,34 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     text-align: left;
     transition: all 150ms;
   }
-  
+
   .variable-item:hover,
   .function-item:hover {
     background: #e0e7ff;
     border-color: #3b82f6;
   }
-  
+
   .var-name {
     font-family: monospace;
     color: #1f2937;
   }
-  
+
   .var-type {
     font-size: 0.75rem;
     color: #9ca3af;
   }
-  
+
   .function-item {
     font-family: monospace;
     font-size: 0.75rem;
     color: #4b5563;
   }
-  
+
   .editor-container {
     flex: 1;
     min-width: 0;
   }
-  
+
   .preview-panel {
     width: 300px;
     border-left: 1px solid #e5e7eb;
@@ -449,7 +449,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     display: flex;
     flex-direction: column;
   }
-  
+
   .preview-content {
     flex: 1;
     padding: 1rem;
@@ -461,30 +461,30 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     line-height: 1.5;
     overflow-y: auto;
   }
-  
-  .preview-content h2 {
+
+  :global(.preview-content h2) {
     font-size: 1.125rem;
     font-weight: 600;
     margin: 1rem 0 0.5rem;
   }
-  
-  .preview-content strong {
+
+  :global(.preview-content strong) {
     font-weight: 600;
     color: #111827;
   }
-  
+
   .preview-variables {
     padding: 1rem;
     border-top: 1px solid #e5e7eb;
   }
-  
+
   .preview-var-list {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
     font-size: 0.75rem;
   }
-  
+
   .preview-var {
     display: flex;
     justify-content: space-between;
@@ -492,12 +492,12 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     background: white;
     border-radius: 0.25rem;
   }
-  
+
   .var-key {
     font-family: monospace;
     color: #6b7280;
   }
-  
+
   .var-value {
     font-family: monospace;
     color: #111827;

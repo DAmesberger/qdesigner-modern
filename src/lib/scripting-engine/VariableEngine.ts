@@ -139,6 +139,13 @@ export class VariableEngine {
   }
 
   /**
+   * Evaluate a raw math expression with provided scope
+   */
+  public evaluate(expression: string, scope?: Record<string, any>): any {
+    return math.evaluate(expression, scope || {});
+  }
+
+  /**
    * Evaluate a formula
    */
   public evaluateFormula(formula: string, contextVariableId?: string): EvaluationResult {

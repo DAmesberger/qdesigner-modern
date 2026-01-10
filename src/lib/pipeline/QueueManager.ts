@@ -310,7 +310,7 @@ export class QueueManager<T = any> {
       const queue = this.queues.get(priority)!;
       
       for (let i = 0; i < queue.length; i++) {
-        const item = queue[i];
+        const item = queue[i]!;
         
         // Check if item is ready to be processed
         if (item.scheduled <= now) {
@@ -381,7 +381,7 @@ export class QueueManager<T = any> {
       
       this.emitEvent('item.completed', { item, result, workerId });
 
-    } catch (error) {
+    } catch (error: any) {
       attempt.success = false;
       attempt.duration = Date.now() - startTime;
       attempt.error = error.message;
@@ -439,7 +439,7 @@ export class QueueManager<T = any> {
       
       this.emitEvent('batch.completed', { items, results, duration });
       
-    } catch (error) {
+    } catch (error: any) {
       // Handle batch failure
       items.forEach(item => {
         this.processing.delete(item.id);
@@ -520,7 +520,7 @@ export class QueueManager<T = any> {
       handlers.forEach(handler => {
         try {
           handler(data);
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Event handler error for ${eventType}:`, error);
         }
       });

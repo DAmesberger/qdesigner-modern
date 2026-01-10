@@ -1,9 +1,17 @@
 import { BaseQuestionStorage } from '../shared/BaseStorage';
-import type { QuestionResponse } from '$lib/shared';
+import type { QuestionResponse } from '../shared/types';
 
 export class TextInputStorage extends BaseQuestionStorage {
   constructor() {
-    super('text-input');
+    super();
+  }
+
+  getAnswerType(): string {
+    return 'text-input';
+  }
+
+  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+    return this.getAllForSession();
   }
   
   parseValue(value: any): string {
@@ -17,8 +25,7 @@ export class TextInputStorage extends BaseQuestionStorage {
   }
   
   validateResponse(response: QuestionResponse): boolean {
-    if (!super.validateResponse(response)) return false;
-    
+
     const value = response.value;
     if (typeof value !== 'string' && value !== null && value !== undefined) {
       console.warn('Text input response must be a string');
@@ -31,7 +38,7 @@ export class TextInputStorage extends BaseQuestionStorage {
   // Text-specific aggregations
   async getWordCount(questionId: string): Promise<number> {
     const responses = await this.getResponses(questionId);
-    const totalWords = responses.reduce((sum, r) => {
+    const totalWords = responses.reduce((sum: number, r: QuestionResponse) => {
       const text = this.parseValue(r.value);
       return sum + text.split(/\s+/).filter(word => word.length > 0).length;
     }, 0);
@@ -42,7 +49,7 @@ export class TextInputStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     if (responses.length === 0) return 0;
     
-    const totalLength = responses.reduce((sum, r) => {
+    const totalLength = responses.reduce((sum: number, r: QuestionResponse) => {
       return sum + this.parseValue(r.value).length;
     }, 0);
     
@@ -54,7 +61,7 @@ export class TextInputStorage extends BaseQuestionStorage {
     const wordCounts = new Map<string, number>();
     
     // Count word occurrences
-    responses.forEach(r => {
+    responses.forEach((r: QuestionResponse) => {
       const text = this.parseValue(r.value).toLowerCase();
       const words = text.split(/\s+/).filter(word => word.length > 2); // Ignore very short words
       
@@ -83,7 +90,7 @@ export class TextInputStorage extends BaseQuestionStorage {
     const positiveWords = ['good', 'great', 'excellent', 'happy', 'love', 'wonderful', 'amazing', 'fantastic'];
     const negativeWords = ['bad', 'poor', 'terrible', 'hate', 'awful', 'horrible', 'disappointing', 'worst'];
     
-    responses.forEach(r => {
+    responses.forEach((r: QuestionResponse) => {
       const text = this.parseValue(r.value).toLowerCase();
       let positiveCount = 0;
       let negativeCount = 0;

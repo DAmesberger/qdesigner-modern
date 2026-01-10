@@ -1,7 +1,7 @@
 // WebGL question storage with specialized aggregations for performance analysis
 
 import { BaseQuestionStorage } from '../shared/BaseStorage';
-import type { StorageData } from '$lib/services/localStorage';
+import type { QuestionResponse } from '../shared/types';
 
 interface WebGLValue {
   response: string | null;
@@ -14,6 +14,14 @@ interface WebGLValue {
 }
 
 export class WebGLStorage extends BaseQuestionStorage {
+  getAnswerType(): string {
+    return 'webgl';
+  }
+
+  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+    return this.getAllForSession();
+  }
+
   /**
    * Get reaction time statistics
    */
@@ -27,7 +35,7 @@ export class WebGLStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const reactionTimes: number[] = [];
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: WebGLValue = this.parseValue(response.value);
       if (value.reactionTime > 0 && !value.timeout) {
         reactionTimes.push(value.reactionTime);
@@ -40,12 +48,12 @@ export class WebGLStorage extends BaseQuestionStorage {
     
     // Calculate statistics
     const sorted = [...reactionTimes].sort((a, b) => a - b);
-    const mean = reactionTimes.reduce((a, b) => a + b, 0) / reactionTimes.length;
+    const mean = reactionTimes.reduce((a: number, b: number) => a + b, 0) / reactionTimes.length;
     const median = sorted.length % 2 === 0
-      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-      : sorted[Math.floor(sorted.length / 2)];
+      ? (sorted[sorted.length / 2 - 1]! + sorted[sorted.length / 2]!) / 2
+      : sorted[Math.floor(sorted.length / 2)]!;
     
-    const variance = reactionTimes.reduce((sum, rt) => sum + Math.pow(rt - mean, 2), 0) / reactionTimes.length;
+    const variance = reactionTimes.reduce((sum: number, rt: number) => sum + Math.pow(rt - mean, 2), 0) / reactionTimes.length;
     const stdDev = Math.sqrt(variance);
     
     return {
@@ -70,7 +78,7 @@ export class WebGLStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     let allFrameTimings: number[] = [];
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: WebGLValue = this.parseValue(response.value);
       if (value.frameTimings && value.frameTimings.length > 0) {
         allFrameTimings = allFrameTimings.concat(value.frameTimings);
@@ -90,19 +98,23 @@ export class WebGLStorage extends BaseQuestionStorage {
     // Calculate frame deltas
     const frameDeltas: number[] = [];
     for (let i = 1; i < allFrameTimings.length; i++) {
-      frameDeltas.push(allFrameTimings[i] - allFrameTimings[i - 1]);
+      const current = allFrameTimings[i];
+      const previous = allFrameTimings[i - 1];
+      if (current !== undefined && previous !== undefined) {
+        frameDeltas.push(current - previous);
+      }
     }
     
     // Convert to FPS
     const fps = frameDeltas.map(delta => 1000 / delta);
-    const avgFPS = fps.reduce((a, b) => a + b, 0) / fps.length;
+    const avgFPS = fps.reduce((a: number, b: number) => a + b, 0) / fps.length;
     
     // Count dropped frames (>16.67ms for 60fps, >8.33ms for 120fps)
     const targetFrameTime = 1000 / 120; // Assuming 120fps target
     const droppedFrames = frameDeltas.filter(delta => delta > targetFrameTime * 1.5).length;
     
     // Calculate consistency (coefficient of variation)
-    const fpsStdDev = Math.sqrt(fps.reduce((sum, f) => sum + Math.pow(f - avgFPS, 2), 0) / fps.length);
+    const fpsStdDev = Math.sqrt(fps.reduce((sum: number, f: number) => sum + Math.pow(f - avgFPS, 2), 0) / fps.length);
     const consistency = 1 - (fpsStdDev / avgFPS);
     
     return {
@@ -126,7 +138,7 @@ export class WebGLStorage extends BaseQuestionStorage {
     let total = 0;
     const byResponse: Record<string, { correct: number; total: number }> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: WebGLValue = this.parseValue(response.value);
       if (value.isCorrect !== undefined && value.response) {
         total++;
@@ -135,9 +147,13 @@ export class WebGLStorage extends BaseQuestionStorage {
         if (!byResponse[value.response]) {
           byResponse[value.response] = { correct: 0, total: 0 };
         }
-        byResponse[value.response].total++;
-        if (value.isCorrect) {
-          byResponse[value.response].correct++;
+        
+        const entry = byResponse[value.response];
+        if (entry) {
+          entry.total++;
+          if (value.isCorrect) {
+            entry.correct++;
+          }
         }
       }
     });
@@ -165,7 +181,7 @@ export class WebGLStorage extends BaseQuestionStorage {
     let timeouts = 0;
     let total = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: WebGLValue = this.parseValue(response.value);
       total++;
       if (value.timeout) timeouts++;
@@ -184,7 +200,7 @@ export class WebGLStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const distribution: Record<string, number> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: WebGLValue = this.parseValue(response.value);
       if (value.response) {
         distribution[value.response] = (distribution[value.response] || 0) + 1;
@@ -209,7 +225,7 @@ export class WebGLStorage extends BaseQuestionStorage {
     const responseLatencies: number[] = [];
     
     let lastOnset = 0;
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: WebGLValue = this.parseValue(response.value);
       
       if (value.stimulusOnset > 0) {
@@ -226,18 +242,18 @@ export class WebGLStorage extends BaseQuestionStorage {
     
     // Calculate variance in stimulus onset timing
     const onsetMean = onsetDeltas.length > 0 
-      ? onsetDeltas.reduce((a, b) => a + b, 0) / onsetDeltas.length 
+      ? onsetDeltas.reduce((a: number, b: number) => a + b, 0) / onsetDeltas.length 
       : 0;
     const onsetVariance = onsetDeltas.length > 0
-      ? onsetDeltas.reduce((sum, delta) => sum + Math.pow(delta - onsetMean, 2), 0) / onsetDeltas.length
+      ? onsetDeltas.reduce((sum: number, delta: number) => sum + Math.pow(delta - onsetMean, 2), 0) / onsetDeltas.length
       : 0;
     
     // Calculate response latency stats
     const latencyMean = responseLatencies.length > 0
-      ? responseLatencies.reduce((a, b) => a + b, 0) / responseLatencies.length
+      ? responseLatencies.reduce((a: number, b: number) => a + b, 0) / responseLatencies.length
       : 0;
     const latencyStdDev = responseLatencies.length > 0
-      ? Math.sqrt(responseLatencies.reduce((sum, lat) => sum + Math.pow(lat - latencyMean, 2), 0) / responseLatencies.length)
+      ? Math.sqrt(responseLatencies.reduce((sum: number, lat: number) => sum + Math.pow(lat - latencyMean, 2), 0) / responseLatencies.length)
       : 0;
     
     return {
@@ -252,6 +268,21 @@ export class WebGLStorage extends BaseQuestionStorage {
   /**
    * Format aggregation results for display
    */
+  /**
+   * Parse stored value
+   */
+  protected parseValue(value: any): WebGLValue {
+    if (!value) return { response: null, reactionTime: 0, stimulusOnset: 0, responseTime: 0 };
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return { response: null, reactionTime: 0, stimulusOnset: 0, responseTime: 0 };
+      }
+    }
+    return value;
+  }
+
   formatAggregation(type: string, value: any): string {
     switch (type) {
       case 'rtStats':
@@ -265,7 +296,7 @@ export class WebGLStorage extends BaseQuestionStorage {
       case 'timingPrecision':
         return `Onset variance: ${value.stimulusOnsetVariance.toFixed(2)}ms², Response latency: ${value.responseLatencyStats.mean.toFixed(1)}±${value.responseLatencyStats.stdDev.toFixed(1)}ms`;
       default:
-        return super.formatAggregation(type, value);
+        return JSON.stringify(value);
     }
   }
   
@@ -273,8 +304,7 @@ export class WebGLStorage extends BaseQuestionStorage {
    * Get all available aggregations for WebGL questions
    */
   async getAllAggregations(questionId: string): Promise<Record<string, any>> {
-    const [base, rtStats, frameRate, accuracy, timeouts, distribution, precision] = await Promise.all([
-      super.getAllAggregations(questionId),
+    const [rtStats, frameRate, accuracy, timeouts, distribution, precision] = await Promise.all([
       this.getReactionTimeStats(questionId),
       this.getFrameRateStats(questionId),
       this.getAccuracyStats(questionId),
@@ -284,7 +314,6 @@ export class WebGLStorage extends BaseQuestionStorage {
     ]);
     
     return {
-      ...base,
       rtStats,
       frameRate,
       accuracy,

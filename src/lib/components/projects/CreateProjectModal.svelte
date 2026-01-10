@@ -6,12 +6,12 @@
   import LoadingButton from '../common/LoadingButton.svelte';
   import { toast } from '$lib/stores/toast';
   import { handleAPIError } from '$lib/utils/errorHandler';
-  
+
   export let open = false;
   export let organizationId: string;
-  
+
   const dispatch = createEventDispatcher();
-  
+
   let loading = false;
   let formData = {
     name: '',
@@ -21,26 +21,26 @@
     maxParticipants: null as number | null,
     irbNumber: '',
     startDate: '',
-    endDate: ''
+    endDate: '',
   };
-  
+
   let errors: Record<string, string> = {};
-  
+
   function validateForm() {
     errors = {};
-    
+
     if (!formData.name.trim()) {
       errors.name = 'Project name is required';
     }
-    
+
     if (formData.name.length < 3) {
       errors.name = 'Project name must be at least 3 characters';
     }
-    
+
     if (formData.code && !/^[a-zA-Z0-9-_]+$/.test(formData.code)) {
       errors.code = 'Code can only contain letters, numbers, hyphens, and underscores';
     }
-    
+
     if (formData.startDate && formData.endDate) {
       const start = new Date(formData.startDate);
       const end = new Date(formData.endDate);
@@ -48,20 +48,20 @@
         errors.endDate = 'End date must be after start date';
       }
     }
-    
+
     return Object.keys(errors).length === 0;
   }
-  
+
   async function handleSubmit() {
     if (!validateForm()) return;
-    
+
     loading = true;
-    
+
     try {
       const response = await fetch('/api/projects', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           ...formData,
@@ -70,23 +70,23 @@
           is_public: formData.isPublic,
           irb_number: formData.irbNumber || undefined,
           start_date: formData.startDate || undefined,
-          end_date: formData.endDate || undefined
-        })
+          end_date: formData.endDate || undefined,
+        }),
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw error;
       }
-      
+
       const project = await response.json();
-      
+
       toast.success('Project created successfully!');
       dispatch('created', project);
-      
+
       // Navigate to the new project
       goto(`/projects/${project.id}`);
-      
+
       // Reset form
       resetForm();
       open = false;
@@ -97,7 +97,7 @@
       loading = false;
     }
   }
-  
+
   function resetForm() {
     formData = {
       name: '',
@@ -107,11 +107,11 @@
       maxParticipants: null,
       irbNumber: '',
       startDate: '',
-      endDate: ''
+      endDate: '',
     };
     errors = {};
   }
-  
+
   function handleClose() {
     if (!loading) {
       open = false;
@@ -119,7 +119,7 @@
       dispatch('close');
     }
   }
-  
+
   // Generate project code from name
   $: if (formData.name && !formData.code) {
     formData.code = formData.name
@@ -130,8 +130,8 @@
   }
 </script>
 
-<Dialog 
-  bind:open 
+<Dialog
+  bind:open
   title="Create New Project"
   description="Start a new research project to organize your questionnaires and data collection."
   size="lg"
@@ -157,7 +157,7 @@
         <p class="mt-1 text-sm text-destructive">{errors.name}</p>
       {/if}
     </div>
-    
+
     <div>
       <label for="description" class="block text-sm font-medium text-foreground">
         Description
@@ -173,11 +173,9 @@
         placeholder="Brief description of your research project..."
       ></textarea>
     </div>
-    
+
     <div>
-      <label for="code" class="block text-sm font-medium text-foreground">
-        Project Code
-      </label>
+      <label for="code" class="block text-sm font-medium text-foreground"> Project Code </label>
       <input
         type="text"
         id="code"
@@ -197,7 +195,7 @@
         </p>
       {/if}
     </div>
-    
+
     <div class="grid grid-cols-2 gap-4">
       <div>
         <label for="startDate" class="block text-sm font-medium text-foreground">
@@ -213,11 +211,9 @@
                  disabled:cursor-not-allowed disabled:opacity-50"
         />
       </div>
-      
+
       <div>
-        <label for="endDate" class="block text-sm font-medium text-foreground">
-          End Date
-        </label>
+        <label for="endDate" class="block text-sm font-medium text-foreground"> End Date </label>
         <input
           type="date"
           id="endDate"
@@ -233,7 +229,7 @@
         {/if}
       </div>
     </div>
-    
+
     <div>
       <label for="maxParticipants" class="block text-sm font-medium text-foreground">
         Maximum Participants
@@ -249,15 +245,11 @@
                disabled:cursor-not-allowed disabled:opacity-50"
         placeholder="No limit"
       />
-      <p class="mt-1 text-sm text-muted-foreground">
-        Leave empty for unlimited participants
-      </p>
+      <p class="mt-1 text-sm text-muted-foreground">Leave empty for unlimited participants</p>
     </div>
-    
+
     <div>
-      <label for="irbNumber" class="block text-sm font-medium text-foreground">
-        IRB Number
-      </label>
+      <label for="irbNumber" class="block text-sm font-medium text-foreground"> IRB Number </label>
       <input
         type="text"
         id="irbNumber"
@@ -268,18 +260,16 @@
                disabled:cursor-not-allowed disabled:opacity-50"
         placeholder="IRB-2024-001"
       />
-      <p class="mt-1 text-sm text-muted-foreground">
-        Institutional Review Board approval number
-      </p>
+      <p class="mt-1 text-sm text-muted-foreground">Institutional Review Board approval number</p>
     </div>
-    
+
     <div class="flex items-center">
       <input
         type="checkbox"
         id="isPublic"
         bind:checked={formData.isPublic}
         disabled={loading}
-        class="h-4 w-4 rounded border-input text-primary 
+        class="h-4 w-4 rounded border-input text-primary
                focus:ring-ring focus:ring-offset-2"
       />
       <label for="isPublic" class="ml-2 block text-sm text-foreground">
@@ -287,16 +277,10 @@
       </label>
     </div>
   </form>
-  
+
   {#snippet footer()}
-    <Button
-      variant="ghost"
-      on:click={handleClose}
-      disabled={loading}
-    >
-      Cancel
-    </Button>
-    
+    <Button variant="ghost" onclick={handleClose} disabled={loading}>Cancel</Button>
+
     <LoadingButton
       type="button"
       variant="primary"

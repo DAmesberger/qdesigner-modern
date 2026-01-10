@@ -1,27 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { designerStore, canUndo, canRedo } from '$lib/features/designer/stores/designerStore';
+  import { designerStore } from '$lib/stores/designer.svelte';
   import QuestionPalette from './QuestionPalette.svelte';
   import PageCanvas from './PageCanvas.svelte';
   import VariableManager from './VariableManager.svelte';
   import PropertiesPanel from './PropertiesPanel.svelte';
   import SaveLoadToolbar from './SaveLoadToolbar.svelte';
 
-  let activeTab: 'questions' | 'variables' | 'flow' = 'questions';
-  let showPreview = false;
-  let questionnaireName = '';
-  let pages: any[] = [];
+  let activeTab = $state<'questions' | 'variables' | 'flow'>('questions');
+
+  let questionnaireName = $derived(designerStore.questionnaire.name);
+  let pages = $derived(designerStore.questionnaire.pages);
+  let showPreview = $derived(designerStore.previewMode);
 
   // Initialize
   onMount(() => {
     designerStore.initVariableEngine();
-  });
-
-  // Subscribe to store
-  designerStore.subscribe(state => {
-    questionnaireName = state.questionnaire.name;
-    pages = state.questionnaire.pages;
-    showPreview = state.previewMode;
   });
 
   // Keyboard shortcuts
@@ -29,10 +23,10 @@
     if (e.ctrlKey || e.metaKey) {
       switch (e.key) {
         case 'z':
-          if (e.shiftKey && $canRedo) {
+          if (e.shiftKey && designerStore.canRedo) {
             e.preventDefault();
             designerStore.redo();
-          } else if ($canUndo) {
+          } else if (designerStore.canUndo) {
             e.preventDefault();
             designerStore.undo();
           }
@@ -93,7 +87,7 @@
 <div class="h-screen flex flex-col bg-gray-100">
   <!-- Save/Load Toolbar -->
   <SaveLoadToolbar />
-  
+
   <!-- Main Toolbar -->
   <div class="bg-white border-b border-gray-200 px-4 py-3">
     <div class="flex items-center justify-between">
@@ -101,29 +95,39 @@
         <h1 class="text-xl font-semibold text-gray-900">
           {questionnaireName || 'Untitled Questionnaire'}
         </h1>
-        
+
         <div class="flex items-center space-x-2">
           <button
-            on:click={designerStore.undo}
-            disabled={!$canUndo}
+            onclick={() => designerStore.undo()}
+            disabled={!designerStore.canUndo}
             class="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Undo (Ctrl+Z)"
+            aria-label="Undo"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+              />
             </svg>
           </button>
-          
+
           <button
-            on:click={designerStore.redo}
-            disabled={!$canRedo}
+            onclick={() => designerStore.redo()}
+            disabled={!designerStore.canRedo}
             class="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Redo (Ctrl+Shift+Z)"
+            aria-label="Redo"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"
+              />
             </svg>
           </button>
         </div>
@@ -131,28 +135,28 @@
 
       <div class="flex items-center space-x-3">
         <button
-          on:click={handleImport}
+          onclick={handleImport}
           class="px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
         >
           Import
         </button>
-        
+
         <button
-          on:click={handleExport}
+          onclick={handleExport}
           class="px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
         >
           Export
         </button>
-        
+
         <button
-          on:click={handleSave}
+          onclick={handleSave}
           class="px-4 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
           Save
         </button>
-        
+
         <button
-          on:click={() => designerStore.togglePreview()}
+          onclick={() => designerStore.togglePreview()}
           class="px-4 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
         >
           {showPreview ? 'Edit' : 'Preview'}
@@ -168,23 +172,26 @@
       <!-- Tabs -->
       <div class="flex border-b border-gray-200 bg-white">
         <button
-          on:click={() => activeTab = 'questions'}
-          class="flex-1 px-4 py-3 text-sm font-medium transition-colors
-                 {activeTab === 'questions' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}"
+          onclick={() => (activeTab = 'questions')}
+          class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'questions'
+            ? 'text-blue-600 border-b-2 border-blue-600'
+            : 'text-gray-600 hover:text-gray-900'}"
         >
           Questions
         </button>
         <button
-          on:click={() => activeTab = 'variables'}
-          class="flex-1 px-4 py-3 text-sm font-medium transition-colors
-                 {activeTab === 'variables' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}"
+          onclick={() => (activeTab = 'variables')}
+          class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'variables'
+            ? 'text-blue-600 border-b-2 border-blue-600'
+            : 'text-gray-600 hover:text-gray-900'}"
         >
           Variables
         </button>
         <button
-          on:click={() => activeTab = 'flow'}
-          class="flex-1 px-4 py-3 text-sm font-medium transition-colors
-                 {activeTab === 'flow' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-900'}"
+          onclick={() => (activeTab = 'flow')}
+          class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'flow'
+            ? 'text-blue-600 border-b-2 border-blue-600'
+            : 'text-gray-600 hover:text-gray-900'}"
         >
           Flow
         </button>
@@ -199,13 +206,13 @@
         {:else if activeTab === 'flow'}
           <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <h3 class="text-lg font-semibold mb-4 text-gray-800">Page Flow</h3>
-            
+
             <!-- Pages List -->
             <div class="space-y-2 mb-4">
               {#each pages as page, index}
-                <div
-                  on:click={() => designerStore.setCurrentPage(page.id)}
-                  class="p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
+                <button
+                  onclick={() => designerStore.setCurrentPage(page.id)}
+                  class="w-full text-left p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 mb-2 block transition-colors"
                 >
                   <div class="flex items-center justify-between">
                     <div>
@@ -214,16 +221,26 @@
                         {(page.questions ?? []).length} questions
                       </p>
                     </div>
-                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    <svg
+                      class="w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M9 5l7 7-7 7"
+                      />
                     </svg>
                   </div>
-                </div>
+                </button>
               {/each}
             </div>
 
             <button
-              on:click={handleAddPage}
+              onclick={handleAddPage}
               class="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg
                      hover:border-gray-400 text-gray-600 hover:text-gray-800 transition-colors"
             >
@@ -257,14 +274,11 @@
         <span>•</span>
         <span>{pages.reduce((sum, p) => sum + (p.questions ?? []).length, 0)} questions</span>
         <span>•</span>
-        <button
-          on:click={() => designerStore.validate()}
-          class="text-blue-600 hover:text-blue-800"
-        >
+        <button onclick={() => designerStore.validate()} class="text-blue-600 hover:text-blue-800">
           Validate
         </button>
       </div>
-      
+
       <div class="flex items-center space-x-2">
         <span class="text-xs">Last saved: Never</span>
       </div>

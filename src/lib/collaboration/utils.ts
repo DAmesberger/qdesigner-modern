@@ -51,7 +51,7 @@ export function getNestedValue(obj: any, path: PathArray): any {
 export function setNestedValue(obj: any, path: PathArray, value: any): void {
   let current = obj;
   for (let i = 0; i < path.length - 1; i++) {
-    const segment = path[i];
+    const segment = path[i]!;
     if (!(segment in current) || typeof current[segment] !== 'object') {
       current[segment] = {};
     }
@@ -68,14 +68,14 @@ export function deleteNestedValue(obj: any, path: PathArray): boolean {
   
   let current = obj;
   for (let i = 0; i < path.length - 1; i++) {
-    const segment = path[i];
+    const segment = path[i]!;
     if (!(segment in current) || typeof current[segment] !== 'object') {
       return false;
     }
     current = current[segment];
   }
   
-  const lastSegment = path[path.length - 1];
+  const lastSegment = path[path.length - 1]!;
   if (lastSegment in current) {
     delete current[lastSegment];
     return true;
@@ -221,7 +221,7 @@ export function generateUserColor(userId: string): string {
   ];
   
   const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return colors[hash % colors.length];
+  return colors[hash % colors.length]!;
 }
 
 /**

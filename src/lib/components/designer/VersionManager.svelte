@@ -1,37 +1,42 @@
 <script lang="ts">
   import { fade, fly } from 'svelte/transition';
-  import { designerStore } from '$lib/features/designer/stores/designerStore';
+  import { designerStore } from '$lib/stores/designer.svelte';
   import { toast } from '$lib/stores/toast';
   import { page } from '$app/stores';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
   import { supabase } from '$lib/services/supabase';
-  
-  export let questionnaireId: string;
-  
-  let showVersionMenu = false;
-  let showVersionModal = false;
-  let versions: any[] = [];
-  let isLoadingVersions = false;
-  let currentVersion = '1';
-  let newVersionNote = '';
-  let isSavingVersion = false;
-  let selectedVersions: string[] = [];
-  
-  $: user = $page.data?.user;
-  $: questionnaire = $designerStore.questionnaire;
-  $: currentVersion = questionnaire.version || '1';
+
+  let { questionnaireId } = $props<{ questionnaireId: string }>();
+
+  let showVersionMenu = $state(false);
+  let showVersionModal = $state(false);
+  let versions = $state<any[]>([]);
+  let isLoadingVersions = $state(false);
+  let currentVersion = $state('1'); // Use state for reactivity if local, but it's derived below
+  let newVersionNote = $state('');
+  let isSavingVersion = $state(false);
+  let selectedVersions = $state<string[]>([]);
+
+  let user = $derived($page.data?.user);
+  let questionnaire = $derived(designerStore.questionnaire);
+  let versionDisplay = $derived(questionnaire.version || '1');
+
+  // Sync currentVersion local var with derived for legacy compatibility if needed, or just use versionDisplay
+  $effect(() => {
+    currentVersion = versionDisplay;
+  });
 
   async function loadVersions() {
     if (!questionnaireId || isLoadingVersions) return;
-    
+
     // Also check if questionnaire has required fields
     if (!questionnaire.projectId || !questionnaire.code) {
       versions = [];
       return;
     }
-    
+
     isLoadingVersions = true;
-    
+
     try {
       const { data, error } = await supabase
         .from('questionnaire_definitions')
@@ -39,9 +44,9 @@
         .eq('project_id', questionnaire.projectId)
         .eq('code', questionnaire.code)
         .order('version', { ascending: false });
-      
+
       if (error) throw error;
-      
+
       versions = data || [];
     } catch (error) {
       console.error('Failed to load versions:', error);
@@ -53,13 +58,13 @@
 
   async function saveAsNewVersion() {
     if (!newVersionNote.trim() || isSavingVersion) return;
-    
+
     isSavingVersion = true;
-    
+
     try {
       // Create new version
       const newVersion = String(parseInt(currentVersion) + 1);
-      
+
       const { data, error } = await supabase
         .from('questionnaire_definitions')
         .insert({
@@ -73,30 +78,30 @@
             version: newVersion,
             changes: newVersionNote,
             timestamp: new Date().toISOString(),
-            author: user.id
+            author: user.id,
           },
           created_by: user.id,
           parent_version_id: questionnaireId,
-          is_active: false
+          is_active: false,
         })
         .select()
         .single();
-      
+
       if (error) throw error;
-      
+
       // Update current questionnaire with new version
       designerStore.updateQuestionnaire({
         ...questionnaire,
         id: data.id,
-        version: newVersion
+        version: newVersion,
       });
-      
+
       toast.success(`Saved as version ${newVersion}`);
-      
+
       // Reset form
       newVersionNote = '';
       showVersionModal = false;
-      
+
       // Reload versions
       await loadVersions();
     } catch (error) {
@@ -114,9 +119,9 @@
         .select('*')
         .eq('id', versionId)
         .single();
-      
+
       if (error) throw error;
-      
+
       if (data) {
         designerStore.importQuestionnaire(data.definition);
         toast.success(`Loaded version ${data.version}`);
@@ -136,18 +141,18 @@
         .update({ is_active: false, published_at: null })
         .eq('project_id', questionnaire.projectId)
         .eq('code', questionnaire.code);
-      
+
       // Then publish selected version
       const { error } = await supabase
         .from('questionnaire_definitions')
-        .update({ 
-          is_active: true, 
-          published_at: new Date().toISOString() 
+        .update({
+          is_active: true,
+          published_at: new Date().toISOString(),
         })
         .eq('id', versionId);
-      
+
       if (error) throw error;
-      
+
       toast.success('Version published successfully');
       await loadVersions();
     } catch (error) {
@@ -171,12 +176,16 @@
 <!-- Version Button -->
 <div class="relative">
   <button
-    on:click={toggleVersionMenu}
+    onclick={toggleVersionMenu}
     class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
   >
     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+      />
     </svg>
     Version {currentVersion}
     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -186,7 +195,7 @@
 
   <!-- Version Dropdown Menu -->
   {#if showVersionMenu}
-    <div 
+    <div
       transition:fly={{ y: -10, duration: 200 }}
       class="absolute top-full mt-2 right-0 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50"
     >
@@ -194,7 +203,7 @@
         <div class="flex items-center justify-between">
           <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Version History</h3>
           <button
-            on:click={() => {
+            onclick={() => {
               showVersionModal = true;
               showVersionMenu = false;
             }}
@@ -223,7 +232,7 @@
           <div class="py-2">
             {#each versions as version}
               <button
-                on:click={() => loadVersion(version.id)}
+                onclick={() => loadVersion(version.id)}
                 class="w-full px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors"
                 class:bg-blue-50={version.id === questionnaireId}
                 class:dark:bg-blue-900={version.id === questionnaireId}
@@ -235,12 +244,16 @@
                         Version {version.version}
                       </span>
                       {#if version.is_active}
-                        <span class="px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900 rounded-full">
+                        <span
+                          class="px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900 rounded-full"
+                        >
                           Published
                         </span>
                       {/if}
                       {#if version.id === questionnaireId}
-                        <span class="px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900 rounded-full">
+                        <span
+                          class="px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900 rounded-full"
+                        >
                           Current
                         </span>
                       {/if}
@@ -256,8 +269,14 @@
                   </div>
                   {#if !version.is_active}
                     <div
-                      on:click|stopPropagation={() => publishVersion(version.id)}
-                      on:keypress|stopPropagation={(e) => e.key === 'Enter' && publishVersion(version.id)}
+                      onclick={(e) => {
+                        e.stopPropagation();
+                        publishVersion(version.id);
+                      }}
+                      onkeypress={(e) => {
+                        e.stopPropagation();
+                        e.key === 'Enter' && publishVersion(version.id);
+                      }}
                       role="button"
                       tabindex="0"
                       class="ml-2 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
@@ -277,24 +296,27 @@
 
 <!-- Save as New Version Modal -->
 {#if showVersionModal}
-  <div 
+  <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
     transition:fade={{ duration: 200 }}
   >
-    <div 
+    <div
       class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6"
       transition:fly={{ y: 20, duration: 300 }}
     >
       <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
         Save as New Version
       </h3>
-      
+
       <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
         This will create version {parseInt(currentVersion) + 1} of your questionnaire.
       </p>
 
       <div class="mb-6">
-        <label for="version-note" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label
+          for="version-note"
+          class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+        >
           Version Notes <span class="text-red-500">*</span>
         </label>
         <textarea
@@ -303,12 +325,12 @@
           rows="3"
           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           placeholder="Describe what changed in this version..."
-        />
+        ></textarea>
       </div>
 
       <div class="flex justify-end gap-3">
         <button
-          on:click={() => {
+          onclick={() => {
             showVersionModal = false;
             newVersionNote = '';
           }}
@@ -318,14 +340,25 @@
           Cancel
         </button>
         <button
-          on:click={saveAsNewVersion}
+          onclick={saveAsNewVersion}
           disabled={!newVersionNote.trim() || isSavingVersion}
           class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {#if isSavingVersion}
             <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              ></path>
             </svg>
           {/if}
           Save Version

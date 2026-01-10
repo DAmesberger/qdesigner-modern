@@ -18,8 +18,8 @@ export const metadata: ModuleMetadata = {
     supportsVariables: true
   },
   components: {
-    runtime: () => import('./Drawing.svelte'),
-    designer: () => import('./DrawingDesigner.svelte')
+    runtime: () => import('./Drawing.svelte') as any,
+    designer: () => import('./DrawingDesigner.svelte') as any
   },
   defaultConfig: {
     tools: ['pen', 'eraser'],

@@ -3,7 +3,7 @@
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
   import { WebGLRenderer } from '$lib/renderer';
-  
+
   interface WebGLContent {
     type: 'circle' | 'rectangle' | 'triangle' | 'custom';
     properties: {
@@ -15,7 +15,7 @@
       vertices?: number[];
     };
   }
-  
+
   interface WebGLConfig {
     stimulus: {
       type: 'shape' | 'image' | 'video' | 'custom';
@@ -46,7 +46,7 @@
       antialias?: boolean;
     };
   }
-  
+
   interface WebGLValue {
     response: string | null;
     reactionTime: number;
@@ -56,39 +56,41 @@
     isCorrect?: boolean;
     timeout?: boolean;
   }
-  
-  interface Props extends QuestionProps {
-    question: Question & { config: WebGLConfig };
+
+  interface Props extends Omit<QuestionProps, 'question'> {
+    question: any;
   }
-  
+
   let {
-    question,
+    question = $bindable(),
     mode = 'runtime',
     value = $bindable(null),
     disabled = false,
     onResponse,
     onValidation,
-    onInteraction
+    onInteraction,
   }: Props = $props();
-  
+
   // Canvas and renderer
   let canvas: HTMLCanvasElement;
   let renderer: WebGLRenderer | null = null;
-  
+
   // Timing state
   let responseStartTime = $state(0);
   let stimulusOnsetTime = $state(0);
   let isPresenting = $state(false);
-  let presentationPhase = $state<'waiting' | 'fixation' | 'delay' | 'stimulus' | 'response' | 'complete'>('waiting');
-  
+  let presentationPhase = $state<
+    'waiting' | 'fixation' | 'delay' | 'stimulus' | 'response' | 'complete'
+  >('waiting');
+
   // Response handling
   let keyHandlers = new Map<string, () => void>();
   let timeoutId: number | null = null;
-  
+
   // Configuration
   const config = $derived(question.config);
   const targetFPS = $derived(config.rendering?.targetFPS || 120);
-  
+
   // Initialize value
   $effect(() => {
     if (!value) {
@@ -98,22 +100,22 @@
         stimulusOnset: 0,
         responseTime: 0,
         frameTimings: [],
-        timeout: false
+        timeout: false,
       };
     }
   });
-  
+
   // Setup canvas and renderer
   $effect(() => {
     if (canvas && !renderer) {
       setupRenderer();
-      
+
       if (mode === 'runtime' && !disabled) {
         startPresentation();
       }
     }
   });
-  
+
   // Cleanup on unmount
   $effect(() => {
     return () => {
@@ -124,57 +126,60 @@
       }
     };
   });
-  
+
   // Validation
   $effect(() => {
     const errors: string[] = [];
     let isValid = true;
-    
+
     if (question.required && !value?.response) {
       errors.push('Response is required');
       isValid = false;
     }
-    
+
     if (value?.timeout) {
       errors.push('Response timeout');
       isValid = false;
     }
-    
+
     onValidation?.({ valid: isValid, errors });
   });
-  
+
   async function setupRenderer() {
     if (!canvas) return;
-    
+
     renderer = new WebGLRenderer({
       canvas,
-      targetFPS,
+      targetFPS: targetFPS as any,
       vsync: config.rendering?.vsync ?? true,
-      antialias: config.rendering?.antialias ?? true
-    });
-    
+      antialias: config.rendering?.antialias ?? true,
+    } as any);
+
     // Track frame timings for performance analysis
-    renderer.onFrame((timing) => {
+    (renderer as any).onFrame((timing: number) => {
       if (value && isPresenting) {
         value.frameTimings = [...(value.frameTimings || []), timing];
       }
     });
   }
-  
+
   async function startPresentation() {
     presentationPhase = 'waiting';
-    
+
     const phases = [
-      { phase: 'fixation', duration: config.stimulus.fixation?.show ? config.stimulus.fixation.duration : 0 },
+      {
+        phase: 'fixation',
+        duration: config.stimulus.fixation?.show ? config.stimulus.fixation.duration : 0,
+      },
       { phase: 'delay', duration: config.timing?.postFixationDelay || 0 },
-      { phase: 'stimulus', duration: 0 } // Stimulus stays until response
+      { phase: 'stimulus', duration: 0 }, // Stimulus stays until response
     ];
-    
+
     // Pre-delay
     if (config.timing?.preDelay) {
       await delay(config.timing.preDelay);
     }
-    
+
     // Execute phases
     for (const { phase, duration } of phases) {
       if (phase === 'fixation' && duration > 0) {
@@ -189,14 +194,14 @@
         presentationPhase = 'stimulus';
         stimulusOnsetTime = performance.now();
         value.stimulusOnset = stimulusOnsetTime;
-        
+
         renderer?.markStimulusOnset();
         showStimulus();
-        
+
         // Start response collection
         responseStartTime = performance.now();
         setupResponseHandlers();
-        
+
         // Handle stimulus duration
         if (config.timing?.stimulusDuration && config.timing.stimulusDuration > 0) {
           setTimeout(() => {
@@ -204,7 +209,7 @@
             presentationPhase = 'response';
           }, config.timing.stimulusDuration);
         }
-        
+
         // Handle response timeout
         if (config.timing?.responseDuration) {
           timeoutId = window.setTimeout(() => {
@@ -213,31 +218,31 @@
             }
           }, config.timing.responseDuration);
         }
-        
+
         isPresenting = true;
       }
     }
-    
+
     onInteraction?.({
-      type: 'presentation-start',
+      type: 'presentation-start' as any,
       timestamp: Date.now(),
-      data: { targetFPS }
+      data: { targetFPS },
     });
   }
-  
+
   function showFixation() {
     if (!renderer) return;
-    
+
     const fixationType = config.stimulus.fixation?.type || 'cross';
     const color = parseColor(config.stimulus.fixation?.color || '#ffffff');
-    
+
     renderer.addRenderable({
       id: 'fixation',
       layer: 100,
       render: (gl, context) => {
         const centerX = context.width / 2;
         const centerY = context.height / 2;
-        
+
         if (fixationType === 'cross') {
           // Horizontal line
           renderer?.executeCommand({
@@ -247,8 +252,8 @@
               y: centerY - 2,
               width: 40,
               height: 4,
-              color
-            }
+              color,
+            },
           });
           // Vertical line
           renderer?.executeCommand({
@@ -258,8 +263,8 @@
               y: centerY - 20,
               width: 4,
               height: 40,
-              color
-            }
+              color,
+            },
           });
         } else if (fixationType === 'dot') {
           renderer?.executeCommand({
@@ -268,42 +273,42 @@
               x: centerX,
               y: centerY,
               radius: 5,
-              color
-            }
+              color,
+            },
           });
         }
-      }
+      },
     });
-    
+
     renderer.start();
   }
-  
+
   function hideFixation() {
     renderer?.removeRenderable('fixation');
   }
-  
+
   function showStimulus() {
     if (!renderer) return;
-    
+
     const stimulusType = config.stimulus.type;
     const content = config.stimulus.content;
-    
+
     renderer.addRenderable({
       id: 'stimulus',
       layer: 50,
       render: (gl, context) => {
         if (stimulusType === 'shape' && typeof content === 'object') {
           const webglContent = content as WebGLContent;
-          
+
           if (webglContent.type === 'circle') {
             renderer?.executeCommand({
-              type: 'drawCircle',
+              type: 'drawCircle' as any,
               params: {
                 x: context.width / 2,
                 y: context.height / 2,
                 radius: webglContent.properties.radius || 50,
-                color: webglContent.properties.color || [1, 1, 1, 1]
-              }
+                color: webglContent.properties.color || [1, 1, 1, 1],
+              },
             });
           } else if (webglContent.type === 'rectangle') {
             renderer?.executeCommand({
@@ -313,16 +318,16 @@
                 y: (context.height - (webglContent.properties.height || 100)) / 2,
                 width: webglContent.properties.width || 100,
                 height: webglContent.properties.height || 100,
-                color: webglContent.properties.color || [1, 1, 1, 1]
-              }
+                color: webglContent.properties.color || [1, 1, 1, 1],
+              },
             });
           } else if (webglContent.type === 'triangle') {
             const size = webglContent.properties.width || 100;
             const centerX = context.width / 2;
             const centerY = context.height / 2;
-            
+
             renderer?.executeCommand({
-              type: 'drawTriangle',
+              type: 'drawTriangle' as any,
               params: {
                 x1: centerX,
                 y1: centerY - size / 2,
@@ -330,101 +335,101 @@
                 y2: centerY + size / 2,
                 x3: centerX + size / 2,
                 y3: centerY + size / 2,
-                color: webglContent.properties.color || [1, 1, 1, 1]
-              }
+                color: webglContent.properties.color || [1, 1, 1, 1],
+              },
             });
           } else if (webglContent.type === 'custom' && webglContent.properties.shader) {
             // Custom shader support
             renderer?.executeCommand({
-              type: 'customShader',
+              type: 'customShader' as any,
               params: {
                 shader: webglContent.properties.shader,
                 vertices: webglContent.properties.vertices || [],
                 uniforms: {
                   time: (performance.now() - stimulusOnsetTime) / 1000,
-                  resolution: [context.width, context.height]
-                }
-              }
+                  resolution: [context.width, context.height],
+                },
+              },
             });
           }
         }
         // Add support for images/videos via texture rendering
-      }
+      },
     });
   }
-  
+
   function hideStimulus() {
     renderer?.removeRenderable('stimulus');
   }
-  
+
   function setupResponseHandlers() {
     const responseConfig = config.response;
-    
+
     if (responseConfig.type === 'keyboard' && responseConfig.validKeys) {
       const handleKeypress = (event: KeyboardEvent) => {
         if (!isPresenting && config.timing?.stimulusDuration) {
           // Only accept responses during stimulus presentation if duration is set
           if (presentationPhase !== 'stimulus') return;
         }
-        
+
         if (responseConfig.validKeys?.includes(event.key)) {
           const reactionTime = performance.now() - stimulusOnsetTime;
-          
+
           let isCorrect: boolean | undefined;
           if (responseConfig.requireCorrect && responseConfig.correctKey) {
             isCorrect = event.key === responseConfig.correctKey;
           }
-          
+
           handleResponse({
             response: event.key,
             reactionTime,
             responseTime: performance.now(),
-            isCorrect
+            isCorrect,
           });
         }
       };
-      
+
       document.addEventListener('keydown', handleKeypress);
       keyHandlers.set('keydown', () => document.removeEventListener('keydown', handleKeypress));
     }
-    
+
     // TODO: Add mouse/touch handlers
   }
-  
+
   function cleanupResponseHandlers() {
-    keyHandlers.forEach(cleanup => cleanup());
+    keyHandlers.forEach((cleanup) => cleanup());
     keyHandlers.clear();
-    
+
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
       timeoutId = null;
     }
   }
-  
+
   function handleResponse(response: Partial<WebGLValue>) {
     cleanupResponseHandlers();
     hideStimulus();
-    
+
     value = {
       ...value,
       ...response,
-      timeout: false
+      timeout: false,
     };
-    
+
     presentationPhase = 'complete';
     isPresenting = false;
-    
+
     onResponse?.(value);
     onInteraction?.({
-      type: 'response',
+      type: 'response' as any,
       timestamp: Date.now(),
       data: {
         key: response.response,
         reactionTime: response.reactionTime,
-        isCorrect: response.isCorrect
-      }
+        isCorrect: response.isCorrect,
+      },
     });
-    
+
     // Handle inter-trial interval
     if (config.timing?.interTrialInterval) {
       setTimeout(() => {
@@ -432,29 +437,29 @@
       }, config.timing.interTrialInterval);
     }
   }
-  
+
   function handleTimeout() {
     cleanupResponseHandlers();
     hideStimulus();
-    
+
     value = {
       ...value,
       response: null,
       reactionTime: -1,
       responseTime: performance.now(),
-      timeout: true
+      timeout: true,
     };
-    
+
     presentationPhase = 'complete';
     isPresenting = false;
-    
+
     onResponse?.(value);
     onInteraction?.({
-      type: 'timeout',
-      timestamp: Date.now()
+      type: 'timeout' as any,
+      timestamp: Date.now(),
     });
   }
-  
+
   function cleanupPresentation() {
     cleanupResponseHandlers();
     if (renderer) {
@@ -462,11 +467,11 @@
       renderer.clearRenderables();
     }
   }
-  
+
   function delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
-  
+
   function parseColor(color: string): [number, number, number, number] {
     if (color.startsWith('#')) {
       const hex = color.slice(1);
@@ -479,28 +484,16 @@
   }
 </script>
 
-<BaseQuestion
-  {question}
-  {mode}
-  bind:value
-  {disabled}
-  {onResponse}
-  {onValidation}
-  {onInteraction}
->
+<BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
   <div class="webgl-container">
-    <canvas 
-      bind:this={canvas}
-      class="webgl-canvas"
-      class:presenting={isPresenting}
-    />
-    
+    <canvas bind:this={canvas} class="webgl-canvas" class:presenting={isPresenting}></canvas>
+
     {#if presentationPhase === 'waiting' && !disabled}
       <div class="status-overlay">
         <p>Preparing stimulus...</p>
       </div>
     {/if}
-    
+
     {#if presentationPhase === 'complete'}
       <div class="status-overlay">
         <p>Complete</p>
@@ -521,17 +514,17 @@
     border-radius: 0.5rem;
     overflow: hidden;
   }
-  
+
   .webgl-canvas {
     width: 100%;
     height: 100%;
     display: block;
   }
-  
+
   .webgl-canvas.presenting {
     cursor: none;
   }
-  
+
   .status-overlay {
     position: absolute;
     inset: 0;
@@ -542,18 +535,18 @@
     background: rgba(0, 0, 0, 0.8);
     color: white;
   }
-  
+
   .status-overlay p {
     margin: 0.25rem 0;
     font-size: 1.125rem;
   }
-  
+
   .status-overlay .rt {
     font-size: 1.5rem;
     font-weight: 600;
     color: #4ade80;
   }
-  
+
   /* Responsive */
   @media (max-width: 768px) {
     .webgl-container {

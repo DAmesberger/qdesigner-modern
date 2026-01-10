@@ -1,101 +1,114 @@
 :root {
-  /* Colors - Light Mode */
-  --background: 0 0% 100%;
+  /* Colors - Light Mode (Crisp & Clean) */
+  --background: 210 40% 98%; /* Slightly tinted off-white */
   --foreground: 222.2 84% 4.9%;
-  
+
   --muted: 210 40% 96.1%;
   --muted-foreground: 215.4 16.3% 46.9%;
-  
+
   --popover: 0 0% 100%;
   --popover-foreground: 222.2 84% 4.9%;
-  
+
   --card: 0 0% 100%;
   --card-foreground: 222.2 84% 4.9%;
-  
+
   --border: 214.3 31.8% 91.4%;
   --input: 214.3 31.8% 91.4%;
-  
-  --primary: 262.1 83.3% 57.8%;
+
+  /* Premium Violet Primary */
+  --primary: 255 90% 60%; /* Vibrant Violet */
   --primary-foreground: 210 40% 98%;
-  
+
   --secondary: 210 40% 96.1%;
   --secondary-foreground: 222.2 47.4% 11.2%;
-  
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-  
+
+  --accent: 255 90% 96%; /* Very light violet tint */
+  --accent-foreground: 255 90% 60%;
+
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
-  
-  --ring: 262.1 83.3% 57.8%;
-  
-  --radius: 0.5rem;
-  
+
+  --ring: 255 90% 60%;
+
+  --radius: 0.75rem; /* More rounded for modern feel */
+
+  /* Glassmorphism Tokens - Light */
+  --glass-bg: 0 0% 100% / 0.7;
+  --glass-border: 255 100% 100% / 0.5;
+  --glass-blur: 12px;
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+
   /* Layering System */
-  --layer-base: 0 0% 98%;
+  --layer-base: 210 40% 98%;
   --layer-surface: 0 0% 100%;
   --layer-overlay: 0 0% 100%;
   --layer-modal: 0 0% 100%;
-  
+
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  
+  --shadow-glow: 0 0 20px -5px hsl(var(--primary) / 0.5);
+
   /* Backdrop */
   --backdrop-opacity: 0.5;
 }
 
 .dark {
-  /* Colors - Dark Mode */
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-  
-  --popover: 222.2 47% 11.2%;
-  --popover-foreground: 210 40% 98%;
-  
-  --card: 222.2 47% 11.2%;
-  --card-foreground: 210 40% 98%;
-  
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  
-  --primary: 263.4 70% 50.4%;
-  --primary-foreground: 210 40% 98%;
-  
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-  
-  --ring: 263.4 70% 50.4%;
-  
-  /* Layering System */
-  --layer-base: 222.2 84% 4.9%;
-  --layer-surface: 222.2 47% 11.2%;
-  --layer-overlay: 217.2 32.6% 17.5%;
-  --layer-modal: 222.2 47% 11.2%;
-  
-  /* Shadows - Enhanced for dark mode */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.25);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
-  
-  /* Backdrop */
-  --backdrop-opacity: 0.7;
-}
+  /* Colors - Dark Mode (Deep Space) */
+  --background: 240 10% 3.9%; /* Deepest void */
+  --foreground: 0 0% 98%;
 
-/* Removed @media (prefers-color-scheme: dark) to prevent system theme override.
-   Dark mode is now controlled exclusively by the .dark class */
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+
+  --popover: 240 10% 3.9%;
+  --popover-foreground: 0 0% 98%;
+
+  --card: 240 10% 3.9%;
+  --card-foreground: 0 0% 98%;
+
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+
+  /* Premium Violet Primary - Glowing in Dark */
+  --primary: 263.4 70% 60%;
+  --primary-foreground: 210 40% 98%;
+
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+
+  --accent: 263.4 70% 15%; /* Darker violet for accents */
+  --accent-foreground: 0 0% 98%;
+
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+
+  --ring: 263.4 70% 60%;
+
+  /* Glassmorphism Tokens - Dark */
+  --glass-bg: 240 10% 10% / 0.6; /* Dark semi-transparent */
+  --glass-border: 255 255 255 / 0.08;
+  --glass-blur: 16px;
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+
+  /* Layering System */
+  --layer-base: 240 10% 3.9%;
+  --layer-surface: 240 5% 10%; /* Slightly lighter than base */
+  --layer-overlay: 240 3.7% 15.9%;
+  --layer-modal: 240 10% 3.9%;
+
+  /* Shadows - Enhanced for dark mode */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.7), 0 4px 6px -4px rgb(0 0 0 / 0.7);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.8), 0 8px 10px -6px rgb(0 0 0 / 0.8);
+  --shadow-glow: 0 0 30px -5px hsl(var(--primary) / 0.6);
+
+  /* Backdrop */
+  --backdrop-opacity: 0.8;
+}
 
 * {
   border-color: hsl(var(--border));
@@ -104,11 +117,16 @@
 body {
   color: hsl(var(--foreground));
   background: hsl(var(--background));
+  /* Subtle mesh gradient background */
+  background-image:
+    radial-gradient(at 0% 0%, hsl(var(--primary) / 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, hsl(var(--accent) / 0.1) 0px, transparent 50%);
+  background-attachment: fixed;
 }
 
 /* Gradient Utilities */
 .gradient-primary {
-  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.8));
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(280, 80%, 60%));
 }
 
 .gradient-text {
@@ -122,9 +140,7 @@ body {
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-20px); }
-}
-
-@keyframes pulse-light {
+}@keyframes pulse-light {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 0.8; }
 }

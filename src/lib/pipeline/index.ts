@@ -57,7 +57,7 @@ export class PipelineManager {
     };
 
     this.streaming = new StreamingService({
-      enabled: this.config.enableStreaming,
+      enabled: this.config.enableStreaming ?? false,
       bufferSize: this.config.backpressureThreshold,
       flushInterval: 1000
     });
@@ -204,7 +204,7 @@ export class PipelineManager {
         warnings: warnings.length > 0 ? warnings : undefined
       };
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         errors: [`Pipeline processing failed: ${error.message}`]
@@ -236,7 +236,8 @@ export class PipelineManager {
       const exportRequest = { ...request, sessions };
       return await this.export.exportData(exportRequest);
       
-    } catch (error) {
+
+    } catch (error: any) {
       return {
         success: false,
         format: request.format,

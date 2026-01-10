@@ -3,13 +3,13 @@
   import type { AnalyticsBlockConfig } from './types';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
   import { scriptingEngine } from '$lib/services/scriptingEngine';
-  
+
   interface Props extends AnalyticsBlockProps {
     block: AnalyticsBlockConfig;
     children?: any;
     class?: string;
   }
-  
+
   let {
     block,
     mode = 'runtime',
@@ -19,7 +19,7 @@
     class: className = '',
     ...restProps
   }: Props = $props();
-  
+
   const dispatch = createEventDispatcher<{
     update: Partial<AnalyticsBlockConfig>;
     edit: void;
@@ -27,28 +27,28 @@
     duplicate: void;
     export: { format: string; data: any };
   }>();
-  
+
   let isVisible = $state(true);
   let isLoading = $state(false);
   let error = $state<string | null>(null);
   let processedData = $state<any>(null);
   let refreshInterval: number | null = null;
-  let element: HTMLDivElement;
-  
+  let element = $state<HTMLDivElement>();
+
   // Check conditional visibility
   $effect(() => {
     if (block.conditions && mode === 'runtime') {
       checkVisibility();
     }
   });
-  
+
   // Process data when it changes
   $effect(() => {
     if (data && data.length > 0) {
       processData();
     }
   });
-  
+
   // Set up refresh interval if configured
   onMount(() => {
     if (block.refreshInterval && mode === 'runtime') {
@@ -57,19 +57,19 @@
       }, block.refreshInterval);
     }
   });
-  
+
   onDestroy(() => {
     if (refreshInterval) {
       clearInterval(refreshInterval);
     }
   });
-  
+
   async function checkVisibility() {
     if (!block.conditions) {
       isVisible = true;
       return;
     }
-    
+
     try {
       const result = await scriptingEngine.evaluateCondition(block.conditions);
       isVisible = result;
@@ -78,40 +78,43 @@
       isVisible = true; // Default to visible on error
     }
   }
-  
+
   async function processData() {
     if (!block.calculations || block.calculations.length === 0) {
       processedData = data;
       return;
     }
-    
+
     isLoading = true;
     error = null;
-    
+
     try {
       // Apply calculations
       const results = await Promise.all(
         block.calculations.map(async (calc) => {
           const context = {
             data,
-            ...calc.inputs
+            ...calc.inputs,
           };
-          
+
           const value = await scriptingEngine.evaluate(calc.formula, context);
           return {
             name: calc.name,
-            value
+            value,
           };
         })
       );
-      
+
       // Merge calculation results with raw data
       processedData = {
         raw: data,
-        calculated: results.reduce((acc, { name, value }) => {
-          acc[name] = value;
-          return acc;
-        }, {} as Record<string, any>)
+        calculated: results.reduce(
+          (acc, { name, value }) => {
+            acc[name] = value;
+            return acc;
+          },
+          {} as Record<string, any>
+        ),
       };
     } catch (err) {
       error = err instanceof Error ? err.message : 'Error processing data';
@@ -120,24 +123,26 @@
       isLoading = false;
     }
   }
-  
+
   function handleUpdate(updates: Partial<AnalyticsBlockConfig>) {
     dispatch('update', updates);
     onUpdate?.(updates);
   }
-  
+
   function handleExport(format: string) {
     if (!block.exportable) return;
-    
+
     dispatch('export', {
       format,
-      data: processedData || data
+      data: processedData || data,
     });
   }
-  
+
   // Base classes for consistent styling
-  const baseClasses = `analytics-block analytics-${block.type} mode-${mode}`;
-  const containerClasses = `${baseClasses} ${className} ${!isVisible ? 'hidden' : ''} ${isLoading ? 'loading' : ''}`;
+  let baseClasses = $derived(`analytics-block analytics-${block.type} mode-${mode}`);
+  let containerClasses = $derived(
+    `${baseClasses} ${className} ${!isVisible ? 'hidden' : ''} ${isLoading ? 'loading' : ''}`
+  );
 </script>
 
 {#if isVisible || mode === 'edit'}
@@ -156,31 +161,17 @@
           <span class="block-order">#{block.order}</span>
         </div>
         <div class="block-actions">
-          <button
-            class="action-button"
-            on:click={() => dispatch('edit')}
-            title="Edit"
-          >
-            ✏️
-          </button>
-          <button
-            class="action-button"
-            on:click={() => dispatch('duplicate')}
-            title="Duplicate"
-          >
+          <button class="action-button" onclick={() => dispatch('edit')} title="Edit"> ✏️ </button>
+          <button class="action-button" onclick={() => dispatch('duplicate')} title="Duplicate">
             📋
           </button>
-          <button
-            class="action-button danger"
-            on:click={() => dispatch('delete')}
-            title="Delete"
-          >
+          <button class="action-button danger" onclick={() => dispatch('delete')} title="Delete">
             🗑️
           </button>
         </div>
       </div>
     {/if}
-    
+
     <div class="block-content">
       {#if isLoading}
         <div class="loading-indicator">
@@ -196,13 +187,13 @@
         {@render children?.()}
       {/if}
     </div>
-    
+
     {#if mode === 'runtime' && block.exportable && processedData}
       <div class="export-controls">
         {#each block.exportFormats || ['png', 'csv'] as format}
           <button
             class="export-button"
-            on:click={() => handleExport(format)}
+            onclick={() => handleExport(format)}
             title="Export as {format.toUpperCase()}"
           >
             Export {format.toUpperCase()}
@@ -210,14 +201,14 @@
         {/each}
       </div>
     {/if}
-    
+
     {#if mode === 'edit' && block.conditions}
       <div class="condition-indicator">
         <span class="condition-icon">🔀</span>
         <span class="condition-text">Has conditional visibility</span>
       </div>
     {/if}
-    
+
     {#if mode === 'edit' && block.refreshInterval}
       <div class="refresh-indicator">
         <span class="refresh-icon">🔄</span>
@@ -233,23 +224,23 @@
     margin-bottom: 2rem;
     transition: all 0.2s ease;
   }
-  
+
   .analytics-block.hidden {
     display: none;
   }
-  
+
   .analytics-block.mode-edit {
     border: 1px solid #e5e7eb;
     border-radius: 0.5rem;
     padding: 1rem;
     background: #ffffff;
   }
-  
+
   .analytics-block.mode-edit:hover {
     border-color: #3b82f6;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
-  
+
   .block-header {
     display: flex;
     justify-content: space-between;
@@ -258,13 +249,13 @@
     padding-bottom: 0.75rem;
     border-bottom: 1px solid #f3f4f6;
   }
-  
+
   .block-info {
     display: flex;
     align-items: center;
     gap: 0.5rem;
   }
-  
+
   .block-type {
     font-size: 0.75rem;
     font-weight: 600;
@@ -274,17 +265,17 @@
     padding: 0.125rem 0.5rem;
     border-radius: 0.25rem;
   }
-  
+
   .block-order {
     font-size: 0.875rem;
     color: #9ca3af;
   }
-  
+
   .block-actions {
     display: flex;
     gap: 0.25rem;
   }
-  
+
   .action-button {
     padding: 0.25rem 0.5rem;
     font-size: 0.875rem;
@@ -294,21 +285,21 @@
     cursor: pointer;
     transition: all 0.15s ease;
   }
-  
+
   .action-button:hover {
     background: #e5e7eb;
   }
-  
+
   .action-button.danger:hover {
     background: #fee2e2;
     color: #dc2626;
   }
-  
+
   .block-content {
     position: relative;
     min-height: 200px;
   }
-  
+
   .loading-indicator {
     display: flex;
     flex-direction: column;
@@ -317,7 +308,7 @@
     height: 200px;
     color: #6b7280;
   }
-  
+
   .spinner {
     width: 2rem;
     height: 2rem;
@@ -327,13 +318,13 @@
     animation: spin 0.8s linear infinite;
     margin-bottom: 0.5rem;
   }
-  
+
   @keyframes spin {
     to {
       transform: rotate(360deg);
     }
   }
-  
+
   .error-message {
     display: flex;
     align-items: center;
@@ -343,11 +334,11 @@
     color: #dc2626;
     border-radius: 0.5rem;
   }
-  
+
   .error-icon {
     font-size: 1.25rem;
   }
-  
+
   .export-controls {
     display: flex;
     gap: 0.5rem;
@@ -355,7 +346,7 @@
     padding-top: 1rem;
     border-top: 1px solid #f3f4f6;
   }
-  
+
   .export-button {
     padding: 0.375rem 0.75rem;
     font-size: 0.875rem;
@@ -365,12 +356,12 @@
     cursor: pointer;
     transition: all 0.15s ease;
   }
-  
+
   .export-button:hover {
     background: #3b82f6;
     color: white;
   }
-  
+
   .condition-indicator,
   .refresh-indicator {
     display: flex;
@@ -382,17 +373,17 @@
     font-size: 0.75rem;
     color: #6b7280;
   }
-  
+
   .condition-icon,
   .refresh-icon {
     font-size: 0.875rem;
   }
-  
+
   /* Runtime-specific styles */
   .analytics-block.mode-runtime {
     animation: fadeIn 0.3s ease;
   }
-  
+
   @keyframes fadeIn {
     from {
       opacity: 0;

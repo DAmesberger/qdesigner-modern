@@ -17,15 +17,17 @@
     'skeleton',
     `skeleton--${variant}`,
     animation !== 'none' && `skeleton--${animation}`,
-    className
-  ].filter(Boolean).join(' ');
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
 </script>
 
-<div 
+<div
   class={baseClasses}
   style="width: {widthValue}; height: {computedHeight};"
   aria-hidden="true"
-/>
+></div>
 
 <style>
   .skeleton {
@@ -83,22 +85,12 @@
     right: 0;
     bottom: 0;
     left: 0;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.4),
-      transparent
-    );
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
     animation: skeleton-wave 1.5s linear infinite;
   }
 
   :global(.dark) .skeleton--wave::after {
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.1),
-      transparent
-    );
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
   }
 
   @keyframes skeleton-wave {

@@ -94,7 +94,7 @@ export class ValidationLayer {
       warnings.push(...validationResult.warnings);
       transformed = validationResult.transformed || response.value;
       
-    } catch (error) {
+    } catch (error: any) {
       errors.push({
         field: 'value',
         code: 'SCHEMA_VALIDATION_ERROR',
@@ -268,7 +268,7 @@ export class ValidationLayer {
             transformed = result.transformed;
           }
           
-        } catch (error) {
+        } catch (error: any) {
           errors.push({
             field: 'value',
             code: 'CUSTOM_RULE_ERROR',

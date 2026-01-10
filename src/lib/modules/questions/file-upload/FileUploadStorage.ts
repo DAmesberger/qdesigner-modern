@@ -1,7 +1,7 @@
 // File Upload question storage with specialized aggregations
 
 import { BaseQuestionStorage } from '../shared/BaseStorage';
-import type { StorageData } from '$lib/services/localStorage';
+import type { QuestionResponse } from '../shared/types';
 
 interface FileData {
   id: string;
@@ -16,6 +16,29 @@ interface FileData {
 }
 
 export class FileUploadStorage extends BaseQuestionStorage {
+  getAnswerType(): string {
+    return 'file-upload';
+  }
+
+  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+    return this.getAllForSession();
+  }
+
+  /**
+   * Parse stored value
+   */
+  protected parseValue(value: any): FileData | FileData[] {
+    if (!value) return [];
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return [];
+      }
+    }
+    return value;
+  }
+
   /**
    * Get total size of all uploaded files
    */
@@ -23,7 +46,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     let totalSize = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       const files = Array.isArray(value) ? value : [value];
       
@@ -44,7 +67,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const distribution: Record<string, number> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       const files = Array.isArray(value) ? value : [value];
       
@@ -67,7 +90,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const distribution: Record<string, number> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       const files = Array.isArray(value) ? value : [value];
       
@@ -90,7 +113,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
     let totalSize = 0;
     let fileCount = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       const files = Array.isArray(value) ? value : [value];
       
@@ -116,7 +139,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
     let largest: FileData | null = null;
     let smallest: FileData | null = null;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       const files = Array.isArray(value) ? value : [value];
       
@@ -142,7 +165,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const distribution: Record<string, number> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       const files = Array.isArray(value) ? value : [value];
       
@@ -166,7 +189,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const fileNames: string[] = [];
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       const files = Array.isArray(value) ? value : [value];
       
@@ -187,7 +210,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const matchingFiles: FileData[] = [];
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);
       const files = Array.isArray(value) ? value : [value];
       
@@ -229,7 +252,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
           .map(([type, count]) => `${type}: ${count}`)
           .join(', ');
       default:
-        return super.formatAggregation(type, value);
+        return JSON.stringify(value);
     }
   }
   
@@ -237,8 +260,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
    * Get all available aggregations for file upload questions
    */
   async getAllAggregations(questionId: string): Promise<Record<string, any>> {
-    const [base, totalSize, avgSize, fileTypes, extensions, extremes] = await Promise.all([
-      super.getAllAggregations(questionId),
+    const [totalSize, avgSize, fileTypes, extensions, extremes] = await Promise.all([
       this.getTotalFileSize(questionId),
       this.getAverageFileSize(questionId),
       this.getFileTypeDistribution(questionId),
@@ -247,7 +269,6 @@ export class FileUploadStorage extends BaseQuestionStorage {
     ]);
     
     return {
-      ...base,
       totalSize,
       averageSize: avgSize,
       fileTypes,

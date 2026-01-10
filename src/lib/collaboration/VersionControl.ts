@@ -9,8 +9,7 @@ import type {
   VersionDiff,
   MergeRequest,
   Operation,
-  Conflict,
-  Questionnaire
+  Conflict
 } from './types.js';
 import type { Questionnaire as QuestionnaireType } from '$lib/shared';
 import { OperationalTransform } from './OperationalTransform.js';
@@ -91,7 +90,7 @@ export class VersionControl {
    */
   getLatestVersion(questionnaireId: string, branchName: string = 'main'): Version | null {
     const versions = this.getVersions(questionnaireId, branchName);
-    return versions.length > 0 ? versions[0] : null;
+    return versions.length > 0 ? versions[0]! : null;
   }
 
   /**
@@ -583,7 +582,7 @@ export class VersionControl {
 
   private getNextVersionNumber(questionnaireId: string, branchName: string): number {
     const versions = this.getVersions(questionnaireId, branchName);
-    return versions.length > 0 ? versions[0].version + 1 : 1;
+    return versions.length > 0 ? versions[0]!.version + 1 : 1;
   }
 
   private updateBranch(questionnaireId: string, branchName: string, headVersionId: string): void {

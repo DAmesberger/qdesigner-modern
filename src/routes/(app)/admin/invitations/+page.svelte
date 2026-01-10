@@ -8,19 +8,19 @@
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
-  
+
   let invitations: Invitation[] = [];
   let loading = true;
   let error: string | null = null;
   let success: string | null = null;
-  
+
   // New invitation form
   let showNewInviteForm = false;
   let inviteEmail = '';
   let inviteRole: 'member' | 'admin' | 'viewer' = 'member';
   let inviteMessage = '';
   let inviteLoading = false;
-  
+
   // Current user and organization
   interface User {
     id: string;
@@ -28,38 +28,41 @@
     email: string;
     full_name?: string;
   }
-  
+
   interface Organization {
     id: string;
     name: string;
     slug: string;
   }
-  
+
   let currentUser: User | null = null;
   let currentOrg: Organization | null = null;
-  
+
   onMount(async () => {
     await loadData();
   });
-  
+
   async function loadData() {
     try {
       // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
-      
+
       const { data: userData } = await supabase
         .from('users')
         .select('*')
         .eq('auth_id', user.id)
         .single();
-      
+
       currentUser = userData;
-      
+
       // Get user's organization (assuming they're viewing their active org)
       const { data: membership } = await supabase
         .from('organization_members')
-        .select(`
+        .select(
+          `
           organization_id,
           role,
           organizations (
@@ -67,20 +70,21 @@
             name,
             slug
           )
-        `)
+        `
+        )
         .eq('user_id', currentUser!.id)
         .eq('status', 'active')
         .single();
-      
+
       if (!membership || !['owner', 'admin'].includes(membership.role)) {
         error = 'You do not have permission to manage invitations';
         loading = false;
         return;
       }
-      
+
       // Type assertion needed because Supabase types might be incorrect
       currentOrg = membership.organizations as unknown as Organization;
-      
+
       // Load invitations
       await loadInvitations();
     } catch (err) {
@@ -90,54 +94,56 @@
       loading = false;
     }
   }
-  
+
   async function loadInvitations() {
     if (!currentOrg) return;
-    
+
     const { data, error: fetchError } = await supabase
       .from('organization_invitations')
-      .select(`
+      .select(
+        `
         *,
         invited_by:users!organization_invitations_invited_by_fkey (
           email,
           full_name
         )
-      `)
+      `
+      )
       .eq('organization_id', currentOrg.id)
       .order('created_at', { ascending: false });
-    
+
     if (fetchError) {
       console.error('Error loading invitations:', fetchError);
       error = 'Failed to load invitations';
     } else {
       // Transform snake_case to camelCase for consistency
-      invitations = (data || []).map(inv => ({
+      invitations = (data || []).map((inv) => ({
         ...inv,
         organizationId: inv.organization_id,
         expiresAt: inv.expires_at,
         customMessage: inv.custom_message,
         createdAt: inv.created_at,
         acceptedAt: inv.accepted_at,
-        invitedBy: inv.invited_by
+        invitedBy: inv.invited_by,
       }));
     }
   }
-  
+
   async function sendInvitation() {
     if (!inviteEmail || !currentOrg || !currentUser) return;
-    
+
     inviteLoading = true;
     error = null;
     success = null;
-    
+
     const { data, error: inviteError } = await createInvitation({
       organizationId: currentOrg.id,
       email: inviteEmail,
       role: inviteRole,
       customMessage: inviteMessage || undefined,
-      invitedBy: currentUser.id
+      invitedBy: currentUser.id,
     });
-    
+
     if (inviteError) {
       error = inviteError;
     } else {
@@ -147,19 +153,19 @@
       showNewInviteForm = false;
       await loadInvitations();
     }
-    
+
     inviteLoading = false;
   }
-  
+
   async function handleRevokeInvitation(invitationId: string) {
     if (!confirm('Are you sure you want to revoke this invitation?')) return;
     if (!currentUser) return;
-    
+
     const { success: revokeSuccess, error: revokeError } = await revokeInvitation(
       invitationId,
       currentUser.id
     );
-    
+
     if (revokeError) {
       error = revokeError;
     } else {
@@ -167,8 +173,11 @@
       await loadInvitations();
     }
   }
-  
-  function getStatusBadge(status: string): { variant: 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info'; label: string } {
+
+  function getStatusBadge(status: string): {
+    variant: 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info';
+    label: string;
+  } {
     switch (status) {
       case 'pending':
         return { variant: 'warning', label: 'Pending' };
@@ -186,14 +195,14 @@
         return { variant: 'secondary', label: status };
     }
   }
-  
+
   function formatDate(date: string) {
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   }
 </script>
@@ -207,15 +216,12 @@
           Manage invitations to {currentOrg?.name || 'your organization'}
         </p>
       </div>
-      <Button
-        variant="primary"
-        on:click={() => showNewInviteForm = !showNewInviteForm}
-      >
+      <Button variant="primary" onclick={() => (showNewInviteForm = !showNewInviteForm)}>
         {showNewInviteForm ? 'Cancel' : 'Send Invitation'}
       </Button>
     </div>
   </div>
-  
+
   {#if error}
     <div class="mb-4">
       <Alert variant="error">
@@ -223,7 +229,7 @@
       </Alert>
     </div>
   {/if}
-  
+
   {#if success}
     <div class="mb-4">
       <Alert variant="success">
@@ -231,7 +237,7 @@
       </Alert>
     </div>
   {/if}
-  
+
   {#if showNewInviteForm}
     <Card class="mb-8">
       <h3 class="text-lg font-semibold mb-4">Send New Invitation</h3>
@@ -245,7 +251,7 @@
             placeholder="colleague@example.com"
           />
         </FormGroup>
-        
+
         <FormGroup label="Role" id="invite-role">
           <select
             id="invite-role"
@@ -257,7 +263,7 @@
             <option value="admin">Admin - Can manage users and settings</option>
           </select>
         </FormGroup>
-        
+
         <FormGroup label="Custom Message (Optional)" id="invite-message">
           <textarea
             id="invite-message"
@@ -265,29 +271,19 @@
             rows="3"
             class="w-full rounded-md border-border bg-background px-3 py-2"
             placeholder="Add a personal message to the invitation..."
-          />
+          ></textarea>
         </FormGroup>
-        
+
         <div class="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            on:click={() => showNewInviteForm = false}
-          >
+          <Button type="button" variant="secondary" onclick={() => (showNewInviteForm = false)}>
             Cancel
           </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            loading={inviteLoading}
-          >
-            Send Invitation
-          </Button>
+          <Button type="submit" variant="primary" loading={inviteLoading}>Send Invitation</Button>
         </div>
       </form>
     </Card>
   {/if}
-  
+
   {#if loading}
     <div class="flex justify-center py-8">
       <div class="text-muted-foreground">Loading invitations...</div>
@@ -312,7 +308,7 @@
                 <Badge {...getStatusBadge(invitation.status)} />
                 <Badge variant="secondary">{invitation.role}</Badge>
               </div>
-              
+
               <div class="text-sm text-muted-foreground space-y-1">
                 <p>
                   Invited by {invitation.invitedBy?.full_name || invitation.invitedBy?.email}
@@ -329,13 +325,13 @@
                 {/if}
               </div>
             </div>
-            
+
             {#if invitation.status === 'pending'}
               <div class="flex gap-2">
                 <Button
                   size="sm"
                   variant="secondary"
-                  on:click={() => {
+                  onclick={() => {
                     navigator.clipboard.writeText(
                       `${window.location.origin}/invite/${invitation.token}`
                     );
@@ -347,7 +343,7 @@
                 <Button
                   size="sm"
                   variant="secondary"
-                  on:click={() => handleRevokeInvitation(invitation.id)}
+                  onclick={() => handleRevokeInvitation(invitation.id)}
                 >
                   Revoke
                 </Button>

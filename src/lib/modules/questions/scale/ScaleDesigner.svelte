@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
-  
+
   interface ScaleConfig {
     min: number;
     max: number;
@@ -13,19 +13,19 @@
     orientation?: 'horizontal' | 'vertical';
     defaultValue?: number;
   }
-  
+
   interface ScaleLabel {
     value: number;
     label: string;
     description?: string;
   }
-  
+
   interface Props extends QuestionProps {
     question: Question & { config: ScaleConfig };
   }
-  
+
   let { question, onResponse }: Props = $props();
-  
+
   // Initialize config if it doesn't exist
   $effect(() => {
     if (!question.config) {
@@ -36,21 +36,21 @@
         displayType: 'buttons',
         showValue: true,
         showLabels: true,
-        orientation: 'horizontal'
+        orientation: 'horizontal',
       };
     }
   });
-  
+
   function updateConfig(updates: Partial<ScaleConfig>) {
     onResponse?.({
       ...question,
       config: {
         ...question.config,
-        ...updates
-      }
+        ...updates,
+      },
     });
   }
-  
+
   function updateLabel(index: number, field: keyof ScaleLabel, value: any) {
     const labels = [...(question.config?.labels || [])];
     if (labels[index]) {
@@ -58,46 +58,45 @@
       updateConfig({ labels });
     }
   }
-  
+
   function addLabel() {
     const labels = [...(question.config?.labels || [])];
-    const nextValue = labels.length > 0 ? 
-      Math.max(...labels.map(l => l.value)) + 1 : 
-      question.config?.min || 1;
-    
+    const nextValue =
+      labels.length > 0 ? Math.max(...labels.map((l) => l.value)) + 1 : question.config?.min || 1;
+
     if (nextValue <= (question.config?.max || 10)) {
       labels.push({
         value: nextValue,
-        label: `Label ${nextValue}`
+        label: `Label ${nextValue}`,
       });
       updateConfig({ labels });
     }
   }
-  
+
   function removeLabel(index: number) {
     const labels = [...(question.config?.labels || [])];
     labels.splice(index, 1);
     updateConfig({ labels });
   }
-  
+
   // Ensure min/max labels exist
   $effect(() => {
     const labels = question.config.labels || [];
-    const hasMinLabel = labels.some(l => l.value === (question.config?.min || 1));
-    const hasMaxLabel = labels.some(l => l.value === (question.config?.max || 10));
-    
+    const hasMinLabel = labels.some((l) => l.value === (question.config?.min || 1));
+    const hasMaxLabel = labels.some((l) => l.value === (question.config?.max || 10));
+
     if (!hasMinLabel || !hasMaxLabel) {
       const newLabels = [...labels];
       if (!hasMinLabel) {
         newLabels.push({
           value: question.config?.min || 1,
-          label: 'Minimum'
+          label: 'Minimum',
         });
       }
       if (!hasMaxLabel) {
         newLabels.push({
           value: question.config?.max || 10,
-          label: 'Maximum'
+          label: 'Maximum',
         });
       }
       updateConfig({ labels: newLabels.sort((a, b) => a.value - b.value) });
@@ -108,29 +107,32 @@
 <div class="scale-designer">
   <div class="form-section">
     <h3>Scale Range</h3>
-    
+
     <div class="form-row">
       <div class="field">
-        <label>Minimum</label>
+        <label for="scale-min">Minimum</label>
         <input
+          id="scale-min"
           type="number"
           value={question.config?.min || 1}
           oninput={(e) => updateConfig({ min: parseInt(e.currentTarget.value) || 0 })}
         />
       </div>
-      
+
       <div class="field">
-        <label>Maximum</label>
+        <label for="scale-max">Maximum</label>
         <input
+          id="scale-max"
           type="number"
           value={question.config?.max || 10}
           oninput={(e) => updateConfig({ max: parseInt(e.currentTarget.value) || 10 })}
         />
       </div>
-      
+
       <div class="field">
-        <label>Step</label>
+        <label for="scale-step">Step</label>
         <input
+          id="scale-step"
           type="number"
           min="0.1"
           step="0.1"
@@ -140,10 +142,10 @@
       </div>
     </div>
   </div>
-  
+
   <div class="form-section">
     <h3>Display Type</h3>
-    
+
     <div class="radio-group">
       <label>
         <input
@@ -155,7 +157,7 @@
         />
         <span>Buttons</span>
       </label>
-      
+
       <label>
         <input
           type="radio"
@@ -166,7 +168,7 @@
         />
         <span>Slider</span>
       </label>
-      
+
       <label>
         <input
           type="radio"
@@ -177,7 +179,7 @@
         />
         <span>Stars</span>
       </label>
-      
+
       <label>
         <input
           type="radio"
@@ -190,11 +192,11 @@
       </label>
     </div>
   </div>
-  
+
   {#if question.config?.displayType === 'buttons'}
     <div class="form-section">
       <h3>Orientation</h3>
-      
+
       <div class="radio-group">
         <label>
           <input
@@ -206,7 +208,7 @@
           />
           <span>Horizontal</span>
         </label>
-        
+
         <label>
           <input
             type="radio"
@@ -220,10 +222,10 @@
       </div>
     </div>
   {/if}
-  
+
   <div class="form-section">
     <h3>Display Options</h3>
-    
+
     <label class="checkbox-label">
       <input
         type="checkbox"
@@ -232,7 +234,7 @@
       />
       <span>Show selected value</span>
     </label>
-    
+
     <label class="checkbox-label">
       <input
         type="checkbox"
@@ -241,78 +243,83 @@
       />
       <span>Show labels</span>
     </label>
-    
+
     <div class="field">
-      <label>Default Value (optional)</label>
-      <input
-        type="number"
-        min={question.config.min}
-        max={question.config.max}
-        step={question.config.step}
-        placeholder="No default"
-        value={question.config?.defaultValue || ''}
-        oninput={(e) => updateConfig({ 
-          defaultValue: e.currentTarget.value ? parseFloat(e.currentTarget.value) : undefined 
-        })}
-      />
+      <label
+        >Default Value (optional)
+        <input
+          type="number"
+          min={question.config.min}
+          max={question.config.max}
+          step={question.config.step}
+          placeholder="No default"
+          value={question.config?.defaultValue || ''}
+          oninput={(e) =>
+            updateConfig({
+              defaultValue: e.currentTarget.value ? parseFloat(e.currentTarget.value) : undefined,
+            })}
+        />
+      </label>
     </div>
   </div>
-  
+
   <div class="form-section">
     <h3>Labels</h3>
     <p class="help-text">Define custom labels for specific scale values</p>
-    
+
     <div class="labels-list">
       {#each question.config?.labels || [] as label, index}
         <div class="label-item">
           <div class="label-fields">
             <div class="field">
-              <label>Value</label>
-              <input
-                type="number"
-                min={question.config.min}
-                max={question.config.max}
-                step={question.config.step}
-                value={label.value}
-                oninput={(e) => updateLabel(index, 'value', parseFloat(e.currentTarget.value) || 0)}
-              />
+              <label
+                >Value
+                <input
+                  type="number"
+                  min={question.config.min}
+                  max={question.config.max}
+                  step={question.config.step}
+                  value={label.value}
+                  oninput={(e) =>
+                    updateLabel(index, 'value', parseFloat(e.currentTarget.value) || 0)}
+                />
+              </label>
             </div>
-            
+
             <div class="field flex-1">
-              <label>Label</label>
-              <input
-                type="text"
-                value={label.label}
-                oninput={(e) => updateLabel(index, 'label', e.currentTarget.value)}
-                placeholder="Label text"
-              />
+              <label
+                >Label
+                <input
+                  type="text"
+                  value={label.label}
+                  oninput={(e) => updateLabel(index, 'label', e.currentTarget.value)}
+                  placeholder="Label text"
+                />
+              </label>
             </div>
-            
-            <button
-              class="remove-button"
-              onclick={() => removeLabel(index)}
-              title="Remove label"
-            >
+
+            <button class="remove-button" onclick={() => removeLabel(index)} title="Remove label">
               ×
             </button>
           </div>
-          
+
           <div class="field full-width">
-            <label>Description (optional)</label>
-            <input
-              type="text"
-              value={label.description || ''}
-              oninput={(e) => updateLabel(index, 'description', e.currentTarget.value || undefined)}
-              placeholder="Additional description for this value"
-            />
+            <label
+              >Description (optional)
+              <input
+                type="text"
+                value={label.description || ''}
+                oninput={(e) =>
+                  updateLabel(index, 'description', e.currentTarget.value || undefined)}
+                placeholder="Additional description for this value"
+              />
+            </label>
           </div>
         </div>
       {/each}
     </div>
-    
-    <button class="add-button" onclick={addLabel}>
-      + Add Label
-    </button>
+
+    <button class="add-button" onclick={addLabel}> + Add Label </button>
   </div>
 </div>
 
@@ -322,77 +329,77 @@
     flex-direction: column;
     gap: 1.5rem;
   }
-  
+
   .form-section {
     background: #f9fafb;
     padding: 1rem;
     border-radius: 0.5rem;
   }
-  
+
   h3 {
     font-size: 0.875rem;
     font-weight: 600;
     color: #111827;
     margin-bottom: 0.75rem;
   }
-  
+
   .help-text {
     font-size: 0.75rem;
     color: #6b7280;
     margin-bottom: 0.75rem;
   }
-  
+
   .form-row {
     display: flex;
     gap: 0.75rem;
   }
-  
+
   .field {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
   }
-  
+
   .field.flex-1 {
     flex: 1;
   }
-  
+
   .field.full-width {
     width: 100%;
   }
-  
+
   .field label {
     font-size: 0.75rem;
     font-weight: 500;
     color: #374151;
   }
-  
+
   .field input {
     padding: 0.5rem;
     border: 1px solid #d1d5db;
     border-radius: 0.375rem;
     font-size: 0.875rem;
   }
-  
+
   .field input:focus {
     outline: none;
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
-  
+
   .radio-group {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
   }
-  
+
   .radio-group label {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     cursor: pointer;
   }
-  
+
   .checkbox-label {
     display: flex;
     align-items: center;
@@ -401,27 +408,27 @@
     font-size: 0.875rem;
     margin-bottom: 0.5rem;
   }
-  
+
   .labels-list {
     display: flex;
     flex-direction: column;
     gap: 1rem;
   }
-  
+
   .label-item {
     background: white;
     border: 1px solid #e5e7eb;
     border-radius: 0.375rem;
     padding: 0.75rem;
   }
-  
+
   .label-fields {
     display: flex;
     gap: 0.5rem;
     align-items: flex-end;
     margin-bottom: 0.5rem;
   }
-  
+
   .remove-button {
     padding: 0.5rem 0.75rem;
     background: #fee2e2;
@@ -433,11 +440,11 @@
     line-height: 1;
     transition: all 0.15s;
   }
-  
+
   .remove-button:hover {
     background: #fecaca;
   }
-  
+
   .add-button {
     margin-top: 0.75rem;
     padding: 0.5rem 1rem;
@@ -450,7 +457,7 @@
     transition: all 0.15s;
     width: 100%;
   }
-  
+
   .add-button:hover {
     border-color: #3b82f6;
     color: #3b82f6;

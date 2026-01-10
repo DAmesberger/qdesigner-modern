@@ -64,15 +64,14 @@
 </script>
 
 <div class="relative w-full h-screen bg-black">
-  <canvas bind:this={canvas} class="absolute inset-0" />
+  <canvas bind:this={canvas} class="absolute inset-0"></canvas>
 
   {#if showInstructions}
     <div class="absolute inset-0 flex items-center justify-center z-10">
       <div class="bg-gray-900 p-8 rounded-lg max-w-md text-white">
         <h2 class="text-2xl font-bold mb-4">Reaction Time Test</h2>
         <p class="mb-4">
-          When the screen turns white, press the <strong>SPACEBAR</strong> as quickly as
-          possible.
+          When the screen turns white, press the <strong>SPACEBAR</strong> as quickly as possible.
         </p>
         <p class="mb-4 text-sm text-gray-400">
           The test includes 3 practice trials followed by 17 test trials.

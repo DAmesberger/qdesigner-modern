@@ -424,9 +424,10 @@ export class LocaleFormatter {
       year: absValue === 1 ? 'year' : 'years'
     };
     
+    const label = (unitLabels as any)[unit];
     return isPast 
-      ? `${absValue} ${unitLabels[unit]} ago`
-      : `in ${absValue} ${unitLabels[unit]}`;
+      ? `${absValue} ${label} ago`
+      : `in ${absValue} ${label}`;
   }
 
   private formatListManually(items: string[], type: 'conjunction' | 'disjunction' | 'unit'): string {

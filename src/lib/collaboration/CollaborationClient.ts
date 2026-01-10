@@ -36,7 +36,7 @@ class CollaborationEventEmitter extends EventTarget {
     event: K,
     callback: (data: CollaborationEvents[K]) => void
   ): void {
-    this.removeEventListener(event, callback as EventListener);
+    this.removeEventListener(event, callback as unknown as EventListener);
   }
 }
 

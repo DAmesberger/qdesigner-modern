@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import type { Question } from '$lib/shared';
-  
+
   export let question: Question;
   export let onUpdate: (script: string) => void;
-  
+
   let editorContainer: HTMLDivElement;
   let editor: any;
   let monaco: any;
-  
+
   // Script template
   const scriptTemplate = `// Question Script: ${question.name || question.id}
 // Available APIs:
@@ -102,7 +102,7 @@ export const apiCalls = {
   // }
 };
 `;
-  
+
   // TypeScript definitions for the API
   const typeDefinitions = `
 declare namespace QuestionAPI {
@@ -136,21 +136,21 @@ declare namespace QuestionAPI {
   }
 }
 `;
-  
+
   onMount(async () => {
     // Only load Monaco in browser environment
     if (typeof window === 'undefined') return;
-    
+
     try {
       // Dynamically import Monaco
       monaco = await import('monaco-editor');
-      
+
       // Configure Monaco
       monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
         noSemanticValidation: false,
         noSyntaxValidation: false,
       });
-      
+
       monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
         target: monaco.languages.typescript.ScriptTarget.ES2020,
         allowNonTsExtensions: true,
@@ -158,13 +158,13 @@ declare namespace QuestionAPI {
         module: monaco.languages.typescript.ModuleKind.ESNext,
         allowJs: true,
       });
-      
+
       // Add type definitions
       monaco.languages.typescript.javascriptDefaults.addExtraLib(
         typeDefinitions,
         'questionapi.d.ts'
       );
-      
+
       // Create editor
       editor = monaco.editor.create(editorContainer, {
         value: question.settings?.script || scriptTemplate,
@@ -185,13 +185,13 @@ declare namespace QuestionAPI {
           strings: true,
         },
       });
-      
+
       // Handle changes
       editor.onDidChangeModelContent(() => {
         const value = editor.getValue();
         onUpdate(value);
       });
-      
+
       // Add keyboard shortcuts
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
         // Save shortcut - could trigger save
@@ -201,7 +201,7 @@ declare namespace QuestionAPI {
       console.error('Failed to load Monaco Editor:', error as Error);
     }
   });
-  
+
   onDestroy(() => {
     editor?.dispose();
   });
@@ -211,32 +211,39 @@ declare namespace QuestionAPI {
   <div class="editor-header">
     <h3>Question Script</h3>
     <div class="editor-actions">
-      <button 
+      <button
         class="action-btn"
         on:click={() => editor?.trigger('', 'editor.action.formatDocument', null)}
         title="Format code"
+        aria-label="Format code"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
-          <path d="M2 4h12M2 8h12M2 12h12" stroke-width="2" stroke-linecap="round"/>
+          <path d="M2 4h12M2 8h12M2 12h12" stroke-width="2" stroke-linecap="round" />
         </svg>
       </button>
-      <button 
+      <button
         class="action-btn"
         on:click={() => {
           editor?.setValue(scriptTemplate);
           onUpdate(scriptTemplate);
         }}
         title="Reset to template"
+        aria-label="Reset to template"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
-          <path d="M2 8a6 6 0 1 1 8.472 5.473L8 11M8 5v3l2 2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path
+            d="M2 8a6 6 0 1 1 8.472 5.473L8 11M8 5v3l2 2"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
         </svg>
       </button>
     </div>
   </div>
-  
+
   <div class="editor-container" bind:this={editorContainer}></div>
-  
+
   <div class="editor-footer">
     <span class="hint">Ctrl+S to save • Ctrl+Space for suggestions</span>
   </div>
@@ -251,7 +258,7 @@ declare namespace QuestionAPI {
     border-radius: 0.5rem;
     overflow: hidden;
   }
-  
+
   .editor-header {
     display: flex;
     justify-content: space-between;
@@ -260,19 +267,19 @@ declare namespace QuestionAPI {
     background: #2d2d30;
     border-bottom: 1px solid #3e3e42;
   }
-  
+
   .editor-header h3 {
     font-size: 0.875rem;
     font-weight: 600;
     color: #cccccc;
     margin: 0;
   }
-  
+
   .editor-actions {
     display: flex;
     gap: 0.5rem;
   }
-  
+
   .action-btn {
     padding: 0.25rem;
     background: none;
@@ -282,23 +289,23 @@ declare namespace QuestionAPI {
     border-radius: 0.25rem;
     transition: all 150ms;
   }
-  
+
   .action-btn:hover {
     background: #3e3e42;
     color: #cccccc;
   }
-  
+
   .editor-container {
     flex: 1;
     min-height: 400px;
   }
-  
+
   .editor-footer {
     padding: 0.5rem 1rem;
     background: #2d2d30;
     border-top: 1px solid #3e3e42;
   }
-  
+
   .hint {
     font-size: 0.75rem;
     color: #858585;

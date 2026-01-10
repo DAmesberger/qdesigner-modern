@@ -7,35 +7,36 @@
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import { supabase } from '$lib/services/supabase';
   import { handleAuthUser } from '$lib/database/auth-helpers';
-  
+
   let email = '';
   let password = '';
   let loading = false;
   let error: string | null = null;
   let successMessage: string | null = null;
-  
-  async function handleSignIn() {
+
+  async function handleSignIn(e: Event) {
+    e.preventDefault();
     loading = true;
     error = null;
-    
+
     try {
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
-        password
+        password,
       });
-      
+
       if (signInError) {
         error = signInError.message;
         loading = false;
         return;
       }
-      
+
       if (data.user) {
         console.log('Login successful, user:', data.user.email);
         // Sync user with our database and get organizations
         const userInfo = await handleAuthUser(data.user);
         console.log('User info:', userInfo);
-        
+
         // Check if user has any organizations
         if (userInfo.organizations.length === 0) {
           console.log('No organizations, redirecting to onboarding');
@@ -53,21 +54,21 @@
       loading = false;
     }
   }
-  
+
   async function handleSignUp() {
     loading = true;
     error = null;
-    
+
     const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
           full_name: '', // Can be collected during onboarding
-        }
-      }
+        },
+      },
     });
-    
+
     if (signUpError) {
       error = signUpError.message;
       loading = false;
@@ -83,9 +84,11 @@
   <div class="sm:mx-auto sm:w-full sm:max-w-sm">
     <div class="flex items-center justify-center gap-2 mb-6">
       <div class="relative">
-        <div class="absolute inset-0 bg-gradient-to-r from-primary to-primary-foreground blur-lg opacity-75"></div>
+        <div
+          class="absolute inset-0 bg-gradient-to-r from-primary to-primary-foreground blur-lg opacity-75"
+        ></div>
         <svg class="relative w-12 h-12 text-primary" viewBox="0 0 32 32" fill="currentColor">
-          <path d="M16 2L2 9v14l14 7 14-7V9L16 2zm0 4l8 4v8l-8 4-8-4V10l8-4z"/>
+          <path d="M16 2L2 9v14l14 7 14-7V9L16 2zm0 4l8 4v8l-8 4-8-4V10l8-4z" />
         </svg>
       </div>
     </div>
@@ -95,7 +98,7 @@
   </div>
 
   <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
-    <form class="space-y-6" on:submit|preventDefault={handleSignIn}>
+    <form class="space-y-6" onsubmit={handleSignIn}>
       <FormGroup label="Email address" id="email">
         <Input
           id="email"
@@ -112,7 +115,10 @@
         <FormGroup label="Password" id="password">
           <div slot="label" class="flex items-center justify-between w-full">
             <span>Password</span>
-            <a href="/forgot-password" class="text-sm font-semibold text-primary hover:text-primary/80">
+            <a
+              href="/forgot-password"
+              class="text-sm font-semibold text-primary hover:text-primary/80"
+            >
               Forgot password?
             </a>
           </div>
@@ -133,7 +139,7 @@
           {error}
         </Alert>
       {/if}
-      
+
       {#if successMessage}
         <Alert variant="success">
           {successMessage}
@@ -141,15 +147,7 @@
       {/if}
 
       <div>
-        <Button
-          type="submit"
-          variant="primary"
-          size="lg"
-          class="w-full"
-          {loading}
-        >
-          Sign in
-        </Button>
+        <Button type="submit" variant="primary" size="lg" class="w-full" {loading}>Sign in</Button>
       </div>
 
       <div class="mt-6">
@@ -168,7 +166,7 @@
             variant="secondary"
             size="lg"
             class="w-full"
-            on:click={handleSignUp}
+            onclick={handleSignUp}
             {loading}
           >
             Create new account

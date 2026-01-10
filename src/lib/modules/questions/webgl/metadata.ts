@@ -15,13 +15,11 @@ export const metadata: ModuleMetadata = {
     supportsValidation: true,
     supportsAnalytics: true,
     supportsTiming: true,
-    supportsVariables: true,
-    requiresInteraction: true,
-    requiresWebGL: true
+    supportsVariables: true
   },
   components: {
-    runtime: () => import('./WebGL.svelte'),
-    designer: () => import('./WebGLDesigner.svelte')
+    runtime: () => import('./WebGL.svelte') as any,
+    designer: () => import('./WebGLDesigner.svelte') as any
   },
   defaultConfig: {
     stimulus: {
@@ -58,10 +56,6 @@ export const metadata: ModuleMetadata = {
       antialias: true
     }
   },
-  answerType: AnswerTypes.TIMING,
-  renderer: 'webgl',
-  performance: {
-    targetFPS: 120,
-    gpuRequired: true
-  }
+  answerType: 'timing' as any,
+  
 };

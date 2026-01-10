@@ -1,12 +1,17 @@
 // Core module types and interfaces
 
+import type { Question, ConditionalLogic, Questionnaire } from '$lib/shared';
 import type { ComponentType } from 'svelte';
-import type { Question, ConditionalLogic } from '$lib/shared';
+// AnswerType and ResponseData are defined in this file, no need to import from $lib/shared/types/response
 
 // Module categories
 // - display: Components that only show content (no user response)
 // - question: Interactive components that collect user responses
-export type ModuleCategory = 'display' | 'question';
+// - instruction: Instructional content blocks
+// - analytics: Data visualization blocks
+export type ModuleCategory = 'display' | 'question' | 'instruction' | 'analytics';
+
+export type { Question, ConditionalLogic, Questionnaire };
 
 // Base module metadata
 export interface ModuleMetadata {
@@ -34,8 +39,8 @@ export interface ModuleCapabilities {
 
 // Module component loaders
 export interface ModuleComponents {
-  runtime: () => Promise<{ default: ComponentType }>;
-  designer: () => Promise<{ default: ComponentType }>;
+  runtime: () => Promise<{ default: any }>;
+  designer: () => Promise<{ default: any }>;
 }
 
 // Answer type definition for questions
@@ -227,5 +232,5 @@ export interface ModuleRegistry {
   get(type: string): ModuleMetadata | undefined;
   getByCategory(category: ModuleCategory): ModuleMetadata[];
   getAllTypes(): string[];
-  loadComponent(type: string, variant: 'runtime' | 'designer'): Promise<ComponentType>;
+  loadComponent(type: string, variant: 'runtime' | 'designer'): Promise<any>;
 }

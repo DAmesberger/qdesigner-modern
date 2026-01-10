@@ -8,6 +8,6 @@ import './bar-chart';
 // import './boxplot';
 
 // Export shared components
-export * from './shared/types';
-export { default as BaseAnalytics } from './shared/BaseAnalytics.svelte';
-export { BaseAnalyticsStorage } from './shared/BaseStorage';
+export * from '../display/shared/analytics/types';
+export { default as BaseAnalytics } from '../display/shared/analytics/BaseAnalytics.svelte';
+export { BaseAnalyticsStorage } from '../display/shared/analytics/BaseStorage';

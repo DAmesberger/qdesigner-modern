@@ -228,16 +228,16 @@ export const activeLanguageConfig = derived(
 
 // Translation statistics store
 export const translationStats = derived(
-  [translationManagerStore, supportedLanguages],
-  ([$entries, $supportedLanguages]) => {
+  translationManagerStore,
+  ($entries) => {
     const totalKeys = $entries.length;
-    const totalPossibleTranslations = totalKeys * $supportedLanguages.length;
+    const totalPossibleTranslations = totalKeys * supportedLanguages.length;
     
     let totalTranslations = 0;
     let missingByLanguage: Record<string, number> = {};
     let completionByLanguage: Record<string, number> = {};
     
-    $supportedLanguages.forEach(lang => {
+    supportedLanguages.forEach(lang => {
       missingByLanguage[lang.code] = 0;
       completionByLanguage[lang.code] = 0;
     });
@@ -246,19 +246,28 @@ export const translationStats = derived(
       Object.keys(entry.translations).forEach(lang => {
         if (entry.translations[lang]) {
           totalTranslations++;
-          completionByLanguage[lang]++;
+          if (completionByLanguage[lang] !== undefined) {
+            completionByLanguage[lang]++;
+          } else {
+             completionByLanguage[lang] = 1;
+          }
         }
       });
       
       entry.missing.forEach(lang => {
-        missingByLanguage[lang]++;
+        if (missingByLanguage[lang] !== undefined) {
+           missingByLanguage[lang]++;
+        } else {
+           missingByLanguage[lang] = 1;
+        }
       });
     });
     
     // Calculate completion percentages
     Object.keys(completionByLanguage).forEach(lang => {
+      const currentCompl = completionByLanguage[lang] || 0;
       completionByLanguage[lang] = totalKeys > 0 
-        ? (completionByLanguage[lang] / totalKeys) * 100 
+        ? (currentCompl / totalKeys) * 100 
         : 0;
     });
     

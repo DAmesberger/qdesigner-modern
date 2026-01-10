@@ -1,39 +1,43 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { goto } from '$app/navigation';
-  import { signOut } from '$lib/services/supabase';
+  import { supabase } from '$lib/services/supabase';
   import { clickOutside } from '$lib/utils/clickOutside';
-  
+
   export let user: { email: string; full_name?: string } | null = null;
-  
+
   let isOpen = false;
   const dispatch = createEventDispatcher();
-  
+
   function toggleMenu() {
     isOpen = !isOpen;
   }
-  
+
   function closeMenu() {
     isOpen = false;
   }
-  
+
   async function handleSignOut() {
     try {
-      await signOut();
+      await supabase.auth.signOut();
       goto('/login');
     } catch (error) {
       console.error('Error signing out:', error);
     }
   }
-  
+
   function handleNavigation(path: string) {
     closeMenu();
     goto(path);
   }
-  
+
   $: initials = user?.full_name
-    ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase()
-    : user?.email?.[0].toUpperCase() || '?';
+    ? user.full_name
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+    : user?.email?.[0]?.toUpperCase() || '?';
 </script>
 
 {#if user}
@@ -52,7 +56,9 @@
       {:else}
         <img
           class="h-8 w-8 rounded-full"
-          src="https://ui-avatars.com/api/?name={encodeURIComponent(user.email)}&background=6366f1&color=fff"
+          src="https://ui-avatars.com/api/?name={encodeURIComponent(
+            user.email
+          )}&background=6366f1&color=fff"
           alt="Profile"
         />
       {/if}
@@ -70,7 +76,7 @@
         />
       </svg>
     </button>
-    
+
     {#if isOpen}
       <div
         class="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none"
@@ -84,49 +90,76 @@
             <div class="font-medium">{user.full_name || 'User'}</div>
             <div class="text-xs text-gray-500 mt-0.5">{user.email}</div>
           </div>
-          
+
           <button
             on:click={() => handleNavigation('/profile')}
             class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
             role="menuitem"
           >
             <div class="flex items-center">
-              <svg class="mr-3 h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              <svg
+                class="mr-3 h-5 w-5 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                />
               </svg>
               Profile Settings
             </div>
           </button>
-          
+
           <button
             on:click={() => handleNavigation('/organization/settings')}
             class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
             role="menuitem"
           >
             <div class="flex items-center">
-              <svg class="mr-3 h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              <svg
+                class="mr-3 h-5 w-5 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                />
               </svg>
               Organization Settings
             </div>
           </button>
-          
+
           <button
             on:click={() => handleNavigation('/help')}
             class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
             role="menuitem"
           >
             <div class="flex items-center">
-              <svg class="mr-3 h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                  d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                class="mr-3 h-5 w-5 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               Help & Support
             </div>
           </button>
-          
+
           <div class="border-t border-gray-200 mt-1 pt-1">
             <button
               on:click={handleSignOut}
@@ -134,9 +167,18 @@
               role="menuitem"
             >
               <div class="flex items-center">
-                <svg class="mr-3 h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                <svg
+                  class="mr-3 h-5 w-5 text-gray-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  />
                 </svg>
                 Sign out
               </div>

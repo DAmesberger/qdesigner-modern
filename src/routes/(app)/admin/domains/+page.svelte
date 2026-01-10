@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { supabase } from '$lib/services/supabase';
-  import { 
-    addDomain, 
-    verifyDomain, 
-    updateDomainConfig, 
+  import {
+    addDomain,
+    verifyDomain,
+    updateDomainConfig,
     removeDomain,
-    type DomainConfig 
+    type DomainConfig,
   } from '$lib/services/domain-verification';
   import Card from '$lib/components/common/Card.svelte';
   import Button from '$lib/components/common/Button.svelte';
@@ -14,47 +14,50 @@
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
-  
+
   let domains: DomainConfig[] = [];
   let loading = true;
   let error: string | null = null;
   let success: string | null = null;
-  
+
   // Add domain form
   let showAddDomainForm = false;
   let newDomain = '';
   let addingDomain = false;
-  
+
   // Current user and organization
   let currentUser: any = null;
   let currentOrg: any = null;
-  
+
   // Domain settings
   let editingDomain: string | null = null;
   let domainSettings: Record<string, any> = {};
-  
+
   onMount(async () => {
     await loadData();
   });
-  
+
   async function loadData() {
     try {
       // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
-      
+
       const { data: userData } = await supabase
         .from('users')
         .select('*')
         .eq('auth_id', user.id)
         .single();
-      
+
       currentUser = userData;
-      
+
       // Get user's organization
       const { data: membership } = await supabase
         .from('organization_members')
-        .select(`
+        .select(
+          `
           organization_id,
           role,
           organizations (
@@ -62,19 +65,20 @@
             name,
             slug
           )
-        `)
+        `
+        )
         .eq('user_id', currentUser.id)
         .eq('status', 'active')
         .single();
-      
+
       if (!membership || membership.role !== 'owner') {
         error = 'Only organization owners can manage domains';
         loading = false;
         return;
       }
-      
+
       currentOrg = membership.organizations;
-      
+
       // Load domains
       await loadDomains();
     } catch (err) {
@@ -84,46 +88,46 @@
       loading = false;
     }
   }
-  
+
   async function loadDomains() {
     if (!currentOrg) return;
-    
+
     const { data, error: fetchError } = await supabase
       .from('organization_domains')
       .select('*')
       .eq('organization_id', currentOrg.id)
       .order('created_at', { ascending: false });
-    
+
     if (fetchError) {
       console.error('Error loading domains:', fetchError);
       error = 'Failed to load domains';
     } else {
       domains = data || [];
       // Initialize settings for each domain
-      domains.forEach(domain => {
+      domains.forEach((domain) => {
         domainSettings[domain.id] = {
           autoJoinEnabled: domain.autoJoinEnabled,
           includeSubdomains: domain.includeSubdomains,
           defaultRole: domain.defaultRole,
-          welcomeMessage: domain.welcomeMessage || ''
+          welcomeMessage: domain.welcomeMessage || '',
         };
       });
     }
   }
-  
+
   async function handleAddDomain() {
     if (!newDomain || !currentOrg || !currentUser) return;
-    
+
     addingDomain = true;
     error = null;
     success = null;
-    
+
     const { data, error: addError } = await addDomain({
       organizationId: currentOrg.id,
       domain: newDomain.toLowerCase().trim(),
-      userId: currentUser.id
+      userId: currentUser.id,
     });
-    
+
     if (addError) {
       error = addError;
     } else {
@@ -132,13 +136,13 @@
       showAddDomainForm = false;
       await loadDomains();
     }
-    
+
     addingDomain = false;
   }
-  
+
   async function handleVerifyDomain(domainId: string) {
     const result = await verifyDomain(domainId, currentUser.id);
-    
+
     if (result.success) {
       success = `Domain verified successfully using ${result.method} method!`;
       await loadDomains();
@@ -146,22 +150,22 @@
       error = result.error || 'Verification failed';
     }
   }
-  
+
   async function handleUpdateDomain(domainId: string) {
     const settings = domainSettings[domainId];
     if (!settings) return;
-    
+
     const result = await updateDomainConfig({
       domainId,
       config: {
         autoJoinEnabled: settings.autoJoinEnabled,
         includeSubdomains: settings.includeSubdomains,
         defaultRole: settings.defaultRole,
-        welcomeMessage: settings.welcomeMessage
+        welcomeMessage: settings.welcomeMessage,
       },
-      userId: currentUser.id
+      userId: currentUser.id,
     });
-    
+
     if (result.success) {
       success = 'Domain settings updated';
       editingDomain = null;
@@ -170,14 +174,14 @@
       error = result.error || 'Failed to update settings';
     }
   }
-  
+
   async function handleRemoveDomain(domainId: string, domainName: string) {
     if (!confirm(`Are you sure you want to remove ${domainName}? This cannot be undone.`)) {
       return;
     }
-    
+
     const result = await removeDomain(domainId, currentUser.id);
-    
+
     if (result.success) {
       success = 'Domain removed';
       await loadDomains();
@@ -185,12 +189,12 @@
       error = result.error || 'Failed to remove domain';
     }
   }
-  
+
   function formatDate(date: string) {
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     });
   }
 </script>
@@ -204,27 +208,24 @@
           Configure domain auto-join for {currentOrg?.name || 'your organization'}
         </p>
       </div>
-      <Button
-        variant="primary"
-        on:click={() => showAddDomainForm = !showAddDomainForm}
-      >
+      <Button variant="primary" onclick={() => (showAddDomainForm = !showAddDomainForm)}>
         {showAddDomainForm ? 'Cancel' : 'Add Domain'}
       </Button>
     </div>
   </div>
-  
+
   {#if error}
     <Alert variant="error" class="mb-4">
       {error}
     </Alert>
   {/if}
-  
+
   {#if success}
     <Alert variant="success" class="mb-4">
       {success}
     </Alert>
   {/if}
-  
+
   {#if showAddDomainForm}
     <Card class="mb-8">
       <h3 class="text-lg font-semibold mb-4">Add New Domain</h3>
@@ -242,27 +243,17 @@
             Users with email addresses from this domain can automatically join your organization
           </p>
         </FormGroup>
-        
+
         <div class="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            on:click={() => showAddDomainForm = false}
-          >
+          <Button type="button" variant="secondary" onclick={() => (showAddDomainForm = false)}>
             Cancel
           </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            loading={addingDomain}
-          >
-            Add Domain
-          </Button>
+          <Button type="submit" variant="primary" loading={addingDomain}>Add Domain</Button>
         </div>
       </form>
     </Card>
   {/if}
-  
+
   {#if loading}
     <div class="flex justify-center py-8">
       <div class="text-muted-foreground">Loading domains...</div>
@@ -301,50 +292,34 @@
                   {/if}
                 </p>
               </div>
-              
+
               <div class="flex gap-2">
                 {#if !domain.verifiedAt}
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    on:click={() => handleVerifyDomain(domain.id)}
-                  >
+                  <Button size="sm" variant="primary" onclick={() => handleVerifyDomain(domain.id)}>
                     Verify Domain
                   </Button>
                 {:else if editingDomain === domain.id}
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    on:click={() => handleUpdateDomain(domain.id)}
-                  >
+                  <Button size="sm" variant="primary" onclick={() => handleUpdateDomain(domain.id)}>
                     Save Settings
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    on:click={() => editingDomain = null}
-                  >
+                  <Button size="sm" variant="secondary" onclick={() => (editingDomain = null)}>
                     Cancel
                   </Button>
                 {:else}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    on:click={() => editingDomain = domain.id}
-                  >
+                  <Button size="sm" variant="secondary" onclick={() => (editingDomain = domain.id)}>
                     Settings
                   </Button>
                 {/if}
                 <Button
                   size="sm"
                   variant="secondary"
-                  on:click={() => handleRemoveDomain(domain.id, domain.domain)}
+                  onclick={() => handleRemoveDomain(domain.id, domain.domain)}
                 >
                   Remove
                 </Button>
               </div>
             </div>
-            
+
             {#if !domain.verifiedAt}
               <Alert variant="info">
                 <h4 class="font-semibold mb-2">Verification Instructions</h4>
@@ -370,7 +345,7 @@
                     <span>Enable automatic joining for users from this domain</span>
                   </label>
                 </FormGroup>
-                
+
                 <FormGroup label="Subdomain Settings">
                   <label class="flex items-center gap-2">
                     <input
@@ -381,7 +356,7 @@
                     <span>Include all subdomains (*.{domain.domain})</span>
                   </label>
                 </FormGroup>
-                
+
                 <FormGroup label="Default Role" id={`role-${domain.id}`}>
                   <select
                     id={`role-${domain.id}`}
@@ -392,7 +367,7 @@
                     <option value="member">Member</option>
                   </select>
                 </FormGroup>
-                
+
                 <FormGroup label="Welcome Message" id={`welcome-${domain.id}`}>
                   <textarea
                     id={`welcome-${domain.id}`}
@@ -400,7 +375,7 @@
                     rows="3"
                     class="w-full rounded-md border-border bg-background px-3 py-2"
                     placeholder="Optional message shown to users who join via this domain..."
-                  />
+                  ></textarea>
                 </FormGroup>
               </div>
             {/if}

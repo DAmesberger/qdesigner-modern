@@ -1,12 +1,12 @@
 // Base storage class for analytics modules
 
-import type { StorageData } from '$lib/services/localStorage';
+
 
 export abstract class BaseAnalyticsStorage {
-  protected storage: StorageData;
+  protected storage: any;
   protected questionnaireId: string;
   
-  constructor(storage: StorageData, questionnaireId: string) {
+  constructor(storage: any, questionnaireId: string) {
     this.storage = storage;
     this.questionnaireId = questionnaireId;
   }
@@ -56,12 +56,13 @@ export abstract class BaseAnalyticsStorage {
   async getEvents(analyticsId: string): Promise<Array<{
     type: string;
     timestamp: number;
+    interaction?: string;
     data?: any;
   }>> {
     const responses = await this.storage.getResponses(this.questionnaireId);
     const events = responses
-      .filter(r => r.questionId === analyticsId)
-      .map(r => {
+      .filter((r: any) => r.questionId === analyticsId)
+      .map((r: any) => {
         try {
           return typeof r.value === 'string' ? JSON.parse(r.value) : r.value;
         } catch {
@@ -106,7 +107,7 @@ export abstract class BaseAnalyticsStorage {
    */
   async clearEvents(analyticsId: string): Promise<void> {
     const allResponses = await this.storage.getResponses(this.questionnaireId);
-    const filtered = allResponses.filter(r => r.questionId !== analyticsId);
+    const filtered = allResponses.filter((r: any) => r.questionId !== analyticsId);
     
     // Save filtered responses back
     for (const response of filtered) {

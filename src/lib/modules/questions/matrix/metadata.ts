@@ -38,5 +38,5 @@ export const metadata: ModuleMetadata = {
     stickyHeaders: false,
     alternateRowColors: false
   },
-  answerType: AnswerTypes.COMPOSITE
+  answerType: AnswerTypes.MATRIX
 };

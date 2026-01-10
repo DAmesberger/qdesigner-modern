@@ -28,7 +28,7 @@ export const load: PageLoad = async ({ parent }) => {
         .eq('status', 'active')
         .limit(1);
         
-      if (orgMembers && orgMembers.length > 0) {
+      if (orgMembers && orgMembers.length > 0 && orgMembers[0]) {
         actualOrganizationId = orgMembers[0].organization_id;
       }
     }

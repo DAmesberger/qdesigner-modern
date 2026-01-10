@@ -1,7 +1,8 @@
 // Drawing question storage with specialized aggregations
 
 import { BaseQuestionStorage } from '../shared/BaseStorage';
-import type { StorageData } from '$lib/services/localStorage';
+import type { QuestionResponse } from '../shared/types';
+
 
 interface DrawingValue {
   imageData: string;
@@ -30,6 +31,14 @@ interface DrawingValue {
 }
 
 export class DrawingStorage extends BaseQuestionStorage {
+  getAnswerType(): string {
+    return 'drawing';
+  }
+
+  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+    return this.getAllForSession();
+  }
+
   /**
    * Get stroke statistics
    */
@@ -43,7 +52,7 @@ export class DrawingStorage extends BaseQuestionStorage {
     let totalPoints = 0;
     let drawingsWithStrokes = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: DrawingValue = this.parseValue(response.value);
       if (value.strokes && value.strokes.length > 0) {
         drawingsWithStrokes++;
@@ -66,7 +75,7 @@ export class DrawingStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const colorUsage: Record<string, number> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: DrawingValue = this.parseValue(response.value);
       if (value.analysis?.colors) {
         value.analysis.colors.forEach(color => {
@@ -91,7 +100,7 @@ export class DrawingStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const toolUsage: Record<string, number> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: DrawingValue = this.parseValue(response.value);
       if (value.analysis?.tools) {
         value.analysis.tools.forEach(tool => {
@@ -121,7 +130,7 @@ export class DrawingStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const drawingTimes: number[] = [];
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: DrawingValue = this.parseValue(response.value);
       if (value.analysis?.drawingTime) {
         drawingTimes.push(value.analysis.drawingTime / 1000); // Convert to seconds
@@ -158,7 +167,7 @@ export class DrawingStorage extends BaseQuestionStorage {
     let totalVariance = 0;
     let participantsWithPressure = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: DrawingValue = this.parseValue(response.value);
       if (value.analysis?.averagePressure !== undefined) {
         totalPressure += value.analysis.averagePressure;
@@ -181,8 +190,8 @@ export class DrawingStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     
     return responses
-      .map(response => ({
-        participantId: response.participantId,
+      .map((response: QuestionResponse) => ({
+        participantId: response.participantId || 'anonymous',
         imageData: this.parseValue(response.value).imageData
       }))
       .filter(item => item.imageData);
@@ -195,7 +204,7 @@ export class DrawingStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     let emptyCount = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const value: DrawingValue = this.parseValue(response.value);
       // Consider drawing empty if no strokes or very few points
       if (!value.strokes || value.strokes.length === 0 || 
@@ -207,6 +216,30 @@ export class DrawingStorage extends BaseQuestionStorage {
     return emptyCount;
   }
   
+  /**
+   * Format aggregation results for display
+   */
+
+
+  /**
+   * Parse stored value
+   */
+  protected parseValue(value: any): DrawingValue {
+    if (!value) return { 
+      imageData: '', 
+      timestamp: Date.now() 
+    };
+    
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return { imageData: '', timestamp: Date.now() };
+      }
+    }
+    return value;
+  }
+
   /**
    * Format aggregation results for display
    */
@@ -230,7 +263,7 @@ export class DrawingStorage extends BaseQuestionStorage {
       case 'emptyDrawings':
         return `${value} empty/minimal drawings`;
       default:
-        return super.formatAggregation(type, value);
+        return JSON.stringify(value);
     }
   }
   
@@ -238,8 +271,7 @@ export class DrawingStorage extends BaseQuestionStorage {
    * Get all available aggregations for drawing questions
    */
   async getAllAggregations(questionId: string): Promise<Record<string, any>> {
-    const [base, strokeStats, colorUsage, toolUsage, timeStats, pressureStats, emptyDrawings] = await Promise.all([
-      super.getAllAggregations(questionId),
+    const [strokeStats, colorUsage, toolUsage, timeStats, pressureStats, emptyDrawings] = await Promise.all([
       this.getStrokeStats(questionId),
       this.getColorUsage(questionId),
       this.getToolUsage(questionId),
@@ -249,7 +281,6 @@ export class DrawingStorage extends BaseQuestionStorage {
     ]);
     
     return {
-      ...base,
       strokeStats,
       colorUsage,
       toolUsage,

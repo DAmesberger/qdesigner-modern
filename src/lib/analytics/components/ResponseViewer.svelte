@@ -18,9 +18,11 @@
     connected: false,
     connectionType: 'offline',
     reconnectAttempts: 0,
-    errors: []
+    errors: [],
   });
-  let selectedEventTypes = $state<Set<string>>(new Set(['response_submitted', 'session_completed']));
+  let selectedEventTypes = $state<Set<string>>(
+    new Set(['response_submitted', 'session_completed'])
+  );
   let autoScroll = $state(true);
   let showDetails = $state(false);
   let selectedEvent = $state<RealtimeEvent | null>(null);
@@ -30,21 +32,21 @@
   let eventsContainer = $state<HTMLDivElement>();
 
   // Computed filtered events
-  let filteredEvents = $derived(() => {
-    return events.filter(event => {
+  let filteredEvents = $derived.by(() => {
+    return events.filter((event) => {
       // Filter by selected event types
       if (!selectedEventTypes.has(event.type)) return false;
-      
+
       // Filter by questionnaire ID
       if (event.questionnaireId !== questionnaireId) return false;
-      
+
       // Filter by text search if provided
       if (filterText) {
         const searchText = filterText.toLowerCase();
         const eventText = JSON.stringify(event).toLowerCase();
         if (!eventText.includes(searchText)) return false;
       }
-      
+
       return true;
     });
   });
@@ -53,10 +55,10 @@
   onMount(() => {
     setupEventListeners();
     updateConnectionStatus();
-    
+
     // Update connection status periodically
     const statusInterval = setInterval(updateConnectionStatus, 1000);
-    
+
     return () => {
       clearInterval(statusInterval);
     };
@@ -85,17 +87,19 @@
   function handleRealtimeEvent(event: RealtimeEvent) {
     // Add new event to the beginning of the array
     events = [event, ...events];
-    
+
     // Limit the number of events to prevent memory issues
     if (events.length > maxEvents) {
       events = events.slice(0, maxEvents);
     }
-    
+
+    // Auto-scroll to latest event if enabled
     // Auto-scroll to latest event if enabled
     if (autoScroll && eventsContainer) {
-      setTimeout(() => {
-        eventsContainer?.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 100);
+      // Use requestAnimationFrame for smoother scrolling
+      requestAnimationFrame(() => {
+        if (eventsContainer) eventsContainer.scrollTop = 0;
+      });
     }
   }
 
@@ -125,12 +129,12 @@
     const dataStr = JSON.stringify(filteredEvents, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
-    
+
     const link = document.createElement('a');
     link.href = url;
     link.download = `realtime_events_${new Date().toISOString().slice(0, 19)}.json`;
     link.click();
-    
+
     URL.revokeObjectURL(url);
   }
 
@@ -194,6 +198,22 @@
       eventsContainer.scrollTop = 0;
     }
   });
+
+  function closeDetails() {
+    showDetails = false;
+  }
+
+  function handleBackdropClick(e: MouseEvent) {
+    if (e.target === e.currentTarget) {
+      closeDetails();
+    }
+  }
+
+  function handleBackdropKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      closeDetails();
+    }
+  }
 </script>
 
 <div class="p-6">
@@ -202,13 +222,14 @@
     <div class="flex items-center space-x-4">
       <!-- Connection status -->
       <div class="flex items-center space-x-2">
-        <div class="w-3 h-3 rounded-full {connectionStatus.connected 
-          ? 'bg-green-500' 
-          : 'bg-red-500'} animate-pulse">
-        </div>
+        <div
+          class="w-3 h-3 rounded-full {connectionStatus.connected
+            ? 'bg-green-500'
+            : 'bg-red-500'} animate-pulse"
+        ></div>
         <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-          {connectionStatus.connected 
-            ? `Connected (${connectionStatus.connectionType})` 
+          {connectionStatus.connected
+            ? `Connected (${connectionStatus.connectionType})`
             : 'Disconnected'}
         </span>
         {#if connectionStatus.latency}
@@ -227,9 +248,9 @@
     <div class="flex items-center space-x-2">
       <!-- Auto-scroll toggle -->
       <button
-        on:click={() => autoScroll = !autoScroll}
-        class="flex items-center px-3 py-1 text-xs font-medium rounded {autoScroll 
-          ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100' 
+        onclick={() => (autoScroll = !autoScroll)}
+        class="flex items-center px-3 py-1 text-xs font-medium rounded {autoScroll
+          ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
           : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}"
       >
         Auto-scroll
@@ -237,7 +258,7 @@
 
       <!-- Export button -->
       <button
-        on:click={exportEvents}
+        onclick={exportEvents}
         disabled={filteredEvents.length === 0}
         class="px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
       >
@@ -246,7 +267,7 @@
 
       <!-- Clear button -->
       <button
-        on:click={clearEvents}
+        onclick={clearEvents}
         disabled={events.length === 0}
         class="px-3 py-1 text-xs font-medium text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-800 rounded hover:bg-red-200 dark:hover:bg-red-700 disabled:opacity-50"
       >
@@ -259,14 +280,14 @@
   <div class="mb-4 space-y-3">
     <!-- Event type filters -->
     <div>
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        Event Types
-      </label>
+      <h3 class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Event Types</h3>
       <div class="flex flex-wrap gap-2">
         {#each ['response_submitted', 'session_completed', 'session_started', 'question_viewed', 'error_occurred', 'performance_metric'] as eventType}
           <button
-            on:click={() => toggleEventType(eventType)}
-            class="flex items-center px-3 py-1 text-xs font-medium rounded-full border {selectedEventTypes.has(eventType)
+            onclick={() => toggleEventType(eventType)}
+            class="flex items-center px-3 py-1 text-xs font-medium rounded-full border {selectedEventTypes.has(
+              eventType
+            )
               ? 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-800 dark:text-blue-100 dark:border-blue-600'
               : 'bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'}"
           >
@@ -279,7 +300,10 @@
 
     <!-- Text filter -->
     <div>
-      <label for="event-filter" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+      <label
+        for="event-filter"
+        class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+      >
         Filter Events
       </label>
       <input
@@ -300,38 +324,38 @@
     {#if filteredEvents.length === 0}
       <div class="flex items-center justify-center h-full text-center">
         <div class="text-gray-500 dark:text-gray-400">
-          {events.length === 0 
-            ? 'No events received yet' 
-            : 'No events match the current filters'}
+          {events.length === 0 ? 'No events received yet' : 'No events match the current filters'}
         </div>
       </div>
     {:else}
       <div class="space-y-2">
         {#each filteredEvents as event (event.timestamp + event.sessionId)}
-          <div
-            class="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow cursor-pointer"
-            on:click={() => showEventDetails(event)}
+          <button
+            class="w-full text-left bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow cursor-pointer"
+            onclick={() => showEventDetails(event)}
           >
             <div class="flex items-start justify-between">
               <div class="flex items-start space-x-3">
                 <span class="text-lg {getEventColor(event.type)}">
                   {getEventIcon(event.type)}
                 </span>
-                
+
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center space-x-2">
                     <h4 class="text-sm font-medium text-gray-900 dark:text-white">
-                      {event.type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      {event.type
+                        .replace(/_/g, ' ')
+                        .replace(/\b\w/g, (l: string) => l.toUpperCase())}
                     </h4>
                     <span class="text-xs text-gray-500 dark:text-gray-400">
                       {formatTimestamp(event.timestamp)}
                     </span>
                   </div>
-                  
+
                   <div class="mt-1 text-sm text-gray-600 dark:text-gray-400">
                     Session: {event.sessionId.slice(0, 8)}...
                   </div>
-                  
+
                   {#if event.data && typeof event.data === 'object'}
                     <div class="mt-2 text-xs text-gray-500 dark:text-gray-400 truncate">
                       {JSON.stringify(event.data).slice(0, 100)}...
@@ -343,14 +367,19 @@
                   {/if}
                 </div>
               </div>
-              
-              <button class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+
+              <div class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 5l7 7-7 7"
+                  />
                 </svg>
-              </button>
+              </div>
             </div>
-          </div>
+          </button>
         {/each}
       </div>
     {/if}
@@ -359,59 +388,96 @@
 
 <!-- Event details modal -->
 {#if showDetails && selectedEvent}
-  <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" on:click={() => showDetails = false}></div>
-      
-      <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+  <div
+    class="fixed inset-0 z-50 overflow-y-auto"
+    aria-labelledby="modal-title"
+    role="dialog"
+    aria-modal="true"
+  >
+    <div
+      class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
+    >
+      <div
+        class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+        onclick={closeDetails}
+        onkeydown={handleBackdropKeydown}
+        role="button"
+        tabindex="0"
+        aria-label="Close modal"
+      ></div>
+
+      <div
+        class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full"
+      >
         <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">
               Event Details
             </h3>
             <button
-              on:click={() => showDetails = false}
+              onclick={closeDetails}
               class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              aria-label="Close"
             >
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
-          
+
           <div class="space-y-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Type</label>
+              <span class="block text-sm font-medium text-gray-700 dark:text-gray-300">Type</span>
               <div class="mt-1 text-sm text-gray-900 dark:text-white">{selectedEvent.type}</div>
             </div>
-            
+
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Timestamp</label>
-              <div class="mt-1 text-sm text-gray-900 dark:text-white">{new Date(selectedEvent.timestamp).toLocaleString()}</div>
+              <span class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >Timestamp</span
+              >
+              <div class="mt-1 text-sm text-gray-900 dark:text-white">
+                {new Date(selectedEvent.timestamp).toLocaleString()}
+              </div>
             </div>
-            
+
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Session ID</label>
-              <div class="mt-1 text-sm text-gray-900 dark:text-white font-mono">{selectedEvent.sessionId}</div>
+              <span class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >Session ID</span
+              >
+              <div class="mt-1 text-sm text-gray-900 dark:text-white font-mono">
+                {selectedEvent.sessionId}
+              </div>
             </div>
-            
+
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Questionnaire ID</label>
-              <div class="mt-1 text-sm text-gray-900 dark:text-white font-mono">{selectedEvent.questionnaireId}</div>
+              <span class="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >Questionnaire ID</span
+              >
+              <div class="mt-1 text-sm text-gray-900 dark:text-white font-mono">
+                {selectedEvent.questionnaireId}
+              </div>
             </div>
-            
+
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data</label>
+              <span class="block text-sm font-medium text-gray-700 dark:text-gray-300">Data</span>
               <div class="mt-1">
-                <pre class="bg-gray-100 dark:bg-gray-900 p-3 rounded-md text-xs text-gray-900 dark:text-white overflow-x-auto">{formatEventData(selectedEvent.data)}</pre>
+                <pre
+                  class="bg-gray-100 dark:bg-gray-900 p-3 rounded-md text-xs text-gray-900 dark:text-white overflow-x-auto">{formatEventData(
+                    selectedEvent.data
+                  )}</pre>
               </div>
             </div>
           </div>
         </div>
-        
+
         <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
           <button
-            on:click={() => showDetails = false}
+            onclick={closeDetails}
             class="w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto sm:text-sm"
           >
             Close

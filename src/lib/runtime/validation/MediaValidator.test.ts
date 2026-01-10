@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MediaValidator } from './MediaValidator';
-import type { Questionnaire, Question, Stimulus } from '$lib/shared';
+import type { Questionnaire, Question } from '$lib/shared';
+import type { StimulusConfig } from '$lib/runtime/stimuli/Stimulus';
 
 // Mock fetch
 global.fetch = vi.fn();
@@ -35,10 +36,15 @@ describe('MediaValidator', () => {
     it('should pass validation when no media is present', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'text',
+        type: 'text-display',
         name: 'Text Question',
-        text: 'What is your name?',
-        responseType: { type: 'text' }
+        display: {
+          content: 'What is your name?',
+          format: 'text'
+        },
+        order: 0,
+        required: false,
+        response: { type: 'text' }
       }]);
 
       const result = await validator.validateQuestionnaire(questionnaire);
@@ -51,10 +57,17 @@ describe('MediaValidator', () => {
     it('should fail validation when image URL returns 404', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'multimedia',
+          type: 'media-display',
         name: 'Image Question',
-        text: 'Look at this image',
-        responseType: { 
+        display: {
+          caption: 'Look at this image',
+          media: [
+            { type: 'image', url: 'missing-image.jpg' }
+          ]
+        },
+        order: 0,
+        required: false,
+        response: { 
           type: 'single',
           options: [
             { id: 'opt1', value: 1, label: 'Option 1' },
@@ -92,10 +105,17 @@ describe('MediaValidator', () => {
     it('should fail validation when network error occurs', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'multimedia',
+          type: 'media-display',
         name: 'Video Question',
-        text: 'Watch this video',
-        responseType: { 
+        display: {
+          caption: 'Watch this video',
+          media: [
+            { type: 'video', url: 'invalid-video.mp4' }
+          ]
+        },
+        order: 0,
+        required: false,
+        response: { 
           type: 'single',
           options: [
             { id: 'opt1', value: 1, label: 'Option 1' },
@@ -127,10 +147,17 @@ describe('MediaValidator', () => {
     it('should warn about CORS issues', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'multimedia',
+          type: 'media-display',
         name: 'Audio Question',
-        text: 'Listen to this',
-        responseType: { 
+        display: {
+          caption: 'Listen to this',
+          media: [
+            { type: 'audio', url: 'http://external.com/audio.mp3' }
+          ]
+        },
+        order: 0,
+        required: false,
+        response: { 
           type: 'single',
           options: [
             { id: 'opt1', value: 1, label: 'Option 1' },
@@ -168,10 +195,17 @@ describe('MediaValidator', () => {
     it('should warn about large file sizes', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'multimedia',
+          type: 'media-display',
         name: 'Large Video',
-        text: 'Watch this',
-        responseType: { 
+        display: {
+          caption: 'Watch this',
+          media: [
+            { type: 'video', url: 'large-video.mp4', size: 'large' }
+          ]
+        },
+        order: 0,
+        required: false,
+        response: { 
           type: 'single',
           options: [
             { id: 'opt1', value: 1, label: 'Option 1' },
@@ -212,10 +246,17 @@ describe('MediaValidator', () => {
     it('should validate composite stimuli', async () => {
       const questionnaire = createTestQuestionnaire([{
         id: 'q1',
-        type: 'multimedia',
+          type: 'media-display',
         name: 'Composite Question',
-        text: 'Multiple media',
-        responseType: { 
+        display: {
+          caption: 'Multiple media',
+          media: [
+            { type: 'image', url: 'valid-image.jpg' }
+          ]
+        },
+        order: 0,
+        required: false,
+        response: { 
           type: 'single',
           options: [
             { id: 'opt1', value: 1, label: 'Option 1' },
@@ -273,10 +314,17 @@ describe('MediaValidator', () => {
       const questionnaire = createTestQuestionnaire([
         {
           id: 'q1',
-          type: 'multimedia',
+            type: 'media-display',
           name: 'Image 1',
-          text: 'Same image',
-          responseType: { 
+          display: {
+            caption: 'Same image',
+            media: [
+              { type: 'image', url: 'valid-image.jpg' }
+            ]
+          },
+          order: 0,
+        required: false,
+        response: { 
             type: 'single',
             options: [
               { id: 'opt1', value: 1, label: 'Option 1' },
@@ -292,10 +340,17 @@ describe('MediaValidator', () => {
         },
         {
           id: 'q2',
-          type: 'multimedia',
+            type: 'media-display',
           name: 'Image 2',
-          text: 'Same image again',
-          responseType: { 
+          display: {
+            caption: 'Same image again',
+            media: [
+              { type: 'image', url: 'valid-image.jpg' }
+            ]
+          },
+          order: 0,
+        required: false,
+        response: { 
             type: 'single',
             options: [
               { id: 'opt1', value: 1, label: 'Option 1' },

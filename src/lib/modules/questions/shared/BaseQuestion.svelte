@@ -6,14 +6,14 @@
   import { scriptingEngine } from '$lib/services/scriptingEngine';
   import { processMarkdownContentSync } from '$lib/services/markdownProcessor';
   import { mediaService } from '$lib/services/mediaService';
-  
+
   interface Props extends QuestionProps {
     question: QuestionModuleConfig & { media?: MediaConfig[] };
     children?: any;
     class?: string;
     showValidation?: boolean;
   }
-  
+
   let {
     question,
     mode = 'runtime',
@@ -27,7 +27,7 @@
     showValidation = true,
     ...restProps
   }: Props = $props();
-  
+
   const dispatch = createEventDispatcher<{
     response: any;
     validation: ValidationResult;
@@ -37,7 +37,7 @@
     delete: void;
     duplicate: void;
   }>();
-  
+
   let isVisible = $state(true);
   let validationResult = $state<ValidationResult | null>(null);
   let hasInteracted = $state(false);
@@ -45,39 +45,39 @@
   let mediaUrls = $state<Record<string, string>>({});
   let processedTitle = $state('');
   let processedDescription = $state('');
-  
+
   // Check conditional visibility
   $effect(() => {
     if (question.conditions && mode === 'runtime') {
       checkVisibility();
     }
   });
-  
+
   // Load media URLs if media is present
   $effect(() => {
     if (question.media && question.media.length > 0) {
       loadMediaUrls();
     }
   });
-  
+
   // Process markdown content with media
   $effect(() => {
     processContent();
   });
-  
+
   // Validate on value change
   $effect(() => {
     if (hasInteracted && value !== undefined && mode === 'runtime') {
       validate();
     }
   });
-  
+
   async function checkVisibility() {
     if (!question.conditions) {
       isVisible = true;
       return;
     }
-    
+
     try {
       const result = await scriptingEngine.evaluateCondition(question.conditions);
       isVisible = result;
@@ -86,26 +86,26 @@
       isVisible = true; // Default to visible on error
     }
   }
-  
+
   async function validate() {
     const result: ValidationResult = {
       valid: true,
-      errors: []
+      errors: [],
     };
-    
+
     // Required validation
     if (question.required && (value === null || value === undefined || value === '')) {
       result.valid = false;
       result.errors.push('This question is required');
     }
-    
+
     // Custom validation
     if (question.customValidation && value !== undefined) {
       try {
-        const isValid = await scriptingEngine.evaluate(
-          question.customValidation,
-          { value, question }
-        );
+        const isValid = await scriptingEngine.evaluate(question.customValidation, {
+          value,
+          question,
+        });
         if (!isValid) {
           result.valid = false;
           result.errors.push('Invalid response');
@@ -114,45 +114,43 @@
         console.error('Custom validation error:', error);
       }
     }
-    
+
     validationResult = result;
     dispatch('validation', result);
     onValidation?.(result);
-    
+
     return result;
   }
-  
+
   function handleResponse(newValue: any) {
     hasInteracted = true;
     value = newValue;
     dispatch('response', newValue);
     onResponse?.(newValue);
-    
+
     // Track response interaction
     handleInteraction({
       type: 'change',
       timestamp: Date.now(),
-      data: { value: newValue }
+      data: { value: newValue },
     });
   }
-  
+
   function handleInteraction(event: InteractionEvent) {
     dispatch('interaction', event);
     onInteraction?.(event);
   }
-  
+
   function handleUpdate(updates: Partial<QuestionModuleConfig>) {
     dispatch('update', updates);
   }
-  
+
   // Track view interaction
   async function loadMediaUrls() {
     if (!question.media || question.media.length === 0) return;
-    
-    const mediaIds = question.media
-      .filter(m => m.mediaId)
-      .map(m => m.mediaId);
-    
+
+    const mediaIds = question.media.filter((m) => m.mediaId).map((m) => m.mediaId as string);
+
     if (mediaIds.length > 0) {
       try {
         const urls = await mediaService.getSignedUrls(mediaIds);
@@ -162,43 +160,47 @@
       }
     }
   }
-  
+
   function processContent() {
     // Process title with markdown and media
-    if (question.title) {
-      processedTitle = processMarkdownContentSync(question.title, {
+    const q = question as any;
+    if (q.title) {
+      processedTitle = processMarkdownContentSync(q.title, {
         media: question.media || [],
         mediaUrls,
         format: 'markdown',
         processVariables: true,
-        variables: {}
+        variables: {},
       });
     }
-    
+
     // Process description with markdown and media
-    if (question.description) {
-      processedDescription = processMarkdownContentSync(question.description, {
+    const qDesc = question as any;
+    if (qDesc.description) {
+      processedDescription = processMarkdownContentSync(qDesc.description, {
         media: question.media || [],
         mediaUrls,
         format: 'markdown',
         processVariables: true,
-        variables: {}
+        variables: {},
       });
     }
   }
-  
+
   onMount(() => {
     if (mode === 'runtime') {
       handleInteraction({
         type: 'view',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
     }
   });
-  
+
   // Base classes for consistent styling
   const baseClasses = `question-block question-${question.type} mode-${mode}`;
-  const containerClasses = $derived(`${baseClasses} ${className} ${!isVisible ? 'hidden' : ''} ${validationResult && !validationResult.valid ? 'has-error' : ''}`);
+  const containerClasses = $derived(
+    `${baseClasses} ${className} ${!isVisible ? 'hidden' : ''} ${validationResult && !validationResult.valid ? 'has-error' : ''}`
+  );
 </script>
 
 {#if isVisible || mode === 'edit'}
@@ -222,50 +224,36 @@
           {/if}
         </div>
         <div class="question-actions">
-          <button
-            class="action-button"
-            onclick={() => dispatch('edit')}
-            title="Edit"
-          >
-            ✏️
-          </button>
-          <button
-            class="action-button"
-            onclick={() => dispatch('duplicate')}
-            title="Duplicate"
-          >
+          <button class="action-button" onclick={() => dispatch('edit')} title="Edit"> ✏️ </button>
+          <button class="action-button" onclick={() => dispatch('duplicate')} title="Duplicate">
             📋
           </button>
-          <button
-            class="action-button danger"
-            onclick={() => dispatch('delete')}
-            title="Delete"
-          >
+          <button class="action-button danger" onclick={() => dispatch('delete')} title="Delete">
             🗑️
           </button>
         </div>
       </div>
     {/if}
-    
-    {#if question.title}
+
+    {#if (question as any).title}
       <div class="question-title" id="question-{question.id}-title">
-        {@html processedTitle || question.title}
+        {@html processedTitle || (question as any).title}
         {#if question.required && mode === 'runtime'}
           <span class="required-indicator" aria-label="Required">*</span>
         {/if}
       </div>
     {/if}
-    
-    {#if question.description}
+
+    {#if (question as any).description}
       <div class="question-description" id="question-{question.id}-description">
-        {@html processedDescription || question.description}
+        {@html processedDescription || (question as any).description}
       </div>
     {/if}
-    
+
     <div class="question-content">
       {@render children?.()}
     </div>
-    
+
     {#if showValidation && mode === 'runtime' && validationResult && !validationResult.valid}
       <div class="validation-errors" role="alert">
         {#each validationResult.errors as error}
@@ -273,7 +261,7 @@
         {/each}
       </div>
     {/if}
-    
+
     {#if mode === 'edit' && question.conditions}
       <div class="condition-indicator">
         <span class="condition-icon">🔀</span>
@@ -289,23 +277,23 @@
     margin-bottom: 2rem;
     transition: all 0.2s ease;
   }
-  
+
   .question-block.hidden {
     display: none;
   }
-  
+
   .question-block.mode-edit {
     border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 1rem;
     background: hsl(var(--card));
   }
-  
+
   .question-block.mode-edit:hover {
     border-color: hsl(var(--primary));
     box-shadow: var(--shadow-sm);
   }
-  
+
   .question-header {
     display: flex;
     justify-content: space-between;
@@ -314,13 +302,13 @@
     padding-bottom: 0.75rem;
     border-bottom: 1px solid hsl(var(--border));
   }
-  
+
   .question-info {
     display: flex;
     align-items: center;
     gap: 0.5rem;
   }
-  
+
   .question-type {
     font-size: 0.75rem;
     font-weight: 600;
@@ -330,12 +318,12 @@
     padding: 0.125rem 0.5rem;
     border-radius: 0.25rem;
   }
-  
+
   .question-order {
     font-size: 0.875rem;
     color: hsl(var(--muted-foreground));
   }
-  
+
   .question-required {
     font-size: 0.75rem;
     font-weight: 600;
@@ -344,12 +332,12 @@
     padding: 0.125rem 0.5rem;
     border-radius: 0.25rem;
   }
-  
+
   .question-actions {
     display: flex;
     gap: 0.25rem;
   }
-  
+
   .action-button {
     padding: 0.25rem 0.5rem;
     font-size: 0.875rem;
@@ -359,16 +347,16 @@
     cursor: pointer;
     transition: all 0.15s ease;
   }
-  
+
   .action-button:hover {
     background: hsl(var(--accent));
   }
-  
+
   .action-button.danger:hover {
     background: hsl(var(--destructive) / 0.1);
     color: hsl(var(--destructive));
   }
-  
+
   .question-title {
     font-size: 1rem;
     font-weight: 500;
@@ -376,33 +364,33 @@
     margin-bottom: 0.5rem;
     line-height: 1.5;
   }
-  
+
   .required-indicator {
     color: hsl(var(--destructive));
     margin-left: 0.25rem;
   }
-  
+
   .question-description {
     font-size: 0.875rem;
     color: hsl(var(--muted-foreground));
     margin-bottom: 1rem;
     line-height: 1.5;
   }
-  
+
   .question-content {
     position: relative;
   }
-  
+
   .validation-errors {
     margin-top: 0.5rem;
   }
-  
+
   .validation-error {
     font-size: 0.875rem;
     color: hsl(var(--destructive));
     margin-top: 0.25rem;
   }
-  
+
   .condition-indicator {
     display: flex;
     align-items: center;
@@ -413,25 +401,25 @@
     font-size: 0.75rem;
     color: hsl(var(--muted-foreground));
   }
-  
+
   .condition-icon {
     font-size: 0.875rem;
   }
-  
+
   /* Error state */
   .question-block.has-error {
     border-color: hsl(var(--destructive));
   }
-  
+
   .question-block.has-error .question-title {
     color: hsl(var(--destructive));
   }
-  
+
   /* Runtime-specific styles */
   .question-block.mode-runtime {
     animation: fadeIn 0.3s ease;
   }
-  
+
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -442,7 +430,7 @@
       transform: translateY(0);
     }
   }
-  
+
   /* Disabled state */
   .question-block :global(input:disabled),
   .question-block :global(textarea:disabled),

@@ -6,15 +6,15 @@
   import VariableManager from '$lib/components/designer/VariableManager.svelte';
   import FlowControlManager from '$lib/components/designer/FlowControlManager.svelte';
   import theme from '$lib/theme';
-  
+
   interface Props {
     activeTab: 'blocks' | 'questions' | 'variables' | 'flow';
   }
-  
+
   let { activeTab = $bindable('blocks') }: Props = $props();
-  
-  let isCollapsed = false;
-  
+
+  let isCollapsed = $state(false);
+
   // Load collapsed state from localStorage
   onMount(() => {
     const saved = localStorage.getItem('designer-left-sidebar-collapsed');
@@ -22,46 +22,61 @@
       isCollapsed = true;
     }
   });
-  
+
   // Save collapsed state
   function toggleCollapse() {
     isCollapsed = !isCollapsed;
     localStorage.setItem('designer-left-sidebar-collapsed', String(isCollapsed));
   }
-  
+
   type TabId = typeof activeTab;
-  
+
   const tabs: Array<{ id: TabId; label: string; icon: string }> = [
-    { id: 'blocks', label: 'Blocks', icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z' },
-    { id: 'questions', label: 'Questions', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-    { id: 'variables', label: 'Variables', icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z' },
-    { id: 'flow', label: 'Flow', icon: 'M13 10V3L4 14h7v7l9-11h-7z' }
+    {
+      id: 'blocks',
+      label: 'Blocks',
+      icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z',
+    },
+    {
+      id: 'questions',
+      label: 'Questions',
+      icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+    },
+    {
+      id: 'variables',
+      label: 'Variables',
+      icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z',
+    },
+    { id: 'flow', label: 'Flow', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
   ];
 </script>
 
-<aside 
-  class="relative flex flex-col transition-all duration-300 ease-in-out {theme.components.designerSidebar.base}"
+<aside
+  class="relative flex flex-col transition-all duration-300 ease-in-out {theme.components
+    .designerSidebar.base}"
   class:w-80={!isCollapsed}
   class:w-14={isCollapsed}
 >
   <!-- Collapse Toggle -->
   <button
     onclick={toggleCollapse}
-    class="absolute -right-3 top-20 z-10 w-6 h-6 {theme.semantic.bgSurface} {theme.semantic.borderDefault} border rounded-full flex items-center justify-center {theme.semantic.interactive.ghost} transition-colors"
+    class="absolute -right-3 top-20 z-10 w-6 h-6 {theme.semantic.bgSurface} {theme.semantic
+      .borderDefault} border rounded-full flex items-center justify-center {theme.semantic
+      .interactive.ghost} transition-colors"
     title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
     aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
   >
-    <svg 
+    <svg
       class="w-3 h-3 text-muted-foreground transition-transform duration-300"
       class:rotate-180={!isCollapsed}
-      fill="none" 
-      stroke="currentColor" 
+      fill="none"
+      stroke="currentColor"
       viewBox="0 0 24 24"
     >
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
     </svg>
   </button>
-  
+
   {#if !isCollapsed}
     <!-- Full Sidebar -->
     <div transition:slide={{ duration: 300, axis: 'x' }}>
@@ -69,10 +84,11 @@
       <div class="flex {theme.semantic.borderDefault} border-b">
         {#each tabs as tab}
           <button
-            class="flex-1 px-4 py-3 text-sm font-medium transition-colors relative {theme.semantic.interactive.ghost}"
+            class="flex-1 px-4 py-3 text-sm font-medium transition-colors relative {theme.semantic
+              .interactive.ghost}"
             class:text-foreground={activeTab === tab.id}
             class:text-muted-foreground={activeTab !== tab.id}
-            onclick={() => activeTab = tab.id}
+            onclick={() => (activeTab = tab.id)}
           >
             {tab.label}
             {#if activeTab === tab.id}
@@ -81,7 +97,7 @@
           </button>
         {/each}
       </div>
-      
+
       <!-- Tab Content -->
       <div class="flex-1 overflow-y-auto">
         {#if activeTab === 'blocks'}
@@ -104,15 +120,17 @@
           class:bg-muted={activeTab === tab.id}
           class:text-foreground={activeTab === tab.id}
           class:text-muted-foreground={activeTab !== tab.id}
-          onclick={() => activeTab = tab.id}
+          onclick={() => (activeTab = tab.id)}
           title={tab.label}
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={tab.icon} />
           </svg>
-          
+
           <!-- Tooltip -->
-          <div class="absolute left-full ml-2 px-2 py-1 bg-foreground text-background text-xs rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+          <div
+            class="absolute left-full ml-2 px-2 py-1 bg-foreground text-background text-xs rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap z-50"
+          >
             {tab.label}
           </div>
         </button>

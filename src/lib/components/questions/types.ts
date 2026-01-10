@@ -28,6 +28,7 @@ export interface ExtendedQuestion {
   type: QuestionType;
   order: number;
   required: boolean;
+  variables?: string[];
   
   // Optional common properties from BaseQuestion
   randomize?: boolean;
@@ -47,6 +48,13 @@ export interface ExtendedQuestion {
   
   // Layout properties
   styling?: QuestionStyling;
+  layout?: QuestionLayout;
+  
+  // Media properties
+  media?: MediaConfig[];
+
+  // Validation properties
+  validation?: ValidationRule[] | any;
   
   // Advanced properties
   scoring?: ScoringConfig;
@@ -82,8 +90,10 @@ export interface AnimationConfig {
 }
 
 export interface MediaConfig {
-  type: 'image' | 'video' | 'audio';
-  source: string;
+  type?: 'image' | 'video' | 'audio';
+  source?: string;
+  url?: string;
+  mediaId?: string;
   alt?: string;
   caption?: string;
   position?: 'above' | 'below' | 'left' | 'right' | 'background';

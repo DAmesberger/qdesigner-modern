@@ -2,7 +2,7 @@
   import MonacoEditor from './MonacoEditor.svelte';
   import { createEventDispatcher, onMount } from 'svelte';
   import type * as monaco from 'monaco-editor';
-  
+
   export let value: string = '';
   export let title: string = 'Script Editor';
   export let description: string = '';
@@ -12,15 +12,15 @@
   export let showHelp: boolean = true;
   export let variables: Array<{ name: string; type: string; description?: string }> = [];
   export let functions: Array<{ name: string; signature: string; description?: string }> = [];
-  
+
   const dispatch = createEventDispatcher();
-  
+
   let monacoEditor: MonacoEditor;
   let editorInstance: monaco.editor.IStandaloneCodeEditor;
   let monacoInstance: any;
   let showHelpPanel = false;
   let searchQuery = '';
-  
+
   // Script templates
   const scriptTemplates = [
     {
@@ -29,7 +29,7 @@
 if (responses.get('q1') === 'yes') {
   questionnaire.skipToQuestion('q5');
 }`,
-      description: 'Skip questions based on conditions'
+      description: 'Skip questions based on conditions',
     },
     {
       name: 'Calculate Score',
@@ -37,7 +37,7 @@ if (responses.get('q1') === 'yes') {
 const scores = ['q1', 'q2', 'q3'].map(id => responses.get(id) || 0);
 const totalScore = utils.sum(scores);
 variables.set('totalScore', totalScore);`,
-      description: 'Sum responses to calculate a score'
+      description: 'Sum responses to calculate a score',
     },
     {
       name: 'Show/Hide Questions',
@@ -47,7 +47,7 @@ if (variables.get('age') < 18) {
 } else {
   ui.showQuestion('adult_questions');
 }`,
-      description: 'Control question visibility'
+      description: 'Control question visibility',
     },
     {
       name: 'Validate Response',
@@ -57,7 +57,7 @@ if (email && !email.includes('@')) {
   ui.showMessage('Please enter a valid email address', 'error');
   return false; // Prevent navigation
 }`,
-      description: 'Custom response validation'
+      description: 'Custom response validation',
     },
     {
       name: 'Time-based Logic',
@@ -69,48 +69,50 @@ if (elapsed > 30) {
   ui.showMessage('Time limit exceeded', 'warning');
   questionnaire.end();
 }`,
-      description: 'Time-based questionnaire control'
-    }
+      description: 'Time-based questionnaire control',
+    },
   ];
-  
+
   // Filter help items based on search
-  $: filteredVariables = variables.filter(v => 
-    v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    v.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  $: filteredVariables = variables.filter(
+    (v) =>
+      v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      v.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  
-  $: filteredFunctions = functions.filter(f => 
-    f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    f.description?.toLowerCase().includes(searchQuery.toLowerCase())
+
+  $: filteredFunctions = functions.filter(
+    (f) =>
+      f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      f.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  
-  $: filteredTemplates = scriptTemplates.filter(t => 
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.description.toLowerCase().includes(searchQuery.toLowerCase())
+
+  $: filteredTemplates = scriptTemplates.filter(
+    (t) =>
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  
+
   function handleEditorReady(event: CustomEvent) {
     editorInstance = event.detail.editor;
     monacoInstance = event.detail.monaco;
-    
+
     // Register custom completions
     registerCompletions();
-    
+
     // Add custom key bindings
-    editorInstance.addCommand(
-      monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS,
-      () => dispatch('save', { value })
+    editorInstance.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () =>
+      dispatch('save', { value })
     );
-    
+
     editorInstance.addCommand(
       monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyH,
-      () => showHelpPanel = !showHelpPanel
+      () => (showHelpPanel = !showHelpPanel)
     );
   }
-  
+
   function registerCompletions() {
     if (!monacoInstance) return;
-    
+
     // Register completion provider
     monacoInstance.languages.registerCompletionItemProvider('typescript', {
       provideCompletionItems: (model: monaco.editor.ITextModel, position: monaco.Position) => {
@@ -119,67 +121,67 @@ if (elapsed > 30) {
           startLineNumber: position.lineNumber,
           endLineNumber: position.lineNumber,
           startColumn: word.startColumn,
-          endColumn: word.endColumn
+          endColumn: word.endColumn,
         };
-        
+
         const suggestions: monaco.languages.CompletionItem[] = [];
-        
+
         // Add variable completions
-        variables.forEach(v => {
+        variables.forEach((v) => {
           suggestions.push({
             label: v.name,
             kind: monacoInstance.languages.CompletionItemKind.Variable,
             documentation: v.description || `Variable of type ${v.type}`,
             insertText: v.name,
-            range: range
+            range: range,
           });
         });
-        
+
         // Add function completions
-        functions.forEach(f => {
+        functions.forEach((f) => {
           suggestions.push({
             label: f.name,
             kind: monacoInstance.languages.CompletionItemKind.Function,
             documentation: f.description || f.signature,
             insertText: f.name + '()',
             insertTextRules: monacoInstance.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-            range: range
+            range: range,
           });
         });
-        
+
         // Add API object completions
         const apiObjects = ['questionnaire', 'variables', 'responses', 'ui', 'utils'];
-        apiObjects.forEach(obj => {
+        apiObjects.forEach((obj) => {
           suggestions.push({
             label: obj,
             kind: monacoInstance.languages.CompletionItemKind.Module,
             documentation: `Access to ${obj} API`,
             insertText: obj + '.',
-            range: range
+            range: range,
           });
         });
-        
+
         return { suggestions };
-      }
+      },
     });
   }
-  
-  function insertTemplate(template: typeof scriptTemplates[0]) {
+
+  function insertTemplate(template: (typeof scriptTemplates)[0]) {
     if (monacoEditor) {
       monacoEditor.insertText('\n' + template.code + '\n');
       showHelpPanel = false;
     }
   }
-  
+
   function handleChange(event: CustomEvent) {
     value = event.detail.value;
     dispatch('change', { value });
   }
-  
+
   function toggleHelp() {
     showHelpPanel = !showHelpPanel;
   }
-  
+
   function formatCode() {
     if (monacoEditor) {
       monacoEditor.format();
@@ -195,35 +197,41 @@ if (elapsed > 30) {
         <p class="editor-description">{description}</p>
       {/if}
     </div>
-    
+
     <div class="editor-actions">
-      <button
-        class="action-btn"
-        on:click={formatCode}
-        title="Format code (Alt+Shift+F)"
-      >
+      <button class="action-btn" onclick={formatCode} title="Format code (Alt+Shift+F)">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M4 6h16M4 12h16M4 18h7"
+          />
         </svg>
         Format
       </button>
-      
+
       {#if showHelp}
         <button
           class="action-btn"
           class:active={showHelpPanel}
-          on:click={toggleHelp}
+          onclick={toggleHelp}
           title="Toggle help panel (Ctrl/Cmd+H)"
         >
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
           Help
         </button>
       {/if}
     </div>
   </div>
-  
+
   <div class="editor-container" class:with-help={showHelpPanel}>
     <div class="monaco-wrapper">
       <MonacoEditor
@@ -235,68 +243,72 @@ if (elapsed > 30) {
         {readOnly}
         on:ready={handleEditorReady}
         on:change={handleChange}
-        on:focus
-        on:blur
+        on:focus={() => dispatch('focus')}
+        on:blur={() => dispatch('blur')}
       />
     </div>
-    
+
     {#if showHelpPanel}
       <div class="help-panel">
         <div class="help-header">
           <h4>Script Reference</h4>
-          <input
-            type="text"
-            class="help-search"
-            placeholder="Search..."
-            bind:value={searchQuery}
-          />
+          <input type="text" class="help-search" placeholder="Search..." bind:value={searchQuery} />
         </div>
-        
+
         <div class="help-content">
           {#if filteredVariables.length > 0}
             <div class="help-section">
               <h5>Variables</h5>
               <div class="help-items">
                 {#each filteredVariables as variable}
-                  <div class="help-item" on:click={() => monacoEditor && monacoEditor.insertText(variable.name)}>
+                  <button
+                    class="help-item w-full text-left"
+                    onclick={() => monacoEditor && monacoEditor.insertText(variable.name)}
+                  >
                     <span class="help-name">{variable.name}</span>
                     <span class="help-type">{variable.type}</span>
                     {#if variable.description}
                       <span class="help-desc">{variable.description}</span>
                     {/if}
-                  </div>
+                  </button>
                 {/each}
               </div>
             </div>
           {/if}
-          
+
           {#if filteredFunctions.length > 0}
             <div class="help-section">
               <h5>Functions</h5>
               <div class="help-items">
                 {#each filteredFunctions as func}
-                  <div class="help-item" on:click={() => monacoEditor && monacoEditor.insertText(func.name + '()')}>
+                  <button
+                    class="help-item w-full text-left"
+                    onclick={() => monacoEditor && monacoEditor.insertText(func.name + '()')}
+                  >
                     <span class="help-name">{func.name}</span>
                     <span class="help-signature">{func.signature}</span>
                     {#if func.description}
                       <span class="help-desc">{func.description}</span>
                     {/if}
-                  </div>
+                  </button>
                 {/each}
               </div>
             </div>
           {/if}
-          
+
           {#if filteredTemplates.length > 0}
             <div class="help-section">
               <h5>Templates</h5>
               <div class="help-items">
                 {#each filteredTemplates as template}
-                  <div class="help-template" on:click={() => insertTemplate(template)}>
+                  <button
+                    class="help-template w-full text-left"
+                    onclick={() => insertTemplate(template)}
+                  >
                     <h6>{template.name}</h6>
                     <p>{template.description}</p>
                     <pre>{template.code}</pre>
-                  </div>
+                  </button>
                 {/each}
               </div>
             </div>
@@ -317,7 +329,7 @@ if (elapsed > 30) {
     border-radius: 0.5rem;
     overflow: hidden;
   }
-  
+
   .editor-header {
     display: flex;
     justify-content: space-between;
@@ -326,29 +338,29 @@ if (elapsed > 30) {
     border-bottom: 1px solid var(--color-gray-200);
     background: var(--color-gray-50);
   }
-  
+
   .header-content {
     flex: 1;
   }
-  
+
   .editor-title {
     font-size: 1.125rem;
     font-weight: 600;
     color: var(--color-gray-900);
     margin: 0;
   }
-  
+
   .editor-description {
     font-size: 0.875rem;
     color: var(--color-gray-600);
     margin: 0.25rem 0 0 0;
   }
-  
+
   .editor-actions {
     display: flex;
     gap: 0.5rem;
   }
-  
+
   .action-btn {
     display: flex;
     align-items: center;
@@ -362,34 +374,34 @@ if (elapsed > 30) {
     cursor: pointer;
     transition: all 0.2s;
   }
-  
+
   .action-btn:hover {
     border-color: var(--color-gray-400);
     background: var(--color-gray-50);
   }
-  
+
   .action-btn.active {
     border-color: var(--color-blue-500);
     background: var(--color-blue-50);
     color: var(--color-blue-700);
   }
-  
+
   .icon {
     width: 1rem;
     height: 1rem;
   }
-  
+
   .editor-container {
     flex: 1;
     display: flex;
     overflow: hidden;
   }
-  
+
   .monaco-wrapper {
     flex: 1;
     overflow: hidden;
   }
-  
+
   .help-panel {
     width: 300px;
     border-left: 1px solid var(--color-gray-200);
@@ -398,20 +410,20 @@ if (elapsed > 30) {
     flex-direction: column;
     overflow: hidden;
   }
-  
+
   .help-header {
     padding: 1rem;
     border-bottom: 1px solid var(--color-gray-200);
     background: white;
   }
-  
+
   .help-header h4 {
     margin: 0 0 0.5rem 0;
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--color-gray-900);
   }
-  
+
   .help-search {
     width: 100%;
     padding: 0.375rem 0.75rem;
@@ -419,17 +431,17 @@ if (elapsed > 30) {
     border-radius: 0.375rem;
     font-size: 0.813rem;
   }
-  
+
   .help-content {
     flex: 1;
     overflow-y: auto;
     padding: 1rem;
   }
-  
+
   .help-section {
     margin-bottom: 1.5rem;
   }
-  
+
   .help-section h5 {
     margin: 0 0 0.5rem 0;
     font-size: 0.813rem;
@@ -438,13 +450,13 @@ if (elapsed > 30) {
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
-  
+
   .help-items {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
   }
-  
+
   .help-item {
     padding: 0.5rem;
     background: white;
@@ -453,25 +465,25 @@ if (elapsed > 30) {
     cursor: pointer;
     transition: all 0.2s;
   }
-  
+
   .help-item:hover {
     border-color: var(--color-blue-400);
     background: var(--color-blue-50);
   }
-  
+
   .help-name {
     font-weight: 500;
     color: var(--color-gray-900);
     font-family: var(--font-mono);
     font-size: 0.813rem;
   }
-  
+
   .help-type {
     margin-left: 0.5rem;
     font-size: 0.75rem;
     color: var(--color-gray-500);
   }
-  
+
   .help-signature {
     display: block;
     font-family: var(--font-mono);
@@ -479,14 +491,14 @@ if (elapsed > 30) {
     color: var(--color-gray-600);
     margin-top: 0.25rem;
   }
-  
+
   .help-desc {
     display: block;
     font-size: 0.75rem;
     color: var(--color-gray-600);
     margin-top: 0.25rem;
   }
-  
+
   .help-template {
     padding: 0.75rem;
     background: white;
@@ -496,25 +508,25 @@ if (elapsed > 30) {
     transition: all 0.2s;
     margin-bottom: 0.5rem;
   }
-  
+
   .help-template:hover {
     border-color: var(--color-blue-400);
     background: var(--color-blue-50);
   }
-  
+
   .help-template h6 {
     margin: 0 0 0.25rem 0;
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--color-gray-900);
   }
-  
+
   .help-template p {
     margin: 0 0 0.5rem 0;
     font-size: 0.75rem;
     color: var(--color-gray-600);
   }
-  
+
   .help-template pre {
     margin: 0;
     padding: 0.5rem;
@@ -524,7 +536,7 @@ if (elapsed > 30) {
     font-size: 0.75rem;
     overflow-x: auto;
   }
-  
+
   /* Responsive */
   @media (max-width: 768px) {
     .help-panel {
@@ -535,7 +547,7 @@ if (elapsed > 30) {
       box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
       z-index: 10;
     }
-    
+
     .editor-container.with-help .monaco-wrapper {
       margin-right: 300px;
     }

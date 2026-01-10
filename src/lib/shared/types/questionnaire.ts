@@ -117,6 +117,7 @@ export const QuestionTypes = {
   INSTRUCTION: 'instruction',
   MEDIA_DISPLAY: 'media-display',
   WEBGL: 'webgl',
+  BAR_CHART: 'bar-chart',
   
   // Input questions
   TEXT_INPUT: 'text-input',
@@ -498,6 +499,11 @@ export interface DrawingResponseConfig extends BaseResponseConfig {
 // Validation Configuration Types
 // ============================================================================
 
+export interface BaseValidation {
+  required?: boolean;
+  customRules?: ValidationRule[];
+}
+
 export interface TextValidation {
   required?: boolean;
   minLength?: number;
@@ -545,6 +551,14 @@ export interface BaseQuestion {
   // Metadata
   name?: string;
   tags?: string[];
+
+  // Legacy/Common properties for type compatibility
+  settings?: Record<string, any>;
+  response?: any; // Loosely typed to allow access before narrowing
+  validation?: any;
+  media?: MediaConfig[]; // Legacy access
+  stimulus?: any;
+  responseOptions?: any;
 }
 
 // ============================================================================
@@ -569,7 +583,7 @@ export interface Size {
 // ============================================================================
 
 export interface ResponseType {
-  type: 'single' | 'multiple' | 'text' | 'number' | 'scale' | 'keypress' | 'click' | 'custom';
+  type: 'single' | 'multiple' | 'text' | 'number' | 'scale' | 'keypress' | 'click' | 'custom' | 'none' | 'webgl';
   config?: ResponseConfig;
 }
 
@@ -729,6 +743,11 @@ export interface StatisticalFeedbackQuestion extends BaseQuestion {
   display: StatisticalFeedbackConfig;
 }
 
+export interface BarChartQuestion extends BaseQuestion {
+  type: typeof QuestionTypes.BAR_CHART;
+  display: StatisticalFeedbackConfig; // Reusing config for now
+}
+
 // ============================================================================
 // Union Type
 // ============================================================================
@@ -751,7 +770,8 @@ export type Question =
   | FileUploadQuestion
   | MediaResponseQuestion
   | DrawingQuestion
-  | StatisticalFeedbackQuestion;
+  | StatisticalFeedbackQuestion
+  | BarChartQuestion;
 
 // ============================================================================
 // Type Guards

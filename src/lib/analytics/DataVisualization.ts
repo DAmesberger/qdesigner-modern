@@ -114,26 +114,26 @@ export class DataVisualization {
           title: {
             display: true,
             text: 'Response Time Distribution',
-            position: 'top' as const
+            position: 'top'
           },
           tooltip: {
             enabled: true,
-            mode: 'index' as const,
+            mode: 'index',
             intersect: false,
             callbacks: {
-              title: (context) => {
+              title: (context: any) => {
                 const index = context[0]?.dataIndex;
                 if (index !== undefined && bins.binRanges[index]) {
                   return `${bins.binRanges[index].min.toFixed(0)}ms - ${bins.binRanges[index].max.toFixed(0)}ms`;
                 }
                 return '';
               },
-              label: (context) => `Frequency: ${context.parsed.y}`
+              label: (context: any) => `Frequency: ${context.parsed.y}`
             }
           }
         },
         ...options
-      },
+      } as any,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -142,7 +142,7 @@ export class DataVisualization {
       type: 'bar',
       data: config.data,
       options: config.options
-    }) as any;
+    } as any);
 
     this.charts.set(chartId, chart);
     return chart;
@@ -200,7 +200,7 @@ export class DataVisualization {
           intersect: false
         },
         ...options
-      },
+      } as any,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -209,7 +209,7 @@ export class DataVisualization {
       type: 'line',
       data: config.data,
       options: config.options
-    });
+    } as any);
 
     this.charts.set(chartId, chart);
     return chart;
@@ -232,7 +232,7 @@ export class DataVisualization {
     const chartId = `scatter_${Date.now()}`;
     const scatterData: ChartPoint[] = xData.map((x, i) => ({
       x,
-      y: yData[i],
+      y: yData[i] ?? 0,
       metadata: labels ? { label: labels[i] } : undefined
     }));
 
@@ -275,7 +275,7 @@ export class DataVisualization {
           },
           tooltip: {
             callbacks: {
-              label: (context) => {
+              label: (context: any) => {
                 const point = context.raw as ChartPoint;
                 const label = point.metadata?.label || '';
                 return `${label} (${point.x}, ${point.y})`;
@@ -284,7 +284,7 @@ export class DataVisualization {
           }
         },
         ...options
-      },
+      } as any,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -293,7 +293,7 @@ export class DataVisualization {
       type: 'scatter',
       data: config.data,
       options: config.options
-    });
+    } as any);
 
     this.charts.set(chartId, chart);
     return chart;
@@ -335,11 +335,11 @@ export class DataVisualization {
         datasets: [{
           label: 'Heatmap',
           data: flattenedData,
-          backgroundColor: (context) => {
+          backgroundColor: ((context: any) => {
             const point = context.raw as ChartPoint;
             const intensity = point.metadata?.intensity || 0;
             return this.getHeatmapColor(intensity);
-          },
+          }) as any,
           borderColor: '#ffffff',
           borderWidth: 1
         }]
@@ -355,7 +355,7 @@ export class DataVisualization {
             max: xLabels.length - 0.5,
             ticks: {
               stepSize: 1,
-              callback: (value) => xLabels[value as number] || ''
+              callback: (value: any) => xLabels[value as number] || ''
             },
             title: {
               display: true,
@@ -368,7 +368,7 @@ export class DataVisualization {
             max: yLabels.length - 0.5,
             ticks: {
               stepSize: 1,
-              callback: (value) => yLabels[value as number] || ''
+              callback: (value: any) => yLabels[value as number] || ''
             },
             title: {
               display: true,
@@ -384,7 +384,7 @@ export class DataVisualization {
           tooltip: {
             callbacks: {
               title: () => '',
-              label: (context) => {
+              label: (context: any) => {
                 const point = context.raw as ChartPoint;
                 const meta = point.metadata;
                 return `${meta?.xLabel} × ${meta?.yLabel}: ${meta?.value}`;
@@ -401,7 +401,7 @@ export class DataVisualization {
           }
         },
         ...options
-      },
+      } as any,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -410,7 +410,7 @@ export class DataVisualization {
       type: 'scatter',
       data: config.data,
       options: config.options
-    });
+    } as any);
 
     this.charts.set(chartId, chart);
     return chart;
@@ -442,7 +442,7 @@ export class DataVisualization {
       type: 'box_plot',
       data: {
         labels: datasets.map(d => d.label),
-        datasets: boxPlotData
+        datasets: boxPlotData as any
       },
       options: {
         responsive: true,
@@ -462,7 +462,7 @@ export class DataVisualization {
           },
           tooltip: {
             callbacks: {
-              label: (context) => {
+              label: (context: any) => {
                 const stats = context.raw as any;
                 return [
                   `Min: ${stats.min.toFixed(2)}`,
@@ -477,7 +477,7 @@ export class DataVisualization {
           }
         },
         ...options
-      },
+      } as any,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -526,7 +526,7 @@ export class DataVisualization {
           pointBorderColor: '#fff',
           pointHoverBackgroundColor: '#fff',
           pointHoverBorderColor: this.colorPalette[0]
-        }]
+        }] as any
       },
       options: {
         responsive: true,
@@ -539,7 +539,7 @@ export class DataVisualization {
             suggestedMin: 0,
             suggestedMax: 100
           }
-        },
+        } as any,
         plugins: {
           title: {
             display: true,
@@ -547,7 +547,7 @@ export class DataVisualization {
           }
         },
         ...options
-      },
+      } as any,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -556,7 +556,7 @@ export class DataVisualization {
       type: 'radar',
       data: config.data,
       options: config.options
-    });
+    } as any);
 
     this.charts.set(chartId, chart);
     return chart;
@@ -622,6 +622,17 @@ export class DataVisualization {
     const sorted = [...data].sort((a, b) => a - b);
     const n = sorted.length;
     
+    if (n === 0) {
+      return {
+        min: 0,
+        q1: 0,
+        median: 0,
+        q3: 0,
+        max: 0,
+        outliers: []
+      };
+    }
+    
     const q1 = this.calculateQuartile(sorted, 0.25);
     const median = this.calculateQuartile(sorted, 0.5);
     const q3 = this.calculateQuartile(sorted, 0.75);
@@ -631,8 +642,8 @@ export class DataVisualization {
     const upperBound = q3 + 1.5 * iqr;
     
     const outliers = sorted.filter(x => x < lowerBound || x > upperBound);
-    const whiskerMin = Math.max(sorted[0], lowerBound);
-    const whiskerMax = Math.min(sorted[n - 1], upperBound);
+    const whiskerMin = Math.max(sorted[0] ?? 0, lowerBound);
+    const whiskerMax = Math.min(sorted[n - 1] ?? 0, upperBound);
     
     return {
       min: whiskerMin,
@@ -648,14 +659,14 @@ export class DataVisualization {
     const index = percentile * (sortedData.length - 1);
     
     if (Number.isInteger(index)) {
-      return sortedData[index];
+      return sortedData[index] ?? 0;
     }
     
     const lower = Math.floor(index);
     const upper = Math.ceil(index);
     const weight = index - lower;
     
-    return sortedData[lower] * (1 - weight) + sortedData[upper] * weight;
+    return (sortedData[lower] ?? 0) * (1 - weight) + (sortedData[upper] ?? 0) * weight;
   }
 
   private createCustomBoxPlot(canvas: HTMLCanvasElement, data: any[], options: any): Chart {
@@ -674,7 +685,7 @@ export class DataVisualization {
         }]
       },
       options
-    });
+    } as any);
   }
 
   private normalizeValue(value: number, dataset: number[]): number {
@@ -709,7 +720,7 @@ export class DataVisualization {
   updateChart(chartId: string, newData: ChartData): void {
     const chart = this.charts.get(chartId);
     if (chart) {
-      chart.data = newData;
+      chart.data = newData as any;
       chart.update();
     }
   }
@@ -807,7 +818,7 @@ export class DataVisualization {
             ...customOptions?.scales?.y
           },
           ...customOptions?.scales
-        };
+        } as any;
         break;
       
       case 'time_series':
@@ -818,7 +829,7 @@ export class DataVisualization {
             ...customOptions?.scales?.x
           },
           ...customOptions?.scales
-        };
+        } as any;
         break;
       
       case 'scatter':
@@ -829,7 +840,7 @@ export class DataVisualization {
             ...customOptions?.scales?.x
           },
           ...customOptions?.scales
-        };
+        } as any;
         break;
     }
 

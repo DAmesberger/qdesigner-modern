@@ -305,7 +305,8 @@ export class ChangeTracker {
     const grouped = new Map<string, ActivityItem[]>();
     
     for (const activity of activities) {
-      const dateKey = activity.timestamp.toISOString().split('T')[0];
+      if (!activity.timestamp) continue;
+      const dateKey = activity.timestamp.toISOString().split('T')[0] as string;
       if (!grouped.has(dateKey)) {
         grouped.set(dateKey, []);
       }
@@ -365,16 +366,15 @@ export class ChangeTracker {
       stats.changesByImpact[change.impact]++;
       
       // Count by user
-      if (!stats.changesByUser[change.user.id]) {
-        stats.changesByUser[change.user.id] = 0;
-      }
-      stats.changesByUser[change.user.id]++;
+      const userId = change.user.id;
+      stats.changesByUser[userId] = (stats.changesByUser[userId] || 0) + 1;
     }
 
     // Group by day
     const dayGroups = new Map<string, number>();
     for (const change of changes) {
-      const day = change.timestamp.toISOString().split('T')[0];
+      if (!change.timestamp) continue;
+      const day = change.timestamp.toISOString().split('T')[0] as string;
       dayGroups.set(day, (dayGroups.get(day) || 0) + 1);
     }
     
@@ -505,7 +505,7 @@ export class ChangeTracker {
         return 'Reordered items';
         
       default:
-        return `Performed ${operation.type} operation`;
+        return `Performed ${(operation as any).type} operation`;
     }
   }
 
@@ -532,7 +532,7 @@ export class ChangeTracker {
         return `Reordered ${reorderOp.indices.length} items in ${reorderOp.path.join('.')}`;
         
       default:
-        return `Performed ${operation.type} operation on ${operation.path.join('.')}`;
+        return `Performed ${(operation as any).type} operation on ${(operation as any).path.join('.')}`;
     }
   }
 

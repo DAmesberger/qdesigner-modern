@@ -1,4 +1,4 @@
-import type { Questionnaire, Question, Stimulus } from '$lib/shared';
+import type { Questionnaire, Question, StimulusConfig as Stimulus } from '$lib/shared';
 
 export interface MediaValidationResult {
   valid: boolean;
@@ -70,7 +70,9 @@ export class MediaValidator {
    * Validate stimulus media
    */
   private async validateStimulus(stimulus: Stimulus, questionId: string): Promise<void> {
-    const content = stimulus.content;
+    const content = stimulus.content as any;
+    
+    if (typeof content === 'string') return;
 
     if (content.imageUrl) {
       await this.validateMediaUrl(content.imageUrl, 'image', questionId);

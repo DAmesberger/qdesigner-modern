@@ -460,7 +460,7 @@ export class OperationalTransform {
     const adjustedPath = [...path];
     if (insertPath.length < path.length) {
       const affectedIndex = insertPath.length;
-      const currentIndex = parseInt(path[affectedIndex]);
+      const currentIndex = parseInt(path[affectedIndex]!);
       if (!isNaN(currentIndex) && currentIndex >= insertPosition) {
         adjustedPath[affectedIndex] = (currentIndex + 1).toString();
       }
@@ -477,7 +477,7 @@ export class OperationalTransform {
     const adjustedPath = [...path];
     if (deletePath.length < path.length) {
       const affectedIndex = deletePath.length;
-      const currentIndex = parseInt(path[affectedIndex]);
+      const currentIndex = parseInt(path[affectedIndex]!);
       if (!isNaN(currentIndex)) {
         if (currentIndex >= deletePosition && currentIndex < deletePosition + deleteLength) {
           // This path points to a deleted item

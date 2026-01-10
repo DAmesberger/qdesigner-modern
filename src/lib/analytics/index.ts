@@ -4,19 +4,21 @@
  * data visualization, and export functionality
  */
 
-// Core Analytics Classes
-export { StatisticalEngine } from './StatisticalEngine';
-export { RealtimeAnalytics } from './RealtimeAnalytics';
-export { DataVisualization } from './DataVisualization';
-export { ExportService } from './ExportService';
+import { StatisticalEngine } from './StatisticalEngine';
+import { RealtimeAnalytics } from './RealtimeAnalytics';
+import { DataVisualization } from './DataVisualization';
+import { ExportService } from './ExportService';
+
+// Re-export Core Classes
+export { StatisticalEngine, RealtimeAnalytics, DataVisualization, ExportService };
 
 // Svelte Components
 export { default as AnalyticsDashboard } from './components/AnalyticsDashboard.svelte';
 export { default as ResponseViewer } from './components/ResponseViewer.svelte';
 export { default as StatisticsCard } from './components/StatisticsCard.svelte';
 
-// Type Definitions
-export type {
+// Import types for local usage and re-export
+import type {
   // Core Analytics Types
   AnalyticsData,
   AnalyticsMetadata,
@@ -79,6 +81,69 @@ export type {
   RetryConfig
 } from './types';
 
+export type {
+  // Core Analytics Types
+  AnalyticsData,
+  AnalyticsMetadata,
+  DeviceInfo,
+  BrowserInfo,
+  EnvironmentalFactors,
+  PerformanceCapabilities,
+
+  // Statistical Analysis Types
+  StatisticalSummary,
+  CorrelationAnalysis,
+  TTestResult,
+  AnovaResult,
+  AnovaGroup,
+  RegressionResult,
+  ReliabilityAnalysis,
+  FactorAnalysis,
+
+  // Real-time Analytics Types
+  RealtimeConfig,
+  RealtimeEvent,
+  RealtimeEventType,
+  RealtimeBuffer,
+  ConnectionStatus,
+
+  // Data Visualization Types
+  ChartConfig,
+  ChartType,
+  ChartData,
+  Dataset,
+  ChartPoint,
+  ChartOptions,
+  ScaleConfig,
+  LegendConfig,
+  TitleConfig,
+  TooltipConfig,
+  AnimationConfig,
+  InteractionConfig,
+
+  // Export Types
+  ExportConfig,
+  ExportFormat,
+  ExportResult,
+  DataTransformation,
+  TransformationType,
+
+  // Dashboard Types
+  DashboardConfig,
+  TimeRange,
+  DisplayMetric,
+  FilterConfig,
+  FilterOperator,
+
+  // Performance Metrics Types
+  PerformanceMetrics,
+
+  // Error Handling Types
+  AnalyticsError,
+  ErrorHandler,
+  RetryConfig
+};
+
 // Utility Functions and Constants
 export const ANALYTICS_VERSION = '1.0.0';
 
@@ -120,11 +185,16 @@ export function initializeAnalytics(config?: {
   const realtimeConfig = { ...DEFAULT_REALTIME_CONFIG, ...config?.realtime };
   const dashboardConfig = { ...DEFAULT_DASHBOARD_CONFIG, ...config?.dashboard };
   
+  // Only initialize realtime if endpoint is provided
+  const realtimeInstance = (config?.realtime && 'endpoint' in config.realtime && config.realtime.endpoint)
+    ? RealtimeAnalytics.getInstance(realtimeConfig as RealtimeConfig)
+    : null;
+
   return {
     statistical: StatisticalEngine.getInstance(),
     visualization: DataVisualization.getInstance(),
     export: ExportService.getInstance(),
-    realtime: config?.realtime ? RealtimeAnalytics.getInstance(realtimeConfig as RealtimeConfig) : null,
+    realtime: realtimeInstance,
     config: {
       realtime: realtimeConfig,
       dashboard: dashboardConfig
@@ -164,14 +234,14 @@ export async function generateAnalyticsReport(
   // Response time analysis
   const responseTimes = data.flatMap(session => 
     session.responses
-      .filter(r => r.responseTime !== undefined)
-      .map(r => r.responseTime!)
+    .filter(r => r.responseTime !== undefined && r.responseTime !== null)
+    .map(r => r.responseTime as number)
   );
 
   const reactionTimes = data.flatMap(session => 
     session.responses
-      .filter(r => r.reactionTime !== undefined)
-      .map(r => r.reactionTime!)
+    .filter(r => r.reactionTime !== undefined && r.reactionTime !== null)
+    .map(r => r.reactionTime as number)
   );
 
   const report: any = {
@@ -231,7 +301,7 @@ export function validateAnalyticsData(data: any[]): { valid: boolean; errors: st
     return { valid: false, errors };
   }
 
-  data.forEach((session, index) => {
+  data.forEach((session: any, index: number) => {
     if (!session.sessionId || typeof session.sessionId !== 'string') {
       errors.push(`Session ${index}: Missing or invalid sessionId`);
     }
@@ -277,14 +347,14 @@ export function calculatePerformanceMetrics(data: AnalyticsData[]): PerformanceM
 
   const responseTimes = data.flatMap(session => 
     session.responses
-      .filter(r => r.responseTime !== undefined)
-      .map(r => r.responseTime!)
+      .filter(r => r.responseTime !== undefined && r.responseTime !== null)
+      .map(r => r.responseTime as number)
   );
 
   const reactionTimes = data.flatMap(session => 
     session.responses
-      .filter(r => r.reactionTime !== undefined)
-      .map(r => r.reactionTime!)
+      .filter(r => r.reactionTime !== undefined && r.reactionTime !== null)
+      .map(r => r.reactionTime as number)
   );
 
   if (responseTimes.length === 0) return null;
@@ -321,7 +391,7 @@ export function calculatePerformanceMetrics(data: AnalyticsData[]): PerformanceM
     },
     userEngagement: {
       timeOnPage: data.reduce((sum, session) => {
-        return sum + ((session.endTime || session.startTime) - session.startTime);
+        return sum + ((session.endTime ?? session.startTime) - session.startTime);
       }, 0) / data.length,
       interactionCount: data.reduce((sum, session) => sum + session.interactions.length, 0) / data.length,
       scrollDepth: 0, // Would be measured from actual interaction data

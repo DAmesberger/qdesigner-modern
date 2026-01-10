@@ -31,5 +31,5 @@ export const metadata: ModuleMetadata = {
     showPreview: true,
     autoUpload: true
   },
-  answerType: AnswerTypes.FILE
+  answerType: AnswerTypes.FILE_UPLOAD
 };

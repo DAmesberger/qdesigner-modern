@@ -18,11 +18,11 @@ export const metadata: ModuleMetadata = {
     supportsVariables: true
   },
   components: {
-    runtime: () => import('./BarChart.svelte'),
-    designer: () => import('./BarChartDesigner.svelte')
+    runtime: () => import('./BarChart.svelte') as any,
+    designer: () => import('./BarChartDesigner.svelte') as any
   },
   defaultConfig: {
-    orientation: 'vertical' as 'vertical' | 'horizontal',
+    orientation: 'horizontal' as 'vertical' | 'horizontal',
     showErrorBars: false,
     errorType: 'standardError' as 'standardError' | 'standardDeviation' | 'confidence95',
     stacked: false,
@@ -30,6 +30,8 @@ export const metadata: ModuleMetadata = {
     showDataLabels: true,
     barWidth: 0.8,
     barSpacing: 0.2,
+    value: '', // Main value to display (can be variable or formula)
+    referenceValue: '', // Reference value for comparison (can be variable or formula)
     colors: {
       scheme: 'default',
       customColors: []

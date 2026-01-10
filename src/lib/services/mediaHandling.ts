@@ -99,7 +99,7 @@ export function findOrphanedMediaReferences(
   const contentRefIds = matches.map(m => m[1]);
   
   // Find orphaned references (in content but not in media array)
-  return contentRefIds.filter(refId => !currentRefIds.has(refId));
+  return contentRefIds.filter((refId): refId is string => !!refId && !currentRefIds.has(refId));
 }
 
 /**

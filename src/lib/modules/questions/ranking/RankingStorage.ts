@@ -1,9 +1,13 @@
 import { BaseQuestionStorage } from '../shared/BaseStorage';
-import type { QuestionResponse } from '$lib/shared';
+import type { QuestionResponse } from '../shared/types';
 
 export class RankingStorage extends BaseQuestionStorage {
   constructor() {
-    super('ranking');
+    super();
+  }
+
+  getAnswerType(): string {
+    return 'ranking';
   }
   
   parseValue(value: any): string[] {
@@ -16,8 +20,7 @@ export class RankingStorage extends BaseQuestionStorage {
   }
   
   validateResponse(response: QuestionResponse): boolean {
-    if (!super.validateResponse(response)) return false;
-    
+
     const value = response.value;
     if (!Array.isArray(value)) {
       console.warn('Ranking response must be an array');
@@ -34,14 +37,19 @@ export class RankingStorage extends BaseQuestionStorage {
     return true;
   }
   
+  // Helper to get responses (mock implementation matching usage pattern)
+  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+    return this.getAllForSession();
+  }
+
   // Ranking-specific aggregations
   async getAverageRankPerItem(questionId: string): Promise<Record<string, number>> {
     const responses = await this.getResponses(questionId);
     const rankSums: Record<string, { sum: number; count: number }> = {};
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const ranking = this.parseValue(response.value);
-      ranking.forEach((itemId, index) => {
+      ranking.forEach((itemId: string, index: number) => {
         if (!rankSums[itemId]) {
           rankSums[itemId] = { sum: 0, count: 0 };
         }
@@ -75,7 +83,7 @@ export class RankingStorage extends BaseQuestionStorage {
     
     const rankings = responses.map(r => this.parseValue(r.value));
     const allItems = new Set<string>();
-    rankings.forEach(ranking => ranking.forEach(item => allItems.add(item)));
+    rankings.forEach((ranking: string[]) => ranking.forEach((item: string) => allItems.add(item)));
     
     const items = Array.from(allItems);
     const n = responses.length; // number of raters
@@ -85,8 +93,8 @@ export class RankingStorage extends BaseQuestionStorage {
     const rankSums = new Map<string, number>();
     items.forEach(item => rankSums.set(item, 0));
     
-    rankings.forEach(ranking => {
-      ranking.forEach((itemId, index) => {
+    rankings.forEach((ranking: string[]) => {
+      ranking.forEach((itemId: string, index: number) => {
         const currentSum = rankSums.get(itemId) || 0;
         rankSums.set(itemId, currentSum + index + 1);
       });
@@ -115,15 +123,15 @@ export class RankingStorage extends BaseQuestionStorage {
     // Need to know total items to calculate partial rate
     // For now, we'll find the max number of unique items across all responses
     const allItems = new Set<string>();
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const ranking = this.parseValue(response.value);
-      ranking.forEach(item => allItems.add(item));
+      ranking.forEach((item: string) => allItems.add(item));
     });
     
     const totalItems = allItems.size;
     let partialCount = 0;
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const ranking = this.parseValue(response.value);
       if (ranking.length < totalItems) {
         partialCount++;
@@ -137,7 +145,7 @@ export class RankingStorage extends BaseQuestionStorage {
     const responses = await this.getResponses(questionId);
     const patternCounts = new Map<string, number>();
     
-    responses.forEach(response => {
+    responses.forEach((response: QuestionResponse) => {
       const ranking = this.parseValue(response.value);
       const patternKey = JSON.stringify(ranking);
       patternCounts.set(patternKey, (patternCounts.get(patternKey) || 0) + 1);

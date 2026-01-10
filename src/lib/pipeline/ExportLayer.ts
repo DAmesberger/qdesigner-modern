@@ -53,7 +53,7 @@ export class ExportLayer {
         }
       };
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         format: request.format,
@@ -123,7 +123,7 @@ export class ExportLayer {
         }
       };
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         format: 'csv',
@@ -183,7 +183,7 @@ export class ExportLayer {
 
       return result;
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         format: 'spss',
@@ -232,7 +232,7 @@ export class ExportLayer {
         }
       };
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         format: 'r',
@@ -321,7 +321,7 @@ export class ExportLayer {
         }
       };
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         format: 'excel',
@@ -361,7 +361,7 @@ export class ExportLayer {
         }
       };
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         format: 'json',
@@ -390,7 +390,7 @@ export class ExportLayer {
         end_time: session.endTime ? this.formatDateTime(session.endTime, config?.dateFormat, config?.timeFormat) : '',
         status: session.status,
         duration_ms: session.endTime ? session.endTime - session.startTime : null
-      };
+      } as Record<string, any>;
 
       // Add metadata fields
       if (session.metadata && config?.includeMetadata !== false) {
@@ -616,8 +616,8 @@ export class ExportLayer {
    */
   private formatDateTime(timestamp: number, dateFormat?: string, timeFormat?: string): string {
     const date = new Date(timestamp);
-    const datePart = date.toISOString().split('T')[0];
-    const timePart = date.toISOString().split('T')[1].split('.')[0];
+    const datePart = date.toISOString().split('T')[0] || '';
+    const timePart = date.toISOString().split('T')[1]?.split('.')[0] || '';
     
     if (dateFormat && timeFormat) {
       return `${datePart} ${timePart}`;

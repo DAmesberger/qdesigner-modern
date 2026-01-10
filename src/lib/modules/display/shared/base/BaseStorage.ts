@@ -1,12 +1,12 @@
 // Base storage class for instruction modules
 
-import type { StorageData } from '$lib/services/localStorage';
+
 
 export abstract class BaseInstructionStorage {
-  protected storage: StorageData;
+  protected storage: any;
   protected questionnaireId: string;
   
-  constructor(storage: StorageData, questionnaireId: string) {
+  constructor(storage: any, questionnaireId: string) {
     this.storage = storage;
     this.questionnaireId = questionnaireId;
   }
@@ -20,7 +20,7 @@ export abstract class BaseInstructionStorage {
     value: any;
   }>> {
     const responses = await this.storage.getResponses(this.questionnaireId);
-    return responses.filter(r => r.questionId === questionId);
+    return responses.filter((r: any) => r.questionId === questionId);
   }
   
   /**
@@ -48,7 +48,7 @@ export abstract class BaseInstructionStorage {
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     )[0];
     
-    return this.parseValue(latest.value);
+    return latest ? this.parseValue(latest.value) : null;
   }
   
   /**
@@ -56,7 +56,7 @@ export abstract class BaseInstructionStorage {
    */
   async clearResponses(questionId: string): Promise<void> {
     const allResponses = await this.storage.getResponses(this.questionnaireId);
-    const filtered = allResponses.filter(r => r.questionId !== questionId);
+    const filtered = allResponses.filter((r: any) => r.questionId !== questionId);
     
     // Save filtered responses back
     for (const response of filtered) {

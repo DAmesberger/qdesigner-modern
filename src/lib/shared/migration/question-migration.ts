@@ -3,7 +3,9 @@
  * Converts old question format to new typed format
  */
 
-import type { Question as OldQuestion, QuestionType as OldQuestionType } from '../types/questionnaire';
+import type { Question as ImportedQuestionType, QuestionType as OldQuestionTypeStr } from '../types/questionnaire';
+type OldQuestion = any; 
+type OldQuestionType = string;
 import type { 
   Question as NewQuestion, 
   QuestionType as NewQuestionType,
@@ -54,6 +56,10 @@ export function migrateQuestion(oldQuestion: OldQuestion): MigrationResult {
   try {
     // Determine new question type
     let newType = typeMapping[oldQuestion.type];
+    if (!newType) {
+      warnings.push(`Unknown question type: ${oldQuestion.type}`);
+      return { success: false, warnings, errors: ['Unknown question type'] };
+    }
     
     // Special case: text with response becomes text-input
     if (oldQuestion.type === 'text' && oldQuestion.responseType?.type === 'text') {

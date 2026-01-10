@@ -63,7 +63,7 @@ export interface StreamSubscription {
 
 export interface StreamFilter {
   type: 'question' | 'responseType' | 'custom';
-  value: string | RegExp;
+  value: string | RegExp | ((message: StreamMessage) => boolean);
   operator?: 'equals' | 'contains' | 'matches';
 }
 
@@ -121,7 +121,7 @@ export interface SchemaDefinition {
   properties?: Record<string, SchemaDefinition>;
   items?: SchemaDefinition;
   format?: string;
-  pattern?: string;
+  pattern?: RegExp;
   minimum?: number;
   maximum?: number;
   minLength?: number;
@@ -150,7 +150,7 @@ export interface TransformationStage {
 
 export interface Transformer {
   name: string;
-  transform: (data: any, context: TransformationContext) => TransformationResult;
+  transform: (data: any, context: TransformationContext) => TransformationResult | Promise<TransformationResult>;
   supports: (data: any) => boolean;
 }
 
@@ -224,6 +224,26 @@ export interface ExportMetadata {
   version?: string;
   tags?: string[];
   custom?: Record<string, any>;
+  
+  // Export process tracking
+  exportedAt?: Date | string;
+  sessionCount?: number;
+  questionnaireId?: string;
+  rows?: number;
+  columns?: number;
+  variables?: number;
+  encoding?: string;
+  worksheets?: number;
+  totalResponses?: number;
+  sessions?: number;
+  
+  // Format specific
+  hasLabels?: boolean;
+  variableLabels?: boolean;
+  valueLabels?: boolean;
+  syntaxFile?: string;
+  packageFormat?: string;
+  hasFactors?: boolean;
 }
 
 export interface ExportResult {
@@ -376,6 +396,7 @@ export interface BatchJob<T = any> {
   created: number;
   started?: number;
   completed?: number;
+  metadata?: Record<string, any>;
 }
 
 export interface BatchConfig {

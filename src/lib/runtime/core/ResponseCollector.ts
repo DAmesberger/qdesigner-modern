@@ -35,7 +35,7 @@ export class ResponseCollector {
     this.collectedValue = null;
     
     // Configure based on response type
-    this.configureHandlers(question.responseType);
+    this.configureHandlers((question as any).responseType);
   }
   
   /**
@@ -48,7 +48,7 @@ export class ResponseCollector {
     this.startTime = performance.now();
     
     // Set up timeout if specified
-    const timing = this.question.timing;
+    const timing = (this.question as any).timing;
     if (timing?.responseDuration && timing.responseDuration > 0) {
       this.timeoutId = window.setTimeout(() => {
         if (this.isActive) {
@@ -87,30 +87,31 @@ export class ResponseCollector {
    * Configure handlers based on response type
    */
   private configureHandlers(responseType: ResponseType): void {
-    switch (responseType.type) {
+    const rt = responseType as any;
+    switch (rt.type) {
       case 'keypress':
-        this.configureKeypressHandler(responseType);
+        this.configureKeypressHandler(rt);
         break;
         
       case 'single':
       case 'multiple':
-        this.configureChoiceHandler(responseType);
+        this.configureChoiceHandler(rt);
         break;
         
       case 'scale':
-        this.configureScaleHandler(responseType);
+        this.configureScaleHandler(rt);
         break;
         
       case 'number':
-        this.configureNumberHandler(responseType);
+        this.configureNumberHandler(rt);
         break;
         
       case 'text':
-        this.configureTextHandler(responseType);
+        this.configureTextHandler(rt);
         break;
         
       case 'click':
-        this.configureClickHandler(responseType);
+        this.configureClickHandler(rt);
         break;
     }
   }
@@ -119,10 +120,11 @@ export class ResponseCollector {
    * Configure keypress response handler
    */
   private configureKeypressHandler(responseType: ResponseType): void {
-    if (responseType.type !== 'keypress') return;
+    const rt = responseType as any;
+    if (rt.type !== 'keypress') return;
     
     // Set up valid keys
-    this.validKeys = new Set(responseType.keys || []);
+    this.validKeys = new Set(rt.keys || []);
     
     this.keyboardHandler = (e: KeyboardEvent) => {
       if (!this.isActive || this.isPaused) return;
@@ -143,10 +145,11 @@ export class ResponseCollector {
    * Configure choice response handler
    */
   private configureChoiceHandler(responseType: ResponseType): void {
-    if (responseType.type !== 'single' && responseType.type !== 'multiple') return;
+    const rt = responseType as any;
+    if (rt.type !== 'single' && rt.type !== 'multiple') return;
     
-    const options = responseType.options || [];
-    const isMultiple = responseType.type === 'multiple';
+    const options: any[] = rt.options || [];
+    const isMultiple = rt.type === 'multiple';
     const selectedValues: Set<string> = new Set();
     
     this.keyboardHandler = (e: KeyboardEvent) => {
@@ -185,10 +188,11 @@ export class ResponseCollector {
    * Configure scale response handler
    */
   private configureScaleHandler(responseType: ResponseType): void {
-    if (responseType.type !== 'scale') return;
+    const rt = responseType as any;
+    if (rt.type !== 'scale') return;
     
-    const min = responseType.min || 1;
-    const max = responseType.max || 5;
+    const min = rt.min || 1;
+    const max = rt.max || 5;
     let currentValue = Math.floor((min + max) / 2);
     
     this.keyboardHandler = (e: KeyboardEvent) => {
@@ -228,11 +232,12 @@ export class ResponseCollector {
    * Configure number response handler
    */
   private configureNumberHandler(responseType: ResponseType): void {
-    if (responseType.type !== 'number') return;
+    const rt = responseType as any;
+    if (rt.type !== 'number') return;
     
     let inputValue = '';
-    const min = responseType.min;
-    const max = responseType.max;
+    const min = rt.min;
+    const max = rt.max;
     
     this.keyboardHandler = (e: KeyboardEvent) => {
       if (!this.isActive || this.isPaused) return;
@@ -273,11 +278,12 @@ export class ResponseCollector {
    * Configure text response handler
    */
   private configureTextHandler(responseType: ResponseType): void {
-    if (responseType.type !== 'text') return;
+    const rt = responseType as any;
+    if (rt.type !== 'text') return;
     
     let inputValue = '';
-    const minLength = responseType.minLength || 0;
-    const maxLength = responseType.maxLength;
+    const minLength = rt.minLength || 0;
+    const maxLength = rt.maxLength;
     
     this.keyboardHandler = (e: KeyboardEvent) => {
       if (!this.isActive || this.isPaused) return;

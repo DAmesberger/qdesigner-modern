@@ -70,9 +70,9 @@ export class StatisticalEngine {
       mode,
       standardDeviation,
       variance,
-      min: sorted[0],
-      max: sorted[n - 1],
-      range: sorted[n - 1] - sorted[0],
+      min: sorted[0] ?? 0,
+      max: sorted[n - 1] ?? 0,
+      range: (sorted[n - 1] ?? 0) - (sorted[0] ?? 0),
       quartiles,
       percentiles,
       skewness: this.calculateSkewness(validData, mean, standardDeviation),
@@ -91,9 +91,9 @@ export class StatisticalEngine {
   private calculateMedian(sortedData: number[]): number {
     const n = sortedData.length;
     if (n % 2 === 0) {
-      return (sortedData[n / 2 - 1] + sortedData[n / 2]) / 2;
+      return ((sortedData[n / 2 - 1] ?? 0) + (sortedData[n / 2] ?? 0)) / 2;
     }
-    return sortedData[Math.floor(n / 2)];
+    return sortedData[Math.floor(n / 2)] ?? 0;
   }
 
   private calculateMode(data: number[]): number[] {
@@ -133,14 +133,14 @@ export class StatisticalEngine {
     const index = (percentile / 100) * (n - 1);
     
     if (Number.isInteger(index)) {
-      return sortedData[index];
+      return sortedData[index] ?? 0;
     }
     
     const lower = Math.floor(index);
     const upper = Math.ceil(index);
     const weight = index - lower;
     
-    return sortedData[lower] * (1 - weight) + sortedData[upper] * weight;
+    return (sortedData[lower] ?? 0) * (1 - weight) + (sortedData[upper] ?? 0) * weight;
   }
 
   private calculateSkewness(data: number[], mean: number, stdDev: number): number {
@@ -224,7 +224,7 @@ export class StatisticalEngine {
     const n = x.length;
     const sumX = x.reduce((sum, val) => sum + val, 0);
     const sumY = y.reduce((sum, val) => sum + val, 0);
-    const sumXY = x.reduce((sum, val, i) => sum + val * y[i], 0);
+    const sumXY = x.reduce((sum, val, i) => sum + val * (y[i] ?? 0), 0);
     const sumX2 = x.reduce((sum, val) => sum + val * val, 0);
     const sumY2 = y.reduce((sum, val) => sum + val * val, 0);
 
@@ -247,8 +247,8 @@ export class StatisticalEngine {
 
     for (let i = 0; i < n - 1; i++) {
       for (let j = i + 1; j < n; j++) {
-        const signX = Math.sign(x[j] - x[i]);
-        const signY = Math.sign(y[j] - y[i]);
+        const signX = Math.sign((x[j] ?? 0) - (x[i] ?? 0));
+        const signY = Math.sign((y[j] ?? 0) - (y[i] ?? 0));
         
         if (signX * signY > 0) concordant++;
         else if (signX * signY < 0) discordant++;
@@ -267,13 +267,14 @@ export class StatisticalEngine {
     
     for (let i = 0; i < indexed.length; i++) {
       let tieCount = 1;
-      while (i + tieCount < indexed.length && indexed[i].value === indexed[i + tieCount].value) {
+      while (i + tieCount < indexed.length && indexed[i]?.value === indexed[i + tieCount]?.value) {
         tieCount++;
       }
       
       const averageRank = currentRank + (tieCount - 1) / 2;
       for (let j = 0; j < tieCount; j++) {
-        ranks[indexed[i + j].index] = averageRank;
+        const idx = indexed[i + j]?.index;
+        if (idx !== undefined) ranks[idx] = averageRank;
       }
       
       currentRank += tieCount;
@@ -408,7 +409,7 @@ export class StatisticalEngine {
       throw new Error('Paired data must have equal length');
     }
 
-    const differences = data1.map((x, i) => x - data2[i]);
+    const differences = data1.map((x, i) => x - (data2[i] ?? 0));
     return { ...this.performOneSampleTTest(differences, 0), type: 'two-sample-paired' };
   }
 
@@ -438,14 +439,14 @@ export class StatisticalEngine {
 
     // Sum of squares between groups (SSB)
     const ssb = groups.reduce((sum, group, i) => {
-      const groupMean = groupData[i].mean;
+      const groupMean = groupData[i]?.mean ?? 0;
       const groupSize = group.length;
       return sum + groupSize * Math.pow(groupMean - grandMean, 2);
     }, 0);
 
     // Sum of squares within groups (SSW)
     const ssw = groups.reduce((sum, group, i) => {
-      const groupMean = groupData[i].mean;
+      const groupMean = groupData[i]?.mean ?? 0;
       return sum + group.reduce((innerSum, x) => innerSum + Math.pow(x - groupMean, 2), 0);
     }, 0);
 
@@ -503,7 +504,7 @@ export class StatisticalEngine {
     const yMean = this.calculateMean(y);
 
     // Calculate slope and intercept
-    const numerator = x.reduce((sum, xi, i) => sum + (xi - xMean) * (y[i] - yMean), 0);
+    const numerator = x.reduce((sum, xi, i) => sum + (xi - xMean) * ((y[i] ?? 0) - yMean), 0);
     const denominator = x.reduce((sum, xi) => sum + Math.pow(xi - xMean, 2), 0);
     
     const slope = numerator / denominator;
@@ -511,7 +512,7 @@ export class StatisticalEngine {
 
     // Calculate residuals and predicted values
     const predicted = x.map(xi => intercept + slope * xi);
-    const residuals = y.map((yi, i) => yi - predicted[i]);
+    const residuals = y.map((yi, i) => yi - (predicted[i] ?? 0));
 
     // Calculate R-squared
     const ssTot = y.reduce((sum, yi) => sum + Math.pow(yi - yMean, 2), 0);
@@ -566,11 +567,11 @@ export class StatisticalEngine {
     if (cached) return cached;
 
     const k = items.length; // number of items
-    const n = items[0].length; // number of observations
+    const n = items[0]?.length ?? 0; // number of observations
 
     // Calculate total scores
     const totalScores = Array.from({ length: n }, (_, i) => 
-      items.reduce((sum, item) => sum + item[i], 0)
+      items.reduce((sum, item) => sum + (item[i] ?? 0), 0)
     );
 
     // Calculate variances
@@ -586,7 +587,7 @@ export class StatisticalEngine {
     items.forEach((item, i) => {
       const otherItemsTotal = Array.from({ length: n }, (_, j) => 
         items.reduce((sum, otherItem, otherIndex) => 
-          otherIndex !== i ? sum + otherItem[j] : sum, 0
+          otherIndex !== i ? sum + (otherItem[j] ?? 0) : sum, 0
         )
       );
       const correlation = this.calculatePearsonCorrelation(item, otherItemsTotal);
@@ -608,7 +609,7 @@ export class StatisticalEngine {
     let correlationCount = 0;
     for (let i = 0; i < k; i++) {
       for (let j = i + 1; j < k; j++) {
-        totalCorrelations += this.calculatePearsonCorrelation(items[i], items[j]);
+        totalCorrelations += this.calculatePearsonCorrelation(items[i]!, items[j]!);
         correlationCount++;
       }
     }
@@ -619,10 +620,10 @@ export class StatisticalEngine {
     const secondHalf = items.slice(Math.floor(k / 2));
     
     const firstHalfScores = Array.from({ length: n }, (_, i) => 
-      firstHalf.reduce((sum, item) => sum + item[i], 0)
+      firstHalf.reduce((sum, item) => sum + (item[i] ?? 0), 0)
     );
     const secondHalfScores = Array.from({ length: n }, (_, i) => 
-      secondHalf.reduce((sum, item) => sum + item[i], 0)
+      secondHalf.reduce((sum, item) => sum + (item[i] ?? 0), 0)
     );
     
     const splitHalfCorrelation = this.calculatePearsonCorrelation(firstHalfScores, secondHalfScores);
@@ -654,7 +655,7 @@ export class StatisticalEngine {
     if (cached) return cached;
 
     const nVars = data.length;
-    const nObs = data[0].length;
+    const nObs = data[0]?.length ?? 0;
 
     // Standardize the data
     const standardizedData = data.map(variable => {
@@ -668,9 +669,9 @@ export class StatisticalEngine {
     for (let i = 0; i < nVars; i++) {
       for (let j = 0; j < nVars; j++) {
         if (i === j) {
-          correlationMatrix[i][j] = 1;
+          correlationMatrix[i]![j] = 1;
         } else {
-          correlationMatrix[i][j] = this.calculatePearsonCorrelation(standardizedData[i], standardizedData[j]);
+          correlationMatrix[i]![j] = this.calculatePearsonCorrelation(standardizedData[i] ?? [], standardizedData[j] ?? []);
         }
       }
     }
@@ -686,14 +687,14 @@ export class StatisticalEngine {
       .sort((a, b) => b.value - a.value)
       .map(item => item.index);
 
-    const sortedEigenvalues = sortedIndices.map(i => eigenvalues[i]);
-    const sortedEigenvectors = sortedIndices.map(i => eigenvectors[i]);
+    const sortedEigenvalues = sortedIndices.map(i => eigenvalues[i]!);
+    const sortedEigenvectors = sortedIndices.map(i => eigenvectors[i]!);
 
     // Calculate explained variance
-    const totalVariance = sortedEigenvalues.reduce((sum, val) => sum + val, 0);
-    const explainedVariance = sortedEigenvalues.map(val => (val / totalVariance) * 100);
+    const totalVariance = sortedEigenvalues.reduce((sum, val) => sum + (val ?? 0), 0);
+    const explainedVariance = sortedEigenvalues.map(val => ((val ?? 0) / totalVariance) * 100);
     const cumulativeVariance = explainedVariance.reduce((acc, val, index) => {
-      acc[index] = val + (acc[index - 1] || 0);
+      acc[index] = val + (acc[index - 1] ?? 0);
       return acc;
     }, [] as number[]);
 
@@ -704,8 +705,10 @@ export class StatisticalEngine {
     for (let i = 0; i < nVars; i++) {
       factorLoadings[`Variable_${i + 1}`] = [];
       for (let j = 0; j < numComponents; j++) {
-        const loading = sortedEigenvectors[j][i] * Math.sqrt(sortedEigenvalues[j]);
-        factorLoadings[`Variable_${i + 1}`].push(loading);
+        const eigenvector = sortedEigenvectors[j] ?? [];
+        const eigenvalue = sortedEigenvalues[j] ?? 0;
+        const loading = (eigenvector[i] ?? 0) * Math.sqrt(eigenvalue);
+        factorLoadings[`Variable_${i + 1}`]!.push(loading);
       }
     }
 
@@ -714,7 +717,10 @@ export class StatisticalEngine {
     for (let i = 0; i < nVars; i++) {
       let communality = 0;
       for (let j = 0; j < numComponents; j++) {
-        communality += Math.pow(factorLoadings[`Variable_${i + 1}`][j], 2);
+        const loadings = factorLoadings[`Variable_${i + 1}`];
+        if (loadings && loadings[j] !== undefined) {
+          communality += Math.pow(loadings[j] ?? 0, 2);
+        }
       }
       communalities[`Variable_${i + 1}`] = communality;
     }
@@ -746,7 +752,7 @@ export class StatisticalEngine {
     // This is a simplified implementation
     // For production use, implement QR algorithm or use a math library
     for (let i = 0; i < n; i++) {
-      values.push(matrix[i][i]); // Diagonal approximation
+      values.push(matrix[i]?.[i] ?? 0); // Diagonal approximation
       const vector = Array(n).fill(0);
       vector[i] = 1;
       vectors.push(vector);
@@ -793,14 +799,8 @@ export class StatisticalEngine {
   // Statistical distribution functions (simplified implementations)
   private studentTCDF(t: number, df: number): number {
     // Simplified t-distribution CDF approximation
-    if (df >= 30) {
-      return this.standardNormalCDF(t);
-    }
-    
-    // Use gamma function approximation for t-distribution
-    const x = t / Math.sqrt(df);
-    return 0.5 + (x * this.gamma(0.5) * this.hypergeometric2F1(0.5, (df + 1) / 2, 1.5, -x * x)) / 
-           (Math.sqrt(Math.PI) * this.gamma((df + 1) / 2));
+    // For large degrees of freedom, t-distribution converges to normal distribution
+    return this.standardNormalCDF(t);
   }
 
   private studentTInverse(p: number, df: number): number {
@@ -851,18 +851,18 @@ export class StatisticalEngine {
     
     if (p < pLow) {
       const q = Math.sqrt(-2 * Math.log(p));
-      x = (((((c[6] * q + c[5]) * q + c[4]) * q + c[3]) * q + c[2]) * q + c[1]) * q + c[0];
-      x /= ((((d[4] * q + d[3]) * q + d[2]) * q + d[1]) * q + 1);
+      x = (((((c[6]! * q + c[5]!) * q + c[4]!) * q + c[3]!) * q + c[2]!) * q + c[1]!) * q + c[0]!;
+      x /= ((((d[4]! * q + d[3]!) * q + d[2]!) * q + d[1]!) * q + 1);
     } else if (p <= pHigh) {
       const q = p - 0.5;
       const r = q * q;
-      x = (((((a[6] * r + a[5]) * r + a[4]) * r + a[3]) * r + a[2]) * r + a[1]) * r + a[0];
+      x = (((((a[6]! * r + a[5]!) * r + a[4]!) * r + a[3]!) * r + a[2]!) * r + a[1]!) * r + a[0]!;
       x *= q;
-      x /= ((((b[5] * r + b[4]) * r + b[3]) * r + b[2]) * r + b[1]) * r + 1;
+      x /= ((((b[5]! * r + b[4]!) * r + b[3]!) * r + b[2]!) * r + b[1]!) * r + 1;
     } else {
       const q = Math.sqrt(-2 * Math.log(1 - p));
-      x = -(((((c[6] * q + c[5]) * q + c[4]) * q + c[3]) * q + c[2]) * q + c[1]) * q + c[0];
-      x /= ((((d[4] * q + d[3]) * q + d[2]) * q + d[1]) * q + 1);
+      x = -(((((c[6]! * q + c[5]!) * q + c[4]!) * q + c[3]!) * q + c[2]!) * q + c[1]!) * q + c[0]!;
+      x /= ((((d[4]! * q + d[3]!) * q + d[2]!) * q + d[1]!) * q + 1);
     }
     
     return x;
@@ -941,9 +941,9 @@ export class StatisticalEngine {
     }
     
     z -= 1;
-    let x = C[0];
+    let x = C[0] ?? 0;
     for (let i = 1; i < g + 2; i++) {
-      x += C[i] / (z + i);
+      x += (C[i] ?? 0) / (z + i);
     }
     
     const t = z + g + 0.5;

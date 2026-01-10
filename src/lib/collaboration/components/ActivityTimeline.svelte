@@ -16,7 +16,7 @@
     groupByDate = true,
     showFilters = true,
     onLoadMore,
-    currentUser
+    currentUser,
   }: Props = $props();
 
   // Local state
@@ -25,32 +25,32 @@
   let showUserOnly = $state(false);
 
   // Reactive computations
-  const filteredActivities = $derived(() => {
+  const filteredActivities = $derived.by(() => {
     let filtered = [...activities];
 
     // Filter by user
     if (selectedUserFilter) {
-      filtered = filtered.filter(a => a.user.id === selectedUserFilter);
+      filtered = filtered.filter((a) => a.user.id === selectedUserFilter);
     } else if (showUserOnly && currentUser) {
-      filtered = filtered.filter(a => a.user.id === currentUser.id);
+      filtered = filtered.filter((a) => a.user.id === currentUser.id);
     }
 
     // Filter by type
     if (selectedTypeFilter !== 'all') {
-      filtered = filtered.filter(a => a.type === selectedTypeFilter);
+      filtered = filtered.filter((a) => a.type === selectedTypeFilter);
     }
 
     // Limit items
     return filtered.slice(0, maxItems);
   });
 
-  const groupedActivities = $derived(() => {
+  const groupedActivities = $derived.by(() => {
     if (!groupByDate) {
       return [{ date: null, activities: filteredActivities }];
     }
 
     const groups = new Map<string, ActivityItem[]>();
-    
+
     for (const activity of filteredActivities) {
       const dateKey = activity.timestamp.toDateString();
       if (!groups.has(dateKey)) {
@@ -64,7 +64,7 @@
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   });
 
-  const uniqueUsers = $derived(() => {
+  const uniqueUsers = $derived.by(() => {
     const users = new Map<string, CollaborationUser>();
     for (const activity of activities) {
       users.set(activity.user.id, activity.user);
@@ -79,7 +79,7 @@
     { value: 'version', label: 'Versions' },
     { value: 'merge', label: 'Merges' },
     { value: 'join', label: 'Joins' },
-    { value: 'leave', label: 'Leaves' }
+    { value: 'leave', label: 'Leaves' },
   ]);
 
   // Methods
@@ -98,10 +98,10 @@
     } else if (date.toDateString() === yesterday.toDateString()) {
       return 'Yesterday';
     } else {
-      return date.toLocaleDateString([], { 
-        weekday: 'long', 
-        month: 'short', 
-        day: 'numeric' 
+      return date.toLocaleDateString([], {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
       });
     }
   }
@@ -113,7 +113,7 @@
       version: '📋',
       merge: '🔀',
       join: '👋',
-      leave: '👋'
+      leave: '👋',
     };
     return icons[type] || '📄';
   }
@@ -125,14 +125,14 @@
       version: 'text-purple-600',
       merge: 'text-orange-600',
       join: 'text-teal-600',
-      leave: 'text-gray-600'
+      leave: 'text-gray-600',
     };
     return colors[type] || 'text-gray-600';
   }
 
   function getUserAvatar(user: CollaborationUser): string {
     if (user.avatar) return user.avatar;
-    
+
     // Generate a simple avatar based on user ID
     const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-yellow-500'];
     const hash = user.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -142,7 +142,7 @@
   function getUserInitials(name: string): string {
     return name
       .split(' ')
-      .map(part => part.charAt(0))
+      .map((part) => part.charAt(0))
       .join('')
       .toUpperCase()
       .substring(0, 2);
@@ -167,11 +167,13 @@
   <div class="px-4 py-3 border-b border-gray-200">
     <div class="flex items-center justify-between">
       <h3 class="text-lg font-semibold text-gray-900">Activity Timeline</h3>
-      
+
       {#if currentUser}
         <button
           onclick={toggleUserOnly}
-          class="px-3 py-1 text-sm rounded {showUserOnly ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'} hover:bg-opacity-80 transition-colors"
+          class="px-3 py-1 text-sm rounded {showUserOnly
+            ? 'bg-blue-100 text-blue-800'
+            : 'bg-gray-100 text-gray-700'} hover:bg-opacity-80 transition-colors"
         >
           My Activity
         </button>
@@ -215,7 +217,8 @@
 
         <!-- Results count -->
         <span class="text-sm text-gray-500 ml-2">
-          {filteredActivities.length} {filteredActivities.length === 1 ? 'activity' : 'activities'}
+          {filteredActivities.length}
+          {filteredActivities.length === 1 ? 'activity' : 'activities'}
         </span>
       </div>
     {/if}
@@ -228,10 +231,7 @@
         <div class="text-4xl mb-2">🤷‍♀️</div>
         <p>No activities found</p>
         {#if selectedUserFilter || selectedTypeFilter !== 'all' || showUserOnly}
-          <button
-            onclick={clearFilters}
-            class="mt-2 text-blue-600 hover:text-blue-800 underline"
-          >
+          <button onclick={clearFilters} class="mt-2 text-blue-600 hover:text-blue-800 underline">
             Clear filters to see all activities
           </button>
         {/if}
@@ -254,13 +254,17 @@
               <!-- User avatar -->
               <div class="flex-shrink-0">
                 {#if activity.user.avatar}
-                  <img 
-                    src={activity.user.avatar} 
+                  <img
+                    src={activity.user.avatar}
                     alt={activity.user.name}
                     class="w-8 h-8 rounded-full"
                   />
                 {:else}
-                  <div class="w-8 h-8 rounded-full {getUserAvatar(activity.user)} text-white flex items-center justify-center text-sm font-medium">
+                  <div
+                    class="w-8 h-8 rounded-full {getUserAvatar(
+                      activity.user
+                    )} text-white flex items-center justify-center text-sm font-medium"
+                  >
                     {getUserInitials(activity.user.name)}
                   </div>
                 {/if}
@@ -271,12 +275,12 @@
                 <div class="flex items-center gap-2 mb-1">
                   <!-- Activity icon -->
                   <span class="text-lg">{getActivityIcon(activity.type)}</span>
-                  
+
                   <!-- Activity title -->
                   <span class="text-sm font-medium text-gray-900">
                     {activity.title}
                   </span>
-                  
+
                   <!-- Timestamp -->
                   <span class="text-xs text-gray-500">
                     {formatTime(activity.timestamp)}
@@ -340,23 +344,21 @@
 </div>
 
 <style>
-  .activity-timeline {
-    /* Custom scrollbar styling */
-  }
-  
+  /* Custom scrollbar styling */
+
   .activity-timeline .overflow-y-auto::-webkit-scrollbar {
     width: 6px;
   }
-  
+
   .activity-timeline .overflow-y-auto::-webkit-scrollbar-track {
     background: #f1f5f9;
   }
-  
+
   .activity-timeline .overflow-y-auto::-webkit-scrollbar-thumb {
     background: #cbd5e1;
     border-radius: 3px;
   }
-  
+
   .activity-timeline .overflow-y-auto::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
   }

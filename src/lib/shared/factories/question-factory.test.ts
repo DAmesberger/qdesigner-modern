@@ -2,12 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { QuestionFactory } from './question-factory';
 import { QuestionTypes } from '../types/questionnaire';
 import { QuestionValidator } from '../validators/question-validators';
-import type { Question } from '../types/questionnaire';
+import type { 
+  Question,
+  TextDisplayQuestion,
+  SingleChoiceQuestion, 
+  ScaleQuestion,
+  MatrixQuestion,
+  TextInputQuestion,
+  MultipleChoiceQuestion
+} from '../types/questionnaire';
 
 describe('QuestionFactory', () => {
   describe('create', () => {
     it('should create a valid text display question', () => {
-      const question = QuestionFactory.create(QuestionTypes.TEXT_DISPLAY);
+      const question = QuestionFactory.create(QuestionTypes.TEXT_DISPLAY) as TextDisplayQuestion;
       
       expect(question.type).toBe(QuestionTypes.TEXT_DISPLAY);
       expect(question.id).toBeDefined();
@@ -21,7 +29,7 @@ describe('QuestionFactory', () => {
     });
     
     it('should create a valid single choice question', () => {
-      const question = QuestionFactory.create(QuestionTypes.SINGLE_CHOICE);
+      const question = QuestionFactory.create(QuestionTypes.SINGLE_CHOICE) as SingleChoiceQuestion;
       
       expect(question.type).toBe(QuestionTypes.SINGLE_CHOICE);
       expect(question.required).toBe(true);
@@ -33,7 +41,7 @@ describe('QuestionFactory', () => {
     });
     
     it('should create a valid scale question', () => {
-      const question = QuestionFactory.create(QuestionTypes.SCALE);
+      const question = QuestionFactory.create(QuestionTypes.SCALE) as ScaleQuestion;
       
       expect(question.type).toBe(QuestionTypes.SCALE);
       expect(question.display.min).toBe(1);
@@ -46,7 +54,7 @@ describe('QuestionFactory', () => {
     });
     
     it('should create a valid matrix question', () => {
-      const question = QuestionFactory.create(QuestionTypes.MATRIX);
+      const question = QuestionFactory.create(QuestionTypes.MATRIX) as MatrixQuestion;
       
       expect(question.type).toBe(QuestionTypes.MATRIX);
       expect(question.display.rows).toHaveLength(3);
@@ -62,11 +70,11 @@ describe('QuestionFactory', () => {
       const q2 = QuestionFactory.create(QuestionTypes.TEXT_INPUT);
       
       expect(q1.id).not.toBe(q2.id);
-      expect(q1.response.saveAs).not.toBe(q2.response.saveAs);
+      expect(q1.response!.saveAs).not.toBe(q2.response!.saveAs);
     });
     
     it('should create unique option IDs for choice questions', () => {
-      const question = QuestionFactory.create(QuestionTypes.SINGLE_CHOICE);
+      const question = QuestionFactory.create(QuestionTypes.SINGLE_CHOICE) as SingleChoiceQuestion;
       const optionIds = question.display.options.map(opt => opt.id);
       const uniqueIds = new Set(optionIds);
       
@@ -82,7 +90,7 @@ describe('QuestionFactory', () => {
   
   describe('createMultiple', () => {
     it('should create multiple questions with unique IDs', () => {
-      const questions = QuestionFactory.createMultiple(QuestionTypes.TEXT_INPUT, 5);
+      const questions = QuestionFactory.createMultiple(QuestionTypes.TEXT_INPUT, 5) as TextInputQuestion[];
       
       expect(questions).toHaveLength(5);
       
@@ -98,8 +106,8 @@ describe('QuestionFactory', () => {
   
   describe('clone', () => {
     it('should clone a question with new ID', () => {
-      const original = QuestionFactory.create(QuestionTypes.SINGLE_CHOICE);
-      const cloned = QuestionFactory.clone(original);
+      const original = QuestionFactory.create(QuestionTypes.SINGLE_CHOICE) as SingleChoiceQuestion;
+      const cloned = QuestionFactory.clone(original) as SingleChoiceQuestion;
       
       expect(cloned.id).not.toBe(original.id);
       expect(cloned.type).toBe(original.type);
@@ -107,16 +115,16 @@ describe('QuestionFactory', () => {
     });
     
     it('should update variable name with new ID', () => {
-      const original = QuestionFactory.create(QuestionTypes.TEXT_INPUT);
-      const cloned = QuestionFactory.clone(original);
+      const original = QuestionFactory.create(QuestionTypes.TEXT_INPUT) as TextInputQuestion;
+      const cloned = QuestionFactory.clone(original) as TextInputQuestion;
       
       expect(cloned.response.saveAs).not.toBe(original.response.saveAs);
       expect(cloned.response.saveAs).toMatch(/^text_[a-zA-Z0-9]{6}$/);
     });
     
     it('should create new option IDs for choice questions', () => {
-      const original = QuestionFactory.create(QuestionTypes.MULTIPLE_CHOICE);
-      const cloned = QuestionFactory.clone(original);
+      const original = QuestionFactory.create(QuestionTypes.MULTIPLE_CHOICE) as MultipleChoiceQuestion;
+      const cloned = QuestionFactory.clone(original) as MultipleChoiceQuestion;
       
       const originalIds = original.display.options.map(opt => opt.id);
       const clonedIds = cloned.display.options.map(opt => opt.id);
@@ -126,8 +134,8 @@ describe('QuestionFactory', () => {
     });
     
     it('should create new row/column IDs for matrix questions', () => {
-      const original = QuestionFactory.create(QuestionTypes.MATRIX);
-      const cloned = QuestionFactory.clone(original);
+      const original = QuestionFactory.create(QuestionTypes.MATRIX) as MatrixQuestion;
+      const cloned = QuestionFactory.clone(original) as MatrixQuestion;
       
       const originalRowIds = original.display.rows.map(row => row.id);
       const clonedRowIds = cloned.display.rows.map(row => row.id);
@@ -141,8 +149,8 @@ describe('QuestionFactory', () => {
     });
     
     it('should maintain deep copy of nested properties', () => {
-      const original = QuestionFactory.create(QuestionTypes.SCALE);
-      const cloned = QuestionFactory.clone(original);
+      const original = QuestionFactory.create(QuestionTypes.SCALE) as ScaleQuestion;
+      const cloned = QuestionFactory.clone(original) as ScaleQuestion;
       
       // Modify original
       original.display.labels!.min = 'Modified';

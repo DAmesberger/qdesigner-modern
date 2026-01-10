@@ -56,6 +56,8 @@ export interface SessionMetadata {
   timezone?: string;
   locale?: string;
   custom?: Record<string, any>;
+  computedVariables?: Record<string, any>;
+  aggregations?: Record<string, any>;
 }
 
 export interface ResponseMetadata {
@@ -113,6 +115,7 @@ export interface ExportData {
 export interface QuestionnaireMetadata {
   id: string;
   name: string;
+  description?: string;
   version: string;
   variables: VariableMetadata[];
   questions: QuestionMetadata[];

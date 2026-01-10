@@ -2,46 +2,62 @@
   import type { ExtendedQuestion } from './types';
   import type { ComponentType } from 'svelte';
   import { moduleRegistry } from '$lib/modules/registry';
-  
+
   interface Props {
     question: ExtendedQuestion;
     mode?: 'edit' | 'preview' | 'runtime';
     value?: any;
     disabled?: boolean;
     variables?: Record<string, any>;
+    interactive?: boolean;
+    onresponse?: (detail: any) => void;
+    onedit?: (detail: any) => void;
+    ondelete?: (detail: any) => void;
+    onduplicate?: (detail: any) => void;
+    oninteraction?: (detail: any) => void;
+    onmount?: (detail: any) => void;
+    onchange?: (detail: any) => void;
   }
-  
-  let { 
-    question, 
+
+  let {
+    question,
     mode = 'runtime',
     value = undefined,
     disabled = false,
-    variables = {}
+    variables = {},
+    interactive = true,
+    onresponse,
+    onedit,
+    ondelete,
+    onduplicate,
+    oninteraction,
+    onmount,
+    onchange,
   }: Props = $props();
-  
+
   let QuestionComponent = $state<ComponentType | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
-  
+
   // Load component from module registry
   $effect(() => {
     loadComponent(question.type);
   });
-  
+
   async function loadComponent(type: string) {
     loading = true;
     error = null;
-    
+
     console.log('[QuestionRenderer] Loading component:', type);
-    
+
     try {
       // Check module registry for question or instruction
       const metadata = moduleRegistry.get(type);
       console.log('[QuestionRenderer] Metadata found:', metadata);
-      
+
       if (metadata && (metadata.category === 'question' || metadata.category === 'display')) {
-        // Map preview mode to runtime for loading components
-        const loadMode = mode === 'preview' ? 'runtime' : mode;
+        // Map mode to registry mode (runtime/designer)
+        const loadMode = mode === 'preview' || mode === 'runtime' ? 'runtime' : 'designer';
         QuestionComponent = await moduleRegistry.loadComponent(type, loadMode);
         console.log('[QuestionRenderer] Component loaded successfully');
       } else {
@@ -57,16 +73,16 @@
       loading = false;
     }
   }
-  
+
   // Merge question properties with type-specific config
   const fullQuestion = $derived({
     ...question,
     config: {
       ...question.config,
-      ...(question as any) // Type-specific properties
-    }
+      ...(question as any), // Type-specific properties
+    },
   });
-  
+
   // Transform question to analytics format for display modules
   const analyticsData = $derived(() => {
     const metadata = moduleRegistry.get(question.type);
@@ -76,21 +92,21 @@
         ...question,
         dataSource: {
           variables: question.variables || [],
-          aggregation: 'none' as const
+          aggregation: 'none' as const,
         },
         visualization: {
-          title: question.prompt || question.text || '',
-          subtitle: question.description || '',
+          title: (question as any).prompt || (question as any).text || '',
+          subtitle: (question as any).description || '',
           showLegend: true,
           showGrid: true,
           showTooltips: true,
-          colorScheme: 'default' as const
+          colorScheme: 'default' as const,
         },
         config: {
           ...metadata.defaultConfig,
           ...question.config,
-          ...(question as any)
-        }
+          ...(question as any),
+        },
       };
     }
     return fullQuestion;
@@ -106,32 +122,43 @@
   {@const metadata = moduleRegistry.get(question.type)}
   {#if metadata?.category === 'display'}
     <!-- Display modules (analytics, instructions) use analytics prop -->
-    <svelte:component 
-      this={QuestionComponent}
+    <QuestionComponent
       analytics={analyticsData()}
       {mode}
       {variables}
-      on:edit
-      on:delete
-      on:duplicate
-      on:interaction
+      onevent={(e: any) => {
+        /* Handle events if needed */
+      }}
     />
   {:else}
     <!-- Question modules use question prop -->
-    <svelte:component 
-      this={QuestionComponent}
+    <QuestionComponent
       question={fullQuestion}
       {mode}
       bind:value
       {disabled}
       {variables}
-      on:edit
-      on:delete
-      on:duplicate
-      on:response
-      on:interaction
-      on:mount
-      on:change
+      onedit={(e: any) => {
+        /* dispatch('edit', e.detail) */
+      }}
+      ondelete={(e: any) => {
+        /* dispatch('delete', e.detail) */
+      }}
+      onduplicate={(e: any) => {
+        /* dispatch('duplicate', e.detail) */
+      }}
+      onresponse={(e: any) => {
+        /* dispatch('response', e.detail) */
+      }}
+      oninteraction={(e: any) => {
+        /* dispatch('interaction', e.detail) */
+      }}
+      onmount={(e: any) => {
+        /* dispatch('mount', e.detail) */
+      }}
+      onchange={(e: any) => {
+        /* dispatch('change', e.detail) */
+      }}
     />
   {/if}
 {:else}
@@ -141,8 +168,8 @@
     <p>Question type "{question.type}" is not registered.</p>
     {#if mode === 'edit'}
       <p class="help-text">
-        Please check that the question type is correctly configured
-        or that the required component is installed.
+        Please check that the question type is correctly configured or that the required component
+        is installed.
       </p>
     {/if}
   </div>
@@ -157,7 +184,7 @@
     padding: 2rem;
     color: #6b7280;
   }
-  
+
   .spinner {
     width: 1.5rem;
     height: 1.5rem;
@@ -166,13 +193,13 @@
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
-  
+
   @keyframes spin {
     to {
       transform: rotate(360deg);
     }
   }
-  
+
   .unknown-question-type {
     padding: 2rem;
     text-align: center;
@@ -180,24 +207,24 @@
     border: 2px dashed #e5e7eb;
     border-radius: 0.5rem;
   }
-  
+
   .error-icon {
     font-size: 3rem;
     margin-bottom: 1rem;
   }
-  
+
   .unknown-question-type h3 {
     font-size: 1.25rem;
     font-weight: 600;
     color: #111827;
     margin-bottom: 0.5rem;
   }
-  
+
   .unknown-question-type p {
     color: #6b7280;
     margin: 0;
   }
-  
+
   .help-text {
     margin-top: 0.5rem;
     font-size: 0.875rem;

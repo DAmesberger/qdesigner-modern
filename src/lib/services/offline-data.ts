@@ -1,5 +1,9 @@
 import { browser } from '$app/environment';
-import type { Project, Organization, QuestionnaireDefinition } from '$lib/shared/types';
+import type { Tables } from '$lib/services/supabase';
+
+type Project = Tables['projects'];
+type Organization = Tables['organizations'];
+type QuestionnaireDefinition = Tables['questionnaire_definitions'];
 
 interface CachedData {
   timestamp: number;

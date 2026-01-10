@@ -1,109 +1,130 @@
 <script lang="ts">
-  import { designerStore, selectedItem } from '$lib/features/designer/stores/designerStore';
+  import { designerStore } from '$lib/stores/designer.svelte';
   import type { Question, Page, Variable } from '$lib/shared';
   import { moduleRegistry } from '$lib/modules/registry';
   import type { ComponentType } from 'svelte';
-  import StyleEditor from '../../wysiwyg/StyleEditor.svelte';
-  import ScriptEditor from '../../wysiwyg/ScriptEditor.svelte';
+  import StyleEditor from './StyleEditor.svelte';
+  import ScriptEditor from './ScriptEditor.svelte';
   import { defaultTheme } from '$lib/shared/types/theme';
   import { getItemSettings } from '$lib/utils/itemSettings';
-  
-  let activeTab: 'properties' | 'style' | 'script' = 'properties';
-  let theme = defaultTheme; // In real app, this would come from store
+
+  let activeTab = $state<'properties' | 'style' | 'script'>('properties');
+  let theme = $state(defaultTheme); // In real app, this would come from store
 
   // Use reactive declarations instead of manual subscription
-  $: item = $selectedItem;
-  $: itemType = item ? $designerStore.selectedItemType : null;
+  let item = $derived(designerStore.selectedItem);
+  let itemType = $derived(designerStore.selectedItemType);
+
+  // Type-narrowed derived values for template safety
+  let questionItem = $derived(item && itemType === 'question' ? (item as Question) : null);
+  let pageItem = $derived(item && itemType === 'page' ? (item as Page) : null);
+  let variableItem = $derived(item && itemType === 'variable' ? (item as Variable) : null);
 
   // Get organizationId and userId from store
-  $: organizationId = $designerStore.questionnaire.organizationId || '';
-  $: userId = $designerStore.userId || '';
-  $: showScriptTab = item && itemType === 'question';
-  
-  // Debug logging - commented out to prevent performance issues
-  // $: console.log('[PropertiesPanel] Store state:', {
-  //   organizationId,
-  //   userId,
-  //   questionnaire: $designerStore.questionnaire
+  let organizationId = $derived(designerStore.questionnaire.organizationId || '');
+  let userId = $derived(designerStore.userId || '');
+  let showScriptTab = $derived(!!questionItem);
+
+  // Debug logging
+  // $effect(() => {
+  //   console.log('[PropertiesPanel] Store state:', {
+  //     organizationId,
+  //     userId,
+  //     questionnaire: designerStore.questionnaire
+  //   });
   // });
 
   // Update handlers
-  function updateQuestion(updates: Partial<Question>) {
-    if (item && itemType === 'question') {
+  function updateQuestion(updates: Partial<Question> & { config?: any }) {
+    if (questionItem) {
+      const q = questionItem;
       // Sync config with display for questions that have options
       if (updates.config) {
         const questionTypesWithOptions = ['multiple-choice', 'single-choice', 'ranking', 'scale'];
-        
-        if (questionTypesWithOptions.includes(item.type)) {
+
+        if (questionTypesWithOptions.includes(q.type)) {
           // Sync options between config and display
           if (updates.config.options) {
             updates.display = {
-              ...item.display,
-              options: updates.config.options.map((opt: any) => ({
-                id: opt.id,
-                label: opt.label,
-                value: opt.value,
-                description: opt.description,
-                icon: opt.icon,
-                image: opt.image,
-                color: opt.color
-              }))
-            };
+              ...q.display,
+              options: (updates.config.options as any[]).map(
+                (opt: {
+                  id: string;
+                  label: string;
+                  value: string;
+                  description?: string;
+                  icon?: string;
+                  image?: string;
+                  color?: string;
+                }) =>
+                  ({
+                    id: opt.id,
+                    label: opt.label,
+                    value: opt.value,
+                    description: opt.description,
+                    icon: opt.icon,
+                    image: opt.image,
+                    color: opt.color,
+                  }) as any
+              ),
+            } as any;
           }
-          
+
           // Sync other display properties
           if (updates.config.prompt !== undefined) {
             updates.display = {
-              ...updates.display || item.display,
-              prompt: updates.config.prompt
+              ...(updates.display || q.display),
+              prompt: updates.config.prompt,
             };
           }
         }
       }
-      
+
       // Also handle direct display updates
       if (updates.display) {
         // Ensure display has all necessary properties
         updates.display = {
-          ...item.display,
-          ...updates.display
+          ...q.display,
+          ...updates.display,
         };
       }
-      
-      designerStore.updateQuestion(item.id, updates);
+
+      designerStore.updateQuestion(questionItem.id, updates);
     }
   }
 
   function updatePageProperty(property: string, value: any) {
-    if (item && itemType === 'page') {
-      designerStore.updatePage(item.id, { [property]: value });
+    if (pageItem) {
+      designerStore.updatePage(pageItem.id, { [property]: value });
     }
   }
 
   function updateVariableProperty(property: string, value: any) {
-    if (item && itemType === 'variable') {
-      designerStore.updateVariable(item.id, { [property]: value });
+    if (variableItem) {
+      designerStore.updateVariable(variableItem.id, { [property]: value });
     }
   }
 
   // Get the appropriate designer component from module registry
-  let designerComponent: ComponentType | null = null;
-  let loadingComponent = false;
-  let moduleCategory: string | null = null;
-  let lastLoadedType: string | null = null;
-  
+  let designerComponent = $state<ComponentType | null>(null);
+  let loadingComponent = $state(false);
+  let moduleCategory = $state<string | null>(null);
+  let lastLoadedType = $state<string | null>(null);
+
   // Only reload component if the type changes
-  $: if (item && itemType === 'question') {
-    if (item.type !== lastLoadedType) {
-      lastLoadedType = item.type;
-      loadModuleDesigner(item.type);
+  $effect(() => {
+    if (questionItem) {
+      if (questionItem.type !== lastLoadedType) {
+        lastLoadedType = questionItem.type;
+        loadModuleDesigner(questionItem.type);
+      }
+    } else {
+      lastLoadedType = null;
+      designerComponent = null;
+      moduleCategory = null;
     }
-  } else {
-    lastLoadedType = null;
-    designerComponent = null;
-    moduleCategory = null;
-  }
-  
+  });
+
   async function loadModuleDesigner(type: string) {
     loadingComponent = true;
     try {
@@ -123,7 +144,7 @@
       loadingComponent = false;
     }
   }
-  
+
   function handleThemeUpdate(event: CustomEvent) {
     const { path, value } = event.detail;
     // Update theme in store
@@ -135,14 +156,14 @@
     }
     obj[path[path.length - 1]] = value;
   }
-  
+
   function handleScriptUpdate(script: string) {
-    if (item && itemType === 'question') {
-      designerStore.updateQuestion(item.id, {
+    if (questionItem) {
+      designerStore.updateQuestion(questionItem.id, {
         settings: {
-          ...getItemSettings(item),
-          script
-        }
+          ...getItemSettings(questionItem),
+          script,
+        },
       });
     }
   }
@@ -158,7 +179,7 @@
       class:text-muted-foreground={activeTab !== 'properties'}
       class:border-b-2={activeTab === 'properties'}
       class:border-primary={activeTab === 'properties'}
-      on:click={() => activeTab = 'properties'}
+      onclick={() => (activeTab = 'properties')}
     >
       Properties
     </button>
@@ -169,7 +190,7 @@
       class:text-muted-foreground={activeTab !== 'style'}
       class:border-b-2={activeTab === 'style'}
       class:border-primary={activeTab === 'style'}
-      on:click={() => activeTab = 'style'}
+      onclick={() => (activeTab = 'style')}
     >
       Style
     </button>
@@ -181,7 +202,7 @@
         class:text-muted-foreground={activeTab !== 'script'}
         class:border-b-2={activeTab === 'script'}
         class:border-primary={activeTab === 'script'}
-        on:click={() => activeTab = 'script'}
+        onclick={() => (activeTab = 'script')}
       >
         Script
       </button>
@@ -192,261 +213,317 @@
   <div class="flex-1 overflow-hidden">
     {#if activeTab === 'properties'}
       <div class="h-full overflow-y-auto">
-    {#if item && itemType === 'question'}
-      <!-- Question Properties -->
-      <div class="p-4 space-y-4">
-        <!-- Common Properties -->
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Question ID</label>
-          <input
-            type="text"
-            value={item.id}
-            disabled
-            class="w-full px-3 py-2 border border-input rounded-md bg-muted text-muted-foreground"
-          />
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Question Type</label>
-          <input
-            type="text"
-            value={item.type}
-            disabled
-            class="w-full px-3 py-2 border border-input rounded-md bg-muted text-muted-foreground"
-          />
-          <p class="text-xs text-muted-foreground mt-1">
-            To change the type, delete this question and create a new one
-          </p>
-        </div>
-
-        <!-- Type-specific Properties -->
-        {#if loadingComponent}
-          <div class="border-t pt-4">
-            <div class="flex items-center justify-center p-4">
-              <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-              <span class="ml-2 text-sm text-muted-foreground">Loading properties...</span>
-            </div>
-          </div>
-        {:else if designerComponent}
-          <div class="border-t pt-4">
-            {#key item.id}
-              {#if moduleCategory === 'instruction'}
-                <svelte:component 
-                  this={designerComponent} 
-                  instruction={item} 
-                  mode="edit"
-                  onUpdate={updateQuestion}
-                  {organizationId}
-                  {userId}
-                />
-              {:else if moduleCategory === 'analytics'}
-                <svelte:component 
-                  this={designerComponent} 
-                  block={item} 
-                  mode="edit"
-                  onUpdate={updateQuestion}
-                  {organizationId}
-                  {userId}
-                />
-              {:else if moduleCategory === 'question'}
-                <svelte:component 
-                  this={designerComponent} 
-                  question={item} 
-                  mode="edit"
-                  onUpdate={updateQuestion}
-                  {organizationId}
-                  {userId}
-                />
-              {/if}
-            {/key}
-          </div>
-        {:else}
-          <div class="border-t pt-4">
-            <div class="bg-yellow-500/10 p-3 rounded-md">
-              <p class="text-sm text-yellow-600 dark:text-yellow-400">
-                Properties for {item.type} are handled in the module designer.
-              </p>
-              <p class="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
-                Make sure the module is properly registered.
-              </p>
-            </div>
-          </div>
-        {/if}
-
-        <!-- Common Optional Properties -->
-        <div class="border-t pt-4">
-          <h4 class="text-sm font-medium text-foreground mb-2">Advanced Settings</h4>
-          
-          <div class="space-y-3">
+        {#if questionItem}
+          <!-- Question Properties -->
+          <div class="p-4 space-y-4">
+            <!-- Common Properties -->
             <div>
-              <label class="block text-sm font-medium text-foreground mb-1">Internal Name</label>
+              <label
+                for="question-id-{questionItem.id}"
+                class="block text-sm font-medium text-foreground mb-1">Question ID</label
+              >
               <input
+                id="question-id-{questionItem.id}"
                 type="text"
-                value={item.name || ''}
-                on:input={(e) => updateQuestion({ name: e.currentTarget.value || undefined })}
+                value={questionItem.id}
+                disabled
+                class="w-full px-3 py-2 border border-input rounded-md bg-muted text-muted-foreground"
+              />
+            </div>
+
+            <div>
+              <label
+                for="question-type-{questionItem.id}"
+                class="block text-sm font-medium text-foreground mb-1">Question Type</label
+              >
+              <input
+                id="question-type-{questionItem.id}"
+                type="text"
+                value={questionItem.type}
+                disabled
+                class="w-full px-3 py-2 border border-input rounded-md bg-muted text-muted-foreground"
+              />
+              <p class="text-xs text-muted-foreground mt-1">
+                To change the type, delete this question and create a new one
+              </p>
+            </div>
+
+            <!-- Type-specific Properties -->
+            {#if loadingComponent}
+              <div class="border-t pt-4">
+                <div class="flex items-center justify-center p-4">
+                  <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  <span class="ml-2 text-sm text-muted-foreground">Loading properties...</span>
+                </div>
+              </div>
+            {:else if designerComponent}
+              {@const DesignerComponent = designerComponent}
+              <div class="border-t pt-4">
+                {#key questionItem.id}
+                  {#if moduleCategory === 'instruction'}
+                    <DesignerComponent
+                      instruction={questionItem}
+                      mode="edit"
+                      onUpdate={updateQuestion}
+                      {organizationId}
+                      {userId}
+                    />
+                  {:else if moduleCategory === 'display' || moduleCategory === 'analytics'}
+                    <!-- Display modules (analytics, instructions) -->
+                    <DesignerComponent
+                      analytics={questionItem}
+                      mode="edit"
+                      onUpdate={updateQuestion}
+                      {organizationId}
+                      {userId}
+                    />
+                  {:else if moduleCategory === 'question'}
+                    <DesignerComponent
+                      question={questionItem}
+                      mode="edit"
+                      onUpdate={updateQuestion}
+                      {organizationId}
+                      {userId}
+                    />
+                  {/if}
+                {/key}
+              </div>
+            {:else}
+              <div class="border-t pt-4">
+                <div class="bg-yellow-500/10 p-3 rounded-md">
+                  <p class="text-sm text-yellow-600 dark:text-yellow-400">
+                    Properties for {questionItem.type} are handled in the module designer.
+                  </p>
+                  <p class="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                    Make sure the module is properly registered.
+                  </p>
+                </div>
+              </div>
+            {/if}
+
+            <!-- Common Optional Properties -->
+            <div class="border-t pt-4">
+              <h4 class="text-sm font-medium text-foreground mb-2">Advanced Settings</h4>
+
+              <div class="space-y-3">
+                <div>
+                  <label
+                    for="internal-name-{questionItem.id}"
+                    class="block text-sm font-medium text-foreground mb-1">Internal Name</label
+                  >
+                  <input
+                    id="internal-name-{questionItem.id}"
+                    type="text"
+                    value={questionItem.name || ''}
+                    oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                      updateQuestion({ name: e.currentTarget.value || undefined })}
+                    class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
+                    placeholder="Optional internal identifier"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    for="tags-{questionItem.id}"
+                    class="block text-sm font-medium text-foreground mb-1">Tags</label
+                  >
+                  <input
+                    id="tags-{questionItem.id}"
+                    type="text"
+                    value={questionItem.tags?.join(', ') || ''}
+                    oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+                      const tags = e.currentTarget.value
+                        .split(',')
+                        .map((t) => t.trim())
+                        .filter((t) => t.length > 0);
+                      updateQuestion({ tags: tags.length > 0 ? tags : undefined });
+                    }}
+                    class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
+                    placeholder="tag1, tag2, tag3"
+                  />
+                </div>
+
+                <label class="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={questionItem.required}
+                    onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
+                      updateQuestion({ required: e.currentTarget.checked })}
+                    class="rounded border-input text-primary focus:ring-primary"
+                  />
+                  <span class="text-sm text-foreground">Required question</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        {:else if pageItem}
+          <!-- Page Properties -->
+          <div class="p-4 space-y-4">
+            <div>
+              <label
+                for="page-name-{pageItem.id}"
+                class="block text-sm font-medium text-foreground mb-1">Page Name</label
+              >
+              <input
+                id="page-name-{pageItem.id}"
+                type="text"
+                value={pageItem.name || ''}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                  updatePageProperty('name', e.currentTarget.value)}
+                class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
+                placeholder="Page name..."
+              />
+            </div>
+
+            <div>
+              <label
+                for="page-id-{pageItem.id}"
+                class="block text-sm font-medium text-foreground mb-1">Page ID</label
+              >
+              <input
+                id="page-id-{pageItem.id}"
+                type="text"
+                value={pageItem.id}
+                disabled
+                class="w-full px-3 py-2 border border-input rounded-md bg-muted text-muted-foreground"
+              />
+            </div>
+
+            <div>
+              <label
+                for="page-layout-{pageItem.id}"
+                class="block text-sm font-medium text-foreground mb-1">Layout</label
+              >
+              <select
+                id="page-layout-{pageItem.id}"
+                value={pageItem.layout?.type || 'vertical'}
+                onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
+                  updatePageProperty('layout', {
+                    ...pageItem.layout,
+                    type: e.currentTarget.value,
+                  })}
+                class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
+              >
+                <option value="vertical">Vertical</option>
+                <option value="horizontal">Horizontal</option>
+                <option value="grid">Grid</option>
+              </select>
+            </div>
+
+            <div>
+              <span class="block text-sm font-medium text-foreground mb-1">Questions</span>
+              <p class="text-sm text-muted-foreground">
+                This page contains {pageItem.blocks?.reduce(
+                  (sum: number, block: any) => sum + (block.questions?.length || 0),
+                  0
+                ) || 0} questions
+              </p>
+            </div>
+          </div>
+        {:else if variableItem}
+          <!-- Variable Properties -->
+          <div class="p-4 space-y-4">
+            <div>
+              <label
+                for="var-name-{variableItem.id}"
+                class="block text-sm font-medium text-foreground mb-1">Variable Name</label
+              >
+              <input
+                id="var-name-{variableItem.id}"
+                type="text"
+                value={variableItem.name}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                  updateVariableProperty('name', e.currentTarget.value)}
                 class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
                 placeholder="Optional internal identifier"
               />
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-foreground mb-1">Tags</label>
-              <input
-                type="text"
-                value={item.tags?.join(', ') || ''}
-                on:input={(e) => {
-                  const tags = e.currentTarget.value
-                    .split(',')
-                    .map(t => t.trim())
-                    .filter(t => t.length > 0);
-                  updateQuestion({ tags: tags.length > 0 ? tags : undefined });
-                }}
+              <label
+                for="var-type-{variableItem.id}"
+                class="block text-sm font-medium text-foreground mb-1">Type</label
+              >
+              <select
+                id="var-type-{variableItem.id}"
+                value={variableItem.type}
+                onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
+                  updateVariableProperty('type', e.currentTarget.value)}
                 class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-                placeholder="tag1, tag2, tag3"
-              />
+              >
+                <option value="number">Number</option>
+                <option value="string">Text</option>
+                <option value="boolean">True/False</option>
+                <option value="date">Date</option>
+                <option value="time">Time</option>
+                <option value="array">List</option>
+                <option value="reaction_time">Reaction Time</option>
+                <option value="stimulus_onset">Stimulus Onset</option>
+              </select>
             </div>
 
-            <label class="flex items-center space-x-2">
+            <div>
+              <label
+                for="var-formula-{variableItem.id}"
+                class="block text-sm font-medium text-foreground mb-1">Formula</label
+              >
+              <textarea
+                id="var-formula-{variableItem.id}"
+                value={variableItem.formula || ''}
+                oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) =>
+                  updateVariableProperty('formula', e.currentTarget.value)}
+                rows="3"
+                class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary font-mono text-sm bg-background text-foreground"
+                placeholder="e.g., age * 10 + reactionTime"
+              ></textarea>
+            </div>
+
+            <div>
+              <label
+                for="var-desc-{variableItem.id}"
+                class="block text-sm font-medium text-foreground mb-1">Description</label
+              >
               <input
-                type="checkbox"
-                checked={item.required}
-                on:change={(e) => updateQuestion({ required: e.currentTarget.checked })}
-                class="rounded border-input text-primary focus:ring-primary"
+                id="var-desc-{variableItem.id}"
+                type="text"
+                value={variableItem.description || ''}
+                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
+                  updateVariableProperty('description', e.currentTarget.value)}
+                class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
+                placeholder="What is this variable for?"
               />
-              <span class="text-sm text-foreground">Required question</span>
-            </label>
+            </div>
           </div>
-        </div>
+        {:else}
+          <!-- No Selection -->
+          <div class="p-4 text-center text-muted-foreground">
+            <svg
+              class="mx-auto h-12 w-12 text-muted mb-3"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 48 48"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 16l8-8m0 0l8 8m-8-8v32m16-24l8-8m0 0l8 8m-8-8v32"
+              />
+            </svg>
+            <p class="text-sm">Select an item to view its properties</p>
+          </div>
+        {/if}
       </div>
-
-    {:else if item && itemType === 'page'}
-      <!-- Page Properties -->
-      <div class="p-4 space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Page Name</label>
-          <input
-            type="text"
-            value={item.name || ''}
-            on:input={(e) => updatePageProperty('name', e.currentTarget.value)}
-            class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-            placeholder="Page name..."
-          />
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Page ID</label>
-          <input
-            type="text"
-            value={item.id}
-            disabled
-            class="w-full px-3 py-2 border border-input rounded-md bg-muted text-muted-foreground"
-          />
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Layout</label>
-          <select
-            value={item.layout?.type || 'vertical'}
-            on:change={(e) => updatePageProperty('layout', {
-              ...item.layout,
-              type: e.currentTarget.value
-            })}
-            class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-          >
-            <option value="vertical">Vertical</option>
-            <option value="horizontal">Horizontal</option>
-            <option value="grid">Grid</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Questions</label>
-          <p class="text-sm text-muted-foreground">
-            This page contains {item.blocks?.reduce((sum, block) => sum + (block.questions?.length || 0), 0) || 0} questions
-          </p>
-        </div>
-      </div>
-
-    {:else if item && itemType === 'variable'}
-      <!-- Variable Properties -->
-      <div class="p-4 space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Variable Name</label>
-          <input
-            type="text"
-            value={item.name}
-            on:input={(e) => updateVariableProperty('name', e.currentTarget.value)}
-            class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-          />
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Type</label>
-          <select
-            value={item.type}
-            on:change={(e) => updateVariableProperty('type', e.currentTarget.value)}
-            class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-          >
-            <option value="number">Number</option>
-            <option value="string">Text</option>
-            <option value="boolean">True/False</option>
-            <option value="date">Date</option>
-            <option value="time">Time</option>
-            <option value="array">List</option>
-            <option value="reaction_time">Reaction Time</option>
-            <option value="stimulus_onset">Stimulus Onset</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Formula</label>
-          <textarea
-            value={item.formula || ''}
-            on:input={(e) => updateVariableProperty('formula', e.currentTarget.value)}
-            rows="3"
-            class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary font-mono text-sm bg-background text-foreground"
-            placeholder="e.g., age * 10 + reactionTime"
-          />
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Description</label>
-          <input
-            type="text"
-            value={item.description || ''}
-            on:input={(e) => updateVariableProperty('description', e.currentTarget.value)}
-            class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-            placeholder="What is this variable for?"
-          />
-        </div>
-      </div>
-
-    {:else}
-      <!-- No Selection -->
-      <div class="p-4 text-center text-muted-foreground">
-        <svg class="mx-auto h-12 w-12 text-muted mb-3" fill="none" stroke="currentColor" viewBox="0 0 48 48">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M8 16l8-8m0 0l8 8m-8-8v32m16-24l8-8m0 0l8 8m-8-8v32" />
-        </svg>
-        <p class="text-sm">Select an item to view its properties</p>
-      </div>
-    {/if}
-  </div>
     {:else if activeTab === 'style'}
       <StyleEditor
         {theme}
-        selectedElement={
-          (['question', 'page', 'global'] as const).includes(itemType as any)
-            ? (itemType as 'question' | 'page' | 'global')
-            : 'global'
-        }
+        selectedElement={(['question', 'page', 'global'] as const).includes(itemType as any)
+          ? (itemType as 'question' | 'page' | 'global')
+          : 'global'}
         on:update={handleThemeUpdate}
       />
-    {:else if activeTab === 'script' && item && itemType === 'question'}
-      <ScriptEditor
-        question={item}
-        onUpdate={handleScriptUpdate}
-      />
+    {:else if activeTab === 'script' && questionItem}
+      <ScriptEditor question={questionItem} onUpdate={handleScriptUpdate} />
     {/if}
   </div>
 </div>
