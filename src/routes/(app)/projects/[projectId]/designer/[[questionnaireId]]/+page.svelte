@@ -207,7 +207,7 @@
 <!-- <CommandPalette bind:isOpen={showCommandPalette} /> -->
 
 <!-- Preview Modal -->
-<PreviewModal bind:isOpen={showPreview} on:close={() => (showPreview = false)} />
+<PreviewModal bind:isOpen={showPreview} onclose={() => (showPreview = false)} />
 
 <style>
   /* Responsive breakpoints for mobile/tablet */

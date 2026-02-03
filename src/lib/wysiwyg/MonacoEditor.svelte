@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { onMount } from 'svelte';
   import type * as Monaco from 'monaco-editor';
 
   interface Props {
@@ -13,6 +13,17 @@
     fontSize?: number;
     height?: string;
     options?: Monaco.editor.IStandaloneEditorConstructionOptions;
+    onchange?: (event: { value: string }) => void;
+    oncursorChange?: (event: {
+      position: Monaco.Position;
+      selection: Monaco.Selection | null;
+    }) => void;
+    onfocus?: () => void;
+    onblur?: () => void;
+    onready?: (event: {
+      editor: Monaco.editor.IStandaloneCodeEditor;
+      monaco: typeof Monaco;
+    }) => void;
   }
 
   let {
@@ -26,19 +37,16 @@
     fontSize = 14,
     height = '400px',
     options = {},
+    onchange,
+    oncursorChange,
+    onfocus,
+    onblur,
+    onready,
   }: Props = $props();
 
   let editorContainer = $state<HTMLDivElement>();
   let editor = $state<Monaco.editor.IStandaloneCodeEditor>();
   let monaco = $state<typeof Monaco>();
-
-  const dispatch = createEventDispatcher<{
-    change: { value: string };
-    cursorChange: { position: Monaco.Position; selection: Monaco.Selection | null };
-    focus: void;
-    blur: void;
-    ready: { editor: Monaco.editor.IStandaloneCodeEditor; monaco: typeof Monaco };
-  }>();
 
   onMount(() => {
     let mounted = true;
@@ -96,7 +104,7 @@
       editor.onDidChangeModelContent(() => {
         if (editor) {
           const newValue = editor.getValue();
-          dispatch('change', { value: newValue });
+          onchange?.({ value: newValue });
           value = newValue;
         }
       });
@@ -104,7 +112,7 @@
       // Handle cursor position changes
       editor.onDidChangeCursorPosition((e) => {
         if (editor) {
-          dispatch('cursorChange', {
+          oncursorChange?.({
             position: e.position,
             selection: editor.getSelection(),
           });
@@ -113,15 +121,15 @@
 
       // Handle focus events
       editor.onDidFocusEditorText(() => {
-        dispatch('focus');
+        onfocus?.();
       });
 
       editor.onDidBlurEditorText(() => {
-        dispatch('blur');
+        onblur?.();
       });
 
       // Dispatch ready event
-      dispatch('ready', { editor, monaco: monacoModule });
+      onready?.({ editor, monaco: monacoModule });
     });
 
     return () => {

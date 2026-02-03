@@ -1,27 +1,37 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import MediaManager from './MediaManager.svelte';
   import type { MediaAsset } from '$lib/shared/types/media';
   import type { MediaConfig } from '$lib/shared/types/questionnaire';
   import { generateMediaRefId } from '$lib/services/markdownProcessor';
   import theme from '$lib/theme';
 
-  export let isOpen = false;
-  export let organizationId: string;
-  export let userId: string;
-  export let allowMultiple = false;
-  export let selectedMedia: MediaAsset[] = [];
-  export let title = 'Select Media';
+  interface Props {
+    isOpen?: boolean;
+    organizationId: string;
+    userId: string;
+    allowMultiple?: boolean;
+    selectedMedia?: MediaAsset[];
+    title?: string;
+    onselect?: (event: { media: MediaAsset[]; asset: MediaAsset }) => void;
+    onconfirm?: (event: { media: MediaConfig[]; markdown: string }) => void;
+    onclose?: () => void;
+  }
 
-  const dispatch = createEventDispatcher<{
-    select: { assets: MediaAsset[]; asset: MediaAsset };
-    confirm: { media: MediaConfig[]; markdown: string };
-    close: void;
-  }>();
+  let {
+    isOpen = $bindable(false),
+    organizationId,
+    userId,
+    allowMultiple = false,
+    selectedMedia = $bindable([]),
+    title = 'Select Media',
+    onselect,
+    onconfirm,
+    onclose,
+  }: Props = $props();
 
-  function handleSelect(event: CustomEvent<{ media: MediaAsset[]; asset: MediaAsset }>) {
-    selectedMedia = event.detail.media;
-    dispatch('select', { assets: event.detail.media, asset: event.detail.asset });
+  function handleSelect(event: { media: MediaAsset[]; asset: MediaAsset }) {
+    selectedMedia = event.media;
+    onselect?.({ media: event.media, asset: event.asset });
 
     // Auto-close if single selection
     if (!allowMultiple) {
@@ -31,7 +41,7 @@
 
   function handleClose() {
     isOpen = false;
-    dispatch('close');
+    onclose?.();
   }
 
   function handleConfirm() {
@@ -64,7 +74,7 @@
 
     const markdown = allowMultiple ? markdownSnippets.join('\n') : markdownSnippets[0] || '';
 
-    dispatch('confirm', { media: mediaConfigs, markdown });
+    onconfirm?.({ media: mediaConfigs, markdown });
     isOpen = false;
   }
 
@@ -76,18 +86,25 @@
 </script>
 
 {#if isOpen}
-  <div class="fixed inset-0 z-50 overflow-y-auto" on:keydown={handleKeydown}>
+  <div class="fixed inset-0 z-50 overflow-y-auto" onkeydown={handleKeydown}>
     <!-- Backdrop -->
     <div
       class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-      on:click={handleClose}
+      role="button"
+      tabindex="0"
+      onclick={handleClose}
+      onkeydown={(e) => e.key === 'Escape' && handleClose()}
+      aria-label="Close modal"
     />
 
     <!-- Modal -->
     <div class="flex min-h-full items-center justify-center p-4">
       <div
         class="bg-layer-modal border border-border shadow-xl rounded-lg relative max-w-6xl w-full max-h-[90vh] flex flex-col"
-        on:click|stopPropagation
+        role="document"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+        tabindex="-1"
       >
         <!-- Header -->
         <div class="flex items-center justify-between p-4 border-b {theme.semantic.borderDefault}">
@@ -95,8 +112,18 @@
             {title}
           </h2>
 
-          <button on:click={handleClose} class="p-2 {theme.semantic.interactive.ghost} rounded-md">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button
+            onclick={handleClose}
+            class="p-2 {theme.semantic.interactive.ghost} rounded-md"
+            aria-label="Close"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -115,7 +142,7 @@
             {allowMultiple}
             bind:selectedMedia
             mode="select"
-            on:select={handleSelect}
+            onselect={handleSelect}
           />
         </div>
 
@@ -130,17 +157,19 @@
 
             <div class="flex gap-2">
               <button
-                on:click={handleClose}
+                onclick={handleClose}
                 class="{theme.components.button.variants.outline} {theme.components.button.sizes
                   .sm} rounded-md"
+                aria-label="Cancel"
               >
                 Cancel
               </button>
               <button
-                on:click={handleConfirm}
+                onclick={handleConfirm}
                 disabled={selectedMedia.length === 0}
                 class="{theme.components.button.variants.default} {theme.components.button.sizes
                   .sm} rounded-md disabled:opacity-50"
+                aria-label="Confirm Selection"
               >
                 Confirm Selection
               </button>

@@ -22,14 +22,19 @@ export const metadata: ModuleMetadata = {
     designer: () => import('./FileUploadDesigner.svelte')
   },
   defaultConfig: {
-    accept: [],
-    maxSize: 10 * 1024 * 1024, // 10MB
-    maxFiles: 1,
-    dragDrop: true,
-    storage: 'reference', // 'reference' | 'base64' | 'url'
-    saveMetadata: true,
-    showPreview: true,
-    autoUpload: true
+    display: {
+      prompt: 'Upload a file:',
+      accept: [],
+      maxSize: 10 * 1024 * 1024, // 10MB
+      maxFiles: 1,
+      dragDrop: true,
+      showPreview: true
+    },
+    response: {
+      storage: 'reference', // 'reference' | 'base64' | 'url'
+      saveMetadata: true,
+      autoUpload: true
+    }
   },
   answerType: AnswerTypes.FILE_UPLOAD
 };

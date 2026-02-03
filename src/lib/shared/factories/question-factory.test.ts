@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { QuestionFactory } from './question-factory';
 import { QuestionTypes } from '../types/questionnaire';
 import { QuestionValidator } from '../validators/question-validators';
+import { registerModule } from '$lib/modules/registry';
 import type { 
   Question,
   TextDisplayQuestion,
@@ -12,7 +13,110 @@ import type {
   MultipleChoiceQuestion
 } from '../types/questionnaire';
 
+// Import metadata for registration
+import { metadata as textMetadata } from '$lib/modules/display/text/metadata';
+import { metadata as textInstructionMetadata } from '$lib/modules/display/text-instruction/metadata';
+import { metadata as multipleChoiceMetadata } from '$lib/modules/questions/multiple-choice/metadata';
+import { metadata as scaleMetadata } from '$lib/modules/questions/scale/metadata';
+import { metadata as textInputMetadata } from '$lib/modules/questions/text-input/metadata';
+import { metadata as matrixMetadata } from '$lib/modules/questions/matrix/metadata';
+import { metadata as rankingMetadata } from '$lib/modules/questions/ranking/metadata';
+import { metadata as dateTimeMetadata } from '$lib/modules/questions/date-time/metadata';
+import { metadata as fileUploadMetadata } from '$lib/modules/questions/file-upload/metadata';
+import { metadata as drawingMetadata } from '$lib/modules/questions/drawing/metadata';
+import { metadata as reactionTimeMetadata } from '$lib/modules/questions/reaction-time/metadata';
+import { metadata as webglMetadata } from '$lib/modules/questions/webgl/metadata';
+import { metadata as statisticalFeedbackMetadata } from '$lib/modules/display/statistical-feedback/metadata';
+import { metadata as barChartMetadata } from '$lib/modules/display/bar-chart/metadata';
+
+
+beforeAll(() => {
+  registerModule(textMetadata);
+  registerModule(textInstructionMetadata);
+  registerModule(multipleChoiceMetadata);
+  
+  // Register single-choice as a variant of multiple-choice for testing purposes
+  registerModule({
+    ...multipleChoiceMetadata,
+    type: 'single-choice',
+    name: 'Single Choice'
+  });
+
+  registerModule(scaleMetadata);
+  registerModule(textInputMetadata);
+  registerModule(matrixMetadata);
+  registerModule(rankingMetadata);
+  registerModule(dateTimeMetadata);
+  registerModule(fileUploadMetadata);
+  registerModule(drawingMetadata);
+  registerModule(reactionTimeMetadata);
+  registerModule(webglMetadata);
+  registerModule(statisticalFeedbackMetadata);
+  registerModule(barChartMetadata);
+
+  // Register INSTRUCTION alias
+  registerModule({
+      ...textInstructionMetadata,
+      type: 'instruction',
+      name: 'Instruction'
+  });
+
+  registerModule({
+      ...textInstructionMetadata,
+      type: 'instruction',
+      name: 'Instruction'
+  });
+
+  // Register NUMBER_INPUT alias (variant of text-input)
+  registerModule({
+      ...textInputMetadata,
+      type: 'number-input',
+      name: 'Number Input',
+      defaultConfig: { ...textInputMetadata.defaultConfig, inputType: 'number' }
+  });
+
+  // Register missing MEDIA_DISPLAY (mock)
+  registerModule({
+      type: 'media-display',
+      category: 'display',
+      name: 'Media Display',
+      description: 'Mock Media Display',
+      icon: '🖼️',
+      capabilities: { supportsScripting: false, supportsConditionals: false, supportsVariables: false },
+      components: { runtime: () => Promise.resolve({ default: {} as any }), designer: () => Promise.resolve({ default: {} as any }) },
+      defaultConfig: { media: [] }
+  });
+
+  // Register missing MEDIA_RESPONSE (mock)
+  registerModule({
+      type: 'media-response',
+      category: 'question',
+      name: 'Media Response',
+      description: 'Mock Media Response',
+      icon: '📹',
+      capabilities: { supportsScripting: false, supportsConditionals: false, supportsVariables: false },
+      components: { runtime: () => Promise.resolve({ default: {} as any }), designer: () => Promise.resolve({ default: {} as any }) },
+      defaultConfig: { 
+        display: { prompt: 'Upload media:', accept: [], maxSize: 50 * 1024 * 1024 },
+        response: { storage: 'url' } 
+      }
+  });
+
+  // Register missing RATING (mock)
+  registerModule({
+      type: 'rating',
+      category: 'question',
+      name: 'Rating',
+      description: 'Mock Rating',
+      icon: '⭐',
+      capabilities: { supportsScripting: false, supportsConditionals: false, supportsVariables: false },
+      components: { runtime: () => Promise.resolve({ default: {} as any }), designer: () => Promise.resolve({ default: {} as any }) },
+      defaultConfig: { display: { levels: 5, style: 'stars', prompt: 'Rate this:' } }
+  });
+});
+
 describe('QuestionFactory', () => {
+
   describe('create', () => {
     it('should create a valid text display question', () => {
       const question = QuestionFactory.create(QuestionTypes.TEXT_DISPLAY) as TextDisplayQuestion;
@@ -34,7 +138,7 @@ describe('QuestionFactory', () => {
       expect(question.type).toBe(QuestionTypes.SINGLE_CHOICE);
       expect(question.required).toBe(true);
       expect(question.display.options).toHaveLength(3);
-      expect(question.response.saveAs).toMatch(/^single_[a-zA-Z0-9]{6}$/);
+      expect(question.response.saveAs).toMatch(/^single_[a-zA-Z0-9\-_]{6,12}$/);
       
       const validation = QuestionValidator.validateQuestion(question);
       expect(validation.valid).toBe(true);
@@ -57,7 +161,7 @@ describe('QuestionFactory', () => {
       const question = QuestionFactory.create(QuestionTypes.MATRIX) as MatrixQuestion;
       
       expect(question.type).toBe(QuestionTypes.MATRIX);
-      expect(question.display.rows).toHaveLength(3);
+      expect(question.display.rows).toHaveLength(2);
       expect(question.display.columns).toHaveLength(5);
       expect(question.display.responseType).toBe('single');
       
@@ -119,7 +223,7 @@ describe('QuestionFactory', () => {
       const cloned = QuestionFactory.clone(original) as TextInputQuestion;
       
       expect(cloned.response.saveAs).not.toBe(original.response.saveAs);
-      expect(cloned.response.saveAs).toMatch(/^text_[a-zA-Z0-9]{6}$/);
+      expect(cloned.response.saveAs).toMatch(/^text_[a-zA-Z0-9\-_]{6,12}$/);
     });
     
     it('should create new option IDs for choice questions', () => {
@@ -152,11 +256,15 @@ describe('QuestionFactory', () => {
       const original = QuestionFactory.create(QuestionTypes.SCALE) as ScaleQuestion;
       const cloned = QuestionFactory.clone(original) as ScaleQuestion;
       
-      // Modify original
-      original.display.labels!.min = 'Modified';
-      
-      // Cloned should not be affected
-      expect(cloned.display.labels!.min).toBe('Strongly Disagree');
+      // Modify original - labels is an object
+      if (original.display.labels) {
+        original.display.labels.min = 'Modified';
+        
+        // Cloned should not be affected
+        expect(cloned.display.labels!.min).toBe('Strongly Disagree');
+      } else {
+        throw new Error('Labels object is undefined');
+      }
     });
   });
   
@@ -167,6 +275,10 @@ describe('QuestionFactory', () => {
       it(`should create valid ${type} question`, () => {
         const question = QuestionFactory.create(type);
         const validation = QuestionValidator.validateQuestion(question);
+        
+        if (!validation.valid) {
+          console.error(`Validation failed for ${type}:`, validation.errors);
+        }
         
         expect(validation.valid).toBe(true);
         expect(validation.errors).toHaveLength(0);

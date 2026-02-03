@@ -215,8 +215,8 @@
     }
   }
 
-  function handleMediaSelect(event: CustomEvent<{ media: MediaConfig[]; markdown: string }>) {
-    const { media, markdown } = event.detail;
+  function handleMediaSelect(event: { media: MediaConfig[]; markdown: string }) {
+    const { media, markdown } = event;
 
     // Insert markdown at cursor position
     const cursorPos = contentTextarea?.selectionStart || localContent.length;
@@ -415,7 +415,7 @@
   {userId}
   allowMultiple={false}
   title="Insert Media"
-  on:confirm={handleMediaSelect}
+  onconfirm={handleMediaSelect}
 />
 
 <style>

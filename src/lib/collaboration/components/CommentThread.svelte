@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { CommentThread, Comment, CollaborationUser, Reaction } from '../types.js';
-  import { createEventDispatcher } from 'svelte';
 
   interface Props {
     thread: CommentThread;
@@ -21,8 +20,6 @@
     onResolveThread,
     onReaction,
   }: Props = $props();
-
-  const dispatch = createEventDispatcher();
 
   let newCommentContent = $state('');
   let editingCommentId = $state<string | null>(null);

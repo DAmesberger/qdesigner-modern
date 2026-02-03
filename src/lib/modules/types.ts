@@ -183,10 +183,12 @@ export interface LayoutConfig {
 
 // Media configuration
 export interface MediaConfig {
-  id: string;
-  type: 'image' | 'video' | 'audio';
-  source: string;
+  id?: string;
+  type?: 'image' | 'video' | 'audio';
+  source?: string;
+  url?: string; // For compatibility with shared types
   mediaId?: string; // Reference to uploaded media
+  refId?: string; // Reference ID for markdown
   alt?: string;
   caption?: string;
   position?: 'above' | 'below' | 'left' | 'right' | 'background';
@@ -205,7 +207,7 @@ export interface TimingConfig {
 
 // Interaction events
 export interface InteractionEvent {
-  type: 'view' | 'click' | 'keypress' | 'focus' | 'blur' | 'change' | 'submit';
+  type: 'view' | 'click' | 'keypress' | 'focus' | 'blur' | 'change' | 'submit' | 'auto-advance';
   timestamp: number;
   data?: any;
 }

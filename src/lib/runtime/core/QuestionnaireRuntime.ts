@@ -501,7 +501,7 @@ export class QuestionnaireRuntime {
     }
     
     // Update any custom variables defined for this question
-    const q = question as any;
+    // Update any custom variables defined for this question
     if (q.variables) {
       for (const qVar of q.variables) {
         this.updateQuestionVariable(qVar, response);

@@ -21,6 +21,7 @@ export const metadata: ModuleMetadata = {
   defaultConfig: {
     display: {
       content: 'Enter your instruction text here...',
+      format: 'markdown', // Required by Validator
       enableMarkdown: true,
       variables: true
     },

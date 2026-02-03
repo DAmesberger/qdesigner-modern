@@ -3,7 +3,7 @@ import { SupabaseTestInstance } from '../utils/supabase-test';
 import { OfflinePersistenceService } from '$lib/services/offlinePersistence';
 import { db } from '$lib/services/db/indexeddb';
 import { createTestQuestionnaire, createCompleteQuestionnaire } from '../factories/questionnaire.factory';
-import { QuestionnairePersistenceService } from '$lib/services/QuestionnairePersistenceService';
+  import { QuestionnairePersistenceService } from "$lib/services/questionnairePersistence";
 
 describe('Sync Queue Integration Tests', () => {
   let testDb: SupabaseTestInstance;

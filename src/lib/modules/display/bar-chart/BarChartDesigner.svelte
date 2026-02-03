@@ -31,6 +31,8 @@
         max: 'auto' | number;
       };
     };
+    value?: string;
+    referenceValue?: string;
   }
 
   interface BarChartDataSource {
@@ -214,7 +216,7 @@
 
     if (newIndex < 0 || newIndex >= colors.length) return;
 
-    [colors[index], colors[newIndex]] = [colors[newIndex], colors[index]];
+    [colors[index], colors[newIndex]] = [colors[newIndex]!, colors[index]!];
 
     onUpdate?.({
       ...item,
@@ -256,7 +258,9 @@
           <h4 class="section-title">Data Source</h4>
 
           <div class="form-group">
-            <label>Variables to Display</label>
+            <span class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >Variables to Display</span
+            >
             <div class="variable-list">
               {#each availableVariables as variable}
                 <label class="variable-option">
@@ -473,7 +477,7 @@
             </label>
           </div>
 
-          {#if item.config.showErrorBars}
+          {#if item.config?.showErrorBars}
             <div class="form-group indent">
               <label for="error-type">Error Type</label>
               <select
@@ -584,7 +588,9 @@
           </div>
 
           <div class="form-group">
-            <label>Custom Colors</label>
+            <span class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+              >Custom Colors</span
+            >
             <div class="custom-colors">
               {#each item.config?.colors?.customColors || [] as color, index}
                 <div class="custom-color-item">

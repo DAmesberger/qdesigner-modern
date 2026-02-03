@@ -22,6 +22,7 @@ export interface Questionnaire {
   pages: Page[];
   flow: FlowControl[];
   settings: QuestionnaireSettings;
+  metadata?: Record<string, any>;
 }
 
 export interface Variable {

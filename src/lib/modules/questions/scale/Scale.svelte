@@ -36,7 +36,7 @@
     onInteraction,
   }: Props = $props();
 
-  let sliderElement: HTMLInputElement;
+  let sliderElement = $state<HTMLInputElement>();
   let isDragging = $state(false);
   let hoverValue = $state<number | null>(null);
 

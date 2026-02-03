@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { onMount, createEventDispatcher } from 'svelte';
+  import { onMount } from 'svelte';
 
   interface Props {
     open?: boolean;
     size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
     title?: string;
     closable?: boolean;
+    onclose?: () => void;
     header?: import('svelte').Snippet;
     children?: import('svelte').Snippet;
     footer?: import('svelte').Snippet;
@@ -16,12 +17,11 @@
     size = 'md',
     title = '',
     closable = true,
+    onclose,
     header,
     children,
     footer,
   }: Props = $props();
-
-  const dispatch = createEventDispatcher();
 
   const sizeClasses = {
     sm: 'sm:max-w-sm',
@@ -36,14 +36,14 @@
   function handleBackdropClick(event: MouseEvent) {
     if (closable && event.target === event.currentTarget) {
       open = false;
-      dispatch('close');
+      onclose?.();
     }
   }
 
   function handleEscape(event: KeyboardEvent) {
     if (closable && event.key === 'Escape') {
       open = false;
-      dispatch('close');
+      onclose?.();
     }
   }
 

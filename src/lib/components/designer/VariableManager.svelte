@@ -557,8 +557,7 @@
           {#if showAdvancedEditor}
             <FormulaEditor
               value={editingVariable ? editingVariable.formula || '' : newVariable.formula}
-              on:change={(e) => {
-                const value = e.detail;
+              onchange={(value) => {
                 if (editingVariable) {
                   editingVariable.formula = value;
                 } else {

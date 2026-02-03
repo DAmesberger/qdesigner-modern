@@ -4,10 +4,12 @@
  */
 
 // Core classes
-export { CollaborationClient } from './CollaborationClient.js';
-export { OperationalTransform } from './OperationalTransform.js';
-export { VersionControl } from './VersionControl.js';
-export { ChangeTracker } from './ChangeTracker.js';
+import { CollaborationClient } from './CollaborationClient.js';
+import { OperationalTransform } from './OperationalTransform.js';
+import { VersionControl } from './VersionControl.js';
+import { ChangeTracker } from './ChangeTracker.js';
+
+export { CollaborationClient, OperationalTransform, VersionControl, ChangeTracker };
 
 // Types
 export type * from './types.js';
@@ -99,7 +101,7 @@ export function createMockUser(
     name,
     email,
     role,
-    color: generateUserColors([id])[id],
+    color: generateUserColors([id])[id] || '#808080',
     status: 'online',
     lastSeen: new Date()
   };

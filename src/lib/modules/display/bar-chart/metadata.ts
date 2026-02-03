@@ -22,34 +22,38 @@ export const metadata: ModuleMetadata = {
     designer: () => import('./BarChartDesigner.svelte') as any
   },
   defaultConfig: {
-    orientation: 'horizontal' as 'vertical' | 'horizontal',
-    showErrorBars: false,
-    errorType: 'standardError' as 'standardError' | 'standardDeviation' | 'confidence95',
-    stacked: false,
-    showValues: true,
-    showDataLabels: true,
-    barWidth: 0.8,
-    barSpacing: 0.2,
-    value: '', // Main value to display (can be variable or formula)
-    referenceValue: '', // Reference value for comparison (can be variable or formula)
-    colors: {
-      scheme: 'default',
-      customColors: []
-    },
-    axes: {
-      x: {
-        label: '',
-        showGrid: false,
-        showTicks: true
+    display: {
+      prompt: 'Chart Feedback',
+      chartType: 'bar', // Explicitly set for StatisticalFeedbackConfig
+      dataSource: '', // Required by StatisticalFeedbackConfig
+      orientation: 'horizontal' as 'vertical' | 'horizontal',
+      showErrorBars: false,
+      errorType: 'standardError' as 'standardError' | 'standardDeviation' | 'confidence95',
+      stacked: false,
+      showValues: true,
+      showDataLabels: true,
+      barWidth: 0.8,
+      barSpacing: 0.2,
+      value: '', // Main value to display (can be variable or formula)
+      referenceValue: '', // Reference value for comparison (can be variable or formula)
+      colors: {
+        scheme: 'default',
+        customColors: []
       },
-      y: {
-        label: '',
-        showGrid: true,
-        showTicks: true,
-        min: 'auto',
-        max: 'auto'
+      axes: {
+        x: {
+          label: '',
+          showGrid: false,
+          showTicks: true
+        },
+        y: {
+          label: '',
+          showGrid: true,
+          showTicks: true,
+          min: 'auto',
+          max: 'auto'
+        }
       }
     }
-  },
-  answerType: AnswerTypes.NONE // Display modules don't produce answers
+  }
 };

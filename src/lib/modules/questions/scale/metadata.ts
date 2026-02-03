@@ -22,16 +22,23 @@ export const metadata: ModuleMetadata = {
     designer: () => import('./ScaleDesigner.svelte')
   },
   defaultConfig: {
-    min: 1,
-    max: 7,
-    step: 1,
-    displayType: 'buttons',
-    showValue: true,
-    showLabels: true,
-    labels: [
-      { value: 1, label: 'Strongly Disagree' },
-      { value: 7, label: 'Strongly Agree' }
-    ]
+    display: {
+      prompt: 'Rate this statement:',
+      min: 1,
+      max: 7,
+      step: 1,
+      style: 'buttons', // Changed from displayType to style based on ScaleDisplayConfig definition (inference)
+      showValue: true,
+      showLabels: true,
+      orientation: 'horizontal', // Required by validator
+      labels: {
+        min: 'Strongly Disagree',
+        max: 'Strongly Agree'
+      }
+    },
+    response: {
+      valueType: 'number'
+    }
   },
   answerType: AnswerTypes.LIKERT_SCALE
 };

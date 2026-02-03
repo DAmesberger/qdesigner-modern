@@ -3,7 +3,7 @@
  * Provides consistent media handling across all component types
  */
 
-import type { MediaConfig } from '$lib/shared/types/questionnaire';
+import type { MediaConfig } from '$lib/modules/types';
 import { mediaService } from './mediaService';
 import { processMarkdownContent, processMarkdownContentSync } from './markdownProcessor';
 

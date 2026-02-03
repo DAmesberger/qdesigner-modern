@@ -1,17 +1,13 @@
 <script lang="ts">
   import type { QuestionnaireTheme } from '$lib/shared/types/theme';
-  import { createEventDispatcher } from 'svelte';
 
   interface Props {
     theme: QuestionnaireTheme;
     selectedElement?: 'question' | 'page' | 'global';
+    onupdate?: (event: { path: string[]; value: any }) => void;
   }
 
-  let { theme, selectedElement = $bindable('question') }: Props = $props();
-
-  const dispatch = createEventDispatcher<{
-    update: { path: string[]; value: any };
-  }>();
+  let { theme, selectedElement = $bindable('question'), onupdate }: Props = $props();
 
   // Color picker state
   let activeColorPicker = $state<string | null>(null);
@@ -42,7 +38,7 @@
 
   // Update theme
   function updateTheme(path: string[], value: any) {
-    dispatch('update', { path, value });
+    onupdate?.({ path, value });
   }
 
   // Get nested value from theme

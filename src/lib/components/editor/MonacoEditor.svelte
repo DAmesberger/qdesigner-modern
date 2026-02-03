@@ -1,54 +1,100 @@
 <script lang="ts">
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import * as monaco from 'monaco-editor';
   import { browser } from '$app/environment';
 
-  export let value: string = '';
-  export let language: string = 'typescript';
-  export let theme: 'vs' | 'vs-dark' | 'hc-black' = 'vs';
-  export let height: string = '400px';
-  export let readOnly: boolean = false;
-  export let minimap: boolean = true;
-  export let lineNumbers: boolean = true;
-  export let fontSize: number = 14;
-  export let wordWrap: 'off' | 'on' | 'wordWrapColumn' | 'bounded' = 'on';
-  export let scrollBeyondLastLine: boolean = false;
-  export let automaticLayout: boolean = true;
-  export let folding: boolean = true;
-  export let glyphMargin: boolean = false;
-  export let showUnused: boolean = true;
-  export let smoothScrolling: boolean = true;
-  export let padding: { top?: number; bottom?: number } = { top: 10, bottom: 10 };
+  import type * as Monaco from 'monaco-editor';
 
-  const dispatch = createEventDispatcher();
+  interface Props {
+    value?: string;
+    language?: string;
+    theme?: 'vs' | 'vs-dark' | 'hc-black';
+    height?: string;
+    readOnly?: boolean;
+    minimap?: boolean;
+    lineNumbers?: boolean;
+    fontSize?: number;
+    wordWrap?: 'off' | 'on' | 'wordWrapColumn' | 'bounded';
+    scrollBeyondLastLine?: boolean;
+    automaticLayout?: boolean;
+    folding?: boolean;
+    glyphMargin?: boolean;
+    showUnused?: boolean;
+    smoothScrolling?: boolean;
+    padding?: { top?: number; bottom?: number };
+    onchange?: (event: { value: string }) => void;
+    oncursorChange?: (event: {
+      position: Monaco.Position;
+      secondaryPositions: Monaco.Position[];
+    }) => void;
+    onselectionChange?: (event: {
+      selection: Monaco.Selection;
+      secondarySelections: Monaco.Selection[];
+    }) => void;
+    onfocus?: () => void;
+    onblur?: () => void;
+    onready?: (event: {
+      editor: Monaco.editor.IStandaloneCodeEditor;
+      monaco: typeof Monaco;
+    }) => void;
+  }
+
+  let {
+    value = $bindable(''),
+    language = 'typescript',
+    theme = 'vs',
+    height = '400px',
+    readOnly = false,
+    minimap = true,
+    lineNumbers = true,
+    fontSize = 14,
+    wordWrap = 'on',
+    scrollBeyondLastLine = false,
+    automaticLayout = true,
+    folding = true,
+    glyphMargin = false,
+    showUnused = true,
+    smoothScrolling = true,
+    padding = { top: 10, bottom: 10 },
+    onchange,
+    oncursorChange,
+    onselectionChange,
+    onfocus,
+    onblur,
+    onready,
+  }: Props = $props();
 
   let container: HTMLDivElement;
   let editor: monaco.editor.IStandaloneCodeEditor;
   let monaco_instance: typeof monaco;
 
   // Update editor value when prop changes
-  $: if (editor && value !== editor.getValue()) {
-    editor.setValue(value);
-  }
+  $effect(() => {
+    if (editor && value !== editor.getValue()) {
+      editor.setValue(value);
+    }
+  });
 
   // Update editor options when props change
-  $: if (editor) {
-    editor.updateOptions({
-      theme,
-      readOnly,
-      fontSize,
-      wordWrap,
-      lineNumbers: lineNumbers ? 'on' : 'off',
-      minimap: { enabled: minimap },
-      scrollBeyondLastLine,
-      automaticLayout,
-      folding,
-      glyphMargin,
-      showUnused,
-      smoothScrolling,
-      padding,
-    });
-  }
+  $effect(() => {
+    if (editor) {
+      editor.updateOptions({
+        theme,
+        readOnly,
+        fontSize,
+        wordWrap,
+        lineNumbers: lineNumbers ? 'on' : 'off',
+        minimap: { enabled: minimap },
+        scrollBeyondLastLine,
+        automaticLayout,
+        folding,
+        glyphMargin,
+        showUnused,
+        smoothScrolling,
+        padding,
+      });
+    }
+  });
 
   onMount(async () => {
     if (!browser) return;
@@ -176,12 +222,12 @@
     editor.onDidChangeModelContent(() => {
       const newValue = editor.getValue();
       value = newValue;
-      dispatch('change', { value: newValue });
+      onchange?.({ value: newValue });
     });
 
     // Handle cursor position changes
     editor.onDidChangeCursorPosition((e) => {
-      dispatch('cursorChange', {
+      oncursorChange?.({
         position: e.position,
         secondaryPositions: e.secondaryPositions,
       });
@@ -189,7 +235,7 @@
 
     // Handle selection changes
     editor.onDidChangeCursorSelection((e) => {
-      dispatch('selectionChange', {
+      onselectionChange?.({
         selection: e.selection,
         secondarySelections: e.secondarySelections,
       });
@@ -197,15 +243,15 @@
 
     // Handle focus/blur
     editor.onDidFocusEditorText(() => {
-      dispatch('focus');
+      onfocus?.();
     });
 
     editor.onDidBlurEditorText(() => {
-      dispatch('blur');
+      onblur?.();
     });
 
     // Dispatch ready event
-    dispatch('ready', { editor, monaco: monaco_instance });
+    onready?.({ editor, monaco: monaco_instance });
   });
 
   onDestroy(() => {

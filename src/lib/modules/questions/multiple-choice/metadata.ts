@@ -22,15 +22,18 @@ export const metadata: ModuleMetadata = {
     designer: () => import('./MultipleChoiceDesigner.svelte')
   },
   defaultConfig: {
-    responseType: { type: 'single' },
-    options: [
-      { id: '1', label: 'Option 1', value: 1 },
-      { id: '2', label: 'Option 2', value: 2 },
-      { id: '3', label: 'Option 3', value: 3 }
-    ],
-    layout: 'vertical',
-    randomizeOptions: false,
-    otherOption: false
+    response: { type: 'single' }, // Maps to question.responseType
+    display: {
+      prompt: 'Select an option:', // Required by SingleChoiceDisplayConfig
+      options: [
+        { id: '1', label: 'Option 1', value: 1 },
+        { id: '2', label: 'Option 2', value: 2 },
+        { id: '3', label: 'Option 3', value: 3 }
+      ],
+      layout: 'vertical',
+      randomizeOptions: false,
+      otherOption: false
+    }
   },
   answerType: AnswerTypes.SINGLE_CHOICE // Will be dynamically set based on responseType
 };

@@ -2,7 +2,7 @@
   import type { QuestionProps, ValidationResult, InteractionEvent } from '$lib/modules/types';
   import type { QuestionModuleConfig } from './types';
   import type { MediaConfig } from '$lib/shared/types/questionnaire';
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { scriptingEngine } from '$lib/services/scriptingEngine';
   import { processMarkdownContentSync } from '$lib/services/markdownProcessor';
   import { mediaService } from '$lib/services/mediaService';
@@ -12,6 +12,10 @@
     children?: any;
     class?: string;
     showValidation?: boolean;
+    onupdate?: (updates: Partial<QuestionModuleConfig>) => void;
+    onedit?: () => void;
+    ondelete?: () => void;
+    onduplicate?: () => void;
   }
 
   let {
@@ -22,21 +26,15 @@
     onResponse,
     onValidation,
     onInteraction,
+    onupdate,
+    onedit,
+    ondelete,
+    onduplicate,
     children,
     class: className = '',
     showValidation = true,
     ...restProps
   }: Props = $props();
-
-  const dispatch = createEventDispatcher<{
-    response: any;
-    validation: ValidationResult;
-    interaction: InteractionEvent;
-    update: Partial<QuestionModuleConfig>;
-    edit: void;
-    delete: void;
-    duplicate: void;
-  }>();
 
   let isVisible = $state(true);
   let validationResult = $state<ValidationResult | null>(null);
@@ -116,7 +114,6 @@
     }
 
     validationResult = result;
-    dispatch('validation', result);
     onValidation?.(result);
 
     return result;
@@ -125,7 +122,6 @@
   function handleResponse(newValue: any) {
     hasInteracted = true;
     value = newValue;
-    dispatch('response', newValue);
     onResponse?.(newValue);
 
     // Track response interaction
@@ -137,12 +133,11 @@
   }
 
   function handleInteraction(event: InteractionEvent) {
-    dispatch('interaction', event);
     onInteraction?.(event);
   }
 
   function handleUpdate(updates: Partial<QuestionModuleConfig>) {
-    dispatch('update', updates);
+    onupdate?.(updates);
   }
 
   // Track view interaction
@@ -224,13 +219,9 @@
           {/if}
         </div>
         <div class="question-actions">
-          <button class="action-button" onclick={() => dispatch('edit')} title="Edit"> ✏️ </button>
-          <button class="action-button" onclick={() => dispatch('duplicate')} title="Duplicate">
-            📋
-          </button>
-          <button class="action-button danger" onclick={() => dispatch('delete')} title="Delete">
-            🗑️
-          </button>
+          <button class="action-button" onclick={onedit} title="Edit"> ✏️ </button>
+          <button class="action-button" onclick={onduplicate} title="Duplicate"> 📋 </button>
+          <button class="action-button danger" onclick={ondelete} title="Delete"> 🗑️ </button>
         </div>
       </div>
     {/if}

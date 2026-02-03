@@ -1,25 +1,45 @@
 <script lang="ts">
   import MonacoEditor from './MonacoEditor.svelte';
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import type * as monaco from 'monaco-editor';
 
-  export let value: string = '';
-  export let title: string = 'Script Editor';
-  export let description: string = '';
-  export let height: string = '400px';
-  export let readOnly: boolean = false;
-  export let theme: 'vs' | 'vs-dark' = 'vs';
-  export let showHelp: boolean = true;
-  export let variables: Array<{ name: string; type: string; description?: string }> = [];
-  export let functions: Array<{ name: string; signature: string; description?: string }> = [];
+  interface Props {
+    value?: string;
+    title?: string;
+    description?: string;
+    height?: string;
+    readOnly?: boolean;
+    theme?: 'vs' | 'vs-dark';
+    showHelp?: boolean;
+    variables?: Array<{ name: string; type: string; description?: string }>;
+    functions?: Array<{ name: string; signature: string; description?: string }>;
+    onchange?: (event: { value: string }) => void;
+    onsave?: (event: { value: string }) => void;
+    onfocus?: () => void;
+    onblur?: () => void;
+  }
 
-  const dispatch = createEventDispatcher();
+  let {
+    value = $bindable(''),
+    title = 'Script Editor',
+    description = '',
+    height = '400px',
+    readOnly = false,
+    theme = 'vs',
+    showHelp = true,
+    variables = [],
+    functions = [],
+    onchange,
+    onsave,
+    onfocus,
+    onblur,
+  }: Props = $props();
 
   let monacoEditor: MonacoEditor;
   let editorInstance: monaco.editor.IStandaloneCodeEditor;
   let monacoInstance: any;
-  let showHelpPanel = false;
-  let searchQuery = '';
+  let showHelpPanel = $state(false);
+  let searchQuery = $state('');
 
   // Script templates
   const scriptTemplates = [
@@ -74,34 +94,40 @@ if (elapsed > 30) {
   ];
 
   // Filter help items based on search
-  $: filteredVariables = variables.filter(
-    (v) =>
-      v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      v.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  let filteredVariables = $derived(
+    variables.filter(
+      (v) =>
+        v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        v.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
-  $: filteredFunctions = functions.filter(
-    (f) =>
-      f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  let filteredFunctions = $derived(
+    functions.filter(
+      (f) =>
+        f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        f.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
-  $: filteredTemplates = scriptTemplates.filter(
-    (t) =>
-      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.description.toLowerCase().includes(searchQuery.toLowerCase())
+  let filteredTemplates = $derived(
+    scriptTemplates.filter(
+      (t) =>
+        t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.description.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
-  function handleEditorReady(event: CustomEvent) {
-    editorInstance = event.detail.editor;
-    monacoInstance = event.detail.monaco;
+  function handleEditorReady(event: { editor: monaco.editor.IStandaloneCodeEditor; monaco: any }) {
+    editorInstance = event.editor;
+    monacoInstance = event.monaco;
 
     // Register custom completions
     registerCompletions();
 
     // Add custom key bindings
     editorInstance.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () =>
-      dispatch('save', { value })
+      onsave?.({ value })
     );
 
     editorInstance.addCommand(
@@ -173,9 +199,9 @@ if (elapsed > 30) {
     }
   }
 
-  function handleChange(event: CustomEvent) {
-    value = event.detail.value;
-    dispatch('change', { value });
+  function handleChange(event: { value: string }) {
+    value = event.value;
+    onchange?.({ value });
   }
 
   function toggleHelp() {
@@ -241,10 +267,10 @@ if (elapsed > 30) {
         {theme}
         {height}
         {readOnly}
-        on:ready={handleEditorReady}
-        on:change={handleChange}
-        on:focus={() => dispatch('focus')}
-        on:blur={() => dispatch('blur')}
+        onready={handleEditorReady}
+        onchange={handleChange}
+        {onfocus}
+        {onblur}
       />
     </div>
 

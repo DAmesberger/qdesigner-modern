@@ -15,7 +15,7 @@ vi.mock('$lib/stores/network', () => ({
 }));
 
 // Mock Supabase persistence
-vi.mock('$lib/services/QuestionnairePersistenceService', () => ({
+vi.mock('$lib/services/questionnairePersistence', () => ({
   QuestionnairePersistenceService: {
     saveQuestionnaire: vi.fn(),
     loadQuestionnaire: vi.fn()
@@ -78,7 +78,7 @@ describe('OfflinePersistenceService', () => {
       const mockSaveQuestionnaire = vi.fn().mockResolvedValue(true);
       
       // Mock the import
-      const { QuestionnairePersistenceService } = await import('$lib/services/QuestionnairePersistenceService');
+      const { QuestionnairePersistenceService } = await import('$lib/services/questionnairePersistence');
       QuestionnairePersistenceService.saveQuestionnaire = mockSaveQuestionnaire;
       
       const result = await OfflinePersistenceService.saveQuestionnaire(questionnaire, testUserId);
@@ -103,7 +103,7 @@ describe('OfflinePersistenceService', () => {
       const questionnaire = createTestQuestionnaire();
       const mockSaveQuestionnaire = vi.fn().mockRejectedValue(new Error('Server error'));
       
-      const { QuestionnairePersistenceService } = await import('$lib/services/QuestionnairePersistenceService');
+      const { QuestionnairePersistenceService } = await import('$lib/services/questionnairePersistence');
       QuestionnairePersistenceService.saveQuestionnaire = mockSaveQuestionnaire;
       
       const result = await OfflinePersistenceService.saveQuestionnaire(questionnaire, testUserId);
@@ -151,7 +151,7 @@ describe('OfflinePersistenceService', () => {
       const serverQuestionnaire = { ...questionnaire, modified: new Date() };
       
       const mockLoadQuestionnaire = vi.fn().mockResolvedValue(serverQuestionnaire);
-      const { QuestionnairePersistenceService } = await import('$lib/services/QuestionnairePersistenceService');
+      const { QuestionnairePersistenceService } = await import('$lib/services/questionnairePersistence');
       QuestionnairePersistenceService.loadQuestionnaire = mockLoadQuestionnaire;
       
       // Add to IndexedDB
@@ -195,7 +195,7 @@ describe('OfflinePersistenceService', () => {
       });
       
       const mockSaveQuestionnaire = vi.fn().mockResolvedValue(true);
-      const { QuestionnairePersistenceService } = await import('$lib/services/QuestionnairePersistenceService');
+      const { QuestionnairePersistenceService } = await import('$lib/services/questionnairePersistence');
       QuestionnairePersistenceService.saveQuestionnaire = mockSaveQuestionnaire;
       
       // Start sync
@@ -232,7 +232,7 @@ describe('OfflinePersistenceService', () => {
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValueOnce(true);
         
-      const { QuestionnairePersistenceService } = await import('$lib/services/QuestionnairePersistenceService');
+      const { QuestionnairePersistenceService } = await import('$lib/services/questionnairePersistence');
       QuestionnairePersistenceService.saveQuestionnaire = mockSaveQuestionnaire;
       
       // Start sync
@@ -267,7 +267,7 @@ describe('OfflinePersistenceService', () => {
       });
       
       const mockSaveQuestionnaire = vi.fn().mockRejectedValue(new Error('Persistent error'));
-      const { QuestionnairePersistenceService } = await import('$lib/services/QuestionnairePersistenceService');
+      const { QuestionnairePersistenceService } = await import('$lib/services/questionnairePersistence');
       QuestionnairePersistenceService.saveQuestionnaire = mockSaveQuestionnaire;
       
       // Process sync

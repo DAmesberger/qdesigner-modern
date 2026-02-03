@@ -22,14 +22,17 @@ export const metadata: ModuleMetadata = {
     designer: () => import('./DateTimeDesigner.svelte')
   },
   defaultConfig: {
-    mode: 'date',
-    format: 'YYYY-MM-DD',
-    showCalendar: true,
-    minDate: null,
-    maxDate: null,
-    disabledDates: [],
-    defaultToToday: false,
-    timeStep: 15
+    display: {
+      prompt: 'Please select a date/time:',
+      mode: 'date',
+      format: 'YYYY-MM-DD',
+      showCalendar: true,
+      minDate: null,
+      maxDate: null,
+      disabledDates: [],
+      defaultToToday: false,
+      timeStep: 15
+    }
   },
   answerType: AnswerTypes.DATE
 };

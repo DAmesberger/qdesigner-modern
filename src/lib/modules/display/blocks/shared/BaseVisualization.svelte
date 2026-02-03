@@ -1,13 +1,18 @@
 <script lang="ts">
   import type { AnalyticsBlockProps, ConditionalLogic } from '$lib/modules/types';
   import type { AnalyticsBlockConfig } from './types';
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { scriptingEngine } from '$lib/services/scriptingEngine';
 
   interface Props extends AnalyticsBlockProps {
     block: AnalyticsBlockConfig;
     children?: any;
     class?: string;
+    onupdate?: (updates: Partial<AnalyticsBlockConfig>) => void;
+    onedit?: () => void;
+    ondelete?: () => void;
+    onduplicate?: () => void;
+    onexport?: (event: { format: string; data: any }) => void;
   }
 
   let {
@@ -17,16 +22,13 @@
     onUpdate,
     children,
     class: className = '',
+    onupdate,
+    onedit,
+    ondelete,
+    onduplicate,
+    onexport,
     ...restProps
   }: Props = $props();
-
-  const dispatch = createEventDispatcher<{
-    update: Partial<AnalyticsBlockConfig>;
-    edit: void;
-    delete: void;
-    duplicate: void;
-    export: { format: string; data: any };
-  }>();
 
   let isVisible = $state(true);
   let isLoading = $state(false);
@@ -53,7 +55,7 @@
   onMount(() => {
     if (block.refreshInterval && mode === 'runtime') {
       refreshInterval = window.setInterval(() => {
-        dispatch('update', {}); // Trigger parent to refresh data
+        onupdate?.({}); // Trigger parent to refresh data
       }, block.refreshInterval);
     }
   });
@@ -125,14 +127,14 @@
   }
 
   function handleUpdate(updates: Partial<AnalyticsBlockConfig>) {
-    dispatch('update', updates);
+    onupdate?.(updates);
     onUpdate?.(updates);
   }
 
   function handleExport(format: string) {
     if (!block.exportable) return;
 
-    dispatch('export', {
+    onexport?.({
       format,
       data: processedData || data,
     });
@@ -161,13 +163,9 @@
           <span class="block-order">#{block.order}</span>
         </div>
         <div class="block-actions">
-          <button class="action-button" onclick={() => dispatch('edit')} title="Edit"> ✏️ </button>
-          <button class="action-button" onclick={() => dispatch('duplicate')} title="Duplicate">
-            📋
-          </button>
-          <button class="action-button danger" onclick={() => dispatch('delete')} title="Delete">
-            🗑️
-          </button>
+          <button class="action-button" onclick={onedit} title="Edit"> ✏️ </button>
+          <button class="action-button" onclick={onduplicate} title="Duplicate"> 📋 </button>
+          <button class="action-button danger" onclick={ondelete} title="Delete"> 🗑️ </button>
         </div>
       </div>
     {/if}

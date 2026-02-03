@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/services/supabase';
   import { clickOutside } from '$lib/utils/clickOutside';
@@ -7,7 +6,6 @@
   export let user: { email: string; full_name?: string } | null = null;
 
   let isOpen = false;
-  const dispatch = createEventDispatcher();
 
   function toggleMenu() {
     isOpen = !isOpen;

@@ -1,26 +1,38 @@
 <script lang="ts">
-  export let variant: 'text' | 'circular' | 'rectangular' | 'rounded' = 'text';
-  export let width: string | number = '100%';
-  export let height: string | number = 'auto';
-  export let animation: 'pulse' | 'wave' | 'none' = 'pulse';
-  export let className = '';
+  interface Props {
+    variant?: 'text' | 'circular' | 'rectangular' | 'rounded';
+    width?: string | number;
+    height?: string | number;
+    animation?: 'pulse' | 'wave' | 'none';
+    className?: string;
+  }
+
+  let {
+    variant = 'text',
+    width = '100%',
+    height = 'auto',
+    animation = 'pulse',
+    className = '',
+  }: Props = $props();
 
   // Convert number values to pixels
-  $: widthValue = typeof width === 'number' ? `${width}px` : width;
-  $: heightValue = typeof height === 'number' ? `${height}px` : height;
+  let widthValue = $derived(typeof width === 'number' ? `${width}px` : width);
+  let heightValue = $derived(typeof height === 'number' ? `${height}px` : height);
 
   // Default heights for text variant
-  $: computedHeight = variant === 'text' && height === 'auto' ? '1em' : heightValue;
+  let computedHeight = $derived(variant === 'text' && height === 'auto' ? '1em' : heightValue);
 
   // Base classes
-  $: baseClasses = [
-    'skeleton',
-    `skeleton--${variant}`,
-    animation !== 'none' && `skeleton--${animation}`,
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  let baseClasses = $derived(
+    [
+      'skeleton',
+      `skeleton--${variant}`,
+      animation !== 'none' && `skeleton--${animation}`,
+      className,
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
 </script>
 
 <div

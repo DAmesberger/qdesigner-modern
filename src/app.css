@@ -46,7 +46,10 @@
   }
 
   .glass-card {
-    @apply glass rounded-xl transition-all duration-300;
+    @apply backdrop-blur-[var(--glass-blur)] rounded-xl transition-all duration-300;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
   }
   
   .glass-card:hover {

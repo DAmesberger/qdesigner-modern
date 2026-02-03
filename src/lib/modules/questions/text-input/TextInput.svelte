@@ -34,7 +34,7 @@
     onInteraction,
   }: Props = $props();
 
-  let inputElement: HTMLInputElement | HTMLTextAreaElement;
+  let inputElement = $state<HTMLInputElement | HTMLTextAreaElement>();
   let showSuggestions = $state(false);
   let selectedSuggestionIndex = $state(-1);
   let validationMessage = $state('');

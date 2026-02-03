@@ -1,36 +1,51 @@
 <script lang="ts">
-  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import type { editor } from 'monaco-editor';
-  
-  export let value: string = '';
-  export let language: string = 'javascript';
-  export let height: string = '200px';
-  export let readOnly: boolean = false;
-  export let theme: 'light' | 'dark' = 'light';
-  export let placeholder: string = 'Enter your formula here...';
-  export let variables: Record<string, any> = {};
-  export let showMinimap: boolean = false;
-  
-  const dispatch = createEventDispatcher();
-  
+
+  interface Props {
+    value?: string;
+    language?: string;
+    height?: string;
+    readOnly?: boolean;
+    theme?: 'light' | 'dark';
+    placeholder?: string;
+    variables?: Record<string, any>;
+    showMinimap?: boolean;
+    onchange?: (value: string) => void;
+    onblur?: () => void;
+  }
+
+  let {
+    value = $bindable(''),
+    language = 'javascript',
+    height = '200px',
+    readOnly = false,
+    theme = 'light',
+    placeholder = 'Enter your formula here...',
+    variables = {},
+    showMinimap = false,
+    onchange,
+    onblur,
+  }: Props = $props();
+
   let container: HTMLDivElement;
   let monacoEditor: editor.IStandaloneCodeEditor | null = null;
   let monaco: any;
-  let isLoading = true;
-  
+  let isLoading = $state(true);
+
   // Load Monaco Editor
   onMount(async () => {
     // Only load Monaco in browser environment
     if (typeof window === 'undefined') return;
-    
+
     try {
       // Setup Monaco environment
       const { setupMonacoEnvironment } = await import('$lib/utils/monacoConfig');
       setupMonacoEnvironment();
-      
+
       // Dynamically import Monaco
       monaco = await import('monaco-editor');
-      
+
       // Register custom theme
       monaco.editor.defineTheme('qdesigner-light', {
         base: 'vs',
@@ -49,9 +64,9 @@
           'editor.lineHighlightBackground': '#F7F7F7',
           'editorCursor.foreground': '#000000',
           'editor.selectionBackground': '#ADD6FF',
-        }
+        },
       });
-      
+
       monaco.editor.defineTheme('qdesigner-dark', {
         base: 'vs-dark',
         inherit: true,
@@ -69,9 +84,9 @@
           'editor.lineHighlightBackground': '#2A2A2A',
           'editorCursor.foreground': '#D4D4D4',
           'editor.selectionBackground': '#264F78',
-        }
+        },
       });
-      
+
       // Create editor
       const createdEditor = monaco.editor.create(container, {
         value: value || '',
@@ -88,7 +103,7 @@
         quickSuggestions: {
           other: true,
           comments: false,
-          strings: true
+          strings: true,
         },
         parameterHints: { enabled: true },
         wordBasedSuggestions: 'currentDocument',
@@ -100,27 +115,27 @@
         matchBrackets: 'always',
         renderWhitespace: 'selection',
         readOnly,
-        placeholder
+        placeholder,
       });
-      
+
       monacoEditor = createdEditor;
-      
+
       // Register completion provider for variables
       monaco.languages.registerCompletionItemProvider('javascript', {
         provideCompletionItems: (model: any, position: any) => {
           const suggestions: any[] = [];
-          
+
           // Add variables
-          Object.keys(variables).forEach(varName => {
+          Object.keys(variables).forEach((varName) => {
             suggestions.push({
               label: varName,
               kind: monaco.languages.CompletionItemKind.Variable,
               documentation: `Variable: ${varName}`,
               insertText: varName,
-              detail: typeof variables[varName]
+              detail: typeof variables[varName],
             });
           });
-          
+
           // Add built-in functions
           const functions = [
             { name: 'SUM', args: '(...values)', desc: 'Sum of values' },
@@ -133,86 +148,96 @@
             { name: 'LENGTH', args: '(string)', desc: 'String length' },
             { name: 'NOW', args: '()', desc: 'Current timestamp' },
             { name: 'RANDOM', args: '()', desc: 'Random number 0-1' },
-            { name: 'RANDINT', args: '(min, max)', desc: 'Random integer' }
+            { name: 'RANDINT', args: '(min, max)', desc: 'Random integer' },
           ];
-          
-          functions.forEach(fn => {
+
+          functions.forEach((fn) => {
             suggestions.push({
               label: fn.name,
               kind: monaco.languages.CompletionItemKind.Function,
               documentation: fn.desc,
               insertText: `${fn.name}${fn.args}`,
               insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-              detail: `function ${fn.args}`
+              detail: `function ${fn.args}`,
             });
           });
-          
+
           return { suggestions };
-        }
+        },
       });
-      
+
       // Handle changes
       createdEditor.onDidChangeModelContent(() => {
         const newValue = createdEditor.getValue() || '';
-        dispatch('change', newValue);
+        onchange?.(newValue);
       });
-      
+
       // Handle blur
       createdEditor.onDidBlurEditorText(() => {
-        dispatch('blur');
+        onblur?.();
       });
-      
+
       isLoading = false;
     } catch (error) {
       console.error('Failed to load Monaco Editor:', error as Error);
       isLoading = false;
     }
   });
-  
+
   // Update value when prop changes
-  $: if (monacoEditor && value !== monacoEditor.getValue()) {
-    monacoEditor.setValue(value || '');
-  }
-  
+  $effect(() => {
+    if (monacoEditor && value !== monacoEditor.getValue()) {
+      monacoEditor.setValue(value || '');
+    }
+  });
+
   // Update theme
-  $: if (monacoEditor && monaco) {
-    monaco.editor.setTheme(theme === 'dark' ? 'qdesigner-dark' : 'qdesigner-light');
-  }
-  
+  $effect(() => {
+    if (monacoEditor && monaco) {
+      monaco.editor.setTheme(theme === 'dark' ? 'qdesigner-dark' : 'qdesigner-light');
+    }
+  });
+
   // Update read-only state
-  $: if (monacoEditor) {
-    monacoEditor.updateOptions({ readOnly });
-  }
-  
+  $effect(() => {
+    if (monacoEditor) {
+      monacoEditor.updateOptions({ readOnly });
+    }
+  });
+
   // Update variables for completion
-  $: if (monacoEditor && variables) {
-    // Variables update will be picked up by completion provider
-  }
-  
+  $effect(() => {
+    if (monacoEditor && variables) {
+      // Variables update will be picked up by completion provider
+    }
+  });
+
   // Cleanup
   onDestroy(() => {
     if (monacoEditor) {
       monacoEditor.dispose();
     }
   });
-  
+
   // Public methods
   export function focus() {
     monacoEditor?.focus();
   }
-  
+
   export function getSelection() {
     return monacoEditor?.getSelection();
   }
-  
+
   export function insertText(text: string) {
     const selection = monacoEditor?.getSelection();
     if (selection && monacoEditor) {
-      monacoEditor.executeEdits('', [{
-        range: selection,
-        text: text,
-        forceMoveMarkers: true
-      }]);
+      monacoEditor.executeEdits('', [
+        {
+          range: selection,
+          text: text,
+          forceMoveMarkers: true,
+        },
+      ]);
     }
   }
 </script>
@@ -234,16 +259,16 @@
     border-radius: 0.375rem;
     overflow: hidden;
   }
-  
+
   .monaco-container {
     width: 100%;
     height: 100%;
   }
-  
+
   .monaco-container.loading {
     opacity: 0;
   }
-  
+
   .loading-container {
     position: absolute;
     inset: 0;
@@ -253,7 +278,7 @@
     justify-content: center;
     background: #f9fafb;
   }
-  
+
   .loading-spinner {
     width: 2rem;
     height: 2rem;
@@ -262,13 +287,13 @@
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
-  
+
   .loading-text {
     margin-top: 0.5rem;
     font-size: 0.875rem;
     color: #6b7280;
   }
-  
+
   @keyframes spin {
     to {
       transform: rotate(360deg);

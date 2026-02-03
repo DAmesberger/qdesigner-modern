@@ -7,7 +7,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./tests/setup/test-setup.ts'],
+    setupFiles: ['./tests/setup/test-setup.ts', './tests/setup/webgl-mock.ts'],
     include: [
       'src/**/*.{test,spec}.{js,ts}',
       'tests/unit/**/*.{test,spec}.{js,ts}',

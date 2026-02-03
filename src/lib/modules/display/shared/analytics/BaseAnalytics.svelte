@@ -1,12 +1,15 @@
 <script lang="ts">
   import type { AnalyticsProps, AnalyticsModuleConfig, AnalyticsInteractionEvent } from './types';
-  import { createEventDispatcher } from 'svelte';
+
   import { scriptingEngine } from '$lib/services/scriptingEngine';
 
   interface Props extends AnalyticsProps {
     analytics: any;
     children?: any;
     class?: string;
+    onedit?: () => void;
+    onduplicate?: () => void;
+    ondelete?: () => void;
   }
 
   let {
@@ -18,6 +21,9 @@
     onInteraction,
     children,
     class: className = '',
+    onedit,
+    onduplicate,
+    ondelete,
     ...restProps
   }: Props = $props();
 
@@ -32,14 +38,6 @@
       variableKeys: Object.keys(variables),
     });
   });
-
-  const dispatch = createEventDispatcher<{
-    interaction: AnalyticsInteractionEvent;
-    update: Partial<AnalyticsModuleConfig>;
-    edit: void;
-    delete: void;
-    duplicate: void;
-  }>();
 
   let isVisible = $state(true);
   let computedData = $state<any[]>([]);
@@ -121,13 +119,15 @@
         return data.map((d) => ({
           ...d,
           value: Array.isArray(d.value)
-            ? d.value.reduce((a, b) => a + b, 0) / d.value.length
+            ? d.value.reduce((a: number, b: number) => a + b, 0) / d.value.length
             : d.value,
         }));
       case 'sum':
         return data.map((d) => ({
           ...d,
-          value: Array.isArray(d.value) ? d.value.reduce((a, b) => a + b, 0) : d.value,
+          value: Array.isArray(d.value)
+            ? d.value.reduce((a: number, b: number) => a + b, 0)
+            : d.value,
         }));
       case 'count':
         return data.map((d) => ({
@@ -140,18 +140,22 @@
   }
 
   function handleInteraction(event: AnalyticsInteractionEvent) {
-    dispatch('interaction', event);
     onInteraction?.(event);
+  }
+
+  function getVariableValue(varId: string) {
+    if (mode === 'edit') {
+      onedit?.();
+    }
   }
 
   function handleEdit() {
     if (mode === 'edit') {
-      dispatch('edit');
+      onedit?.();
     }
   }
 
   function handleUpdate(updates: Partial<AnalyticsModuleConfig>) {
-    dispatch('update', updates);
     onUpdate?.(updates);
   }
 
@@ -178,13 +182,11 @@
           <span class="analytics-order">#{analytics.order}</span>
         </div>
         <div class="analytics-actions">
-          <button class="action-button" onclick={() => dispatch('edit')} title="Configure">
-            ⚙️
-          </button>
-          <button class="action-button" onclick={() => dispatch('duplicate')} title="Duplicate">
+          <button class="action-button" onclick={() => onedit?.()} title="Configure"> ⚙️ </button>
+          <button class="action-button" onclick={() => onduplicate?.()} title="Duplicate">
             📋
           </button>
-          <button class="action-button danger" onclick={() => dispatch('delete')} title="Delete">
+          <button class="action-button danger" onclick={() => ondelete?.()} title="Delete">
             🗑️
           </button>
         </div>

@@ -22,21 +22,24 @@ export const metadata: ModuleMetadata = {
     designer: () => import('./MatrixDesigner.svelte')
   },
   defaultConfig: {
-    rows: [
-      { id: 'row1', label: 'Item 1', required: true },
-      { id: 'row2', label: 'Item 2', required: true }
-    ],
-    columns: [
-      { id: 'col1', label: 'Strongly Disagree', value: 1 },
-      { id: 'col2', label: 'Disagree', value: 2 },
-      { id: 'col3', label: 'Neutral', value: 3 },
-      { id: 'col4', label: 'Agree', value: 4 },
-      { id: 'col5', label: 'Strongly Agree', value: 5 }
-    ],
-    responseType: 'radio',
-    mobileLayout: 'scroll',
-    stickyHeaders: false,
-    alternateRowColors: false
+    display: {
+      prompt: 'Please evaluate the following items:',
+      rows: [
+        { id: 'row1', label: 'Item 1', required: true },
+        { id: 'row2', label: 'Item 2', required: true }
+      ],
+      columns: [
+        { id: 'col1', label: 'Strongly Disagree', value: 1 },
+        { id: 'col2', label: 'Disagree', value: 2 },
+        { id: 'col3', label: 'Neutral', value: 3 },
+        { id: 'col4', label: 'Agree', value: 4 },
+        { id: 'col5', label: 'Strongly Agree', value: 5 }
+      ],
+      responseType: 'single', // 'radio' -> 'single'
+      mobileLayout: 'scroll',
+      stickyHeaders: false,
+      alternateRowColors: false
+    }
   },
   answerType: AnswerTypes.MATRIX
 };

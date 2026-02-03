@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import { goto } from '$app/navigation';
   import Dialog from '../ui/overlays/Dialog.svelte';
   import Button from '../common/Button.svelte';
@@ -7,13 +6,17 @@
   import { toast } from '$lib/stores/toast';
   import { handleAPIError } from '$lib/utils/errorHandler';
 
-  export let open = false;
-  export let organizationId: string;
+  interface Props {
+    open?: boolean;
+    organizationId: string;
+    oncreated?: (project: any) => void;
+    onclose?: () => void;
+  }
 
-  const dispatch = createEventDispatcher();
+  let { open = $bindable(false), organizationId, oncreated, onclose }: Props = $props();
 
-  let loading = false;
-  let formData = {
+  let loading = $state(false);
+  let formData = $state({
     name: '',
     description: '',
     code: '',
@@ -22,9 +25,9 @@
     irbNumber: '',
     startDate: '',
     endDate: '',
-  };
+  });
 
-  let errors: Record<string, string> = {};
+  let errors: Record<string, string> = $state({});
 
   function validateForm() {
     errors = {};
@@ -82,7 +85,7 @@
       const project = await response.json();
 
       toast.success('Project created successfully!');
-      dispatch('created', project);
+      oncreated?.(project);
 
       // Navigate to the new project
       goto(`/projects/${project.id}`);
@@ -116,18 +119,20 @@
     if (!loading) {
       open = false;
       resetForm();
-      dispatch('close');
+      onclose?.();
     }
   }
 
   // Generate project code from name
-  $: if (formData.name && !formData.code) {
-    formData.code = formData.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .substring(0, 20);
-  }
+  $effect(() => {
+    if (formData.name && !formData.code) {
+      formData.code = formData.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .substring(0, 20);
+    }
+  });
 </script>
 
 <Dialog
@@ -135,9 +140,9 @@
   title="Create New Project"
   description="Start a new research project to organize your questionnaires and data collection."
   size="lg"
-  on:close={handleClose}
+  onclose={handleClose}
 >
-  <form on:submit|preventDefault={handleSubmit} class="space-y-6">
+  <form onsubmit={handleSubmit} class="space-y-6">
     <div>
       <label for="name" class="block text-sm font-medium text-foreground">
         Project Name <span class="text-destructive">*</span>
@@ -286,7 +291,7 @@
       variant="primary"
       {loading}
       loadingText="Creating..."
-      on:click={handleSubmit}
+      onclick={handleSubmit}
     >
       Create Project
     </LoadingButton>

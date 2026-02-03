@@ -22,18 +22,24 @@ export const metadata: ModuleMetadata = {
     designer: () => import('./DrawingDesigner.svelte') as any
   },
   defaultConfig: {
-    tools: ['pen', 'eraser'],
-    colors: ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'],
-    canvas: {
-      width: 600,
-      height: 400,
-      background: null
+    display: {
+      prompt: 'Draw something:',
+      tools: ['pen', 'eraser'],
+      colors: ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'],
+      canvas: {
+        width: 600,
+        height: 400,
+        background: null
+      }
     },
-    analysis: {
-      extractFeatures: false,
-      detectShapes: false,
-      measurePressure: false,
-      trackTiming: false
+    response: {
+      storage: 'url', // Default storage
+      analysis: {
+        extractFeatures: false,
+        detectShapes: false,
+        measurePressure: false,
+        trackTiming: false
+      }
     }
   },
   answerType: AnswerTypes.DRAWING

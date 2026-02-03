@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import Dialog from './Dialog.svelte';
   import Button from '../../common/Button.svelte';
   import { fade } from 'svelte/transition';
@@ -11,6 +10,8 @@
     multiple?: boolean;
     maxSize?: number; // in MB
     maxFiles?: number;
+    onclose?: () => void;
+    onupload?: (event: { files: File[] }) => void;
   }
 
   let {
@@ -20,9 +21,9 @@
     multiple = true,
     maxSize = 10,
     maxFiles = 10,
+    onclose,
+    onupload,
   }: Props = $props();
-
-  const dispatch = createEventDispatcher();
 
   let fileInput: HTMLInputElement;
   let dragActive = $state(false);
@@ -38,7 +39,7 @@
     uploadProgress = {};
     errors = {};
     dragActive = false;
-    dispatch('close');
+    onclose?.();
   }
 
   function validateFile(file: File): string | null {
@@ -140,7 +141,7 @@
       uploadProgress[file.name] = 0;
     });
 
-    dispatch('upload', { files });
+    onupload?.({ files });
   }
 
   function getFileIcon(file: File) {
@@ -154,7 +155,7 @@
   }
 </script>
 
-<Dialog bind:open {title} size="lg" on:close={handleClose}>
+<Dialog bind:open {title} size="lg" onclose={handleClose}>
   <div class="space-y-6">
     <!-- Drop Zone -->
     <div

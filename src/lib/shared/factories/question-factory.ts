@@ -53,12 +53,12 @@ export class QuestionFactory {
     
     // Handle response configuration
     if (item.config?.response) {
-      question.responseType = {
+      question.response = {
         type: this.inferResponseType(item.type),
         ...item.config.response
       };
     } else if (item.category === 'instruction') {
-      question.responseType = { type: 'none' };
+      question.response = { type: 'none' };
     }
     
     // Handle display configuration (including media)
@@ -144,8 +144,8 @@ export class QuestionFactory {
     };
     
     // Extract response configuration
-    if ((question as any).responseType) {
-      moduleItem.config.response = (question as any).responseType;
+    if (question.response) {
+      moduleItem.config.response = question.response;
     }
     
     // Extract display configuration (including media)

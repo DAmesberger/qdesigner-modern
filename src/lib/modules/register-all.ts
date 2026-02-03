@@ -24,7 +24,8 @@ export async function registerAllModules() {
     { metadata: fileUploadMetadata },
     { metadata: drawingMetadata },
     { metadata: reactionTimeMetadata },
-    { metadata: webglMetadata }
+    { metadata: webglMetadata },
+    { metadata: statisticalFeedbackMetadata }
   ] = await Promise.all([
     // Display modules
     import('./display/bar-chart/metadata'),
@@ -40,13 +41,15 @@ export async function registerAllModules() {
     import('./questions/file-upload/metadata'),
     import('./questions/drawing/metadata'),
     import('./questions/reaction-time/metadata'),
-    import('./questions/webgl/metadata')
+    import('./questions/webgl/metadata'),
+    import('./display/statistical-feedback/metadata')
   ]);
 
   // Register all display modules
   registerModule(barChartMetadata);
   registerModule(textMetadata);
   registerModule(textInstructionMetadata);
+  registerModule(statisticalFeedbackMetadata);
 
   // Register all question modules
   registerModule(multipleChoiceMetadata);

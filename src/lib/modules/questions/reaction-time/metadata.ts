@@ -22,24 +22,27 @@ export const metadata: ModuleMetadata = {
     designer: () => import('./ReactionTimeDesigner.svelte') as any
   },
   defaultConfig: {
-    stimulus: {
-      type: 'shape',
-      content: 'circle',
-      fixation: {
-        type: 'cross',
-        duration: 500
-      }
+    display: {
+      prompt: 'Reaction Time Task', // Required by ReactionTimeDisplayConfig (implied base)
+      stimulus: {
+        type: 'shape',
+        content: 'circle',
+        fixation: {
+          type: 'cross',
+          duration: 500
+        }
+      },
+      feedback: true,
+      practice: false,
+      practiceTrials: 3,
+      testTrials: 10, // These seem to be display/logic config
+      targetFPS: 60
     },
     response: {
       validKeys: ['f', 'j'],
       timeout: 2000,
       requireCorrect: false
-    },
-    feedback: true,
-    practice: false,
-    practiceTrials: 3,
-    testTrials: 10,
-    targetFPS: 60
+    }
   },
   answerType: AnswerTypes.REACTION_TIME
 };

@@ -1,19 +1,21 @@
 <script lang="ts">
   import Modal from '../ui/feedback/Modal.svelte';
   import RealtimePreview from './RealtimePreview.svelte';
-  import { createEventDispatcher } from 'svelte';
 
-  export let isOpen = false;
+  interface Props {
+    isOpen?: boolean;
+    onclose?: () => void;
+  }
 
-  const dispatch = createEventDispatcher();
+  let { isOpen = $bindable(false), onclose }: Props = $props();
 
   function handleClose() {
     isOpen = false;
-    dispatch('close');
+    onclose?.();
   }
 </script>
 
-<Modal bind:open={isOpen} on:close={handleClose} size="xl">
+<Modal bind:open={isOpen} onclose={handleClose} size="xl">
   <div class="h-[80vh] flex flex-col">
     <div class="flex items-center justify-between px-6 py-4 border-b">
       <h2 class="text-lg font-semibold">Preview</h2>

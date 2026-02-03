@@ -2,6 +2,7 @@
   import { designerStore } from '$lib/stores/designer.svelte';
   import type { Question, Page, Variable } from '$lib/shared';
   import { moduleRegistry } from '$lib/modules/registry';
+  import { slide } from 'svelte/transition';
   import type { ComponentType } from 'svelte';
   import StyleEditor from './StyleEditor.svelte';
   import ScriptEditor from './ScriptEditor.svelte';
@@ -145,16 +146,22 @@
     }
   }
 
-  function handleThemeUpdate(event: CustomEvent) {
-    const { path, value } = event.detail;
+  function handleThemeUpdate(event: { path: string[]; value: any }) {
+    const { path, value } = event;
     // Update theme in store
     // For now, just update local theme
     theme = JSON.parse(JSON.stringify(theme));
     let obj = theme as any;
     for (let i = 0; i < path.length - 1; i++) {
-      obj = obj[path[i]];
+      const key = path[i];
+      if (key !== undefined) {
+        obj = obj[key];
+      }
     }
-    obj[path[path.length - 1]] = value;
+    const lastKey = path[path.length - 1];
+    if (lastKey !== undefined) {
+      obj[lastKey] = value;
+    }
   }
 
   function handleScriptUpdate(script: string) {
@@ -520,7 +527,7 @@
         selectedElement={(['question', 'page', 'global'] as const).includes(itemType as any)
           ? (itemType as 'question' | 'page' | 'global')
           : 'global'}
-        on:update={handleThemeUpdate}
+        onupdate={handleThemeUpdate}
       />
     {:else if activeTab === 'script' && questionItem}
       <ScriptEditor question={questionItem} onUpdate={handleScriptUpdate} />

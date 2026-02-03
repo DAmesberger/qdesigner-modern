@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import type { Snippet } from 'svelte';
@@ -16,6 +16,7 @@
     className?: string;
     children?: Snippet;
     footer?: Snippet;
+    onclose?: () => void;
   }
 
   let {
@@ -30,9 +31,8 @@
     className = '',
     children,
     footer,
+    onclose,
   }: Props = $props();
-
-  const dispatch = createEventDispatcher();
 
   let sheetElement = $state<HTMLDivElement>();
   let previousActiveElement: HTMLElement | null = null;
@@ -81,7 +81,7 @@
   function handleClose() {
     if (closable) {
       open = false;
-      dispatch('close');
+      onclose?.();
     }
   }
 

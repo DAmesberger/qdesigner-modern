@@ -560,7 +560,7 @@
       setTimeout(() => {
         saveStatus = 'idle';
       }, 3000);
-    }); catch (error) {
+    } catch (error) {
       saveStatus = 'error';
       console.error('Save failed:', error);
     } finally {
@@ -569,7 +569,7 @@
   }
 
   // React to filter changes
-  $: {
+  $effect(() => {
     if (
       searchQuery !== undefined ||
       selectedNamespace !== undefined ||
@@ -582,7 +582,7 @@
     ) {
       filterAndSortEntries();
     }
-  }
+  });
 </script>
 
 <div class="translation-manager p-6 max-h-screen overflow-y-auto">

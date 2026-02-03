@@ -1,14 +1,14 @@
 import { marked } from 'marked';
 import { mediaService } from './mediaService';
 import { interpolateVariables } from './variableInterpolation';
-import type { MediaConfig } from '$lib/shared/types/questionnaire';
+import type { MediaConfig } from '$lib/modules/types';
 
 // Configure marked for safe rendering
 marked.use({
   breaks: true,
   gfm: true,
   pedantic: false,
-  smartypants: false
+
 });
 
 export interface MarkdownProcessorOptions {
@@ -60,7 +60,7 @@ export async function processMarkdownContent(
     }
     
     // Parse markdown to HTML
-    return marked.parse(processedContent);
+    return marked.parse(processedContent) as Promise<string>;
   } catch (error) {
     console.error('Error processing markdown:', error);
     return content;
@@ -106,7 +106,7 @@ export function processMarkdownContentSync(
     processedContent = replaceMediaReferencesSync(processedContent, media, mediaUrls);
     
     // Parse markdown to HTML
-    return marked.parse(processedContent);
+    return marked.parse(processedContent) as string;
   } catch (error) {
     console.error('Error processing markdown:', error);
     return content;
@@ -163,7 +163,7 @@ function replaceMediaReferencesSync(
   
   media.forEach((mediaItem, index) => {
     if (mediaItem.mediaId && mediaUrls[mediaItem.mediaId]) {
-      const url = mediaUrls[mediaItem.mediaId];
+      const url = mediaUrls[mediaItem.mediaId]!;
       
       console.log(`[replaceMediaReferencesSync] Processing media ${index}:`, {
         mediaId: mediaItem.mediaId,
@@ -173,7 +173,7 @@ function replaceMediaReferencesSync(
       
       // Replace by refId if available
       if (mediaItem.refId) {
-        const pattern = `media:${escapeRegExp(mediaItem.refId)}`;
+        const pattern = `media:${escapeRegExp(mediaItem.refId!)}`;
         const regex = new RegExp(pattern, 'g');
         const matches = processedContent.match(regex);
         console.log(`[replaceMediaReferencesSync] Looking for pattern: ${pattern}, found: ${matches?.length || 0} matches`);
@@ -235,7 +235,7 @@ export function extractMediaReferences(content: string): string[] {
   let match;
   
   while ((match = pattern.exec(content)) !== null) {
-    references.push(match[1]);
+    references.push(match[1]!);
   }
   
   return [...new Set(references)]; // Return unique references

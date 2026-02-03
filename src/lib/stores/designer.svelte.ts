@@ -1,4 +1,5 @@
 import type { Questionnaire, Question, Page, Block, Variable } from '$lib/shared';
+import { nanoid as generateId } from 'nanoid';
 
 // Union type for selected item
 export type SelectedItem = Question | Page | Block | Variable;
@@ -10,7 +11,12 @@ class DesignerStore {
     description: '',
     pages: [],
     variables: [],
-    settings: {}, // Add default settings structure if needed
+    settings: {}, 
+    version: '1.0.0',
+    created: new Date(),
+    modified: new Date(),
+    questions: [],
+    flow: [],
     metadata: {
         created: Date.now(),
         modified: Date.now(),
@@ -106,12 +112,12 @@ class DesignerStore {
     
     // Init navigation
     if (this.questionnaire.pages.length > 0) {
-        this.currentPageId = this.questionnaire.pages[0].id;
+        this.currentPageId = this.questionnaire.pages[0]?.id ?? null;
     const firstPage = this.questionnaire.pages[0];
     if (firstPage) {
         this.currentPageId = firstPage.id;
         if (firstPage.blocks && firstPage.blocks.length > 0) {
-            this.currentBlockId = firstPage.blocks[0].id;
+            this.currentBlockId = firstPage.blocks[0]?.id ?? null;
         }
     }
     }
@@ -123,7 +129,7 @@ class DesignerStore {
       // Reset block to first on page
       const page = this.questionnaire.pages.find(p => p.id === pageId);
       if (page && page.blocks && page.blocks.length > 0) {
-          this.currentBlockId = page.blocks[0].id;
+          this.currentBlockId = page.blocks[0]?.id ?? null;
       } else {
           this.currentBlockId = null;
       }
@@ -217,15 +223,15 @@ class DesignerStore {
       if (!block) return;
 
       const newQuestions = [...block.questions];
-      const [moved] = newQuestions.splice(fromIndex, 1);
-      newQuestions.splice(toIndex, 0, moved);
+      const moved = newQuestions.splice(fromIndex, 1)[0];
+      if (moved) newQuestions.splice(toIndex, 0, moved);
 
       this.updateBlockQuestions(blockId, newQuestions);
   }
   
   updateQuestion(id: string, updates: any) {
     const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-    const qIndex = newQuestionnaire.questions.findIndex(q => q.id === id);
+    const qIndex = newQuestionnaire.questions.findIndex((q: Question) => q.id === id);
     if (qIndex !== -1) {
         newQuestionnaire.questions[qIndex] = { ...newQuestionnaire.questions[qIndex], ...updates };
         this.updateQuestionnaire(newQuestionnaire);
@@ -266,7 +272,7 @@ class DesignerStore {
   
   updateVariable(id: string, updates: any) {
     const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-    const vIndex = newQuestionnaire.variables.findIndex(v => v.id === id);
+    const vIndex = newQuestionnaire.variables.findIndex((v: Variable) => v.id === id);
     if (vIndex !== -1) {
         newQuestionnaire.variables[vIndex] = { ...newQuestionnaire.variables[vIndex], ...updates };
         this.updateQuestionnaire(newQuestionnaire);
@@ -283,7 +289,7 @@ class DesignerStore {
 
   deleteVariable(id: string) {
       const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-      newQuestionnaire.variables = newQuestionnaire.variables.filter(v => v.id !== id);
+      newQuestionnaire.variables = newQuestionnaire.variables.filter((v: Variable) => v.id !== id);
       this.updateQuestionnaire(newQuestionnaire);
       if (this.selectedItem && this.selectedItem.id === id) {
           this.selectedItem = null;

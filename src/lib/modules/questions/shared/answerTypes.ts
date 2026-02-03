@@ -213,6 +213,7 @@ export const Aggregations = {
   sum: (values: number[]) => values.reduce((a, b) => a + b, 0),
   mean: (values: number[]) => values.length ? Aggregations.sum(values) / values.length : 0,
   median: (values: number[]) => {
+    if (!values.length) return 0;
     const sorted = [...values].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
     return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;

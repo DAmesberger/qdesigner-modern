@@ -21,9 +21,12 @@ export const metadata: ModuleMetadata = {
     designer: () => import('./TextDisplayDesigner.svelte')
   },
   defaultConfig: {
-    content: '## Welcome\n\nPlease read the following instructions carefully.',
-    markdown: true,
-    variables: false,
+    display: {
+      content: '## Welcome\n\nPlease read the following instructions carefully.',
+      format: 'markdown', // Required by TextDisplayConfig
+      enableMarkdown: true,
+      variables: false
+    },
     autoAdvance: {
       enabled: false,
       delay: 5000

@@ -99,11 +99,18 @@ export class ModuleFactory {
    */
   private static applyQuestionDefaults(module: ModuleItem, metadata: any): ModuleItem {
     // Questions typically need response configuration
+    // Ensure response config exists
     if (!module.config.response) {
-      module.config.response = {
-        saveAs: generateVariableName(module.type, module.id),
-        trackTiming: true
-      };
+      module.config.response = {};
+    }
+
+    // Apply default response settings if missing
+    if (!module.config.response.saveAs) {
+      module.config.response.saveAs = generateVariableName(module.type, module.id);
+    }
+    
+    if (module.config.response.trackTiming === undefined) {
+      module.config.response.trackTiming = true;
     }
     
     // Add validation if the module supports it

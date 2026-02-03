@@ -1,13 +1,16 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
   import MonacoEditor from '$lib/wysiwyg/MonacoEditor.svelte';
   import type { Variable } from '$lib/shared';
 
-  export let template: string = '';
-  export let variables: Variable[] = [];
-  export let showPreview: boolean = true;
+  interface Props {
+    template?: string;
+    variables?: Variable[];
+  }
 
-  const dispatch = createEventDispatcher();
+  let { template = $bindable(''), variables = [] }: Props = $props();
+
+  let monacoEditor: MonacoEditor;
+  let showPreview = $state(false);
 
   // Example templates
   const templates = [
@@ -45,14 +48,15 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
   ];
 
   // State
-  let selectedTemplate = '';
-  let previewVariables: Record<string, any> = {};
-  let showVariableList = false;
+  let selectedTemplate = $state('');
+  let previewVariables = $state<Record<string, any>>({});
+  let showVariableList = $state(false);
 
   // Initialize preview variables with mock data
-  $: {
+  // Initialize preview variables with mock data
+  $effect(() => {
     previewVariables = {};
-    variables.forEach((v) => {
+    variables.forEach((v: Variable) => {
       switch (v.type) {
         case 'number':
           previewVariables[v.name] = Math.round(Math.random() * 100);
@@ -75,7 +79,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     previewVariables.categoryA = 9;
     previewVariables.categoryB = 7;
     previewVariables.categoryC = 6;
-  }
+  });
 
   // Render template with variables
   function renderTemplate(template: string): string {
@@ -118,12 +122,12 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
   // Insert variable at cursor
   function insertVariable(varName: string) {
     const insertion = `$\{${varName}}`;
-    dispatch('insertText', insertion);
+    monacoEditor?.insertText(insertion);
   }
 
   // Insert function at cursor
   function insertFunction(func: string) {
-    dispatch('insertText', func);
+    monacoEditor?.insertText(func);
   }
 
   // Load template
@@ -132,7 +136,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     selectedTemplate = t.name;
   }
 
-  $: renderedTemplate = renderTemplate(template);
+  let renderedTemplate = $derived(renderTemplate(template));
 </script>
 
 <div class="feedback-builder">
@@ -142,7 +146,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
       <span class="toolbar-label">Template:</span>
       <select
         bind:value={selectedTemplate}
-        on:change={(e) => {
+        onchange={(e) => {
           const t = templates.find((t) => t.name === e.currentTarget.value);
           if (t) loadTemplate(t);
         }}
@@ -156,7 +160,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     </div>
 
     <div class="toolbar-section">
-      <button on:click={() => (showVariableList = !showVariableList)} class="toolbar-button">
+      <button onclick={() => (showVariableList = !showVariableList)} class="toolbar-button">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
@@ -168,7 +172,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
         Variables
       </button>
 
-      <button on:click={() => (showPreview = !showPreview)} class="toolbar-button">
+      <button onclick={() => (showPreview = !showPreview)} class="toolbar-button">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
@@ -199,7 +203,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
           <h5 class="section-title">Custom Variables</h5>
           <div class="variable-list">
             {#each variables as variable}
-              <button on:click={() => insertVariable(variable.name)} class="variable-item">
+              <button onclick={() => insertVariable(variable.name)} class="variable-item">
                 <span class="var-name">{variable.name}</span>
                 <span class="var-type">{variable.type}</span>
               </button>
@@ -210,19 +214,19 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
         <div class="variable-section">
           <h5 class="section-title">System Variables</h5>
           <div class="variable-list">
-            <button on:click={() => insertVariable('score')} class="variable-item">
+            <button onclick={() => insertVariable('score')} class="variable-item">
               <span class="var-name">score</span>
               <span class="var-type">number</span>
             </button>
-            <button on:click={() => insertVariable('maxScore')} class="variable-item">
+            <button onclick={() => insertVariable('maxScore')} class="variable-item">
               <span class="var-name">maxScore</span>
               <span class="var-type">number</span>
             </button>
-            <button on:click={() => insertVariable('responseTime')} class="variable-item">
+            <button onclick={() => insertVariable('responseTime')} class="variable-item">
               <span class="var-name">responseTime</span>
               <span class="var-type">number</span>
             </button>
-            <button on:click={() => insertVariable('completionTime')} class="variable-item">
+            <button onclick={() => insertVariable('completionTime')} class="variable-item">
               <span class="var-name">completionTime</span>
               <span class="var-type">number</span>
             </button>
@@ -233,18 +237,18 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
           <h5 class="section-title">Functions</h5>
           <div class="function-list">
             <button
-              on:click={() => insertFunction('$\{IF(condition, "true", "false")}')}
+              onclick={() => insertFunction('$\{IF(condition, "true", "false")}')}
               class="function-item"
             >
               IF(condition, true, false)
             </button>
-            <button on:click={() => insertFunction('$\{Math.round(value)}')} class="function-item">
+            <button onclick={() => insertFunction('$\{Math.round(value)}')} class="function-item">
               Math.round(value)
             </button>
-            <button on:click={() => insertFunction('$\{Math.floor(value)}')} class="function-item">
+            <button onclick={() => insertFunction('$\{Math.floor(value)}')} class="function-item">
               Math.floor(value)
             </button>
-            <button on:click={() => insertFunction('$\{value.toFixed(2)}')} class="function-item">
+            <button onclick={() => insertFunction('$\{value.toFixed(2)}')} class="function-item">
               toFixed(decimals)
             </button>
           </div>
@@ -255,6 +259,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     <!-- Editor -->
     <div class="editor-container">
       <MonacoEditor
+        bind:this={monacoEditor}
         bind:value={template}
         language="markdown"
         height="300px"
@@ -269,9 +274,6 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
           renderLineHighlight: 'none',
           scrollBeyondLastLine: false,
           fontSize: 14,
-        }}
-        on:insertText={(e) => {
-          // Monaco editor will handle the insertion
         }}
       />
     </div>
