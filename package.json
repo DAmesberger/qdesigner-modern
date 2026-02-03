@@ -114,7 +114,7 @@
     "immer": "^10.1.1",
     "lucide-svelte": "^0.536.0",
     "marked": "^16.0.0",
-    "mathjs": "^14.5.3",
+    "mathjs": "^15.1.0",
     "monaco-editor": "^0.45.0",
     "nanoid": "^5.1.5",
     "papaparse": "^5.5.3",
