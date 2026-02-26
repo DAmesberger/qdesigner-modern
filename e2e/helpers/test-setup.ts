@@ -1,6 +1,8 @@
 import { Page } from '@playwright/test';
+import { TEST_CONFIG } from './test-config';
+import { createTestClient, TestApiClient } from './api-client';
+import { loginUser } from './auth';
 
-// Extend the existing TestUser interface
 export interface ExtendedTestUser {
   id: string;
   email: string;
@@ -23,48 +25,11 @@ export interface TestProject {
   organizationId: string;
 }
 
-// Mock Supabase client for testing
-class MockSupabaseClient {
-  auth = {
-    signUp: async (params: any) => {
-      const userId = `user-${Date.now()}`;
-      return {
-        data: {
-          user: {
-            id: userId,
-            email: params.email,
-            user_metadata: params.options?.data || {}
-          }
-        },
-        error: null
-      };
-    },
-    admin: {
-      updateUser: async (userId: string, updates: any) => {
-        return { data: { user: { id: userId, ...updates } }, error: null };
-      }
-    }
-  };
-  
-  from(table: string) {
-    return {
-      insert: (data: any) => ({
-        select: () => ({
-          single: async () => ({ data, error: null })
-        }),
-        execute: async () => ({ data, error: null })
-      }),
-      delete: () => ({
-        eq: () => ({ execute: async () => ({ error: null }) })
-      })
-    };
-  }
-}
-
-// Mock supabase instance
-const mockSupabase = new MockSupabaseClient();
-
-// Create a test user with proper setup
+/**
+ * Create a test user via the API client.
+ * Note: In the new backend, test users are seeded. This helper is for
+ * tests that need dynamically created users.
+ */
 export async function createTestUser(options: {
   email?: string;
   password?: string;
@@ -73,110 +38,80 @@ export async function createTestUser(options: {
   name?: string;
   department?: string;
 }): Promise<ExtendedTestUser> {
-  const email = options.email || `test-${Date.now()}@example.com`;
+  const email = options.email || `test-${Date.now()}@test.local`;
   const password = options.password || 'TestPassword123!';
   const role = options.role || 'participant';
   const name = options.name || 'Test User';
-  
-  // In a real implementation, this would use the actual Supabase client
-  const { data: authData } = await mockSupabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
+
+  // For seeded test users, return the config directly
+  const seededUsers = TEST_CONFIG.users;
+  for (const [key, user] of Object.entries(seededUsers)) {
+    if (user.email === email) {
+      return {
+        id: user.uuid,
+        email: user.email,
+        password: user.password,
+        role: key as ExtendedTestUser['role'],
+        organizationId: options.organizationId,
         name,
-        role,
-        organization_id: options.organizationId,
-        department: options.department
-      }
+        department: options.department,
+      };
     }
-  });
-  
+  }
+
+  // For non-seeded users, return a placeholder
+  // These users would need to be created via the signup flow in actual tests
   return {
-    id: authData!.user!.id,
+    id: `user-${Date.now()}`,
     email,
     password,
     role,
     organizationId: options.organizationId,
     name,
-    department: options.department
+    department: options.department,
   };
 }
 
-// Login helper for E2E tests
-export async function loginUser(page: Page, email: string, password: string) {
-  await page.goto('/login');
-  await page.fill('[data-testid="email"]', email);
-  await page.fill('[data-testid="password"]', password);
-  await page.click('[data-testid="login-button"]');
-  await page.waitForURL('/dashboard', { timeout: 10000 });
-}
-
-// Set up a complete test organization
+/**
+ * Set up a complete test organization using seeded data
+ */
 export async function setupTestOrganization(orgName?: string): Promise<{
   organization: TestOrganization;
   project: TestProject;
   owner: ExtendedTestUser;
 }> {
-  const timestamp = Date.now();
   const organization: TestOrganization = {
-    id: `org-${timestamp}`,
-    name: orgName || `Test Organization ${timestamp}`,
-    slug: `test-org-${timestamp}`
+    id: TEST_CONFIG.organization.id,
+    name: orgName || TEST_CONFIG.organization.name,
+    slug: TEST_CONFIG.organization.slug,
   };
-  
-  // Create owner user
+
   const owner = await createTestUser({
-    email: `owner-${timestamp}@example.com`,
-    role: 'owner',
+    email: TEST_CONFIG.users.admin.email,
+    role: 'admin',
     organizationId: organization.id,
-    name: 'Test Owner'
+    name: 'Test Admin',
   });
-  
-  // Create default project
+
   const project: TestProject = {
-    id: `proj-${timestamp}`,
-    name: 'Default Test Project',
-    organizationId: organization.id
+    id: TEST_CONFIG.project.id,
+    name: TEST_CONFIG.project.name,
+    organizationId: organization.id,
   };
-  
+
   return {
     organization,
     project,
-    owner
+    owner,
   };
 }
 
-// Helper to create test study data
-export async function createTestStudyWithData(page: Page, projectId: string) {
-  await page.goto(`/projects/${projectId}/studies/new`);
-  
-  // Create study
-  await page.fill('[data-testid="study-name"]', 'Test Study with Data');
-  await page.fill('[data-testid="study-description"]', 'Automated test study');
-  await page.click('[data-testid="create-study"]');
-  
-  // Add sample questions
-  await page.click('[data-testid="add-question"]');
-  await page.selectOption('[data-testid="question-type"]', 'text');
-  await page.fill('[data-testid="question-text"]', 'Test question 1');
-  
-  await page.click('[data-testid="add-question"]');
-  await page.selectOption('[data-testid="question-type"]', 'single_choice');
-  await page.fill('[data-testid="question-text"]', 'Test question 2');
-  
-  // Save
-  await page.click('[data-testid="save-study"]');
-  
-  // Generate test data
-  await page.click('[data-testid="generate-test-data"]');
-  await page.fill('[data-testid="num-responses"]', '100');
-  await page.click('[data-testid="generate"]');
-  
-  return page.url().split('/').pop(); // Return study ID
-}
+// Re-export loginUser for backward compatibility
+export { loginUser };
 
-// Helper to wait for real-time updates
+/**
+ * Helper to wait for real-time updates via WebSocket
+ */
 export async function waitForRealtimeUpdate(page: Page, eventType: string, timeout = 5000) {
   await page.waitForFunction(
     (expectedEvent) => {
@@ -188,25 +123,9 @@ export async function waitForRealtimeUpdate(page: Page, eventType: string, timeo
   );
 }
 
-// Mock Stripe payment for testing
-export async function mockStripePayment(page: Page) {
-  await page.addInitScript(() => {
-    (window as any).Stripe = () => ({
-      elements: () => ({
-        create: () => ({
-          mount: () => {},
-          on: () => {},
-          update: () => {}
-        })
-      }),
-      confirmCardPayment: async () => ({
-        paymentIntent: { id: 'pi_test_123', status: 'succeeded' }
-      })
-    });
-  });
-}
-
-// Helper to simulate network conditions
+/**
+ * Helper to simulate network conditions
+ */
 export async function simulateSlowNetwork(page: Page) {
   await page.route('**/*', async route => {
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -214,7 +133,9 @@ export async function simulateSlowNetwork(page: Page) {
   });
 }
 
-// Helper to create test fixtures
+/**
+ * Helper to create test fixtures
+ */
 export function createTestFixtures() {
   return {
     testLogo: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
@@ -223,13 +144,13 @@ export function createTestFixtures() {
       demographics: {
         age: 25,
         gender: 'male',
-        education: 'bachelors'
+        education: 'bachelors',
       },
       responses: {
         q1: 'Test response',
         q2: 3,
-        q3: true
-      }
-    }
+        q3: true,
+      },
+    },
   };
 }

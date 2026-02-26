@@ -1,6 +1,5 @@
-import { supabase } from './supabase';
+import { api } from './api';
 import type { Questionnaire } from '$lib/shared';
-import { nanoid } from 'nanoid';
 
 export interface SaveResult {
   success: boolean;
@@ -16,22 +15,16 @@ export interface LoadResult {
 
 export class QuestionnairePersistenceService {
   /**
-   * Save a questionnaire to Supabase
-   * Note: This implementation stores the entire questionnaire as JSONB in questionnaire_definitions table
-   * according to the actual database schema
+   * Save a questionnaire to the backend API
+   * Stores the entire questionnaire as JSONB in questionnaire_definitions table
    */
   static async saveQuestionnaire(
-    questionnaire: Questionnaire, 
-    projectId: string,
-    organizationId: string,
-    userId: string
+    questionnaire: Questionnaire,
+    projectId: string
   ): Promise<SaveResult> {
     try {
-      const questionnaireId = questionnaire.id || nanoid();
-      
-      // Prepare the questionnaire definition for storage
-      const definition = {
-        id: questionnaireId,
+      const content = {
+        id: questionnaire.id,
         name: questionnaire.name,
         description: questionnaire.description,
         version: questionnaire.version,
@@ -44,30 +37,33 @@ export class QuestionnairePersistenceService {
         modified: new Date().toISOString()
       };
 
-      // Insert or update the questionnaire definition
-      const { data, error } = await supabase
-        .from('questionnaire_definitions')
-        .upsert({
-          id: questionnaireId,
-          project_id: projectId,
+      if (questionnaire.id) {
+        // Update existing questionnaire
+        await api.questionnaires.update(projectId, questionnaire.id, {
           name: questionnaire.name,
           description: questionnaire.description,
-          version: parseInt(String(questionnaire.version || '1.0.0').split('.')[0] || '1', 10),
-          content: definition, // Store entire questionnaire as JSONB in content field
-          status: 'draft',
-          settings: questionnaire.settings || {},
-          created_by: userId,
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
+          content,
+          settings: questionnaire.settings || {}
+        });
 
-      if (error) throw error;
+        return {
+          success: true,
+          questionnaireId: questionnaire.id
+        };
+      } else {
+        // Create new questionnaire
+        const result = await api.questionnaires.create(projectId, {
+          name: questionnaire.name,
+          description: questionnaire.description,
+          content,
+          settings: questionnaire.settings || {}
+        });
 
-      return {
-        success: true,
-        questionnaireId
-      };
+        return {
+          success: true,
+          questionnaireId: result.id
+        };
+      }
     } catch (error) {
       console.error('Error saving questionnaire:', error as Error);
       return {
@@ -78,34 +74,28 @@ export class QuestionnairePersistenceService {
   }
 
   /**
-   * Load a questionnaire from Supabase
+   * Load a questionnaire from the backend API
    */
-  static async loadQuestionnaire(questionnaireId: string): Promise<LoadResult> {
+  static async loadQuestionnaire(projectId: string, questionnaireId: string): Promise<LoadResult> {
     try {
-      // Load questionnaire definition
-      const { data, error } = await supabase
-        .from('questionnaire_definitions')
-        .select('*')
-        .eq('id', questionnaireId)
-        .single();
+      const data = await api.questionnaires.get(projectId, questionnaireId);
 
-      if (error) throw error;
       if (!data) throw new Error('Questionnaire not found');
 
       // Extract questionnaire from the JSONB content
       const content = data.content || {};
       const questionnaire: Questionnaire = {
-        id: content.id || data.id,
-        name: content.name || data.name,
-        description: content.description || data.description || '',
-        version: content.version || `${data.version}.0.0`,
-        pages: content.pages || [],
-        questions: content.questions || [],
-        variables: content.variables || [],
-        settings: content.settings || data.settings || {},
-        flow: content.flow || [],
-        created: content.created || data.created_at,
-        modified: content.modified || data.updated_at
+        id: (content as any).id || data.id,
+        name: (content as any).name || data.name,
+        description: (content as any).description || data.description || '',
+        version: (content as any).version || `${data.version}.0.0`,
+        pages: (content as any).pages || [],
+        questions: (content as any).questions || [],
+        variables: (content as any).variables || [],
+        settings: (content as any).settings || data.settings || {},
+        flow: (content as any).flow || [],
+        created: (content as any).created || data.createdAt,
+        modified: (content as any).modified || data.updatedAt
       };
 
       return {
@@ -131,23 +121,24 @@ export class QuestionnairePersistenceService {
       name: string;
       version: number;
       status: string;
-      created_at: string;
-      updated_at: string;
+      createdAt: string;
+      updatedAt: string;
     }>;
     error?: string;
   }> {
     try {
-      const { data, error } = await supabase
-        .from('questionnaire_definitions')
-        .select('id, name, version, status, created_at, updated_at')
-        .eq('project_id', projectId)
-        .order('updated_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await api.questionnaires.list(projectId);
 
       return {
         success: true,
-        questionnaires: data || []
+        questionnaires: (data || []).map((q) => ({
+          id: q.id,
+          name: q.name,
+          version: q.version,
+          status: q.status,
+          createdAt: q.createdAt,
+          updatedAt: q.updatedAt
+        }))
       };
     } catch (error) {
       console.error('Error listing questionnaires:', error as Error);
@@ -161,14 +152,9 @@ export class QuestionnairePersistenceService {
   /**
    * Delete a questionnaire
    */
-  static async deleteQuestionnaire(questionnaireId: string): Promise<{ success: boolean; error?: string }> {
+  static async deleteQuestionnaire(projectId: string, questionnaireId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const { error } = await supabase
-        .from('questionnaire_definitions')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', questionnaireId);
-
-      if (error) throw error;
+      await api.questionnaires.delete(projectId, questionnaireId);
 
       return { success: true };
     } catch (error) {

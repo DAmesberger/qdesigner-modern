@@ -1,0 +1,12 @@
+/home/amd/dev/personal/qdesigner-modern/server/target/debug/deps/signature-959acd4aa8a99c94.d: /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/lib.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/hazmat.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/error.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/keypair.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/signature.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/signer.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/verifier.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/../README.md
+
+/home/amd/dev/personal/qdesigner-modern/server/target/debug/deps/libsignature-959acd4aa8a99c94.rmeta: /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/lib.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/hazmat.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/error.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/keypair.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/signature.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/signer.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/verifier.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/../README.md
+
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/lib.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/hazmat.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/error.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/keypair.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/signature.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/signer.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/verifier.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/signature-1.6.4/src/../README.md:

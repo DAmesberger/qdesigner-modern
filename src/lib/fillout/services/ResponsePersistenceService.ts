@@ -1,4 +1,4 @@
-import { supabase } from '$lib/services/supabase';
+import { api } from '$lib/services/api';
 import type { ResponseData, InteractionEvent } from '$lib/types/response';
 import type { Session } from '$lib/types/session';
 
@@ -51,13 +51,10 @@ export class ResponsePersistenceService {
 				this.responseQueue.push(enhancedResponse);
 				await this.saveToLocalStorage();
 			} else {
-				// Save immediately
-				const { error } = await supabase
-					.from('responses')
-					.insert(enhancedResponse);
-
-				if (error) {
-					console.error('Failed to save response:', error as Error);
+				try {
+					await api.sessions.submitResponses(this.sessionId, [enhancedResponse]);
+				} catch (err) {
+					console.error('Failed to save response:', err);
 					// Queue for retry
 					this.responseQueue.push(enhancedResponse);
 				}
@@ -90,7 +87,7 @@ export class ResponsePersistenceService {
 			} else {
 				// Batch events for efficiency
 				this.eventQueue.push(enhancedEvent);
-				
+
 				if (this.eventQueue.length >= this.batchSize) {
 					await this.flushEventQueue();
 				}
@@ -114,19 +111,10 @@ export class ResponsePersistenceService {
 		status?: string;
 	}): Promise<void> {
 		try {
-			const updates = {
+			await api.sessions.update(this.sessionId, {
 				...data,
 				last_activity_at: new Date().toISOString()
-			};
-
-			const { error } = await supabase
-				.from('sessions')
-				.update(updates)
-				.eq('id', this.sessionId);
-
-			if (error) {
-				console.error('Failed to update session:', error as Error);
-			}
+			} as any);
 		} catch (error) {
 			console.error('Error updating session:', error as Error);
 		}
@@ -141,18 +129,10 @@ export class ResponsePersistenceService {
 			await this.syncAll();
 
 			// Update session status
-			const { error } = await supabase
-				.from('sessions')
-				.update({
-					status: 'completed',
-					completed_at: new Date().toISOString(),
-					progress_percentage: 100
-				})
-				.eq('id', this.sessionId);
-
-			if (error) {
-				console.error('Failed to complete session:', error as Error);
-			}
+			await api.sessions.update(this.sessionId, {
+				status: 'completed',
+				completed_at: new Date().toISOString()
+			} as any);
 		} catch (error) {
 			console.error('Error completing session:', error as Error);
 		}
@@ -163,21 +143,11 @@ export class ResponsePersistenceService {
 	 */
 	async saveVariable(name: string, value: any, type: string = 'string'): Promise<void> {
 		try {
-			const { error } = await supabase
-				.from('session_variables')
-				.upsert({
-					session_id: this.sessionId,
-					name,
-					value,
-					type,
-					last_updated_at: new Date().toISOString()
-				}, {
-					onConflict: 'session_id,name'
-				});
-
-			if (error) {
-				console.error('Failed to save variable:', error as Error);
-			}
+			await api.post(`/api/sessions/${this.sessionId}/variables`, {
+				name,
+				value,
+				type
+			});
 		} catch (error) {
 			console.error('Error saving variable:', error as Error);
 		}
@@ -199,7 +169,7 @@ export class ResponsePersistenceService {
 	 */
 	async syncAll(): Promise<void> {
 		if (this.isSyncing) return;
-		
+
 		this.isSyncing = true;
 		try {
 			// Sync responses
@@ -231,19 +201,11 @@ export class ResponsePersistenceService {
 		if (toSync.length === 0) return;
 
 		try {
-			const { error } = await supabase
-				.from('responses')
-				.insert(toSync);
-
-			if (error) {
-				// Re-queue failed items
-				this.responseQueue.push(...toSync);
-				console.error('Failed to sync responses:', error as Error);
-			}
+			await api.sessions.submitResponses(this.sessionId, toSync as any);
 		} catch (error) {
-			// Re-queue on network error
+			// Re-queue failed items
 			this.responseQueue.push(...toSync);
-			console.error('Error syncing responses:', error as Error);
+			console.error('Failed to sync responses:', error as Error);
 		}
 	}
 
@@ -257,19 +219,11 @@ export class ResponsePersistenceService {
 		if (toSync.length === 0) return;
 
 		try {
-			const { error } = await supabase
-				.from('interaction_events')
-				.insert(toSync);
-
-			if (error) {
-				// Re-queue failed items
-				this.eventQueue.push(...toSync);
-				console.error('Failed to sync events:', error as Error);
-			}
+			await api.post(`/api/sessions/${this.sessionId}/events`, toSync);
 		} catch (error) {
-			// Re-queue on network error
+			// Re-queue failed items
 			this.eventQueue.push(...toSync);
-			console.error('Error syncing events:', error as Error);
+			console.error('Failed to sync events:', error as Error);
 		}
 	}
 
@@ -301,11 +255,11 @@ export class ResponsePersistenceService {
 		try {
 			const key = `qdesigner_offline_${this.sessionId}`;
 			const stored = localStorage.getItem(key);
-			
+
 			if (!stored) return;
 
 			const data = JSON.parse(stored);
-			
+
 			// Add to queues
 			if (data.responses?.length > 0) {
 				this.responseQueue.push(...data.responses);

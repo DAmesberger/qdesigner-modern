@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: qdesigner-test-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: qdesigner_test
+      POSTGRES_USER: qdesigner
+      POSTGRES_PASSWORD: qdesigner
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qdesigner -d qdesigner_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: qdesigner-test-redis
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: qdesigner-test-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-test-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: qdesigner-test-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing myminio/qdesigner-media;
+      mc anonymous set download myminio/qdesigner-media;
+      exit 0;
+      "
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: qdesigner-test-mailpit
+    ports:
+      - "1026:1025"
+      - "8026:8025"
+    restart: unless-stopped
+
+volumes:
+  postgres-test-data:
+  minio-test-data:

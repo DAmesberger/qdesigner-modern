@@ -1,4 +1,4 @@
-import { supabase } from '$lib/services/supabase';
+import { api } from '$lib/services/api';
 import type { Session } from '$lib/types/session';
 import { browser } from '$app/environment';
 
@@ -17,7 +17,7 @@ export interface SessionState {
 
 export class SessionManagementService {
 	private static SESSION_KEY = 'qdesigner_active_session';
-	
+
 	/**
 	 * Create or resume a session
 	 */
@@ -56,70 +56,54 @@ export class SessionManagementService {
 		const deviceInfo = this.getDeviceInfo();
 		const browserInfo = this.getBrowserInfo();
 
-		const sessionData = {
-			questionnaire_id: config.questionnaireId,
-			participant_id: config.participantId || null,
-			status: 'not_started',
-			started_at: new Date().toISOString(),
-			device_info: deviceInfo,
-			browser_info: browserInfo,
-			metadata: config.metadata || {},
-			access_code: this.generateAccessCode()
-		};
+		const data = await api.sessions.create({
+			questionnaireId: config.questionnaireId,
+			participantId: config.participantId || undefined,
+			metadata: {
+				...config.metadata,
+				device_info: deviceInfo,
+				browser_info: browserInfo,
+				access_code: this.generateAccessCode()
+			}
+		});
 
-		const { data, error } = await supabase
-			.from('sessions')
-			.insert(sessionData)
-			.select()
-			.single();
-
-		if (error || !data) {
-			throw new Error('Failed to create session');
-		}
+		const session = data as unknown as Session;
 
 		// Store in local storage
-		this.saveLocalSession(data);
+		this.saveLocalSession(session);
 
-		return data;
+		return session;
 	}
 
 	/**
 	 * Resume an existing session
 	 */
 	private static async resumeSession(
-		sessionId: string, 
+		sessionId: string,
 		questionnaireId: string
 	): Promise<Session | null> {
 		try {
-			const { data, error } = await supabase
-				.from('sessions')
-				.select('*')
-				.eq('id', sessionId)
-				.eq('questionnaire_id', questionnaireId)
-				.single();
+			const data = await api.sessions.get(sessionId);
 
-			if (error || !data) {
-				return null;
-			}
+			if (!data) return null;
+
+			const session = data as unknown as Session;
 
 			// Can't resume completed sessions
-			if (data.status === 'completed') {
+			if (session.status === 'completed') {
 				return null;
 			}
 
 			// Update last activity
-			await supabase
-				.from('sessions')
-				.update({ 
-					last_activity_at: new Date().toISOString(),
-					status: data.status === 'not_started' ? 'in_progress' : data.status
-				})
-				.eq('id', sessionId);
+			await api.sessions.update(sessionId, {
+				last_activity_at: new Date().toISOString(),
+				status: session.status === 'not_started' ? 'in_progress' : session.status
+			} as any);
 
 			// Update local storage
-			this.saveLocalSession(data);
+			this.saveLocalSession(session);
 
-			return data;
+			return session;
 		} catch (error) {
 			console.error('Failed to resume session:', error as Error);
 			return null;
@@ -130,42 +114,32 @@ export class SessionManagementService {
 	 * Start a session (mark as in progress)
 	 */
 	static async startSession(sessionId: string): Promise<void> {
-		await supabase
-			.from('sessions')
-			.update({
-				status: 'in_progress',
-				started_at: new Date().toISOString(),
-				last_activity_at: new Date().toISOString()
-			})
-			.eq('id', sessionId);
+		await api.sessions.update(sessionId, {
+			status: 'in_progress',
+			started_at: new Date().toISOString(),
+			last_activity_at: new Date().toISOString()
+		} as any);
 	}
 
 	/**
 	 * Pause a session
 	 */
 	static async pauseSession(sessionId: string, currentState?: any): Promise<void> {
-		await supabase
-			.from('sessions')
-			.update({
-				status: 'paused',
-				last_activity_at: new Date().toISOString(),
-				state_snapshot: currentState || {}
-			})
-			.eq('id', sessionId);
+		await api.sessions.update(sessionId, {
+			status: 'paused',
+			last_activity_at: new Date().toISOString(),
+			state_snapshot: currentState || {}
+		} as any);
 	}
 
 	/**
 	 * Complete a session
 	 */
 	static async completeSession(sessionId: string): Promise<void> {
-		await supabase
-			.from('sessions')
-			.update({
-				status: 'completed',
-				completed_at: new Date().toISOString(),
-				progress_percentage: 100
-			})
-			.eq('id', sessionId);
+		await api.sessions.update(sessionId, {
+			status: 'completed',
+			completed_at: new Date().toISOString()
+		} as any);
 
 		// Clear local storage
 		this.clearLocalSession();
@@ -175,16 +149,13 @@ export class SessionManagementService {
 	 * Abandon a session
 	 */
 	static async abandonSession(sessionId: string, reason?: string): Promise<void> {
-		await supabase
-			.from('sessions')
-			.update({
-				status: 'abandoned',
-				last_activity_at: new Date().toISOString(),
-				metadata: {
-					abandon_reason: reason || 'user_exit'
-				}
-			})
-			.eq('id', sessionId);
+		await api.sessions.update(sessionId, {
+			status: 'abandoned',
+			last_activity_at: new Date().toISOString(),
+			metadata: {
+				abandon_reason: reason || 'user_exit'
+			}
+		} as any);
 
 		// Clear local storage
 		this.clearLocalSession();
@@ -198,7 +169,7 @@ export class SessionManagementService {
 			sid: session.id,
 			...(session.participant_id && { pid: session.participant_id })
 		});
-		
+
 		return `${baseUrl}/q/${session.access_code}?${params.toString()}`;
 	}
 
@@ -282,7 +253,7 @@ export class SessionManagementService {
 	 */
 	private static saveLocalSession(session: Session): void {
 		if (!browser) return;
-		
+
 		try {
 			localStorage.setItem(this.SESSION_KEY, JSON.stringify({
 				id: session.id,
@@ -298,20 +269,20 @@ export class SessionManagementService {
 
 	private static getLocalSession(): any {
 		if (!browser) return null;
-		
+
 		try {
 			const stored = localStorage.getItem(this.SESSION_KEY);
 			if (!stored) return null;
-			
+
 			const data = JSON.parse(stored);
-			
+
 			// Check if session is recent (within 24 hours)
 			const age = Date.now() - data.saved_at;
 			if (age > 24 * 60 * 60 * 1000) {
 				this.clearLocalSession();
 				return null;
 			}
-			
+
 			return data;
 		} catch (error) {
 			console.error('Failed to read local session:', error as Error);
@@ -321,7 +292,7 @@ export class SessionManagementService {
 
 	private static clearLocalSession(): void {
 		if (!browser) return;
-		
+
 		try {
 			localStorage.removeItem(this.SESSION_KEY);
 		} catch (error) {

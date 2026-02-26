@@ -3,81 +3,82 @@
  */
 
 export const TEST_CONFIG = {
-  // Test user prefixes to ensure unique emails
-  emailPrefixes: {
-    selfService: 'self-service',
-    invitation: 'invitation',
-    domainAutoJoin: 'auto-join',
-    admin: 'admin'
-  },
-  
-  // Test organizations
-  organizations: {
-    default: {
-      name: 'Test Research Lab',
-      slug: 'test-research-lab'
+  // Test credentials
+  users: {
+    admin: {
+      email: 'admin@test.local',
+      password: 'TestPassword123!',
+      uuid: '11111111-1111-1111-1111-111111111111',
     },
-    university: {
-      name: 'Test University',
-      slug: 'test-university',
-      domain: 'test-university.edu'
+    editor: {
+      email: 'editor@test.local',
+      password: 'TestPassword123!',
+      uuid: '22222222-2222-2222-2222-222222222222',
     },
-    corporate: {
-      name: 'Test Corporation',
-      slug: 'test-corp',
-      domain: 'testcorp.com'
-    }
+    viewer: {
+      email: 'viewer@test.local',
+      password: 'TestPassword123!',
+      uuid: '33333333-3333-3333-3333-333333333333',
+    },
+    participant: {
+      email: 'participant@test.local',
+      password: 'TestPassword123!',
+      uuid: '44444444-4444-4444-4444-444444444444',
+    },
+    demo: {
+      email: 'demo@example.com',
+      password: 'demo123456',
+      uuid: '55555555-5555-5555-5555-555555555555',
+    },
   },
-  
-  // Test domains for auto-join
-  autoJoinDomains: [
-    'approved-domain.com',
-    'test-university.edu',
-    'research-institute.org'
-  ],
-  
-  // Default test password
-  defaultPassword: 'TestPassword123!',
-  
+
+  // Test organization
+  organization: {
+    id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    name: 'Test Organization',
+    slug: 'test-org',
+  },
+
+  // Test project
+  project: {
+    id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    name: 'Test Project',
+    code: 'TEST001',
+  },
+
+  // URLs
+  urls: {
+    frontend: process.env.VITE_APP_URL || 'http://localhost:5173',
+    backend: process.env.VITE_API_URL || 'http://localhost:3000',
+    wsBackend: process.env.VITE_WS_URL || 'ws://localhost:3000/api/ws',
+  },
+
   // Timeouts
   timeouts: {
-    navigation: 10000,
-    verification: 5000,
-    animation: 500
+    navigation: 15000,
+    api: 10000,
+    animation: 500,
   },
-  
-  // Test invitation tokens
-  invitationTokens: {
-    valid: 'valid-invitation-token',
-    expired: 'expired-invitation-token',
-    revoked: 'revoked-invitation-token',
-    accepted: 'accepted-invitation-token'
+
+  // Viewport
+  viewport: {
+    width: 1280,
+    height: 720,
   },
-  
-  // Error messages to check
-  errorMessages: {
-    invalidCredentials: 'Invalid login credentials',
-    emailTaken: 'User already registered',
-    invalidVerificationCode: 'Invalid verification code',
-    expiredInvitation: 'This invitation has expired',
-    organizationRequired: 'Please enter an organization name'
-  },
-  
-  // Success messages
-  successMessages: {
-    accountCreated: 'Account created successfully',
-    emailVerified: 'Email verified successfully',
-    invitationSent: 'Invitation sent successfully',
-    domainVerified: 'Domain verified successfully',
-    organizationCreated: 'Organization created successfully'
-  }
 };
 
 /**
- * Get a test organization by key
+ * Get a test user by role
  */
-export function getTestOrganization(key: keyof typeof TEST_CONFIG.organizations) {
-  return TEST_CONFIG.organizations[key];
+export function getTestUser(role: keyof typeof TEST_CONFIG.users) {
+  return TEST_CONFIG.users[role];
+}
+
+/**
+ * Generate a unique test email address
+ */
+export function generateTestEmail(prefix = 'test'): string {
+  return `${prefix}+${Date.now()}@test.local`;
 }
 
 /**
@@ -85,13 +86,13 @@ export function getTestOrganization(key: keyof typeof TEST_CONFIG.organizations)
  */
 export function generateUserData(prefix?: string) {
   const timestamp = Date.now();
-  const emailPrefix = prefix || TEST_CONFIG.emailPrefixes.selfService;
-  
+  const emailPrefix = prefix || 'test';
+
   return {
     email: `${emailPrefix}+${timestamp}@test.local`,
-    password: TEST_CONFIG.defaultPassword,
+    password: TEST_CONFIG.users.admin.password,
     fullName: `Test User ${timestamp}`,
-    id: `test-user-${timestamp}`
+    id: `test-user-${timestamp}`,
   };
 }
 
@@ -100,43 +101,11 @@ export function generateUserData(prefix?: string) {
  */
 export function generateOrganizationData() {
   const timestamp = Date.now();
-  
+
   return {
     name: `Test Org ${timestamp}`,
     slug: `test-org-${timestamp}`,
-    id: `test-org-${timestamp}`
-  };
-}
-
-/**
- * Get expected onboarding flow based on email
- */
-export function getExpectedOnboardingFlow(email: string): {
-  requiresVerification: boolean;
-  autoJoinOrganization: boolean;
-  organizationName?: string;
-  showInvitations: boolean;
-} {
-  // Check if it's a test mode email
-  const isTestMode = email.includes('+test') || email.endsWith('@test.local');
-  
-  // Check for domain auto-join
-  let autoJoinOrganization = false;
-  let organizationName: string | undefined;
-  
-  for (const domain of TEST_CONFIG.autoJoinDomains) {
-    if (email.endsWith(`@${domain}`)) {
-      autoJoinOrganization = true;
-      organizationName = TEST_CONFIG.organizations.university.name;
-      break;
-    }
-  }
-  
-  return {
-    requiresVerification: true, // Always true in our system
-    autoJoinOrganization,
-    organizationName,
-    showInvitations: !autoJoinOrganization // Show invitations if not auto-joining
+    id: `test-org-${timestamp}`,
   };
 }
 
@@ -144,30 +113,8 @@ export function getExpectedOnboardingFlow(email: string): {
  * Viewport configurations for responsive testing
  */
 export const VIEWPORTS = {
-  mobile: { width: 375, height: 667 }, // iPhone SE
-  tablet: { width: 768, height: 1024 }, // iPad
-  desktop: { width: 1280, height: 720 }, // Standard desktop
-  wide: { width: 1920, height: 1080 } // Full HD
+  mobile: { width: 375, height: 667 },
+  tablet: { width: 768, height: 1024 },
+  desktop: { width: 1280, height: 720 },
+  wide: { width: 1920, height: 1080 },
 };
-
-/**
- * Browser configurations for compatibility testing
- */
-export const BROWSERS = [
-  {
-    name: 'Chrome',
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-  },
-  {
-    name: 'Safari',
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15'
-  },
-  {
-    name: 'Firefox',
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0'
-  },
-  {
-    name: 'Edge',
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0'
-  }
-];

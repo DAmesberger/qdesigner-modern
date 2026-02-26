@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { mockAuth } from './fixtures/auth';
 
 test.describe('UI Components', () => {
+  // Use saved auth state from setup project
+  test.use({ storageState: '.auth/editor.json' });
+
   test.beforeEach(async ({ page }) => {
-    await mockAuth(page);
     await page.goto('/design');
   });
 
@@ -13,7 +14,7 @@ test.describe('UI Components', () => {
       const saveButton = page.locator('button:has-text("Save")').first();
       await expect(saveButton).toHaveClass(/bg-indigo-600/);
       await expect(saveButton).toHaveClass(/text-white/);
-      
+
       // Hover effect
       await saveButton.hover();
       await expect(saveButton).toHaveClass(/hover:bg-indigo-500/);
@@ -29,7 +30,7 @@ test.describe('UI Components', () => {
     test('should show loading state', async ({ page }) => {
       // Trigger save to see loading state
       await page.click('button:has-text("Save")');
-      
+
       // Should show spinner
       const spinner = page.locator('svg.animate-spin');
       await expect(spinner).toBeVisible();
@@ -40,7 +41,7 @@ test.describe('UI Components', () => {
     test('should display card containers', async ({ page }) => {
       // Switch to structural view to see cards
       await page.click('button:has-text("Structure")');
-      
+
       // Page cards should have proper styling
       const pageCard = page.locator('.page-card').first();
       await expect(pageCard).toHaveClass(/rounded-lg/);
@@ -54,10 +55,10 @@ test.describe('UI Components', () => {
       // Visual mode shows empty state when no questions
       const emptyState = page.locator('.empty-state');
       await expect(emptyState).toBeVisible();
-      
+
       // Check icon
       await expect(emptyState.locator('svg')).toBeVisible();
-      
+
       // Check message
       await expect(emptyState).toContainText('No questions yet');
       await expect(emptyState).toContainText('Drag a question type');
@@ -66,7 +67,7 @@ test.describe('UI Components', () => {
     test('should display dashed border for add actions', async ({ page }) => {
       // Switch to structural view
       await page.click('button:has-text("Structure")');
-      
+
       // Add page button should have dashed border
       const addPageButton = page.locator('button:has-text("Add Page")');
       await expect(addPageButton).toHaveClass(/border-dashed/);
@@ -77,11 +78,11 @@ test.describe('UI Components', () => {
     test('should display tab navigation', async ({ page }) => {
       // Properties panel tabs
       const tabsContainer = page.locator('.properties-panel');
-      
+
       // Check tab buttons
       await expect(tabsContainer.locator('button:has-text("Properties")')).toBeVisible();
       await expect(tabsContainer.locator('button:has-text("Style")')).toBeVisible();
-      
+
       // Active tab should have underline
       const activeTab = tabsContainer.locator('button:has-text("Properties")');
       await expect(activeTab).toHaveClass(/border-b-2/);
@@ -93,14 +94,14 @@ test.describe('UI Components', () => {
       const textButton = page.locator('button:has-text("Text/Instruction")');
       await textButton.dragTo(page.locator('.page-canvas'));
       await page.locator('.question-container').click();
-      
+
       // Click Style tab
       await page.click('.properties-panel button:has-text("Style")');
-      
+
       // Style tab should be active
       const styleTab = page.locator('.properties-panel button:has-text("Style")');
       await expect(styleTab).toHaveClass(/border-blue-500/);
-      
+
       // Properties tab should not be active
       const propertiesTab = page.locator('.properties-panel button:has-text("Properties")');
       await expect(propertiesTab).not.toHaveClass(/border-blue-500/);
@@ -113,12 +114,12 @@ test.describe('UI Components', () => {
       const textButton = page.locator('button:has-text("Text/Instruction")');
       await textButton.dragTo(page.locator('.page-canvas'));
       await page.locator('.question-container').click();
-      
+
       // Check input styling
       const textarea = page.locator('textarea[placeholder="Enter question text..."]');
       await expect(textarea).toHaveClass(/rounded-md/);
       await expect(textarea).toHaveClass(/border/);
-      
+
       // Focus state
       await textarea.focus();
       await expect(textarea).toHaveClass(/focus:ring-2/);
@@ -130,7 +131,7 @@ test.describe('UI Components', () => {
       const textButton = page.locator('button:has-text("Text/Instruction")');
       await textButton.dragTo(page.locator('.page-canvas'));
       await page.locator('.question-container').click();
-      
+
       // Check select styling
       const select = page.locator('select').first();
       await expect(select).toHaveClass(/rounded-md/);
@@ -144,7 +145,7 @@ test.describe('UI Components', () => {
       const textButton = page.locator('button:has-text("Text/Instruction")');
       await textButton.dragTo(page.locator('.page-canvas'));
       await page.locator('.question-container').click();
-      
+
       // Look for toggle in timing section
       const timingCheckbox = page.locator('input[type="checkbox"]').first();
       await expect(timingCheckbox.locator('..')).toHaveClass(/rounded-full/);
@@ -155,10 +156,10 @@ test.describe('UI Components', () => {
     test('should apply consistent shadow system', async ({ page }) => {
       // Cards should have shadows
       await page.click('button:has-text("Structure")');
-      
+
       const card = page.locator('.page-card').first();
       await expect(card).toHaveClass(/shadow/);
-      
+
       // Buttons should have shadow-sm
       const button = page.locator('button:has-text("Save")').first();
       await expect(button).toHaveClass(/shadow-sm/);
@@ -170,7 +171,7 @@ test.describe('UI Components', () => {
       // Main heading
       const heading = page.locator('h2').first();
       await expect(heading).toHaveClass(/text-2xl/);
-      
+
       // Labels
       const label = page.locator('label').first();
       await expect(label).toHaveClass(/text-sm/);
@@ -182,11 +183,11 @@ test.describe('UI Components', () => {
       // Primary actions use indigo
       const primaryButton = page.locator('button:has-text("Save")').first();
       await expect(primaryButton).toHaveClass(/bg-indigo-600/);
-      
+
       // Active states use indigo
       const activeTab = page.locator('.border-blue-500').first();
       await expect(activeTab).toBeVisible();
-      
+
       // Text uses gray scale
       const bodyText = page.locator('.text-gray-600').first();
       await expect(bodyText).toBeVisible();

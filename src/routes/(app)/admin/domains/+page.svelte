@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { supabase } from '$lib/services/supabase';
+  import { auth } from '$lib/services/auth';
+  import { api } from '$lib/services/api';
   import {
     addDomain,
     verifyDomain,
@@ -40,44 +41,20 @@
   async function loadData() {
     try {
       // Get current user
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await auth.getUser();
       if (!user) return;
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('auth_id', user.id)
-        .single();
+      currentUser = user;
 
-      currentUser = userData;
-
-      // Get user's organization
-      const { data: membership } = await supabase
-        .from('organization_members')
-        .select(
-          `
-          organization_id,
-          role,
-          organizations (
-            id,
-            name,
-            slug
-          )
-        `
-        )
-        .eq('user_id', currentUser.id)
-        .eq('status', 'active')
-        .single();
-
-      if (!membership || membership.role !== 'owner') {
+      // Get user's organizations
+      const orgs = await api.organizations.list();
+      if (!orgs || orgs.length === 0) {
         error = 'Only organization owners can manage domains';
         loading = false;
         return;
       }
 
-      currentOrg = membership.organizations;
+      currentOrg = orgs[0];
 
       // Load domains
       await loadDomains();
@@ -92,17 +69,23 @@
   async function loadDomains() {
     if (!currentOrg) return;
 
-    const { data, error: fetchError } = await supabase
-      .from('organization_domains')
-      .select('*')
-      .eq('organization_id', currentOrg.id)
-      .order('created_at', { ascending: false });
-
-    if (fetchError) {
-      console.error('Error loading domains:', fetchError);
-      error = 'Failed to load domains';
-    } else {
-      domains = data || [];
+    try {
+      const data = await api.organizations.domains.list(currentOrg.id);
+      domains = (data || []).map((d) => ({
+        id: d.id,
+        organizationId: d.organizationId,
+        domain: d.domain,
+        verificationToken: d.verificationToken,
+        verificationMethod: d.verificationMethod,
+        verifiedAt: d.verifiedAt,
+        autoJoinEnabled: d.autoJoinEnabled,
+        includeSubdomains: d.includeSubdomains,
+        defaultRole: d.defaultRole,
+        emailWhitelist: d.emailWhitelist,
+        emailBlacklist: d.emailBlacklist,
+        welcomeMessage: d.welcomeMessage,
+        createdAt: d.createdAt,
+      }));
       // Initialize settings for each domain
       domains.forEach((domain) => {
         domainSettings[domain.id] = {
@@ -112,6 +95,9 @@
           welcomeMessage: domain.welcomeMessage || '',
         };
       });
+    } catch (err) {
+      console.error('Error loading domains:', err);
+      error = 'Failed to load domains';
     }
   }
 
@@ -125,7 +111,6 @@
     const { data, error: addError } = await addDomain({
       organizationId: currentOrg.id,
       domain: newDomain.toLowerCase().trim(),
-      userId: currentUser.id,
     });
 
     if (addError) {
@@ -141,7 +126,7 @@
   }
 
   async function handleVerifyDomain(domainId: string) {
-    const result = await verifyDomain(domainId, currentUser.id);
+    const result = await verifyDomain(currentOrg!.id, domainId);
 
     if (result.success) {
       success = `Domain verified successfully using ${result.method} method!`;
@@ -156,6 +141,7 @@
     if (!settings) return;
 
     const result = await updateDomainConfig({
+      orgId: currentOrg!.id,
       domainId,
       config: {
         autoJoinEnabled: settings.autoJoinEnabled,
@@ -163,7 +149,6 @@
         defaultRole: settings.defaultRole,
         welcomeMessage: settings.welcomeMessage,
       },
-      userId: currentUser.id,
     });
 
     if (result.success) {
@@ -180,7 +165,7 @@
       return;
     }
 
-    const result = await removeDomain(domainId, currentUser.id);
+    const result = await removeDomain(currentOrg!.id, domainId);
 
     if (result.success) {
       success = 'Domain removed';

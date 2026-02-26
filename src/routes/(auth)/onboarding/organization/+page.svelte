@@ -7,43 +7,32 @@
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Card from '$lib/components/common/Card.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
-  import { supabase } from '$lib/services/supabase';
-  import { createFirstOrganization, userHasOrganization } from '$lib/database/auth-helpers';
-  import {
-    getPendingInvitations,
-    acceptInvitation,
-    type Invitation,
-  } from '$lib/services/invitations';
+  import { auth } from '$lib/services/auth';
+  import { api } from '$lib/services/api';
+  import type { User } from '$lib/types/auth';
+  import type { Invitation } from '$lib/types/api';
 
   let organizationName = $state('');
   let loading = $state(false);
   let error = $state<string | null>(null);
-  let currentUser = $state<any>(null);
+  let currentUser = $state<User | null>(null);
   let pendingInvitations = $state<Invitation[]>([]);
   let showCreateForm = $state(false);
   let acceptingInvitation = $state(false);
 
   onMount(async () => {
     // Check if user is authenticated
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await auth.getUser();
     if (!user) {
       await goto('/login');
       return;
     }
 
-    // Get user data
-    const { data: userData } = await supabase
-      .from('users')
-      .select('*')
-      .eq('auth_id', user.id)
-      .single();
-
-    currentUser = userData;
+    currentUser = user;
 
     // Check if user already has organizations
-    if (currentUser && (await userHasOrganization(currentUser.id))) {
+    const orgs = await api.organizations.list();
+    if (orgs.length > 0) {
       await goto('/dashboard');
       return;
     }
@@ -59,15 +48,11 @@
     acceptingInvitation = true;
     error = null;
 
-    const { success, error: acceptError } = await acceptInvitation(
-      invitation.token,
-      currentUser.id
-    );
-
-    if (success) {
+    try {
+      await api.organizations.invitations.accept(invitation.token);
       await goto('/dashboard');
-    } else {
-      error = acceptError || 'Failed to accept invitation';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to accept invitation';
       acceptingInvitation = false;
     }
   }
@@ -87,7 +72,7 @@
         throw new Error('User not found');
       }
 
-      await createFirstOrganization(currentUser.id, organizationName);
+      await api.organizations.create({ name: organizationName });
       // Invalidate all load functions to refresh organization data
       await invalidateAll();
       // Small delay to ensure data propagation

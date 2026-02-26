@@ -1,4 +1,4 @@
-import { supabase } from '$lib/services/supabase';
+import { api } from '$lib/services/api';
 import type { Questionnaire } from '$lib/shared';
 import type { Session } from '$lib/types/session';
 
@@ -22,15 +22,9 @@ export class QuestionnaireAccessService {
 	 */
 	static async validateAccess(code: string): Promise<AccessValidation> {
 		try {
-			// Fetch questionnaire by access code
-			const { data: questionnaire, error } = await supabase
-				.from('questionnaire_definitions')
-				.select('*')
-				.eq('code', code.toUpperCase())
-				.eq('status', 'published')
-				.single();
+			const questionnaire = await api.get<any>(`/api/questionnaires/by-code/${code.toUpperCase()}`);
 
-			if (error || !questionnaire) {
+			if (!questionnaire) {
 				return {
 					valid: false,
 					error: 'Invalid or expired access code'
@@ -94,50 +88,39 @@ export class QuestionnaireAccessService {
 		try {
 			// If sessionId provided, try to resume
 			if (sessionId) {
-				const { data: existingSession, error } = await supabase
-					.from('sessions')
-					.select('*')
-					.eq('id', sessionId)
-					.eq('questionnaire_id', questionnaireId)
-					.single();
-
-				if (!error && existingSession && existingSession.status !== 'completed') {
-					return { session: existingSession, isNew: false };
+				try {
+					const existingSession = await api.sessions.get(sessionId);
+					if (existingSession && existingSession.status !== 'completed') {
+						return { session: existingSession as unknown as Session, isNew: false };
+					}
+				} catch {
+					// Session not found, create new
 				}
 			}
 
 			// Create new session
-			const sessionData = {
-				questionnaire_id: questionnaireId,
-				participant_id: participantId,
-				status: 'not_started',
-				device_info: {
-					userAgent: navigator.userAgent,
-					screen: {
-						width: window.screen.width,
-						height: window.screen.height,
-						pixelRatio: window.devicePixelRatio
+			const newSession = await api.sessions.create({
+				questionnaireId,
+				participantId,
+				metadata: {
+					device_info: {
+						userAgent: navigator.userAgent,
+						screen: {
+							width: window.screen.width,
+							height: window.screen.height,
+							pixelRatio: window.devicePixelRatio
+						},
+						platform: navigator.platform,
+						language: navigator.language
 					},
-					platform: navigator.platform,
-					language: navigator.language
-				},
-				browser_info: {
-					name: getBrowserName(),
-					version: getBrowserVersion()
+					browser_info: {
+						name: getBrowserName(),
+						version: getBrowserVersion()
+					}
 				}
-			};
+			});
 
-			const { data: newSession, error } = await supabase
-				.from('sessions')
-				.insert(sessionData)
-				.select()
-				.single();
-
-			if (error) {
-				throw error;
-			}
-
-			return { session: newSession, isNew: true };
+			return { session: newSession as unknown as Session, isNew: true };
 		} catch (error) {
 			console.error('Error creating/resuming session:', error as Error);
 			throw new Error('Failed to initialize session');
@@ -152,15 +135,10 @@ export class QuestionnaireAccessService {
 		participantId: string
 	): Promise<boolean> {
 		try {
-			const { data, error } = await supabase
-				.from('sessions')
-				.select('id')
-				.eq('questionnaire_id', questionnaireId)
-				.eq('participant_id', participantId)
-				.eq('status', 'completed')
-				.limit(1);
-
-			return !error && data && data.length > 0;
+			const sessions = await api.get<any[]>(
+				`/api/sessions?questionnaire_id=${questionnaireId}&participant_id=${participantId}&status=completed&limit=1`
+			);
+			return sessions && sessions.length > 0;
 		} catch (error) {
 			console.error('Error checking previous completion:', error as Error);
 			return false;

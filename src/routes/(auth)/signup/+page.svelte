@@ -5,7 +5,8 @@
   import Input from '$lib/components/ui/forms/Input.svelte';
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
-  import { supabase } from '$lib/services/supabase';
+  import { auth } from '$lib/services/auth';
+  import { api } from '$lib/services/api';
   import {
     sendVerificationCode,
     verifyCode,
@@ -68,21 +69,13 @@
 
     try {
       // Create account
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          },
-        },
-      });
+      const { user: signedUpUser, error: signUpError } = await auth.signUp(email, password, fullName);
 
       if (signUpError) {
-        throw signUpError;
+        throw new Error(signUpError);
       }
 
-      if (data.user) {
+      if (signedUpUser) {
         // Send verification code without userId for now
         const verificationResult = await sendVerificationCode({
           email,
@@ -126,13 +119,10 @@
 
       if (result.success) {
         // Sign in the user
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error: signInError } = await auth.signIn(email, password);
 
         if (signInError) {
-          throw signInError;
+          throw new Error(signInError);
         }
 
         // Redirect to dashboard or organization setup

@@ -1,9 +1,29 @@
 import { browser } from '$app/environment';
-import type { Tables } from '$lib/services/supabase';
 
-type Project = Tables['projects'];
-type Organization = Tables['organizations'];
-type QuestionnaireDefinition = Tables['questionnaire_definitions'];
+interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  organization_id: string;
+  created_at: string;
+  updated_at: string;
+  [key: string]: unknown;
+}
+
+interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  [key: string]: unknown;
+}
+
+interface QuestionnaireDefinition {
+  id: string;
+  name: string;
+  project_id: string;
+  content?: Record<string, unknown>;
+  [key: string]: unknown;
+}
 
 interface CachedData {
   timestamp: number;

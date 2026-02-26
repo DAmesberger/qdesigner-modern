@@ -1,0 +1,18 @@
+/home/amd/dev/personal/qdesigner-modern/server/target/debug/deps/aws_types-2d0c78c971b88ed9.d: /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/lib.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/app_name.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/build_metadata.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/endpoint_config.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/origin.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/os_shim_internal.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/region.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/request_id.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/sdk_config.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/service_config.rs /home/amd/dev/personal/qdesigner-modern/server/target/debug/build/aws-types-6d4a27f423c52a68/out/build_env.rs
+
+/home/amd/dev/personal/qdesigner-modern/server/target/debug/deps/libaws_types-2d0c78c971b88ed9.rmeta: /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/lib.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/app_name.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/build_metadata.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/endpoint_config.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/origin.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/os_shim_internal.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/region.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/request_id.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/sdk_config.rs /home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/service_config.rs /home/amd/dev/personal/qdesigner-modern/server/target/debug/build/aws-types-6d4a27f423c52a68/out/build_env.rs
+
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/lib.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/app_name.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/build_metadata.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/endpoint_config.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/origin.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/os_shim_internal.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/region.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/request_id.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/sdk_config.rs:
+/home/amd/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/aws-types-1.3.13/src/service_config.rs:
+/home/amd/dev/personal/qdesigner-modern/server/target/debug/build/aws-types-6d4a27f423c52a68/out/build_env.rs:
+
+# env-dep:CARGO_PKG_VERSION=1.3.13
+# env-dep:OUT_DIR=/home/amd/dev/personal/qdesigner-modern/server/target/debug/build/aws-types-6d4a27f423c52a68/out

@@ -1,6 +1,4 @@
 import { Page } from '@playwright/test';
-// Mock Supabase for now - in real implementation, use proper import
-// import { supabase } from '$lib/supabase';
 
 export interface TestUser {
   id: string;
@@ -17,7 +15,6 @@ export async function createTestUser(): Promise<TestUser> {
   const password = 'testpass123456';
   
   // For E2E tests, we'll use the demo user that should already exist
-  // In a real implementation, this would create a user via Supabase Admin API
   return {
     id: `test-user-${timestamp}`,
     email: 'demo@example.com',
@@ -42,6 +39,6 @@ export async function loginTestUser(page: Page, email = 'demo@example.com', pass
  * Cleanup test data
  */
 export async function cleanupTestData(userId: string) {
-  // In a real implementation, this would delete test data via Supabase Admin API
+  // In a real implementation, this would delete test data via the backend API
   console.log(`Would cleanup test data for user: ${userId}`);
 }

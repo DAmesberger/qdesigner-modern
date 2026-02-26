@@ -36,10 +36,8 @@ export class OfflinePersistenceService {
       if (get(isOnline)) {
         try {
           const result = await QuestionnairePersistenceService.saveQuestionnaire(
-            questionnaire, 
-            projectId,
-            organizationId,
-            userId
+            questionnaire,
+            projectId
           );
           
           if (result.success) {
@@ -78,7 +76,7 @@ export class OfflinePersistenceService {
   /**
    * Load questionnaire with offline fallback
    */
-  static async loadQuestionnaire(questionnaireId: string, userId: string): Promise<{
+  static async loadQuestionnaire(questionnaireId: string, userId: string, projectId?: string): Promise<{
     success: boolean;
     questionnaire?: Questionnaire;
     isOffline?: boolean;
@@ -86,9 +84,12 @@ export class OfflinePersistenceService {
   }> {
     try {
       // Try to load from server first if online
-      if (get(isOnline)) {
+      if (get(isOnline) && projectId) {
         try {
-          const result = await QuestionnairePersistenceService.loadQuestionnaire(questionnaireId);
+          const result = await QuestionnairePersistenceService.loadQuestionnaire(
+            projectId,
+            questionnaireId
+          );
           
           if (result.success && result.questionnaire) {
             // Update IndexedDB with server version
@@ -262,23 +263,26 @@ export class OfflinePersistenceService {
       case 'questionnaires':
         switch (item.operation) {
           case 'create':
-          case 'update':
-            // Get organizationId and projectId from the questionnaire or sync queue item
+          case 'update': {
             const projectId = item.data.projectId || item.projectId;
-            const organizationId = item.organizationId;
-            if (!projectId || !organizationId) {
-              throw new Error('Missing projectId or organizationId for sync');
+            if (!projectId) {
+              throw new Error('Missing projectId for sync');
             }
             return await QuestionnairePersistenceService.saveQuestionnaire(
               item.data,
-              projectId,
-              organizationId,
-              item.userId
+              projectId
             );
-          case 'delete':
+          }
+          case 'delete': {
+            const deleteProjectId = item.data?.projectId || item.projectId;
+            if (!deleteProjectId) {
+              throw new Error('Missing projectId for delete sync');
+            }
             return await QuestionnairePersistenceService.deleteQuestionnaire(
+              deleteProjectId,
               item.recordId
             );
+          }
           default:
             throw new Error(`Unknown operation: ${item.operation}`);
         }

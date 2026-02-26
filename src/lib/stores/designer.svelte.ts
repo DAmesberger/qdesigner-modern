@@ -358,25 +358,20 @@ class DesignerStore {
   
   // Methods for SaveLoadToolbar
   async listQuestionnaires() {
-    // This should ideally involve a service or direct DB call if permissible
-    // For now, return empty array or mock, assuming this logic was previously in the store file we are replacing
-    // If the previous store imported 'supabase', we should too.
-    // However, I don't want to bloat this store with DB logic if possible.
-    // I will throw or return empty for now, developer must implement service integration
-    // console.warn('listQuestionnaires logic missing in migrated store');
-    // Using explicit import in component is better, but to support current migration:
-    const { supabase } = await import('$lib/services/supabase');
-    const { data } = await supabase.from('questionnaire_definitions').select('id, name, description, version, updated_at, is_active').order('updated_at', { ascending: false });
+    if (!this.projectId) return [];
+    const { api } = await import('$lib/services/api');
+    const data = await api.questionnaires.list(this.projectId);
     return data || [];
   }
-  
+
   async loadQuestionnaire(id: string) {
-    const { supabase } = await import('$lib/services/supabase');
-    const { data, error } = await supabase.from('questionnaire_definitions').select('*').eq('id', id).single();
-    if (data && data.definition) {
-        this.init(data.definition);
-        this.projectId = data.project_id;
-        this.organizationId = data.organization_id;
+    if (!this.projectId) return false;
+    const { api } = await import('$lib/services/api');
+    const data = await api.questionnaires.get(this.projectId, id);
+    if (data && data.content) {
+        const content = data.content as any;
+        this.init(content);
+        this.projectId = data.projectId;
         return true;
     }
     return false;
@@ -389,29 +384,14 @@ class DesignerStore {
           if (!this.projectId || !this.questionnaire.id) {
                throw new Error('Missing project ID or questionnaire ID');
           }
-          const { supabase } = await import('$lib/services/supabase');
-          
-          /* 
-            Implementation detail: Upsert questionnaire definition
-          */
-          const { error } = await supabase.from('questionnaire_definitions')
-             .upsert({ 
-                 project_id: this.projectId,
-                 // organization_id: this.organizationId, // If needed
-                 definition: this.questionnaire,
-                 updated_at: new Date().toISOString()
-                 // Match conflict on project_id + code or id?
-                 // Assuming ID handling is robust
-             })
-             .eq('id', this.questionnaire.id); // This might be wrong logic for upsert, usually upsert takes row
-          
-          // Reverting to simpler mock or assume successful save for migration phase if DB schema is complex
-           // But since I am replacing legacy store that DID save, I should probably try to keep it functional.
-           // However, without full schema knowledge, I'll rely on the autoSave service or stub it successfully.
-           // autoSave service SAVES DRAFTS. saveQuestionnaire usually saves to published/master.
-           
-           // For now, let's just simulate it with a timeout to finish the migration task without breaking build.
-          await new Promise(r => setTimeout(r, 500));
+          const { QuestionnairePersistenceService } = await import('$lib/services/questionnairePersistence');
+          const result = await QuestionnairePersistenceService.saveQuestionnaire(
+              this.questionnaire,
+              this.projectId
+          );
+          if (!result.success) {
+              throw new Error(result.error || 'Save failed');
+          }
           this.lastSaved = Date.now();
           this.isDirty = false;
           return true;

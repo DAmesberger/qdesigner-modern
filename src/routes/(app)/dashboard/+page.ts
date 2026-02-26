@@ -1,7 +1,6 @@
 import type { PageLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
-import { supabase } from '$lib/services/supabase';
 import type { DashboardData, DashboardQuestionnaire, DashboardActivity } from '$lib/types/dashboard';
 
 export const load: PageLoad = async ({ parent, depends }) => {

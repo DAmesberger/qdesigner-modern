@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createTestUser, setupTestOrganization } from '../helpers/auth';
+import { createTestUser, setupTestOrganization } from '../helpers/test-setup';
 
 test.describe('Data Analysis Workflow - Data Scientist Journey', () => {
   let dataScientist: any;

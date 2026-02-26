@@ -302,18 +302,21 @@ test.describe('Onboarding - Navigation', () => {
   });
   
   test('should redirect authenticated users from auth pages', async ({ page }) => {
-    // Mock authentication
+    // Mock authentication with new token format
     await page.addInitScript(() => {
-      window.localStorage.setItem('supabase.auth.token', JSON.stringify({
+      window.localStorage.setItem('auth_token', JSON.stringify({
         access_token: 'mock-token',
         refresh_token: 'mock-refresh',
-        user: { id: 'test-user-id', email: 'test@example.com' }
+      }));
+      window.localStorage.setItem('auth_user', JSON.stringify({
+        id: 'test-user-id',
+        email: 'test@example.com',
       }));
     });
-    
+
     // Try to access login
     await page.goto('/login');
-    
+
     // Should redirect to dashboard
     await expect(page).toHaveURL('/dashboard');
   });

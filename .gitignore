@@ -35,6 +35,7 @@ test-results/
 playwright-report/
 playwright/.cache/
 e2e/.cache/
+.auth/
 
 # IDE and Editor directories
 .vscode/*

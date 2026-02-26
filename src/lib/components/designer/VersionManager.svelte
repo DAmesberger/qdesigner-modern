@@ -4,7 +4,7 @@
   import { toast } from '$lib/stores/toast';
   import { page } from '$app/stores';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
-  import { supabase } from '$lib/services/supabase';
+  import { api } from '$lib/services/api';
 
   let { questionnaireId } = $props<{ questionnaireId: string }>();
 
@@ -38,14 +38,9 @@
     isLoadingVersions = true;
 
     try {
-      const { data, error } = await supabase
-        .from('questionnaire_definitions')
-        .select('id, version, changelog, created_at, created_by, published_at')
-        .eq('project_id', questionnaire.projectId)
-        .eq('code', questionnaire.code)
-        .order('version', { ascending: false });
-
-      if (error) throw error;
+      const data = await api.get<any[]>(
+        `/api/projects/${questionnaire.projectId}/questionnaires?code=${encodeURIComponent(questionnaire.code)}`
+      );
 
       versions = data || [];
     } catch (error) {
@@ -65,29 +60,24 @@
       // Create new version
       const newVersion = String(parseInt(currentVersion) + 1);
 
-      const { data, error } = await supabase
-        .from('questionnaire_definitions')
-        .insert({
-          organization_id: questionnaire.organizationId,
-          project_id: questionnaire.projectId,
-          name: questionnaire.name,
-          code: questionnaire.code,
+      const data = await api.questionnaires.create(questionnaire.projectId, {
+        name: questionnaire.name,
+        content: {
+          ...questionnaire,
           version: newVersion,
-          definition: questionnaire,
+          code: questionnaire.code,
+        },
+        settings: {
           changelog: {
             version: newVersion,
             changes: newVersionNote,
             timestamp: new Date().toISOString(),
             author: user.id,
           },
-          created_by: user.id,
           parent_version_id: questionnaireId,
           is_active: false,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
+        }
+      });
 
       // Update current questionnaire with new version
       designerStore.updateQuestionnaire({
@@ -114,16 +104,10 @@
 
   async function loadVersion(versionId: string) {
     try {
-      const { data, error } = await supabase
-        .from('questionnaire_definitions')
-        .select('*')
-        .eq('id', versionId)
-        .single();
-
-      if (error) throw error;
+      const data = await api.get<any>(`/api/questionnaires/${versionId}`);
 
       if (data) {
-        designerStore.importQuestionnaire(data.definition);
+        designerStore.importQuestionnaire(data.definition || data.content);
         toast.success(`Loaded version ${data.version}`);
         showVersionMenu = false;
       }
@@ -135,23 +119,8 @@
 
   async function publishVersion(versionId: string) {
     try {
-      // First unpublish all versions
-      await supabase
-        .from('questionnaire_definitions')
-        .update({ is_active: false, published_at: null })
-        .eq('project_id', questionnaire.projectId)
-        .eq('code', questionnaire.code);
-
-      // Then publish selected version
-      const { error } = await supabase
-        .from('questionnaire_definitions')
-        .update({
-          is_active: true,
-          published_at: new Date().toISOString(),
-        })
-        .eq('id', versionId);
-
-      if (error) throw error;
+      // Publish selected version via the API
+      await api.questionnaires.publish(questionnaire.projectId, versionId);
 
       toast.success('Version published successfully');
       await loadVersions();

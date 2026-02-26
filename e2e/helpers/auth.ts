@@ -1,4 +1,5 @@
 import { Page } from '@playwright/test';
+import { TEST_CONFIG } from './test-config';
 
 export interface TestUser {
   id: string;
@@ -20,56 +21,63 @@ export function generateTestEmail(prefix = 'test'): string {
  */
 export async function getVerificationCode(page: Page): Promise<string | null> {
   const logs: string[] = [];
-  
+
   // Set up console listener
   page.on('console', msg => {
     if (msg.type() === 'log') {
       logs.push(msg.text());
     }
   });
-  
+
   // Wait for verification code to be logged
   await page.waitForTimeout(1000);
-  
+
   // Find the verification code in logs
   const codeLog = logs.find(log => log.includes('VERIFICATION CODE'));
   if (!codeLog) {
     console.error('Verification code not found in console logs:', logs);
     return null;
   }
-  
+
   const match = codeLog.match(/\d{6}/);
   return match ? match[0] : null;
 }
 
 /**
- * Set up authenticated state for a user
+ * Set up authenticated state for a user by setting JWT tokens in localStorage.
+ * For most tests, prefer using the storageState from auth.setup.ts instead.
  */
 export async function authenticateUser(page: Page, user: TestUser): Promise<void> {
   await page.addInitScript((userData) => {
-    const authData = {
+    window.localStorage.setItem('auth_token', JSON.stringify({
       access_token: 'mock-token-' + userData.id,
       refresh_token: 'mock-refresh-' + userData.id,
-      user: {
-        id: userData.id,
-        email: userData.email,
-        user_metadata: {
-          full_name: userData.fullName
-        }
-      }
-    };
-    
-    // Set Supabase auth token
-    window.localStorage.setItem('supabase.auth.token', JSON.stringify(authData));
-    
+    }));
+    window.localStorage.setItem('auth_user', JSON.stringify({
+      id: userData.id,
+      email: userData.email,
+      full_name: userData.fullName,
+    }));
+
     // Also set organization data if provided
     if (userData.organizationId) {
       window.localStorage.setItem('current_organization', JSON.stringify({
         id: userData.organizationId,
-        role: userData.role || 'member'
+        role: userData.role || 'member',
       }));
     }
   }, user);
+}
+
+/**
+ * Login via the UI (navigates to /login, fills form, submits)
+ */
+export async function loginUser(page: Page, email: string, password: string): Promise<void> {
+  await page.goto('/login');
+  await page.fill('input[name="email"], input[type="email"]', email);
+  await page.fill('input[name="password"], input[type="password"]', password);
+  await page.click('button[type="submit"]');
+  await page.waitForURL(/\/(dashboard|onboarding)/, { timeout: TEST_CONFIG.timeouts.navigation });
 }
 
 /**
@@ -83,16 +91,16 @@ export async function completeSignup(
 ): Promise<string | null> {
   // Navigate to signup
   await page.goto('/signup');
-  
+
   // Fill form
   await page.fill('input[id="full-name"]', fullName);
   await page.fill('input[id="email"]', email);
   await page.fill('input[id="password"]', password);
   await page.check('input[id="agree-terms"]');
-  
+
   // Submit
   await page.click('button:has-text("Create Account")');
-  
+
   // Get verification code
   return await getVerificationCode(page);
 }
@@ -122,7 +130,7 @@ export async function signOut(page: Page): Promise<void> {
     window.localStorage.clear();
     window.sessionStorage.clear();
   });
-  
+
   // Navigate to login to ensure clean state
   await page.goto('/login');
 }
@@ -152,14 +160,14 @@ export async function mockInvitation(page: Page, invitation: {
           customMessage: invitation.customMessage,
           organization: {
             id: 'test-org-id',
-            name: invitation.organizationName
+            name: invitation.organizationName,
           },
           invitedBy: {
             full_name: invitation.inviterName,
-            email: 'inviter@example.com'
-          }
-        }
-      })
+            email: 'inviter@example.com',
+          },
+        },
+      }),
     });
   });
 }
@@ -171,7 +179,7 @@ export async function mockDomainAutoJoin(page: Page, domain: string, organizatio
   await page.route('/api/domains/check-auto-join', async route => {
     const request = route.request();
     const postData = request.postDataJSON();
-    
+
     if (postData?.email?.endsWith(`@${domain}`)) {
       await route.fulfill({
         status: 200,
@@ -180,16 +188,16 @@ export async function mockDomainAutoJoin(page: Page, domain: string, organizatio
           canAutoJoin: true,
           organizationId: 'auto-join-org-id',
           organizationName: organizationName,
-          domain: domain
-        })
+          domain: domain,
+        }),
       });
     } else {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          canAutoJoin: false
-        })
+          canAutoJoin: false,
+        }),
       });
     }
   });
@@ -199,7 +207,7 @@ export async function mockDomainAutoJoin(page: Page, domain: string, organizatio
  * Wait for navigation to complete
  */
 export async function waitForNavigation(page: Page, url: string | RegExp): Promise<void> {
-  await page.waitForURL(url, { timeout: 10000 });
+  await page.waitForURL(url, { timeout: TEST_CONFIG.timeouts.navigation });
 }
 
 /**

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createTestUser } from '../helpers/auth';
+import { createTestUser } from '../helpers/test-setup';
 
 test.describe('Organization Onboarding Journey', () => {
   test('complete organization setup from signup to first study', async ({ page, context }) => {

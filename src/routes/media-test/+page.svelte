@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { mediaService } from '$lib/services/mediaService';
-  import { supabase } from '$lib/services/supabase';
+  import { auth } from '$lib/services/auth';
+  import { api } from '$lib/services/api';
 
   let uploadStatus = '';
   let logs: string[] = [];
@@ -12,73 +13,34 @@
 
   onMount(async () => {
     // Check auth status
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) {
+    const user = await auth.getUser();
+    if (!user) {
       addLog('No session found. Please login first.');
       return;
     }
 
-    addLog(`Auth user ID: ${session.user.id}`);
-
-    // Get public user
-    const { data: publicUser, error: userError } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('auth_id', session.user.id)
-      .single();
-
-    if (userError) {
-      addLog(`Error getting public user: ${JSON.stringify(userError)}`);
-      return;
-    }
-
-    userId = publicUser.id;
-    addLog(`Public user ID: ${userId}`);
-
-    // Double-check the user exists
-    const { data: userCheck, error: checkError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', userId)
-      .single();
-
-    if (checkError || !userCheck) {
-      addLog(`ERROR: User ID ${userId} not found in users table!`);
-      addLog(`Check error: ${JSON.stringify(checkError)}`);
-    } else {
-      addLog(`User ID ${userId} confirmed in users table`);
-    }
+    userId = user.id;
+    addLog(`User ID: ${userId}`);
 
     // Get organization
-    const { data: orgMember, error: orgError } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', userId)
-      .single();
-
-    if (orgError) {
-      addLog(`Error getting organization: ${JSON.stringify(orgError)}`);
+    try {
+      const orgs = await api.organizations.list();
+      if (orgs.length > 0) {
+        organizationId = orgs[0].id;
+        addLog(`Organization ID: ${organizationId}`);
+      } else {
+        addLog('No organizations found');
+        return;
+      }
+    } catch (err) {
+      addLog(`Error getting organization: ${err}`);
       return;
     }
 
-    organizationId = orgMember.organization_id;
-    addLog(`Organization ID: ${organizationId}`);
-
     userInfo = {
-      authId: session.user.id,
       publicId: userId,
       organizationId,
     };
-
-    // Test bucket access
-    try {
-      const { data: buckets } = await supabase.storage.listBuckets();
-      addLog(`Available buckets: ${buckets?.map((b) => b.name).join(', ') || 'none visible'}`);
-    } catch (err) {
-      addLog(`Cannot list buckets: ${err}`);
-    }
   });
 
   function addLog(message: string) {
@@ -124,8 +86,7 @@
   {#if userInfo}
     <div class="mb-4 p-4 bg-gray-100 rounded">
       <h2 class="font-semibold mb-2">User Info:</h2>
-      <p>Auth ID: {userInfo.authId}</p>
-      <p>Public ID: {userInfo.publicId}</p>
+      <p>User ID: {userInfo.publicId}</p>
       <p>Organization ID: {userInfo.organizationId}</p>
     </div>
 
@@ -135,7 +96,7 @@
         <input
           type="file"
           bind:this={fileInput}
-          on:change={handleFileSelect}
+          onchange={handleFileSelect}
           accept="image/*,video/*,audio/*"
           class="block w-full mt-1 p-2 border rounded"
         />

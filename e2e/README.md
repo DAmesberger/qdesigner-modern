@@ -2,6 +2,28 @@
 
 This directory contains comprehensive end-to-end tests for the QDesigner Modern application using Playwright.
 
+## Architecture
+
+### Setup
+
+- **`setup/global-setup.ts`** - Runs before all tests. Waits for the Rust backend to be ready and verifies seeded test users can log in.
+- **`setup/auth.setup.ts`** - Playwright setup project. Logs in as each test role (admin, editor, viewer) through the actual login UI and saves browser storage state to `.auth/` files.
+
+### Auth Storage States
+
+Tests use per-role storage states saved by the auth setup project:
+
+- `.auth/admin.json` - Admin user session (admin@test.local)
+- `.auth/editor.json` - Editor user session (editor@test.local)
+- `.auth/viewer.json` - Viewer user session (viewer@test.local)
+
+### Helpers
+
+- **`helpers/test-config.ts`** - Centralized test configuration (users, URLs, timeouts, organization/project IDs)
+- **`helpers/api-client.ts`** - Direct API client for test data setup (bypasses frontend, talks to Rust backend)
+- **`helpers/auth.ts`** - Auth helper functions (login via UI, mock auth, signup flow)
+- **`helpers/test-setup.ts`** - Test setup utilities (create users, organizations, fixtures)
+
 ## Test Structure
 
 ### Authentication Tests (`auth.spec.ts`)
@@ -9,7 +31,6 @@ This directory contains comprehensive end-to-end tests for the QDesigner Modern 
 - Login form validation
 - Error handling for invalid credentials
 - User menu and sign out functionality
-- Session persistence
 
 ### Navigation Tests (`navigation.spec.ts`)
 - Sidebar navigation display and functionality
@@ -17,8 +38,6 @@ This directory contains comprehensive end-to-end tests for the QDesigner Modern 
 - Navigation between different sections
 - Mobile navigation menu
 - User dropdown menu
-- Click outside handling
-- Responsive behavior
 
 ### Designer Navigation Tests (`designer-navigation.spec.ts`)
 - Page header and questionnaire info display
@@ -26,38 +45,32 @@ This directory contains comprehensive end-to-end tests for the QDesigner Modern 
 - View mode switching (Structure/Visual)
 - Left sidebar tabs (Questions/Variables/Flow)
 - Properties panel tabs (Properties/Style/Script)
-- Empty states
-- Undo/redo functionality
-- Status bar
+- Empty states, undo/redo, status bar
 - Responsive design for tablet and mobile
 
 ### UI Components Tests (`ui-components.spec.ts`)
 - Button variants and states
-- Card components
-- Empty states
-- Tab navigation
-- Form inputs and styling
-- Toggle switches
-- Shadow system
-- Typography scale
-- Color consistency
+- Card components and empty states
+- Tab navigation and form inputs
+- Toggle switches, shadows, typography, colors
 
 ### WYSIWYG Designer Tests (`wysiwyg-designer.spec.ts`)
 - View mode toggling
 - Adding questions via drag and drop
-- Inline editing
-- Properties panel editing
-- Question deletion
-- Style editor
-- Script editor
-- Live test runner
+- Inline editing and properties panel editing
+- Style editor, script editor, live test runner
 - Drag and drop reordering
 
 ### User Journey Tests (`user-journey.spec.ts`)
 - Complete workflow from login to questionnaire creation
 - State persistence across reloads
 - Navigation error handling
-- State maintenance when switching view modes
+
+### Onboarding Tests (`onboarding.spec.ts`, `onboarding-advanced.spec.ts`)
+- Self-service signup flow
+- Invitation flows
+- Domain auto-join
+- Error handling, security, accessibility
 
 ## Running Tests
 
@@ -65,69 +78,67 @@ This directory contains comprehensive end-to-end tests for the QDesigner Modern 
 # Run all E2E tests
 pnpm test:e2e
 
-# Run specific test suites
-pnpm test:e2e:auth          # Authentication tests only
-pnpm test:e2e:navigation    # Navigation tests only
-pnpm test:e2e:components    # UI component tests only
-pnpm test:e2e:journey       # User journey tests only
+# Run specific test file
+npx playwright test e2e/auth.spec.ts
+
+# Run tests by project (role)
+npx playwright test --project=admin
+npx playwright test --project=unauthenticated
 
 # Run tests in UI mode (interactive)
-pnpm test:e2e:ui
+npx playwright test --ui
 
 # Run tests in headed mode (see browser)
-pnpm test:e2e:headed
+npx playwright test --headed
 
 # Debug tests
-pnpm test:e2e:debug
+npx playwright test --debug
 ```
-
-## Test Fixtures
-
-### Authentication Mock (`fixtures/auth.ts`)
-Helper functions to mock Supabase authentication for tests:
-- `mockAuth(page)` - Sets up authenticated user state
-- `clearAuth(page)` - Clears authentication state
 
 ## Writing New Tests
 
-1. Import necessary utilities:
+1. For authenticated tests, use the `storageState` from the setup project:
 ```typescript
 import { test, expect } from '@playwright/test';
-import { mockAuth } from './fixtures/auth';
-```
 
-2. Set up authentication if needed:
-```typescript
-test.beforeEach(async ({ page }) => {
-  await mockAuth(page);
-  await page.goto('/design');
+test.describe('My Feature', () => {
+  test.use({ storageState: '.auth/admin.json' });
+
+  test('should work when authenticated', async ({ page }) => {
+    await page.goto('/design');
+    // ...
+  });
 });
 ```
 
-3. Write descriptive test cases:
+2. For unauthenticated tests (login, signup), use no storageState:
 ```typescript
-test('should perform expected behavior', async ({ page }) => {
-  // Arrange
-  await page.click('button:has-text("Action")');
-  
-  // Act
-  const result = page.locator('.result');
-  
-  // Assert
-  await expect(result).toBeVisible();
+test.describe('Public Page', () => {
+  test('should show login form', async ({ page }) => {
+    await page.goto('/login');
+    // ...
+  });
 });
 ```
 
-## Best Practices
+3. For API-level test data setup, use the TestApiClient:
+```typescript
+import { createTestClient } from './helpers/api-client';
 
-1. **Use data-testid attributes** for reliable element selection when possible
-2. **Test user workflows** not implementation details
-3. **Keep tests independent** - each test should set up its own state
-4. **Use descriptive test names** that explain what is being tested
-5. **Test responsive behavior** with different viewports
-6. **Mock external dependencies** like authentication
-7. **Wait for elements** to be visible/ready before interacting
-8. **Use Page Object Model** for complex pages (future improvement)
+const api = createTestClient();
+await api.login('admin@test.local', 'TestPassword123!');
+await api.createProject(orgId, 'My Project', 'PROJ001');
+```
+
+## Test Users (seeded)
+
+| Role        | Email                  | Password          |
+|-------------|------------------------|--------------------|
+| Admin       | admin@test.local       | TestPassword123!   |
+| Editor      | editor@test.local      | TestPassword123!   |
+| Viewer      | viewer@test.local      | TestPassword123!   |
+| Participant | participant@test.local | TestPassword123!   |
+| Demo        | demo@example.com       | demo123456         |
 
 ## Debugging Failed Tests
 
@@ -140,7 +151,9 @@ test('should perform expected behavior', async ({ page }) => {
 ## CI/CD Integration
 
 Tests are configured to run in CI with:
-- Retry logic for flaky tests
-- Parallel execution disabled for consistency
+- Global setup verifies backend readiness before running tests
+- Auth setup project runs first, saving storage states
+- Retry logic for flaky tests (2 retries in CI)
+- Parallel execution disabled in CI for consistency
 - HTML reports generated
 - Trace recording on first retry

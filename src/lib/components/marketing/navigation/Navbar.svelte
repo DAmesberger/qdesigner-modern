@@ -5,7 +5,7 @@
 	import { goto } from '$app/navigation';
 	import Button from '$lib/components/common/Button.svelte';
 	import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
-	import { supabase } from '$lib/services/supabase';
+	import { auth } from '$lib/services/auth';
 	
 	interface Props {
 		scrollY?: number;
@@ -23,18 +23,18 @@
 	
 	onMount(() => {
 		// Check for authenticated user
-		supabase.auth.getUser().then(({ data: { user: currentUser } }) => {
+		auth.getUser().then((currentUser) => {
 			user = currentUser;
 		});
-		
+
 		// Listen for auth changes
-		const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-			user = session?.user ?? null;
+		const unsubscribe = auth.onAuthStateChange((currentUser) => {
+			user = currentUser;
 		});
-		
+
 		// Click outside handler
 		const handleClickOutside = (event: MouseEvent) => {
-			if (showUserMenu && !(event.target as Element).closest('[role="menu"]') && 
+			if (showUserMenu && !(event.target as Element).closest('[role="menu"]') &&
 				!(event.target as Element).closest('button[aria-label="User menu"]')) {
 				showUserMenu = false;
 			}
@@ -45,17 +45,17 @@
 				showResourcesMenu = false;
 			}
 		};
-		
+
 		document.addEventListener('click', handleClickOutside);
-		
+
 		return () => {
-			subscription.unsubscribe();
+			unsubscribe();
 			document.removeEventListener('click', handleClickOutside);
 		};
 	});
-	
+
 	async function handleSignOut() {
-		await supabase.auth.signOut();
+		await auth.signOut();
 		await goto('/');
 	}
 

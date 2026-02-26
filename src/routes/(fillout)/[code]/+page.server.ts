@@ -1,51 +1,23 @@
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
-import { createServerClient } from '@supabase/ssr';
 
-export const load: PageServerLoad = async ({ params, cookies, url }) => {
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+export const load: PageServerLoad = async ({ params, url, fetch }) => {
 	const { code } = params;
 
-	// Create Supabase client
-	const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:8000';
-	const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
-	
-	const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-		cookies: {
-			getAll: () => cookies.getAll(),
-			setAll: (cookiesToSet) => {
-				cookiesToSet.forEach(({ name, value, options }) => {
-					cookies.set(name, value, { ...options, path: '/' });
-				});
-			}
-		}
-	});
-
 	try {
-		// Fetch questionnaire by access code
-		const { data: questionnaire, error: fetchError } = await supabase
-			.from('questionnaire_definitions')
-			.select(`
-				id,
-				name,
-				code,
-				version,
-				definition,
-				variables,
-				global_scripts,
-				status,
-				is_active,
-				start_date,
-				end_date,
-				project_id,
-				project:projects(id, name)
-			`)
-			.eq('code', code.toUpperCase())
-			.eq('status', 'published')
-			.single();
+		// Fetch questionnaire by access code from the Rust backend
+		const response = await fetch(`${API_URL}/api/questionnaires/by-code/${code.toUpperCase()}`);
 
-		if (fetchError || !questionnaire) {
-			throw error(404, 'Questionnaire not found');
+		if (!response.ok) {
+			if (response.status === 404) {
+				throw error(404, 'Questionnaire not found');
+			}
+			throw error(response.status, 'Failed to load questionnaire');
 		}
+
+		const questionnaire = await response.json();
 
 		// Validate questionnaire is active
 		if (!questionnaire.is_active) {
@@ -65,18 +37,19 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
 		// Check for existing participant session
 		const participantId = url.searchParams.get('pid');
 		const sessionId = url.searchParams.get('sid');
-		
+
 		let existingSession = null;
 		if (sessionId) {
-			const { data: session } = await supabase
-				.from('sessions')
-				.select('*')
-				.eq('id', sessionId)
-				.eq('questionnaire_id', questionnaire.id)
-				.single();
-			
-			if (session && session.status !== 'completed') {
-				existingSession = session;
+			try {
+				const sessionResponse = await fetch(`${API_URL}/api/sessions/${sessionId}`);
+				if (sessionResponse.ok) {
+					const session = await sessionResponse.json();
+					if (session.questionnaire_id === questionnaire.id && session.status !== 'completed') {
+						existingSession = session;
+					}
+				}
+			} catch {
+				// Session not found or error - proceed without existing session
 			}
 		}
 

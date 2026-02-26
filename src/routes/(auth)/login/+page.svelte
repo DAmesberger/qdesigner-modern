@@ -5,8 +5,8 @@
   import Input from '$lib/components/ui/forms/Input.svelte';
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
-  import { supabase } from '$lib/services/supabase';
-  import { handleAuthUser } from '$lib/database/auth-helpers';
+  import { auth } from '$lib/services/auth';
+  import { api } from '$lib/services/api';
 
   let email = '';
   let password = '';
@@ -20,31 +20,24 @@
     error = null;
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { session, user: signedInUser, error: signInError } = await auth.signIn(email, password);
 
       if (signInError) {
-        error = signInError.message;
+        error = signInError;
         loading = false;
         return;
       }
 
-      if (data.user) {
-        console.log('Login successful, user:', data.user.email);
-        // Sync user with our database and get organizations
-        const userInfo = await handleAuthUser(data.user);
-        console.log('User info:', userInfo);
+      if (signedInUser) {
+        console.log('Login successful, user:', signedInUser.email);
 
         // Check if user has any organizations
-        if (userInfo.organizations.length === 0) {
+        const orgs = await api.organizations.list();
+        if (orgs.length === 0) {
           console.log('No organizations, redirecting to onboarding');
-          // Redirect to organization setup
           await goto('/onboarding/organization');
         } else {
           console.log('Has organizations, redirecting to dashboard');
-          // Redirect to dashboard
           await goto('/dashboard');
         }
       }
@@ -59,18 +52,10 @@
     loading = true;
     error = null;
 
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: '', // Can be collected during onboarding
-        },
-      },
-    });
+    const { error: signUpError } = await auth.signUp(email, password, '');
 
     if (signUpError) {
-      error = signUpError.message;
+      error = signUpError;
       loading = false;
     } else {
       successMessage = 'Check your email for the confirmation link!';

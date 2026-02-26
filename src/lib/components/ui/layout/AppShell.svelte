@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { supabase } from '$lib/services/supabase';
+  import { auth } from '$lib/services/auth';
   import Button from '../../common/Button.svelte';
   import ThemeToggle from '../ThemeToggle.svelte';
   import { onMount } from 'svelte';
@@ -37,7 +37,7 @@
   });
   
   async function handleSignOut() {
-    await supabase.auth.signOut();
+    await auth.signOut();
     goto('/login');
   }
   

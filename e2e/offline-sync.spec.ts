@@ -9,7 +9,7 @@ import {
   verifySyncInProgress,
   monitorSyncOperations
 } from '../tests/helpers/offline';
-import { createTestUser, loginUser } from './helpers/auth';
+import { createTestUser, loginUser } from './helpers/test-setup';
 
 test.describe('Offline/Online Sync E2E Tests', () => {
   let testUser: any;

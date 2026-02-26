@@ -6,7 +6,7 @@
   import Card from '$lib/components/common/Card.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
-  import { supabase } from '$lib/services/supabase';
+  import { auth } from '$lib/services/auth';
   import {
     getInvitationByToken,
     acceptInvitation,
@@ -31,18 +31,11 @@
     }
 
     // Check if user is authenticated
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await auth.getUser();
     isAuthenticated = !!user;
 
     if (user) {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('auth_id', user.id)
-        .single();
-      currentUser = userData;
+      currentUser = user;
     }
 
     // Load invitation
@@ -75,8 +68,7 @@
     error = null;
 
     const { success, error: acceptError } = await acceptInvitation(
-      invitation.token,
-      currentUser.id
+      invitation.token
     );
 
     if (success) {
@@ -99,8 +91,7 @@
     error = null;
 
     const { success, error: declineError } = await declineInvitation(
-      invitation.token,
-      currentUser.id
+      invitation.token
     );
 
     if (success) {
@@ -231,7 +222,7 @@
               variant="secondary"
               class="w-full"
               onclick={async () => {
-                await supabase.auth.signOut();
+                await auth.signOut();
                 invitation && goto(`/login?redirect=/invite/${invitation.token}`);
               }}
             >

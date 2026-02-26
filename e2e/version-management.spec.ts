@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createTestUser, loginUser } from './helpers/auth';
+import { createTestUser, loginUser } from './helpers/test-setup';
 
 test.describe('Version Management E2E Tests', () => {
   let testUser: any;

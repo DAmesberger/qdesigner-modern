@@ -1,0 +1,347 @@
+use axum::{extract::State, Json};
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+use validator::Validate;
+
+use crate::auth::models::*;
+use crate::auth::password;
+use crate::auth::session;
+use crate::error::ApiError;
+use crate::state::AppState;
+
+/// POST /api/auth/register
+pub async fn register(
+    State(state): State<AppState>,
+    Json(body): Json<RegisterRequest>,
+) -> Result<Json<AuthResponse>, ApiError> {
+    body.validate()
+        .map_err(|e| ApiError::Validation(e.to_string()))?;
+
+    // Check if email already exists
+    let existing = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)",
+    )
+    .bind(&body.email)
+    .fetch_one(&state.pool)
+    .await?;
+
+    if existing {
+        return Err(ApiError::Conflict("Email already registered".into()));
+    }
+
+    let hash = password::hash_password(&body.password)?;
+    let full_name = body
+        .full_name
+        .unwrap_or_else(|| body.email.split('@').next().unwrap_or("User").to_string());
+
+    let user_id = Uuid::new_v4();
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (id, email, full_name, password_hash, email_verified)
+        VALUES ($1, $2, $3, $4, false)
+        "#,
+    )
+    .bind(user_id)
+    .bind(&body.email)
+    .bind(&full_name)
+    .bind(&hash)
+    .execute(&state.pool)
+    .await?;
+
+    // Issue tokens
+    let roles = vec!["user".to_string()];
+    let (access_token, _claims) = state
+        .jwt_manager
+        .create_access_token(user_id, &body.email, roles.clone())?;
+    let (refresh_token, refresh_claims) = state.jwt_manager.create_refresh_token(user_id)?;
+
+    session::store_refresh_token(
+        &state.pool,
+        user_id,
+        refresh_claims.jti,
+        DateTime::<Utc>::from_timestamp(refresh_claims.exp, 0).unwrap_or_else(Utc::now),
+    )
+    .await?;
+
+    Ok(Json(AuthResponse {
+        access_token,
+        refresh_token,
+        token_type: "Bearer".into(),
+        expires_in: state.jwt_manager.access_expiry_secs(),
+        user: UserInfo {
+            id: user_id,
+            email: body.email,
+            full_name: Some(full_name),
+            avatar_url: None,
+            roles,
+        },
+    }))
+}
+
+/// POST /api/auth/login
+pub async fn login(
+    State(state): State<AppState>,
+    Json(body): Json<LoginRequest>,
+) -> Result<Json<AuthResponse>, ApiError> {
+    body.validate()
+        .map_err(|e| ApiError::Validation(e.to_string()))?;
+
+    let user = sqlx::query_as::<_, UserRow>(
+        r#"
+        SELECT id, email, full_name, avatar_url, password_hash, email_verified,
+               created_at, updated_at
+        FROM users
+        WHERE email = $1 AND deleted_at IS NULL
+        "#,
+    )
+    .bind(&body.email)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::Unauthorized("Invalid email or password".into()))?;
+
+    let hash = user
+        .password_hash
+        .as_deref()
+        .ok_or_else(|| ApiError::Unauthorized("Invalid email or password".into()))?;
+
+    if !password::verify_password(&body.password, hash)? {
+        return Err(ApiError::Unauthorized("Invalid email or password".into()));
+    }
+
+    // Collect roles from org memberships
+    let roles: Vec<String> = sqlx::query_scalar(
+        r#"
+        SELECT DISTINCT role FROM organization_members
+        WHERE user_id = $1 AND status = 'active'
+        "#,
+    )
+    .bind(user.id)
+    .fetch_all(&state.pool)
+    .await
+    .unwrap_or_default();
+
+    let roles = if roles.is_empty() {
+        vec!["user".to_string()]
+    } else {
+        roles
+    };
+
+    // Update last login
+    sqlx::query("UPDATE users SET last_login_at = NOW(), login_count = COALESCE(login_count, 0) + 1 WHERE id = $1")
+        .bind(user.id)
+        .execute(&state.pool)
+        .await?;
+
+    let (access_token, _claims) = state
+        .jwt_manager
+        .create_access_token(user.id, &user.email, roles.clone())?;
+    let (refresh_token, refresh_claims) = state.jwt_manager.create_refresh_token(user.id)?;
+
+    session::store_refresh_token(
+        &state.pool,
+        user.id,
+        refresh_claims.jti,
+        DateTime::<Utc>::from_timestamp(refresh_claims.exp, 0).unwrap_or_else(Utc::now),
+    )
+    .await?;
+
+    Ok(Json(AuthResponse {
+        access_token,
+        refresh_token,
+        token_type: "Bearer".into(),
+        expires_in: state.jwt_manager.access_expiry_secs(),
+        user: UserInfo {
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name,
+            avatar_url: user.avatar_url,
+            roles,
+        },
+    }))
+}
+
+/// POST /api/auth/refresh
+pub async fn refresh(
+    State(state): State<AppState>,
+    Json(body): Json<RefreshRequest>,
+) -> Result<Json<AuthResponse>, ApiError> {
+    let claims = state
+        .jwt_manager
+        .verify_refresh_token(&body.refresh_token)?;
+
+    // Check if the refresh token is still valid
+    if !session::is_refresh_token_valid(&state.pool, claims.jti).await? {
+        return Err(ApiError::Unauthorized("Refresh token revoked".into()));
+    }
+
+    // Revoke the old refresh token (rotation)
+    session::revoke_refresh_token(&state.pool, claims.jti).await?;
+
+    // Look up the user
+    let user = sqlx::query_as::<_, UserRow>(
+        r#"
+        SELECT id, email, full_name, avatar_url, password_hash, email_verified,
+               created_at, updated_at
+        FROM users WHERE id = $1 AND deleted_at IS NULL
+        "#,
+    )
+    .bind(claims.sub)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::Unauthorized("User not found".into()))?;
+
+    let roles: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT role FROM organization_members WHERE user_id = $1 AND status = 'active'",
+    )
+    .bind(user.id)
+    .fetch_all(&state.pool)
+    .await
+    .unwrap_or_default();
+
+    let roles = if roles.is_empty() {
+        vec!["user".to_string()]
+    } else {
+        roles
+    };
+
+    let (access_token, _new_claims) = state
+        .jwt_manager
+        .create_access_token(user.id, &user.email, roles.clone())?;
+    let (refresh_token, new_refresh_claims) = state.jwt_manager.create_refresh_token(user.id)?;
+
+    session::store_refresh_token(
+        &state.pool,
+        user.id,
+        new_refresh_claims.jti,
+        DateTime::<Utc>::from_timestamp(new_refresh_claims.exp, 0).unwrap_or_else(Utc::now),
+    )
+    .await?;
+
+    Ok(Json(AuthResponse {
+        access_token,
+        refresh_token,
+        token_type: "Bearer".into(),
+        expires_in: state.jwt_manager.access_expiry_secs(),
+        user: UserInfo {
+            id: user.id,
+            email: user.email,
+            full_name: user.full_name,
+            avatar_url: user.avatar_url,
+            roles,
+        },
+    }))
+}
+
+/// POST /api/auth/logout
+pub async fn logout(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // Revoke the access token JTI
+    session::revoke_access_token(&state.pool, user.jti).await?;
+
+    // Revoke all refresh tokens for this user
+    session::revoke_all_user_tokens(&state.pool, user.user_id).await?;
+
+    Ok(Json(serde_json::json!({ "message": "Logged out" })))
+}
+
+/// GET /api/auth/me
+pub async fn me(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+) -> Result<Json<UserInfo>, ApiError> {
+    let row = sqlx::query_as::<_, UserRow>(
+        r#"
+        SELECT id, email, full_name, avatar_url, password_hash, email_verified,
+               created_at, updated_at
+        FROM users WHERE id = $1
+        "#,
+    )
+    .bind(user.user_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
+
+    Ok(Json(UserInfo {
+        id: row.id,
+        email: row.email,
+        full_name: row.full_name,
+        avatar_url: row.avatar_url,
+        roles: user.roles,
+    }))
+}
+
+/// POST /api/auth/verify-email
+pub async fn verify_email(
+    State(state): State<AppState>,
+    Json(body): Json<VerifyEmailRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // Look up the verification token
+    let row = sqlx::query_as::<_, (Uuid,)>(
+        r#"
+        SELECT user_id FROM email_verifications
+        WHERE token = $1 AND expires_at > NOW() AND used_at IS NULL
+        "#,
+    )
+    .bind(&body.token)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::BadRequest("Invalid or expired verification token".into()))?;
+
+    // Mark email as verified
+    sqlx::query("UPDATE users SET email_verified = true, updated_at = NOW() WHERE id = $1")
+        .bind(row.0)
+        .execute(&state.pool)
+        .await?;
+
+    // Mark token as used
+    sqlx::query("UPDATE email_verifications SET used_at = NOW() WHERE token = $1")
+        .bind(&body.token)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "message": "Email verified" })))
+}
+
+/// POST /api/auth/password-reset
+pub async fn password_reset(
+    State(state): State<AppState>,
+    Json(body): Json<PasswordResetRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    body.validate()
+        .map_err(|e| ApiError::Validation(e.to_string()))?;
+
+    // Always return success to prevent email enumeration.
+    let user = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL",
+    )
+    .bind(&body.email)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    if let Some(user_id) = user {
+        let token = Uuid::new_v4().to_string();
+        let expires_at = Utc::now() + chrono::Duration::hours(1);
+
+        sqlx::query(
+            r#"
+            INSERT INTO password_resets (user_id, token, expires_at)
+            VALUES ($1, $2, $3)
+            "#,
+        )
+        .bind(user_id)
+        .bind(&token)
+        .bind(expires_at)
+        .execute(&state.pool)
+        .await?;
+
+        // In production, send the email here via lettre.
+        tracing::info!("Password reset token for {}: {token}", body.email);
+    }
+
+    Ok(Json(
+        serde_json::json!({ "message": "If the email exists, a reset link has been sent" }),
+    ))
+}

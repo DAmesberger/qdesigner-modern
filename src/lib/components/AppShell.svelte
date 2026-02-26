@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { supabase } from '$lib/services/supabase';
+  import { auth } from '$lib/services/auth';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
 
@@ -17,7 +17,7 @@
       sidebarCollapsed = true;
     }
 
-    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+    auth.getUser().then((authUser) => {
       if (authUser) {
         user = authUser;
         // Generate avatar from email
@@ -27,7 +27,7 @@
   });
 
   async function handleSignOut() {
-    await supabase.auth.signOut();
+    await auth.signOut();
     goto('/login');
   }
 

@@ -1,43 +1,36 @@
 import { redirect } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
 import { browser } from '$app/environment';
-import { supabase } from '$lib/services/supabase';
+import { auth } from '$lib/services/auth';
+import { api } from '$lib/services/api';
 
 export const load: PageLoad = async ({ url }) => {
   // Check if already logged in
   if (browser) {
-    const { data: { session } } = await supabase.auth.getSession();
-    
+    const session = await auth.getSession();
+
     if (session) {
-      // Check if user has an organization
-      const { data: publicUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('auth_id', session.user.id)
-        .single();
-      
-      if (publicUser) {
-        const { data: orgMembers } = await supabase
-          .from('organization_members')
-          .select('organization_id')
-          .eq('user_id', publicUser.id)
-          .limit(1);
-        
-        if (orgMembers && orgMembers.length > 0) {
+      try {
+        const orgs = await api.organizations.list();
+
+        if (orgs.length > 0) {
           // Has organization, go to dashboard
           throw redirect(303, '/dashboard');
         } else {
           // No organization, go to onboarding
           throw redirect(303, '/onboarding/organization');
         }
-      } else {
-        // No public user record - this is an orphaned session
-        // Sign out to clear it and stay on login page
-        await supabase.auth.signOut();
+      } catch (err) {
+        // Re-throw redirects
+        if (err && typeof err === 'object' && 'status' in err) {
+          throw err;
+        }
+        // API error likely means invalid session - sign out and stay on login
+        await auth.signOut();
         return {};
       }
     }
   }
-  
+
   return {};
 };

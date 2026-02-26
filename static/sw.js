@@ -30,8 +30,7 @@ const CACHE_STRATEGIES = {
   ],
   // Network first for API calls
   networkFirst: [
-    /^https:\/\/.*\.supabase\.co\/rest\//,
-    /^https:\/\/.*\.supabase\.co\/auth\//,
+    /\/api\//,
   ],
   // Stale while revalidate for everything else
   staleWhileRevalidate: [
@@ -206,7 +205,6 @@ function isTrustedOrigin(origin) {
   const trustedOrigins = [
     'https://fonts.googleapis.com',
     'https://fonts.gstatic.com',
-    /^https:\/\/.*\.supabase\.co$/,
   ];
   
   return trustedOrigins.some(trusted => {

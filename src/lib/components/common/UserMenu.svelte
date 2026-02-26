@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { supabase } from '$lib/services/supabase';
+  import { auth } from '$lib/services/auth';
   import { clickOutside } from '$lib/utils/clickOutside';
 
   export let user: { email: string; full_name?: string } | null = null;
@@ -17,7 +17,7 @@
 
   async function handleSignOut() {
     try {
-      await supabase.auth.signOut();
+      await auth.signOut();
       goto('/login');
     } catch (error) {
       console.error('Error signing out:', error);

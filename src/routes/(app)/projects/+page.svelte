@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { Plus, FolderOpen, Users, Calendar, ChevronRight } from 'lucide-svelte';
-  import { supabase } from '$lib/services/supabase';
+  import { api } from '$lib/services/api';
   import { Modal } from '$lib/components/ui';
   import type { PageData } from './$types';
 
@@ -20,51 +20,11 @@
     if (!newProjectName.trim() || !newProjectCode.trim()) return;
 
     try {
-      // Get the current session
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
-        console.error('No session found');
-        return;
-      }
-
-      // Get the public user ID
-      const { data: publicUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('auth_id', session.user.id)
-        .single();
-
-      if (!publicUser) {
-        console.error('Public user not found');
-        return;
-      }
-
-      // Create the project directly with Supabase client
-      const { data: project, error } = await supabase
-        .from('projects')
-        .insert({
-          organization_id: data.organizationId,
-          name: newProjectName,
-          code: newProjectCode.toUpperCase(),
-          description: newProjectDescription,
-          created_by: publicUser.id,
-          status: 'active',
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating project:', error);
-        return;
-      }
-
-      // Add creator as project owner
-      await supabase.from('project_members').insert({
-        project_id: project.id,
-        user_id: publicUser.id,
-        role: 'owner',
+      const project = await api.projects.create({
+        organizationId: data.organizationId,
+        name: newProjectName,
+        code: newProjectCode.toUpperCase(),
+        description: newProjectDescription,
       });
 
       showCreateModal = false;
@@ -72,7 +32,7 @@
         window.location.href = `/projects/${project.id}`;
       }
     } catch (error) {
-      console.error('Error in createProject:', error);
+      console.error('Error creating project:', error);
     }
   }
 

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createTestUser, setupTestOrganization } from '../helpers/auth';
+import { createTestUser, setupTestOrganization } from '../helpers/test-setup';
 
 test.describe('Collaboration and Multi-Tenant Scenarios', () => {
   test('real-time collaboration between team members', async ({ browser }) => {

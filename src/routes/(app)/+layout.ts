@@ -1,105 +1,70 @@
 import { redirect } from '@sveltejs/kit';
 import type { LayoutLoad } from './$types';
-import { supabase } from '$lib/services/supabase';
+import { auth } from '$lib/services/auth';
+import { api } from '$lib/services/api';
 import { browser } from '$app/environment';
 
 export const load: LayoutLoad = async ({ url, route, depends }) => {
   // This ensures the load function re-runs when invalidateAll() is called
   depends('app:organization');
-  
+
   // Only check auth on client side
   if (browser) {
-    let { data: { session } } = await supabase.auth.getSession();
-    
+    let session = await auth.getSession();
+
     // Check for test mode auto-login
     if (!session && import.meta.env.DEV) {
       const testMode = localStorage.getItem('qdesigner-test-mode');
       if (testMode === 'true') {
-        console.log('🧪 Test mode enabled - auto-logging in as demo user');
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: 'demo@example.com',
-          password: 'demo123456'
-        });
-        
+        console.log('Test mode enabled - auto-logging in as demo user');
+        const { session: newSession, error } = await auth.signIn('demo@example.com', 'demo123456');
+
         if (error) {
           console.error('Test mode auto-login failed:', error);
           // Clear test mode on failure
           localStorage.removeItem('qdesigner-test-mode');
         } else {
-          session = data.session;
-          console.log('✅ Test mode auto-login successful');
+          session = newSession;
+          console.log('Test mode auto-login successful');
         }
       }
     }
-    
+
     // Special handling for routes that need client-side auth
     const protectedRoutes = ['/designer', '/admin', '/dashboard'];
     const isProtectedRoute = protectedRoutes.some(r => url.pathname.startsWith(r));
-    
+
     if (!session && isProtectedRoute) {
       throw redirect(303, '/login');
     }
-    
+
     // If we have a session, get the user's organization
     let organizationId = null;
-    let publicUser = null;
-    
+
     if (session?.user) {
-      console.log('Session user ID (auth):', session.user.id);
-      
-      // First get the public user record using auth ID
-      const { data: publicUserData, error: userError } = await supabase
-        .from('users')
-        .select('id, auth_id, email, full_name')
-        .eq('auth_id', session.user.id)
-        .single();
-      
-      if (userError) {
-        console.error('Error fetching public user:', userError);
-        // If we can't find a public user for this auth session, the session is orphaned
-        // This can happen after database resets during development
-        // Sign out the user to clear the invalid session
-        if (userError.code === 'PGRST116') {
-          console.warn('Orphaned auth session detected, signing out user');
-          await supabase.auth.signOut();
-          throw redirect(303, '/login');
+      console.log('Session user ID:', session.user.id);
+
+      try {
+        const orgs = await api.organizations.list();
+        if (orgs.length > 0) {
+          organizationId = orgs[0].id;
         }
-      } else if (publicUserData) {
-        console.log('Public user ID:', publicUserData.id);
-        publicUser = publicUserData;
-        
-        // Now get the organization membership using the public user ID
-        const { data: orgMembers, error: orgError } = await supabase
-          .from('organization_members')
-          .select('organization_id')
-          .eq('user_id', publicUserData.id)
-          .limit(1);
-        
-        if (orgError) {
-          console.error('Error fetching organization member:', orgError);
-        } else if (orgMembers && orgMembers.length > 0) {
-          console.log('Organization member data:', orgMembers[0]);
-          const firstMember = orgMembers[0];
-          if (firstMember) {
-            organizationId = firstMember.organization_id;
-          }
-        }
+      } catch (err) {
+        console.error('Error fetching organizations:', err);
       }
     }
-    
+
     return {
       session,
-      user: publicUser || session?.user, // Use public user if available
-      publicUser, // Also provide public user
+      user: session?.user ?? null,
       organizationId
     };
   }
-  
+
   // During SSR, return empty data - will be handled client-side
   return {
     session: null,
     user: null,
-    publicUser: null,
     organizationId: null
   };
 };

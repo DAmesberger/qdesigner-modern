@@ -3,7 +3,7 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { supabase } from '$lib/services/supabase';
+  import { auth } from '$lib/services/auth';
   import Spinner from '$lib/components/ui/feedback/Spinner.svelte';
   import Toast from '$lib/components/ui/Toast.svelte';
   import OfflineIndicator from '$lib/components/ui/OfflineIndicator.svelte';
@@ -47,18 +47,19 @@
     // Request persistent storage for better offline experience
     requestPersistentStorage();
 
+    // Initialize auth service
+    auth.init();
+
     // For client-side routes, auth is handled in their own layouts
     loading = false;
 
     // Listen for auth changes
     try {
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, session) => {
+      const unsubscribe = auth.onAuthStateChange(({ event, session }) => {
         user = session?.user ?? null;
       });
 
-      return () => subscription.unsubscribe();
+      return unsubscribe;
     } catch (error) {
       console.error('Error setting up auth listener:', error as Error);
       return () => {}; // Return empty cleanup function

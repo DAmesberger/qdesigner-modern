@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { supabase } from '$lib/services/supabase';
+  import { auth } from '$lib/services/auth';
+  import { api } from '$lib/services/api';
   import { createInvitation, revokeInvitation, type Invitation } from '$lib/services/invitations';
   import Card from '$lib/components/common/Card.svelte';
   import Button from '$lib/components/common/Button.svelte';
@@ -45,45 +46,20 @@
   async function loadData() {
     try {
       // Get current user
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await auth.getUser();
       if (!user) return;
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('*')
-        .eq('auth_id', user.id)
-        .single();
+      currentUser = user as unknown as User;
 
-      currentUser = userData;
-
-      // Get user's organization (assuming they're viewing their active org)
-      const { data: membership } = await supabase
-        .from('organization_members')
-        .select(
-          `
-          organization_id,
-          role,
-          organizations (
-            id,
-            name,
-            slug
-          )
-        `
-        )
-        .eq('user_id', currentUser!.id)
-        .eq('status', 'active')
-        .single();
-
-      if (!membership || !['owner', 'admin'].includes(membership.role)) {
+      // Get user's organizations
+      const orgs = await api.organizations.list();
+      if (!orgs || orgs.length === 0) {
         error = 'You do not have permission to manage invitations';
         loading = false;
         return;
       }
 
-      // Type assertion needed because Supabase types might be incorrect
-      currentOrg = membership.organizations as unknown as Organization;
+      currentOrg = orgs[0] as unknown as Organization;
 
       // Load invitations
       await loadInvitations();
@@ -98,34 +74,24 @@
   async function loadInvitations() {
     if (!currentOrg) return;
 
-    const { data, error: fetchError } = await supabase
-      .from('organization_invitations')
-      .select(
-        `
-        *,
-        invited_by:users!organization_invitations_invited_by_fkey (
-          email,
-          full_name
-        )
-      `
-      )
-      .eq('organization_id', currentOrg.id)
-      .order('created_at', { ascending: false });
-
-    if (fetchError) {
-      console.error('Error loading invitations:', fetchError);
-      error = 'Failed to load invitations';
-    } else {
-      // Transform snake_case to camelCase for consistency
+    try {
+      const data = await api.organizations.invitations.list(currentOrg.id);
       invitations = (data || []).map((inv) => ({
-        ...inv,
-        organizationId: inv.organization_id,
-        expiresAt: inv.expires_at,
-        customMessage: inv.custom_message,
-        createdAt: inv.created_at,
-        acceptedAt: inv.accepted_at,
-        invitedBy: inv.invited_by,
+        id: inv.id,
+        organizationId: inv.organizationId,
+        email: inv.email,
+        role: inv.role,
+        token: inv.token,
+        status: inv.status,
+        expiresAt: inv.expiresAt,
+        createdAt: inv.createdAt,
+        acceptedAt: inv.acceptedAt,
+        customMessage: inv.customMessage ?? undefined,
+        invitedBy: inv.invitedBy,
       }));
+    } catch (err) {
+      console.error('Error loading invitations:', err);
+      error = 'Failed to load invitations';
     }
   }
 
@@ -141,7 +107,6 @@
       email: inviteEmail,
       role: inviteRole,
       customMessage: inviteMessage || undefined,
-      invitedBy: currentUser.id,
     });
 
     if (inviteError) {
@@ -162,8 +127,8 @@
     if (!currentUser) return;
 
     const { success: revokeSuccess, error: revokeError } = await revokeInvitation(
-      invitationId,
-      currentUser.id
+      currentOrg!.id,
+      invitationId
     );
 
     if (revokeError) {
