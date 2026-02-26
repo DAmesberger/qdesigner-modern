@@ -38,7 +38,7 @@
       // If we have an existing session, skip welcome/consent
       if (data.existingSession) {
         session = data.existingSession;
-        if (session.status === 'in_progress') {
+        if (session.status === 'in_progress' || session.status === 'active') {
           currentScreen = 'runtime';
           await initializeRuntime();
         }

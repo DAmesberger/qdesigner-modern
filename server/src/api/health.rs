@@ -19,13 +19,11 @@ pub async fn ready(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     // Check Redis (optional)
     let redis_ok = if let Some(ref redis) = state.redis {
         match redis.get_multiplexed_async_connection().await {
-            Ok(mut conn) => {
-                redis::cmd("PING")
-                    .query_async::<String>(&mut conn)
-                    .await
-                    .map(|pong| pong == "PONG")
-                    .unwrap_or(false)
-            }
+            Ok(mut conn) => redis::cmd("PING")
+                .query_async::<String>(&mut conn)
+                .await
+                .map(|pong| pong == "PONG")
+                .unwrap_or(false),
             Err(_) => false,
         }
     } else {

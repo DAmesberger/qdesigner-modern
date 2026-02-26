@@ -50,10 +50,7 @@ impl RbacManager {
 
     /// Return all organisation IDs + roles for a user.
     #[allow(dead_code)]
-    pub async fn get_user_org_roles(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Vec<(Uuid, String)>, ApiError> {
+    pub async fn get_user_org_roles(&self, user_id: Uuid) -> Result<Vec<(Uuid, String)>, ApiError> {
         let rows = sqlx::query_as::<_, (Uuid, String)>(
             r#"
             SELECT organization_id, role
@@ -98,7 +95,9 @@ impl RbacManager {
         required: &ProjectRole,
     ) -> Result<bool, ApiError> {
         let role = self.get_project_role(user_id, project_id).await?;
-        Ok(role.map_or(false, |r| project_role_level(&r) >= project_role_level(required)))
+        Ok(role.map_or(false, |r| {
+            project_role_level(&r) >= project_role_level(required)
+        }))
     }
 
     // ── Permission checks ────────────────────────────────────────────
@@ -136,12 +135,11 @@ impl RbacManager {
         }
 
         // Fall back to org-level role
-        let org_id = sqlx::query_scalar::<_, Uuid>(
-            "SELECT organization_id FROM projects WHERE id = $1",
-        )
-        .bind(project_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let org_id =
+            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         if let Some(oid) = org_id {
             return self.has_org_permission(user_id, oid, perm).await;

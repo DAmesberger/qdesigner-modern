@@ -31,6 +31,17 @@ export interface RuntimeConfig {
   participantId?: string;
   onComplete?: (session: QuestionnaireSession) => void;
   onProgress?: (pageIndex: number, totalPages: number) => void;
+  onQuestionPresented?: (event: QuestionPresentedEvent) => void;
+}
+
+export interface QuestionPresentedEvent {
+  questionId: string;
+  questionType: string;
+  pageId?: string;
+  pageIndex: number;
+  itemIndex: number;
+  category: ModuleMetadata['category'];
+  timestamp: number;
 }
 
 export class QuestionnaireRuntime {
@@ -275,6 +286,7 @@ export class QuestionnaireRuntime {
     if (responseType === 'multiple') return 'array';
     if (responseType === 'single' || responseType === 'text' || responseType === 'keypress')
       return 'string';
+    if (responseType === 'none') return 'string';
     if (responseType === 'click') return 'object';
 
     return 'object';
@@ -345,6 +357,15 @@ export class QuestionnaireRuntime {
     }
 
     this.currentQuestion = item;
+    this.config.onQuestionPresented?.({
+      questionId: item.id,
+      questionType: item.type,
+      pageId: this.currentPage?.id,
+      pageIndex: this.currentPageIndex,
+      itemIndex: this.currentItemIndex,
+      category: metadata.category,
+      timestamp: performance.now(),
+    });
 
     switch (metadata.category) {
       case 'question':
@@ -482,7 +503,7 @@ export class QuestionnaireRuntime {
     };
 
     this.session.responses.push(response);
-    this.updateQuestionVariables(question, response, runtimeResult.isCorrect);
+    this.updateQuestionVariables(question, response, runtimeResult.isCorrect ?? null);
 
     await this.questionPresenter.clear();
 

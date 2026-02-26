@@ -36,11 +36,7 @@ impl S3StorageService {
         let client = Client::from_conf(config);
 
         // Ensure the bucket exists
-        let exists = client
-            .head_bucket()
-            .bucket(bucket)
-            .send()
-            .await;
+        let exists = client.head_bucket().bucket(bucket).send().await;
 
         if exists.is_err() {
             client
@@ -79,11 +75,7 @@ impl S3StorageService {
     }
 
     /// Generate a presigned GET URL valid for the given duration.
-    pub async fn presigned_url(
-        &self,
-        key: &str,
-        expires_in: Duration,
-    ) -> Result<String, ApiError> {
+    pub async fn presigned_url(&self, key: &str, expires_in: Duration) -> Result<String, ApiError> {
         let presign_config = PresigningConfig::builder()
             .expires_in(expires_in)
             .build()

@@ -18,12 +18,11 @@ pub async fn register(
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
     // Check if email already exists
-    let existing = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)",
-    )
-    .bind(&body.email)
-    .fetch_one(&state.pool)
-    .await?;
+    let existing =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+            .bind(&body.email)
+            .fetch_one(&state.pool)
+            .await?;
 
     if existing {
         return Err(ApiError::Conflict("Email already registered".into()));
@@ -51,9 +50,10 @@ pub async fn register(
 
     // Issue tokens
     let roles = vec!["user".to_string()];
-    let (access_token, _claims) = state
-        .jwt_manager
-        .create_access_token(user_id, &body.email, roles.clone())?;
+    let (access_token, _claims) =
+        state
+            .jwt_manager
+            .create_access_token(user_id, &body.email, roles.clone())?;
     let (refresh_token, refresh_claims) = state.jwt_manager.create_refresh_token(user_id)?;
 
     session::store_refresh_token(
@@ -133,9 +133,10 @@ pub async fn login(
         .execute(&state.pool)
         .await?;
 
-    let (access_token, _claims) = state
-        .jwt_manager
-        .create_access_token(user.id, &user.email, roles.clone())?;
+    let (access_token, _claims) =
+        state
+            .jwt_manager
+            .create_access_token(user.id, &user.email, roles.clone())?;
     let (refresh_token, refresh_claims) = state.jwt_manager.create_refresh_token(user.id)?;
 
     session::store_refresh_token(
@@ -205,9 +206,10 @@ pub async fn refresh(
         roles
     };
 
-    let (access_token, _new_claims) = state
-        .jwt_manager
-        .create_access_token(user.id, &user.email, roles.clone())?;
+    let (access_token, _new_claims) =
+        state
+            .jwt_manager
+            .create_access_token(user.id, &user.email, roles.clone())?;
     let (refresh_token, new_refresh_claims) = state.jwt_manager.create_refresh_token(user.id)?;
 
     session::store_refresh_token(
@@ -364,11 +366,13 @@ pub async fn verify_code(
     }
 
     // Mark code as used
-    sqlx::query("UPDATE email_verification_codes SET used_at = NOW() WHERE email = $1 AND code = $2")
-        .bind(&body.email)
-        .bind(&body.code)
-        .execute(&state.pool)
-        .await?;
+    sqlx::query(
+        "UPDATE email_verification_codes SET used_at = NOW() WHERE email = $1 AND code = $2",
+    )
+    .bind(&body.email)
+    .bind(&body.code)
+    .execute(&state.pool)
+    .await?;
 
     // Mark user email as verified
     sqlx::query("UPDATE users SET email_verified = true, updated_at = NOW() WHERE email = $1")

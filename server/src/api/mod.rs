@@ -28,10 +28,8 @@ pub fn router(state: AppState) -> Router {
         .route("/verify-email/resend", post(auth::send_verification_code))
         .route("/password-reset", post(auth::password_reset));
 
-    let user_routes = Router::new().route(
-        "/me",
-        get(users::get_profile).patch(users::update_profile),
-    );
+    let user_routes =
+        Router::new().route("/me", get(users::get_profile).patch(users::update_profile));
 
     let org_routes = Router::new()
         .route(
@@ -77,7 +75,16 @@ pub fn router(state: AppState) -> Router {
             get(questionnaires::get_questionnaire)
                 .patch(questionnaires::update_questionnaire)
                 .delete(questionnaires::delete_questionnaire),
+        )
+        .route(
+            "/{id}/questionnaires/{qid}/publish",
+            post(questionnaires::publish_questionnaire),
         );
+
+    let questionnaire_routes = Router::new().route(
+        "/by-code/{code}",
+        get(questionnaires::get_questionnaire_by_code),
+    );
 
     let session_routes = Router::new()
         .route("/", post(sessions::create_session))
@@ -85,14 +92,13 @@ pub fn router(state: AppState) -> Router {
             "/{id}",
             get(sessions::get_session).patch(sessions::update_session),
         )
-        .route("/{id}/responses", post(sessions::submit_response));
+        .route("/{id}/responses", post(sessions::submit_response))
+        .route("/{id}/events", post(sessions::submit_events))
+        .route("/{id}/variables", post(sessions::upsert_variable));
 
     let media_routes = Router::new()
         .route("/", get(media::list_media).post(media::upload_media))
-        .route(
-            "/{id}",
-            get(media::get_media).delete(media::delete_media),
-        );
+        .route("/{id}", get(media::get_media).delete(media::delete_media));
 
     let ws_route = Router::new().route("/ws", get(crate::websocket::handler::ws_upgrade));
 
@@ -103,6 +109,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/users", user_routes)
         .nest("/api/organizations", org_routes)
         .nest("/api/projects", project_routes)
+        .nest("/api/questionnaires", questionnaire_routes)
         .nest("/api/sessions", session_routes)
         .nest("/api/media", media_routes)
         .nest("/api", ws_route)

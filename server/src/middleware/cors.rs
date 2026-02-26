@@ -6,10 +6,7 @@ use tower_http::cors::CorsLayer;
 
 /// Build a CORS layer from the configured origin list.
 pub fn cors_layer(origins: &[String]) -> CorsLayer {
-    let allowed: Vec<HeaderValue> = origins
-        .iter()
-        .filter_map(|o| o.parse().ok())
-        .collect();
+    let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
 
     CorsLayer::new()
         .allow_origin(allowed)

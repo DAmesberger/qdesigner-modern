@@ -36,6 +36,7 @@
     "test:e2e": "playwright test --project=smoke-chromium",
     "test:e2e:smoke": "playwright test --project=smoke-chromium",
     "test:e2e:regression": "playwright test --project=regression-chromium",
+    "test:e2e:fullstack": "playwright test --project=fullstack-chromium",
     "test:e2e:regression:all": "playwright test --project=regression-chromium --project=regression-firefox --project=regression-webkit",
     "test:e2e:all": "playwright test",
     "test:e2e:ui": "playwright test --project=smoke-chromium --ui",

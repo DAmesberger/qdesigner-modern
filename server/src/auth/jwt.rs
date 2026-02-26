@@ -75,8 +75,7 @@ impl JwtManager {
 
     /// Verify and decode a refresh token.
     pub fn verify_refresh_token(&self, token: &str) -> Result<RefreshClaims, ApiError> {
-        let data =
-            decode::<RefreshClaims>(token, &self.refresh_decoding, &Validation::default())?;
+        let data = decode::<RefreshClaims>(token, &self.refresh_decoding, &Validation::default())?;
         Ok(data.claims)
     }
 

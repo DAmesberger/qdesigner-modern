@@ -4,7 +4,7 @@ const isCI = Boolean(process.env.CI);
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: ['**/*.smoke.spec.ts', '**/*.regression.spec.ts'],
+  testMatch: ['**/*.smoke.spec.ts', '**/*.regression.spec.ts', '**/*.fullstack.spec.ts'],
   fullyParallel: !isCI,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
@@ -43,6 +43,13 @@ export default defineConfig({
       grep: /@regression/,
       use: {
         ...devices['Desktop Safari'],
+      },
+    },
+    {
+      name: 'fullstack-chromium',
+      grep: /@fullstack/,
+      use: {
+        ...devices['Desktop Chrome'],
       },
     },
   ],

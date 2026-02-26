@@ -28,6 +28,19 @@ pub struct Questionnaire {
     pub published_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct QuestionnaireByCode {
+    pub id: Uuid,
+    pub name: String,
+    pub definition: serde_json::Value,
+    pub is_active: bool,
+    pub start_date: Option<chrono::NaiveDate>,
+    pub end_date: Option<chrono::NaiveDate>,
+    pub project: serde_json::Value,
+    pub variables: serde_json::Value,
+    pub global_scripts: serde_json::Value,
+}
+
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateQuestionnaireRequest {
     #[validate(length(min = 1, max = 255))]
@@ -58,11 +71,64 @@ pub struct QuestionnaireListQuery {
 
 #[derive(Deserialize)]
 pub struct ProjectQuestionnairePath {
-    pub id: Uuid,       // project_id
-    pub qid: Uuid,      // questionnaire_id
+    pub id: Uuid,  // project_id
+    pub qid: Uuid, // questionnaire_id
+}
+
+#[derive(Debug, Deserialize)]
+pub struct QuestionnaireCodePath {
+    pub code: String,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────
+
+/// GET /api/questionnaires/by-code/:code
+pub async fn get_questionnaire_by_code(
+    State(state): State<AppState>,
+    Path(path): Path<QuestionnaireCodePath>,
+) -> Result<Json<QuestionnaireByCode>, ApiError> {
+    let code = path.code.trim().to_uppercase();
+    if code.len() < 6
+        || code.len() > 12
+        || !code
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric())
+    {
+        return Err(ApiError::NotFound("Questionnaire not found".into()));
+    }
+
+    let questionnaire = sqlx::query_as::<_, QuestionnaireByCode>(
+        r#"
+        SELECT
+            q.id,
+            q.name,
+            q.content AS definition,
+            (q.status = 'published' AND p.status = 'active') AS is_active,
+            p.start_date,
+            p.end_date,
+            jsonb_build_object('id', p.id, 'name', p.name) AS project,
+            COALESCE(q.content->'variables', '{}'::jsonb) AS variables,
+            COALESCE(
+                q.content->'global_scripts',
+                q.content->'globalScripts',
+                '{}'::jsonb
+            ) AS global_scripts
+        FROM questionnaire_definitions q
+        JOIN projects p ON p.id = q.project_id
+        WHERE UPPER(SUBSTRING(REPLACE(q.id::text, '-', ''), 1, 8)) = $1
+          AND q.deleted_at IS NULL
+          AND p.deleted_at IS NULL
+          AND q.status = 'published'
+        LIMIT 1
+        "#,
+    )
+    .bind(&code)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+
+    Ok(Json(questionnaire))
+}
 
 /// GET /api/projects/:id/questionnaires
 pub async fn list_questionnaires(
@@ -274,6 +340,32 @@ pub async fn update_questionnaire(
     Ok(Json(q))
 }
 
+/// POST /api/projects/:id/questionnaires/:qid/publish
+pub async fn publish_questionnaire(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(path): Path<ProjectQuestionnairePath>,
+) -> Result<Json<Questionnaire>, ApiError> {
+    verify_project_write_access(&state, user.user_id, path.id).await?;
+
+    let questionnaire = sqlx::query_as::<_, Questionnaire>(
+        r#"
+        UPDATE questionnaire_definitions
+        SET status = 'published', published_at = NOW(), updated_at = NOW()
+        WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
+        RETURNING id, project_id, name, description, version, content, status,
+                  settings, created_by, created_at, updated_at, published_at
+        "#,
+    )
+    .bind(path.qid)
+    .bind(path.id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+
+    Ok(Json(questionnaire))
+}
+
 /// DELETE /api/projects/:id/questionnaires/:qid  (soft delete)
 pub async fn delete_questionnaire(
     State(state): State<AppState>,
@@ -294,7 +386,9 @@ pub async fn delete_questionnaire(
         return Err(ApiError::NotFound("Questionnaire not found".into()));
     }
 
-    Ok(Json(serde_json::json!({ "message": "Questionnaire deleted" })))
+    Ok(Json(
+        serde_json::json!({ "message": "Questionnaire deleted" }),
+    ))
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -350,7 +444,9 @@ async fn verify_project_write_access(
     .await?;
 
     if !has_write {
-        return Err(ApiError::Forbidden("No write access to this project".into()));
+        return Err(ApiError::Forbidden(
+            "No write access to this project".into(),
+        ));
     }
     Ok(())
 }

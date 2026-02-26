@@ -43,10 +43,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
     let send_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
             // Only forward if the connection is subscribed to this channel.
-            if ws_state
-                .is_subscribed(&forward_conn_id, &msg.channel)
-                .await
-            {
+            if ws_state.is_subscribed(&forward_conn_id, &msg.channel).await {
                 let text = serde_json::to_string(&msg).unwrap_or_default();
                 if sender.send(Message::Text(text.into())).await.is_err() {
                     break;
@@ -99,8 +96,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
 #[derive(serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum ClientCommand {
-    Subscribe { channel: String },
-    Unsubscribe { channel: String },
+    Subscribe {
+        channel: String,
+    },
+    Unsubscribe {
+        channel: String,
+    },
     Publish {
         channel: String,
         event: String,

@@ -4,6 +4,7 @@ Playwright tests are split into two lanes:
 
 - `@smoke`: fast PR gate (Chromium only)
 - `@regression`: broader designer/runtime coverage (Chromium/Firefox/WebKit)
+- `@fullstack`: real backend creation + publish + participant fillout (Chromium)
 
 Legacy specs were moved to `e2e/legacy/` and are excluded from default runs.
 
@@ -11,6 +12,7 @@ Legacy specs were moved to `e2e/legacy/` and are excluded from default runs.
 
 - `e2e/smoke/` - critical path tests
 - `e2e/regression/` - deeper behavior tests
+- `e2e/fullstack/` - backend-provisioned end-to-end flows
 - `e2e/page-objects/` - reusable UI helpers
 - `e2e/fixtures/` - deterministic test data helpers
 - `e2e/setup/` - legacy auth/bootstrap setup project (not used by default lanes)
@@ -22,6 +24,7 @@ Legacy specs were moved to `e2e/legacy/` and are excluded from default runs.
 pnpm test:e2e                 # smoke lane (PR default)
 pnpm test:e2e:smoke           # same as above
 pnpm test:e2e:regression      # regression on Chromium
+pnpm test:e2e:fullstack       # fullstack on Chromium
 pnpm test:e2e:regression:all  # regression on Chromium + Firefox + WebKit
 pnpm test:e2e:all             # all configured projects
 ```
@@ -45,5 +48,7 @@ Use `data-testid` selectors for stability. Core selectors used by smoke/regressi
 - Designer question insertion
 - Preview-based fillout interaction
 - Command palette + responsive designer shell behavior
+- Runtime flow-control, randomization, programmability, answer-option, and chart-feedback scenarios
+- Fullstack questionnaire creation/publish/fillout path via real backend APIs
 
 Default smoke/regression lanes are intentionally auth-free and use mock project route `test-project-1` for deterministic PR stability.

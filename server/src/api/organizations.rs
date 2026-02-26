@@ -138,12 +138,11 @@ pub async fn create_organization(
     let slug = body.slug.unwrap_or_else(|| slugify(&body.name));
 
     // Check slug uniqueness
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM organizations WHERE slug = $1)",
-    )
-    .bind(&slug)
-    .fetch_one(&state.pool)
-    .await?;
+    let exists =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM organizations WHERE slug = $1)")
+            .bind(&slug)
+            .fetch_one(&state.pool)
+            .await?;
 
     if exists {
         return Err(ApiError::Conflict("Organization slug already taken".into()));
@@ -198,7 +197,9 @@ pub async fn get_organization(
     .await?;
 
     if !is_member {
-        return Err(ApiError::Forbidden("Not a member of this organization".into()));
+        return Err(ApiError::Forbidden(
+            "Not a member of this organization".into(),
+        ));
     }
 
     let org = sqlx::query_as::<_, Organization>(
@@ -298,7 +299,9 @@ pub async fn delete_organization(
         .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
         .await?
     {
-        return Err(ApiError::Forbidden("Only owner can delete organization".into()));
+        return Err(ApiError::Forbidden(
+            "Only owner can delete organization".into(),
+        ));
     }
 
     sqlx::query("UPDATE organizations SET deleted_at = NOW() WHERE id = $1")
@@ -306,7 +309,9 @@ pub async fn delete_organization(
         .execute(&state.pool)
         .await?;
 
-    Ok(Json(serde_json::json!({ "message": "Organization deleted" })))
+    Ok(Json(
+        serde_json::json!({ "message": "Organization deleted" }),
+    ))
 }
 
 // ── Members ──────────────────────────────────────────────────────────
@@ -429,13 +434,11 @@ pub async fn remove_member(
         }
     }
 
-    sqlx::query(
-        "DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2",
-    )
-    .bind(org_id)
-    .bind(target_id)
-    .execute(&state.pool)
-    .await?;
+    sqlx::query("DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2")
+        .bind(org_id)
+        .bind(target_id)
+        .execute(&state.pool)
+        .await?;
 
     Ok(Json(serde_json::json!({ "message": "Member removed" })))
 }

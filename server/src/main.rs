@@ -122,7 +122,5 @@ async fn main() {
         .expect("Failed to bind");
 
     tracing::info!("Listening on {addr}");
-    axum::serve(listener, app)
-        .await
-        .expect("Server error");
+    axum::serve(listener, app).await.expect("Server error");
 }

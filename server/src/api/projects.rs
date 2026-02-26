@@ -167,13 +167,11 @@ pub async fn create_project(
     .await?;
 
     // Add creator as project owner
-    sqlx::query(
-        "INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'owner')",
-    )
-    .bind(project.id)
-    .bind(user.user_id)
-    .execute(&state.pool)
-    .await?;
+    sqlx::query("INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'owner')")
+        .bind(project.id)
+        .bind(user.user_id)
+        .execute(&state.pool)
+        .await?;
 
     Ok((axum::http::StatusCode::CREATED, Json(project)))
 }
@@ -225,13 +223,12 @@ pub async fn update_project(
         .await?
     {
         // Fall back to org-level check
-        let org_id = sqlx::query_scalar::<_, Uuid>(
-            "SELECT organization_id FROM projects WHERE id = $1",
-        )
-        .bind(project_id)
-        .fetch_optional(&state.pool)
-        .await?
-        .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
+        let org_id =
+            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&state.pool)
+                .await?
+                .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
 
         if !state
             .rbac
@@ -312,13 +309,12 @@ pub async fn delete_project(
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     // Require project owner or org admin
-    let org_id = sqlx::query_scalar::<_, Uuid>(
-        "SELECT organization_id FROM projects WHERE id = $1",
-    )
-    .bind(project_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
+    let org_id =
+        sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(&state.pool)
+            .await?
+            .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
 
     let is_project_owner = state
         .rbac

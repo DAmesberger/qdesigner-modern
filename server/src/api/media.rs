@@ -57,7 +57,9 @@ pub async fn list_media(
         )
         .await?
     {
-        return Err(ApiError::Forbidden("Not a member of this organization".into()));
+        return Err(ApiError::Forbidden(
+            "Not a member of this organization".into(),
+        ));
     }
 
     let limit = q.limit.unwrap_or(50).min(100);
@@ -104,14 +106,13 @@ pub async fn upload_media(
                     .text()
                     .await
                     .map_err(|e| ApiError::BadRequest(format!("Invalid field: {e}")))?;
-                organization_id =
-                    Some(text.parse().map_err(|_| ApiError::BadRequest("Invalid UUID".into()))?);
+                organization_id = Some(
+                    text.parse()
+                        .map_err(|_| ApiError::BadRequest("Invalid UUID".into()))?,
+                );
             }
             "file" => {
-                let filename = field
-                    .file_name()
-                    .unwrap_or("upload.bin")
-                    .to_string();
+                let filename = field.file_name().unwrap_or("upload.bin").to_string();
                 let content_type = field
                     .content_type()
                     .unwrap_or("application/octet-stream")
@@ -126,8 +127,8 @@ pub async fn upload_media(
         }
     }
 
-    let org_id =
-        organization_id.ok_or_else(|| ApiError::BadRequest("organization_id is required".into()))?;
+    let org_id = organization_id
+        .ok_or_else(|| ApiError::BadRequest("organization_id is required".into()))?;
     let (filename, bytes, content_type) =
         file_data.ok_or_else(|| ApiError::BadRequest("file is required".into()))?;
 
