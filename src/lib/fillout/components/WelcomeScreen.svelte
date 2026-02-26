@@ -27,14 +27,16 @@
   });
 </script>
 
-<div class="welcome-screen">
+<div class="welcome-screen" data-testid="fillout-welcome-screen">
   <Card class="welcome-card">
     <div class="welcome-content">
       {#if projectName}
         <p class="project-name">{projectName}</p>
       {/if}
 
-      <h1 class="welcome-title">{questionnaire.name || 'Welcome'}</h1>
+      <h1 class="welcome-title" data-testid="fillout-welcome-title">
+        {questionnaire.name || 'Welcome'}
+      </h1>
 
       {#if questionnaire.description}
         <p class="welcome-description">{questionnaire.description}</p>
@@ -77,7 +79,13 @@
       {/if}
 
       <div class="actions">
-        <Button variant="default" size="lg" onclick={onStart} class="start-button">
+        <Button
+          variant="default"
+          size="lg"
+          onclick={onStart}
+          class="start-button"
+          data-testid="fillout-start-button"
+        >
           Start Questionnaire
         </Button>
       </div>

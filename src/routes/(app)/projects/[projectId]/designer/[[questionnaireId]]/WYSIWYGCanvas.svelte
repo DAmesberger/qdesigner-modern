@@ -73,23 +73,54 @@
     designerStore.updateQuestion(questionId, updates);
   }
 
+  function addQuestionOfType(type = 'text-input') {
+    const firstPage = designerStore.questionnaire.pages[0];
+    const firstBlock = firstPage?.blocks?.[0];
+    const target =
+      designerStore.currentBlock?.id ||
+      firstBlock?.id ||
+      designerStore.currentPage?.id ||
+      firstPage?.id;
+    if (!target) return;
+    designerStore.addQuestion(target, type);
+  }
+
+  function resolveDroppedQuestionType(payload: Record<string, any>): string | null {
+    if (payload.type === 'new-question' && payload.questionType) {
+      return payload.questionType;
+    }
+
+    if (payload.type === 'new-module' && payload.moduleType) {
+      return payload.moduleType;
+    }
+
+    return null;
+  }
+
   function handleDrop(e: DragEvent) {
     e.preventDefault();
     const data = e.dataTransfer?.getData('application/json');
-    if (data && designerStore.currentBlock) {
+    if (!data) return;
+
+    try {
       const parsedData = JSON.parse(data);
-      if (parsedData.type === 'new-question' && parsedData.questionType) {
-        designerStore.addQuestion(designerStore.currentBlock.id, parsedData.questionType);
-      }
+      const type = resolveDroppedQuestionType(parsedData);
+      if (type) addQuestionOfType(type);
+    } catch {
+      // Ignore invalid drag payload.
     }
   }
 </script>
 
-<div class="h-full overflow-auto {uiTheme.components.designerCanvas.base}">
+<div
+  class="h-full overflow-auto {uiTheme.components.designerCanvas.base}"
+  data-testid="designer-wysiwyg-canvas"
+>
   <!-- Canvas Controls -->
   <div
     class="sticky top-0 z-10 {uiTheme.semantic.bgBase} {uiTheme.semantic
       .borderDefault} border-b px-4 py-2 flex items-center justify-between backdrop-blur-sm bg-opacity-95"
+    data-testid="designer-canvas-toolbar"
   >
     <div class="flex items-center gap-2">
       <!-- Zoom Controls -->
@@ -102,6 +133,7 @@
           disabled={zoomLevel === 50}
           class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost} disabled:opacity-50"
           aria-label="Zoom out"
+          data-testid="designer-canvas-zoom-out"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -114,13 +146,15 @@
         </button>
         <span
           class="px-2 py-1 text-sm {uiTheme.semantic.textPrimary} border-x {uiTheme.semantic
-            .borderDefault}">{zoomLevel}%</span
+            .borderDefault}"
+          data-testid="designer-canvas-zoom-level">{zoomLevel}%</span
         >
         <button
           onclick={zoomIn}
           disabled={zoomLevel === 150}
           class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost} disabled:opacity-50"
           aria-label="Zoom in"
+          data-testid="designer-canvas-zoom-in"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
@@ -138,6 +172,7 @@
         class="p-1.5 {uiTheme.semantic.textSecondary} {uiTheme.semantic.interactive
           .ghost} rounded-md"
         aria-label="Toggle grid"
+        data-testid="designer-canvas-grid-toggle"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -154,6 +189,7 @@
       onclick={() => (showTestRunner = true)}
       class="flex items-center gap-1.5 px-3 py-1.5 {uiTheme.components.button.variants
         .outline} {uiTheme.components.button.sizes.sm} rounded-md"
+      data-testid="designer-live-test-button"
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -187,6 +223,7 @@
         aria-label="Canvas area"
         ondrop={handleDrop}
         ondragover={(e) => e.preventDefault()}
+        data-testid="designer-page-canvas"
       >
         <!-- Page Header -->
         <div class="px-8 pt-8 pb-4 border-b {uiTheme.semantic.borderDefault}">
@@ -223,6 +260,7 @@
                   value={designerStore.currentBlock?.id}
                   onchange={(e) => designerStore.setCurrentBlock(e.currentTarget.value)}
                   class="text-sm px-3 py-1 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
+                  data-testid="designer-block-select"
                 >
                   {#each designerStore.currentPageBlocks as block}
                     <option value={block.id}>
@@ -240,7 +278,10 @@
         <div class="px-8 py-6">
           {#if items.length === 0 || !designerStore.currentBlock}
             <!-- Empty State -->
-            <div class="flex flex-col items-center justify-center py-20 text-center">
+            <div
+              class="flex flex-col items-center justify-center py-20 text-center"
+              data-testid="designer-empty-state"
+            >
               <div class="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-4">
                 <svg
                   class="w-10 h-10 text-muted-foreground"
@@ -258,19 +299,27 @@
               </div>
               <h3 class="text-base font-medium text-foreground mb-1">Add your first question</h3>
               <p class="text-sm text-muted-foreground max-w-sm mb-4">
-                Drag a question type from the left sidebar or click the + button to get started
+                Drag from the left palette, or add one now.
               </p>
-              <button
-                class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-                onclick={() => {
-                  // Open the module palette or add a default question
-                  // For now, we'll just log to show it's clickable
-                  console.log('Add question button clicked - implement module palette opening');
-                }}
-                title="Add Question"
-              >
-                + Add Question
-              </button>
+
+              <div class="flex items-center gap-2">
+                <button
+                  class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                  onclick={() => addQuestionOfType('text-input')}
+                  title="Add text question"
+                  data-testid="designer-empty-add-text-question"
+                >
+                  + Text Question
+                </button>
+                <button
+                  class="px-4 py-2 border border-border rounded-md text-foreground hover:bg-accent transition-colors"
+                  onclick={() => designerStore.toggleCommandPalette(true)}
+                  title="Open command palette"
+                  data-testid="designer-empty-open-command-palette"
+                >
+                  Open Commands
+                </button>
+              </div>
             </div>
           {:else}
             <!-- Questions List -->
@@ -291,9 +340,13 @@
                 }}
                 onconsider={handleDndConsider}
                 onfinalize={handleDndFinalize}
+                data-testid="designer-question-list"
               >
                 {#each items as item (item.id)}
-                  <div animate:flip={{ duration: 300 }}>
+                  <div
+                    animate:flip={{ duration: 300 }}
+                    data-testid={`designer-question-${item.id}`}
+                  >
                     {#if item && item.question}
                       {@const isDisplay = [
                         'text-display',

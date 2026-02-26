@@ -1,21 +1,16 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { page } from '$app/stores';
   import { designerStore } from '$lib/stores/designer.svelte';
   import { autoSave } from '$lib/services/autoSave.svelte';
   import type { PageData } from './$types';
 
-  // Components
   import DesignerHeader from './components/DesignerHeader.svelte';
   import LeftSidebar from './components/LeftSidebar.svelte';
   import RightSidebar from './components/RightSidebar.svelte';
   import PreviewModal from '$lib/components/designer/PreviewModal.svelte';
   import WYSIWYGCanvas from './WYSIWYGCanvas.svelte';
   import StructuralCanvas from './StructuralCanvas.svelte';
-  // TODO: Create these components
-  // import PreviewModal from '$lib/components/designer/PreviewModal.svelte';
-  // import CrashRecovery from '$lib/components/ui/CrashRecovery.svelte';
-  // import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
+  import DesignerCommandPalette from './components/DesignerCommandPalette.svelte';
 
   interface Props {
     data: PageData;
@@ -23,207 +18,144 @@
 
   let { data }: Props = $props();
 
-  console.log('[INIT] Props received:', { hasData: !!data, dataType: typeof data });
-  if (data) {
-    console.log('[INIT] Data keys:', Object.keys(data));
-    console.log('[INIT] Full data:', data);
-  }
-
-  // Extract data with derived (reactive in Svelte 5)
-  const user = $derived(data?.user);
-  const publicUser = $derived(data?.publicUser);
-  const organizationId = $derived(data?.organizationId);
-  const projectId = $derived(data?.projectId);
-  const questionnaire = $derived(data?.questionnaire);
-  const project = $derived(data?.project);
-
-  // State
-  let viewMode = $state<'structural' | 'wysiwyg'>('wysiwyg');
-  let activeTab = $state<'blocks' | 'questions' | 'variables' | 'flow'>('blocks');
-  let showPreview = $state(false);
-  let showCommandPalette = $state(false);
-
-  // Initialize
-  onMount(async () => {
-    console.log('[Designer Page] Mounting with data:', {
-      organizationId,
-      projectId,
-      userId: publicUser?.id || user?.id,
-      questionnaire,
-      dataKeys: data ? Object.keys(data) : 'no data',
-    });
-    console.log('[DEBUG] Full questionnaire data:', questionnaire);
-    console.log('[DEBUG] Page data:', data);
-
-    // Import and register modules
+  async function initializeDesigner() {
     try {
       const { registerAllModules } = await import('$lib/modules');
       await registerAllModules();
-      console.log('[Designer Page] Modules registered');
-    } catch (err) {
-      console.error('[Designer Page] Failed to load modules:', err);
+    } catch (error) {
+      console.error('Failed to register modules:', error);
     }
 
+    designerStore.restoreUiFromStorage();
     designerStore.initVariableEngine();
 
-    // Initialize store with context
-    // Use public user ID for database operations
-    if (publicUser?.id) {
-      designerStore.setUserId(publicUser.id);
-    } else if (user?.id) {
-      // Fallback to auth user ID if public user not available
-      console.warn('Public user not available, using auth user ID');
-      designerStore.setUserId(user.id);
+    const userId = (data as any)?.publicUser?.id || data?.user?.id;
+    if (userId) designerStore.setUserId(userId);
+
+    if (data?.organizationId) {
+      designerStore.setOrganizationId(data.organizationId);
     }
 
-    if (organizationId) {
-      designerStore.setOrganizationId(organizationId);
+    if (data?.projectId) {
+      designerStore.setProjectId(data.projectId);
     }
 
-    if (projectId) {
-      designerStore.setProjectId(projectId);
-    }
-
-    // Load existing questionnaire or create new
+    const questionnaire = (data as any)?.questionnaire;
     if (questionnaire?.isNew) {
-      // Create new questionnaire with project context
       await designerStore.createNewQuestionnaire({
         name: questionnaire.name,
         description: questionnaire.description,
-        projectId: projectId,
-        organizationId: organizationId,
+        projectId: data?.projectId,
+        organizationId: data?.organizationId,
       });
-    } else if (questionnaire && !questionnaire.isNew) {
-      // Load existing questionnaire
-      console.log('[DEBUG] Loading questionnaire from definition:', questionnaire);
+    } else if (questionnaire) {
       designerStore.loadQuestionnaireFromDefinition(questionnaire);
-      // Ensure context is set from page data
-      if (organizationId) {
-        designerStore.setOrganizationId(organizationId);
+    }
+
+    autoSave.start();
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    const isMeta = event.ctrlKey || event.metaKey;
+
+    if (isMeta) {
+      const key = event.key.toLowerCase();
+      if (key === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          designerStore.redo();
+        } else {
+          designerStore.undo();
+        }
+        return;
       }
-      if (projectId) {
-        designerStore.setProjectId(projectId);
+
+      if (key === 's') {
+        event.preventDefault();
+        void designerStore.saveQuestionnaire().then((success) => {
+          if (success) autoSave.resetTracking();
+        });
+        return;
+      }
+
+      if (key === 'p') {
+        event.preventDefault();
+        designerStore.togglePreview();
+        return;
+      }
+
+      if (key === 'k') {
+        event.preventDefault();
+        designerStore.toggleCommandPalette();
+        return;
+      }
+
+      if (key === 'd') {
+        event.preventDefault();
+        designerStore.duplicateSelected();
       }
     }
 
-    // Start auto-save
-    autoSave.start();
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      const target = event.target as HTMLElement | null;
+      const isInput =
+        target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+      if (!isInput) {
+        event.preventDefault();
+        designerStore.deleteSelected();
+      }
+    }
+
+    if (event.key === 'Escape') {
+      designerStore.toggleCommandPalette(false);
+      designerStore.toggleDrawer('left', false);
+      designerStore.toggleDrawer('right', false);
+    }
+  }
+
+  onMount(() => {
+    void initializeDesigner();
   });
 
   onDestroy(() => {
-    // Stop auto-save when component unmounts
     autoSave.stop();
   });
-
-  // Keyboard shortcuts
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.ctrlKey || e.metaKey) {
-      switch (e.key) {
-        case 'z':
-          if (e.shiftKey) {
-            e.preventDefault();
-            designerStore.redo();
-          } else {
-            e.preventDefault();
-            designerStore.undo();
-          }
-          break;
-        case 's':
-          e.preventDefault();
-          designerStore.saveQuestionnaire().then((success) => {
-            if (success) {
-              autoSave.resetTracking();
-            }
-          });
-          break;
-        case 'p':
-          e.preventDefault();
-          showPreview = !showPreview;
-          break;
-        case 'd':
-          e.preventDefault();
-          // TODO: Implement duplicate
-          break;
-      }
-    } else if (e.key === 'Delete' && designerStore.selectedItem) {
-      e.preventDefault();
-      // TODO: Implement delete
-    } else if (e.key === 'F11') {
-      e.preventDefault();
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen();
-      } else {
-        document.exitFullscreen();
-      }
-    }
-  }
-
-  function handleViewModeChange(event: CustomEvent) {
-    viewMode = event.detail;
-  }
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} />
 
-<div class="h-screen flex flex-col bg-background">
-  <!-- Header -->
+<div class="h-screen flex flex-col bg-background" data-testid="designer-root">
   <DesignerHeader
     questionnaireName={designerStore.questionnaire.name}
     pageCount={designerStore.questionnaire.pages.length}
     blockCount={designerStore.questionnaire.pages.reduce(
-      (acc, p) => acc + (p.blocks ?? []).length,
+      (acc, page) => acc + (page.blocks?.length || 0),
       0
     )}
     questionCount={designerStore.questionnaire.questions.length}
-    {viewMode}
-    on:viewModeChange={handleViewModeChange}
-    on:togglePreview={() => (showPreview = !showPreview)}
+    viewMode={designerStore.viewMode}
   />
 
-  <!-- Main Content -->
-  <div class="flex-1 flex overflow-hidden">
-    <!-- Left Sidebar -->
-    <LeftSidebar bind:activeTab />
+  <div class="flex-1 flex overflow-hidden relative" data-testid="designer-main-layout">
+    <LeftSidebar />
 
-    <!-- Canvas Area -->
-    <main class="flex-1 overflow-hidden bg-muted/30 relative">
-      {#if viewMode === 'structural'}
+    <main class="flex-1 overflow-hidden bg-muted/30 relative" data-testid="designer-canvas">
+      {#if designerStore.viewMode === 'structural'}
         <StructuralCanvas />
       {:else}
         <WYSIWYGCanvas />
       {/if}
     </main>
 
-    <!-- Right Sidebar -->
     <RightSidebar />
   </div>
 </div>
 
-<!-- TODO: Uncomment when components are created -->
-<!-- Crash Recovery Dialog -->
-<!-- <CrashRecovery /> -->
-
-<!-- Command Palette -->
-<!-- <CommandPalette bind:isOpen={showCommandPalette} /> -->
-
-<!-- Preview Modal -->
-<PreviewModal bind:isOpen={showPreview} onclose={() => (showPreview = false)} />
-
-<style>
-  /* Responsive breakpoints for mobile/tablet */
-  @media (max-width: 768px) {
-    /* Stack layout vertically on mobile */
-    .flex {
-      flex-direction: column;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    /* Hide sidebars on tablet by default */
-    :global(.designer-sidebar) {
-      position: absolute;
-      z-index: 20;
-      height: 100%;
-    }
-  }
-</style>
+<PreviewModal
+  isOpen={designerStore.previewMode}
+  onclose={() => designerStore.togglePreview(false)}
+/>
+<DesignerCommandPalette
+  isOpen={designerStore.showCommandPalette}
+  onclose={() => designerStore.toggleCommandPalette(false)}
+/>

@@ -57,7 +57,8 @@
     event.dataTransfer!.setData(
       'application/json',
       JSON.stringify({
-        type: 'new-module',
+        type: 'new-question',
+        questionType: module.type,
         moduleType: module.type,
         category: module.category,
       })
@@ -90,7 +91,10 @@
   }
 </script>
 
-<div class="{theme.components.container.card} p-4 flex flex-col h-full">
+<div
+  class="{theme.components.container.card} p-4 flex flex-col h-full"
+  data-testid="designer-module-palette"
+>
   <h3 class="{theme.typography.h4} mb-4 {theme.semantic.textPrimary}">Module Palette</h3>
 
   <!-- Search -->
@@ -102,6 +106,7 @@
       class="w-full px-3 py-2 border {theme.semantic.borderDefault} rounded-lg {theme.typography
         .body} 
              focus:outline-none focus:ring-2 focus:ring-primary"
+      data-testid="designer-module-search"
     />
   </div>
 
@@ -114,6 +119,7 @@
                {selectedCategory === category.id
           ? 'bg-white shadow-sm {theme.semantic.textPrimary}'
           : 'text-gray-600 hover:text-gray-900'}"
+        data-testid={`designer-module-category-${category.id}`}
       >
         <span class="mr-1">{category.icon}</span>
         {category.label}
@@ -145,6 +151,7 @@
             .interactive.ghost} 
                  transition-all transform hover:scale-[1.02] hover:shadow-md
                  {draggedItem === module ? 'opacity-50 shadow-lg ring-2 ring-primary' : ''}"
+          data-testid={`designer-module-${module.type}`}
         >
           <div class="flex items-start space-x-3">
             <span class="text-2xl" role="img" aria-label={module.name}>

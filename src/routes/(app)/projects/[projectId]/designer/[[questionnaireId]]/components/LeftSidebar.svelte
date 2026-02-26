@@ -1,138 +1,161 @@
 <script lang="ts">
-  import { slide } from 'svelte/transition';
   import { onMount } from 'svelte';
+  import { designerStore } from '$lib/stores/designer.svelte';
   import QuestionPalette from '$lib/components/designer/QuestionPalette.svelte';
   import BlockManager from '$lib/components/designer/BlockManager.svelte';
   import VariableManager from '$lib/components/designer/VariableManager.svelte';
   import FlowControlManager from '$lib/components/designer/FlowControlManager.svelte';
-  import theme from '$lib/theme';
 
-  interface Props {
-    activeTab: 'blocks' | 'questions' | 'variables' | 'flow';
-  }
+  const tabs = [
+    { id: 'blocks', label: 'Blocks' },
+    { id: 'questions', label: 'Questions' },
+    { id: 'variables', label: 'Variables' },
+    { id: 'flow', label: 'Flow' },
+  ] as const;
 
-  let { activeTab = $bindable('blocks') }: Props = $props();
+  let isMobile = $state(false);
 
-  let isCollapsed = $state(false);
-
-  // Load collapsed state from localStorage
   onMount(() => {
-    const saved = localStorage.getItem('designer-left-sidebar-collapsed');
-    if (saved === 'true') {
-      isCollapsed = true;
-    }
+    const media = window.matchMedia('(max-width: 767px)');
+    const apply = () => {
+      isMobile = media.matches;
+      if (!isMobile) {
+        designerStore.toggleDrawer('left', false);
+      }
+    };
+
+    apply();
+    media.addEventListener('change', apply);
+
+    return () => media.removeEventListener('change', apply);
   });
 
-  // Save collapsed state
   function toggleCollapse() {
-    isCollapsed = !isCollapsed;
-    localStorage.setItem('designer-left-sidebar-collapsed', String(isCollapsed));
+    designerStore.setSidebarCollapsed('left', !designerStore.leftCollapsed);
   }
 
-  type TabId = typeof activeTab;
-
-  const tabs: Array<{ id: TabId; label: string; icon: string }> = [
-    {
-      id: 'blocks',
-      label: 'Blocks',
-      icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z',
-    },
-    {
-      id: 'questions',
-      label: 'Questions',
-      icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
-    },
-    {
-      id: 'variables',
-      label: 'Variables',
-      icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z',
-    },
-    { id: 'flow', label: 'Flow', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
-  ];
+  function closeDrawer() {
+    designerStore.toggleDrawer('left', false);
+  }
 </script>
 
-<aside
-  class="relative flex flex-col transition-all duration-300 ease-in-out {theme.components
-    .designerSidebar.base}"
-  class:w-80={!isCollapsed}
-  class:w-14={isCollapsed}
->
-  <!-- Collapse Toggle -->
+{#if isMobile && designerStore.isLeftDrawerOpen}
   <button
-    onclick={toggleCollapse}
-    class="absolute -right-3 top-20 z-10 w-6 h-6 {theme.semantic.bgSurface} {theme.semantic
-      .borderDefault} border rounded-full flex items-center justify-center {theme.semantic
-      .interactive.ghost} transition-colors"
-    title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-    aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-  >
-    <svg
-      class="w-3 h-3 text-muted-foreground transition-transform duration-300"
-      class:rotate-180={!isCollapsed}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-    </svg>
-  </button>
+    type="button"
+    class="fixed inset-0 z-30 bg-black/40 md:hidden"
+    aria-label="Close left panel"
+    onclick={closeDrawer}
+  ></button>
+{/if}
 
-  {#if !isCollapsed}
-    <!-- Full Sidebar -->
-    <div transition:slide={{ duration: 300, axis: 'x' }}>
-      <!-- Tabs -->
-      <div class="flex {theme.semantic.borderDefault} border-b">
-        {#each tabs as tab}
+<aside
+  class="designer-sidebar z-40 flex h-full flex-col border-r border-border bg-background transition-all duration-200"
+  class:w-80={!designerStore.leftCollapsed && !isMobile}
+  class:w-14={designerStore.leftCollapsed && !isMobile}
+  class:fixed={isMobile}
+  class:inset-y-0={isMobile}
+  class:left-0={isMobile}
+  class:w-[86vw]={isMobile}
+  class:max-w-sm={isMobile}
+  class:translate-x-0={isMobile && designerStore.isLeftDrawerOpen}
+  class:-translate-x-full={isMobile && !designerStore.isLeftDrawerOpen}
+  data-testid="designer-left-sidebar"
+>
+  <div class="flex items-center justify-between border-b border-border px-3 py-2">
+    {#if !designerStore.leftCollapsed || isMobile}
+      <h2 class="text-sm font-semibold text-foreground">Builder</h2>
+      <div class="flex items-center gap-1">
+        {#if isMobile}
           <button
-            class="flex-1 px-4 py-3 text-sm font-medium transition-colors relative {theme.semantic
-              .interactive.ghost}"
-            class:text-foreground={activeTab === tab.id}
-            class:text-muted-foreground={activeTab !== tab.id}
-            onclick={() => (activeTab = tab.id)}
+            type="button"
+            class="rounded p-1 text-muted-foreground hover:bg-accent"
+            aria-label="Close left panel"
+            onclick={closeDrawer}
           >
-            {tab.label}
-            {#if activeTab === tab.id}
-              <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></div>
-            {/if}
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
-        {/each}
-      </div>
-
-      <!-- Tab Content -->
-      <div class="flex-1 overflow-y-auto">
-        {#if activeTab === 'blocks'}
-          <BlockManager />
-        {:else if activeTab === 'questions'}
-          <QuestionPalette />
-        {:else if activeTab === 'variables'}
-          <VariableManager />
-        {:else if activeTab === 'flow'}
-          <FlowControlManager />
+        {/if}
+        {#if !isMobile}
+          <button
+            type="button"
+            class="rounded p-1 text-muted-foreground hover:bg-accent"
+            aria-label="Collapse left panel"
+            onclick={toggleCollapse}
+            data-testid="left-sidebar-collapse"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+          </button>
         {/if}
       </div>
-    </div>
-  {:else}
-    <!-- Collapsed Sidebar -->
-    <div class="flex flex-col items-center py-4 space-y-4">
+    {:else}
+      <button
+        type="button"
+        class="mx-auto rounded p-1 text-muted-foreground hover:bg-accent"
+        aria-label="Expand left panel"
+        onclick={toggleCollapse}
+        data-testid="left-sidebar-expand"
+      >
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    {/if}
+  </div>
+
+  {#if !designerStore.leftCollapsed || isMobile}
+    <div class="grid grid-cols-4 border-b border-border">
       {#each tabs as tab}
         <button
-          class="p-2 rounded-md transition-colors relative group {theme.semantic.interactive.ghost}"
-          class:bg-muted={activeTab === tab.id}
-          class:text-foreground={activeTab === tab.id}
-          class:text-muted-foreground={activeTab !== tab.id}
-          onclick={() => (activeTab = tab.id)}
-          title={tab.label}
+          type="button"
+          class="px-2 py-2 text-xs"
+          class:bg-accent={designerStore.activeLeftTab === tab.id}
+          class:text-foreground={designerStore.activeLeftTab === tab.id}
+          class:text-muted-foreground={designerStore.activeLeftTab !== tab.id}
+          onclick={() => designerStore.setActiveLeftTab(tab.id)}
+          data-testid={`left-tab-${tab.id}`}
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={tab.icon} />
-          </svg>
+          {tab.label}
+        </button>
+      {/each}
+    </div>
 
-          <!-- Tooltip -->
-          <div
-            class="absolute left-full ml-2 px-2 py-1 bg-foreground text-background text-xs rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap z-50"
-          >
-            {tab.label}
-          </div>
+    <div class="min-h-0 flex-1 overflow-auto" data-testid="left-sidebar-content">
+      {#if designerStore.activeLeftTab === 'blocks'}
+        <BlockManager />
+      {:else if designerStore.activeLeftTab === 'questions'}
+        <QuestionPalette />
+      {:else if designerStore.activeLeftTab === 'variables'}
+        <VariableManager />
+      {:else}
+        <FlowControlManager />
+      {/if}
+    </div>
+  {:else}
+    <div class="flex flex-1 flex-col items-center gap-2 py-3">
+      {#each tabs as tab}
+        <button
+          type="button"
+          class="w-10 rounded px-1 py-1 text-[10px] text-muted-foreground hover:bg-accent"
+          class:bg-accent={designerStore.activeLeftTab === tab.id}
+          onclick={() => designerStore.setActiveLeftTab(tab.id)}
+          title={tab.label}
+          data-testid={`left-tab-mini-${tab.id}`}
+        >
+          {tab.label.slice(0, 1)}
         </button>
       {/each}
     </div>

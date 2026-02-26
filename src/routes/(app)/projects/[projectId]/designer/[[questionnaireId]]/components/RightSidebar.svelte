@@ -1,73 +1,138 @@
 <script lang="ts">
-  import { slide } from 'svelte/transition';
   import { onMount } from 'svelte';
+  import { designerStore } from '$lib/stores/designer.svelte';
   import PropertiesPanel from '$lib/components/designer/PropertiesPanel.svelte';
 
-  let isCollapsed = false;
+  let isMobile = $state(false);
 
-  // Load collapsed state from localStorage
-  onMount(() => {
-    const saved = localStorage.getItem('designer-right-sidebar-collapsed');
-    if (saved === 'true') {
-      isCollapsed = true;
-    }
+  const panelLabel = $derived.by(() => {
+    if (!designerStore.selectedItemType) return 'Properties';
+
+    if (designerStore.selectedItemType === 'question') return 'Question Properties';
+    if (designerStore.selectedItemType === 'page') return 'Page Properties';
+    if (designerStore.selectedItemType === 'block') return 'Block Properties';
+    if (designerStore.selectedItemType === 'variable') return 'Variable Properties';
+
+    return 'Properties';
   });
 
-  // Save collapsed state
+  onMount(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const apply = () => {
+      isMobile = media.matches;
+      if (!isMobile) {
+        designerStore.toggleDrawer('right', false);
+      }
+    };
+
+    apply();
+    media.addEventListener('change', apply);
+
+    return () => media.removeEventListener('change', apply);
+  });
+
+  function closeDrawer() {
+    designerStore.toggleDrawer('right', false);
+  }
+
   function toggleCollapse() {
-    isCollapsed = !isCollapsed;
-    localStorage.setItem('designer-right-sidebar-collapsed', String(isCollapsed));
+    designerStore.setSidebarCollapsed('right', !designerStore.rightCollapsed);
   }
 </script>
 
-<aside
-  class="relative bg-layer-surface border-l border-border flex flex-col transition-all duration-300 ease-in-out"
-  class:w-96={!isCollapsed}
-  class:w-14={isCollapsed}
->
-  <!-- Collapse Toggle -->
+{#if isMobile && designerStore.isRightDrawerOpen}
   <button
-    onclick={toggleCollapse}
-    class="absolute -left-3 top-20 z-10 w-6 h-6 bg-layer-surface border border-border rounded-full flex items-center justify-center hover:bg-accent hover:text-accent-foreground transition-colors"
-    title={isCollapsed ? 'Expand properties' : 'Collapse properties'}
-    aria-label={isCollapsed ? 'Expand properties' : 'Collapse properties'}
-  >
-    <svg
-      class="w-3 h-3 text-muted-foreground transition-transform duration-300"
-      class:rotate-180={isCollapsed}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-    </svg>
-  </button>
+    type="button"
+    class="fixed inset-0 z-30 bg-black/40 md:hidden"
+    aria-label="Close properties panel"
+    onclick={closeDrawer}
+  ></button>
+{/if}
 
-  {#if !isCollapsed}
-    <!-- Full Sidebar -->
-    <div transition:slide={{ duration: 300, axis: 'x' }} class="flex-1 overflow-hidden">
-      <PropertiesPanel />
-    </div>
-  {:else}
-    <!-- Collapsed Sidebar -->
-    <div class="flex flex-col items-center py-4">
-      <div class="p-2 text-muted-foreground group relative">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<aside
+  class="designer-right-sidebar z-40 flex h-full flex-col border-l border-border bg-background transition-all duration-200"
+  class:w-96={!designerStore.rightCollapsed && !isMobile}
+  class:w-14={designerStore.rightCollapsed && !isMobile}
+  class:fixed={isMobile}
+  class:inset-y-0={isMobile}
+  class:right-0={isMobile}
+  class:w-[86vw]={isMobile}
+  class:max-w-md={isMobile}
+  class:translate-x-0={isMobile && designerStore.isRightDrawerOpen}
+  class:translate-x-full={isMobile && !designerStore.isRightDrawerOpen}
+  data-testid="designer-right-sidebar"
+>
+  <div class="flex items-center justify-between border-b border-border px-3 py-2">
+    {#if !designerStore.rightCollapsed || isMobile}
+      <h2 class="truncate text-sm font-semibold text-foreground" data-testid="right-sidebar-title">
+        {panelLabel}
+      </h2>
+
+      <div class="flex items-center gap-1">
+        {#if isMobile}
+          <button
+            type="button"
+            class="rounded p-1 text-muted-foreground hover:bg-accent"
+            aria-label="Close right panel"
+            onclick={closeDrawer}
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        {/if}
+
+        {#if !isMobile}
+          <button
+            type="button"
+            class="rounded p-1 text-muted-foreground hover:bg-accent"
+            aria-label="Collapse right panel"
+            onclick={toggleCollapse}
+            data-testid="right-sidebar-collapse"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          </button>
+        {/if}
+      </div>
+    {:else}
+      <button
+        type="button"
+        class="mx-auto rounded p-1 text-muted-foreground hover:bg-accent"
+        aria-label="Expand right panel"
+        onclick={toggleCollapse}
+        data-testid="right-sidebar-expand"
+      >
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="2"
-            d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+            d="M15 19l-7-7 7-7"
           />
         </svg>
+      </button>
+    {/if}
+  </div>
 
-        <!-- Tooltip -->
-        <div
-          class="absolute right-full mr-2 px-2 py-1 bg-foreground text-background text-xs rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap"
-        >
-          Properties & Style
-        </div>
-      </div>
+  {#if !designerStore.rightCollapsed || isMobile}
+    <div class="min-h-0 flex-1 overflow-hidden" data-testid="right-sidebar-content">
+      <PropertiesPanel />
+    </div>
+  {:else}
+    <div class="flex flex-1 items-start justify-center py-3">
+      <span class="rounded bg-muted px-2 py-1 text-[10px] text-muted-foreground">Props</span>
     </div>
   {/if}
 </aside>

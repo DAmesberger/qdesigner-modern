@@ -1,36 +1,39 @@
-import type { Questionnaire, Question, Page, Block, Variable } from '$lib/shared';
-import { nanoid as generateId } from 'nanoid';
+import type { Block, FlowControl, Page, Question, Questionnaire, Variable } from '$lib/shared';
+import { DocumentStore, type DocumentValidationResult } from './designer/DocumentStore';
+import {
+  UiStore,
+  type DesignerLeftTab,
+  type DesignerViewMode,
+  type DrawerSide,
+} from './designer/UiStore';
+import { DesignerPersistenceService } from './designer/PersistenceService';
+import { generateId } from '$lib/shared/utils/id';
 
-// Union type for selected item
 export type SelectedItem = Question | Page | Block | Variable;
+export type SelectedItemType = 'question' | 'page' | 'block' | 'variable' | null;
+
+interface CommitOptions {
+  selectedItemId?: string | null;
+  selectedItemType?: Exclude<SelectedItemType, null>;
+  currentPageId?: string | null;
+  currentBlockId?: string | null;
+  markDirty?: boolean;
+  pushHistory?: boolean;
+}
 
 class DesignerStore {
-  questionnaire = $state<Questionnaire>({
-    id: '',
-    name: 'Untitled Questionnaire',
-    description: '',
-    pages: [],
-    variables: [],
-    settings: {}, 
-    version: '1.0.0',
-    created: new Date(),
-    modified: new Date(),
-    questions: [],
-    flow: [],
-    metadata: {
-        created: Date.now(),
-        modified: Date.now(),
-        author: '',
-        version: '1.0.0'
-    }
-  });
+  private readonly documentStore = new DocumentStore();
+  private readonly uiStore = new UiStore();
+  private readonly persistenceService = new DesignerPersistenceService();
 
+  questionnaire = $state<Questionnaire>(this.documentStore.createEmptyQuestionnaire());
   selectedItem = $state<SelectedItem | null>(null);
-  
+  selectedItemKind = $state<SelectedItemType>(null);
+
   // History management
   history = $state<Questionnaire[]>([]);
   historyIndex = $state(-1);
-  
+
   // Save status
   isDirty = $state(false);
   isLoading = $state(false);
@@ -41,14 +44,42 @@ class DesignerStore {
   currentPageId = $state<string | null>(null);
   currentBlockId = $state<string | null>(null);
 
-  get canUndo() { return this.historyIndex > 0; }
-  get canRedo() { return this.historyIndex < this.history.length - 1; }
-  get isSaving() { return this.isLoading; }
+  // Metadata state
+  userId = $state<string | null>(null);
+  projectId = $state<string | null>(null);
+  organizationId = $state<string | null>(null);
 
-  // Derived Navigation Helpers
+  // Preview/UI state
+  previewMode = $state(false);
+  viewMode = $state<DesignerViewMode>('wysiwyg');
+  activeLeftTab = $state<DesignerLeftTab>('blocks');
+  showCommandPalette = $state(false);
+  isLeftDrawerOpen = $state(false);
+  isRightDrawerOpen = $state(false);
+  leftCollapsed = $state(false);
+  rightCollapsed = $state(false);
+
+  constructor() {
+    this.syncUiState(this.uiStore.getState());
+  }
+
+  get canUndo() {
+    return this.historyIndex > 0;
+  }
+
+  get canRedo() {
+    return this.historyIndex >= 0 && this.historyIndex < this.history.length - 1;
+  }
+
+  get isSaving() {
+    return this.isLoading;
+  }
+
   get currentPage() {
-    if (!this.currentPageId) return this.questionnaire.pages[0] || null;
-    return this.questionnaire.pages.find(p => p.id === this.currentPageId) || null;
+    if (!this.currentPageId) {
+      return this.questionnaire.pages[0] || null;
+    }
+    return this.questionnaire.pages.find((page) => page.id === this.currentPageId) || null;
   }
 
   get currentPageBlocks() {
@@ -56,464 +87,546 @@ class DesignerStore {
   }
 
   get currentBlock() {
-     if (!this.currentBlockId) return this.currentPageBlocks[0] || null;
-     return this.currentPageBlocks.find(b => b.id === this.currentBlockId) || null;
+    if (!this.currentBlockId) {
+      return this.currentPageBlocks[0] || null;
+    }
+    return this.currentPageBlocks.find((block) => block.id === this.currentBlockId) || null;
   }
 
   get currentBlockQuestions() {
-      // Return actual Question objects, not just IDs
-      const block = this.currentBlock;
-      if (!block) return [];
-      // Assuming questions are stored in a flat list in questionnaire.questions
-      // and block has array of IDs.
-      return block.questions.map(qId => 
-          this.questionnaire.questions.find(q => q.id === qId)
-      ).filter(q => !!q) as Question[];
+    const block = this.currentBlock;
+    if (!block) return [];
+    const ids = new Set(block.questions || []);
+    const ordered = (block.questions || [])
+      .map((id) => this.questionnaire.questions.find((question) => question.id === id))
+      .filter((question): question is Question => Boolean(question));
+
+    if (ordered.length === ids.size) {
+      return ordered;
+    }
+
+    return this.questionnaire.questions.filter((question) => ids.has(question.id));
   }
-  
+
   get currentPageQuestions() {
-      // Questions from all blocks on page
-      return this.currentPageBlocks.flatMap(block => 
-          block.questions.map(qId => 
-              this.questionnaire.questions.find(q => q.id === qId)
-          )
-      ).filter(q => !!q) as Question[];
+    const ids = new Set<string>();
+    for (const block of this.currentPageBlocks) {
+      for (const id of block.questions || []) {
+        ids.add(id);
+      }
+    }
+
+    if (ids.size === 0) return [];
+
+    return this.questionnaire.questions.filter((question) => ids.has(question.id));
   }
 
-  get selectedItemType(): 'question' | 'page' | 'block' | 'variable' | null {
-      if (!this.selectedItem) return null;
-      // Heuristic to determine type
-      if ('questions' in this.selectedItem && 'blocks' in this.selectedItem) return 'page';
-      if ('scope' in this.selectedItem) return 'variable';
-       // Blocks have types like 'standard', 'loop', etc. but NO 'display' or 'response' usually
-      if ('randomization' in this.selectedItem && 'loop' in this.selectedItem) return 'block';
-
-      if ((this.selectedItem as any).type) return 'question'; 
-      return null;
+  get selectedItemType(): SelectedItemType {
+    return this.selectedItemKind;
   }
-
-  // Metadata state
-  userId = $state<string | null>(null);
-  projectId = $state<string | null>(null);
-  organizationId = $state<string | null>(null);
-
-  // Preview Mode
-  previewMode = $state(false);
-
-  constructor() {}
 
   init(questionnaire: Questionnaire) {
-    this.questionnaire = questionnaire;
-    // Initialize history
-    this.history = [JSON.parse(JSON.stringify(questionnaire))];
-    this.historyIndex = 0;
+    const normalized = this.documentStore.normalizeQuestionnaire(questionnaire);
+    this.questionnaire = normalized;
+    this.resetHistory(normalized);
     this.isDirty = false;
     this.saveError = null;
-    
-    // Init navigation
-    if (this.questionnaire.pages.length > 0) {
-        this.currentPageId = this.questionnaire.pages[0]?.id ?? null;
-    const firstPage = this.questionnaire.pages[0];
-    if (firstPage) {
-        this.currentPageId = firstPage.id;
-        if (firstPage.blocks && firstPage.blocks.length > 0) {
-            this.currentBlockId = firstPage.blocks[0]?.id ?? null;
-        }
-    }
-    }
+    this.selectedItem = null;
+    this.selectedItemKind = null;
+
+    const firstPage = normalized.pages[0] || null;
+    this.currentPageId = firstPage?.id || null;
+    this.currentBlockId = firstPage?.blocks?.[0]?.id || null;
   }
-  
-  // Actions
+
+  initVariableEngine() {
+    // Runtime variable engine is initialized in runtime context.
+  }
+
+  setUserId(id: string) {
+    this.userId = id;
+  }
+
+  setOrganizationId(id: string) {
+    this.organizationId = id;
+  }
+
+  setProjectId(id: string) {
+    this.projectId = id;
+  }
+
   setCurrentPage(pageId: string) {
-      this.currentPageId = pageId;
-      // Reset block to first on page
-      const page = this.questionnaire.pages.find(p => p.id === pageId);
-      if (page && page.blocks && page.blocks.length > 0) {
-          this.currentBlockId = page.blocks[0]?.id ?? null;
-      } else {
-          this.currentBlockId = null;
-      }
+    this.currentPageId = pageId;
+    const page = this.questionnaire.pages.find((candidate) => candidate.id === pageId);
+    this.currentBlockId = page?.blocks?.[0]?.id || null;
   }
-  
+
   setCurrentBlock(blockId: string) {
-      this.currentBlockId = blockId;
+    this.currentBlockId = blockId;
   }
 
-  addBlock(pageId: string, type: string) {
-      const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-      const pIndex = newQuestionnaire.pages.findIndex((p: Page) => p.id === pageId);
-      
-      if (pIndex !== -1) {
-          const newBlock = {
-              id: generateId(),
-              type,
-              name: 'New Block',
-              questions: []
-          };
-          
-          if (!newQuestionnaire.pages[pIndex].blocks) {
-              newQuestionnaire.pages[pIndex].blocks = [];
-          }
-          
-          newQuestionnaire.pages[pIndex].blocks.push(newBlock);
-          this.updateQuestionnaire(newQuestionnaire);
-          this.currentBlockId = newBlock.id;
-      }
+  setViewMode(mode: DesignerViewMode) {
+    this.syncUiState(this.uiStore.setViewMode(mode));
   }
 
-  updateBlock(blockId: string, updates: any) {
-      const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-      
-      // Find the block across all pages
-      for (let pIndex = 0; pIndex < newQuestionnaire.pages.length; pIndex++) {
-          const page = newQuestionnaire.pages[pIndex];
-          if (!page.blocks) continue;
-          
-          const bIndex = page.blocks.findIndex((b: Block) => b.id === blockId);
-          if (bIndex !== -1) {
-              newQuestionnaire.pages[pIndex].blocks[bIndex] = { 
-                  ...newQuestionnaire.pages[pIndex].blocks[bIndex], 
-                  ...updates 
-              };
-              this.updateQuestionnaire(newQuestionnaire);
-              return;
-          }
-      }
+  setActiveLeftTab(tab: DesignerLeftTab) {
+    this.syncUiState(this.uiStore.setLeftTab(tab));
   }
 
-  deleteBlock(blockId: string) {
-      const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-      
-      for (let pIndex = 0; pIndex < newQuestionnaire.pages.length; pIndex++) {
-          const page = newQuestionnaire.pages[pIndex];
-          if (!page.blocks) continue;
-          
-          const bIndex = page.blocks.findIndex((b: Block) => b.id === blockId);
-          if (bIndex !== -1) {
-              newQuestionnaire.pages[pIndex].blocks.splice(bIndex, 1);
-              this.updateQuestionnaire(newQuestionnaire);
-              
-              if (this.currentBlockId === blockId) {
-                  this.currentBlockId = null;
-                  this.selectedItem = null;
-              }
-              return;
-          }
-      }
-  }
-  
-  updateBlockQuestions(blockId: string, questionIds: string[]) {
-      const block = this.currentPageBlocks.find(b => b.id === blockId);
-      if (block) {
-          // We need to update the questionnaire immutably-ish for history
-           const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-           const pIndex = newQuestionnaire.pages.findIndex((p: Page) => p.id === this.currentPageId);
-           if (pIndex !== -1) {
-               const bIndex = newQuestionnaire.pages[pIndex].blocks.findIndex((b: Block) => b.id === blockId);
-               if (bIndex !== -1) {
-                   newQuestionnaire.pages[pIndex].blocks[bIndex].questions = questionIds;
-                   this.updateQuestionnaire(newQuestionnaire);
-               }
-           }
-      }
+  togglePreview(force?: boolean) {
+    const state = this.uiStore.togglePreview(force);
+    this.syncUiState(state);
+    this.previewMode = state.showPreview;
   }
 
-  reorderQuestionsInBlock(blockId: string, fromIndex: number, toIndex: number) {
-      const block = this.currentPageBlocks.find(b => b.id === blockId);
-      if (!block) return;
-
-      const newQuestions = [...block.questions];
-      const moved = newQuestions.splice(fromIndex, 1)[0];
-      if (moved) newQuestions.splice(toIndex, 0, moved);
-
-      this.updateBlockQuestions(blockId, newQuestions);
+  toggleCommandPalette(force?: boolean) {
+    this.syncUiState(this.uiStore.toggleCommandPalette(force));
   }
-  
-  updateQuestion(id: string, updates: any) {
-    const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-    const qIndex = newQuestionnaire.questions.findIndex((q: Question) => q.id === id);
-    if (qIndex !== -1) {
-        newQuestionnaire.questions[qIndex] = { ...newQuestionnaire.questions[qIndex], ...updates };
-        this.updateQuestionnaire(newQuestionnaire);
+
+  toggleDrawer(side: DrawerSide, force?: boolean) {
+    this.syncUiState(this.uiStore.toggleDrawer(side, force));
+  }
+
+  setSidebarCollapsed(side: DrawerSide, collapsed: boolean) {
+    this.syncUiState(this.uiStore.setCollapsed(side, collapsed));
+    if (typeof localStorage !== 'undefined') {
+      this.uiStore.persistCollapsed(localStorage);
     }
   }
-  
-  addQuestion(blockId: string, type: string) {
-      console.log('addQuestion', blockId, type);
-      // Implementation pending - requires full scaffolding
+
+  restoreUiFromStorage() {
+    if (typeof localStorage === 'undefined') return;
+    this.syncUiState(this.uiStore.syncFromStorage(localStorage));
   }
-  
-  deleteQuestion(id: string) {
-       console.log('deleteQuestion', id);
-       // Implementation pending
+
+  async createNewQuestionnaire(data: {
+    name?: string;
+    description?: string;
+    projectId?: string;
+    organizationId?: string;
+  }) {
+    if (data.projectId) this.projectId = data.projectId;
+    if (data.organizationId) this.organizationId = data.organizationId;
+
+    let createdId = '';
+    const draft = this.documentStore.createEmptyQuestionnaire({
+      name: data.name,
+      description: data.description,
+      projectId: this.projectId || data.projectId,
+      organizationId: this.organizationId || data.organizationId,
+    });
+
+    if (this.projectId) {
+      try {
+        const persisted = await this.persistenceService.createQuestionnaire(this.projectId, {
+          name: draft.name,
+          description: draft.description,
+          content: {
+            ...draft,
+            created: draft.created.toISOString(),
+            modified: draft.modified.toISOString(),
+          },
+          settings: draft.settings,
+        });
+        createdId = persisted.id;
+      } catch (error) {
+        this.saveError = error instanceof Error ? error.message : 'Failed to create questionnaire';
+      }
+    }
+
+    if (createdId) {
+      draft.id = createdId;
+    }
+
+    this.init(draft);
+  }
+
+  loadQuestionnaireFromDefinition(data: any) {
+    const normalized = this.documentStore.normalizeQuestionnaire(data);
+    this.init(normalized);
+  }
+
+  importQuestionnaire(data: any) {
+    this.loadQuestionnaireFromDefinition(data);
+  }
+
+  updateQuestionnaire(updates: Partial<Questionnaire>) {
+    const next = this.documentStore.updateQuestionnaire(this.questionnaire, updates);
+    this.commit(next, { markDirty: true });
   }
 
   addPage() {
-    const newPage: Page = {
-        id: generateId(),
-        name: 'New Page',
-        // description: '', // Page interface doesn't have description?
-        blocks: []
-    };
-    const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-    newQuestionnaire.pages.push(newPage);
-    this.updateQuestionnaire(newQuestionnaire);
-    this.setCurrentPage(newPage.id);
-  }
-  
-  updatePage(id: string, updates: any) {
-    const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-    const pIndex = newQuestionnaire.pages.findIndex((p: Page) => p.id === id);
-    if (pIndex !== -1) {
-        newQuestionnaire.pages[pIndex] = { ...newQuestionnaire.pages[pIndex], ...updates };
-        this.updateQuestionnaire(newQuestionnaire);
-    }
-  }
-  
-  updateVariable(id: string, updates: any) {
-    const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-    const vIndex = newQuestionnaire.variables.findIndex((v: Variable) => v.id === id);
-    if (vIndex !== -1) {
-        newQuestionnaire.variables[vIndex] = { ...newQuestionnaire.variables[vIndex], ...updates };
-        this.updateQuestionnaire(newQuestionnaire);
-    }
+    const { questionnaire, pageId } = this.documentStore.addPage(this.questionnaire);
+    const blockId = questionnaire.pages.find((page) => page.id === pageId)?.blocks?.[0]?.id || null;
+    this.commit(questionnaire, {
+      currentPageId: pageId,
+      currentBlockId: blockId,
+      selectedItemId: pageId,
+      selectedItemType: 'page',
+      markDirty: true,
+    });
   }
 
-  addVariable(variable: any) {
-      if (!variable.id) variable.id = generateId();
-      const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-      newQuestionnaire.variables.push(variable);
-      this.updateQuestionnaire(newQuestionnaire);
-      this.selectItem(variable.id);
+  updatePage(id: string, updates: Partial<Page>) {
+    const next = this.documentStore.updatePage(this.questionnaire, id, updates);
+    this.commit(next, { markDirty: true });
+  }
+
+  addBlock(pageId: string, type: Block['type']) {
+    const { questionnaire, blockId } = this.documentStore.addBlock(
+      this.questionnaire,
+      pageId,
+      type
+    );
+    this.commit(questionnaire, {
+      currentPageId: pageId,
+      currentBlockId: blockId || null,
+      selectedItemId: blockId || null,
+      selectedItemType: blockId ? 'block' : undefined,
+      markDirty: true,
+    });
+  }
+
+  updateBlock(blockId: string, updates: Partial<Block>) {
+    const next = this.documentStore.updateBlock(this.questionnaire, blockId, updates);
+    this.commit(next, { markDirty: true });
+  }
+
+  deleteBlock(blockId: string) {
+    const next = this.documentStore.deleteBlock(this.questionnaire, blockId);
+    const currentPage =
+      next.pages.find((page) => page.id === this.currentPageId) || next.pages[0] || null;
+    const currentBlock = currentPage?.blocks?.[0] || null;
+    this.commit(next, {
+      currentPageId: currentPage?.id || null,
+      currentBlockId: currentBlock?.id || null,
+      selectedItemId: null,
+      markDirty: true,
+    });
+  }
+
+  updateBlockQuestions(blockId: string, questionIds: string[]) {
+    const next = this.documentStore.updateBlockQuestions(this.questionnaire, blockId, questionIds);
+    this.commit(next, { markDirty: true });
+  }
+
+  reorderQuestionsInBlock(blockId: string, fromIndex: number, toIndex: number) {
+    const next = this.documentStore.reorderQuestionsInBlock(
+      this.questionnaire,
+      blockId,
+      fromIndex,
+      toIndex
+    );
+    this.commit(next, { markDirty: true });
+  }
+
+  addQuestion(containerId: string, type: string) {
+    const inserted = this.documentStore.addQuestion(this.questionnaire, containerId, type);
+    this.commit(inserted.questionnaire, {
+      currentPageId: inserted.pageId,
+      currentBlockId: inserted.blockId,
+      selectedItemId: inserted.questionId,
+      selectedItemType: 'question',
+      markDirty: true,
+    });
+  }
+
+  updateQuestion(questionId: string, updates: Partial<Question>) {
+    const next = this.documentStore.updateQuestion(this.questionnaire, questionId, updates);
+    this.commit(next, {
+      selectedItemId: questionId,
+      selectedItemType: 'question',
+      markDirty: true,
+    });
+  }
+
+  duplicateQuestion(questionId: string) {
+    const duplicated = this.documentStore.duplicateQuestion(this.questionnaire, questionId);
+    if (!duplicated) return;
+
+    this.commit(duplicated.questionnaire, {
+      currentPageId: duplicated.pageId,
+      currentBlockId: duplicated.blockId,
+      selectedItemId: duplicated.questionId,
+      selectedItemType: 'question',
+      markDirty: true,
+    });
+  }
+
+  deleteQuestion(questionId: string) {
+    const next = this.documentStore.deleteQuestion(this.questionnaire, questionId);
+    this.commit(next, {
+      selectedItemId: null,
+      markDirty: true,
+    });
+  }
+
+  addVariable(variable: Variable) {
+    const next = this.documentStore.addVariable(this.questionnaire, variable);
+    this.commit(next, {
+      selectedItemId: variable.id,
+      selectedItemType: 'variable',
+      markDirty: true,
+    });
+  }
+
+  updateVariable(id: string, updates: Partial<Variable>) {
+    const next = this.documentStore.updateVariable(this.questionnaire, id, updates);
+    this.commit(next, {
+      selectedItemId: id,
+      selectedItemType: 'variable',
+      markDirty: true,
+    });
   }
 
   deleteVariable(id: string) {
-      const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-      newQuestionnaire.variables = newQuestionnaire.variables.filter((v: Variable) => v.id !== id);
-      this.updateQuestionnaire(newQuestionnaire);
-      if (this.selectedItem && this.selectedItem.id === id) {
-          this.selectedItem = null;
+    const next = this.documentStore.deleteVariable(this.questionnaire, id);
+    this.commit(next, {
+      selectedItemId: this.selectedItem?.id === id ? null : this.selectedItem?.id,
+      markDirty: true,
+    });
+  }
+
+  addFlowControl(flow: FlowControl) {
+    const next = this.documentStore.addFlowControl(this.questionnaire, flow);
+    this.commit(next, { markDirty: true });
+  }
+
+  selectItem(itemOrId: string | SelectedItem | null, type?: SelectedItemType) {
+    if (!itemOrId) {
+      this.selectedItem = null;
+      this.selectedItemKind = null;
+      return;
+    }
+
+    if (typeof itemOrId !== 'string') {
+      this.selectedItem = itemOrId;
+      this.selectedItemKind = type || this.detectItemType(itemOrId);
+      return;
+    }
+
+    const question = this.questionnaire.questions.find((candidate) => candidate.id === itemOrId);
+    if (question) {
+      this.selectedItem = question;
+      this.selectedItemKind = type || 'question';
+      return;
+    }
+
+    const page = this.questionnaire.pages.find((candidate) => candidate.id === itemOrId);
+    if (page) {
+      this.selectedItem = page;
+      this.selectedItemKind = type || 'page';
+      return;
+    }
+
+    const variable = this.questionnaire.variables.find((candidate) => candidate.id === itemOrId);
+    if (variable) {
+      this.selectedItem = variable;
+      this.selectedItemKind = type || 'variable';
+      return;
+    }
+
+    for (const currentPage of this.questionnaire.pages) {
+      const block = (currentPage.blocks || []).find((candidate) => candidate.id === itemOrId);
+      if (block) {
+        this.selectedItem = block;
+        this.selectedItemKind = type || 'block';
+        this.currentPageId = currentPage.id;
+        this.currentBlockId = block.id;
+        return;
       }
-  }
-  
-  selectItem(itemOrId: string | SelectedItem | null, type?: string) {
-       if (typeof itemOrId === 'string') {
-            // Logic to find item by ID
-            if (!itemOrId) {
-                this.selectedItem = null;
-                return;
-            }
-            // Search in questions
-            const q = this.questionnaire.questions.find(q => q.id === itemOrId);
-            if (q) {
-                this.selectedItem = q; 
-                return;
-            }
-            // Search pages
-            const p = this.questionnaire.pages.find(p => p.id === itemOrId);
-            if (p) {
-                this.selectedItem = p;
-                return;
-            }
-            // Search variables
-            const v = this.questionnaire.variables.find(v => v.id === itemOrId);
-            if (v) {
-                this.selectedItem = v;
-                return;
-            }
-            this.selectedItem = null;
-       } else {
-           this.selectedItem = itemOrId;
-       }
-  }
-  
-  initVariableEngine() {}
+    }
 
-  setUserId(id: string) {
-      this.userId = id;
+    this.selectedItem = null;
+    this.selectedItemKind = null;
   }
-  setOrganizationId(id: string) {
-      this.organizationId = id;
-  }
-  setProjectId(id: string) {
-      this.projectId = id;
-  }
-  
-  async createNewQuestionnaire(data: any) {
-      const initialBlockId = generateId();
-      const initialPageId = generateId();
 
-      const content = {
-          name: data.name || 'Untitled Questionnaire',
-          description: data.description || '',
-          pages: [
-              {
-                  id: initialPageId,
-                  title: 'Page 1',
-                  blocks: [
-                      {
-                          id: initialBlockId,
-                          type: 'default',
-                          title: 'Block 1',
-                          questions: [],
-                      }
-                  ],
-              }
-          ],
-          variables: [],
-          settings: {},
-          version: '1.0.0',
-          questions: [],
-          flow: [],
-      };
+  duplicateSelected() {
+    if (this.selectedItemKind === 'question' && this.selectedItem) {
+      this.duplicateQuestion(this.selectedItem.id);
+    }
+  }
 
-      // Create on the backend first to get a UUID
-      let dbId: string | undefined;
-      if (this.projectId) {
-          try {
-              const { api } = await import('$lib/services/api');
-              const result = await api.questionnaires.create(this.projectId, {
-                  name: content.name,
-                  description: content.description,
-                  content,
-                  settings: content.settings,
-              });
-              dbId = result.id;
-          } catch (err) {
-              console.error('Failed to create questionnaire on backend:', err);
-          }
+  deleteSelected() {
+    if (!this.selectedItem) return;
+
+    if (this.selectedItemKind === 'question') {
+      this.deleteQuestion(this.selectedItem.id);
+      return;
+    }
+
+    if (this.selectedItemKind === 'block') {
+      this.deleteBlock(this.selectedItem.id);
+      return;
+    }
+
+    if (this.selectedItemKind === 'variable') {
+      this.deleteVariable(this.selectedItem.id);
+    }
+  }
+
+  async saveQuestionnaire(): Promise<boolean> {
+    this.isLoading = true;
+    this.saveError = null;
+
+    try {
+      if (!this.projectId) {
+        throw new Error('Missing project ID');
       }
 
-      const questionnaire: Questionnaire = {
-          id: dbId || generateId(),
-          ...content,
-          created: new Date(),
-          modified: new Date(),
-          metadata: {
-              created: Date.now(),
-              modified: Date.now(),
-              author: '',
-              version: '1.0.0'
-          }
-      };
-      this.init(questionnaire);
-  }
-  
-  loadQuestionnaireFromDefinition(data: any) {
-      this.init(data);
-  }
-  
-  // Alias for VersionManager
-  importQuestionnaire(data: any) {
-      this.init(data);
+      const result = await this.persistenceService.save({
+        projectId: this.projectId,
+        questionnaire: this.questionnaire,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Save failed');
+      }
+
+      if (result.id && !this.questionnaire.id) {
+        this.questionnaire.id = result.id;
+      }
+
+      this.lastSaved = Date.now();
+      this.isDirty = false;
+      return true;
+    } catch (error) {
+      this.saveError = error instanceof Error ? error.message : 'Unknown save error';
+      return false;
+    } finally {
+      this.isLoading = false;
+    }
   }
 
-  togglePreview() {
-      this.previewMode = !this.previewMode;
+  async publishQuestionnaire(): Promise<boolean> {
+    if (!this.projectId || !this.questionnaire.id) {
+      this.saveError = 'Cannot publish before questionnaire is saved.';
+      return false;
+    }
+
+    const result = await this.persistenceService.publish(this.projectId, this.questionnaire.id);
+    if (!result.success) {
+      this.saveError = result.error || 'Publish failed';
+      return false;
+    }
+
+    this.lastSaved = Date.now();
+    this.saveError = null;
+    return true;
   }
-  
-  // Methods for SaveLoadToolbar
+
   async listQuestionnaires() {
     if (!this.projectId) return [];
-    const { api } = await import('$lib/services/api');
-    const data = await api.questionnaires.list(this.projectId);
-    return data || [];
+    return this.persistenceService.list(this.projectId);
   }
 
   async loadQuestionnaire(id: string) {
     if (!this.projectId) return false;
-    const { api } = await import('$lib/services/api');
-    const data = await api.questionnaires.get(this.projectId, id);
-    if (data && data.content) {
-        const content = data.content as any;
-        this.init(content);
-        this.projectId = data.projectId;
-        return true;
-    }
-    return false;
-  }
 
-  async saveQuestionnaire(): Promise<boolean> {
-      this.isLoading = true;
-      this.saveError = null;
-      try {
-          if (!this.projectId || !this.questionnaire.id) {
-               throw new Error('Missing project ID or questionnaire ID');
-          }
-          const { QuestionnairePersistenceService } = await import('$lib/services/questionnairePersistence');
-          const result = await QuestionnairePersistenceService.saveQuestionnaire(
-              this.questionnaire,
-              this.projectId
-          );
-          if (!result.success) {
-              throw new Error(result.error || 'Save failed');
-          }
-          this.lastSaved = Date.now();
-          this.isDirty = false;
-          return true;
-      } catch (err: any) {
-          console.error('Save failed', err);
-          this.saveError = err.message || 'Unknown error';
-          return false;
-      } finally {
-          this.isLoading = false;
-      }
-  }
+    const loaded = await this.persistenceService.load(this.projectId, id);
+    if (!loaded) return false;
 
-  updateQuestionnaire(updates: Partial<Questionnaire>) {
-      // Ensure we don't break reactivity by replacing top-level object if unnecessary, 
-      // but simpler for now.
-      const newIdentifier = { ...this.questionnaire, ...updates, metadata: { ...this.questionnaire.metadata, modified: Date.now() } };
-      this.questionnaire = newIdentifier;
-      this.addToHistory(newIdentifier);
-      this.isDirty = true;
-  }
-  
-  private addToHistory(state: Questionnaire) {
-      // Truncate future if we are in middle of history
-      if (this.historyIndex < this.history.length - 1) {
-          this.history = this.history.slice(0, this.historyIndex + 1);
-      }
-      this.history.push(JSON.parse(JSON.stringify(state)));
-      this.historyIndex = this.history.length - 1;
-  }
-  
-  undo() {
-      if (this.canUndo) {
-          this.historyIndex--;
-          this.questionnaire = JSON.parse(JSON.stringify(this.history[this.historyIndex]));
-      }
-  }
-  
-  redo() {
-      if (this.canRedo) {
-          this.historyIndex++;
-          this.questionnaire = JSON.parse(JSON.stringify(this.history[this.historyIndex]));
-      }
-  }
-  
-  validate() {
-      // Validation stub
-      console.log('Validating questionnaire...');
-      return { validationErrors: [] };
-  }
-
-  getState() {
-      return {
-          validationErrors: []
-      };
-  }
-  addFlowControl(flow: any) {
-     const newQuestionnaire = JSON.parse(JSON.stringify(this.questionnaire));
-     if (!newQuestionnaire.flow) newQuestionnaire.flow = [];
-     newQuestionnaire.flow.push(flow);
-     this.updateQuestionnaire(newQuestionnaire);
+    this.init(loaded);
+    return true;
   }
 
   exportQuestionnaire() {
-      return JSON.parse(JSON.stringify(this.questionnaire));
+    return this.documentStore.exportQuestionnaire(this.questionnaire);
   }
 
+  validate(): DocumentValidationResult {
+    return this.documentStore.validate(this.questionnaire);
+  }
+
+  getState() {
+    return this.validate();
+  }
+
+  undo() {
+    if (!this.canUndo) return;
+
+    this.historyIndex -= 1;
+    const snapshot = this.history[this.historyIndex];
+    if (!snapshot) return;
+
+    this.questionnaire = this.documentStore.normalizeQuestionnaire(snapshot);
+    this.isDirty = true;
+  }
+
+  redo() {
+    if (!this.canRedo) return;
+
+    this.historyIndex += 1;
+    const snapshot = this.history[this.historyIndex];
+    if (!snapshot) return;
+
+    this.questionnaire = this.documentStore.normalizeQuestionnaire(snapshot);
+    this.isDirty = true;
+  }
+
+  private commit(next: Questionnaire, options: CommitOptions = {}) {
+    this.questionnaire = this.documentStore.normalizeQuestionnaire(next);
+
+    if (options.currentPageId !== undefined) {
+      this.currentPageId = options.currentPageId;
+    }
+
+    if (options.currentBlockId !== undefined) {
+      this.currentBlockId = options.currentBlockId;
+    }
+
+    if (options.selectedItemId !== undefined) {
+      if (options.selectedItemId) {
+        this.selectItem(options.selectedItemId, options.selectedItemType || null);
+      } else {
+        this.selectedItem = null;
+        this.selectedItemKind = null;
+      }
+    }
+
+    if (options.pushHistory !== false) {
+      this.pushHistory(this.questionnaire);
+    }
+
+    if (options.markDirty !== false) {
+      this.isDirty = true;
+    }
+  }
+
+  private resetHistory(questionnaire: Questionnaire) {
+    const snapshot = this.documentStore.exportQuestionnaire(questionnaire);
+    this.history = [snapshot];
+    this.historyIndex = 0;
+  }
+
+  private pushHistory(questionnaire: Questionnaire) {
+    const snapshot = this.documentStore.exportQuestionnaire(questionnaire);
+
+    if (this.historyIndex < this.history.length - 1) {
+      this.history = this.history.slice(0, this.historyIndex + 1);
+    }
+
+    this.history.push(snapshot);
+    this.historyIndex = this.history.length - 1;
+  }
+
+  private detectItemType(item: SelectedItem): Exclude<SelectedItemType, null> {
+    if ('scope' in item) return 'variable';
+    if ('blocks' in item) return 'page';
+    if ('pageId' in item && 'questions' in item) return 'block';
+    return 'question';
+  }
+
+  private syncUiState(state: ReturnType<UiStore['getState']>) {
+    this.viewMode = state.viewMode;
+    this.activeLeftTab = state.activeLeftTab;
+    this.previewMode = state.showPreview;
+    this.showCommandPalette = state.showCommandPalette;
+    this.isLeftDrawerOpen = state.isLeftDrawerOpen;
+    this.isRightDrawerOpen = state.isRightDrawerOpen;
+    this.leftCollapsed = state.leftCollapsed;
+    this.rightCollapsed = state.rightCollapsed;
+  }
 }
 
 export const designerStore = new DesignerStore();

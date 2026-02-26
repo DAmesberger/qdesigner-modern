@@ -1,106 +1,54 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const isCI = Boolean(process.env.CI);
+
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
-  globalSetup: './e2e/setup/global-setup.ts',
+  testMatch: ['**/*.smoke.spec.ts', '**/*.regression.spec.ts'],
+  fullyParallel: !isCI,
+  forbidOnly: isCI,
+  retries: isCI ? 1 : 0,
+  workers: isCI ? 1 : undefined,
+  reporter: [['html', { outputFolder: 'playwright-report', open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: process.env.VITE_APP_URL || 'http://localhost:5173',
     trace: 'on-first-retry',
+    video: 'retain-on-failure',
+    screenshot: 'only-on-failure',
   },
   projects: [
-    // Setup project: authenticates test users and saves storage states
     {
-      name: 'setup',
-      testDir: './e2e/setup',
-      testMatch: /auth\.setup\.ts/,
-    },
-
-    // Role-based projects using saved auth states
-    {
-      name: 'admin',
-      use: {
-        ...devices['Desktop Chrome'],
-        storageState: '.auth/admin.json',
-      },
-      dependencies: ['setup'],
-      testIgnore: /setup\//,
-    },
-    {
-      name: 'editor',
-      use: {
-        ...devices['Desktop Chrome'],
-        storageState: '.auth/editor.json',
-      },
-      dependencies: ['setup'],
-      testIgnore: /setup\//,
-    },
-    {
-      name: 'viewer',
-      use: {
-        ...devices['Desktop Chrome'],
-        storageState: '.auth/viewer.json',
-      },
-      dependencies: ['setup'],
-      testIgnore: /setup\//,
-    },
-
-    // Unauthenticated project for login/signup/public page tests
-    {
-      name: 'unauthenticated',
+      name: 'smoke-chromium',
+      grep: /@smoke/,
       use: {
         ...devices['Desktop Chrome'],
       },
-      testMatch: [
-        /auth\.spec\.ts/,
-        /onboarding.*\.spec\.ts/,
-        /reaction-test\.spec\.ts/,
-        /comprehensive-ui-tests\.spec\.ts/,
-      ],
     },
-
-    // Default chromium project (no auth, general tests)
     {
-      name: 'chromium',
+      name: 'regression-chromium',
+      grep: /@regression/,
       use: {
         ...devices['Desktop Chrome'],
-        viewport: null,
-        deviceScaleFactor: undefined,
-        launchOptions: {
-          args: ['--start-maximized'],
-        },
       },
-      dependencies: ['setup'],
-      testIgnore: /setup\//,
     },
-
-    // Cross-browser testing
     {
-      name: 'firefox',
+      name: 'regression-firefox',
+      grep: /@regression/,
       use: {
         ...devices['Desktop Firefox'],
-        storageState: '.auth/admin.json',
       },
-      dependencies: ['setup'],
-      testIgnore: /setup\//,
     },
     {
-      name: 'webkit',
+      name: 'regression-webkit',
+      grep: /@regression/,
       use: {
         ...devices['Desktop Safari'],
-        storageState: '.auth/admin.json',
       },
-      dependencies: ['setup'],
-      testIgnore: /setup\//,
     },
   ],
   webServer: {
     command: 'pnpm dev',
     port: 5173,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !isCI,
   },
 });

@@ -89,10 +89,10 @@
   }
 </script>
 
-<div class="consent-screen">
+<div class="consent-screen" data-testid="fillout-consent-screen">
   <Card class="consent-card">
     <div class="consent-content">
-      <h1 class="consent-title">{title}</h1>
+      <h1 class="consent-title" data-testid="fillout-consent-title">{title}</h1>
 
       <div class="consent-text">
         {@html content}
@@ -129,6 +129,7 @@
             placeholder="Type your full name"
             class="signature-input"
             oninput={() => (showError = false)}
+            data-testid="fillout-consent-signature"
           />
           <p class="signature-note">
             By typing your name above, you are providing an electronic signature.
@@ -141,8 +142,19 @@
       {/if}
 
       <div class="actions">
-        <Button variant="outline" size="lg" onclick={handleDecline}>Decline</Button>
-        <Button variant="default" size="lg" onclick={handleAccept} disabled={!canAccept()}>
+        <Button
+          variant="outline"
+          size="lg"
+          onclick={handleDecline}
+          data-testid="fillout-consent-decline-button">Decline</Button
+        >
+        <Button
+          variant="default"
+          size="lg"
+          onclick={handleAccept}
+          disabled={!canAccept()}
+          data-testid="fillout-consent-accept-button"
+        >
           I Agree
         </Button>
       </div>

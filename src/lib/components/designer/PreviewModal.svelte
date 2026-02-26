@@ -16,13 +16,14 @@
 </script>
 
 <Modal bind:open={isOpen} onclose={handleClose} size="xl">
-  <div class="h-[80vh] flex flex-col">
+  <div class="h-[80vh] flex flex-col" data-testid="designer-preview-modal">
     <div class="flex items-center justify-between px-6 py-4 border-b">
       <h2 class="text-lg font-semibold">Preview</h2>
       <button
         onclick={handleClose}
         aria-label="Close preview"
         class="p-2 hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
+        data-testid="designer-preview-close"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path

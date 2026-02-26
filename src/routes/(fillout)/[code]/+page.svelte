@@ -169,9 +169,9 @@
 
 <svelte:window on:keydown={handleKeyDown} on:resize={handleResize} />
 
-<div class="fillout-page" bind:this={container}>
+<div class="fillout-page" bind:this={container} data-testid="fillout-root">
   {#if error}
-    <div class="error-container">
+    <div class="error-container" data-testid="fillout-error">
       <EmptyState
         title="Unable to load questionnaire"
         description={error}
@@ -180,7 +180,7 @@
       />
     </div>
   {:else if loading}
-    <div class="loading-container">
+    <div class="loading-container" data-testid="fillout-loading">
       <Spinner size="lg" />
       <p class="loading-text">{loadingMessage}</p>
       {#if loadingProgress > 0}
@@ -209,10 +209,11 @@
       class="fillout-canvas"
       width={window.innerWidth}
       height={window.innerHeight}
+      data-testid="fillout-runtime-canvas"
     ></canvas>
 
     <!-- HTML overlay for form inputs -->
-    <div class="html-overlay">
+    <div class="html-overlay" data-testid="fillout-runtime-overlay">
       <!-- Dynamic HTML content will be rendered here -->
     </div>
   {:else if currentScreen === 'complete'}

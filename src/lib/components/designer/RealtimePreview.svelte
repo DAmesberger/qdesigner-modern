@@ -87,8 +87,11 @@
   function getQuestionsForCurrentView() {
     if (!previewQuestionnaire || !currentPage) return [];
 
-    // Get questions from current page (includes questions, instructions, and analytics)
-    const questionIds = currentPage.questions ?? [];
+    const blockQuestionIds = (currentPage.blocks || []).flatMap(
+      (block: any) => block.questions || []
+    );
+    const questionIds =
+      blockQuestionIds.length > 0 ? blockQuestionIds : (currentPage.questions ?? []);
     let questions = questionIds
       .map((id) => previewQuestionnaire?.questions.find((q) => q.id === id))
       .filter((q): q is any => q !== undefined); // Allow any type, not just Question
@@ -231,9 +234,9 @@
   });
 </script>
 
-<div class="preview-container">
+<div class="preview-container" data-testid="designer-realtime-preview">
   <!-- Preview Controls -->
-  <div class="preview-controls">
+  <div class="preview-controls" data-testid="designer-realtime-preview-controls">
     <div class="control-group">
       <button
         class="control-btn"
@@ -241,6 +244,7 @@
         onclick={() => (deviceType = 'desktop')}
         title="Desktop view"
         aria-label="Desktop view"
+        data-testid="preview-device-desktop"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
           <path
@@ -254,6 +258,7 @@
         onclick={() => (deviceType = 'tablet')}
         title="Tablet view"
         aria-label="Tablet view"
+        data-testid="preview-device-tablet"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
           <path
@@ -267,6 +272,7 @@
         onclick={() => (deviceType = 'mobile')}
         title="Mobile view"
         aria-label="Mobile view"
+        data-testid="preview-device-mobile"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
           <path
@@ -282,6 +288,7 @@
         onclick={resetPreview}
         title="Reset preview"
         aria-label="Reset preview"
+        data-testid="preview-reset"
       >
         <svg
           width="16"
@@ -303,6 +310,7 @@
         onclick={() => (showDebugPanel = !showDebugPanel)}
         title="Toggle debug panel"
         aria-label="Toggle debug panel"
+        data-testid="preview-toggle-debug"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
           <path
@@ -321,7 +329,7 @@
   </div>
 
   <!-- Preview Viewport -->
-  <div class="preview-viewport">
+  <div class="preview-viewport" data-testid="designer-realtime-preview-viewport">
     {#if isLoading}
       <div class="loading-state">
         <div class="spinner"></div>
@@ -360,13 +368,13 @@
         {#key previewKey}
           <div class="preview-content">
             {#if currentPage}
-              <div class="page-header">
+              <div class="page-header" data-testid="preview-page-header">
                 <h2>{currentPage.name || `Page ${currentPageIndex + 1}`}</h2>
               </div>
 
-              <div class="questions-container">
+              <div class="questions-container" data-testid="preview-question-list">
                 {#each currentQuestions as question (question.id)}
-                  <div class="question-preview">
+                  <div class="question-preview" data-testid={`preview-question-${question.id}`}>
                     <QuestionRenderer
                       {question}
                       mode="runtime"
@@ -389,11 +397,12 @@
                   class="nav-btn secondary"
                   onclick={navigatePrevious}
                   disabled={currentPageIndex === 0}
+                  data-testid="preview-previous-button"
                 >
                   Previous
                 </button>
 
-                <div class="progress-info">
+                <div class="progress-info" data-testid="preview-progress">
                   Page {currentPageIndex + 1} of {previewQuestionnaire?.pages.length}
                 </div>
 
@@ -402,6 +411,7 @@
                   onclick={navigateNext}
                   disabled={!canNavigateNext() ||
                     currentPageIndex === (previewQuestionnaire?.pages.length || 1) - 1}
+                  data-testid="preview-next-button"
                 >
                   Next
                 </button>

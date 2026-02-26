@@ -45,7 +45,7 @@
   }
 </script>
 
-<div class="completion-screen">
+<div class="completion-screen" data-testid="fillout-completion-screen">
   <Card class="completion-card">
     <div class="completion-content">
       <!-- Success icon -->
@@ -56,7 +56,7 @@
         </svg>
       </div>
 
-      <h1 class="completion-title">Thank You!</h1>
+      <h1 class="completion-title" data-testid="fillout-completion-title">Thank You!</h1>
 
       <p class="completion-message">
         {customMessage || 'Your responses have been successfully recorded.'}

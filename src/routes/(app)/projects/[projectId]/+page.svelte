@@ -97,6 +97,7 @@
             <button
               onclick={() => (showCreateModal = true)}
               class="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              data-testid="create-questionnaire-button"
             >
               <Plus class="-ml-1 mr-2 h-5 w-5" />
               New Questionnaire
@@ -117,6 +118,7 @@
           <button
             onclick={() => (showCreateModal = true)}
             class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            data-testid="create-questionnaire-empty-button"
           >
             <Plus class="-ml-1 mr-2 h-5 w-5" />
             New Questionnaire
@@ -127,7 +129,7 @@
       <div class="bg-white shadow overflow-hidden sm:rounded-md">
         <ul class="divide-y divide-gray-200">
           {#each data.questionnaires as questionnaire}
-            <li>
+            <li data-testid={`questionnaire-list-item-${questionnaire.id}`}>
               <div class="px-4 py-4 sm:px-6 hover:bg-gray-50">
                 <div class="flex items-center justify-between">
                   <div class="flex items-center">
@@ -171,6 +173,7 @@
                         }}
                         class="text-gray-600 hover:text-gray-900"
                         title="Edit questionnaire"
+                        data-testid={`questionnaire-edit-${questionnaire.id}`}
                       >
                         <Edit class="h-5 w-5" />
                       </button>
@@ -214,6 +217,7 @@
         bind:value={questionnaireName}
         class="mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm px-3 py-2"
         placeholder="My Questionnaire"
+        data-testid="questionnaire-name-input"
       />
     </div>
 
@@ -227,6 +231,7 @@
         rows="3"
         class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm"
         placeholder="Brief description of your questionnaire..."
+        data-testid="questionnaire-description-input"
       ></textarea>
     </div>
   </div>
@@ -237,6 +242,7 @@
         onclick={createQuestionnaire}
         disabled={!questionnaireName.trim()}
         class="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary text-base font-medium text-white hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        data-testid="questionnaire-create-confirm"
       >
         Create & Edit
       </button>
