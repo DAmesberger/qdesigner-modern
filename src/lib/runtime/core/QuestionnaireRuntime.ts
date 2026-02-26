@@ -276,18 +276,37 @@ export class QuestionnaireRuntime {
   }
 
   private inferVariableType(question: Question): Variable['type'] {
-    const responseType = (question as any).responseType?.type;
+    const responseType = (question as any).responseType;
+    const responseTypeKind = responseType?.type;
 
-    if (!responseType) {
+    if (!responseTypeKind) {
       return 'object';
     }
 
-    if (responseType === 'number' || responseType === 'scale') return 'number';
-    if (responseType === 'multiple') return 'array';
-    if (responseType === 'single' || responseType === 'text' || responseType === 'keypress')
+    if (responseTypeKind === 'number' || responseTypeKind === 'scale') return 'number';
+    if (responseTypeKind === 'multiple') return 'array';
+
+    if (responseTypeKind === 'single') {
+      const optionValues = Array.isArray(responseType.options)
+        ? responseType.options
+            .map((option: any) => option?.value)
+            .filter((value: unknown) => value !== null && value !== undefined)
+        : [];
+
+      if (optionValues.length > 0 && optionValues.every((value: unknown) => typeof value === 'number')) {
+        return 'number';
+      }
+
+      if (optionValues.length > 0 && optionValues.every((value: unknown) => typeof value === 'boolean')) {
+        return 'boolean';
+      }
+
       return 'string';
-    if (responseType === 'none') return 'string';
-    if (responseType === 'click') return 'object';
+    }
+
+    if (responseTypeKind === 'text' || responseTypeKind === 'keypress') return 'string';
+    if (responseTypeKind === 'none') return 'string';
+    if (responseTypeKind === 'click') return 'object';
 
     return 'object';
   }

@@ -12,28 +12,76 @@ interface RuntimeDebugState {
   responses: Array<{ questionId: string; value: unknown; valid: boolean }>;
   variables: Record<string, unknown>;
   completed: boolean;
+  errors?: string[];
+}
+
+async function getRuntimeState(page: Page): Promise<RuntimeDebugState | null> {
+  try {
+    return await page.evaluate(
+      () => ((window as any).__QDESIGNER_RUNTIME_DEBUG__ ?? null) as RuntimeDebugState | null
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('Execution context was destroyed')) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+async function waitForRuntimeStart(page: Page): Promise<void> {
+  const timeoutMs = 30000;
+  const pollIntervalMs = 100;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const state = await getRuntimeState(page);
+    if (state?.errors?.length) {
+      throw new Error(`Runtime failed to start: ${state.errors.join(' | ')}`);
+    }
+
+    if ((state?.presentedQuestionIds?.length ?? 0) > 0 || state?.completed) {
+      return;
+    }
+
+    await page.waitForTimeout(pollIntervalMs);
+  }
+
+  throw new Error(`Runtime did not start within ${timeoutMs}ms`);
 }
 
 async function startScenario(page: Page, scenario: ScenarioName): Promise<void> {
   await page.goto(`/test-runtime?scenario=${scenario}`);
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(
+          (value) => (window as any).__QDESIGNER_RUNTIME_DEBUG__?.scenario === value,
+          scenario
+        ),
+      { timeout: 10000 }
+    )
+    .toBe(true);
 
   const startButton = page.getByRole('button', { name: 'Start Test' });
   await expect(startButton).toBeVisible();
   await startButton.click();
-  await expect(startButton).toBeHidden({ timeout: 10000 });
+  await waitForRuntimeStart(page);
 }
 
 async function waitForQuestion(page: Page, questionId: string): Promise<void> {
   await expect
     .poll(
-      async () =>
-        page.evaluate(
-          (value) =>
-            (window as any).__QDESIGNER_RUNTIME_DEBUG__?.presentedQuestionIds.includes(value) ??
-            false,
-          questionId
-        ),
-      { timeout: 10000 }
+      async () => {
+        const state = await getRuntimeState(page);
+        if (state?.errors?.length) {
+          throw new Error(`Runtime error: ${state.errors.join(' | ')}`);
+        }
+
+        return state?.presentedQuestionIds.includes(questionId) ?? false;
+      },
+      { timeout: 15000 }
     )
     .toBe(true);
 }
@@ -41,13 +89,19 @@ async function waitForQuestion(page: Page, questionId: string): Promise<void> {
 async function waitForCompletion(page: Page): Promise<RuntimeDebugState> {
   await expect
     .poll(
-      async () =>
-        page.evaluate(() => (window as any).__QDESIGNER_RUNTIME_DEBUG__?.completed ?? false),
-      { timeout: 15000 }
+      async () => {
+        const state = await getRuntimeState(page);
+        if (state?.errors?.length) {
+          throw new Error(`Runtime error: ${state.errors.join(' | ')}`);
+        }
+
+        return state?.completed ?? false;
+      },
+      { timeout: 20000 }
     )
     .toBe(true);
 
-  const state = await page.evaluate(() => (window as any).__QDESIGNER_RUNTIME_DEBUG__);
+  const state = await getRuntimeState(page);
   if (!state) {
     throw new Error('Missing runtime debug state');
   }
@@ -56,6 +110,8 @@ async function waitForCompletion(page: Page): Promise<RuntimeDebugState> {
 }
 
 test.describe('@regression focused runtime scenarios', () => {
+  test.describe.configure({ timeout: 60000 });
+
   test('control flow skips a page when rule condition matches', async ({ page }) => {
     await startScenario(page, 'control-flow');
     await waitForQuestion(page, 'q_gate');

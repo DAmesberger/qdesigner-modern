@@ -147,16 +147,17 @@ export class ResponseCollector {
     const rt = responseType as any;
     if (rt.type !== 'single' && rt.type !== 'multiple') return;
 
-    const options: Array<{ value: string; key?: string }> = rt.options || [];
+    const options: Array<{ value: string | number | boolean; key?: string }> = rt.options || [];
     const isMultiple = rt.type === 'multiple';
-    const selectedValues = new Set<string>();
+    const selectedValues = new Set<string | number | boolean>();
 
     this.keyboardHandler = (event: KeyboardEvent) => {
       if (!this.shouldAcceptResponse()) return;
 
       const key = event.key.toLowerCase();
+      const normalize = (value: unknown) => String(value ?? '').toLowerCase();
       const option = options.find(
-        (entry) => entry.value.toLowerCase() === key || entry.key?.toLowerCase() === key
+        (entry) => normalize(entry.key) === key || normalize(entry.value) === key
       );
 
       if (!option) {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
@@ -95,6 +95,8 @@
       }
 
       currentScreen = 'runtime';
+      loading = false;
+      await tick();
       await initializeRuntime();
     } catch (err) {
       console.error('Failed to create session:', err);
@@ -105,7 +107,12 @@
   }
 
   async function initializeRuntime() {
-    if (!canvas) return;
+    if (!canvas) {
+      await tick();
+      if (!canvas) {
+        throw new Error('Runtime canvas is not ready');
+      }
+    }
 
     try {
       loading = true;
@@ -179,7 +186,7 @@
         onAction={() => goto('/')}
       />
     </div>
-  {:else if loading}
+  {:else if loading && currentScreen !== 'runtime'}
     <div class="loading-container" data-testid="fillout-loading">
       <Spinner size="lg" />
       <p class="loading-text">{loadingMessage}</p>

@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
 
 const TEST_PASSWORD = 'TestPassword123!';
 
@@ -62,10 +62,8 @@ export function deriveQuestionnaireCode(questionnaireId: string): string {
 }
 
 export async function provisionPublishedQuestionnaire(
-  page: Page
+  requestContext: APIRequestContext
 ): Promise<ProvisionedQuestionnaire> {
-  // Use same-origin API path so Vite proxy handles backend routing in e2e.
-  const apiUrl = '';
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const email = `fullstack.${runId}@test.local`;
   const organizationName = `E2E Org ${runId}`;
@@ -75,123 +73,92 @@ export async function provisionPublishedQuestionnaire(
   const questionnaireName = `Fullstack Fillout ${runId}`;
   const definition = buildAutoFilloutDefinition(questionnaireName);
 
-  return page.evaluate(
-    async ({
-      apiUrl: evaluateApiUrl,
-      password,
-      evaluateEmail,
-      evaluateOrganizationName,
-      evaluateOrgSlug,
-      evaluateProjectName,
-      evaluateProjectCode,
-      evaluateQuestionnaireName,
-      evaluateDefinition,
-    }) => {
-      const request = async (
-        method: string,
-        path: string,
-        body?: unknown,
-        token?: string
-      ): Promise<any> => {
-        const headers: Record<string, string> = {};
-        if (token) {
-          headers.Authorization = `Bearer ${token}`;
-        }
-        if (body !== undefined) {
-          headers['Content-Type'] = 'application/json';
-        }
-
-        const response = await fetch(`${evaluateApiUrl}${path}`, {
-          method,
-          headers,
-          body: body !== undefined ? JSON.stringify(body) : undefined,
-        });
-
-        if (!response.ok) {
-          const errorBody = await response.text();
-          throw new Error(`API ${method} ${path} failed (${response.status}): ${errorBody}`);
-        }
-
-        if (response.status === 204) {
-          return null;
-        }
-
-        return response.json();
-      };
-
-      const auth = await request('POST', '/api/auth/register', {
-        email: evaluateEmail,
-        password,
-        full_name: 'Playwright Fullstack User',
-      });
-
-      const token = auth.access_token as string;
-
-      const organization = await request(
-        'POST',
-        '/api/organizations',
-        {
-          name: evaluateOrganizationName,
-          slug: evaluateOrgSlug,
-        },
-        token
-      );
-
-      const project = await request(
-        'POST',
-        '/api/projects',
-        {
-          organization_id: organization.id,
-          name: evaluateProjectName,
-          code: evaluateProjectCode,
-          is_public: true,
-        },
-        token
-      );
-
-      const questionnaire = await request(
-        'POST',
-        `/api/projects/${project.id}/questionnaires`,
-        {
-          name: evaluateQuestionnaireName,
-          description: 'Provisioned by Playwright fullstack tests',
-          content: evaluateDefinition,
-          settings: {},
-        },
-        token
-      );
-
-      await request(
-        'POST',
-        `/api/projects/${project.id}/questionnaires/${questionnaire.id}/publish`,
-        undefined,
-        token
-      );
-
-      const questionnaireCode = (questionnaire.id as string)
-        .replace(/-/g, '')
-        .slice(0, 8)
-        .toUpperCase();
-
-      return {
-        email: evaluateEmail,
-        password,
-        organizationId: organization.id,
-        projectId: project.id,
-        questionnaireId: questionnaire.id,
-        questionnaireCode,
-      } satisfies ProvisionedQuestionnaire;
-    },
-    {
-      apiUrl,
-      password: TEST_PASSWORD,
-      evaluateEmail: email,
-      evaluateOrganizationName: organizationName,
-      evaluateOrgSlug: orgSlug,
-      evaluateProjectName: projectName,
-      evaluateProjectCode: projectCode,
-      evaluateQuestionnaireName: questionnaireName,
-      evaluateDefinition: definition,
+  const requestJson = async (
+    method: string,
+    path: string,
+    body?: unknown,
+    token?: string
+  ): Promise<any> => {
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
+
+    const response = await requestContext.fetch(`/api${path}`, {
+      method,
+      headers,
+      data: body,
+    });
+
+    if (!response.ok()) {
+      const errorBody = await response.text();
+      throw new Error(`API ${method} /api${path} failed (${response.status()}): ${errorBody}`);
+    }
+
+    if (response.status() === 204) {
+      return null;
+    }
+
+    return response.json();
+  };
+
+  const auth = await requestJson('POST', '/auth/register', {
+    email,
+    password: TEST_PASSWORD,
+    full_name: 'Playwright Fullstack User',
+  });
+
+  const token = auth.access_token as string;
+
+  const organization = await requestJson(
+    'POST',
+    '/organizations',
+    {
+      name: organizationName,
+      slug: orgSlug,
+    },
+    token
   );
+
+  const project = await requestJson(
+    'POST',
+    '/projects',
+    {
+      organization_id: organization.id,
+      name: projectName,
+      code: projectCode,
+      is_public: true,
+    },
+    token
+  );
+
+  const questionnaire = await requestJson(
+    'POST',
+    `/projects/${project.id}/questionnaires`,
+    {
+      name: questionnaireName,
+      description: 'Provisioned by Playwright fullstack tests',
+      content: definition,
+      settings: {},
+    },
+    token
+  );
+
+  await requestJson(
+    'POST',
+    `/projects/${project.id}/questionnaires/${questionnaire.id}/publish`,
+    undefined,
+    token
+  );
+
+  const questionnaireCode = (questionnaire.id as string).replace(/-/g, '').slice(0, 8).toUpperCase();
+
+  return {
+    email,
+    password: TEST_PASSWORD,
+    organizationId: organization.id,
+    projectId: project.id,
+    questionnaireId: questionnaire.id,
+    questionnaireCode,
+  };
 }

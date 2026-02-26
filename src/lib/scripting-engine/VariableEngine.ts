@@ -238,10 +238,14 @@ export class VariableEngine {
     contextVariableId: string | undefined,
     stack: Set<string>
   ): EvaluationResult {
-    const cacheKey = `${contextVariableId || 'expression'}:${formula}`;
-    const cached = this.evaluationCache.get(cacheKey);
-    if (cached) {
-      return cached;
+    // Cache only variable-backed formulas. Ad-hoc expressions (e.g. flow conditions)
+    // must always re-evaluate against live variable state.
+    const cacheKey = contextVariableId ? `${contextVariableId}:${formula}` : null;
+    if (cacheKey) {
+      const cached = this.evaluationCache.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
     }
 
     try {
@@ -250,7 +254,9 @@ export class VariableEngine {
       const value = math.evaluate(formula, scope);
 
       const result: EvaluationResult = { value, dependencies };
-      this.evaluationCache.set(cacheKey, result);
+      if (cacheKey) {
+        this.evaluationCache.set(cacheKey, result);
+      }
       return result;
     } catch (error) {
       return {

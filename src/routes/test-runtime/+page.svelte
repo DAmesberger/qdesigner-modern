@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     QuestionnaireRuntime,
     type QuestionPresentedEvent,
@@ -139,8 +139,8 @@
           responseType: {
             type: 'single',
             options: [
-              { value: 'y', label: 'Yes', key: 'y' },
-              { value: 'n', label: 'No', key: 'n' },
+              { value: 1, label: 'Yes', key: 'y' },
+              { value: 0, label: 'No', key: 'n' },
             ],
           },
         },
@@ -152,7 +152,7 @@
         {
           id: 'skip_yes',
           type: 'skip',
-          condition: '(_currentPage == 1) and (q_gate_value == "y")',
+          condition: '(_currentPage == 1) and (q_gate_value == 1)',
           target: 'p3',
         },
       ];
@@ -336,7 +336,18 @@
   }
 
   async function startTest() {
-    if (!canvas || loading) return;
+    if (loading) return;
+
+    if (!canvas) {
+      await tick();
+      if (!canvas) {
+        errorMessage = 'Runtime canvas is not ready yet. Please try again.';
+        updateDebugState((state) => {
+          state.errors.push(errorMessage || 'Runtime canvas is not ready yet.');
+        });
+        return;
+      }
+    }
 
     loading = true;
     started = false;

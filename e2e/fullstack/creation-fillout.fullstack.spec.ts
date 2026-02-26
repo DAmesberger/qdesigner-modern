@@ -2,12 +2,14 @@ import { expect, test } from '@playwright/test';
 import { provisionPublishedQuestionnaire } from '../helpers/fullstack-api';
 
 test.describe('@fullstack questionnaire creation and participant fillout', () => {
-  test('creates, publishes, opens by code, and reaches completion', async ({ page }) => {
+  test('creates, publishes, opens by code, and reaches completion', async ({ page, request }) => {
     await page.goto('/');
-    const provisioned = await provisionPublishedQuestionnaire(page);
+    const provisioned = await provisionPublishedQuestionnaire(request);
 
     await page.goto(`/${provisioned.questionnaireCode}`);
     await expect(page.locator('[data-testid="fillout-welcome-screen"]')).toBeVisible();
+    const startButton = page.getByRole('button', { name: /start questionnaire/i });
+    await expect(startButton).toBeVisible();
 
     const sessionCreated = page.waitForResponse((response) => {
       const url = new URL(response.url());
@@ -18,7 +20,7 @@ test.describe('@fullstack questionnaire creation and participant fillout', () =>
       );
     });
 
-    await page.locator('[data-testid="fillout-start-button"]').click();
+    await startButton.click();
     await sessionCreated;
 
     await expect(page.locator('[data-testid="fillout-runtime-canvas"]')).toBeVisible({

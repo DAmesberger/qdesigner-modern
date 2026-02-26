@@ -125,6 +125,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Never cache or rewrite non-GET requests (e.g. auth/session POSTs).
+  if (request.method !== 'GET') {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   // Skip cross-origin requests
   if (url.origin !== self.location.origin && !isTrustedOrigin(url.origin)) {
     return;
@@ -215,17 +221,19 @@ function isTrustedOrigin(origin) {
   });
 }
 
-function offlineResponse() {
-  return caches.match('/offline.html') || new Response(
-    'Offline - Please check your internet connection',
-    { 
-      status: 503, 
-      statusText: 'Service Unavailable',
-      headers: new Headers({
-        'Content-Type': 'text/plain'
-      })
-    }
-  );
+async function offlineResponse() {
+  const cachedOffline = await caches.match('/offline.html');
+  if (cachedOffline) {
+    return cachedOffline;
+  }
+
+  return new Response('Offline - Please check your internet connection', {
+    status: 503,
+    statusText: 'Service Unavailable',
+    headers: new Headers({
+      'Content-Type': 'text/plain',
+    }),
+  });
 }
 
 // Message handling for sync and other features
