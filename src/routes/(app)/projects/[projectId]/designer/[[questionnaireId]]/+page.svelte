@@ -87,7 +87,7 @@
     // Load existing questionnaire or create new
     if (questionnaire?.isNew) {
       // Create new questionnaire with project context
-      designerStore.createNewQuestionnaire({
+      await designerStore.createNewQuestionnaire({
         name: questionnaire.name,
         description: questionnaire.description,
         projectId: projectId,

@@ -8,6 +8,7 @@ use crate::state::AppState;
 /// session-local variables so that RLS policies can reference them.
 ///
 /// Must run *after* the auth middleware populates `AuthenticatedUser`.
+#[allow(dead_code)]
 pub async fn set_rls_context(
     State(state): State<AppState>,
     request: Request,

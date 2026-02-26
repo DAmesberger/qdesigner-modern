@@ -8,6 +8,7 @@ pub enum OrgRole {
 }
 
 impl OrgRole {
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &'static str {
         match self {
             OrgRole::Owner => "owner",
@@ -38,6 +39,7 @@ pub enum ProjectRole {
 }
 
 impl ProjectRole {
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &'static str {
         match self {
             ProjectRole::Owner => "owner",
@@ -60,6 +62,7 @@ impl ProjectRole {
 
 /// Permission constants used by require_permission middleware.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum Permission {
     // Organization
     OrgRead,
@@ -92,6 +95,7 @@ pub enum Permission {
 }
 
 impl Permission {
+    #[allow(dead_code)]
     pub fn as_str(&self) -> &'static str {
         match self {
             Permission::OrgRead => "org:read",

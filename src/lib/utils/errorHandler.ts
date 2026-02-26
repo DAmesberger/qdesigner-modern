@@ -11,20 +11,9 @@ export interface APIError {
 export function handleAPIError(error: any): APIError {
   console.error('API Error:', error);
   
-  // Handle Supabase/PostgREST specific errors
+  // Handle PostgreSQL/API specific errors
   if (error?.code) {
     switch (error.code) {
-      case 'PGRST200':
-      case 'PGRST201':
-      case 'PGRST204':
-        return {
-          code: error.code,
-          message: 'Database relationship error',
-          details: error.details || 'Failed to load related data',
-          hint: error.hint || 'Please check your data relationships',
-          status: 400
-        };
-        
       case '23505':
         return {
           code: error.code,
@@ -49,14 +38,15 @@ export function handleAPIError(error: any): APIError {
           status: 403
         };
         
-      case 'PGRST301':
+      case '28000':
+      case '28P01':
         return {
           code: error.code,
           message: 'Authentication required',
           details: 'Please log in to continue',
           status: 401
         };
-        
+
       default:
         return {
           code: error.code,

@@ -1,6 +1,6 @@
 use aws_config::Region;
 use aws_sdk_s3::{
-    config::{Builder as S3ConfigBuilder, Credentials},
+    config::{BehaviorVersion, Builder as S3ConfigBuilder, Credentials},
     presigning::PresigningConfig,
     primitives::ByteStream,
     Client,
@@ -26,6 +26,7 @@ impl S3StorageService {
         let creds = Credentials::new(access_key, secret_key, None, None, "static");
 
         let config = S3ConfigBuilder::new()
+            .behavior_version(BehaviorVersion::latest())
             .endpoint_url(endpoint)
             .region(Region::new("us-east-1"))
             .credentials_provider(creds)
@@ -114,6 +115,7 @@ impl S3StorageService {
     }
 
     /// List objects with an optional prefix.
+    #[allow(dead_code)]
     pub async fn list(&self, prefix: Option<&str>) -> Result<Vec<S3Object>, ApiError> {
         let mut builder = self.client.list_objects_v2().bucket(&self.bucket);
         if let Some(p) = prefix {
@@ -153,6 +155,7 @@ impl S3StorageService {
 }
 
 #[derive(Debug, serde::Serialize)]
+#[allow(dead_code)]
 pub struct S3Object {
     pub key: String,
     pub size: i64,

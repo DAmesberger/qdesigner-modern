@@ -357,7 +357,7 @@
               bind:value={verificationCode}
               placeholder="000000"
               maxLength={6}
-              pattern="[0-9]{6}"
+              inputmode="numeric"
               autocomplete="one-time-code"
               class="text-center text-2xl tracking-widest"
             />

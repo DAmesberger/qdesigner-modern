@@ -32,6 +32,7 @@ pub struct RefreshClaims {
 
 /// Authenticated user extracted from middleware into request extensions.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AuthenticatedUser {
     pub user_id: Uuid,
     pub email: String,
@@ -92,6 +93,18 @@ pub struct PasswordResetRequest {
     pub email: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SendVerificationCodeRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VerifyCodeRequest {
+    pub email: String,
+    pub code: String,
+}
+
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Validate)]
 pub struct PasswordResetConfirm {
     pub token: String,
@@ -101,6 +114,7 @@ pub struct PasswordResetConfirm {
 
 /// Row returned when querying the users table + password_hash.
 #[derive(Debug, sqlx::FromRow)]
+#[allow(dead_code)]
 pub struct UserRow {
     pub id: Uuid,
     pub email: String,

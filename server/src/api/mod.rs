@@ -1,5 +1,5 @@
 use axum::{
-    routing::{delete, get, patch, post},
+    routing::{delete, get, post},
     Router,
 };
 
@@ -23,6 +23,9 @@ pub fn router(state: AppState) -> Router {
         .route("/logout", post(auth::logout))
         .route("/me", get(auth::me))
         .route("/verify-email", post(auth::verify_email))
+        .route("/verify-email/send", post(auth::send_verification_code))
+        .route("/verify-email/verify", post(auth::verify_code))
+        .route("/verify-email/resend", post(auth::send_verification_code))
         .route("/password-reset", post(auth::password_reset));
 
     let user_routes = Router::new().route(

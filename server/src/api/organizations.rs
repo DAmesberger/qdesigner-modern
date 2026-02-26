@@ -10,6 +10,19 @@ use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::state::AppState;
 
+// ── Helpers ──────────────────────────────────────────────────────────
+
+fn slugify(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
 // ── Models ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -28,8 +41,7 @@ pub struct Organization {
 pub struct CreateOrgRequest {
     #[validate(length(min = 1, max = 255))]
     pub name: String,
-    #[validate(length(min = 1, max = 255))]
-    pub slug: String,
+    pub slug: Option<String>,
     pub domain: Option<String>,
     pub logo_url: Option<String>,
 }
@@ -122,11 +134,14 @@ pub async fn create_organization(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
+    // Generate slug from name if not provided
+    let slug = body.slug.unwrap_or_else(|| slugify(&body.name));
+
     // Check slug uniqueness
     let exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM organizations WHERE slug = $1)",
     )
-    .bind(&body.slug)
+    .bind(&slug)
     .fetch_one(&state.pool)
     .await?;
 
@@ -145,7 +160,7 @@ pub async fn create_organization(
     )
     .bind(org_id)
     .bind(&body.name)
-    .bind(&body.slug)
+    .bind(&slug)
     .bind(&body.domain)
     .bind(&body.logo_url)
     .bind(user.user_id)

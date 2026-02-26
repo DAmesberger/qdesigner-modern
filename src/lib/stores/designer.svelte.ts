@@ -339,8 +339,64 @@ class DesignerStore {
       this.projectId = id;
   }
   
-  createNewQuestionnaire(data: any) {
-      this.init(data);
+  async createNewQuestionnaire(data: any) {
+      const initialBlockId = generateId();
+      const initialPageId = generateId();
+
+      const content = {
+          name: data.name || 'Untitled Questionnaire',
+          description: data.description || '',
+          pages: [
+              {
+                  id: initialPageId,
+                  title: 'Page 1',
+                  blocks: [
+                      {
+                          id: initialBlockId,
+                          type: 'default',
+                          title: 'Block 1',
+                          questions: [],
+                      }
+                  ],
+              }
+          ],
+          variables: [],
+          settings: {},
+          version: '1.0.0',
+          questions: [],
+          flow: [],
+      };
+
+      // Create on the backend first to get a UUID
+      let dbId: string | undefined;
+      if (this.projectId) {
+          try {
+              const { api } = await import('$lib/services/api');
+              const result = await api.questionnaires.create(this.projectId, {
+                  name: content.name,
+                  description: content.description,
+                  content,
+                  settings: content.settings,
+              });
+              dbId = result.id;
+          } catch (err) {
+              console.error('Failed to create questionnaire on backend:', err);
+          }
+      }
+
+      const questionnaire: Questionnaire = {
+          id: dbId || generateId(),
+          ...content,
+          created: new Date(),
+          modified: new Date(),
+          metadata: {
+              created: Date.now(),
+              modified: Date.now(),
+              author: '',
+              version: '1.0.0'
+          }
+      };
+      this.init(questionnaire);
   }
   
   loadQuestionnaireFromDefinition(data: any) {

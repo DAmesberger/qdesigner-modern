@@ -67,12 +67,8 @@ temp/
 .yarn/
 .pnpm-debug.log
 
-# Supabase
-.supabase/
-!supabase/config.toml
-!supabase/migrations/
-!supabase/functions/
-!supabase/seed.sql
+# Rust build artifacts
+server/target/
 
 # Database
 *.sqlite

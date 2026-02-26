@@ -1,4 +1,7 @@
-use axum::http::{HeaderValue, Method};
+use axum::http::{
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+    HeaderValue, Method,
+};
 use tower_http::cors::CorsLayer;
 
 /// Build a CORS layer from the configured origin list.
@@ -18,7 +21,7 @@ pub fn cors_layer(origins: &[String]) -> CorsLayer {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers(tower_http::cors::Any)
+        .allow_headers([AUTHORIZATION, CONTENT_TYPE, ACCEPT])
         .allow_credentials(true)
         .max_age(std::time::Duration::from_secs(3600))
 }

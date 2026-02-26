@@ -49,6 +49,7 @@ impl RbacManager {
     }
 
     /// Return all organisation IDs + roles for a user.
+    #[allow(dead_code)]
     pub async fn get_user_org_roles(
         &self,
         user_id: Uuid,
@@ -103,6 +104,7 @@ impl RbacManager {
     // ── Permission checks ────────────────────────────────────────────
 
     /// Check whether a user has a given permission for an organisation.
+    #[allow(dead_code)]
     pub async fn has_org_permission(
         &self,
         user_id: Uuid,
@@ -119,6 +121,7 @@ impl RbacManager {
 
     /// Check whether a user has a given permission for a project.
     /// Falls back to the org role if no project-level membership exists.
+    #[allow(dead_code)]
     pub async fn has_project_permission(
         &self,
         user_id: Uuid,
@@ -168,6 +171,7 @@ fn project_role_level(role: &ProjectRole) -> u8 {
     }
 }
 
+#[allow(dead_code)]
 fn org_role_has_permission(role: &OrgRole, perm: Permission) -> bool {
     match role {
         OrgRole::Owner => true, // owner can do everything
@@ -198,6 +202,7 @@ fn org_role_has_permission(role: &OrgRole, perm: Permission) -> bool {
     }
 }
 
+#[allow(dead_code)]
 fn project_role_has_permission(role: &ProjectRole, perm: Permission) -> bool {
     match role {
         ProjectRole::Owner => true,

@@ -8,6 +8,7 @@ use crate::state::AppState;
 
 /// Middleware factory: require an org-level role.
 /// The route must contain an `org_id` path parameter.
+#[allow(dead_code)]
 pub async fn require_org_role(
     axum::extract::State(state): axum::extract::State<AppState>,
     Path(org_id): Path<Uuid>,
@@ -36,6 +37,7 @@ pub async fn require_org_role(
 
 /// Middleware factory: require a project-level role.
 /// The route must contain a `project_id` path parameter.
+#[allow(dead_code)]
 pub async fn require_project_role(
     axum::extract::State(state): axum::extract::State<AppState>,
     Path(project_id): Path<Uuid>,
@@ -63,6 +65,7 @@ pub async fn require_project_role(
 }
 
 /// Middleware factory: require a specific permission for an organisation.
+#[allow(dead_code)]
 pub async fn require_org_permission(
     axum::extract::State(state): axum::extract::State<AppState>,
     Path(org_id): Path<Uuid>,
@@ -90,6 +93,7 @@ pub async fn require_org_permission(
 }
 
 /// Middleware factory: require a specific permission for a project.
+#[allow(dead_code)]
 pub async fn require_project_permission(
     axum::extract::State(state): axum::extract::State<AppState>,
     Path(project_id): Path<Uuid>,

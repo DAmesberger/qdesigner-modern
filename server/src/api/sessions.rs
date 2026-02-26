@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -64,6 +64,7 @@ pub struct SubmitResponseRequest {
     pub metadata: Option<serde_json::Value>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct SessionListQuery {
     pub questionnaire_id: Option<Uuid>,

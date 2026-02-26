@@ -11,6 +11,7 @@ use crate::websocket::manager::WebSocketState;
 
 /// Shared application state — cheaply cloneable via `Arc`.
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct AppState {
     pub pool: PgPool,
     pub jwt_manager: Arc<JwtManager>,

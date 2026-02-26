@@ -13,6 +13,7 @@ pub struct WsMessage {
 
 /// Per-connection state.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Connection {
     pub user_id: Uuid,
     pub subscriptions: Vec<String>,
@@ -87,6 +88,7 @@ impl WebSocketState {
     }
 
     /// Return the number of active connections.
+    #[allow(dead_code)]
     pub async fn connection_count(&self) -> usize {
         self.connections.read().await.len()
     }

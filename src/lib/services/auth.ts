@@ -1,7 +1,16 @@
-import type { User, Session, AuthResult, TokenPair, AuthChangeEvent } from '$lib/types/auth';
+import type { User, Session, AuthResult, AuthChangeEvent } from '$lib/types/auth';
 
 const STORAGE_KEY = 'qdesigner-auth';
 const API_BASE = import.meta.env.VITE_API_URL || '';
+
+/** Matches the flat JSON returned by the Rust backend. */
+interface AuthResponse {
+	access_token: string;
+	refresh_token: string;
+	token_type: string;
+	expires_in: number;
+	user: User;
+}
 
 type AuthChangeCallback = (event: AuthChangeEvent) => void;
 
@@ -42,8 +51,8 @@ class AuthService {
 				return { session: null, user: null, error: err.error || 'Login failed' };
 			}
 
-			const data: { tokens: TokenPair; user: User } = await res.json();
-			const session = this.createSession(data.tokens, data.user);
+			const data: AuthResponse = await res.json();
+			const session = this.createSession(data);
 			this.setSession(session);
 			return { session, user: data.user, error: null };
 		} catch (err) {
@@ -68,8 +77,8 @@ class AuthService {
 				return { session: null, user: null, error: err.error || 'Registration failed' };
 			}
 
-			const data: { tokens: TokenPair; user: User } = await res.json();
-			const session = this.createSession(data.tokens, data.user);
+			const data: AuthResponse = await res.json();
+			const session = this.createSession(data);
 			this.setSession(session);
 			return { session, user: data.user, error: null };
 		} catch (err) {
@@ -170,8 +179,8 @@ class AuthService {
 				return false;
 			}
 
-			const data: { tokens: TokenPair; user: User } = await res.json();
-			const session = this.createSession(data.tokens, data.user);
+			const data: AuthResponse = await res.json();
+			const session = this.createSession(data);
 			this.setSession(session, 'TOKEN_REFRESHED');
 			return true;
 		} catch {
@@ -180,12 +189,12 @@ class AuthService {
 		}
 	}
 
-	private createSession(tokens: TokenPair, user: User): Session {
+	private createSession(data: AuthResponse): Session {
 		return {
-			accessToken: tokens.access_token,
-			refreshToken: tokens.refresh_token,
-			expiresAt: Math.floor(Date.now() / 1000) + tokens.expires_in,
-			user
+			accessToken: data.access_token,
+			refreshToken: data.refresh_token,
+			expiresAt: Math.floor(Date.now() / 1000) + data.expires_in,
+			user: data.user
 		};
 	}
 

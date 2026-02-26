@@ -305,6 +305,83 @@ pub async fn verify_email(
     Ok(Json(serde_json::json!({ "message": "Email verified" })))
 }
 
+/// POST /api/auth/verify-email/send  and  /verify-email/resend
+pub async fn send_verification_code(
+    State(state): State<AppState>,
+    Json(body): Json<SendVerificationCodeRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use rand::Rng;
+
+    let code: String = format!("{:06}", rand::thread_rng().gen_range(100_000..1_000_000u32));
+    let expires_at = Utc::now() + chrono::Duration::minutes(10);
+
+    // Store the code (upsert on email)
+    sqlx::query(
+        r#"
+        INSERT INTO email_verification_codes (email, code, expires_at)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (email) DO UPDATE SET code = $2, expires_at = $3, used_at = NULL
+        "#,
+    )
+    .bind(&body.email)
+    .bind(&code)
+    .bind(expires_at)
+    .execute(&state.pool)
+    .await?;
+
+    // In dev, log the code; in production, send via email
+    tracing::info!("Verification code for {}: {code}", body.email);
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": "Verification code sent"
+    })))
+}
+
+/// POST /api/auth/verify-email/verify
+pub async fn verify_code(
+    State(state): State<AppState>,
+    Json(body): Json<VerifyCodeRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let valid = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM email_verification_codes
+            WHERE email = $1 AND code = $2 AND expires_at > NOW() AND used_at IS NULL
+        )
+        "#,
+    )
+    .bind(&body.email)
+    .bind(&body.code)
+    .fetch_one(&state.pool)
+    .await?;
+
+    if !valid {
+        return Ok(Json(serde_json::json!({
+            "success": false,
+            "error": "Invalid or expired verification code"
+        })));
+    }
+
+    // Mark code as used
+    sqlx::query("UPDATE email_verification_codes SET used_at = NOW() WHERE email = $1 AND code = $2")
+        .bind(&body.email)
+        .bind(&body.code)
+        .execute(&state.pool)
+        .await?;
+
+    // Mark user email as verified
+    sqlx::query("UPDATE users SET email_verified = true, updated_at = NOW() WHERE email = $1")
+        .bind(&body.email)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "message": "Email verified successfully"
+    })))
+}
+
 /// POST /api/auth/password-reset
 pub async fn password_reset(
     State(state): State<AppState>,

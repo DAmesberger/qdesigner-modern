@@ -9,6 +9,7 @@ use crate::state::AppState;
 /// Simple in-memory sliding-window rate limiter.
 /// When Redis is available the state could be moved there instead.
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct RateLimiter {
     /// Map of client key -> list of request timestamps (unix seconds).
     windows: Arc<Mutex<HashMap<String, Vec<i64>>>>,
@@ -28,6 +29,7 @@ impl RateLimiter {
     }
 
     /// Returns `true` if the request is allowed.
+    #[allow(dead_code)]
     pub async fn check(&self, key: &str) -> bool {
         let now = chrono::Utc::now().timestamp();
         let cutoff = now - self.window_secs;
@@ -48,6 +50,7 @@ impl RateLimiter {
 }
 
 /// Middleware that rate-limits based on the authenticated user ID or remote IP.
+#[allow(dead_code)]
 pub async fn rate_limit_middleware(
     State(state): State<AppState>,
     request: Request,

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Config {
     // Database
     pub database_url: String,
@@ -34,7 +35,10 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Self {
-        dotenvy::dotenv().ok();
+        // Try .env in current dir first, then parent (for monorepo layout)
+        if dotenvy::dotenv().is_err() {
+            dotenvy::from_filename("../.env.development").ok();
+        }
 
         let jwt_access_expiry_secs: u64 = std::env::var("JWT_ACCESS_EXPIRY_SECS")
             .ok()

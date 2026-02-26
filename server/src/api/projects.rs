@@ -263,6 +263,7 @@ pub async fn update_project(
     maybe_set!(start_date);
     maybe_set!(end_date);
     maybe_set!(settings);
+    let _ = bind_idx; // suppress unused-assignment warning from last macro expansion
 
     if parts.is_empty() {
         return Err(ApiError::BadRequest("No fields to update".into()));

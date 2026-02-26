@@ -3,7 +3,7 @@ services:
     image: postgres:18-alpine
     container_name: qdesigner-postgres
     ports:
-      - "5432:5432"
+      - "5434:5432"
     environment:
       POSTGRES_DB: qdesigner
       POSTGRES_USER: qdesigner
@@ -21,7 +21,7 @@ services:
     image: redis:7-alpine
     container_name: qdesigner-redis
     ports:
-      - "6379:6379"
+      - "6381:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -34,8 +34,8 @@ services:
     container_name: qdesigner-minio
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9003:9000"
+      - "9004:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -66,8 +66,8 @@ services:
     image: axllent/mailpit:latest
     container_name: qdesigner-mailpit
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "1026:1025"
+      - "8026:8025"
     restart: unless-stopped
 
 volumes:
