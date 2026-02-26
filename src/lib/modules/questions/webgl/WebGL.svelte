@@ -1,8 +1,8 @@
 <script lang="ts">
   import BaseQuestion from '../shared/BaseQuestion.svelte';
   import type { QuestionProps } from '$lib/modules/types';
-  import type { Question } from '$lib/shared';
-  import { WebGLRenderer } from '$lib/renderer';
+  import { ReactionEngine } from '$lib/runtime/reaction';
+  import type { ReactionTrialConfig, ReactionTrialResult } from '$lib/runtime/reaction';
 
   interface WebGLContent {
     type: 'circle' | 'rectangle' | 'triangle' | 'custom';
@@ -24,7 +24,6 @@
         show: boolean;
         type: 'cross' | 'dot';
         duration: number;
-        color: string;
       };
     };
     response: {
@@ -48,13 +47,18 @@
   }
 
   interface WebGLValue {
-    response: string | null;
+    response: string | { x: number; y: number } | null;
     reactionTime: number;
-    stimulusOnset: number;
-    responseTime: number;
-    frameTimings?: number[];
-    isCorrect?: boolean;
+    stimulusOnset: number | null;
+    responseTime: number | null;
+    frameTimings: number[];
+    isCorrect?: boolean | null;
     timeout?: boolean;
+    frameStats?: {
+      fps: number;
+      droppedFrames: number;
+      jitter: number;
+    };
   }
 
   interface Props extends Omit<QuestionProps, 'question'> {
@@ -71,435 +75,199 @@
     onInteraction,
   }: Props = $props();
 
-  // Canvas and renderer
-  let canvas: HTMLCanvasElement;
-  let renderer: WebGLRenderer | null = null;
+  const config = $derived((question.config || {}) as WebGLConfig);
 
-  // Timing state
-  let responseStartTime = $state(0);
-  let stimulusOnsetTime = $state(0);
-  let isPresenting = $state(false);
-  let presentationPhase = $state<
-    'waiting' | 'fixation' | 'delay' | 'stimulus' | 'response' | 'complete'
-  >('waiting');
+  let canvas = $state<HTMLCanvasElement>();
+  let engine = $state<ReactionEngine | null>(null);
+  let runState = $state<'ready' | 'running' | 'complete'>('ready');
+  let abortController = $state<AbortController | null>(null);
 
-  // Response handling
-  let keyHandlers = new Map<string, () => void>();
-  let timeoutId: number | null = null;
-
-  // Configuration
-  const config = $derived(question.config);
-  const targetFPS = $derived(config.rendering?.targetFPS || 120);
-
-  // Initialize value
   $effect(() => {
     if (!value) {
       value = {
         response: null,
         reactionTime: -1,
-        stimulusOnset: 0,
-        responseTime: 0,
+        stimulusOnset: null,
+        responseTime: null,
         frameTimings: [],
         timeout: false,
-      };
+      } satisfies WebGLValue;
     }
   });
 
-  // Setup canvas and renderer
   $effect(() => {
-    if (canvas && !renderer) {
-      setupRenderer();
-
-      if (mode === 'runtime' && !disabled) {
-        startPresentation();
-      }
+    if (canvas && !engine && mode === 'runtime') {
+      engine = new ReactionEngine({
+        canvas,
+        eventTarget: document,
+      });
     }
-  });
 
-  // Cleanup on unmount
-  $effect(() => {
     return () => {
-      cleanupPresentation();
-      if (renderer) {
-        renderer.destroy();
-        renderer = null;
-      }
+      abortController?.abort();
+      engine?.destroy();
+      engine = null;
     };
   });
 
-  // Validation
   $effect(() => {
-    const errors: string[] = [];
-    let isValid = true;
-
-    if (question.required && !value?.response) {
-      errors.push('Response is required');
-      isValid = false;
+    if (mode !== 'runtime' || disabled || !engine || runState !== 'ready') {
+      return;
     }
 
-    if (value?.timeout) {
-      errors.push('Response timeout');
-      isValid = false;
-    }
-
-    onValidation?.({ valid: isValid, errors });
+    void startTrial();
   });
 
-  async function setupRenderer() {
-    if (!canvas) return;
+  async function startTrial() {
+    if (!engine || disabled) return;
 
-    renderer = new WebGLRenderer({
-      canvas,
-      targetFPS: targetFPS as any,
-      vsync: config.rendering?.vsync ?? true,
-      antialias: config.rendering?.antialias ?? true,
-    } as any);
-
-    // Track frame timings for performance analysis
-    (renderer as any).onFrame((timing: number) => {
-      if (value && isPresenting) {
-        value.frameTimings = [...(value.frameTimings || []), timing];
-      }
-    });
-  }
-
-  async function startPresentation() {
-    presentationPhase = 'waiting';
-
-    const phases = [
-      {
-        phase: 'fixation',
-        duration: config.stimulus.fixation?.show ? config.stimulus.fixation.duration : 0,
-      },
-      { phase: 'delay', duration: config.timing?.postFixationDelay || 0 },
-      { phase: 'stimulus', duration: 0 }, // Stimulus stays until response
-    ];
-
-    // Pre-delay
-    if (config.timing?.preDelay) {
-      await delay(config.timing.preDelay);
-    }
-
-    // Execute phases
-    for (const { phase, duration } of phases) {
-      if (phase === 'fixation' && duration > 0) {
-        presentationPhase = 'fixation';
-        showFixation();
-        await delay(duration);
-        hideFixation();
-      } else if (phase === 'delay' && duration > 0) {
-        presentationPhase = 'delay';
-        await delay(duration);
-      } else if (phase === 'stimulus') {
-        presentationPhase = 'stimulus';
-        stimulusOnsetTime = performance.now();
-        value.stimulusOnset = stimulusOnsetTime;
-
-        renderer?.markStimulusOnset();
-        showStimulus();
-
-        // Start response collection
-        responseStartTime = performance.now();
-        setupResponseHandlers();
-
-        // Handle stimulus duration
-        if (config.timing?.stimulusDuration && config.timing.stimulusDuration > 0) {
-          setTimeout(() => {
-            hideStimulus();
-            presentationPhase = 'response';
-          }, config.timing.stimulusDuration);
-        }
-
-        // Handle response timeout
-        if (config.timing?.responseDuration) {
-          timeoutId = window.setTimeout(() => {
-            if (!value?.response) {
-              handleTimeout();
-            }
-          }, config.timing.responseDuration);
-        }
-
-        isPresenting = true;
-      }
-    }
+    abortController?.abort();
+    abortController = new AbortController();
+    runState = 'running';
 
     onInteraction?.({
       type: 'presentation-start' as any,
       timestamp: Date.now(),
-      data: { targetFPS },
-    });
-  }
-
-  function showFixation() {
-    if (!renderer) return;
-
-    const fixationType = config.stimulus.fixation?.type || 'cross';
-    const color = parseColor(config.stimulus.fixation?.color || '#ffffff');
-
-    renderer.addRenderable({
-      id: 'fixation',
-      layer: 100,
-      render: (gl, context) => {
-        const centerX = context.width / 2;
-        const centerY = context.height / 2;
-
-        if (fixationType === 'cross') {
-          // Horizontal line
-          renderer?.executeCommand({
-            type: 'drawRect',
-            params: {
-              x: centerX - 20,
-              y: centerY - 2,
-              width: 40,
-              height: 4,
-              color,
-            },
-          });
-          // Vertical line
-          renderer?.executeCommand({
-            type: 'drawRect',
-            params: {
-              x: centerX - 2,
-              y: centerY - 20,
-              width: 4,
-              height: 40,
-              color,
-            },
-          });
-        } else if (fixationType === 'dot') {
-          renderer?.executeCommand({
-            type: 'drawCircle',
-            params: {
-              x: centerX,
-              y: centerY,
-              radius: 5,
-              color,
-            },
-          });
-        }
+      data: {
+        targetFPS: config.rendering?.targetFPS || 120,
       },
     });
 
-    renderer.start();
-  }
-
-  function hideFixation() {
-    renderer?.removeRenderable('fixation');
-  }
-
-  function showStimulus() {
-    if (!renderer) return;
-
-    const stimulusType = config.stimulus.type;
-    const content = config.stimulus.content;
-
-    renderer.addRenderable({
-      id: 'stimulus',
-      layer: 50,
-      render: (gl, context) => {
-        if (stimulusType === 'shape' && typeof content === 'object') {
-          const webglContent = content as WebGLContent;
-
-          if (webglContent.type === 'circle') {
-            renderer?.executeCommand({
-              type: 'drawCircle' as any,
-              params: {
-                x: context.width / 2,
-                y: context.height / 2,
-                radius: webglContent.properties.radius || 50,
-                color: webglContent.properties.color || [1, 1, 1, 1],
-              },
-            });
-          } else if (webglContent.type === 'rectangle') {
-            renderer?.executeCommand({
-              type: 'drawRect',
-              params: {
-                x: (context.width - (webglContent.properties.width || 100)) / 2,
-                y: (context.height - (webglContent.properties.height || 100)) / 2,
-                width: webglContent.properties.width || 100,
-                height: webglContent.properties.height || 100,
-                color: webglContent.properties.color || [1, 1, 1, 1],
-              },
-            });
-          } else if (webglContent.type === 'triangle') {
-            const size = webglContent.properties.width || 100;
-            const centerX = context.width / 2;
-            const centerY = context.height / 2;
-
-            renderer?.executeCommand({
-              type: 'drawTriangle' as any,
-              params: {
-                x1: centerX,
-                y1: centerY - size / 2,
-                x2: centerX - size / 2,
-                y2: centerY + size / 2,
-                x3: centerX + size / 2,
-                y3: centerY + size / 2,
-                color: webglContent.properties.color || [1, 1, 1, 1],
-              },
-            });
-          } else if (webglContent.type === 'custom' && webglContent.properties.shader) {
-            // Custom shader support
-            renderer?.executeCommand({
-              type: 'customShader' as any,
-              params: {
-                shader: webglContent.properties.shader,
-                vertices: webglContent.properties.vertices || [],
-                uniforms: {
-                  time: (performance.now() - stimulusOnsetTime) / 1000,
-                  resolution: [context.width, context.height],
-                },
-              },
-            });
-          }
-        }
-        // Add support for images/videos via texture rendering
-      },
-    });
-  }
-
-  function hideStimulus() {
-    renderer?.removeRenderable('stimulus');
-  }
-
-  function setupResponseHandlers() {
-    const responseConfig = config.response;
-
-    if (responseConfig.type === 'keyboard' && responseConfig.validKeys) {
-      const handleKeypress = (event: KeyboardEvent) => {
-        if (!isPresenting && config.timing?.stimulusDuration) {
-          // Only accept responses during stimulus presentation if duration is set
-          if (presentationPhase !== 'stimulus') return;
-        }
-
-        if (responseConfig.validKeys?.includes(event.key)) {
-          const reactionTime = performance.now() - stimulusOnsetTime;
-
-          let isCorrect: boolean | undefined;
-          if (responseConfig.requireCorrect && responseConfig.correctKey) {
-            isCorrect = event.key === responseConfig.correctKey;
-          }
-
-          handleResponse({
-            response: event.key,
-            reactionTime,
-            responseTime: performance.now(),
-            isCorrect,
-          });
-        }
-      };
-
-      document.addEventListener('keydown', handleKeypress);
-      keyHandlers.set('keydown', () => document.removeEventListener('keydown', handleKeypress));
+    let result: ReactionTrialResult;
+    try {
+      result = await engine.runTrial(buildTrialConfig(), abortController.signal);
+    } catch (error) {
+      if (isAbortError(error)) {
+        runState = 'ready';
+        return;
+      }
+      throw error;
     }
 
-    // TODO: Add mouse/touch handlers
-  }
-
-  function cleanupResponseHandlers() {
-    keyHandlers.forEach((cleanup) => cleanup());
-    keyHandlers.clear();
-
-    if (timeoutId !== null) {
-      clearTimeout(timeoutId);
-      timeoutId = null;
-    }
-  }
-
-  function handleResponse(response: Partial<WebGLValue>) {
-    cleanupResponseHandlers();
-    hideStimulus();
-
-    value = {
-      ...value,
-      ...response,
-      timeout: false,
-    };
-
-    presentationPhase = 'complete';
-    isPresenting = false;
-
+    value = mapResult(result);
     onResponse?.(value);
+    runState = 'complete';
+
+    onValidation?.({
+      valid: !value.timeout,
+      errors: value.timeout ? ['Response timeout'] : [],
+    });
+
     onInteraction?.({
-      type: 'response' as any,
+      type: value.timeout ? ('timeout' as any) : ('response' as any),
       timestamp: Date.now(),
       data: {
-        key: response.response,
-        reactionTime: response.reactionTime,
-        isCorrect: response.isCorrect,
+        reactionTime: value.reactionTime,
+        isCorrect: value.isCorrect,
       },
     });
-
-    // Handle inter-trial interval
-    if (config.timing?.interTrialInterval) {
-      setTimeout(() => {
-        // Ready for next trial/question
-      }, config.timing.interTrialInterval);
-    }
   }
 
-  function handleTimeout() {
-    cleanupResponseHandlers();
-    hideStimulus();
+  function buildTrialConfig(): ReactionTrialConfig {
+    const stimulusType = config.stimulus?.type || 'shape';
+    const content = config.stimulus?.content;
 
-    value = {
-      ...value,
-      response: null,
-      reactionTime: -1,
-      responseTime: performance.now(),
-      timeout: true,
+    const stimulus =
+      stimulusType === 'image'
+        ? {
+            kind: 'image' as const,
+            src: typeof content === 'string' ? content : '',
+            widthPx: 360,
+            heightPx: 360,
+          }
+        : stimulusType === 'video'
+          ? {
+              kind: 'video' as const,
+              src: typeof content === 'string' ? content : '',
+              widthPx: 480,
+              heightPx: 320,
+              autoplay: true,
+              muted: true,
+            }
+          : stimulusType === 'custom' && typeof content === 'object'
+            ? {
+                kind: 'custom' as const,
+                shader: content.properties.shader || '',
+                vertices: content.properties.vertices || [],
+              }
+            : {
+                kind: 'shape' as const,
+                shape: (typeof content === 'object' ? content.type : 'circle') as
+                  | 'circle'
+                  | 'square'
+                  | 'rectangle'
+                  | 'triangle',
+                radiusPx: typeof content === 'object' ? content.properties.radius : 70,
+                widthPx: typeof content === 'object' ? content.properties.width : 120,
+                heightPx: typeof content === 'object' ? content.properties.height : 120,
+                color: typeof content === 'object' ? content.properties.color : undefined,
+              };
+
+    return {
+      id: `${question.id}-trial`,
+      responseMode: (config.response?.type || 'keyboard') as 'keyboard' | 'mouse' | 'touch',
+      validKeys: config.response?.validKeys || ['f', 'j'],
+      requireCorrect: config.response?.requireCorrect,
+      correctResponse: config.response?.correctKey,
+      fixation: {
+        enabled: config.stimulus?.fixation?.show ?? true,
+        type: config.stimulus?.fixation?.type || 'cross',
+        durationMs: config.stimulus?.fixation?.duration || 500,
+      },
+      preStimulusDelayMs: (config.timing?.preDelay || 0) + (config.timing?.postFixationDelay || 0),
+      stimulus,
+      stimulusDurationMs: config.timing?.stimulusDuration,
+      responseTimeoutMs: config.timing?.responseDuration || 2000,
+      interTrialIntervalMs: config.timing?.interTrialInterval || 0,
+      targetFPS: config.rendering?.targetFPS || 120,
+      vsync: config.rendering?.vsync ?? true,
     };
-
-    presentationPhase = 'complete';
-    isPresenting = false;
-
-    onResponse?.(value);
-    onInteraction?.({
-      type: 'timeout' as any,
-      timestamp: Date.now(),
-    });
   }
 
-  function cleanupPresentation() {
-    cleanupResponseHandlers();
-    if (renderer) {
-      renderer.stop();
-      renderer.clearRenderables();
-    }
+  function mapResult(result: ReactionTrialResult): WebGLValue {
+    return {
+      response: result.response?.value || null,
+      reactionTime: result.response?.reactionTimeMs ?? -1,
+      stimulusOnset: result.stimulusOnsetTime,
+      responseTime: result.response?.timestamp || null,
+      frameTimings: result.frameLog.map((sample) => sample.now),
+      isCorrect: result.isCorrect,
+      timeout: result.timeout,
+      frameStats: {
+        fps: result.stats.fps,
+        droppedFrames: result.stats.droppedFrames,
+        jitter: result.stats.jitter,
+      },
+    };
   }
 
-  function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  function runAgain() {
+    runState = 'ready';
+    void startTrial();
   }
 
-  function parseColor(color: string): [number, number, number, number] {
-    if (color.startsWith('#')) {
-      const hex = color.slice(1);
-      const r = parseInt(hex.slice(0, 2), 16) / 255;
-      const g = parseInt(hex.slice(2, 4), 16) / 255;
-      const b = parseInt(hex.slice(4, 6), 16) / 255;
-      return [r, g, b, 1];
-    }
-    return [1, 1, 1, 1];
+  function isAbortError(error: unknown): boolean {
+    return error instanceof DOMException && error.name === 'AbortError';
   }
 </script>
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
   <div class="webgl-container">
-    <canvas bind:this={canvas} class="webgl-canvas" class:presenting={isPresenting}></canvas>
+    <canvas bind:this={canvas} class="webgl-canvas"></canvas>
 
-    {#if presentationPhase === 'waiting' && !disabled}
+    {#if runState === 'running'}
       <div class="status-overlay">
-        <p>Preparing stimulus...</p>
+        <p>Running trial...</p>
       </div>
     {/if}
 
-    {#if presentationPhase === 'complete'}
+    {#if runState === 'complete'}
       <div class="status-overlay">
-        <p>Complete</p>
-        {#if value?.reactionTime && value.reactionTime > 0}
+        <p>{value?.timeout ? 'Timeout' : 'Complete'}</p>
+        {#if value?.reactionTime > 0}
           <p class="rt">RT: {value.reactionTime.toFixed(0)}ms</p>
         {/if}
+        <button class="restart" onclick={runAgain}>Run Again</button>
       </div>
     {/if}
   </div>
@@ -521,10 +289,6 @@
     display: block;
   }
 
-  .webgl-canvas.presenting {
-    cursor: none;
-  }
-
   .status-overlay {
     position: absolute;
     inset: 0;
@@ -532,22 +296,28 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
+    background: rgba(0, 0, 0, 0.72);
+    color: #fff;
+    text-align: center;
   }
 
-  .status-overlay p {
-    margin: 0.25rem 0;
-    font-size: 1.125rem;
-  }
-
-  .status-overlay .rt {
+  .rt {
+    margin-top: 0.4rem;
     font-size: 1.5rem;
-    font-weight: 600;
+    font-weight: 700;
     color: #4ade80;
   }
 
-  /* Responsive */
+  .restart {
+    margin-top: 1rem;
+    padding: 0.55rem 1rem;
+    border: 1px solid #60a5fa;
+    border-radius: 0.4rem;
+    background: transparent;
+    color: #60a5fa;
+    cursor: pointer;
+  }
+
   @media (max-width: 768px) {
     .webgl-container {
       height: 400px;

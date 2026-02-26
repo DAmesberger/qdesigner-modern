@@ -1,36 +1,38 @@
 import { create, all, type FactoryFunctionMap } from 'mathjs';
 import type { Variable, VariableType } from '$lib/shared';
 
-// Create math.js instance with safe configuration
 const factories = all as FactoryFunctionMap;
 const math = create(factories);
 
-// Configure math.js to be safe (no access to JS internals)
-// We need evaluate and parse for formula evaluation
-math.import({
-  'import': function () { throw new Error('Function import is disabled'); },
-  'createUnit': function () { throw new Error('Function createUnit is disabled'); },
-  'simplify': function () { throw new Error('Function simplify is disabled'); },
-  'derivative': function () { throw new Error('Function derivative is disabled'); },
-  // Add custom functions that mathjs needs to recognize
-  'IF': function (condition: boolean, trueValue: any, falseValue: any) {
-    return condition ? trueValue : falseValue;
+const BUILTIN_FUNCTIONS = {
+  import: () => {
+    throw new Error('Function import is disabled');
   },
-  'NOW': function () { return Date.now(); },
-  'TIME_SINCE': function (timestamp: number) { return Date.now() - timestamp; },
-  'COUNT': function (arr: any[]) { return Array.isArray(arr) ? arr.length : 0; },
-  'SUM': function (arr: number[]) { return Array.isArray(arr) ? arr.reduce((a, b) => a + b, 0) : 0; },
-  'AVG': function (arr: number[]) {
+  createUnit: () => {
+    throw new Error('Function createUnit is disabled');
+  },
+  simplify: () => {
+    throw new Error('Function simplify is disabled');
+  },
+  derivative: () => {
+    throw new Error('Function derivative is disabled');
+  },
+  IF: (condition: boolean, trueValue: any, falseValue: any) => (condition ? trueValue : falseValue),
+  NOW: () => Date.now(),
+  TIME_SINCE: (timestamp: number) => Date.now() - timestamp,
+  COUNT: (arr: any[]) => (Array.isArray(arr) ? arr.length : 0),
+  SUM: (arr: number[]) => (Array.isArray(arr) ? arr.reduce((a, b) => a + b, 0) : 0),
+  AVG: (arr: number[]) => {
     if (!Array.isArray(arr) || arr.length === 0) return 0;
     return arr.reduce((a, b) => a + b, 0) / arr.length;
   },
-  'CONCAT': function (...args: any[]) { return args.join(''); },
-  'LENGTH': function (str: string) { return str?.length ?? 0; },
-  'RANDOM': function () { return Math.random(); },
-  'RANDINT': function (min: number, max: number) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
-}, { override: true });
+  CONCAT: (...args: any[]) => args.join(''),
+  LENGTH: (value: string | any[]) => value?.length ?? 0,
+  RANDOM: () => Math.random(),
+  RANDINT: (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min,
+};
+
+math.import(BUILTIN_FUNCTIONS, { override: true });
 
 export interface VariableValue {
   id: string;
@@ -49,179 +51,247 @@ export interface EvaluationResult {
   dependencies?: string[];
 }
 
+export interface ConditionLike {
+  enabled?: boolean;
+  expression?: string;
+  show?: string;
+  enable?: string;
+  require?: string;
+}
+
 export class VariableEngine {
-  private variables: Map<string, Variable>;
-  private context: VariableContext;
-  private evaluationCache: Map<string, EvaluationResult>;
-  private dependencyGraph: Map<string, Set<string>>;
+  private variables = new Map<string, Variable>();
+  private context: VariableContext = {};
+  private evaluationCache = new Map<string, EvaluationResult>();
+  private dependencyGraph = new Map<string, Set<string>>();
+  private reverseDependencyGraph = new Map<string, Set<string>>();
+  private customFunctions = new Set<string>();
 
-  constructor() {
-    this.variables = new Map();
-    this.context = {};
-    this.evaluationCache = new Map();
-    this.dependencyGraph = new Map();
-  }
-
-  /**
-   * Register a variable in the engine
-   */
   public registerVariable(variable: Variable): void {
-    // Use variable.id as the key
     const varId = variable.id;
     this.variables.set(varId, variable);
-    
-    // Initialize with default value if provided
-    if (variable.defaultValue !== undefined) {
-      this.setVariable(varId, variable.defaultValue, 'default');
+
+    if (variable.defaultValue !== undefined && !this.context[varId]) {
+      this.context[varId] = {
+        id: varId,
+        value: this.validateType(variable.defaultValue, variable.type),
+        timestamp: performance.now(),
+        source: 'default',
+      };
     }
 
-    // Build dependency graph if formula exists
-    if (variable.formula) {
-      const dependencies = this.extractDependencies(variable.formula);
-      this.dependencyGraph.set(varId, new Set(dependencies));
-      
-      // Update reverse dependencies
-      dependencies.forEach(depId => {
-        if (!this.dependencyGraph.has(depId)) {
-          this.dependencyGraph.set(depId, new Set());
-        }
-      });
-    }
+    this.registerDependencies(variable);
+    this.clearCache(varId);
   }
 
-  /**
-   * Set a variable value
-   */
   public setVariable(id: string, value: any, source?: string): void {
     const variable = this.variables.get(id);
     if (!variable) {
       throw new Error(`Variable ${id} not found`);
     }
 
-    // Validate type
-    const validatedValue = this.validateType(value, variable.type);
-
-    // Update context
     this.context[id] = {
       id,
-      value: validatedValue,
+      value: this.validateType(value, variable.type),
       timestamp: performance.now(),
-      source
+      source,
     };
 
-    // Clear evaluation cache for this variable and its dependents
     this.clearCache(id);
-
-    // Trigger recalculation of dependent variables
-    this.recalculateDependents(id);
   }
 
-  /**
-   * Get a variable value
-   */
   public getVariable(id: string): any {
     const variable = this.variables.get(id);
     if (!variable) {
       throw new Error(`Variable ${id} not found`);
     }
 
-    // If it has a formula, evaluate it
-    if (variable.formula) {
-      const result = this.evaluateFormula(variable.formula, variable.id);
-      if (result.error) {
-        throw new Error(`Error evaluating ${id}: ${result.error}`);
-      }
-      return result.value;
+    if (!variable.formula) {
+      return this.context[id]?.value ?? variable.defaultValue;
     }
 
-    // Otherwise return stored value
-    return this.context[id]?.value ?? variable.defaultValue;
+    const result = this.evaluateVariableById(id, new Set());
+    if (result.error) {
+      throw new Error(`Error evaluating ${id}: ${result.error}`);
+    }
+
+    return result.value;
   }
 
-  /**
-   * Evaluate a raw math expression with provided scope
-   */
   public evaluate(expression: string, scope?: Record<string, any>): any {
     return math.evaluate(expression, scope || {});
   }
 
-  /**
-   * Evaluate a formula
-   */
+  public validate(formula: string): void {
+    math.parse(formula);
+  }
+
   public evaluateFormula(formula: string, contextVariableId?: string): EvaluationResult {
-    // Check cache first
-    const cacheKey = `${formula}:${contextVariableId}`;
+    return this.evaluateFormulaInternal(formula, contextVariableId, new Set());
+  }
+
+  public evaluateCondition(condition: string | ConditionLike): boolean {
+    if (typeof condition === 'string') {
+      const result = this.evaluateFormula(condition);
+      return Boolean(result.value);
+    }
+
+    if (!condition) {
+      return true;
+    }
+
+    if (condition.enabled === false) {
+      return true;
+    }
+
+    const expression =
+      condition.expression || condition.show || condition.enable || condition.require;
+    if (!expression) {
+      return true;
+    }
+
+    const result = this.evaluateFormula(expression);
+    return Boolean(result.value);
+  }
+
+  public registerFunction(
+    name: string,
+    fn: (...args: any[]) => any,
+    options?: { override?: boolean }
+  ): void {
+    math.import(
+      {
+        [name]: fn,
+      },
+      { override: options?.override ?? true }
+    );
+
+    this.customFunctions.add(name);
+    this.evaluationCache.clear();
+  }
+
+  public getRegisteredFunctions(): string[] {
+    return [...Object.keys(BUILTIN_FUNCTIONS), ...Array.from(this.customFunctions)].sort();
+  }
+
+  public getAllVariables(): Record<string, any> {
+    const result: Record<string, any> = {};
+
+    for (const [id, variable] of this.variables) {
+      try {
+        result[variable.name] = this.getVariable(id);
+      } catch {
+        result[variable.name] = null;
+      }
+    }
+
+    return result;
+  }
+
+  public setValue(name: string, value: any): void {
+    this.setVariable(name, value, 'runtime');
+  }
+
+  public exportState(): VariableContext {
+    return { ...this.context };
+  }
+
+  public importState(state: VariableContext): void {
+    this.context = { ...state };
+    this.evaluationCache.clear();
+  }
+
+  public clear(): void {
+    this.variables.clear();
+    this.context = {};
+    this.evaluationCache.clear();
+    this.dependencyGraph.clear();
+    this.reverseDependencyGraph.clear();
+  }
+
+  private evaluateVariableById(variableId: string, stack: Set<string>): EvaluationResult {
+    if (stack.has(variableId)) {
+      return {
+        value: null,
+        error: `Circular dependency detected: ${Array.from(stack).join(' -> ')} -> ${variableId}`,
+        dependencies: [variableId],
+      };
+    }
+
+    const variable = this.variables.get(variableId);
+    if (!variable?.formula) {
+      return {
+        value: this.context[variableId]?.value ?? variable?.defaultValue ?? null,
+        dependencies: variableId ? [variableId] : [],
+      };
+    }
+
+    stack.add(variableId);
+    const result = this.evaluateFormulaInternal(variable.formula, variableId, stack);
+    stack.delete(variableId);
+
+    return result;
+  }
+
+  private evaluateFormulaInternal(
+    formula: string,
+    contextVariableId: string | undefined,
+    stack: Set<string>
+  ): EvaluationResult {
+    const cacheKey = `${contextVariableId || 'expression'}:${formula}`;
     const cached = this.evaluationCache.get(cacheKey);
     if (cached) {
       return cached;
     }
 
     try {
-      // Extract dependencies
       const dependencies = this.extractDependencies(formula);
-      
-      // Check for circular dependencies
-      if (contextVariableId && this.hasCircularDependency(contextVariableId, dependencies)) {
-        return {
-          value: null,
-          error: 'Circular dependency detected',
-          dependencies
-        };
-      }
-
-      // Create evaluation scope with variable values
-      const scope = this.createEvaluationScope(dependencies);
-
-      // Evaluate formula with scope
+      const scope = this.createEvaluationScope(dependencies, stack);
       const value = math.evaluate(formula, scope);
 
-      // Cache result
-      const result = { value, dependencies };
+      const result: EvaluationResult = { value, dependencies };
       this.evaluationCache.set(cacheKey, result);
-
       return result;
     } catch (error) {
       return {
         value: null,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        dependencies: []
+        error: error instanceof Error ? error.message : 'Unknown formula evaluation error',
+        dependencies: [],
       };
     }
   }
 
-  /**
-   * Extract variable dependencies from a formula
-   */
   private extractDependencies(formula: string): string[] {
     const dependencies = new Set<string>();
-    
+
     try {
-      // Parse the formula to get the AST
       const node = math.parse(formula);
-      
-      // Traverse the AST to find symbol nodes
-      node.traverse((node: any) => {
-        if (node.type === 'SymbolNode') {
-          const symbolName = node.name;
-          // Check if this is a registered variable
-          for (const [id, variable] of this.variables) {
-            if (variable.name === symbolName || id === symbolName) {
-              dependencies.add(id);
-              break;
-            }
+
+      node.traverse((traversed: any, path: string, parent: any) => {
+        if (traversed.type !== 'SymbolNode') return;
+
+        const symbolName = traversed.name;
+        if (!symbolName) return;
+
+        if (parent?.type === 'FunctionNode' && parent.fn?.name === symbolName) {
+          return;
+        }
+
+        for (const [id, variable] of this.variables) {
+          if (variable.name === symbolName || id === symbolName) {
+            dependencies.add(id);
+            break;
           }
         }
       });
-    } catch (error) {
-      // Fallback to regex if parsing fails
+    } catch {
       const variablePattern = /\b(\w+)\b/g;
-      const matches = formula.matchAll(variablePattern);
-      
-      for (const match of matches) {
-        const varName = match[1];
-        // Check if this is a registered variable
+      for (const match of formula.matchAll(variablePattern)) {
+        const candidate = match[1];
+        if (!candidate) continue;
+
         for (const [id, variable] of this.variables) {
-          if (variable.name === varName || id === varName) {
+          if (variable.name === candidate || id === candidate) {
             dependencies.add(id);
             break;
           }
@@ -232,175 +302,114 @@ export class VariableEngine {
     return Array.from(dependencies);
   }
 
-  /**
-   * Create evaluation scope with variable values
-   */
-  private createEvaluationScope(dependencies: string[]): Record<string, any> {
+  private createEvaluationScope(dependencies: string[], stack: Set<string>): Record<string, any> {
     const scope: Record<string, any> = {};
 
-    for (const depId of dependencies) {
-      const variable = this.variables.get(depId);
-      if (variable) {
-        // Get the actual value (which may require evaluation if it has a formula)
-        const value = this.getVariable(depId);
-        scope[variable.name] = value;
-        scope[depId] = value; // Also support ID-based access
+    for (const dependencyId of dependencies) {
+      const variable = this.variables.get(dependencyId);
+      if (!variable) continue;
+
+      const dependencyResult = this.evaluateVariableById(dependencyId, stack);
+      if (dependencyResult.error) {
+        throw new Error(dependencyResult.error);
       }
+
+      scope[dependencyId] = dependencyResult.value;
+      scope[variable.name] = dependencyResult.value;
     }
 
     return scope;
   }
 
-  /**
-   * Check for circular dependencies
-   */
-  private hasCircularDependency(variableId: string, dependencies: string[], visited = new Set<string>()): boolean {
-    if (visited.has(variableId)) {
-      return true;
-    }
+  private registerDependencies(variable: Variable): void {
+    const variableId = variable.id;
 
-    visited.add(variableId);
-
-    for (const depId of dependencies) {
-      const depDependencies = this.dependencyGraph.get(depId);
-      if (depDependencies) {
-        if (this.hasCircularDependency(depId, Array.from(depDependencies), visited)) {
-          return true;
-        }
+    const previousDependencies = this.dependencyGraph.get(variableId) || new Set<string>();
+    for (const dependencyId of previousDependencies) {
+      const dependents = this.reverseDependencyGraph.get(dependencyId);
+      if (!dependents) continue;
+      dependents.delete(variableId);
+      if (dependents.size === 0) {
+        this.reverseDependencyGraph.delete(dependencyId);
       }
     }
 
-    visited.delete(variableId);
-    return false;
+    if (!variable.formula) {
+      this.dependencyGraph.delete(variableId);
+      return;
+    }
+
+    const dependencies = new Set(this.extractDependencies(variable.formula));
+    this.dependencyGraph.set(variableId, dependencies);
+
+    for (const dependencyId of dependencies) {
+      if (!this.reverseDependencyGraph.has(dependencyId)) {
+        this.reverseDependencyGraph.set(dependencyId, new Set());
+      }
+      this.reverseDependencyGraph.get(dependencyId)!.add(variableId);
+    }
   }
 
-  /**
-   * Clear evaluation cache for a variable and its dependents
-   */
   private clearCache(variableId: string): void {
-    // Clear cache entries for this variable
+    const keysToDelete: string[] = [];
     for (const key of this.evaluationCache.keys()) {
-      if (key.includes(variableId)) {
-        this.evaluationCache.delete(key);
+      if (key.includes(`:${variableId}`) || key.startsWith(`${variableId}:`)) {
+        keysToDelete.push(key);
       }
     }
 
-    // Clear cache for dependents
-    for (const [id, deps] of this.dependencyGraph) {
-      if (deps.has(variableId)) {
-        this.clearCache(id);
-      }
-    }
-  }
+    keysToDelete.forEach((key) => this.evaluationCache.delete(key));
 
-  /**
-   * Recalculate dependent variables
-   */
-  private recalculateDependents(variableId: string): void {
-    for (const [id, deps] of this.dependencyGraph) {
-      if (deps.has(variableId)) {
-        const variable = this.variables.get(id);
-        if (variable?.formula) {
-          // This will trigger recalculation
-          this.getVariable(id);
-        }
-      }
+    const dependents = this.reverseDependencyGraph.get(variableId);
+    if (!dependents) return;
+
+    for (const dependent of dependents) {
+      this.clearCache(dependent);
     }
   }
 
-  /**
-   * Validate value against variable type
-   */
   private validateType(value: any, type: VariableType): any {
     switch (type) {
-      case 'number':
-        const num = Number(value);
-        if (isNaN(num)) {
+      case 'number': {
+        const parsed = Number(value);
+        if (Number.isNaN(parsed)) {
           throw new Error(`Value ${value} is not a valid number`);
         }
-        return num;
-
+        return parsed;
+      }
       case 'string':
         return String(value);
-
       case 'boolean':
         return Boolean(value);
-
-      case 'date':
+      case 'date': {
         const date = new Date(value);
-        if (isNaN(date.getTime())) {
+        if (Number.isNaN(date.getTime())) {
           throw new Error(`Value ${value} is not a valid date`);
         }
         return date;
-
+      }
       case 'array':
         if (!Array.isArray(value)) {
           throw new Error(`Value ${value} is not an array`);
         }
         return value;
-
       case 'object':
         if (typeof value !== 'object' || value === null) {
           throw new Error(`Value ${value} is not an object`);
         }
         return value;
-
       case 'reaction_time':
       case 'stimulus_onset':
-      case 'time':
-        return Number(value);
-
+      case 'time': {
+        if (value === null || value === undefined) return null;
+        const parsed = Number(value);
+        if (Number.isNaN(parsed)) {
+          throw new Error(`Value ${value} is not a valid timing value`);
+        }
+        return parsed;
+      }
       default:
         return value;
     }
-  }
-
-  /**
-   * Get all variables and their current values
-   */
-  public getAllVariables(): Record<string, any> {
-    const result: Record<string, any> = {};
-    
-    for (const [id, variable] of this.variables) {
-      try {
-        result[variable.name] = this.getVariable(id);
-      } catch (error) {
-        result[variable.name] = null;
-      }
-    }
-
-    return result;
-  }
-  
-  /**
-   * Set value by variable name (alias for setVariable)
-   */
-  public setValue(name: string, value: any): void {
-    this.setVariable(name, value, 'runtime');
-  }
-
-  /**
-   * Export variable state
-   */
-  public exportState(): VariableContext {
-    return { ...this.context };
-  }
-
-  /**
-   * Import variable state
-   */
-  public importState(state: VariableContext): void {
-    this.context = { ...state };
-    this.evaluationCache.clear();
-  }
-
-  /**
-   * Clear all variables
-   */
-  public clear(): void {
-    this.variables.clear();
-    this.context = {};
-    this.evaluationCache.clear();
-    this.dependencyGraph.clear();
   }
 }

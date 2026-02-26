@@ -15,11 +15,18 @@ export const metadata: ModuleMetadata = {
     supportsValidation: true,
     supportsAnalytics: true,
     supportsTiming: true,
-    supportsVariables: true
+    supportsVariables: true,
   },
   components: {
     runtime: () => import('./WebGL.svelte') as any,
-    designer: () => import('./WebGLDesigner.svelte') as any
+    designer: () => import('./WebGLDesigner.svelte') as any,
+  },
+  questionRuntime: {
+    contract: 'v1',
+    create: async () => {
+      const { WebGLRuntime } = await import('./WebGLRuntime');
+      return new WebGLRuntime();
+    },
   },
   defaultConfig: {
     stimulus: {
@@ -28,34 +35,33 @@ export const metadata: ModuleMetadata = {
         type: 'circle',
         properties: {
           radius: 50,
-          color: [1, 1, 1, 1]
-        }
+          color: [1, 1, 1, 1],
+        },
       },
       fixation: {
         show: true,
         type: 'cross',
         duration: 500,
-        color: '#ffffff'
-      }
+        color: '#ffffff',
+      },
     },
     response: {
       type: 'keyboard',
       validKeys: ['f', 'j'],
-      requireCorrect: false
+      requireCorrect: false,
     },
     timing: {
       preDelay: 0,
       postFixationDelay: 0,
       stimulusDuration: 0, // 0 = until response
       responseDuration: 2000,
-      interTrialInterval: 500
+      interTrialInterval: 500,
     },
     rendering: {
       targetFPS: 120,
       vsync: true,
-      antialias: true
-    }
+      antialias: true,
+    },
   },
-  answerType: 'timing' as any,
-  
+  answerType: AnswerTypes.REACTION_TIME,
 };

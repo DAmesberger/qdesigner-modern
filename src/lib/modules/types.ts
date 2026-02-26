@@ -2,6 +2,7 @@
 
 import type { Question, ConditionalLogic, Questionnaire } from '$lib/shared';
 import type { ComponentType } from 'svelte';
+import type { IQuestionRuntime } from '$lib/runtime/core/question-runtime';
 // AnswerType and ResponseData are defined in this file, no need to import from $lib/shared/types/response
 
 // Module categories
@@ -24,6 +25,10 @@ export interface ModuleMetadata {
   components: ModuleComponents;
   defaultConfig?: any;
   answerType?: AnswerType; // Only for questions
+  questionRuntime?: {
+    contract: 'v1';
+    create: () => Promise<IQuestionRuntime>;
+  };
 }
 
 // Module capabilities

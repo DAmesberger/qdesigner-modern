@@ -1,7 +1,8 @@
 <script lang="ts">
   import BaseQuestion from '../shared/BaseQuestion.svelte';
   import type { QuestionProps } from '$lib/modules/types';
-  import type { Question } from '$lib/shared';
+  import { ReactionEngine } from '$lib/runtime/reaction';
+  import type { ReactionTrialConfig, ReactionTrialResult } from '$lib/runtime/reaction';
 
   interface ReactionTimeConfig {
     stimulus: {
@@ -26,21 +27,26 @@
     prompt?: string;
   }
 
-  interface ReactionResponse {
+  interface TrialRecord {
+    trialNumber: number;
+    isPractice: boolean;
     key: string | null;
     reactionTime: number | null;
     isCorrect: boolean | null;
-    timing?: any;
-    trialNumber: number;
-    isPractice: boolean;
-    timeout?: boolean;
+    timeout: boolean;
+    stimulusOnsetTime: number | null;
+    frameStats: {
+      fps: number;
+      droppedFrames: number;
+      jitter: number;
+    };
   }
 
   interface ReactionTimeValue {
-    responses: ReactionResponse[];
-    averageRT?: number;
-    accuracy?: number;
-    timeouts?: number;
+    responses: TrialRecord[];
+    averageRT: number | null;
+    accuracy: number | null;
+    timeouts: number;
   }
 
   interface Props extends Omit<QuestionProps, 'question'> {
@@ -57,444 +63,303 @@
     onInteraction,
   }: Props = $props();
 
-  // Configuration
-  const config = $derived(question.config);
-  const fixationDuration = $derived(config.stimulus.fixation?.duration || 500);
-  const fixationType = $derived(config.stimulus.fixation?.type || 'cross');
-  const responseTimeout = $derived(config.response.timeout || 2000);
-  const validKeys = $derived(config.response.validKeys || ['f', 'j']);
+  const config = $derived((question.config || {}) as ReactionTimeConfig);
+  const validKeys = $derived(config.response?.validKeys || ['f', 'j']);
   const showFeedback = $derived(config.feedback !== false);
-  const isPractice = $derived(config.practice || false);
-  const practiceTrialCount = $derived(config.practiceTrials || 3);
-  const testTrialCount = $derived(config.testTrials || 10);
+  const usePractice = $derived(Boolean(config.practice));
+  const practiceTrials = $derived(config.practiceTrials || 3);
+  const testTrials = $derived(config.testTrials || 10);
 
-  // State
-  type ReactionState = 'ready' | 'fixation' | 'stimulus' | 'response' | 'feedback' | 'complete';
-  let currentState = $state('ready' as ReactionState);
-  let canvas: HTMLCanvasElement;
-  let ctx: CanvasRenderingContext2D;
-  let startTime = $state(0);
-  let reactionTime = $state(0);
-  let isCorrect = $state(null as boolean | null);
-  let trialNumber = $state(0);
-  let practiceTrials = $state([] as number[]);
-  let testTrials = $state([] as number[]);
-  let keyListener: ((e: KeyboardEvent) => void) | null = null;
-  let timeoutId: number | null = null;
-  let animationFrame: number | null = null;
+  let canvas = $state<HTMLCanvasElement>();
+  let engine = $state<ReactionEngine | null>(null);
+  let state = $state<'ready' | 'running' | 'feedback' | 'complete'>('ready');
+  let feedbackText = $state('');
+  let feedbackColor = $state('#4ade80');
+  let currentTrial = $state(0);
+  let abortController = $state<AbortController | null>(null);
 
-  // Initialize value
   $effect(() => {
     if (!value) {
       value = {
         responses: [],
-        averageRT: 0,
-        accuracy: 1,
+        averageRT: null,
+        accuracy: null,
         timeouts: 0,
-      };
+      } satisfies ReactionTimeValue;
     }
   });
 
-  // Setup canvas on mount
   $effect(() => {
-    if (canvas && !ctx) {
-      ctx = canvas.getContext('2d')!;
-      setupCanvas();
-
-      if (isPractice) {
-        startPractice();
-      }
+    if (canvas && !engine && mode === 'runtime') {
+      engine = new ReactionEngine({
+        canvas,
+        eventTarget: document,
+      });
     }
-  });
 
-  // Cleanup on unmount
-  $effect(() => {
     return () => {
-      cleanup();
+      abortController?.abort();
+      engine?.destroy();
+      engine = null;
     };
   });
 
-  function cleanup() {
-    if (keyListener) {
-      document.removeEventListener('keydown', keyListener);
-      keyListener = null;
-    }
+  $effect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== ' ') return;
+      if (disabled || state !== 'ready') return;
+      event.preventDefault();
+      void startTask();
+    };
 
-    if (timeoutId !== null) {
-      clearTimeout(timeoutId);
-      timeoutId = null;
-    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  });
 
-    if (animationFrame !== null) {
-      cancelAnimationFrame(animationFrame);
-      animationFrame = null;
-    }
-  }
+  async function startTask() {
+    if (!engine || disabled) return;
 
-  function setupCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
+    abortController?.abort();
+    abortController = new AbortController();
 
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
+    state = 'running';
+    currentTrial = 0;
 
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = rect.height + 'px';
-  }
-
-  function startPractice() {
-    trialNumber = 0;
-    practiceTrials = [];
-    currentState = 'ready';
-  }
-
-  function startTrial() {
-    cleanup();
-    currentState = 'fixation';
-    drawFixation();
-
-    // Start timing measurement
-    // Start timing measurement
-
-    // Show fixation for specified duration
-    timeoutId = window.setTimeout(() => {
-      showStimulus();
-    }, fixationDuration);
+    const responses: TrialRecord[] = [];
+    const total = usePractice ? practiceTrials + testTrials : testTrials;
 
     onInteraction?.({
-      type: 'trial-start' as any,
+      type: 'start' as any,
       timestamp: Date.now(),
-      data: { trialNumber, isPractice: trialNumber <= practiceTrialCount },
+      data: {
+        totalTrials: total,
+        targetFPS: config.targetFPS || 120,
+      },
+    });
+
+    for (let index = 0; index < total; index++) {
+      currentTrial = index + 1;
+      const isPractice = usePractice && index < practiceTrials;
+      let result: ReactionTrialResult;
+      try {
+        result = await engine.runTrial(
+          buildTrialConfig(index + 1, isPractice),
+          abortController.signal
+        );
+      } catch (error) {
+        if (isAbortError(error)) {
+          state = 'ready';
+          return;
+        }
+        throw error;
+      }
+
+      const trialRecord = mapResultToRecord(result, index + 1, isPractice);
+      responses.push(trialRecord);
+
+      onInteraction?.({
+        type: 'trial-complete' as any,
+        timestamp: Date.now(),
+        data: {
+          trialNumber: index + 1,
+          isPractice,
+          reactionTime: trialRecord.reactionTime,
+          timeout: trialRecord.timeout,
+        },
+      });
+
+      if (showFeedback) {
+        await showTrialFeedback(trialRecord);
+      }
+    }
+
+    const computedValue = computeResultValue(responses);
+    value = computedValue;
+    onResponse?.(computedValue);
+
+    onValidation?.({
+      valid: responses.some((response) => !response.timeout),
+      errors: responses.every((response) => response.timeout)
+        ? ['No valid responses captured']
+        : [],
+    });
+
+    state = 'complete';
+
+    onInteraction?.({
+      type: 'complete' as any,
+      timestamp: Date.now(),
+      data: {
+        averageRT: computedValue.averageRT,
+        accuracy: computedValue.accuracy,
+      },
     });
   }
 
-  function drawFixation() {
-    if (!ctx || !canvas) return;
+  function buildTrialConfig(trialNumber: number, isPractice: boolean): ReactionTrialConfig {
+    const stimulusType = config.stimulus?.type || 'shape';
+    const stimulusContent = config.stimulus?.content || 'circle';
 
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
+    const stimulus =
+      stimulusType === 'text'
+        ? {
+            kind: 'text' as const,
+            text: stimulusContent,
+            fontPx: 72,
+          }
+        : stimulusType === 'image'
+          ? {
+              kind: 'image' as const,
+              src: stimulusContent,
+              widthPx: 360,
+              heightPx: 360,
+            }
+          : {
+              kind: 'shape' as const,
+              shape:
+                stimulusContent === 'square'
+                  ? ('square' as const)
+                  : stimulusContent === 'triangle'
+                    ? ('triangle' as const)
+                    : ('circle' as const),
+              radiusPx: 84,
+            };
 
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, width, height);
-
-    // Draw fixation
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3;
-
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const size = 20;
-
-    if (fixationType === 'cross') {
-      ctx.beginPath();
-      ctx.moveTo(centerX - size, centerY);
-      ctx.lineTo(centerX + size, centerY);
-      ctx.moveTo(centerX, centerY - size);
-      ctx.lineTo(centerX, centerY + size);
-      ctx.stroke();
-    } else if (fixationType === 'dot') {
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, size / 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  function showStimulus() {
-    currentState = 'stimulus';
-    startTime = performance.now();
-
-    // Draw stimulus based on type
-    drawStimulus();
-
-    // Add keyboard listener
-    keyListener = (e: KeyboardEvent) => {
-      if (validKeys.includes(e.key.toLowerCase()) && currentState === 'stimulus') {
-        handleResponse(e.key.toLowerCase());
-      }
+    return {
+      id: `${question.id}-trial-${trialNumber}`,
+      responseMode: 'keyboard',
+      validKeys,
+      correctResponse: config.correctKey,
+      requireCorrect: config.response?.requireCorrect,
+      fixation: {
+        enabled: true,
+        type: config.stimulus?.fixation?.type || 'cross',
+        durationMs: config.stimulus?.fixation?.duration || 500,
+      },
+      stimulus,
+      responseTimeoutMs: config.response?.timeout || 2000,
+      targetFPS: config.targetFPS || 120,
+      interTrialIntervalMs: isPractice ? 250 : 400,
     };
-    document.addEventListener('keydown', keyListener);
-
-    // Set response timeout
-    if (responseTimeout > 0) {
-      timeoutId = window.setTimeout(() => {
-        handleTimeout();
-      }, responseTimeout);
-    }
   }
 
-  function drawStimulus() {
-    if (!ctx || !canvas) return;
+  function mapResultToRecord(
+    result: ReactionTrialResult,
+    trialNumber: number,
+    isPractice: boolean
+  ): TrialRecord {
+    const key =
+      result.response && typeof result.response.value === 'string' ? result.response.value : null;
 
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, width, height);
-
-    const stimulusType = config.stimulus.type;
-    const content = config.stimulus.content;
-
-    if (stimulusType === 'text') {
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '48px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(content.toString(), width / 2, height / 2);
-    } else if (stimulusType === 'shape') {
-      ctx.fillStyle = '#ffffff';
-      if (content === 'circle') {
-        ctx.beginPath();
-        ctx.arc(width / 2, height / 2, 50, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (content === 'square') {
-        ctx.fillRect(width / 2 - 50, height / 2 - 50, 100, 100);
-      }
-    } else if (stimulusType === 'image' && typeof content === 'string') {
-      // Load and draw image
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, width / 2 - img.width / 2, height / 2 - img.height / 2);
-      };
-      img.src = content;
-    }
-  }
-
-  function handleResponse(key: string) {
-    if (currentState !== 'stimulus') return;
-
-    cleanup();
-
-    // Calculate reaction time
-    reactionTime = performance.now() - startTime;
-
-    // End timing measurement
-    // End timing measurement
-    const timing = null;
-
-    // Check if correct (if applicable)
-    if (config.response.requireCorrect && config.correctKey) {
-      isCorrect = key === config.correctKey.toLowerCase();
-    }
-
-    // Record response
-    const response: ReactionResponse = {
+    return {
+      trialNumber,
+      isPractice,
       key,
-      reactionTime,
-      isCorrect,
-      timing,
-      trialNumber,
-      isPractice: trialNumber <= practiceTrialCount,
+      reactionTime: result.response?.reactionTimeMs ?? null,
+      isCorrect: result.isCorrect,
+      timeout: result.timeout,
+      stimulusOnsetTime: result.stimulusOnsetTime,
+      frameStats: {
+        fps: result.stats.fps,
+        droppedFrames: result.stats.droppedFrames,
+        jitter: result.stats.jitter,
+      },
     };
+  }
 
-    if (isPractice && trialNumber < practiceTrialCount) {
-      practiceTrials = [...practiceTrials, reactionTime];
+  async function showTrialFeedback(trial: TrialRecord): Promise<void> {
+    state = 'feedback';
+
+    if (trial.timeout) {
+      feedbackText = 'Too slow';
+      feedbackColor = '#f87171';
+    } else if (trial.isCorrect === false) {
+      feedbackText = `${trial.reactionTime?.toFixed(0) || '-'}ms (incorrect)`;
+      feedbackColor = '#f97316';
     } else {
-      testTrials = [...testTrials, reactionTime];
+      feedbackText = `${trial.reactionTime?.toFixed(0) || '-'}ms`;
+      feedbackColor = '#4ade80';
     }
 
-    // Update value
-    value = {
-      ...value,
-      responses: [...(value?.responses || []), response],
-      averageRT: calculateAverageRT(),
-      accuracy: calculateAccuracy(),
+    await delay(650);
+    state = 'running';
+  }
+
+  function computeResultValue(responses: TrialRecord[]): ReactionTimeValue {
+    const testResponses = responses.filter((response) => !response.isPractice);
+    const validRT = testResponses
+      .map((response) => response.reactionTime)
+      .filter((value): value is number => typeof value === 'number' && value > 0);
+
+    const averageRT =
+      validRT.length > 0
+        ? validRT.reduce((sum, current) => sum + current, 0) / validRT.length
+        : null;
+
+    const correctness = testResponses.filter((response) => response.isCorrect !== null);
+    const accuracy =
+      correctness.length > 0
+        ? correctness.filter((response) => response.isCorrect).length / correctness.length
+        : null;
+
+    return {
+      responses,
+      averageRT,
+      accuracy,
+      timeouts: testResponses.filter((response) => response.timeout).length,
     };
-
-    onResponse?.(value);
-    onInteraction?.({
-      type: 'response' as any,
-      timestamp: Date.now(),
-      data: { key, reactionTime, isCorrect, trialNumber },
-    });
-
-    if (showFeedback) {
-      showFeedbackScreen();
-    } else {
-      nextTrial();
-    }
   }
 
-  function handleTimeout() {
-    if (currentState !== 'stimulus') return;
-
-    cleanup();
-
-    // Record timeout
-    const response: ReactionResponse = {
-      key: null,
-      reactionTime: null,
-      isCorrect: false,
-      timeout: true,
-      trialNumber,
-      isPractice: trialNumber <= practiceTrialCount,
-    };
-
-    value = {
-      ...value,
-      responses: [...(value?.responses || []), response],
-      timeouts: (value?.timeouts || 0) + 1,
-    };
-
-    onResponse?.(value);
-    onInteraction?.({
-      type: 'timeout' as any,
-      timestamp: Date.now(),
-      data: { trialNumber },
-    });
-
-    if (showFeedback) {
-      currentState = 'feedback';
-      drawFeedback('Too slow!', '#ff0000');
-      setTimeout(nextTrial, 1000);
-    } else {
-      nextTrial();
-    }
+  function resetTask() {
+    abortController?.abort();
+    state = 'ready';
+    currentTrial = 0;
   }
 
-  function showFeedbackScreen() {
-    currentState = 'feedback';
-
-    let message = '';
-    let color = '#ffffff';
-
-    if (config.response.requireCorrect && isCorrect !== null) {
-      if (isCorrect) {
-        message = `Correct! ${reactionTime.toFixed(0)}ms`;
-        color = '#00ff00';
-      } else {
-        message = `Incorrect! ${reactionTime.toFixed(0)}ms`;
-        color = '#ff0000';
-      }
-    } else {
-      message = `${reactionTime.toFixed(0)}ms`;
-      color = '#00ff00';
-    }
-
-    drawFeedback(message, color);
-
-    setTimeout(nextTrial, 1000);
+  function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  function drawFeedback(message: string, color: string) {
-    if (!ctx || !canvas) return;
-
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, width, height);
-
-    // Draw feedback
-    ctx.fillStyle = color;
-    ctx.font = '32px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(message, width / 2, height / 2);
-  }
-
-  function nextTrial() {
-    trialNumber++;
-
-    const totalTrials = isPractice ? practiceTrialCount + testTrialCount : testTrialCount;
-
-    if (isPractice && trialNumber < practiceTrialCount) {
-      setTimeout(startTrial, 1000);
-    } else if (isPractice && trialNumber === practiceTrialCount) {
-      // Transition from practice to test
-      currentState = 'ready';
-      drawInstructions('Practice complete! Press SPACE to start the test.');
-    } else if (trialNumber < totalTrials) {
-      setTimeout(startTrial, 1000);
-    } else {
-      // Test complete
-      currentState = 'complete';
-      drawComplete();
-    }
-  }
-
-  function drawInstructions(text: string) {
-    if (!ctx || !canvas) return;
-
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, width, height);
-
-    // Draw instructions
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '24px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const lines = text.split('\n');
-    const lineHeight = 30;
-    const startY = height / 2 - (lines.length * lineHeight) / 2;
-
-    lines.forEach((line, index) => {
-      ctx.fillText(line, width / 2, startY + index * lineHeight);
-    });
-  }
-
-  function drawComplete() {
-    if (!ctx || !canvas) return;
-
-    const avgRT = calculateAverageRT();
-    const accuracy = calculateAccuracy();
-
-    drawInstructions(
-      `Task Complete!\n\nAverage RT: ${avgRT.toFixed(0)}ms` +
-        (config.response.requireCorrect ? `\nAccuracy: ${(accuracy * 100).toFixed(0)}%` : '')
-    );
-  }
-
-  function calculateAverageRT(): number {
-    const rts = testTrials.filter((rt: number) => rt > 0);
-    return rts.length > 0 ? rts.reduce((a: number, b: number) => a + b, 0) / rts.length : 0;
-  }
-
-  function calculateAccuracy(): number {
-    if (!config.response.requireCorrect || !value?.responses) return 1;
-
-    const testResponses = value.responses.filter((r: any) => !r.isPractice);
-    const correct = testResponses.filter((r: any) => r.isCorrect).length;
-
-    return testResponses.length > 0 ? correct / testResponses.length : 0;
-  }
-
-  function handleKeyPress(e: KeyboardEvent) {
-    if (disabled) return;
-
-    if (currentState === 'ready' && e.key === ' ') {
-      e.preventDefault();
-      startTrial();
-    }
+  function isAbortError(error: unknown): boolean {
+    return error instanceof DOMException && error.name === 'AbortError';
   }
 </script>
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
   <div class="reaction-container">
-    <canvas bind:this={canvas} class="reaction-canvas" onkeydown={handleKeyPress} tabindex="0"
-    ></canvas>
+    <canvas bind:this={canvas} class="reaction-canvas"></canvas>
 
-    {#if currentState === 'ready'}
+    {#if state === 'ready'}
       <div class="overlay-instructions">
         <h3>Reaction Time Task</h3>
-        <p>
-          {question.config.prompt || 'Respond as quickly as possible when you see the stimulus.'}
-        </p>
+        <p>{config.prompt || 'Respond as quickly as possible when the stimulus appears.'}</p>
         <p class="keys">Valid keys: {validKeys.join(', ').toUpperCase()}</p>
         <p class="start">Press SPACE to begin</p>
+      </div>
+    {/if}
+
+    {#if state === 'running'}
+      <div class="status-overlay">
+        <p>Trial {currentTrial} / {usePractice ? practiceTrials + testTrials : testTrials}</p>
+      </div>
+    {/if}
+
+    {#if state === 'feedback'}
+      <div class="status-overlay">
+        <p class="feedback" style="color: {feedbackColor}">{feedbackText}</p>
+      </div>
+    {/if}
+
+    {#if state === 'complete'}
+      <div class="overlay-instructions">
+        <h3>Complete</h3>
+        {#if value?.averageRT !== null}
+          <p>Average RT: {value.averageRT.toFixed(1)} ms</p>
+        {/if}
+        {#if value?.accuracy !== null}
+          <p>Accuracy: {(value.accuracy * 100).toFixed(1)}%</p>
+        {/if}
+        <button class="restart" onclick={resetTask}>Run Again</button>
       </div>
     {/if}
   </div>
@@ -502,95 +367,81 @@
 
 <style>
   .reaction-container {
-    width: 100%;
-    min-height: 400px;
     position: relative;
-    background: #000;
+    width: 100%;
+    min-height: 420px;
     border-radius: 0.5rem;
     overflow: hidden;
+    background: #000;
   }
 
   .reaction-canvas {
-    width: 100%;
-    height: 400px;
     display: block;
-    cursor: crosshair;
+    width: 100%;
+    height: 420px;
   }
 
-  .reaction-canvas:focus {
-    outline: 2px solid #3b82f6;
-    outline-offset: -2px;
-  }
-
-  .overlay-instructions {
+  .overlay-instructions,
+  .status-overlay {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    color: white;
-    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    background: rgba(0, 0, 0, 0.72);
     padding: 2rem;
-    border-radius: 0.5rem;
-    max-width: 80%;
   }
 
   .overlay-instructions h3 {
-    margin: 0 0 1rem 0;
-    font-size: 1.5rem;
+    margin: 0 0 0.75rem;
+    font-size: 1.4rem;
+  }
+
+  .overlay-instructions p,
+  .status-overlay p {
+    margin: 0.4rem 0;
+  }
+
+  .keys {
+    color: #93c5fd;
+    font-family: monospace;
+  }
+
+  .start {
+    color: #4ade80;
     font-weight: 600;
   }
 
-  .overlay-instructions p {
-    margin: 0.5rem 0;
-    font-size: 1rem;
+  .feedback {
+    font-size: 1.6rem;
+    font-weight: 700;
   }
 
-  .overlay-instructions .keys {
-    margin: 1rem 0;
-    font-family: monospace;
-    font-size: 1.125rem;
-    color: #60a5fa;
-  }
-
-  .overlay-instructions .start {
-    margin-top: 1.5rem;
-    font-size: 1.125rem;
-    font-weight: 500;
+  .restart {
+    margin-top: 1rem;
+    padding: 0.55rem 1rem;
+    border: 1px solid #4ade80;
+    background: transparent;
     color: #4ade80;
-    animation: pulse 2s infinite;
+    border-radius: 0.4rem;
+    cursor: pointer;
   }
 
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
-  }
-
-  /* Responsive */
   @media (max-width: 640px) {
     .reaction-container {
-      min-height: 300px;
+      min-height: 320px;
     }
 
     .reaction-canvas {
-      height: 300px;
+      height: 320px;
     }
 
-    .overlay-instructions {
-      padding: 1.5rem;
-    }
-
-    .overlay-instructions h3 {
-      font-size: 1.25rem;
-    }
-
-    .overlay-instructions p {
-      font-size: 0.875rem;
+    .overlay-instructions,
+    .status-overlay {
+      padding: 1rem;
     }
   }
 </style>

@@ -15,34 +15,39 @@ export const metadata: ModuleMetadata = {
     supportsValidation: false,
     supportsAnalytics: true,
     supportsTiming: true,
-    supportsVariables: true
+    supportsVariables: true,
   },
   components: {
     runtime: () => import('./ReactionTime.svelte') as any,
-    designer: () => import('./ReactionTimeDesigner.svelte') as any
+    designer: () => import('./ReactionTimeDesigner.svelte') as any,
+  },
+  questionRuntime: {
+    contract: 'v1',
+    create: async () => {
+      const { ReactionTimeRuntime } = await import('./ReactionTimeRuntime');
+      return new ReactionTimeRuntime();
+    },
   },
   defaultConfig: {
-    display: {
-      prompt: 'Reaction Time Task', // Required by ReactionTimeDisplayConfig (implied base)
-      stimulus: {
-        type: 'shape',
-        content: 'circle',
-        fixation: {
-          type: 'cross',
-          duration: 500
-        }
+    prompt: 'Reaction Time Task',
+    stimulus: {
+      type: 'shape',
+      content: 'circle',
+      fixation: {
+        type: 'cross',
+        duration: 500,
       },
-      feedback: true,
-      practice: false,
-      practiceTrials: 3,
-      testTrials: 10, // These seem to be display/logic config
-      targetFPS: 60
     },
+    feedback: true,
+    practice: false,
+    practiceTrials: 3,
+    testTrials: 10,
+    targetFPS: 120,
     response: {
       validKeys: ['f', 'j'],
       timeout: 2000,
-      requireCorrect: false
-    }
+      requireCorrect: false,
+    },
   },
-  answerType: AnswerTypes.REACTION_TIME
+  answerType: AnswerTypes.REACTION_TIME,
 };

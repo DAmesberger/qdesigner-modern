@@ -1,22 +1,28 @@
-import type { 
-  Questionnaire, 
-  Question, 
+import type {
+  Questionnaire,
+  Question,
   Page,
-  Variable,
   FlowControl,
-  QuestionVariable,
-  QuestionnaireSession, 
+  QuestionnaireSession,
   Response,
-  VariableState 
+  Variable,
+  DisplayCondition,
+  ConditionalLogic,
 } from '$lib/shared';
-import type { ModuleCategory } from '$lib/modules/types';
 import { moduleRegistry } from '$lib/modules/registry';
+import type { ModuleMetadata } from '$lib/modules/types';
+import type {
+  IQuestionRuntime,
+  QuestionRuntimeContext,
+  QuestionRuntimeResult,
+} from './question-runtime';
 import { VariableEngine } from '$lib/scripting-engine';
 import { WebGLRenderer } from '$lib/renderer';
 import { ResourceManager } from '../resources/ResourceManager';
 import { MediaValidator } from '../validation/MediaValidator';
 import { QuestionPresenter } from './QuestionPresenter';
-import { ResponseCollector } from './ResponseCollector';
+import { ResponseCollector, type ResponseCaptureMetadata } from './ResponseCollector';
+import { BlockRandomizer } from './BlockRandomizer';
 import { nanoid } from 'nanoid';
 
 export interface RuntimeConfig {
@@ -28,27 +34,33 @@ export interface RuntimeConfig {
 }
 
 export class QuestionnaireRuntime {
-  private config: RuntimeConfig;
-  private session: QuestionnaireSession;
-  private variableEngine: VariableEngine;
-  private renderer: WebGLRenderer;
-  private resourceManager: ResourceManager;
-  private questionPresenter: QuestionPresenter;
-  private responseCollector: ResponseCollector;
-  
-  private currentPageIndex: number = 0;
-  private currentQuestionIndex: number = 0;
+  private readonly config: RuntimeConfig;
+  private readonly session: QuestionnaireSession;
+  private readonly variableEngine: VariableEngine;
+  private readonly renderer: WebGLRenderer;
+  private readonly resourceManager: ResourceManager;
+  private readonly questionPresenter: QuestionPresenter;
+  private readonly responseCollector: ResponseCollector;
+  private readonly blockRandomizer: BlockRandomizer;
+
+  private currentPageIndex = 0;
+  private currentItemIndex = 0;
   private currentPage: Page | null = null;
   private currentQuestion: Question | null = null;
-  private currentItemIndex: number = 0;
-  
-  private isRunning: boolean = false;
-  private isPaused: boolean = false;
-  
+  private currentPageItems: Question[] = [];
+
+  private isRunning = false;
+  private isPaused = false;
+
+  private currentAbortController: AbortController | null = null;
+  private autoAdvanceTimeoutId: number | null = null;
+
+  private readonly questionRuntimeCache = new Map<string, IQuestionRuntime>();
+  private readonly loopIterations = new Map<string, number>();
+
   constructor(config: RuntimeConfig) {
     this.config = config;
-    
-    // Initialize session
+
     this.session = {
       id: nanoid(),
       questionnaireId: config.questionnaire.id,
@@ -64,661 +76,641 @@ export class QuestionnaireRuntime {
         refreshRate: (screen as any).refreshRate || 60,
         webGLSupported: true,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        locale: navigator.language
-      }
+        locale: navigator.language,
+      },
     };
-    
-    // Initialize components
+
     this.variableEngine = new VariableEngine();
     this.renderer = new WebGLRenderer({
       canvas: config.canvas,
-      targetFPS: config.questionnaire.settings.webgl?.targetFPS || 60
+      targetFPS: config.questionnaire.settings.webgl?.targetFPS || 60,
+      antialias: config.questionnaire.settings.webgl?.antialias ?? false,
+      vsync: true,
     });
     this.resourceManager = new ResourceManager();
     this.questionPresenter = new QuestionPresenter(this.renderer, this.resourceManager);
     this.responseCollector = new ResponseCollector();
-    
-    // Initialize variables
+    this.blockRandomizer = new BlockRandomizer(
+      config.questionnaire.settings.randomizationSeed || config.questionnaire.id
+    );
+
     this.initializeVariables();
   }
-  
-  /**
-   * Initialize all questionnaire variables
-   */
+
+  public async preload(onProgress?: (progress: number) => void): Promise<void> {
+    const validator = new MediaValidator();
+    const validationResult = await validator.validateQuestionnaire(this.config.questionnaire);
+
+    if (!validationResult.valid) {
+      throw new Error(MediaValidator.formatErrors(validationResult));
+    }
+
+    await this.resourceManager.scanQuestionnaire(this.config.questionnaire);
+    this.resourceManager.setWebGLContext(this.renderer.getContext());
+
+    await this.resourceManager.preloadAll((progress) => {
+      onProgress?.(progress.percentage);
+    });
+  }
+
+  public async start(): Promise<void> {
+    if (this.isRunning) return;
+
+    this.isRunning = true;
+    this.renderer.start();
+
+    await this.navigateToPage(0);
+  }
+
+  public pause(): void {
+    if (!this.isRunning || this.isPaused) return;
+
+    this.isPaused = true;
+    this.renderer.stop();
+    this.responseCollector.pause();
+  }
+
+  public resume(): void {
+    if (!this.isRunning || !this.isPaused) return;
+
+    this.isPaused = false;
+    this.renderer.start();
+    this.responseCollector.resume();
+  }
+
+  public stop(): void {
+    this.isRunning = false;
+    this.isPaused = false;
+
+    this.cancelCurrentExecution();
+
+    if (this.session.status === 'in_progress') {
+      this.session.status = 'abandoned';
+      this.session.endTime = Date.now();
+    }
+
+    this.responseCollector.stop();
+    this.renderer.stop();
+    this.resourceManager.dispose();
+
+    for (const runtime of this.questionRuntimeCache.values()) {
+      runtime.teardown();
+    }
+    this.questionRuntimeCache.clear();
+  }
+
+  public async navigateBack(): Promise<void> {
+    if (!this.config.questionnaire.settings.allowBackNavigation) return;
+    if (this.currentPageIndex <= 0) return;
+
+    await this.navigateToPage(this.currentPageIndex - 1);
+  }
+
+  public getProgress(): { current: number; total: number; percentage: number } {
+    const total = this.config.questionnaire.pages.length;
+    const current = Math.min(total, this.currentPageIndex + 1);
+
+    return {
+      current,
+      total,
+      percentage: total > 0 ? (current / total) * 100 : 0,
+    };
+  }
+
   private initializeVariables(): void {
-    // Register questionnaire variables
-    for (const variable of this.config.questionnaire.variables) {
+    for (const variable of this.config.questionnaire.variables || []) {
       this.variableEngine.registerVariable(variable);
     }
-    
-    // Create automatic variables for each question
+
     for (const question of this.config.questionnaire.questions) {
-      // Only create variables for actual questions, not instructions or analytics
-      const metadata = moduleRegistry.get(question.type);
-      if (metadata?.category === 'question') {
-        this.createQuestionVariables(question);
-      }
+      this.registerQuestionVariables(question);
     }
-    
-    // System variables
+
     this.variableEngine.registerVariable({
       id: '_participantId',
       name: 'participantId',
       type: 'string',
       scope: 'global',
-      defaultValue: this.config.participantId || ''
+      defaultValue: this.config.participantId || '',
     });
-    
+
     this.variableEngine.registerVariable({
       id: '_currentPage',
       name: 'currentPage',
       type: 'number',
       scope: 'global',
-      defaultValue: 1
+      defaultValue: 1,
     });
-    
+
     this.variableEngine.registerVariable({
       id: '_totalPages',
       name: 'totalPages',
       type: 'number',
       scope: 'global',
-      defaultValue: this.config.questionnaire.pages.length
+      defaultValue: this.config.questionnaire.pages.length,
     });
   }
-  
-  /**
-   * Create automatic variables for a question
-   */
-  private createQuestionVariables(question: Question): void {
-    const baseName = question.id;
-    
-    // Main response variable
-    this.variableEngine.registerVariable({
-      id: `${baseName}_value`,
-      name: baseName,
-      type: this.getVariableTypeForQuestion(question),
+
+  private registerQuestionVariables(question: Question): void {
+    const base = question.id;
+    const responseType = this.inferVariableType(question);
+
+    this.registerVariableIfMissing({
+      id: `${base}_value`,
+      name: base,
+      type: responseType,
       scope: 'global',
-      defaultValue: null
+      defaultValue: null,
     });
-    
-    // Time variable (when answered)
-    this.variableEngine.registerVariable({
-      id: `${baseName}_time`,
-      name: `${baseName}_time`,
+
+    this.registerVariableIfMissing({
+      id: `${base}_time`,
+      name: `${base}_time`,
       type: 'time',
       scope: 'global',
-      defaultValue: null
+      defaultValue: null,
     });
-    
-    // Delta variable (reaction time)
-    this.variableEngine.registerVariable({
-      id: `${baseName}_delta`,
-      name: `${baseName}_delta`,
+
+    this.registerVariableIfMissing({
+      id: `${base}_rt`,
+      name: `${base}_rt`,
       type: 'reaction_time',
       scope: 'global',
-      defaultValue: null
+      defaultValue: null,
     });
-    
-    // Correct variable
-    this.variableEngine.registerVariable({
-      id: `${baseName}_correct`,
-      name: `${baseName}_correct`,
+
+    this.registerVariableIfMissing({
+      id: `${base}_correct`,
+      name: `${base}_correct`,
       type: 'boolean',
       scope: 'global',
-      defaultValue: null
+      defaultValue: null,
     });
-    
-    // Stimulus onset time (internal)
-    this.variableEngine.registerVariable({
-      id: `${baseName}_onset`,
-      name: `${baseName}_onset`,
+
+    this.registerVariableIfMissing({
+      id: `${base}_onset`,
+      name: `${base}_onset`,
       type: 'stimulus_onset',
       scope: 'local',
-      defaultValue: null
+      defaultValue: null,
     });
   }
-  
-  /**
-   * Get appropriate variable type for question response
-   */
-  private getVariableTypeForQuestion(question: Question): Variable['type'] {
-    const q = question as any;
-    switch (q.responseType.type) {
-      case 'number':
-      case 'scale':
-        return 'number';
-      case 'text':
-      case 'single':
-      case 'keypress':
-        return 'string';
-      case 'multiple':
-        return 'array';
-      default:
-        return 'string';
+
+  private registerVariableIfMissing(variable: Variable): void {
+    try {
+      this.variableEngine.registerVariable(variable);
+    } catch {
+      // Variable registration collisions are expected during repeated runtime setup.
     }
   }
-  
-  /**
-   * Preload all resources
-   */
-  public async preload(onProgress?: (progress: number) => void): Promise<void> {
-    // First, validate all media URLs are accessible
-    const validator = new MediaValidator();
-    const validationResult = await validator.validateQuestionnaire(this.config.questionnaire);
-    
-    if (!validationResult.valid) {
-      // Throw error with detailed information about what failed
-      throw new Error(MediaValidator.formatErrors(validationResult));
+
+  private inferVariableType(question: Question): Variable['type'] {
+    const responseType = (question as any).responseType?.type;
+
+    if (!responseType) {
+      return 'object';
     }
-    
-    // If validation passes, proceed with resource loading
-    // Scan questionnaire for resources
-    await this.resourceManager.scanQuestionnaire(this.config.questionnaire);
-    
-    // Set WebGL context
-    const gl = this.renderer.getContext();
-    this.resourceManager.setWebGLContext(gl);
-    
-    // Preload all resources (this will throw if any fail to load)
-    await this.resourceManager.preloadAll((progress) => {
-      onProgress?.(progress.percentage);
-    });
+
+    if (responseType === 'number' || responseType === 'scale') return 'number';
+    if (responseType === 'multiple') return 'array';
+    if (responseType === 'single' || responseType === 'text' || responseType === 'keypress')
+      return 'string';
+    if (responseType === 'click') return 'object';
+
+    return 'object';
   }
-  
-  /**
-   * Start questionnaire execution
-   */
-  public async start(): Promise<void> {
-    if (this.isRunning) return;
-    
-    this.isRunning = true;
-    this.renderer.start();
-    
-    // Navigate to first page
-    await this.navigateToPage(0);
-  }
-  
-  /**
-   * Navigate to a specific page
-   */
+
   private async navigateToPage(pageIndex: number): Promise<void> {
+    if (!this.isRunning) return;
+
     if (pageIndex < 0 || pageIndex >= this.config.questionnaire.pages.length) {
       this.complete();
       return;
     }
-    
+
+    this.cancelCurrentExecution();
+
     this.currentPageIndex = pageIndex;
     this.currentPage = this.config.questionnaire.pages[pageIndex] || null;
-    this.currentQuestionIndex = 0;
     this.currentItemIndex = 0;
-    
-    // Update page variable
+
     this.variableEngine.setVariable('_currentPage', pageIndex + 1, 'system');
-    
-    // Check page conditions
-    if (this.currentPage && !this.evaluateConditions(this.currentPage.conditions)) {
-      // Skip this page
+
+    if (this.currentPage && !this.evaluateVisibility(this.currentPage.conditions)) {
       await this.navigateToPage(pageIndex + 1);
       return;
     }
-    
-    // Progress callback
-    this.config.onProgress?.(pageIndex, this.config.questionnaire.pages.length);
-    
-    // Reset item index
-    this.currentItemIndex = 0;
-    
-    // Show first item on page
-    await this.showNextItem();
+
+    this.currentPageItems = this.getPageItems();
+
+    this.config.onProgress?.(pageIndex + 1, this.config.questionnaire.pages.length);
+    await this.showCurrentItem();
   }
-  
-  /**
-   * Show next item (question/instruction/analytics) on current page
-   */
-  private async showNextItem(): Promise<void> {
-    if (!this.currentPage) return;
-    
-    // Get all items for the page (questions, instructions, analytics)
-    const items = this.getAllPageItems();
-    if (this.currentItemIndex >= items.length) {
-      // Page complete, check flow control
+
+  private getPageItems(): Question[] {
+    if (!this.currentPage) return [];
+
+    const questionMap = new Map(
+      this.config.questionnaire.questions.map((question) => [question.id, question])
+    );
+    const orderedIds = this.blockRandomizer.randomizePage(this.currentPage, questionMap);
+
+    return orderedIds
+      .map((id) => questionMap.get(id))
+      .filter((question): question is Question => Boolean(question))
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  }
+
+  private async showCurrentItem(): Promise<void> {
+    if (!this.isRunning || this.isPaused) return;
+
+    const item = this.currentPageItems[this.currentItemIndex];
+    if (!item) {
       await this.handleFlowControl();
       return;
     }
-    
-    // Get current item
-    const currentItem = items[this.currentItemIndex];
-    if (!currentItem) {
-      this.currentItemIndex++;
-      await this.showNextItem();
+
+    if (!this.evaluateVisibility((item as any).conditions)) {
+      this.currentItemIndex += 1;
+      await this.showCurrentItem();
       return;
     }
-    
-    // Check item conditions
-    if (!this.evaluateConditions(currentItem.conditions)) {
-      this.currentItemIndex++;
-      await this.showNextItem();
-      return;
-    }
-    
-    // Get module metadata to determine category
-    const metadata = moduleRegistry.get(currentItem.type);
+
+    const metadata = moduleRegistry.get(item.type);
     if (!metadata) {
-      console.warn(`Module type not found: ${currentItem.type}`);
-      this.currentItemIndex++;
-      await this.showNextItem();
+      console.warn(`Unknown module type: ${item.type}`);
+      this.currentItemIndex += 1;
+      await this.showCurrentItem();
       return;
     }
-    
-    // Present item based on category
+
+    this.currentQuestion = item;
+
     switch (metadata.category) {
       case 'question':
-        this.currentQuestion = currentItem as Question;
-        await this.presentQuestion(currentItem as Question);
+        await this.presentQuestion(item, metadata);
         break;
       case 'instruction':
-        await this.presentInstruction(currentItem);
-        break;
+      case 'display':
       case 'analytics':
-        await this.presentAnalytics(currentItem);
+        await this.presentNonInteractiveItem(item, metadata);
         break;
       default:
-        this.currentItemIndex++;
-        await this.showNextItem();
+        this.currentItemIndex += 1;
+        await this.showCurrentItem();
+        break;
     }
   }
-  
-  /**
-   * Get all items for the current page in order
-   */
-  private getAllPageItems(): any[] {
-    if (!this.currentPage) return [];
-    
-    const items: any[] = [];
-    const questionIds = this.currentPage.questions || [];
-    
-    // Get all questions for this page
-    for (const qId of questionIds) {
-      const question = this.config.questionnaire.questions.find(q => q.id === qId);
-      if (question) {
-        items.push(question);
-      }
-    }
-    
-    // Sort by order if available
-    items.sort((a, b) => (a.order || 0) - (b.order || 0));
-    
-    return items;
-  }
-  
-  /**
-   * Present a question and collect response
-   */
-  private async presentQuestion(question: Question): Promise<void> {
-    // Record stimulus onset time
+
+  private async presentQuestion(question: Question, metadata: ModuleMetadata): Promise<void> {
     const onsetTime = performance.now();
     this.variableEngine.setVariable(`${question.id}_onset`, onsetTime, 'system');
-    
-    // Present question using WebGL renderer
-    await this.questionPresenter.present(question, this.variableEngine);
-    
-    // Check if this is a 'none' response type (instruction/display only)
-    const q = question as any;
-    if (q.responseType.type === 'none') {
-      // Auto-advance after delay if specified
-      const delay = q.responseType.delay || 0;
-      if (q.responseType.autoAdvance !== false) {
-        setTimeout(() => {
-          this.handleResponse(question, 'auto-advanced', onsetTime);
-        }, delay);
+
+    const runtime = await this.resolveQuestionRuntime(metadata);
+    if (runtime) {
+      const context = this.createQuestionRuntimeContext(question);
+      try {
+        const result = await runtime.run(context);
+        await this.handleQuestionRuntimeResult(question, onsetTime, result);
+      } catch (error) {
+        if (!this.isAbortError(error)) {
+          throw error;
+        }
       }
       return;
     }
-    
-    // Set up response collection for questions that expect responses
+
+    await this.questionPresenter.present(question, this.variableEngine);
+
+    const responseType = (question as any).responseType;
+    if (responseType?.type === 'none') {
+      const delay = responseType.delay || 0;
+      this.scheduleAutoAdvance(delay, async () => {
+        await this.handleCollectedResponse(question, onsetTime, 'auto-advanced', {
+          source: 'programmatic',
+          timestamp: performance.now(),
+          responseTimeMs: Math.max(0, performance.now() - onsetTime),
+        });
+      });
+      return;
+    }
+
     this.responseCollector.setup(question, {
-      onResponse: (value: any) => this.handleResponse(question, value, onsetTime),
-      onTimeout: () => this.handleTimeout(question, onsetTime)
+      onResponse: (value, responseMetadata) => {
+        void this.handleCollectedResponse(question, onsetTime, value, responseMetadata);
+      },
+      onTimeout: () => {
+        void this.handleTimeout(question, onsetTime);
+      },
+      eventTarget: document,
+      pointerTarget: this.config.canvas,
+      isResponseAllowed: () => this.isRunning && !this.isPaused,
     });
-    
-    // Start response collection
+
     this.responseCollector.start();
   }
-  
-  /**
-   * Present an instruction (display only)
-   */
-  private async presentInstruction(instruction: any): Promise<void> {
-    // Instructions are display-only, no response collection
-    const onsetTime = performance.now();
-    
-    // Present using the modular presenter
-    await this.questionPresenter.presentModular(instruction, this.variableEngine);
-    
-    // Auto-advance after display duration
-    const duration = instruction.displayDuration || instruction.config?.duration || 3000;
-    const autoAdvance = instruction.autoAdvance !== false;
-    
-    if (autoAdvance) {
-      setTimeout(() => {
-        this.handleInstructionComplete(instruction);
-      }, duration);
+
+  private async presentNonInteractiveItem(
+    question: Question,
+    _metadata: ModuleMetadata
+  ): Promise<void> {
+    await this.questionPresenter.presentModular(question as any, this.variableEngine);
+
+    const timing = (question as any).timing;
+    const duration = timing?.duration || (question as any).displayDuration || 2500;
+    const autoAdvance = (question as any).autoAdvance !== false;
+
+    if (!autoAdvance) {
+      return;
     }
+
+    this.scheduleAutoAdvance(duration, async () => {
+      await this.questionPresenter.clear();
+      this.currentItemIndex += 1;
+      await this.showCurrentItem();
+    });
   }
-  
-  /**
-   * Present analytics visualization
-   */
-  private async presentAnalytics(analytics: any): Promise<void> {
-    // Analytics are visualization-only, no response collection
-    const onsetTime = performance.now();
-    
-    // Compute data for analytics from variables
-    const analyticsData = this.computeAnalyticsData(analytics);
-    
-    // Present using the modular presenter with computed data
-    await this.questionPresenter.presentModular({
-      ...analytics,
-      data: analyticsData
-    }, this.variableEngine);
-    
-    // Auto-advance after display duration
-    const duration = analytics.displayDuration || analytics.config?.duration || 5000;
-    const autoAdvance = analytics.autoAdvance !== false;
-    
-    if (autoAdvance) {
-      setTimeout(() => {
-        this.handleAnalyticsComplete(analytics);
-      }, duration);
-    }
-  }
-  
-  /**
-   * Compute data for analytics visualization
-   */
-  private computeAnalyticsData(analytics: any): any[] {
-    // Get data configuration
-    const dataConfig = analytics.config?.data || analytics.data;
-    if (!dataConfig) return [];
-    
-    // If data source is a variable, get its value
-    if (dataConfig.source === 'variable' && dataConfig.variableName) {
-      const value = this.variableEngine.getVariable(dataConfig.variableName);
-      return Array.isArray(value) ? value : [];
-    }
-    
-    // If data source is a formula, evaluate it
-    if (dataConfig.source === 'formula' && dataConfig.formula) {
-      const result = this.variableEngine.evaluateFormula(dataConfig.formula);
-      return Array.isArray(result.value) ? result.value : [];
-    }
-    
-    // If data is directly provided
-    if (dataConfig.values) {
-      return dataConfig.values;
-    }
-    
-    return [];
-  }
-  
-  /**
-   * Handle question response
-   */
-  private async handleResponse(question: Question, value: any, onsetTime: number): Promise<void> {
-    const responseTime = performance.now();
-    const reactionTime = responseTime - onsetTime;
-    
-    // Create response record
-    const response: Response = {
-      id: nanoid(),
-      questionId: question.id,
-      pageId: this.currentPage?.id,
-      timestamp: responseTime,
-      value: value,
-      reactionTime: reactionTime,
-      stimulusOnsetTime: onsetTime,
-      valid: true
+
+  private createQuestionRuntimeContext(question: Question): QuestionRuntimeContext {
+    this.currentAbortController = new AbortController();
+
+    return {
+      question,
+      canvas: this.config.canvas,
+      renderer: this.renderer,
+      variableEngine: this.variableEngine,
+      resourceManager: this.resourceManager,
+      responseCollector: this.responseCollector,
+      abortSignal: this.currentAbortController.signal,
     };
-    
-    // Add to session only if not a 'none' response type
-    const q = question as any;
-    if (q.responseType.type !== 'none') {
-      this.session.responses.push(response);
-    }
-    
-    // Update question variables
-    this.variableEngine.setVariable(`${question.id}_value`, value, 'response');
-    this.variableEngine.setVariable(`${question.id}_time`, responseTime, 'response');
-    this.variableEngine.setVariable(`${question.id}_delta`, reactionTime, 'response');
-    
-    // Evaluate correctness if formula provided
-    if (question.validation?.find(v => v.type === 'custom')) {
-      const correctFormula = question.validation.find(v => v.type === 'custom')?.value;
-      if (correctFormula) {
-        const result = this.variableEngine.evaluateFormula(correctFormula);
-        this.variableEngine.setVariable(`${question.id}_correct`, result.value || false, 'response');
-      }
-    }
-    
-    // Update any custom variables defined for this question
-    // Update any custom variables defined for this question
-    if (q.variables) {
-      for (const qVar of q.variables) {
-        this.updateQuestionVariable(qVar, response);
-      }
-    }
-    
-    // Stop response collection
-    this.responseCollector.stop();
-    
-    // Clear presentation
-    await this.questionPresenter.clear();
-    
-    // Move to next item
-    this.currentItemIndex++;
-    await this.showNextItem();
   }
-  
-  /**
-   * Handle instruction completion
-   */
-  private async handleInstructionComplete(instruction: any): Promise<void> {
-    // Clear presentation
-    await this.questionPresenter.clear();
-    
-    // Move to next item
-    this.currentItemIndex++;
-    await this.showNextItem();
+
+  private async resolveQuestionRuntime(metadata: ModuleMetadata): Promise<IQuestionRuntime | null> {
+    if (!metadata.questionRuntime || metadata.questionRuntime.contract !== 'v1') {
+      return null;
+    }
+
+    if (this.questionRuntimeCache.has(metadata.type)) {
+      return this.questionRuntimeCache.get(metadata.type)!;
+    }
+
+    const runtime = await metadata.questionRuntime.create();
+    const context = this.createQuestionRuntimeContext(this.currentQuestion!);
+    await runtime.prepare(context);
+    this.questionRuntimeCache.set(metadata.type, runtime);
+    return runtime;
   }
-  
-  /**
-   * Handle analytics completion
-   */
-  private async handleAnalyticsComplete(analytics: any): Promise<void> {
-    // Clear presentation
-    await this.questionPresenter.clear();
-    
-    // Move to next item
-    this.currentItemIndex++;
-    await this.showNextItem();
-  }
-  
-  /**
-   * Handle response timeout
-   */
-  private async handleTimeout(question: Question, onsetTime: number): Promise<void> {
-    // Record as missing response
+
+  private async handleQuestionRuntimeResult(
+    question: Question,
+    onsetTime: number,
+    runtimeResult: QuestionRuntimeResult
+  ): Promise<void> {
+    const timestamp = performance.now();
+    const reactionTime = runtimeResult.reactionTimeMs ?? Math.max(0, timestamp - onsetTime);
+
     const response: Response = {
       id: nanoid(),
       questionId: question.id,
       pageId: this.currentPage?.id,
-      timestamp: performance.now(),
+      timestamp,
+      value: runtimeResult.value,
+      reactionTime,
+      stimulusOnsetTime: onsetTime,
+      valid: !runtimeResult.timedOut,
+      metadata: runtimeResult.metadata,
+    };
+
+    this.session.responses.push(response);
+    this.updateQuestionVariables(question, response, runtimeResult.isCorrect);
+
+    await this.questionPresenter.clear();
+
+    this.currentItemIndex += 1;
+    await this.showCurrentItem();
+  }
+
+  private async handleCollectedResponse(
+    question: Question,
+    onsetTime: number,
+    value: any,
+    responseMetadata?: ResponseCaptureMetadata
+  ): Promise<void> {
+    const timestamp = responseMetadata?.timestamp ?? performance.now();
+    const reactionTime = responseMetadata?.responseTimeMs ?? Math.max(0, timestamp - onsetTime);
+
+    const response: Response = {
+      id: nanoid(),
+      questionId: question.id,
+      pageId: this.currentPage?.id,
+      timestamp,
+      value,
+      reactionTime,
+      stimulusOnsetTime: onsetTime,
+      valid: true,
+      metadata: {
+        ...(responseMetadata ? { firstInteraction: responseMetadata.responseTimeMs } : {}),
+      },
+    };
+
+    this.session.responses.push(response);
+
+    const isCorrect = this.evaluateCustomCorrectness(question, value);
+    this.updateQuestionVariables(question, response, isCorrect);
+
+    this.responseCollector.stop();
+    await this.questionPresenter.clear();
+
+    this.currentItemIndex += 1;
+    await this.showCurrentItem();
+  }
+
+  private async handleTimeout(question: Question, onsetTime: number): Promise<void> {
+    const timestamp = performance.now();
+
+    const response: Response = {
+      id: nanoid(),
+      questionId: question.id,
+      pageId: this.currentPage?.id,
+      timestamp,
       value: null,
       reactionTime: -1,
       stimulusOnsetTime: onsetTime,
-      valid: false
+      valid: false,
     };
-    
+
     this.session.responses.push(response);
-    
-    // Update variables with null/missing
-    this.variableEngine.setVariable(`${question.id}_value`, null, 'timeout');
-    this.variableEngine.setVariable(`${question.id}_time`, null, 'timeout');
-    this.variableEngine.setVariable(`${question.id}_delta`, null, 'timeout');
-    this.variableEngine.setVariable(`${question.id}_correct`, false, 'timeout');
-    
-    // Move to next item
-    this.currentItemIndex++;
-    await this.showNextItem();
+    this.updateQuestionVariables(question, response, false);
+
+    await this.questionPresenter.clear();
+
+    this.currentItemIndex += 1;
+    await this.showCurrentItem();
   }
-  
-  /**
-   * Update custom question variables
-   */
-  private updateQuestionVariable(qVar: QuestionVariable, response: Response): void {
-    let value: any;
-    
-    switch (qVar.source) {
-      case 'response':
-        value = response.value;
-        break;
-      case 'reaction_time':
-        value = response.reactionTime;
-        break;
-      case 'stimulus_onset':
-        value = response.stimulusOnsetTime;
-        break;
-      case 'custom':
-        if (qVar.transform) {
-          const result = this.variableEngine.evaluateFormula(qVar.transform);
-          value = result.value;
-        }
-        break;
+
+  private updateQuestionVariables(
+    question: Question,
+    response: Response,
+    isCorrect: boolean | null
+  ): void {
+    this.variableEngine.setVariable(`${question.id}_value`, response.value, 'response');
+    this.variableEngine.setVariable(`${question.id}_time`, response.timestamp, 'response');
+    this.variableEngine.setVariable(`${question.id}_rt`, response.reactionTime ?? null, 'response');
+    this.variableEngine.setVariable(`${question.id}_correct`, isCorrect, 'response');
+  }
+
+  private evaluateCustomCorrectness(question: Question, value: any): boolean | null {
+    const validation = (question as any).validation;
+    const customRule = Array.isArray(validation)
+      ? validation.find((rule: any) => rule.type === 'custom')
+      : undefined;
+
+    if (!customRule?.value) {
+      return null;
     }
-    
-    if (value !== undefined) {
-      this.variableEngine.setVariable(qVar.variableId, value, 'question');
+
+    try {
+      const result = this.variableEngine.evaluateFormula(customRule.value);
+      return Boolean(result.value);
+    } catch {
+      return null;
     }
   }
-  
-  /**
-   * Evaluate display conditions
-   */
-  private evaluateConditions(conditions?: Array<{formula: string, action: string}>): boolean {
-    if (!conditions || conditions.length === 0) return true;
-    
+
+  private evaluateVisibility(
+    conditions?: DisplayCondition[] | ConditionalLogic | Array<{ formula: string; target?: string }>
+  ): boolean {
+    if (!conditions) return true;
+
+    if (!Array.isArray(conditions)) {
+      const showFormula = (conditions as ConditionalLogic).show;
+      if (!showFormula) return true;
+      const result = this.variableEngine.evaluateFormula(showFormula);
+      return Boolean(result.value);
+    }
+
     for (const condition of conditions) {
-      const result = this.variableEngine.evaluateFormula(condition.formula);
-      const conditionMet = !!result.value;
-      
-      if (condition.action === 'show' && !conditionMet) return false;
-      if (condition.action === 'hide' && conditionMet) return false;
+      const formula = (condition as any).formula || (condition as any).expression;
+      if (!formula) continue;
+
+      const target = (condition as any).target || 'show';
+      const result = Boolean(this.variableEngine.evaluateFormula(formula).value);
+
+      if (target === 'show' && !result) return false;
+      if (target === 'hide' && result) return false;
     }
-    
+
     return true;
   }
-  
-  /**
-   * Handle flow control after page completion
-   */
+
   private async handleFlowControl(): Promise<void> {
-    // Check for flow control rules
-    const flowRules = this.config.questionnaire.flow.filter(f => 
-      f.type === 'branch' && this.evaluateConditions([{formula: f.condition || 'true', action: 'show'}])
-    );
-    
-    if (flowRules.length > 0 && flowRules[0]) {
-      // Follow first matching branch
-      const targetPageId = flowRules[0].target;
-      const targetIndex = this.config.questionnaire.pages.findIndex(p => p.id === targetPageId);
-      
-      if (targetIndex !== -1) {
-        await this.navigateToPage(targetIndex);
+    const matchingRule = this.findMatchingFlowRule();
+
+    if (matchingRule) {
+      if (matchingRule.type === 'terminate') {
+        this.complete();
         return;
       }
+
+      if (matchingRule.type === 'loop') {
+        const executed = this.loopIterations.get(matchingRule.id) || 0;
+        const allowed = matchingRule.iterations || 1;
+
+        if (executed < allowed) {
+          this.loopIterations.set(matchingRule.id, executed + 1);
+          if (matchingRule.target) {
+            const targetIndex = this.config.questionnaire.pages.findIndex(
+              (page) => page.id === matchingRule.target
+            );
+            if (targetIndex >= 0) {
+              await this.navigateToPage(targetIndex);
+              return;
+            }
+          }
+        }
+      }
+
+      if (matchingRule.type === 'skip' || matchingRule.type === 'branch') {
+        if (matchingRule.target) {
+          const targetIndex = this.config.questionnaire.pages.findIndex(
+            (page) => page.id === matchingRule.target
+          );
+          if (targetIndex >= 0) {
+            await this.navigateToPage(targetIndex);
+            return;
+          }
+        }
+      }
     }
-    
-    // Default: next page
+
     await this.navigateToPage(this.currentPageIndex + 1);
   }
-  
-  /**
-   * Complete questionnaire
-   */
+
+  private findMatchingFlowRule(): FlowControl | null {
+    for (const rule of this.config.questionnaire.flow || []) {
+      const condition = rule.condition || 'true';
+      const result = Boolean(this.variableEngine.evaluateFormula(condition).value);
+      if (result) {
+        return rule;
+      }
+    }
+
+    return null;
+  }
+
   private complete(): void {
+    if (!this.isRunning) return;
+
     this.isRunning = false;
-    this.session.endTime = Date.now();
     this.session.status = 'completed';
-    
-    // Save final variable states
-    const allVars = this.variableEngine.getAllVariables();
-    for (const [name, value] of Object.entries(allVars)) {
+    this.session.endTime = Date.now();
+
+    const allVariables = this.variableEngine.getAllVariables();
+    for (const [variableId, value] of Object.entries(allVariables)) {
       this.session.variables.push({
-        variableId: name,
-        value: value,
-        timestamp: Date.now()
+        variableId,
+        value,
+        timestamp: Date.now(),
       });
     }
-    
-    // Stop components
-    this.renderer.stop();
+
     this.responseCollector.stop();
-    
-    // Callback
+    this.renderer.stop();
+
     this.config.onComplete?.(this.session);
   }
-  
-  /**
-   * Pause execution
-   */
-  public pause(): void {
-    this.isPaused = true;
-    this.renderer.stop();
-    this.responseCollector.pause();
-  }
-  
-  /**
-   * Resume execution
-   */
-  public resume(): void {
-    this.isPaused = false;
-    this.renderer.start();
-    this.responseCollector.resume();
-  }
-  
-  /**
-   * Stop execution
-   */
-  public stop(): void {
-    this.isRunning = false;
-    this.session.status = 'abandoned';
-    this.session.endTime = Date.now();
-    
-    this.renderer.stop();
-    this.responseCollector.stop();
-    this.resourceManager.dispose();
-  }
-  
-  /**
-   * Navigate back
-   */
-  public async navigateBack(): Promise<void> {
-    if (this.config.questionnaire.settings.allowBackNavigation && this.currentPageIndex > 0) {
-      await this.navigateToPage(this.currentPageIndex - 1);
+
+  private scheduleAutoAdvance(delayMs: number, callback: () => Promise<void>): void {
+    if (this.autoAdvanceTimeoutId !== null) {
+      clearTimeout(this.autoAdvanceTimeoutId);
+      this.autoAdvanceTimeoutId = null;
     }
+
+    this.autoAdvanceTimeoutId = window.setTimeout(
+      () => {
+        this.autoAdvanceTimeoutId = null;
+        void callback();
+      },
+      Math.max(0, delayMs)
+    );
   }
-  
-  /**
-   * Get current progress
-   */
-  public getProgress(): { current: number; total: number; percentage: number } {
-    const total = this.config.questionnaire.pages.length;
-    const current = this.currentPageIndex + 1;
-    
-    return {
-      current,
-      total,
-      percentage: (current / total) * 100
-    };
+
+  private cancelCurrentExecution(): void {
+    if (this.autoAdvanceTimeoutId !== null) {
+      clearTimeout(this.autoAdvanceTimeoutId);
+      this.autoAdvanceTimeoutId = null;
+    }
+
+    if (this.currentAbortController) {
+      this.currentAbortController.abort();
+      this.currentAbortController = null;
+    }
+
+    this.responseCollector.stop();
+    this.renderer.clearRenderables();
+  }
+
+  private isAbortError(error: unknown): boolean {
+    return error instanceof DOMException && error.name === 'AbortError';
   }
 }
