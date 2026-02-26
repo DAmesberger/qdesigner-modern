@@ -49,6 +49,11 @@
       designerStore.selectItem(page.id, 'page');
     }
   }
+
+  function quickAddQuestion(type: string) {
+    if (!page) return;
+    designerStore.addQuestion(page.id, type);
+  }
 </script>
 
 <div
@@ -84,6 +89,42 @@
                   Conditional
                 </span>
               {/if}
+
+              <div class="hidden sm:flex items-center gap-2">
+                <button
+                  type="button"
+                  class="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    quickAddQuestion('multiple-choice');
+                  }}
+                  data-testid="designer-quick-add-choice"
+                >
+                  + Choice
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    quickAddQuestion('text-input');
+                  }}
+                  data-testid="designer-quick-add-text"
+                >
+                  + Text
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    quickAddQuestion('reaction-time');
+                  }}
+                  data-testid="designer-quick-add-reaction"
+                >
+                  + Reaction
+                </button>
+              </div>
 
               <button
                 onclick={(e) => {

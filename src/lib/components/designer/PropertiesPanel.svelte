@@ -25,6 +25,11 @@
   let organizationId = $derived(designerStore.questionnaire.organizationId || '');
   let userId = $derived(designerStore.userId || '');
   let showScriptTab = $derived(!!questionItem);
+  let isChoiceQuestion = $derived(
+    !!questionItem &&
+      (questionItem.type === 'multiple-choice' || questionItem.type === 'single-choice')
+  );
+  let bulkOptionDraft = $state('');
 
   // Debug logging
   // $effect(() => {
@@ -174,6 +179,97 @@
       });
     }
   }
+
+  function extractChoiceOptions(question: Question): Array<{ value: string; label: string; key?: string }> {
+    const fromResponseType = (question as any).responseType?.options;
+    const fromResponse = (question as any).response?.options;
+    const fromDisplay = (question as any).display?.options;
+
+    const source = Array.isArray(fromResponseType)
+      ? fromResponseType
+      : Array.isArray(fromResponse)
+        ? fromResponse
+        : Array.isArray(fromDisplay)
+          ? fromDisplay
+          : [];
+
+    return source
+      .map((option: any) => {
+        if (!option) return null;
+        const value = option.value ?? option.id ?? option.label;
+        if (value === undefined || value === null) return null;
+        return {
+          value: String(value),
+          label: String(option.label ?? value),
+          key: option.key ? String(option.key) : undefined,
+        };
+      })
+      .filter(
+        (option): option is { value: string; label: string; key?: string } => option !== null
+      );
+  }
+
+  function formatChoiceOptions(question: Question): string {
+    return extractChoiceOptions(question)
+      .map((option) => {
+        if (option.key) return `${option.label}|${option.value}|${option.key}`;
+        return `${option.label}|${option.value}`;
+      })
+      .join('\n');
+  }
+
+  function parseChoiceOptionsInput(raw: string): Array<{ value: string; label: string; key?: string }> {
+    return raw
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const [labelPart, valuePart, keyPart] = line.split('|').map((part) => part.trim());
+        const label = labelPart || valuePart || 'Option';
+        const value = valuePart || labelPart || label;
+        return {
+          label,
+          value,
+          key: keyPart || undefined,
+        };
+      });
+  }
+
+  function applyBulkChoiceOptions(raw: string): void {
+    if (!questionItem || !isChoiceQuestion) return;
+
+    const options = parseChoiceOptionsInput(raw);
+    const responseType = (questionItem as any).responseType || { type: 'single' };
+    const response = (questionItem as any).response || { type: responseType.type || 'single' };
+
+    updateQuestion({
+      responseType: {
+        ...responseType,
+        type: responseType.type || response.type || 'single',
+        options,
+      } as any,
+      response: {
+        ...response,
+        type: response.type || responseType.type || 'single',
+        options,
+      } as any,
+      display: {
+        ...(questionItem.display || {}),
+        options: options.map((option, index) => ({
+          id: `opt_${index + 1}`,
+          label: option.label,
+          value: option.value,
+          key: option.key,
+        })),
+      } as any,
+    } as any);
+  }
+
+  $effect(() => {
+    if (questionItem && isChoiceQuestion) {
+      bulkOptionDraft = formatChoiceOptions(questionItem);
+    }
+  });
 </script>
 
 <div class="h-full flex flex-col overflow-hidden">
@@ -305,6 +401,22 @@
                     Make sure the module is properly registered.
                   </p>
                 </div>
+              </div>
+            {/if}
+
+            {#if isChoiceQuestion}
+              <div class="border-t pt-4">
+                <h4 class="text-sm font-medium text-foreground mb-2">Bulk Option Editor</h4>
+                <p class="text-xs text-muted-foreground mb-2">
+                  One option per line using <code>label|value|key</code>. The keyboard key is optional.
+                </p>
+                <textarea
+                  class="w-full min-h-32 px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary font-mono text-xs bg-background text-foreground"
+                  bind:value={bulkOptionDraft}
+                  onblur={() => applyBulkChoiceOptions(bulkOptionDraft)}
+                  placeholder="Yes|1|y&#10;No|0|n"
+                  data-testid="designer-bulk-option-editor"
+                ></textarea>
               </div>
             {/if}
 

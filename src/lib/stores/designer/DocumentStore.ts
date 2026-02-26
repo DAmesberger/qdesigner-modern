@@ -41,7 +41,12 @@ interface QuestionInsertResult {
 
 function deepClone<T>(value: T): T {
   if (typeof structuredClone === 'function') {
-    return structuredClone(value);
+    try {
+      return structuredClone(value);
+    } catch {
+      // Svelte state proxies are not always structured-cloneable.
+      // JSON fallback keeps designer mutations operational.
+    }
   }
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -683,7 +688,137 @@ export class DocumentStore {
       ...question,
       order: index,
       required: question.required ?? false,
+      responseType: this.ensureResponseType(question as Question),
     }));
+  }
+
+  private ensureResponseType(question: Question): any {
+    const existing = (question as any).responseType;
+    if (existing?.type) {
+      return existing;
+    }
+
+    const normalizeOptions = (
+      input: any
+    ): Array<{ value: string | number | boolean; label: string; key?: string }> => {
+      if (!Array.isArray(input)) return [];
+      return input
+        .map((option: any) => {
+          if (option === null || option === undefined) return null;
+          const rawValue = option.value ?? option.id ?? option.label;
+          if (rawValue === undefined || rawValue === null) return null;
+          return {
+            value: rawValue,
+            label: String(option.label ?? rawValue),
+            key: option.key,
+          };
+        })
+        .filter(
+          (
+            option
+          ): option is { value: string | number | boolean; label: string; key?: string } =>
+            option !== null
+        );
+    };
+
+    const legacyResponse = (question as any).response;
+    const displayOptions = (question as any).display?.options;
+
+    if (legacyResponse?.type) {
+      const type = String(legacyResponse.type);
+      if (type === 'single' || type === 'radio') {
+        return {
+          type: 'single',
+          options: normalizeOptions(legacyResponse.options || displayOptions),
+        };
+      }
+
+      if (type === 'multiple' || type === 'checkbox') {
+        return {
+          type: 'multiple',
+          options: normalizeOptions(legacyResponse.options || displayOptions),
+        };
+      }
+
+      if (type === 'text') {
+        return {
+          type: 'text',
+          minLength: legacyResponse.minLength,
+          maxLength: legacyResponse.maxLength,
+        };
+      }
+
+      if (type === 'number') {
+        return {
+          type: 'number',
+          min: legacyResponse.min,
+          max: legacyResponse.max,
+        };
+      }
+
+      if (type === 'scale') {
+        return {
+          type: 'scale',
+          min: legacyResponse.min ?? 1,
+          max: legacyResponse.max ?? 5,
+          minLabel: legacyResponse.minLabel,
+          maxLabel: legacyResponse.maxLabel,
+        };
+      }
+
+      if (type === 'keypress') {
+        return {
+          type: 'keypress',
+          keys: Array.isArray(legacyResponse.keys) ? legacyResponse.keys : [],
+        };
+      }
+
+      if (type === 'none') {
+        return {
+          type: 'none',
+          delay: legacyResponse.delay ?? 0,
+        };
+      }
+    }
+
+    if (question.type === QuestionTypes.TEXT_INPUT) {
+      return { type: 'text' };
+    }
+
+    if (question.type === QuestionTypes.NUMBER_INPUT) {
+      return { type: 'number' };
+    }
+
+    if (question.type === QuestionTypes.SINGLE_CHOICE) {
+      return {
+        type: 'single',
+        options: normalizeOptions(displayOptions),
+      };
+    }
+
+    if (question.type === QuestionTypes.MULTIPLE_CHOICE) {
+      return {
+        type: 'single',
+        options: normalizeOptions(displayOptions),
+      };
+    }
+
+    if (question.type === QuestionTypes.SCALE || question.type === QuestionTypes.RATING) {
+      return {
+        type: 'scale',
+        min: 1,
+        max: 5,
+      };
+    }
+
+    if (question.type === QuestionTypes.REACTION_TIME) {
+      return {
+        type: 'keypress',
+        keys: ['space'],
+      };
+    }
+
+    return { type: 'none', delay: 0 };
   }
 
   private createQuestion(type: string, order: number): Question {

@@ -7,7 +7,7 @@
   import FlowControlManager from '$lib/components/designer/FlowControlManager.svelte';
 
   const tabs = [
-    { id: 'blocks', label: 'Blocks' },
+    { id: 'blocks', label: 'Structure' },
     { id: 'questions', label: 'Questions' },
     { id: 'variables', label: 'Variables' },
     { id: 'flow', label: 'Flow' },

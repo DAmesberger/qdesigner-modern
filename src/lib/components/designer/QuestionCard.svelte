@@ -23,6 +23,30 @@
     }
   }
 
+  function handleDuplicate(e: MouseEvent) {
+    e.stopPropagation();
+    designerStore.duplicateQuestion(question.id);
+  }
+
+  function moveQuestion(e: MouseEvent, direction: 'up' | 'down') {
+    e.stopPropagation();
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0) return;
+
+    if (blockId) {
+      designerStore.reorderQuestionsInBlock(blockId, index, targetIndex);
+      return;
+    }
+
+    if (pageId) {
+      const page = designerStore.questionnaire.pages.find((candidate) => candidate.id === pageId);
+      const fallbackBlock = page?.blocks?.[0];
+      if (fallbackBlock && targetIndex < fallbackBlock.questions.length) {
+        designerStore.reorderQuestionsInBlock(fallbackBlock.id, index, targetIndex);
+      }
+    }
+  }
+
   function handleDragStart(e: DragEvent) {
     e.dataTransfer!.effectAllowed = 'move';
     e.dataTransfer!.setData(
@@ -209,7 +233,34 @@
         </div>
       </div>
 
-      <div class="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div class="flex items-center space-x-1 opacity-80 group-hover:opacity-100 transition-opacity">
+        <button
+          onclick={(e) => moveQuestion(e, 'up')}
+          class="p-1 hover:bg-gray-100 rounded"
+          title="Move up"
+          aria-label="Move question up"
+          type="button"
+          disabled={index === 0}
+          data-testid={`question-move-up-${question.id}`}
+        >
+          <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+          </svg>
+        </button>
+
+        <button
+          onclick={(e) => moveQuestion(e, 'down')}
+          class="p-1 hover:bg-gray-100 rounded"
+          title="Move down"
+          aria-label="Move question down"
+          type="button"
+          data-testid={`question-move-down-${question.id}`}
+        >
+          <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
         <button
           onclick={(e) => {
             e.stopPropagation();
@@ -227,6 +278,24 @@
               stroke-linejoin="round"
               stroke-width="2"
               d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+            />
+          </svg>
+        </button>
+
+        <button
+          onclick={handleDuplicate}
+          class="p-1 hover:bg-gray-100 rounded"
+          title="Duplicate"
+          aria-label="Duplicate question"
+          type="button"
+          data-testid={`question-duplicate-${question.id}`}
+        >
+          <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 10h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
             />
           </svg>
         </button>

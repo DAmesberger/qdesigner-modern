@@ -20,6 +20,15 @@
       : 'Never'
   );
 
+  const validationState = $derived(designerStore.validate());
+  const validationErrorCount = $derived(validationState.validationErrors.length);
+  const validationWarningCount = $derived(validationState.warnings.length);
+  const canPublish = $derived(
+    validationErrorCount === 0 &&
+      !designerStore.isSaving &&
+      !designerStore.isPublishing
+  );
+
   async function handleSave() {
     await designerStore.saveQuestionnaire();
   }
@@ -194,24 +203,48 @@
       class="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
       onclick={handleSave}
       data-testid="designer-save-button"
+      disabled={designerStore.isSaving || designerStore.isPublishing}
     >
-      Save
+      {designerStore.isSaving ? 'Saving...' : 'Save'}
     </button>
 
     <button
       type="button"
-      class="rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90"
+      class="rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
       onclick={handlePublish}
       data-testid="designer-publish-button"
+      disabled={!canPublish}
     >
-      Publish
+      {designerStore.isPublishing ? 'Publishing...' : 'Publish'}
     </button>
 
-    <div class="hidden md:block text-xs text-muted-foreground" data-testid="designer-save-status">
+    <div class="hidden md:flex items-center gap-2 text-xs text-muted-foreground" data-testid="designer-save-status">
+      {#if validationErrorCount > 0}
+        <span
+          class="rounded bg-red-100 px-2 py-0.5 text-red-700"
+          data-testid="designer-validation-errors"
+        >
+          {validationErrorCount} validation error{validationErrorCount === 1 ? '' : 's'}
+        </span>
+      {/if}
+
+      {#if validationWarningCount > 0}
+        <span
+          class="rounded bg-amber-100 px-2 py-0.5 text-amber-700"
+          data-testid="designer-validation-warnings"
+        >
+          {validationWarningCount} warning{validationWarningCount === 1 ? '' : 's'}
+        </span>
+      {/if}
+
       {#if designerStore.isSaving}
         Saving...
+      {:else if designerStore.isPublishing}
+        Publishing...
       {:else if designerStore.saveError}
         Save failed
+      {:else if designerStore.isDirty}
+        Unsaved changes
       {:else}
         Saved {formattedSaveTime}
       {/if}

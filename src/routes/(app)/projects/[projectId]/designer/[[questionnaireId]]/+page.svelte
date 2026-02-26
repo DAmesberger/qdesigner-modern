@@ -93,6 +93,18 @@
       if (key === 'd') {
         event.preventDefault();
         designerStore.duplicateSelected();
+        return;
+      }
+
+      if (key === 'a' && event.shiftKey) {
+        event.preventDefault();
+        designerStore.addQuestionToCurrentBlock('text-input');
+        return;
+      }
+
+      if (key === 'enter' && event.shiftKey) {
+        event.preventDefault();
+        void designerStore.publishQuestionnaire();
       }
     }
 
@@ -103,6 +115,16 @@
       if (!isInput) {
         event.preventDefault();
         designerStore.deleteSelected();
+      }
+    }
+
+    if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      const target = event.target as HTMLElement | null;
+      const isInput =
+        target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+      if (!isInput) {
+        event.preventDefault();
+        designerStore.moveSelectedQuestion(event.key === 'ArrowUp' ? 'up' : 'down');
       }
     }
 

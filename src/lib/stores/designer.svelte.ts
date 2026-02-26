@@ -37,6 +37,7 @@ class DesignerStore {
   // Save status
   isDirty = $state(false);
   isLoading = $state(false);
+  isPublishing = $state(false);
   lastSaved = $state<number | null>(null);
   saveError = $state<string | null>(null);
 
@@ -331,6 +332,19 @@ class DesignerStore {
     });
   }
 
+  addQuestionToCurrentBlock(type: string = 'text-input') {
+    const block = this.currentBlock;
+    if (block) {
+      this.addQuestion(block.id, type);
+      return;
+    }
+
+    const page = this.currentPage;
+    if (page) {
+      this.addQuestion(page.id, type);
+    }
+  }
+
   updateQuestion(questionId: string, updates: Partial<Question>) {
     const next = this.documentStore.updateQuestion(this.questionnaire, questionId, updates);
     this.commit(next, {
@@ -447,6 +461,23 @@ class DesignerStore {
     }
   }
 
+  moveSelectedQuestion(direction: 'up' | 'down') {
+    if (this.selectedItemKind !== 'question' || !this.selectedItem) return;
+
+    const located = this.findBlockContainingQuestion(this.selectedItem.id);
+    if (!located) return;
+
+    const fromIndex = located.block.questions.findIndex((id) => id === this.selectedItem?.id);
+    if (fromIndex < 0) return;
+
+    const delta = direction === 'up' ? -1 : 1;
+    const toIndex = fromIndex + delta;
+    if (toIndex < 0 || toIndex >= located.block.questions.length) return;
+
+    this.reorderQuestionsInBlock(located.block.id, fromIndex, toIndex);
+    this.selectItem(this.selectedItem.id, 'question');
+  }
+
   deleteSelected() {
     if (!this.selectedItem) return;
 
@@ -504,15 +535,21 @@ class DesignerStore {
       return false;
     }
 
-    const result = await this.persistenceService.publish(this.projectId, this.questionnaire.id);
-    if (!result.success) {
-      this.saveError = result.error || 'Publish failed';
-      return false;
-    }
+    this.isPublishing = true;
 
-    this.lastSaved = Date.now();
-    this.saveError = null;
-    return true;
+    try {
+      const result = await this.persistenceService.publish(this.projectId, this.questionnaire.id);
+      if (!result.success) {
+        this.saveError = result.error || 'Publish failed';
+        return false;
+      }
+
+      this.lastSaved = Date.now();
+      this.saveError = null;
+      return true;
+    } finally {
+      this.isPublishing = false;
+    }
   }
 
   async listQuestionnaires() {
@@ -615,6 +652,17 @@ class DesignerStore {
     if ('blocks' in item) return 'page';
     if ('pageId' in item && 'questions' in item) return 'block';
     return 'question';
+  }
+
+  private findBlockContainingQuestion(questionId: string): { page: Page; block: Block } | null {
+    for (const page of this.questionnaire.pages) {
+      for (const block of page.blocks || []) {
+        if ((block.questions || []).includes(questionId)) {
+          return { page, block };
+        }
+      }
+    }
+    return null;
   }
 
   private syncUiState(state: ReturnType<UiStore['getState']>) {

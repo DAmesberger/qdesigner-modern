@@ -119,6 +119,29 @@
     };
     return icons[type] || '❓';
   }
+
+  function getTargetLabel(targetId?: string): string {
+    if (!targetId) return 'No target';
+    const match = availableTargets.find((target) => target.id === targetId);
+    return match?.label || targetId;
+  }
+
+  function validateFlow(flow: FlowControl): string[] {
+    const issues: string[] = [];
+    if (!flow.condition || flow.condition.trim().length === 0) {
+      issues.push('Missing condition.');
+    }
+
+    if ((flow.type === 'skip' || flow.type === 'branch') && !flow.target) {
+      issues.push('Skip/branch flows require a target.');
+    }
+
+    if (flow.type === 'loop' && (!flow.iterations || flow.iterations < 1)) {
+      issues.push('Loop flows need at least 1 iteration.');
+    }
+
+    return issues;
+  }
 </script>
 
 <div class="{theme.components.container.card} p-4">
@@ -131,6 +154,7 @@
           .sm} rounded-md"
         title="Visual Flow Editor"
         aria-label="Open Visual Flow Editor"
+        data-testid="flow-open-visual-editor"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -145,6 +169,7 @@
         onclick={() => (showAddFlow = true)}
         class="{theme.components.button.variants.default} {theme.components.button.sizes
           .sm} rounded-md"
+        data-testid="flow-open-add-modal"
       >
         <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -169,7 +194,10 @@
   {:else}
     <div class="space-y-3">
       {#each flowControls as flow}
-        <div class="{theme.semantic.bgSubtle} p-3 rounded-md border {theme.semantic.borderDefault}">
+        <div
+          class="{theme.semantic.bgSubtle} p-3 rounded-md border {theme.semantic.borderDefault}"
+          data-testid={`flow-card-${flow.id}`}
+        >
           <div class="flex items-start justify-between">
             <div class="flex-1">
               <div class="flex items-center gap-2 mb-1">
@@ -192,7 +220,7 @@
                     <span class="{theme.typography.caption} {theme.semantic.textSecondary}"
                       >Target:</span
                     >
-                    <span class={theme.typography.caption}>{flow.target}</span>
+                    <span class={theme.typography.caption}>{getTargetLabel(flow.target)}</span>
                   </div>
                 {/if}
 
@@ -205,6 +233,15 @@
                   </div>
                 {/if}
               </div>
+
+              {#if validateFlow(flow).length > 0}
+                <div
+                  class="mt-2 rounded-md bg-red-100 px-2 py-1 text-xs text-red-700"
+                  data-testid={`flow-validation-${flow.id}`}
+                >
+                  {validateFlow(flow).join(' ')}
+                </div>
+              {/if}
             </div>
 
             <div class="flex items-center gap-1">
@@ -288,6 +325,7 @@
               bind:value={newFlow.type}
               class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
               disabled={editingFlow !== null}
+              data-testid="flow-type-select"
             >
               <option value="skip">Skip - Jump to another question/page</option>
               <option value="branch">Branch - Conditional navigation</option>
@@ -310,6 +348,7 @@
               bind:value={newFlow.condition}
               placeholder="e.g., age >= 18 && consent === true"
               class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+              data-testid="flow-condition-input"
             />
             <p class="{theme.typography.caption} {theme.semantic.textSecondary} mt-1">
               Use variable names and JavaScript expressions
@@ -329,12 +368,18 @@
                 id="flow-target"
                 bind:value={newFlow.target}
                 class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                data-testid="flow-target-select"
               >
                 <option value="">Select target...</option>
                 {#each availableTargets as target}
                   <option value={target.id}>{target.label}</option>
                 {/each}
               </select>
+              {#if newFlow.target}
+                <p class="mt-1 text-xs text-muted-foreground">
+                  Selected: {getTargetLabel(newFlow.target)}
+                </p>
+              {/if}
             </div>
           {/if}
 
@@ -354,6 +399,7 @@
                 min="1"
                 max="100"
                 class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                data-testid="flow-iterations-input"
               />
             </div>
           {/if}
@@ -387,9 +433,12 @@
                 handleAddFlow();
               }
             }}
-            disabled={!newFlow.condition}
+            disabled={!newFlow.condition ||
+              ((newFlow.type === 'skip' || newFlow.type === 'branch') && !newFlow.target) ||
+              (newFlow.type === 'loop' && (!newFlow.iterations || newFlow.iterations < 1))}
             class="{theme.components.button.variants.default} {theme.components.button.sizes
               .sm} rounded-md disabled:opacity-50"
+            data-testid="flow-save-button"
           >
             {editingFlow ? 'Update' : 'Add'} Flow
           </button>

@@ -81,7 +81,13 @@
 <svelte:window onkeydown={handleEscape} />
 
 {#if open}
-  <div class="relative z-50" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+  <div
+    class="relative z-50"
+    aria-labelledby="modal-title"
+    role="dialog"
+    aria-modal="true"
+    data-testid="app-modal"
+  >
     <!-- Backdrop with proper theme opacity -->
     <div
       class="fixed inset-0 bg-black/[var(--backdrop-opacity)] backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
@@ -99,6 +105,7 @@
           class="relative transform overflow-hidden rounded-lg bg-layer-modal border border-border text-left shadow-xl transition-all animate-in fade-in zoom-in-95 duration-200 sm:my-8 sm:w-full {sizeClasses[
             size
           ]}"
+          data-testid="app-modal-content"
         >
           {#if title || header}
             <div class="border-b border-border px-4 pb-4 pt-5 sm:p-6 sm:pb-4">

@@ -52,12 +52,59 @@
   let started = $state(false);
   let scenario = $state<ScenarioName>('default');
   let autoStart = false;
+  let fixtureQuestionnaire = $state<Questionnaire | null>(null);
   let errorMessage = $state<string | null>(null);
 
   let debugState: RuntimeDebugState = createDebugState('default');
 
   function isScenarioName(value: string | null): value is ScenarioName {
     return Boolean(value && scenarioNames.includes(value as ScenarioName));
+  }
+
+  function decodeBase64Url(value: string): string {
+    const padded = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padLength = padded.length % 4 === 0 ? 0 : 4 - (padded.length % 4);
+    const base64 = `${padded}${'='.repeat(padLength)}`;
+    return atob(base64);
+  }
+
+  function normalizeQuestionnaire(input: any): Questionnaire {
+    const created = input?.created ? new Date(input.created) : new Date();
+    const modified = input?.modified ? new Date(input.modified) : created;
+
+    return {
+      ...input,
+      created,
+      modified,
+      settings: {
+        webgl: {
+          targetFPS: 120,
+          ...(input?.settings?.webgl || {}),
+        },
+        allowBackNavigation: false,
+        showProgressBar: true,
+        ...(input?.settings || {}),
+      },
+      variables: Array.isArray(input?.variables) ? input.variables : [],
+      pages: Array.isArray(input?.pages) ? input.pages : [],
+      questions: Array.isArray(input?.questions) ? input.questions : [],
+      flow: Array.isArray(input?.flow) ? input.flow : [],
+    } as Questionnaire;
+  }
+
+  function parseFixtureQuestionnaire(payload: string | null): Questionnaire | null {
+    if (!payload) {
+      return null;
+    }
+
+    try {
+      const decoded = decodeBase64Url(payload);
+      const parsed = JSON.parse(decoded);
+      return normalizeQuestionnaire(parsed);
+    } catch (error) {
+      console.error('Failed to parse runtime fixture payload:', error);
+      return null;
+    }
   }
 
   function createDebugState(selectedScenario: ScenarioName): RuntimeDebugState {
@@ -356,7 +403,7 @@
 
     runtime?.stop();
 
-    const questionnaire = buildScenarioQuestionnaire(scenario);
+    const questionnaire = fixtureQuestionnaire ?? buildScenarioQuestionnaire(scenario);
     resetDebugState(scenario);
     updateDebugState((state) => {
       state.startedAt = Date.now();
@@ -405,6 +452,9 @@
 
     const params = new URLSearchParams(window.location.search);
     const requestedScenario = params.get('scenario');
+    const fixturePayload = params.get('fixture');
+    const parsedFixture = parseFixtureQuestionnaire(fixturePayload);
+
     if (isScenarioName(requestedScenario)) {
       scenario = requestedScenario;
     }
@@ -412,6 +462,17 @@
     autoStart = params.get('autostart') === '1' || params.get('autostart') === 'true';
 
     resetDebugState(scenario);
+
+    if (fixturePayload && !parsedFixture) {
+      errorMessage = 'Invalid runtime fixture payload.';
+      updateDebugState((state) => {
+        state.errors.push('Invalid runtime fixture payload.');
+      });
+    } else if (parsedFixture) {
+      fixtureQuestionnaire = parsedFixture;
+    } else {
+      fixtureQuestionnaire = null;
+    }
 
     const resize = () => {
       canvas.width = window.innerWidth;

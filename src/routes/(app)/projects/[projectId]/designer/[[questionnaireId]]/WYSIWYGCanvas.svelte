@@ -313,6 +313,22 @@
                 </button>
                 <button
                   class="px-4 py-2 border border-border rounded-md text-foreground hover:bg-accent transition-colors"
+                  onclick={() => addQuestionOfType('multiple-choice')}
+                  title="Add multiple choice question"
+                  data-testid="designer-empty-add-choice-question"
+                >
+                  + Choice Question
+                </button>
+                <button
+                  class="px-4 py-2 border border-border rounded-md text-foreground hover:bg-accent transition-colors"
+                  onclick={() => addQuestionOfType('reaction-time')}
+                  title="Add reaction-time question"
+                  data-testid="designer-empty-add-reaction-question"
+                >
+                  + Reaction Time
+                </button>
+                <button
+                  class="px-4 py-2 border border-border rounded-md text-foreground hover:bg-accent transition-colors"
                   onclick={() => designerStore.toggleCommandPalette(true)}
                   title="Open command palette"
                   data-testid="designer-empty-open-command-palette"
@@ -320,6 +336,10 @@
                   Open Commands
                 </button>
               </div>
+              <p class="mt-3 text-xs text-muted-foreground">
+                Shortcut: <kbd class="rounded bg-muted px-1">Ctrl/Cmd + Shift + A</kbd> to add a text
+                question.
+              </p>
             </div>
           {:else}
             <!-- Questions List -->

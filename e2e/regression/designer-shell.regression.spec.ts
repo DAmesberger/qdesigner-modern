@@ -19,6 +19,11 @@ test.describe('@regression designer shell interactions', () => {
     await expect(page.locator('[data-testid="designer-canvas"]')).toBeVisible();
     await page.locator('[data-testid="designer-view-visual"]').click();
 
+    await page.locator('[data-testid="designer-empty-add-text-question"]').click();
+    await expect(page.locator('[data-testid="designer-counts"]')).not.toContainText('0 questions');
+    await page.keyboard.press('Control+Shift+A');
+    await expect(page.locator('[data-testid="designer-counts"]')).toContainText('2 question');
+
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator('[data-testid="designer-toggle-left-drawer"]').click();
     await expect(page.locator('[data-testid="designer-left-sidebar"]')).toBeVisible();

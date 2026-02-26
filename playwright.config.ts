@@ -52,6 +52,15 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
       },
     },
+    {
+      name: 'visual-chromium',
+      grep: /@visual/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+        colorScheme: 'light',
+      },
+    },
   ],
   webServer: {
     command: 'pnpm dev',

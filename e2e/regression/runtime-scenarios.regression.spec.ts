@@ -1,182 +1,120 @@
-import { expect, type Page, test } from '@playwright/test';
-
-type ScenarioName =
-  | 'control-flow'
-  | 'randomization'
-  | 'programmability'
-  | 'answer-options'
-  | 'chart-feedback';
-
-interface RuntimeDebugState {
-  presentedQuestionIds: string[];
-  responses: Array<{ questionId: string; value: unknown; valid: boolean }>;
-  variables: Record<string, unknown>;
-  completed: boolean;
-  errors?: string[];
-}
-
-async function getRuntimeState(page: Page): Promise<RuntimeDebugState | null> {
-  try {
-    return await page.evaluate(
-      () => ((window as any).__QDESIGNER_RUNTIME_DEBUG__ ?? null) as RuntimeDebugState | null
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('Execution context was destroyed')) {
-      return null;
-    }
-
-    throw error;
-  }
-}
-
-async function waitForRuntimeStart(page: Page): Promise<void> {
-  const timeoutMs = 30000;
-  const pollIntervalMs = 100;
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    const state = await getRuntimeState(page);
-    if (state?.errors?.length) {
-      throw new Error(`Runtime failed to start: ${state.errors.join(' | ')}`);
-    }
-
-    if ((state?.presentedQuestionIds?.length ?? 0) > 0 || state?.completed) {
-      return;
-    }
-
-    await page.waitForTimeout(pollIntervalMs);
-  }
-
-  throw new Error(`Runtime did not start within ${timeoutMs}ms`);
-}
-
-async function startScenario(page: Page, scenario: ScenarioName): Promise<void> {
-  await page.goto(`/test-runtime?scenario=${scenario}`);
-  await expect
-    .poll(
-      async () =>
-        page.evaluate(
-          (value) => (window as any).__QDESIGNER_RUNTIME_DEBUG__?.scenario === value,
-          scenario
-        ),
-      { timeout: 10000 }
-    )
-    .toBe(true);
-
-  const startButton = page.getByRole('button', { name: 'Start Test' });
-  await expect(startButton).toBeVisible();
-  await startButton.click();
-  await waitForRuntimeStart(page);
-}
-
-async function waitForQuestion(page: Page, questionId: string): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const state = await getRuntimeState(page);
-        if (state?.errors?.length) {
-          throw new Error(`Runtime error: ${state.errors.join(' | ')}`);
-        }
-
-        return state?.presentedQuestionIds.includes(questionId) ?? false;
-      },
-      { timeout: 15000 }
-    )
-    .toBe(true);
-}
-
-async function waitForCompletion(page: Page): Promise<RuntimeDebugState> {
-  await expect
-    .poll(
-      async () => {
-        const state = await getRuntimeState(page);
-        if (state?.errors?.length) {
-          throw new Error(`Runtime error: ${state.errors.join(' | ')}`);
-        }
-
-        return state?.completed ?? false;
-      },
-      { timeout: 20000 }
-    )
-    .toBe(true);
-
-  const state = await getRuntimeState(page);
-  if (!state) {
-    throw new Error('Missing runtime debug state');
-  }
-
-  return state as RuntimeDebugState;
-}
+import { expect, test } from '@playwright/test';
+import { getRuntimeScenarioFixture } from '../helpers/questionnaire-fixtures';
+import { startRuntimeFixture } from '../helpers/runtime-harness';
+import { assertNoRuntimeErrors, waitForCompletion } from '../helpers/runtime-assertions';
 
 test.describe('@regression focused runtime scenarios', () => {
   test.describe.configure({ timeout: 60000 });
 
   test('control flow skips a page when rule condition matches', async ({ page }) => {
-    await startScenario(page, 'control-flow');
-    await waitForQuestion(page, 'q_gate');
+    const fixture = getRuntimeScenarioFixture('control-flow');
 
-    await page.keyboard.press('y');
-
+    await startRuntimeFixture(page, fixture);
     const state = await waitForCompletion(page);
-    expect(state.presentedQuestionIds).toContain('q_gate');
-    expect(state.presentedQuestionIds).toContain('q_target');
-    expect(state.presentedQuestionIds).not.toContain('q_should_skip');
+
+    for (const requiredId of fixture.expectedPresented?.include || []) {
+      expect(state.presentedQuestionIds).toContain(requiredId);
+    }
+
+    for (const skippedId of fixture.expectedPresented?.exclude || []) {
+      expect(state.presentedQuestionIds).not.toContain(skippedId);
+    }
+
+    await assertNoRuntimeErrors(page);
   });
 
   test('randomization is deterministic with fixed positions', async ({ page }) => {
-    await startScenario(page, 'randomization');
+    const fixture = getRuntimeScenarioFixture('randomization');
+
+    await startRuntimeFixture(page, fixture);
     const firstRun = await waitForCompletion(page);
 
-    await startScenario(page, 'randomization');
+    await startRuntimeFixture(page, fixture);
     const secondRun = await waitForCompletion(page);
 
     expect(firstRun.presentedQuestionIds).toEqual(secondRun.presentedQuestionIds);
-    expect(firstRun.presentedQuestionIds[0]).toBe('q_fixed_start');
+
+    if (!fixture.expectedFixedPositions) {
+      throw new Error('Missing expected fixed-position configuration');
+    }
+
+    expect(firstRun.presentedQuestionIds[0]).toBe(fixture.expectedFixedPositions.firstQuestionId);
     expect(firstRun.presentedQuestionIds[firstRun.presentedQuestionIds.length - 1]).toBe(
-      'q_fixed_end'
+      fixture.expectedFixedPositions.lastQuestionId
     );
+
+    await assertNoRuntimeErrors(page);
   });
 
   test('programmability formulas drive flow and computed variables', async ({ page }) => {
-    await startScenario(page, 'programmability');
+    const fixture = getRuntimeScenarioFixture('programmability');
+
+    await startRuntimeFixture(page, fixture);
     const state = await waitForCompletion(page);
 
-    expect(state.presentedQuestionIds).toContain('q_prog_seed');
-    expect(state.presentedQuestionIds).toContain('q_prog_target');
-    expect(state.presentedQuestionIds).not.toContain('q_prog_skip');
-    expect(state.variables.threshold).toBe(450);
-    expect(state.variables.should_skip).toBe(true);
+    for (const requiredId of fixture.expectedPresented?.include || []) {
+      expect(state.presentedQuestionIds).toContain(requiredId);
+    }
+
+    for (const skippedId of fixture.expectedPresented?.exclude || []) {
+      expect(state.presentedQuestionIds).not.toContain(skippedId);
+    }
+
+    for (const [name, expectedValue] of Object.entries(fixture.expectedVariables || {})) {
+      expect(state.variables[name]).toBe(expectedValue);
+    }
+
+    await assertNoRuntimeErrors(page);
   });
 
   test('answer options are captured from keyboard selection', async ({ page }) => {
-    await startScenario(page, 'answer-options');
-    await waitForQuestion(page, 'q_choice');
+    const fixture = getRuntimeScenarioFixture('answer-options');
 
-    await page.keyboard.press('l');
-
+    await startRuntimeFixture(page, fixture);
     const state = await waitForCompletion(page);
-    const choiceResponse = state.responses.find((response) => response.questionId === 'q_choice');
 
-    expect(choiceResponse).toBeTruthy();
-    expect(choiceResponse?.value).toBe('left');
-    expect(choiceResponse?.valid).toBe(true);
+    if (!fixture.expectedResponse) {
+      throw new Error('Missing expected response configuration');
+    }
+
+    const response = state.responses.find(
+      (entry) => entry.questionId === fixture.expectedResponse?.questionId
+    );
+
+    expect(response).toBeTruthy();
+    expect(response?.value).toBe(fixture.expectedResponse.value);
+
+    if (fixture.expectedResponse.valid !== undefined) {
+      expect(response?.valid).toBe(fixture.expectedResponse.valid);
+    }
+
+    await assertNoRuntimeErrors(page);
   });
 
   test('chart feedback question appears immediately after the input response', async ({ page }) => {
-    await startScenario(page, 'chart-feedback');
-    await waitForQuestion(page, 'q_chart_input');
+    const fixture = getRuntimeScenarioFixture('chart-feedback');
 
-    await page.keyboard.press('a');
-
+    await startRuntimeFixture(page, fixture);
     const state = await waitForCompletion(page);
-    const inputIndex = state.presentedQuestionIds.indexOf('q_chart_input');
-    const feedbackIndex = state.presentedQuestionIds.indexOf('q_chart_feedback');
-    const inputResponse = state.responses.find(
-      (response) => response.questionId === 'q_chart_input'
+
+    if (!fixture.expectedResponse || !fixture.expectedImmediateFollowUp) {
+      throw new Error('Missing chart feedback expectation configuration');
+    }
+
+    const response = state.responses.find(
+      (entry) => entry.questionId === fixture.expectedResponse?.questionId
+    );
+
+    const inputIndex = state.presentedQuestionIds.indexOf(
+      fixture.expectedImmediateFollowUp.firstQuestionId
+    );
+    const feedbackIndex = state.presentedQuestionIds.indexOf(
+      fixture.expectedImmediateFollowUp.secondQuestionId
     );
 
     expect(feedbackIndex).toBeGreaterThan(inputIndex);
-    expect(inputResponse?.value).toBe('alpha');
+    expect(response?.value).toBe(fixture.expectedResponse.value);
+
+    await assertNoRuntimeErrors(page);
   });
 });
