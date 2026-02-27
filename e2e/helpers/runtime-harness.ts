@@ -36,7 +36,7 @@ export async function startRuntimeFixture(
 ): Promise<void> {
   await openRuntimeFixture(page, fixture);
 
-  const startButton = page.getByRole('button', { name: 'Start Test' });
+  const startButton = page.getByTestId('test-runtime-start-button');
   await expect(startButton).toBeVisible();
   await startButton.click();
 

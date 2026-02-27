@@ -48,14 +48,14 @@ export const load: PageLoad = async ({ parent, depends }) => {
             questionnaire_id: q.id,
             project_id: project.id,
             name: q.name,
-            description: q.description,
+            description: q.description ?? undefined,
             status: (q.status || 'draft') as 'draft' | 'published' | 'archived',
             total_responses: 0, // TODO: add response count API
             completed_responses: 0,
             avg_completion_time: undefined,
             response_rate_7d: 0,
-            created_at: q.created_at || new Date().toISOString(),
-            updated_at: q.updated_at || new Date().toISOString()
+            created_at: q.createdAt || q.created_at || new Date().toISOString(),
+            updated_at: q.updatedAt || q.updated_at || new Date().toISOString()
           }));
         } catch {
           return [];

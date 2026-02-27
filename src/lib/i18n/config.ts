@@ -155,7 +155,7 @@ export const i18nConfig: I18nConfig = {
     escapeValue: false // Svelte already escapes values
   },
   detection: detectionOptions,
-  compatibilityJSON: 'v3',
+  compatibilityJSON: 'v4',
   backend: {
     loadPath: '/locales/{{lng}}/{{ns}}.json',
     addPath: '/locales/add/{{lng}}/{{ns}}'
@@ -166,7 +166,7 @@ export const i18nConfig: I18nConfig = {
 i18n
   .use(Backend)
   .use(LanguageDetector)
-  .init(i18nConfig)
+  .init(i18nConfig as any)
   .then(() => {
     // Update store when initialized
     i18nStore.setInitialized(true);

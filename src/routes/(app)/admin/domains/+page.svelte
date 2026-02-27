@@ -271,7 +271,7 @@
                   {/if}
                 </div>
                 <p class="text-sm text-muted-foreground mt-1">
-                  Added on {formatDate(domain.created_at)}
+                  Added on {formatDate(domain.createdAt)}
                   {#if domain.verifiedAt}
                     • Verified on {formatDate(domain.verifiedAt)}
                   {/if}

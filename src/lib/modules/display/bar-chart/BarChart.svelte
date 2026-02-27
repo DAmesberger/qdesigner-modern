@@ -1,9 +1,6 @@
 <script lang="ts">
   import BaseAnalytics from '../shared/analytics/BaseAnalytics.svelte';
-  import type { AnalyticsProps } from '../shared/analytics/types';
-  import type { Question } from '$lib/shared';
   import { Chart, registerables } from 'chart.js';
-  import { untrack, tick } from 'svelte';
   import { scriptingEngine } from '$lib/services/scriptingEngine';
 
   // Register all Chart.js components
@@ -40,25 +37,24 @@
     };
   }
 
-  interface Props extends AnalyticsProps {
-    analytics: Question & {
-      config: BarChartConfig;
-      dataSource?: {
-        variables: any[];
-        aggregation: string;
-      };
-    };
+  interface Props {
+    analytics: any;
+    mode?: 'edit' | 'preview' | 'runtime';
+    variables?: Record<string, any>;
+    onInteraction?: (event: any) => void;
   }
 
   let { analytics, mode = 'runtime', variables = {}, onInteraction }: Props = $props();
 
-  // Ensure analytics has dataSource (do this outside of reactive context)
-  if (!analytics.dataSource) {
-    analytics.dataSource = {
-      variables: [],
-      aggregation: 'none',
-    };
-  }
+  // Ensure analytics has dataSource
+  $effect(() => {
+    if (!analytics.dataSource) {
+      analytics.dataSource = {
+        variables: [],
+        aggregation: 'none',
+      };
+    }
+  });
 
   let chartCanvas = $state<HTMLCanvasElement>();
   let chart: Chart | null = null;
@@ -68,7 +64,7 @@
   const isHorizontal = $derived(config.orientation === 'horizontal');
 
   // Color schemes
-  const colorSchemes = {
+  const colorSchemes: Record<string, string[]> = {
     default: [
       '#3b82f6',
       '#10b981',
@@ -130,8 +126,8 @@
     console.log('[BarChart] config:', config);
     console.log('[BarChart] analytics.dataSource:', analytics.dataSource);
     console.log('[BarChart] variables passed to component:', variables);
-    const datasets = [];
-    const labels = [];
+    const datasets: any[] = [];
+    const labels: string[] = [];
 
     // If we have a value expression, use that instead of variable data
     if (config.value) {
@@ -158,7 +154,10 @@
 
           if (refValue !== null) {
             labels.push('Reference');
-            datasets[0].data.push(refValue);
+            const primaryDataset = datasets[0];
+            if (primaryDataset) {
+              primaryDataset.data.push(refValue);
+            }
           }
         } else {
           // For vertical bar chart
@@ -230,7 +229,7 @@
           });
         } else if (firstItem && Array.isArray(firstItem.value)) {
           // Multiple series data
-          labels.push(...firstItem.value.map((_, i) => `Item ${i + 1}`));
+          labels.push(...firstItem.value.map((_: unknown, i: number) => `Item ${i + 1}`));
 
           data.forEach((item, index) => {
             datasets.push({
@@ -394,13 +393,14 @@
           tooltip: {
             enabled: analytics.visualization?.showTooltips ?? true,
             callbacks: {
-              label: (context) => {
+              label: (context: any) => {
                 let label = context.dataset.label || '';
                 if (label) label += ': ';
                 label += context.parsed.y;
 
-                if (config.showErrorBars && context.dataset.errorBars) {
-                  const error = context.dataset.errorBars[context.dataIndex];
+                const dataset = context.dataset as any;
+                if (config.showErrorBars && dataset.errorBars) {
+                  const error = dataset.errorBars[context.dataIndex];
                   label += ` ± ${error.toFixed(2)}`;
                 }
 
@@ -413,7 +413,7 @@
                 display: true,
                 anchor: 'end',
                 align: 'end',
-                formatter: (value) => (config.showValues ? value : ''),
+                formatter: (value: unknown) => (config.showValues ? value : ''),
               }
             : { display: false },
         },
@@ -449,22 +449,25 @@
             max: config.axes.y.max === 'auto' ? undefined : config.axes.y.max,
           },
         },
-        onClick: (event, elements) => {
+        onClick: (_event: any, elements: any[]) => {
           if (elements.length > 0) {
             const element = elements[0];
+            if (!element) return;
+
+            const dataset = chart?.data.datasets[element.datasetIndex];
             onInteraction?.({
               type: 'click',
               timestamp: Date.now(),
               data: {
                 datasetIndex: element.datasetIndex,
                 index: element.index,
-                value: chart?.data.datasets[element.datasetIndex].data[element.index],
+                value: dataset?.data[element.index],
               },
             });
           }
         },
       },
-    });
+    } as any);
   }
   // Action to handle chart data updates from snippet
   function chartDataAction(node: HTMLElement, data: any[]) {
@@ -482,11 +485,15 @@
 </script>
 
 <BaseAnalytics {analytics} {mode} {variables} {onInteraction}>
-  {#snippet children({ data })}
-    <div class="bar-chart" data-has-data={data && data.length > 0} use:chartDataAction={data}>
+  {#snippet children(slotProps: { data: any[] })}
+    <div
+      class="bar-chart"
+      data-has-data={slotProps.data && slotProps.data.length > 0}
+      use:chartDataAction={slotProps.data}
+    >
       {#if mode === 'edit'}
         <!-- In edit mode, show a preview chart if we have variables selected -->
-        {#if analytics.dataSource?.variables?.length > 0 || config.value}
+        {#if (analytics.dataSource?.variables?.length ?? 0) > 0 || config.value}
           <canvas bind:this={chartCanvas} class="chart-canvas"></canvas>
           {#if chartCanvas}
             <!-- Chart updates are handled via $effect -->
@@ -521,28 +528,6 @@
     width: 100%;
     height: 100%;
     display: block; /* Ensure block display */
-  }
-
-  .preview-container {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-  }
-
-  .preview-svg {
-    width: 100%;
-    max-width: 400px;
-    height: auto;
-  }
-
-  .preview-text {
-    margin-top: 1rem;
-    color: #6b7280;
-    font-size: 0.875rem;
   }
 
   .edit-placeholder {

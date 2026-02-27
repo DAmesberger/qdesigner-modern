@@ -11,6 +11,16 @@
   export let pattern: string | undefined = undefined;
   export let minLength: number | undefined = undefined;
   export let maxLength: number | undefined = undefined;
+  export let inputmode:
+    | 'none'
+    | 'text'
+    | 'tel'
+    | 'url'
+    | 'email'
+    | 'numeric'
+    | 'decimal'
+    | 'search'
+    | undefined = undefined;
   // Autocomplete disabled per business decision
   export let autocomplete: HTMLInputElement['autocomplete'] = "off";
   let className = '';
@@ -39,6 +49,7 @@
   {pattern}
   minlength={minLength}
   maxlength={maxLength}
+  inputmode={inputmode}
   {autocomplete}
   bind:value
   class={inputClasses}

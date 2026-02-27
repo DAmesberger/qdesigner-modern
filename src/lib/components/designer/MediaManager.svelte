@@ -34,19 +34,19 @@
   }: Props = $props();
 
   // State
-  let mediaAssets: MediaAsset[] = [];
-  let loading = false;
-  let uploading = false;
-  let uploadProgress: Record<string, MediaUploadProgress> = {};
-  let filter: MediaFilter = { type: 'all' };
-  let searchQuery = '';
-  let viewMode: 'grid' | 'list' = 'grid';
-  let selectedIds = new Set<string>();
-  let showUploadArea = false;
-  let dragActive = false;
+  let mediaAssets = $state<MediaAsset[]>([]);
+  let loading = $state(false);
+  let uploading = $state(false);
+  let uploadProgress = $state<Record<string, MediaUploadProgress>>({});
+  let filter = $state<MediaFilter>({ type: 'all' });
+  let searchQuery = $state('');
+  let viewMode = $state<'grid' | 'list'>('grid');
+  let selectedIds = $state(new Set<string>());
+  let showUploadArea = $state(false);
+  let dragActive = $state(false);
 
   // File input ref
-  let fileInput: HTMLInputElement;
+  let fileInput = $state<HTMLInputElement | undefined>();
 
   onMount(() => {
     console.log('[MediaManager] Mounted with props:', { organizationId, userId });
@@ -194,7 +194,7 @@
         selectedMedia = [asset];
       }
 
-      dispatch('select', {
+      onselect?.({
         media: selectedMedia,
         asset: asset,
       });
@@ -346,6 +346,8 @@
       class="p-8 border-b {theme.semantic.borderDefault} {dragActive
         ? 'bg-primary/5'
         : theme.semantic.bgSubtle}"
+      role="region"
+      aria-label="Media upload drop zone"
       ondrop={handleDrop}
       ondragover={handleDragOver}
       ondragleave={handleDragLeave}
@@ -379,7 +381,7 @@
         />
 
         <button
-          onclick={() => fileInput.click()}
+          onclick={() => fileInput?.click()}
           class="{theme.components.button.variants.outline} {theme.components.button.sizes
             .sm} rounded-md mt-2"
         >
@@ -404,7 +406,7 @@
                 <div
                   class="bg-primary h-2 rounded-full transition-all"
                   style="width: {progress.percentage}%"
-                />
+                ></div>
               </div>
             </div>
           {/each}
@@ -436,7 +438,7 @@
         </svg>
         <p class={theme.semantic.textSecondary}>No media files yet</p>
         <button
-          onclick={() => fileInput.click()}
+          onclick={() => fileInput?.click()}
           class="{theme.components.button.variants.default} {theme.components.button.sizes
             .sm} rounded-md mt-4"
         >

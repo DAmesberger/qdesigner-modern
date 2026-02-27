@@ -161,7 +161,13 @@ export function createChartFeedbackQuestion(params: {
   title: string;
   description: string;
   conditionFormula: string;
+  currentVariable?: string;
+  questionnaireId?: string;
+  source?: 'variable' | 'response';
+  key?: string;
 }): RuntimeQuestion {
+  const currentVariable = params.currentVariable || params.key || '';
+
   return {
     id: params.id,
     type: 'statistical-feedback',
@@ -169,7 +175,75 @@ export function createChartFeedbackQuestion(params: {
     title: params.title,
     description: params.description,
     displayDuration: 40,
+    autoAdvance: true,
+    config: {
+      title: params.title,
+      subtitle: params.description,
+      chartType: 'bar',
+      sourceMode: 'current-session',
+      metric: 'mean',
+      showPercentile: true,
+      showSummary: true,
+      refreshMs: 0,
+      dataSource: {
+        questionnaireId: params.questionnaireId || '',
+        source: params.source || 'variable',
+        key: params.key || currentVariable,
+        currentVariable,
+        participantId: '{{participantId}}',
+        comparisonParticipantId: '',
+      },
+    },
     conditions: [{ formula: params.conditionFormula, target: 'show' }],
+  };
+}
+
+export function createNBackReactionQuestion(params: {
+  id: string;
+  text: string;
+  n?: number;
+  sequenceLength?: number;
+  targetRate?: number;
+  targetKey?: string;
+  nonTargetKey?: string;
+  stimuli?: string[];
+  fixationMs?: number;
+  responseTimeoutMs?: number;
+}): RuntimeQuestion {
+  const stimuli = params.stimuli || ['A', 'B', 'C', 'D'];
+  const targetKey = params.targetKey || 'j';
+  const nonTargetKey = params.nonTargetKey || 'f';
+  const fixationMs = params.fixationMs ?? 120;
+  const responseTimeoutMs = params.responseTimeoutMs ?? 180;
+
+  return {
+    id: params.id,
+    type: 'reaction-time',
+    required: true,
+    text: params.text,
+    config: {
+      task: {
+        type: 'n-back',
+        nBack: {
+          n: params.n || 2,
+          sequenceLength: params.sequenceLength || 12,
+          targetRate: params.targetRate ?? 0.35,
+          stimulusSet: stimuli,
+          targetKey,
+          nonTargetKey,
+          fixationMs,
+          responseTimeoutMs,
+        },
+      },
+      response: {
+        validKeys: [nonTargetKey, targetKey],
+        timeout: responseTimeoutMs,
+        requireCorrect: true,
+      },
+      targetFPS: 120,
+      practice: false,
+      testTrials: params.sequenceLength || 12,
+    },
   };
 }
 

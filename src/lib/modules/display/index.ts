@@ -4,6 +4,7 @@
 import './bar-chart';
 import './text';
 import './text-instruction';
+import './statistical-feedback';
 // import './line-chart';
 // import './scatter-plot';
 // import './distribution';

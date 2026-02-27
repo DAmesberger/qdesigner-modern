@@ -15,6 +15,8 @@ export interface Renderable {
   layer?: number;
 }
 
+type TextureSource = HTMLImageElement | HTMLCanvasElement | HTMLVideoElement;
+
 export type FrameCallback = (
   sample: FrameSample,
   stats: FrameStats,
@@ -59,7 +61,7 @@ export class WebGLRenderer {
   private gpuTime = 0;
   private backgroundColor: RGBAColor;
 
-  private textureCache = new WeakMap<object, WebGLTexture>();
+  private textureCache = new WeakMap<TextureSource, WebGLTexture>();
   private uploadedTextures = new Set<WebGLTexture>();
 
   constructor(options: RendererOptions) {
@@ -431,16 +433,17 @@ export class WebGLRenderer {
   }
 
   private resolveTexture(
-    textureLike: WebGLTexture | HTMLImageElement | HTMLCanvasElement | HTMLVideoElement
+    textureLike: WebGLTexture | TextureSource
   ): WebGLTexture | null {
-    const textureCtor = (globalThis as any).WebGLTexture;
-    if (textureCtor && textureLike instanceof textureCtor) {
-      return textureLike as WebGLTexture;
+    if (this.isWebGLTexture(textureLike)) {
+      return textureLike;
     }
 
-    const cached = this.textureCache.get(textureLike);
+    const source = textureLike as TextureSource;
+
+    const cached = this.textureCache.get(source);
     if (cached) {
-      this.uploadTextureSource(cached, textureLike);
+      this.uploadTextureSource(cached, source);
       return cached;
     }
 
@@ -450,11 +453,18 @@ export class WebGLRenderer {
     }
 
     this.configureTexture(texture);
-    this.uploadTextureSource(texture, textureLike);
-    this.textureCache.set(textureLike, texture);
+    this.uploadTextureSource(texture, source);
+    this.textureCache.set(source, texture);
     this.uploadedTextures.add(texture);
 
     return texture;
+  }
+
+  private isWebGLTexture(
+    value: WebGLTexture | TextureSource
+  ): value is WebGLTexture {
+    const textureCtor = (globalThis as any).WebGLTexture;
+    return Boolean(textureCtor && value instanceof textureCtor);
   }
 
   private configureTexture(texture: WebGLTexture): void {

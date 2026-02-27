@@ -2,6 +2,7 @@ import { expect, type Page } from '@playwright/test';
 
 export interface RuntimeDebugState {
   scenario: string;
+  modulesReady?: boolean;
   progressEvents: Array<{ current: number; total: number }>;
   presentedQuestionIds: string[];
   presentedEvents: Array<{ questionId: string; timestamp: number }>;
@@ -34,7 +35,17 @@ export async function waitForRuntimeBound(page: Page, expectedScenario: string):
     .poll(
       async () => {
         const state = await getRuntimeState(page);
-        return state?.scenario ?? null;
+        if (!state) return null;
+
+        if (state.scenario !== expectedScenario) {
+          return null;
+        }
+
+        if (state.modulesReady === false) {
+          return null;
+        }
+
+        return state.scenario;
       },
       { timeout: 10000 }
     )

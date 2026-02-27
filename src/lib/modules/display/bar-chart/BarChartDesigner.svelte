@@ -97,12 +97,8 @@
   // UI state
   let activeTab = $state<'data' | 'appearance' | 'axes'>('data');
   let newColor = $state('#3b82f6');
-  let yMinInput = $state(
-    item?.config?.axes?.y?.min === 'auto' ? '' : String(item?.config?.axes?.y?.min || '')
-  );
-  let yMaxInput = $state(
-    item?.config?.axes?.y?.max === 'auto' ? '' : String(item?.config?.axes?.y?.max || '')
-  );
+  let yMinInput = $state('');
+  let yMaxInput = $state('');
 
   // Color scheme options
   const colorSchemes = [
@@ -111,6 +107,13 @@
     { value: 'sequential', label: 'Sequential', preview: ['#c6dbef', '#6baed6', '#08519c'] },
     { value: 'diverging', label: 'Diverging', preview: ['#d7191c', '#ffffbf', '#1a9641'] },
   ];
+
+  $effect(() => {
+    const minValue = item?.config?.axes?.y?.min;
+    const maxValue = item?.config?.axes?.y?.max;
+    yMinInput = minValue === 'auto' ? '' : String(minValue ?? '');
+    yMaxInput = maxValue === 'auto' ? '' : String(maxValue ?? '');
+  });
 
   // Update y-axis bounds
   $effect(() => {

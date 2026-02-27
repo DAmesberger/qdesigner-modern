@@ -49,6 +49,8 @@ export function getNestedValue(obj: any, path: PathArray): any {
  * Set a nested value in an object using a path array
  */
 export function setNestedValue(obj: any, path: PathArray, value: any): void {
+  if (path.length === 0) return;
+
   let current = obj;
   for (let i = 0; i < path.length - 1; i++) {
     const segment = path[i]!;
@@ -57,7 +59,8 @@ export function setNestedValue(obj: any, path: PathArray, value: any): void {
     }
     current = current[segment];
   }
-  current[path[path.length - 1]] = value;
+  const lastSegment = path[path.length - 1]!;
+  current[lastSegment] = value;
 }
 
 /**
@@ -490,7 +493,10 @@ export function extractMentions(text: string): string[] {
   let match;
   
   while ((match = mentionRegex.exec(text)) !== null) {
-    mentions.push(match[2]); // Extract user ID
+    const userId = match[2];
+    if (userId) {
+      mentions.push(userId); // Extract user ID
+    }
   }
   
   return mentions;

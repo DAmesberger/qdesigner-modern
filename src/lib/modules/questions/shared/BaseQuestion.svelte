@@ -192,10 +192,12 @@
   });
 
   // Base classes for consistent styling
-  const baseClasses = `question-block question-${question.type} mode-${mode}`;
-  const containerClasses = $derived(
-    `${baseClasses} ${className} ${!isVisible ? 'hidden' : ''} ${validationResult && !validationResult.valid ? 'has-error' : ''}`
-  );
+  const containerClasses = $derived.by(() => {
+    const baseClasses = `question-block question-${question.type} mode-${mode}`;
+    return `${baseClasses} ${className} ${!isVisible ? 'hidden' : ''} ${
+      validationResult && !validationResult.valid ? 'has-error' : ''
+    }`;
+  });
 </script>
 
 {#if isVisible || mode === 'edit'}

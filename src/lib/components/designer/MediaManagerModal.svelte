@@ -85,25 +85,27 @@
   }
 </script>
 
+<svelte:window
+  onkeydown={(event) => {
+    if (isOpen) handleKeydown(event);
+  }}
+/>
+
 {#if isOpen}
-  <div class="fixed inset-0 z-50 overflow-y-auto" onkeydown={handleKeydown}>
+  <div class="fixed inset-0 z-50 overflow-y-auto">
     <!-- Backdrop -->
-    <div
+    <button
+      type="button"
       class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
-      role="button"
-      tabindex="0"
       onclick={handleClose}
-      onkeydown={(e) => e.key === 'Escape' && handleClose()}
       aria-label="Close modal"
-    />
+    ></button>
 
     <!-- Modal -->
     <div class="flex min-h-full items-center justify-center p-4">
       <div
         class="bg-layer-modal border border-border shadow-xl rounded-lg relative max-w-6xl w-full max-h-[90vh] flex flex-col"
         role="document"
-        onclick={(e) => e.stopPropagation()}
-        onkeydown={(e) => e.stopPropagation()}
         tabindex="-1"
       >
         <!-- Header -->

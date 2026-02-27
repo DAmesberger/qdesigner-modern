@@ -110,8 +110,10 @@
   }
 
   // Base classes for consistent styling
-  const baseClasses = `instruction-block instruction-${instruction.type} mode-${mode}`;
-  const containerClasses = $derived(`${baseClasses} ${className} ${!isVisible ? 'hidden' : ''}`);
+  const containerClasses = $derived.by(() => {
+    const baseClasses = `instruction-block instruction-${instruction.type} mode-${mode}`;
+    return `${baseClasses} ${className} ${!isVisible ? 'hidden' : ''}`;
+  });
 </script>
 
 {#if isVisible || mode === 'edit'}

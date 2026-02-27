@@ -11,6 +11,9 @@ export interface Organization {
 	createdBy: string | null;
 	createdAt: string;
 	updatedAt: string;
+	organization_id?: string;
+	created_at?: string;
+	updated_at?: string;
 }
 
 export interface OrganizationMember {
@@ -19,7 +22,7 @@ export interface OrganizationMember {
 	role: 'owner' | 'admin' | 'member' | 'viewer';
 	status: 'active' | 'invited' | 'suspended';
 	joinedAt: string;
-	user?: { id: string; email: string; fullName: string | null };
+	user?: { id: string; email: string; fullName: string | null; full_name?: string | null };
 }
 
 export interface Invitation {
@@ -34,7 +37,10 @@ export interface Invitation {
 	acceptedAt: string | null;
 	customMessage: string | null;
 	organization?: { id: string; name: string; slug: string };
-	invitedBy?: { id: string; email: string; fullName: string | null };
+	invitedBy?: { id: string; email: string; fullName: string | null; full_name?: string | null };
+	created_at?: string;
+	accepted_at?: string | null;
+	expires_at?: string;
 }
 
 // Project types
@@ -55,6 +61,10 @@ export interface Project {
 	createdAt: string;
 	updatedAt: string;
 	questionnaireCount?: number;
+	organization_id?: string;
+	created_at?: string;
+	updated_at?: string;
+	questionnaire_count?: number;
 }
 
 // Questionnaire types
@@ -71,6 +81,11 @@ export interface QuestionnaireDefinition {
 	createdAt: string;
 	updatedAt: string;
 	publishedAt: string | null;
+	project_id?: string;
+	created_at?: string;
+	updated_at?: string;
+	response_count?: number;
+	definition?: Record<string, unknown>;
 }
 
 // Session types
@@ -90,6 +105,48 @@ export interface ResponseSubmission {
 	reactionTimeUs?: number;
 	presentedAt?: string;
 	answeredAt?: string;
+}
+
+export interface SessionStatsSummary {
+	sampleCount: number;
+	mean: number | null;
+	median: number | null;
+	stdDev: number | null;
+	min: number | null;
+	max: number | null;
+	p10: number | null;
+	p25: number | null;
+	p50: number | null;
+	p75: number | null;
+	p90: number | null;
+	p95: number | null;
+	p99: number | null;
+}
+
+export interface SessionAggregateData {
+	questionnaireId: string;
+	source: 'variable' | 'response';
+	key: string;
+	participantCount: number;
+	stats: SessionStatsSummary;
+}
+
+export interface ParticipantStatsData {
+	participantId: string;
+	stats: SessionStatsSummary;
+}
+
+export interface SessionCompareData {
+	questionnaireId: string;
+	source: 'variable' | 'response';
+	key: string;
+	left: ParticipantStatsData;
+	right: ParticipantStatsData;
+	delta: {
+		meanDelta: number | null;
+		medianDelta: number | null;
+		zScore: number | null;
+	};
 }
 
 // Media types
@@ -146,6 +203,7 @@ export interface DomainConfig {
 	emailBlacklist: string[];
 	welcomeMessage: string | null;
 	createdAt: string;
+	created_at?: string;
 }
 
 export interface DomainAutoJoinCheck {

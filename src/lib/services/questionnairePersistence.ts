@@ -43,7 +43,7 @@ export class QuestionnairePersistenceService {
           name: questionnaire.name,
           description: questionnaire.description,
           content,
-          settings: questionnaire.settings || {}
+          settings: (questionnaire.settings || {}) as Record<string, unknown>
         });
 
         return {
@@ -56,7 +56,7 @@ export class QuestionnairePersistenceService {
           name: questionnaire.name,
           description: questionnaire.description,
           content,
-          settings: questionnaire.settings || {}
+          settings: (questionnaire.settings || {}) as Record<string, unknown>
         });
 
         return {

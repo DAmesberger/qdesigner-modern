@@ -143,10 +143,12 @@ export class ResponsePersistenceService {
 	 */
 	async saveVariable(name: string, value: any, type: string = 'string'): Promise<void> {
 		try {
-			await api.post(`/api/sessions/${this.sessionId}/variables`, {
+			await api.sessions.upsertVariable(this.sessionId, {
 				name,
-				value,
-				type
+				value: {
+					type,
+					value
+				}
 			});
 		} catch (error) {
 			console.error('Error saving variable:', error as Error);
@@ -219,7 +221,7 @@ export class ResponsePersistenceService {
 		if (toSync.length === 0) return;
 
 		try {
-			await api.post(`/api/sessions/${this.sessionId}/events`, toSync);
+			await api.sessions.submitEvents(this.sessionId, toSync);
 		} catch (error) {
 			// Re-queue failed items
 			this.eventQueue.push(...toSync);

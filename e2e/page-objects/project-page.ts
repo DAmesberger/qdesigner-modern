@@ -10,13 +10,12 @@ export class ProjectPage {
   constructor(page: Page) {
     this.page = page;
     this.createQuestionnaireButton = page
-      .locator(
-        '[data-testid="create-questionnaire-button"], [data-testid="create-questionnaire-empty-button"]'
-      )
+      .getByTestId('create-questionnaire-button')
+      .or(page.getByTestId('create-questionnaire-empty-button'))
       .first();
-    this.nameInput = page.locator('[data-testid="questionnaire-name-input"]');
-    this.descriptionInput = page.locator('[data-testid="questionnaire-description-input"]');
-    this.createConfirmButton = page.locator('[data-testid="questionnaire-create-confirm"]');
+    this.nameInput = page.getByTestId('questionnaire-name-input');
+    this.descriptionInput = page.getByTestId('questionnaire-description-input');
+    this.createConfirmButton = page.getByTestId('questionnaire-create-confirm');
   }
 
   async open(projectId: string): Promise<void> {
@@ -24,7 +23,11 @@ export class ProjectPage {
     await expect(this.createQuestionnaireButton).toBeVisible();
   }
 
-  async createQuestionnaire(name: string, description = ''): Promise<void> {
+  async createQuestionnaire(
+    name: string,
+    description = '',
+    options?: { waitForDesignerNavigation?: boolean }
+  ): Promise<void> {
     await this.createQuestionnaireButton.click();
     await expect(this.nameInput).toBeVisible();
     await this.nameInput.fill(name);
@@ -33,6 +36,14 @@ export class ProjectPage {
       await this.descriptionInput.fill(description);
     }
 
-    await this.createConfirmButton.click();
+    if (options?.waitForDesignerNavigation === false) {
+      await this.createConfirmButton.click();
+      return;
+    }
+
+    await Promise.all([
+      this.page.waitForURL(/\/projects\/[^/]+\/designer\//, { timeout: 30000 }),
+      this.createConfirmButton.click(),
+    ]);
   }
 }

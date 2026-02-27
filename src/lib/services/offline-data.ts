@@ -3,26 +3,30 @@ import { browser } from '$app/environment';
 interface Project {
   id: string;
   name: string;
-  description?: string;
-  organization_id: string;
-  created_at: string;
-  updated_at: string;
-  [key: string]: unknown;
+  description?: string | null;
+  organizationId?: string;
+  organization_id?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface Organization {
   id: string;
   name: string;
   slug: string;
-  [key: string]: unknown;
 }
 
 interface QuestionnaireDefinition {
   id: string;
   name: string;
-  project_id: string;
+  projectId?: string;
+  project_id?: string;
+  organizationId?: string | null;
+  organization_id?: string | null;
   content?: Record<string, unknown>;
-  [key: string]: unknown;
+  definition?: Record<string, unknown>;
 }
 
 interface CachedData {

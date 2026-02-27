@@ -1,7 +1,24 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import type { ReactionTrialConfig } from '$lib/runtime/reaction';
+
+  type ReactionTaskType = 'standard' | 'n-back' | 'custom';
 
   interface ReactionTimeConfig {
+    task: {
+      type: ReactionTaskType;
+      nBack: {
+        n: number;
+        sequenceLength: number;
+        targetRate: number;
+        stimulusSet: string[];
+        targetKey: string;
+        nonTargetKey: string;
+        fixationMs: number;
+        responseTimeoutMs: number;
+      };
+      customTrials: Array<Partial<ReactionTrialConfig>>;
+    };
     stimulus: {
       type: 'text' | 'shape' | 'image';
       content: string;
@@ -48,11 +65,51 @@
   ];
 
   let newKey = $state('');
+  let newNBackStimulus = $state('');
   let selectedKeyPreset = $state('');
   let selectedTimingPreset = $state('');
+  let customTrialsDraft = $state('[]');
+  let customTrialsError = $state<string | null>(null);
+
+  function ensureTaskDefaults() {
+    if (!question.config.task) {
+      question.config.task = {
+        type: 'standard',
+        nBack: {
+          n: 2,
+          sequenceLength: 20,
+          targetRate: 0.3,
+          stimulusSet: ['A', 'B', 'C', 'D'],
+          targetKey: 'j',
+          nonTargetKey: 'f',
+          fixationMs: 400,
+          responseTimeoutMs: 1200,
+        },
+        customTrials: [],
+      };
+    }
+    if (!question.config.task.nBack) {
+      question.config.task.nBack = {
+        n: 2,
+        sequenceLength: 20,
+        targetRate: 0.3,
+        stimulusSet: ['A', 'B', 'C', 'D'],
+        targetKey: 'j',
+        nonTargetKey: 'f',
+        fixationMs: 400,
+        responseTimeoutMs: 1200,
+      };
+    }
+    if (!Array.isArray(question.config.task.customTrials)) {
+      question.config.task.customTrials = [];
+    }
+  }
+
+  ensureTaskDefaults();
 
   // Initialize config defaults
   $effect(() => {
+    ensureTaskDefaults();
     if (!question.config.stimulus) {
       question.config.stimulus = {
         type: 'shape',
@@ -80,7 +137,14 @@
     if (question.config.practice === undefined) question.config.practice = false;
     if (!question.config.practiceTrials) question.config.practiceTrials = 3;
     if (!question.config.testTrials) question.config.testTrials = 10;
-    if (!question.config.targetFPS) question.config.targetFPS = 60;
+    if (!question.config.targetFPS) question.config.targetFPS = 120;
+  });
+
+  $effect(() => {
+    const serialized = JSON.stringify(question.config.task?.customTrials || [], null, 2);
+    if (serialized !== customTrialsDraft) {
+      customTrialsDraft = serialized;
+    }
   });
 
   function addKey() {
@@ -122,9 +186,180 @@
 
     selectedTimingPreset = '';
   }
+
+  function addNBackStimulus() {
+    const value = newNBackStimulus.trim();
+    if (!value || !question.config.task?.nBack) return;
+
+    const set = question.config.task.nBack.stimulusSet || [];
+    if (!set.includes(value)) {
+      question.config.task.nBack.stimulusSet = [...set, value];
+    }
+    newNBackStimulus = '';
+  }
+
+  function removeNBackStimulus(value: string) {
+    const set = question.config.task?.nBack?.stimulusSet || [];
+    question.config.task!.nBack!.stimulusSet = set.filter((entry) => entry !== value);
+  }
+
+  function applyCustomTrialsJson() {
+    try {
+      const parsed = JSON.parse(customTrialsDraft);
+      if (!Array.isArray(parsed)) {
+        throw new Error('Custom trials JSON must be an array of trial objects');
+      }
+      question.config.task!.customTrials = parsed as Array<Partial<ReactionTrialConfig>>;
+      customTrialsError = null;
+    } catch (error) {
+      customTrialsError = error instanceof Error ? error.message : 'Invalid JSON';
+    }
+  }
 </script>
 
 <div class="designer-panel">
+  <!-- Task Selection -->
+  <div class="section">
+    <h4 class="section-title">Task Mode</h4>
+
+    <div class="form-group">
+      <label for="task-type">Task Type</label>
+      <select id="task-type" bind:value={question.config.task.type} class="select">
+        <option value="standard">Standard Reaction Time</option>
+        <option value="n-back">N-Back</option>
+        <option value="custom">Custom Trial Plan</option>
+      </select>
+    </div>
+
+    {#if question.config.task.type === 'n-back'}
+      <div class="subsection">
+        <h5 class="subsection-title">N-Back Configuration</h5>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="nback-n">N</label>
+            <input
+              id="nback-n"
+              type="number"
+              min="1"
+              max="6"
+              bind:value={question.config.task.nBack.n}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="nback-sequence-length">Sequence Length</label>
+            <input
+              id="nback-sequence-length"
+              type="number"
+              min="3"
+              max="500"
+              bind:value={question.config.task.nBack.sequenceLength}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="nback-target-rate">Target Rate</label>
+            <input
+              id="nback-target-rate"
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              bind:value={question.config.task.nBack.targetRate}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="nback-target-key">Target Key</label>
+            <input
+              id="nback-target-key"
+              type="text"
+              bind:value={question.config.task.nBack.targetKey}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="nback-non-target-key">Non-Target Key</label>
+            <input
+              id="nback-non-target-key"
+              type="text"
+              bind:value={question.config.task.nBack.nonTargetKey}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="nback-fixation-ms">Fixation (ms)</label>
+            <input
+              id="nback-fixation-ms"
+              type="number"
+              min="0"
+              max="5000"
+              step="10"
+              bind:value={question.config.task.nBack.fixationMs}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="nback-timeout-ms">Response Timeout (ms)</label>
+            <input
+              id="nback-timeout-ms"
+              type="number"
+              min="100"
+              max="10000"
+              step="10"
+              bind:value={question.config.task.nBack.responseTimeoutMs}
+              class="input"
+            />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <span class="label-text">Stimulus Set</span>
+          <div class="key-input">
+            <input
+              type="text"
+              bind:value={newNBackStimulus}
+              placeholder="e.g., A"
+              class="input"
+              onkeydown={(e) => e.key === 'Enter' && addNBackStimulus()}
+            />
+            <button class="btn btn-secondary" onclick={addNBackStimulus} disabled={!newNBackStimulus}
+              >Add</button
+            >
+          </div>
+          <div class="key-list">
+            {#each question.config.task.nBack.stimulusSet || [] as item}
+              <div class="key-item">
+                <span class="key-label">{item}</span>
+                <button class="remove-btn" onclick={() => removeNBackStimulus(item)}>✕</button>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if question.config.task.type === 'custom'}
+      <div class="subsection">
+        <h5 class="subsection-title">Custom Trial JSON</h5>
+        <p class="help-text">
+          Define an array of trial objects compatible with ReactionTrialConfig. Use this for fully
+          programmable tasks.
+        </p>
+        <textarea
+          class="input"
+          rows="12"
+          bind:value={customTrialsDraft}
+          onblur={applyCustomTrialsJson}
+        ></textarea>
+        {#if customTrialsError}
+          <p class="error-text">{customTrialsError}</p>
+        {/if}
+      </div>
+    {/if}
+  </div>
+
   <!-- Stimulus Configuration -->
   <div class="section">
     <h4 class="section-title">Stimulus Settings</h4>
@@ -313,17 +548,19 @@
       </div>
     {/if}
 
-    <div class="form-group">
-      <label for="test-trials">Number of Test Trials</label>
-      <input
-        id="test-trials"
-        type="number"
-        bind:value={question.config.testTrials}
-        min="1"
-        max="100"
-        class="input"
-      />
-    </div>
+    {#if question.config.task.type !== 'n-back'}
+      <div class="form-group">
+        <label for="test-trials">Number of Test Trials</label>
+        <input
+          id="test-trials"
+          type="number"
+          bind:value={question.config.testTrials}
+          min="1"
+          max="100"
+          class="input"
+        />
+      </div>
+    {/if}
 
     <div class="form-group">
       <label class="checkbox-label">
@@ -377,6 +614,11 @@
     <div class="preview-box">
       <div class="preview-content">
         <div class="preview-item">
+          <span class="preview-label">Task:</span>
+          <span class="preview-value">{question.config.task.type}</span>
+        </div>
+
+        <div class="preview-item">
           <span class="preview-label">Stimulus:</span>
           <span class="preview-value">
             {question.config.stimulus.type}
@@ -411,8 +653,15 @@
         <div class="preview-item">
           <span class="preview-label">Trials:</span>
           <span class="preview-value">
-            {question.config.practice ? `${question.config.practiceTrials} practice + ` : ''}
-            {question.config.testTrials} test
+            {#if question.config.task.type === 'n-back'}
+              {question.config.practice ? `${question.config.practiceTrials} practice + ` : ''}
+              {question.config.task.nBack.sequenceLength} n-back
+            {:else if question.config.task.type === 'custom'}
+              {(question.config.task.customTrials || []).length} custom trials
+            {:else}
+              {question.config.practice ? `${question.config.practiceTrials} practice + ` : ''}
+              {question.config.testTrials} test
+            {/if}
           </span>
         </div>
 
@@ -520,6 +769,12 @@
     padding-left: 1rem;
   }
 
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
   .subsection-title {
     margin: 0 0 0.5rem 0;
     font-size: 0.875rem;
@@ -531,6 +786,12 @@
     margin-top: 0.25rem;
     font-size: 0.75rem;
     color: #6b7280;
+  }
+
+  .error-text {
+    margin-top: 0.5rem;
+    color: #dc2626;
+    font-size: 0.75rem;
   }
 
   /* Key management */

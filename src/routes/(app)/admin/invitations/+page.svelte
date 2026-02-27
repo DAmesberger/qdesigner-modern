@@ -276,7 +276,7 @@
 
               <div class="text-sm text-muted-foreground space-y-1">
                 <p>
-                  Invited by {invitation.invitedBy?.full_name || invitation.invitedBy?.email}
+                  Invited by {invitation.invitedBy?.fullName || invitation.invitedBy?.email}
                   on {formatDate(invitation.createdAt)}
                 </p>
                 {#if invitation.status === 'pending'}

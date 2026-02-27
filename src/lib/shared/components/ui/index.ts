@@ -1,5 +1,5 @@
 // Layout components
-export { default as AppShell } from './layout/AppShell.svelte';
+export { default as AppShell } from '../../../components/ui/layout/AppShell.svelte';
 export { default as PageHeader } from './layout/PageHeader.svelte';
 export { default as Container } from './layout/Container.svelte';
 

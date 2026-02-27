@@ -7,6 +7,7 @@
     processContentWithMediaSync,
     extractMediaFromDisplay,
   } from '$lib/services/mediaHandling';
+  import type { MediaConfig } from '$lib/shared/types/questionnaire';
 
   interface Props {
     question: Question;
@@ -34,17 +35,12 @@
 
   // Media handling for all question types
   let mediaUrls: Record<string, string> = $state({});
-  let media = extractMediaFromDisplay(question.display);
-
-  // Load media URLs on initialization if media exists
-  if (media && media.length > 0) {
-    loadMediaUrlsForQuestion();
-  }
+  let media = $state<MediaConfig[]>([]);
 
   // Reactive media loading - when question changes, reload media
   $effect(() => {
     // Extract media from display object
-    const newMedia = extractMediaFromDisplay(question.display);
+    const newMedia = extractMediaFromDisplay(question.display) as MediaConfig[];
 
     console.log('[QuestionVisualRenderer] Question data:', {
       type: question.type,
@@ -283,7 +279,7 @@
 
   let questionStyles = $derived(getQuestionStyles());
   let responseConfig = $derived(renderResponse(question, theme));
-  let promptText = $state(getQuestionText(question));
+  let promptText = $state('');
 
   // Update prompt text when question changes
   $effect(() => {

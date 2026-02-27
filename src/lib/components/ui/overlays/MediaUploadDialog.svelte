@@ -31,7 +31,7 @@
   let uploadProgress = $state<Record<string, number>>({});
   let errors = $state<Record<string, string>>({});
 
-  const maxSizeBytes = maxSize * 1024 * 1024;
+  const maxSizeBytes = $derived(maxSize * 1024 * 1024);
 
   function handleClose() {
     open = false;

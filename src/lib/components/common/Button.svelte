@@ -8,6 +8,8 @@
     loading?: boolean;
     class?: string;
     onclick?: (e: MouseEvent) => void;
+    ['data-testid']?: string;
+    [key: string]: unknown;
     children?: any;
   }
   
@@ -20,7 +22,8 @@
     loading = false,
     class: className = '',
     onclick,
-    children
+    children,
+    ...restProps
   }: Props = $props();
   
   const sizeClasses = {
@@ -46,7 +49,7 @@
 </script>
 
 {#if href && !disabled}
-  <a {href} class={classes} {onclick}>
+  <a {href} class={classes} {onclick} {...restProps}>
     {#if loading}
       <svg class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -56,7 +59,7 @@
     {#if children}{@render children()}{/if}
   </a>
 {:else}
-  <button {type} {disabled} class={classes} {onclick}>
+  <button {type} {disabled} class={classes} {onclick} {...restProps}>
     {#if loading}
       <svg class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

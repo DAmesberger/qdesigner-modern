@@ -305,8 +305,12 @@
         editingFlow = null;
         resetForm();
       }}
+      data-testid="flow-add-modal-overlay"
     >
-      <div class="{theme.components.container.card} relative max-w-md w-full p-6">
+      <div
+        class="{theme.components.container.card} relative max-w-md w-full p-6"
+        data-testid="flow-add-modal"
+      >
         <h3 class="{theme.typography.h4} {theme.semantic.textPrimary} mb-4">
           {editingFlow ? 'Edit' : 'Add'} Flow Control
         </h3>
@@ -414,6 +418,7 @@
             }}
             class="{theme.components.button.variants.outline} {theme.components.button.sizes
               .sm} rounded-md"
+            data-testid="flow-cancel-button"
           >
             Cancel
           </button>

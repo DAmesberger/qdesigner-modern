@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { slide } from 'svelte/transition';
   import { supportedLanguages, getCurrentLanguage, changeLanguage, isRTL } from '../config';
   import { currentLanguage, isRTL as isRTLStore } from '../stores';
   import type { LanguageSwitcherProps } from '../types';
@@ -26,7 +27,7 @@
   let isOpen = $state(false);
   let currentLang = $state(getCurrentLanguage());
   let isChanging = $state(false);
-  let buttonRef: HTMLButtonElement;
+  let buttonRef = $state<HTMLButtonElement | undefined>();
 
   // Get current language details
   let currentLanguageDetails = $derived(
@@ -111,11 +112,11 @@
   };
 
   // Position classes for dropdown
-  const positionClasses = {
+  const positionClasses = $derived.by(() => ({
     left: rtlDirection ? 'right-0' : 'left-0',
     right: rtlDirection ? 'left-0' : 'right-0',
     center: 'left-1/2 transform -translate-x-1/2',
-  };
+  }));
 
   onMount(() => {
     document.addEventListener('click', handleClickOutside);

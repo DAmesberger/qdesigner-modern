@@ -15,12 +15,10 @@
   let { instruction, onUpdate, organizationId = '', userId = '' }: Props = $props();
 
   // Use local state for content to prevent focus loss
-  // Initialize with default if display doesn't exist
-  let localContent = $state(
-    instruction.display?.content || instruction.text || 'Enter your instruction text here...'
-  );
+  // Initialize from effect to avoid capturing stale references
+  let localContent = $state('');
   let debounceTimer: number | null = null;
-  let lastInstructionId = instruction.id;
+  let lastInstructionId = $state('');
   let showMediaManager = $state(false);
   let contentTextarea: HTMLTextAreaElement;
   let mediaUrls = $state<Record<string, string>>({});

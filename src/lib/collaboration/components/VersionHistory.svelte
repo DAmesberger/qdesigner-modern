@@ -26,7 +26,7 @@
   }: Props = $props();
 
   // Local state
-  let selectedBranch = $state(currentBranch);
+  let selectedBranch = $state('main');
   let showBranchForm = $state(false);
   let newBranchName = $state('');
   let branchFromVersion = $state<string | null>(null);
@@ -45,6 +45,10 @@
     ...branches.filter((b) => b.isActive),
     ...(branches.length === 0 ? [{ name: 'main', isDefault: true }] : []),
   ]);
+
+  $effect(() => {
+    selectedBranch = currentBranch || 'main';
+  });
 
   // Methods
   function selectVersion(versionId: string) {
@@ -308,8 +312,11 @@
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Create New Branch</h3>
 
       <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700 mb-2"> Branch Name </label>
+        <label for="branch-name-input" class="block text-sm font-medium text-gray-700 mb-2">
+          Branch Name
+        </label>
         <input
+          id="branch-name-input"
           type="text"
           bind:value={newBranchName}
           placeholder="feature/new-feature"

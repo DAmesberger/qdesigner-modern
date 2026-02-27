@@ -702,16 +702,19 @@ export class DocumentStore {
       input: any
     ): Array<{ value: string | number | boolean; label: string; key?: string }> => {
       if (!Array.isArray(input)) return [];
-      return input
-        .map((option: any) => {
+      const normalized = input
+        .map((option: any): { value: string | number | boolean; label: string; key?: string } | null => {
           if (option === null || option === undefined) return null;
           const rawValue = option.value ?? option.id ?? option.label;
           if (rawValue === undefined || rawValue === null) return null;
-          return {
+          const parsed: { value: string | number | boolean; label: string; key?: string } = {
             value: rawValue,
             label: String(option.label ?? rawValue),
-            key: option.key,
           };
+          if (option.key !== undefined && option.key !== null) {
+            parsed.key = String(option.key);
+          }
+          return parsed;
         })
         .filter(
           (
@@ -719,6 +722,7 @@ export class DocumentStore {
           ): option is { value: string | number | boolean; label: string; key?: string } =>
             option !== null
         );
+      return normalized;
     };
 
     const legacyResponse = (question as any).response;

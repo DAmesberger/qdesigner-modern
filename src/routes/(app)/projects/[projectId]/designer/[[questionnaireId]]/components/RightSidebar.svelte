@@ -46,6 +46,7 @@
     class="fixed inset-0 z-30 bg-black/40 md:hidden"
     aria-label="Close properties panel"
     onclick={closeDrawer}
+    data-testid="designer-right-sidebar-backdrop"
   ></button>
 {/if}
 
@@ -75,6 +76,7 @@
             class="rounded p-1 text-muted-foreground hover:bg-accent"
             aria-label="Close right panel"
             onclick={closeDrawer}
+            data-testid="designer-right-sidebar-close"
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

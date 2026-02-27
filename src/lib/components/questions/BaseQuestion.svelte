@@ -110,10 +110,10 @@
     <h3
       id="question-{question.id}-title"
       class="question-title"
-      class:required={question.validation?.some((v) => v.type === 'required')}
+      class:required={question.validation?.some((v: { type?: string }) => v.type === 'required')}
     >
       {question.title}
-      {#if question.validation?.some((v) => v.type === 'required')}
+      {#if question.validation?.some((v: { type?: string }) => v.type === 'required')}
         <span class="required-indicator" aria-label="Required">*</span>
       {/if}
     </h3>

@@ -87,7 +87,12 @@ pub fn router(state: AppState) -> Router {
     );
 
     let session_routes = Router::new()
-        .route("/", post(sessions::create_session))
+        .route(
+            "/",
+            get(sessions::list_sessions).post(sessions::create_session),
+        )
+        .route("/aggregate", get(sessions::aggregate_sessions))
+        .route("/compare", get(sessions::compare_sessions))
         .route(
             "/{id}",
             get(sessions::get_session).patch(sessions::update_session),

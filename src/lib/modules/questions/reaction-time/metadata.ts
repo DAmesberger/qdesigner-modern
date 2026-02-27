@@ -29,6 +29,20 @@ export const metadata: ModuleMetadata = {
     },
   },
   defaultConfig: {
+    task: {
+      type: 'standard',
+      nBack: {
+        n: 2,
+        sequenceLength: 20,
+        targetRate: 0.3,
+        stimulusSet: ['A', 'B', 'C', 'D'],
+        targetKey: 'j',
+        nonTargetKey: 'f',
+        fixationMs: 400,
+        responseTimeoutMs: 1200,
+      },
+      customTrials: [],
+    },
     prompt: 'Reaction Time Task',
     stimulus: {
       type: 'shape',

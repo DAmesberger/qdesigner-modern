@@ -14,6 +14,14 @@ export type ModuleCategory = 'display' | 'question' | 'instruction' | 'analytics
 
 export type { Question, ConditionalLogic, Questionnaire };
 
+export interface BaseModuleConfig {
+  id: string;
+  type: string;
+  order: number;
+  conditions?: ConditionalLogic;
+  styling?: StylingConfig;
+}
+
 // Base module metadata
 export interface ModuleMetadata {
   type: string;

@@ -38,13 +38,13 @@ export interface Variable {
   metadata?: Record<string, any>;
 }
 
-export type VariableType = 
-  | 'number' 
-  | 'string' 
-  | 'boolean' 
-  | 'date' 
-  | 'time' 
-  | 'array' 
+export type VariableType =
+  | 'number'
+  | 'string'
+  | 'boolean'
+  | 'date'
+  | 'time'
+  | 'array'
   | 'object'
   | 'reaction_time'
   | 'stimulus_onset';
@@ -119,39 +119,39 @@ export const QuestionTypes = {
   MEDIA_DISPLAY: 'media-display',
   WEBGL: 'webgl',
   BAR_CHART: 'bar-chart',
-  
+
   // Input questions
   TEXT_INPUT: 'text-input',
   NUMBER_INPUT: 'number-input',
-  
+
   // Choice questions
   SINGLE_CHOICE: 'single-choice',
   MULTIPLE_CHOICE: 'multiple-choice',
-  
+
   // Scale questions
   SCALE: 'scale',
   RATING: 'rating',
-  
+
   // Advanced questions
   MATRIX: 'matrix',
   RANKING: 'ranking',
-  
+
   // Time-based questions
   REACTION_TIME: 'reaction-time',
   DATE_TIME: 'date-time',
-  
+
   // File questions
   FILE_UPLOAD: 'file-upload',
   MEDIA_RESPONSE: 'media-response',
-  
+
   // Drawing
   DRAWING: 'drawing',
-  
+
   // Statistical
-  STATISTICAL_FEEDBACK: 'statistical-feedback'
+  STATISTICAL_FEEDBACK: 'statistical-feedback',
 } as const;
 
-export type QuestionType = typeof QuestionTypes[keyof typeof QuestionTypes];
+export type QuestionType = (typeof QuestionTypes)[keyof typeof QuestionTypes];
 
 // ============================================================================
 // Common Configuration Types
@@ -175,16 +175,16 @@ export interface MediaConfig {
   // Media reference - either URL or media asset ID
   mediaId?: string; // Reference to media asset in media management system
   url?: string; // Direct URL (legacy support or external URLs)
-  
+
   // How this media is referenced in markdown content
   // e.g., ![alt text](media:my-ref-id) would use refId: "my-ref-id"
   refId?: string;
-  
+
   // Media metadata
   type?: 'image' | 'video' | 'audio';
   alt?: string;
   caption?: string;
-  
+
   // Display options (can be overridden in markdown)
   width?: number;
   height?: number;
@@ -430,11 +430,26 @@ export interface WebGLDisplayConfig extends BaseDisplayConfig {
 }
 
 export interface StatisticalFeedbackConfig extends BaseDisplayConfig {
-  prompt: string;
-  chartType: 'bar' | 'line' | 'pie' | 'scatter' | 'histogram';
-  dataSource: string;
-  compareWith?: string;
+  title: string;
+  subtitle?: string;
+  chartType: 'bar' | 'line';
+  sourceMode?:
+    | 'current-session'
+    | 'cohort'
+    | 'participant-vs-cohort'
+    | 'participant-vs-participant';
+  metric?: 'count' | 'mean' | 'median' | 'std_dev' | 'p90' | 'p95' | 'p99' | 'z_score';
+  dataSource: {
+    questionnaireId?: string;
+    source?: 'variable' | 'response';
+    key?: string;
+    currentVariable?: string;
+    participantId?: string;
+    comparisonParticipantId?: string;
+  };
   showPercentile?: boolean;
+  showSummary?: boolean;
+  refreshMs?: number;
   customization?: Record<string, any>;
 }
 
@@ -542,13 +557,13 @@ export interface BaseQuestion {
   type: QuestionType;
   order: number;
   required: boolean;
-  
+
   // Optional common properties
   randomize?: boolean;
   timing?: TimingConfig;
   navigation?: NavigationConfig;
   conditions?: ConditionalLogic;
-  
+
   // Metadata
   name?: string;
   tags?: string[];
@@ -584,7 +599,17 @@ export interface Size {
 // ============================================================================
 
 export interface ResponseType {
-  type: 'single' | 'multiple' | 'text' | 'number' | 'scale' | 'keypress' | 'click' | 'custom' | 'none' | 'webgl';
+  type:
+    | 'single'
+    | 'multiple'
+    | 'text'
+    | 'number'
+    | 'scale'
+    | 'keypress'
+    | 'click'
+    | 'custom'
+    | 'none'
+    | 'webgl';
   config?: ResponseConfig;
 }
 
@@ -592,17 +617,17 @@ export interface ResponseConfig {
   // For keypress
   allowedKeys?: string[];
   recordAllKeys?: boolean;
-  
+
   // For scale
   min?: number;
   max?: number;
   step?: number;
   labels?: string[];
-  
+
   // For text/number
   maxLength?: number;
   pattern?: string;
-  
+
   // General
   timeout?: number; // Max response time in ms
   required?: boolean;
@@ -753,7 +778,7 @@ export interface BarChartQuestion extends BaseQuestion {
 // Union Type
 // ============================================================================
 
-export type Question = 
+export type Question =
   | TextDisplayQuestion
   | InstructionQuestion
   | MediaDisplayQuestion
@@ -863,7 +888,7 @@ export function isDisplayOnlyQuestion(q: Question): boolean {
     QuestionTypes.TEXT_DISPLAY,
     QuestionTypes.INSTRUCTION,
     QuestionTypes.MEDIA_DISPLAY,
-    QuestionTypes.STATISTICAL_FEEDBACK
+    QuestionTypes.STATISTICAL_FEEDBACK,
   ];
   return displayOnlyTypes.includes(q.type);
 }
@@ -883,7 +908,7 @@ export function getQuestionVariable(q: Question): string | undefined {
 // Legacy Type Mapping (for migration)
 // ============================================================================
 
-export type LegacyQuestionType = 
+export type LegacyQuestionType =
   | 'text'
   | 'instruction'
   | 'choice'
@@ -895,13 +920,13 @@ export type LegacyQuestionType =
   | 'webgl';
 
 export const LEGACY_TYPE_MAP: Record<LegacyQuestionType, QuestionType> = {
-  'text': QuestionTypes.TEXT_INPUT,
-  'instruction': QuestionTypes.INSTRUCTION,
-  'choice': QuestionTypes.SINGLE_CHOICE,
-  'scale': QuestionTypes.SCALE,
-  'rating': QuestionTypes.RATING,
-  'reaction': QuestionTypes.REACTION_TIME,
-  'multimedia': QuestionTypes.MEDIA_DISPLAY,
-  'statistical_feedback': QuestionTypes.STATISTICAL_FEEDBACK,
-  'webgl': QuestionTypes.WEBGL
+  text: QuestionTypes.TEXT_INPUT,
+  instruction: QuestionTypes.INSTRUCTION,
+  choice: QuestionTypes.SINGLE_CHOICE,
+  scale: QuestionTypes.SCALE,
+  rating: QuestionTypes.RATING,
+  reaction: QuestionTypes.REACTION_TIME,
+  multimedia: QuestionTypes.MEDIA_DISPLAY,
+  statistical_feedback: QuestionTypes.STATISTICAL_FEEDBACK,
+  webgl: QuestionTypes.WEBGL,
 };

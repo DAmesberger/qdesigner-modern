@@ -81,7 +81,7 @@ export function generateUserColors(userIds: string[]): Record<string, string> {
   const result: Record<string, string> = {};
   
   userIds.forEach((userId, index) => {
-    result[userId] = colors[index % colors.length];
+    result[userId] = colors[index % colors.length] ?? '#3B82F6';
   });
 
   return result;
@@ -271,9 +271,13 @@ export function parseMentions(text: string): { userId: string; name: string; sta
   let match;
 
   while ((match = mentionRegex.exec(text)) !== null) {
+    const name = match[1];
+    const userId = match[2];
+    if (!name || !userId) continue;
+
     mentions.push({
-      name: match[1],
-      userId: match[2],
+      name,
+      userId,
       start: match.index,
       end: match.index + match[0].length
     });

@@ -45,8 +45,8 @@
       await designerStore.createNewQuestionnaire({
         name: questionnaire.name,
         description: questionnaire.description,
-        projectId: data?.projectId,
-        organizationId: data?.organizationId,
+        projectId: data?.projectId ?? undefined,
+        organizationId: data?.organizationId ?? undefined,
       });
     } else if (questionnaire) {
       designerStore.loadQuestionnaireFromDefinition(questionnaire);

@@ -172,11 +172,14 @@ export class ReactionEngine {
     }
 
     const closePhase = this.openPhase('fixation', timeline);
+    const fixationType = fixation?.type || 'cross';
+    const fixationColor = fixation?.color || [1, 1, 1, 1];
+    const fixationSize = fixation?.sizePx || 20;
 
     const fixationRenderable = this.createFixationRenderable(
-      fixation.type || 'cross',
-      fixation.color || [1, 1, 1, 1],
-      fixation.sizePx || 20
+      fixationType,
+      fixationColor,
+      fixationSize
     );
     this.renderer.addRenderable(fixationRenderable);
 

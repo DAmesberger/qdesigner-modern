@@ -198,11 +198,14 @@
         if (!option) return null;
         const value = option.value ?? option.id ?? option.label;
         if (value === undefined || value === null) return null;
-        return {
+        const normalized: { value: string; label: string; key?: string } = {
           value: String(value),
           label: String(option.label ?? value),
-          key: option.key ? String(option.key) : undefined,
         };
+        if (option.key !== undefined && option.key !== null && option.key !== '') {
+          normalized.key = String(option.key);
+        }
+        return normalized;
       })
       .filter(
         (option): option is { value: string; label: string; key?: string } => option !== null
@@ -331,6 +334,7 @@
                 value={questionItem.id}
                 disabled
                 class="w-full px-3 py-2 border border-input rounded-md bg-muted text-muted-foreground"
+                data-testid="designer-question-id"
               />
             </div>
 
@@ -438,6 +442,7 @@
                       updateQuestion({ name: e.currentTarget.value || undefined })}
                     class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
                     placeholder="Optional internal identifier"
+                    data-testid="designer-question-internal-name"
                   />
                 </div>
 

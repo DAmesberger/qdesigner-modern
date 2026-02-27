@@ -83,7 +83,7 @@ test.describe('@fullstack designer creation, publish, and participant fillout', 
       throw new Error('Unable to add a question in designer UI');
     }
 
-    const internalNameInput = page.locator('input[placeholder="Optional internal identifier"]').first();
+    const internalNameInput = page.getByTestId('designer-question-internal-name').first();
     if (await internalNameInput.isVisible()) {
       await internalNameInput.fill('ui_fullstack_item');
     }
@@ -131,9 +131,9 @@ test.describe('@fullstack designer creation, publish, and participant fillout', 
     const questionnaireCode = deriveQuestionnaireCode(created.id);
 
     await page.goto(`/${questionnaireCode}`);
-    await expect(page.locator('[data-testid="fillout-welcome-screen"]')).toBeVisible();
+    await expect(page.getByTestId('fillout-welcome-screen')).toBeVisible();
 
-    const startButton = page.getByRole('button', { name: /start questionnaire/i });
+    const startButton = page.getByTestId('fillout-start-button');
     const sessionCreated = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
@@ -151,11 +151,11 @@ test.describe('@fullstack designer creation, publish, and participant fillout', 
 
     expect(sessionId).toBeTruthy();
 
-    await expect(page.locator('[data-testid="fillout-runtime-canvas"]')).toBeVisible({
+    await expect(page.getByTestId('fillout-runtime-canvas')).toBeVisible({
       timeout: 30000,
     });
 
-    const completionScreen = page.locator('[data-testid="fillout-completion-screen"]');
+    const completionScreen = page.getByTestId('fillout-completion-screen');
     for (let attempt = 0; attempt < 20; attempt += 1) {
       if (await completionScreen.isVisible()) {
         break;
@@ -168,7 +168,7 @@ test.describe('@fullstack designer creation, publish, and participant fillout', 
     await expect(completionScreen).toBeVisible({
       timeout: 30000,
     });
-    await expect(page.locator('[data-testid="fillout-error"]')).toHaveCount(0);
+    await expect(page.getByTestId('fillout-error')).toHaveCount(0);
 
     await expect
       .poll(

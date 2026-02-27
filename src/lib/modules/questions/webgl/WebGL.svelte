@@ -166,6 +166,18 @@
   function buildTrialConfig(): ReactionTrialConfig {
     const stimulusType = config.stimulus?.type || 'shape';
     const content = config.stimulus?.content;
+    const normalizeColor = (
+      input: unknown
+    ): [number, number, number, number] | undefined => {
+      if (
+        Array.isArray(input) &&
+        input.length === 4 &&
+        input.every((value) => typeof value === 'number')
+      ) {
+        return [input[0]!, input[1]!, input[2]!, input[3]!];
+      }
+      return undefined;
+    };
 
     const stimulus =
       stimulusType === 'image'
@@ -200,7 +212,10 @@
                 radiusPx: typeof content === 'object' ? content.properties.radius : 70,
                 widthPx: typeof content === 'object' ? content.properties.width : 120,
                 heightPx: typeof content === 'object' ? content.properties.height : 120,
-                color: typeof content === 'object' ? content.properties.color : undefined,
+                color:
+                  typeof content === 'object'
+                    ? normalizeColor(content.properties.color)
+                    : undefined,
               };
 
     return {

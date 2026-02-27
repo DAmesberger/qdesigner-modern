@@ -23,6 +23,8 @@ export type {
 export type {
   RendererOptions,
   FrameStats,
+  FrameSample,
+  RGBAColor,
   RenderStimulus,
   RenderCommand
 } from './types/renderer';

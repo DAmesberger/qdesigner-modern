@@ -191,7 +191,7 @@
                     </p>
                     <p class="mt-2 flex items-center text-sm text-gray-500 sm:mt-0 sm:ml-6">
                       <Calendar class="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
-                      Updated {formatDate(questionnaire.updated_at)}
+                      Updated {formatDate(questionnaire.updatedAt || questionnaire.updated_at || new Date().toISOString())}
                     </p>
                   </div>
                 </div>

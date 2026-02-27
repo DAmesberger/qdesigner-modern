@@ -476,6 +476,7 @@ export class QuestionnaireRuntime {
 
     return {
       question,
+      questionnaire: this.config.questionnaire,
       canvas: this.config.canvas,
       renderer: this.renderer,
       variableEngine: this.variableEngine,

@@ -12,6 +12,7 @@ export interface QuestionRuntimeCapabilities {
 
 export interface QuestionRuntimeContext {
   question: any;
+  questionnaire?: any;
   canvas: HTMLCanvasElement;
   renderer: WebGLRenderer;
   variableEngine: VariableEngine;

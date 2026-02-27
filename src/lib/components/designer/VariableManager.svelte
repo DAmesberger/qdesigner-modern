@@ -43,9 +43,10 @@
     const defaultValue = parseDefaultValue(newVariable.defaultValue, newVariable.type);
 
     designerStore.addVariable({
+      id: crypto.randomUUID(),
       name: newVariable.name,
       type: newVariable.type,
-      scope: newVariable.scope,
+      scope: newVariable.scope ?? 'global',
       defaultValue: defaultValue !== '' ? defaultValue : undefined,
       formula: newVariable.formula || undefined,
       description: newVariable.description || undefined,

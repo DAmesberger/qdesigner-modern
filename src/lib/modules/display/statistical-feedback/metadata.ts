@@ -1,33 +1,56 @@
-// Statistical Feedback metadata
-
 import type { ModuleMetadata } from '$lib/modules/types';
 
 export const metadata: ModuleMetadata = {
   type: 'statistical-feedback',
   category: 'display',
   name: 'Statistical Feedback',
-  icon: '📊',
-  description: 'Display statistical feedback to the participant',
+  icon: '📈',
+  description:
+    'Configurable statistical feedback panel with current-session, cohort, and participant comparison modes',
   capabilities: {
     supportsScripting: true,
     supportsConditionals: true,
-    supportsValidation: false,
-    supportsAnalytics: false,
+    supportsValidation: true,
+    supportsAnalytics: true,
     supportsTiming: true,
-    supportsVariables: true
+    supportsVariables: true,
   },
   components: {
-    // Using TextDisplay as placeholder for now since components are dynamically imported
-    // and might not exist yet for this new module
-    runtime: () => import('../text/TextDisplay.svelte'),
-    designer: () => import('../text/TextDisplayDesigner.svelte')
+    runtime: () => import('./StatisticalFeedback.svelte') as any,
+    designer: () => import('./StatisticalFeedbackDesigner.svelte') as any,
   },
   defaultConfig: {
-    display: {
-      prompt: 'Your Results',
-      chartType: 'bar' as const,
-      dataSource: '',
-      showPercentile: true
-    }
-  }
+    config: {
+      title: 'Statistical Feedback',
+      subtitle: 'Instant metrics from your questionnaire data',
+      chartType: 'bar',
+      sourceMode: 'current-session',
+      metric: 'mean',
+      showPercentile: true,
+      showSummary: true,
+      refreshMs: 0,
+      dataSource: {
+        questionnaireId: '',
+        source: 'variable',
+        key: '',
+        currentVariable: '',
+        participantId: '{{participantId}}',
+        comparisonParticipantId: '',
+      },
+    },
+    dataSource: {
+      variables: [],
+      aggregation: 'none',
+    },
+    visualization: {
+      title: 'Statistical Feedback',
+      subtitle: '',
+      showLegend: false,
+      showGrid: true,
+      showTooltips: true,
+      colorScheme: 'default',
+    },
+    autoAdvance: true,
+    displayDuration: 3500,
+  },
 };

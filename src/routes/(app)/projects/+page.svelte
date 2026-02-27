@@ -122,11 +122,11 @@
               <div class="mt-4 flex items-center justify-between text-sm text-gray-500">
                 <div class="flex items-center">
                   <Users class="h-4 w-4 mr-1" />
-                  <span>{project.questionnaire_count || 0} questionnaires</span>
+                  <span>{project.questionnaireCount || project.questionnaire_count || 0} questionnaires</span>
                 </div>
                 <div class="flex items-center">
                   <Calendar class="h-4 w-4 mr-1" />
-                  <span>{formatDate(project.created_at)}</span>
+                  <span>{formatDate(project.createdAt || project.created_at || new Date().toISOString())}</span>
                 </div>
               </div>
             </button>

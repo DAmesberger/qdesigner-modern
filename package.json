@@ -24,6 +24,7 @@
     "db:psql": "psql -h localhost -p 5434 -U qdesigner -d qdesigner",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json && tsc",
     "lint": "eslint .",
+    "lint:e2e:selectors": "eslint \"e2e/{smoke,regression,fullstack,page-objects}/**/*.ts\"",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

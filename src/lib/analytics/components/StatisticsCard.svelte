@@ -138,22 +138,16 @@
     return val;
   }
 
-  const colors = getColorClasses(color);
+  const colors = $derived(getColorClasses(color));
 </script>
 
-<div
-  class="bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-200 dark:border-gray-700 transition-all duration-200 {onClick
+<button
+  type="button"
+  class="w-full text-left bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-200 dark:border-gray-700 transition-all duration-200 {onClick
     ? 'cursor-pointer hover:shadow-lg hover:border-gray-300 dark:hover:border-gray-600'
-    : ''}"
-  onclick={onClick}
-  role={onClick ? 'button' : undefined}
-  tabindex={onClick ? 0 : null}
-  onkeydown={(e) => {
-    if (onClick && (e.key === 'Enter' || e.key === ' ')) {
-      e.preventDefault();
-      onClick();
-    }
-  }}
+    : 'cursor-default'}"
+  onclick={() => onClick?.()}
+  disabled={!onClick}
 >
   <div class="p-5">
     <div class="flex items-center">
@@ -238,15 +232,15 @@
       </div>
     </div>
   {/if}
-</div>
+</button>
 
 <style>
   /* Ensure consistent hover effects */
-  [role='button']:hover {
+  button:hover:not(:disabled) {
     transform: translateY(-1px);
   }
 
-  [role='button']:active {
+  button:active:not(:disabled) {
     transform: translateY(0);
   }
 </style>

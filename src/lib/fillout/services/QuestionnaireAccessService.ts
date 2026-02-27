@@ -135,9 +135,12 @@ export class QuestionnaireAccessService {
 		participantId: string
 	): Promise<boolean> {
 		try {
-			const sessions = await api.get<any[]>(
-				`/api/sessions?questionnaire_id=${questionnaireId}&participant_id=${participantId}&status=completed&limit=1`
-			);
+			const sessions = await api.sessions.list({
+				questionnaireId,
+				participantId,
+				status: 'completed',
+				limit: 1
+			});
 			return sessions && sessions.length > 0;
 		} catch (error) {
 			console.error('Error checking previous completion:', error as Error);

@@ -5,6 +5,7 @@
     type QuestionPresentedEvent,
   } from '$lib/runtime/core/QuestionnaireRuntime';
   import type { Questionnaire, QuestionnaireSession } from '$lib/shared';
+  import { registerAllModules } from '$lib/modules';
 
   type ScenarioName =
     | 'default'
@@ -12,10 +13,12 @@
     | 'randomization'
     | 'programmability'
     | 'answer-options'
-    | 'chart-feedback';
+    | 'chart-feedback'
+    | 'n-back';
 
   interface RuntimeDebugState {
     scenario: ScenarioName;
+    modulesReady: boolean;
     progressEvents: Array<{ current: number; total: number }>;
     presentedQuestionIds: string[];
     presentedEvents: QuestionPresentedEvent[];
@@ -43,6 +46,7 @@
     'programmability',
     'answer-options',
     'chart-feedback',
+    'n-back',
   ];
 
   let canvas: HTMLCanvasElement;
@@ -54,6 +58,7 @@
   let autoStart = false;
   let fixtureQuestionnaire = $state<Questionnaire | null>(null);
   let errorMessage = $state<string | null>(null);
+  let modulesReady = $state(false);
 
   let debugState: RuntimeDebugState = createDebugState('default');
 
@@ -110,6 +115,7 @@
   function createDebugState(selectedScenario: ScenarioName): RuntimeDebugState {
     return {
       scenario: selectedScenario,
+      modulesReady: false,
       progressEvents: [],
       presentedQuestionIds: [],
       presentedEvents: [],
@@ -325,8 +331,8 @@
           responseType: {
             type: 'single',
             options: [
-              { value: 'alpha', label: 'Alpha', key: 'a' },
-              { value: 'beta', label: 'Beta', key: 'b' },
+              { value: 1, label: 'Alpha', key: 'a' },
+              { value: 2, label: 'Beta', key: 'b' },
             ],
           },
         },
@@ -338,6 +344,18 @@
           title: 'Instant Feedback',
           description: 'Feedback should be shown immediately after the answer.',
           displayDuration: 40,
+          config: {
+            title: 'Instant Feedback',
+            subtitle: 'Feedback should be shown immediately after the answer.',
+            sourceMode: 'current-session',
+            metric: 'mean',
+            chartType: 'bar',
+            dataSource: {
+              currentVariable: 'q_chart_input_value',
+              key: 'q_chart_input_value',
+              source: 'variable',
+            },
+          },
           conditions: [{ formula: 'q_chart_input_value != null', target: 'show' }],
         },
       ] as any;
@@ -384,6 +402,13 @@
 
   async function startTest() {
     if (loading) return;
+    if (!modulesReady) {
+      errorMessage = 'Module registration is still in progress. Please wait a moment and retry.';
+      updateDebugState((state) => {
+        state.errors.push(errorMessage || 'Modules are not ready.');
+      });
+      return;
+    }
 
     if (!canvas) {
       await tick();
@@ -450,30 +475,6 @@
       return () => {};
     }
 
-    const params = new URLSearchParams(window.location.search);
-    const requestedScenario = params.get('scenario');
-    const fixturePayload = params.get('fixture');
-    const parsedFixture = parseFixtureQuestionnaire(fixturePayload);
-
-    if (isScenarioName(requestedScenario)) {
-      scenario = requestedScenario;
-    }
-
-    autoStart = params.get('autostart') === '1' || params.get('autostart') === 'true';
-
-    resetDebugState(scenario);
-
-    if (fixturePayload && !parsedFixture) {
-      errorMessage = 'Invalid runtime fixture payload.';
-      updateDebugState((state) => {
-        state.errors.push('Invalid runtime fixture payload.');
-      });
-    } else if (parsedFixture) {
-      fixtureQuestionnaire = parsedFixture;
-    } else {
-      fixtureQuestionnaire = null;
-    }
-
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -482,9 +483,55 @@
     resize();
     window.addEventListener('resize', resize);
 
-    if (autoStart) {
-      void startTest();
-    }
+    const init = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const requestedScenario = params.get('scenario');
+      const fixturePayload = params.get('fixture');
+      const parsedFixture = parseFixtureQuestionnaire(fixturePayload);
+
+      if (isScenarioName(requestedScenario)) {
+        scenario = requestedScenario;
+      }
+
+      autoStart = params.get('autostart') === '1' || params.get('autostart') === 'true';
+
+      resetDebugState(scenario);
+
+      if (fixturePayload && !parsedFixture) {
+        errorMessage = 'Invalid runtime fixture payload.';
+        updateDebugState((state) => {
+          state.errors.push('Invalid runtime fixture payload.');
+        });
+      } else if (parsedFixture) {
+        fixtureQuestionnaire = parsedFixture;
+      } else {
+        fixtureQuestionnaire = null;
+      }
+
+      try {
+        await registerAllModules();
+        modulesReady = true;
+        updateDebugState((state) => {
+          state.modulesReady = true;
+        });
+      } catch (error) {
+        modulesReady = false;
+        const message =
+          error instanceof Error
+            ? `Module registration failed: ${error.message}`
+            : 'Module registration failed';
+        errorMessage = message;
+        updateDebugState((state) => {
+          state.errors.push(message);
+        });
+      }
+
+      if (autoStart && modulesReady) {
+        void startTest();
+      }
+    };
+
+    void init();
 
     return () => {
       window.removeEventListener('resize', resize);
@@ -522,11 +569,20 @@
         {:else}
           <button
             onclick={startTest}
+            disabled={!modulesReady}
             class="px-8 py-4 bg-blue-600 hover:bg-blue-700 rounded-lg text-xl font-semibold transition-colors"
+            class:opacity-50={!modulesReady}
+            class:cursor-not-allowed={!modulesReady}
             data-testid="test-runtime-start-button"
           >
             Start Test
           </button>
+
+          {#if !modulesReady}
+            <p class="mt-4 text-amber-300" data-testid="test-runtime-module-loading">
+              Preparing runtime modules...
+            </p>
+          {/if}
 
           <p class="mt-4 text-gray-400">
             Use the <code>?scenario=...</code> query parameter for focused runtime behavior tests.

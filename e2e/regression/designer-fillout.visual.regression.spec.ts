@@ -187,16 +187,13 @@ test.describe('@visual designer and fillout screenshots', () => {
     await page.getByTestId('flow-open-add-modal').click();
     await page.getByTestId('flow-condition-input').fill('q_visual_value == "yes"');
 
-    const flowModal = page
-      .getByTestId('flow-condition-input')
-      .locator('xpath=ancestor::div[contains(@class,\"max-w-md\")]')
-      .first();
+    const flowModal = page.getByTestId('flow-add-modal');
     await expect(flowModal).toHaveScreenshot('designer-flow-modal.png', {
       animations: 'disabled',
       caret: 'hide',
     });
 
-    await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByTestId('flow-cancel-button').click();
     await page.getByTestId('left-tab-questions').click();
     await page.getByTestId('designer-module-multiple-choice').click();
 
@@ -204,7 +201,7 @@ test.describe('@visual designer and fillout screenshots', () => {
     await expect(propertiesPanel).toHaveScreenshot('designer-properties-panel.png', {
       animations: 'disabled',
       caret: 'hide',
-      mask: [page.locator('input[disabled][type="text"]').first()],
+      mask: [page.getByTestId('designer-question-id')],
     });
   });
 
@@ -219,7 +216,7 @@ test.describe('@visual designer and fillout screenshots', () => {
       caret: 'hide',
     });
 
-    await page.getByRole('button', { name: /start questionnaire/i }).click();
+    await page.getByTestId('fillout-start-button').click();
     await expect(page.getByTestId('fillout-runtime-canvas')).toBeVisible({ timeout: 30000 });
 
     await expect(page.getByTestId('fillout-root')).toHaveScreenshot('fillout-runtime-screen.png', {
@@ -236,8 +233,8 @@ test.describe('@visual designer and fillout screenshots', () => {
         animations: 'disabled',
         caret: 'hide',
         mask: [
-          page.locator('[data-testid=\"fillout-completion-screen\"] code'),
-          page.locator('[data-testid=\"fillout-completion-screen\"] .stat-value'),
+          page.getByTestId('fillout-completion-screen').locator('code'),
+          page.getByTestId('fillout-completion-screen').locator('.stat-value'),
         ],
       }
     );

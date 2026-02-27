@@ -7,8 +7,8 @@ test.describe('@fullstack questionnaire creation and participant fillout', () =>
     const provisioned = await provisionPublishedQuestionnaire(request);
 
     await page.goto(`/${provisioned.questionnaireCode}`);
-    await expect(page.locator('[data-testid="fillout-welcome-screen"]')).toBeVisible();
-    const startButton = page.getByRole('button', { name: /start questionnaire/i });
+    await expect(page.getByTestId('fillout-welcome-screen')).toBeVisible();
+    const startButton = page.getByTestId('fillout-start-button');
     await expect(startButton).toBeVisible();
 
     const sessionCreated = page.waitForResponse((response) => {
@@ -23,12 +23,12 @@ test.describe('@fullstack questionnaire creation and participant fillout', () =>
     await startButton.click();
     await sessionCreated;
 
-    await expect(page.locator('[data-testid="fillout-runtime-canvas"]')).toBeVisible({
+    await expect(page.getByTestId('fillout-runtime-canvas')).toBeVisible({
       timeout: 30000,
     });
-    await expect(page.locator('[data-testid="fillout-completion-screen"]')).toBeVisible({
+    await expect(page.getByTestId('fillout-completion-screen')).toBeVisible({
       timeout: 30000,
     });
-    await expect(page.locator('[data-testid="fillout-error"]')).toHaveCount(0);
+    await expect(page.getByTestId('fillout-error')).toHaveCount(0);
   });
 });

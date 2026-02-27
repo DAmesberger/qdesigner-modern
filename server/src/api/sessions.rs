@@ -1,9 +1,10 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::auth::models::AuthenticatedUser;
@@ -100,9 +101,82 @@ pub struct InteractionEventRequest {
 #[derive(Debug, Deserialize)]
 pub struct SessionListQuery {
     pub questionnaire_id: Option<Uuid>,
+    pub participant_id: Option<String>,
     pub status: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SessionAggregateQuery {
+    pub questionnaire_id: Uuid,
+    pub source: Option<String>,
+    pub key: String,
+    pub participant_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SessionCompareQuery {
+    pub questionnaire_id: Uuid,
+    pub source: Option<String>,
+    pub key: String,
+    pub left_participant_id: String,
+    pub right_participant_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct NumericStatsSummary {
+    pub sample_count: usize,
+    pub mean: Option<f64>,
+    pub median: Option<f64>,
+    pub std_dev: Option<f64>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub p10: Option<f64>,
+    pub p25: Option<f64>,
+    pub p50: Option<f64>,
+    pub p75: Option<f64>,
+    pub p90: Option<f64>,
+    pub p95: Option<f64>,
+    pub p99: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionAggregateResponse {
+    pub questionnaire_id: Uuid,
+    pub source: String,
+    pub key: String,
+    pub participant_count: usize,
+    pub stats: NumericStatsSummary,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ParticipantStats {
+    pub participant_id: String,
+    pub stats: NumericStatsSummary,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ComparisonDelta {
+    pub mean_delta: Option<f64>,
+    pub median_delta: Option<f64>,
+    pub z_score: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionCompareResponse {
+    pub questionnaire_id: Uuid,
+    pub source: String,
+    pub key: String,
+    pub left: ParticipantStats,
+    pub right: ParticipantStats,
+    pub delta: ComparisonDelta,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AggregateSource {
+    Variable,
+    Response,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────
@@ -147,6 +221,188 @@ pub async fn create_session(
     .await?;
 
     Ok((axum::http::StatusCode::CREATED, Json(session)))
+}
+
+/// GET /api/sessions
+pub async fn list_sessions(
+    State(state): State<AppState>,
+    Query(query): Query<SessionListQuery>,
+) -> Result<Json<Vec<Session>>, ApiError> {
+    let mut where_parts: Vec<String> = Vec::new();
+    let mut bind_idx = 1u32;
+
+    let normalized_status = query
+        .status
+        .as_deref()
+        .map(normalize_session_status)
+        .transpose()?;
+
+    if query.questionnaire_id.is_some() {
+        where_parts.push(format!("questionnaire_id = ${bind_idx}"));
+        bind_idx += 1;
+    }
+    if query.participant_id.is_some() {
+        where_parts.push(format!("participant_id = ${bind_idx}"));
+        bind_idx += 1;
+    }
+    if normalized_status.is_some() {
+        where_parts.push(format!("status = ${bind_idx}"));
+    }
+
+    let limit = query.limit.unwrap_or(50).clamp(1, 500);
+    let offset = query.offset.unwrap_or(0).max(0);
+
+    let mut sql = String::from(
+        r#"
+        SELECT id, questionnaire_id, participant_id, status, started_at,
+               completed_at, last_activity_at, metadata, browser_info, created_at
+        FROM sessions
+        "#,
+    );
+
+    if !where_parts.is_empty() {
+        sql.push_str(" WHERE ");
+        sql.push_str(&where_parts.join(" AND "));
+    }
+
+    sql.push_str(&format!(
+        " ORDER BY created_at DESC LIMIT {} OFFSET {}",
+        limit, offset
+    ));
+
+    let mut db_query = sqlx::query_as::<_, Session>(&sql);
+
+    if let Some(questionnaire_id) = query.questionnaire_id {
+        db_query = db_query.bind(questionnaire_id);
+    }
+    if let Some(participant_id) = query.participant_id {
+        db_query = db_query.bind(participant_id);
+    }
+    if let Some(status) = normalized_status {
+        db_query = db_query.bind(status);
+    }
+
+    let sessions = db_query.fetch_all(&state.pool).await?;
+    Ok(Json(sessions))
+}
+
+/// GET /api/sessions/aggregate
+pub async fn aggregate_sessions(
+    State(state): State<AppState>,
+    Query(query): Query<SessionAggregateQuery>,
+) -> Result<Json<SessionAggregateResponse>, ApiError> {
+    let source = parse_aggregate_source(query.source.as_deref())?;
+    let key = query.key.trim();
+
+    if key.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Aggregation key is required (variable name or question id)".into(),
+        ));
+    }
+
+    let samples = load_numeric_samples(
+        &state,
+        source,
+        query.questionnaire_id,
+        key,
+        query.participant_id.as_deref(),
+    )
+    .await?;
+
+    let participant_count = samples
+        .iter()
+        .filter_map(|sample| sample.participant_id.as_ref().cloned())
+        .collect::<HashSet<String>>()
+        .len();
+    let values: Vec<f64> = samples.iter().map(|sample| sample.value).collect();
+
+    Ok(Json(SessionAggregateResponse {
+        questionnaire_id: query.questionnaire_id,
+        source: source.as_str().to_string(),
+        key: key.to_string(),
+        participant_count,
+        stats: compute_numeric_stats(&values),
+    }))
+}
+
+/// GET /api/sessions/compare
+pub async fn compare_sessions(
+    State(state): State<AppState>,
+    Query(query): Query<SessionCompareQuery>,
+) -> Result<Json<SessionCompareResponse>, ApiError> {
+    let source = parse_aggregate_source(query.source.as_deref())?;
+    let key = query.key.trim();
+    let left_participant_id = query.left_participant_id.trim();
+    let right_participant_id = query.right_participant_id.trim();
+
+    if key.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Comparison key is required (variable name or question id)".into(),
+        ));
+    }
+
+    if left_participant_id.is_empty() || right_participant_id.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Both left_participant_id and right_participant_id are required".into(),
+        ));
+    }
+
+    let left_samples = load_numeric_samples(
+        &state,
+        source,
+        query.questionnaire_id,
+        key,
+        Some(left_participant_id),
+    )
+    .await?;
+    let right_samples = load_numeric_samples(
+        &state,
+        source,
+        query.questionnaire_id,
+        key,
+        Some(right_participant_id),
+    )
+    .await?;
+
+    let left_values: Vec<f64> = left_samples.iter().map(|sample| sample.value).collect();
+    let right_values: Vec<f64> = right_samples.iter().map(|sample| sample.value).collect();
+
+    let left_stats = compute_numeric_stats(&left_values);
+    let right_stats = compute_numeric_stats(&right_values);
+
+    let mean_delta = match (left_stats.mean, right_stats.mean) {
+        (Some(left), Some(right)) => Some(left - right),
+        _ => None,
+    };
+    let median_delta = match (left_stats.median, right_stats.median) {
+        (Some(left), Some(right)) => Some(left - right),
+        _ => None,
+    };
+    let z_score = match (left_stats.mean, right_stats.mean, right_stats.std_dev) {
+        (Some(left_mean), Some(right_mean), Some(right_std_dev)) if right_std_dev > 0.0 => {
+            Some((left_mean - right_mean) / right_std_dev)
+        }
+        _ => None,
+    };
+
+    Ok(Json(SessionCompareResponse {
+        questionnaire_id: query.questionnaire_id,
+        source: source.as_str().to_string(),
+        key: key.to_string(),
+        left: ParticipantStats {
+            participant_id: left_participant_id.to_string(),
+            stats: left_stats,
+        },
+        right: ParticipantStats {
+            participant_id: right_participant_id.to_string(),
+            stats: right_stats,
+        },
+        delta: ComparisonDelta {
+            mean_delta,
+            median_delta,
+            z_score,
+        },
+    }))
 }
 
 /// GET /api/sessions/:id
@@ -337,6 +593,189 @@ pub async fn upsert_variable(
     ))
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct NumericValueRow {
+    participant_id: Option<String>,
+    value: Value,
+}
+
+#[derive(Debug)]
+struct NumericSample {
+    participant_id: Option<String>,
+    value: f64,
+}
+
+impl AggregateSource {
+    fn as_str(self) -> &'static str {
+        match self {
+            AggregateSource::Variable => "variable",
+            AggregateSource::Response => "response",
+        }
+    }
+}
+
+fn parse_aggregate_source(source: Option<&str>) -> Result<AggregateSource, ApiError> {
+    let normalized = source.unwrap_or("variable").trim().to_ascii_lowercase();
+
+    match normalized.as_str() {
+        "variable" => Ok(AggregateSource::Variable),
+        "response" => Ok(AggregateSource::Response),
+        _ => Err(ApiError::BadRequest(format!(
+            "Invalid source '{normalized}'. Expected 'variable' or 'response'"
+        ))),
+    }
+}
+
+async fn load_numeric_samples(
+    state: &AppState,
+    source: AggregateSource,
+    questionnaire_id: Uuid,
+    key: &str,
+    participant_id: Option<&str>,
+) -> Result<Vec<NumericSample>, ApiError> {
+    let mut where_parts: Vec<String> = vec!["s.questionnaire_id = $1".to_string()];
+    let bind_idx = 3u32;
+
+    if participant_id.is_some() {
+        where_parts.push(format!("s.participant_id = ${bind_idx}"));
+    }
+
+    let base_sql = match source {
+        AggregateSource::Variable => {
+            r#"
+            SELECT s.participant_id, sv.variable_value AS value
+            FROM session_variables sv
+            INNER JOIN sessions s ON s.id = sv.session_id
+            "#
+        }
+        AggregateSource::Response => {
+            r#"
+            SELECT s.participant_id, r.value AS value
+            FROM responses r
+            INNER JOIN sessions s ON s.id = r.session_id
+            "#
+        }
+    };
+
+    let key_filter = match source {
+        AggregateSource::Variable => "sv.variable_name = $2",
+        AggregateSource::Response => "r.question_id = $2",
+    };
+
+    where_parts.push(key_filter.to_string());
+
+    let sql = format!(
+        "{} WHERE {} ORDER BY s.created_at ASC",
+        base_sql,
+        where_parts.join(" AND ")
+    );
+
+    let mut query = sqlx::query_as::<_, NumericValueRow>(&sql)
+        .bind(questionnaire_id)
+        .bind(key);
+
+    if let Some(participant_id) = participant_id {
+        query = query.bind(participant_id);
+    }
+
+    let rows = query.fetch_all(&state.pool).await?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            json_value_to_f64(&row.value).map(|value| NumericSample {
+                participant_id: row.participant_id,
+                value,
+            })
+        })
+        .collect())
+}
+
+fn json_value_to_f64(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(number) => number.as_f64(),
+        Value::String(raw) => raw.parse::<f64>().ok(),
+        Value::Bool(flag) => Some(if *flag { 1.0 } else { 0.0 }),
+        Value::Object(object) => object.get("value").and_then(json_value_to_f64),
+        _ => None,
+    }
+}
+
+fn compute_numeric_stats(values: &[f64]) -> NumericStatsSummary {
+    if values.is_empty() {
+        return NumericStatsSummary {
+            sample_count: 0,
+            mean: None,
+            median: None,
+            std_dev: None,
+            min: None,
+            max: None,
+            p10: None,
+            p25: None,
+            p50: None,
+            p75: None,
+            p90: None,
+            p95: None,
+            p99: None,
+        };
+    }
+
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|left, right| left.total_cmp(right));
+
+    let count = sorted.len();
+    let sum: f64 = sorted.iter().sum();
+    let mean = sum / count as f64;
+    let variance = sorted
+        .iter()
+        .map(|value| {
+            let diff = value - mean;
+            diff * diff
+        })
+        .sum::<f64>()
+        / count as f64;
+    let std_dev = variance.sqrt();
+    let min = sorted.first().copied();
+    let max = sorted.last().copied();
+
+    NumericStatsSummary {
+        sample_count: count,
+        mean: Some(mean),
+        median: percentile(&sorted, 50.0),
+        std_dev: Some(std_dev),
+        min,
+        max,
+        p10: percentile(&sorted, 10.0),
+        p25: percentile(&sorted, 25.0),
+        p50: percentile(&sorted, 50.0),
+        p75: percentile(&sorted, 75.0),
+        p90: percentile(&sorted, 90.0),
+        p95: percentile(&sorted, 95.0),
+        p99: percentile(&sorted, 99.0),
+    }
+}
+
+fn percentile(sorted: &[f64], percentile: f64) -> Option<f64> {
+    if sorted.is_empty() {
+        return None;
+    }
+
+    if sorted.len() == 1 {
+        return sorted.first().copied();
+    }
+
+    let clamped = percentile.clamp(0.0, 100.0);
+    let rank = (clamped / 100.0) * (sorted.len() - 1) as f64;
+    let lower_index = rank.floor() as usize;
+    let upper_index = rank.ceil() as usize;
+    let weight = rank - lower_index as f64;
+
+    let lower = sorted.get(lower_index).copied()?;
+    let upper = sorted.get(upper_index).copied()?;
+
+    Some(lower + (upper - lower) * weight)
+}
+
 fn normalize_session_status(status: &str) -> Result<String, ApiError> {
     let normalized = match status {
         "not_started" | "in_progress" | "paused" | "active" => "active",
@@ -428,5 +867,43 @@ fn merge_event_metadata(metadata: Option<Value>, event_data: Option<Value>) -> V
         (Some(existing), None) => existing,
         (None, Some(event_data)) => serde_json::json!({ "event_data": event_data }),
         (None, None) => serde_json::json!({}),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{compute_numeric_stats, json_value_to_f64, parse_aggregate_source};
+    use serde_json::json;
+
+    #[test]
+    fn parses_numeric_json_values() {
+        assert_eq!(json_value_to_f64(&json!(42)), Some(42.0));
+        assert_eq!(json_value_to_f64(&json!("3.14")), Some(3.14));
+        assert_eq!(json_value_to_f64(&json!(true)), Some(1.0));
+        assert_eq!(json_value_to_f64(&json!({ "value": "5.5" })), Some(5.5));
+        assert_eq!(json_value_to_f64(&json!({ "other": 1 })), None);
+    }
+
+    #[test]
+    fn computes_summary_statistics_with_percentiles() {
+        let stats = compute_numeric_stats(&[10.0, 20.0, 30.0, 40.0, 50.0]);
+
+        assert_eq!(stats.sample_count, 5);
+        assert_eq!(stats.mean, Some(30.0));
+        assert_eq!(stats.median, Some(30.0));
+        assert_eq!(stats.p10, Some(14.0));
+        assert_eq!(stats.p90, Some(46.0));
+        assert_eq!(stats.min, Some(10.0));
+        assert_eq!(stats.max, Some(50.0));
+    }
+
+    #[test]
+    fn parses_aggregate_source_with_default() {
+        let variable = parse_aggregate_source(None).expect("default source should parse");
+        let response = parse_aggregate_source(Some("response")).expect("response should parse");
+
+        assert_eq!(variable.as_str(), "variable");
+        assert_eq!(response.as_str(), "response");
+        assert!(parse_aggregate_source(Some("invalid")).is_err());
     }
 }

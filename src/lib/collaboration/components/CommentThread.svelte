@@ -330,6 +330,9 @@
 
 <style>
   .mention {
-    @apply bg-blue-100 text-blue-800 px-1 rounded;
+    background-color: #dbeafe;
+    color: #1e40af;
+    padding: 0 0.25rem;
+    border-radius: 0.25rem;
   }
 </style>

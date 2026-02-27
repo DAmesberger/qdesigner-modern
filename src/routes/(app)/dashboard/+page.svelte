@@ -15,7 +15,10 @@
 
   let { data }: Props = $props();
 
-  const { user, questionnaires, recentActivity, stats } = data;
+  let user = $derived(data.user);
+  let questionnaires = $derived(data.questionnaires);
+  let recentActivity = $derived(data.recentActivity);
+  let stats = $derived(data.stats);
 
   function getStatusColor(status: string) {
     switch (status) {
@@ -86,7 +89,7 @@
     <h1 class="text-4xl font-bold text-[hsl(var(--foreground))] tracking-tight">
       Welcome back, <span
         class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-600"
-        >{user?.full_name || user?.email?.split('@')[0] || 'User'}</span
+        >{user?.fullName || user?.email?.split('@')[0] || 'User'}</span
       >
     </h1>
     <p class="mt-2 text-lg text-[hsl(var(--muted-foreground))]">

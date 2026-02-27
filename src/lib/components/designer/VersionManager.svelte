@@ -53,6 +53,10 @@
 
   async function saveAsNewVersion() {
     if (!newVersionNote.trim() || isSavingVersion) return;
+    if (!questionnaire.projectId) {
+      toast.error('Missing project ID');
+      return;
+    }
 
     isSavingVersion = true;
 
@@ -72,7 +76,7 @@
             version: newVersion,
             changes: newVersionNote,
             timestamp: new Date().toISOString(),
-            author: user.id,
+            author: user?.id ?? 'unknown',
           },
           parent_version_id: questionnaireId,
           is_active: false,
@@ -118,6 +122,11 @@
   }
 
   async function publishVersion(versionId: string) {
+    if (!questionnaire.projectId) {
+      toast.error('Missing project ID');
+      return;
+    }
+
     try {
       // Publish selected version via the API
       await api.questionnaires.publish(questionnaire.projectId, versionId);

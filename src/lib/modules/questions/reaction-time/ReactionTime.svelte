@@ -1,10 +1,37 @@
 <script lang="ts">
   import BaseQuestion from '../shared/BaseQuestion.svelte';
   import type { QuestionProps } from '$lib/modules/types';
-  import { ReactionEngine } from '$lib/runtime/reaction';
-  import type { ReactionTrialConfig, ReactionTrialResult } from '$lib/runtime/reaction';
+  import { ReactionEngine, createNBackTrials } from '$lib/runtime/reaction';
+  import type {
+    ReactionStimulusConfig,
+    ReactionTrialConfig,
+    ReactionTrialResult,
+  } from '$lib/runtime/reaction';
+
+  type ReactionTaskType = 'standard' | 'n-back' | 'custom';
 
   interface ReactionTimeConfig {
+    task?: {
+      type?: ReactionTaskType;
+      nBack?: {
+        n?: number;
+        sequenceLength?: number;
+        targetRate?: number;
+        stimulusSet?: Array<string | ReactionStimulusConfig>;
+        targetKey?: string;
+        nonTargetKey?: string;
+        fixationMs?: number;
+        responseTimeoutMs?: number;
+      };
+      customTrials?: Array<
+        Partial<ReactionTrialConfig> & {
+          isPractice?: boolean;
+          isTarget?: boolean;
+          expectedResponse?: string;
+          stimulus?: ReactionStimulusConfig | string;
+        }
+      >;
+    };
     stimulus: {
       type: 'text' | 'shape' | 'image';
       content: string;
@@ -27,9 +54,16 @@
     prompt?: string;
   }
 
+  interface PlannedTrial {
+    trial: ReactionTrialConfig;
+    isPractice: boolean;
+    taskType: ReactionTaskType;
+  }
+
   interface TrialRecord {
     trialNumber: number;
     isPractice: boolean;
+    taskType: ReactionTaskType;
     key: string | null;
     reactionTime: number | null;
     isCorrect: boolean | null;
@@ -70,13 +104,14 @@
   const practiceTrials = $derived(config.practiceTrials || 3);
   const testTrials = $derived(config.testTrials || 10);
 
-  let canvas = $state<HTMLCanvasElement>();
-  let engine = $state<ReactionEngine | null>(null);
-  let state = $state<'ready' | 'running' | 'feedback' | 'complete'>('ready');
+  let canvas: HTMLCanvasElement | undefined = $state(undefined);
+  let engine: ReactionEngine | null = $state(null);
+  let phase: 'ready' | 'running' | 'feedback' | 'complete' = $state('ready');
   let feedbackText = $state('');
   let feedbackColor = $state('#4ade80');
   let currentTrial = $state(0);
-  let abortController = $state<AbortController | null>(null);
+  let totalTrials = $state(0);
+  let abortController: AbortController | null = $state(null);
 
   $effect(() => {
     if (!value) {
@@ -107,7 +142,7 @@
   $effect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== ' ') return;
-      if (disabled || state !== 'ready') return;
+      if (disabled || phase !== 'ready') return;
       event.preventDefault();
       void startTask();
     };
@@ -122,39 +157,39 @@
     abortController?.abort();
     abortController = new AbortController();
 
-    state = 'running';
+    phase = 'running';
     currentTrial = 0;
 
+    const trialPlan = buildTrialPlan();
+    totalTrials = trialPlan.length;
+
     const responses: TrialRecord[] = [];
-    const total = usePractice ? practiceTrials + testTrials : testTrials;
 
     onInteraction?.({
       type: 'start' as any,
       timestamp: Date.now(),
       data: {
-        totalTrials: total,
+        totalTrials,
         targetFPS: config.targetFPS || 120,
+        taskType: config.task?.type || 'standard',
       },
     });
 
-    for (let index = 0; index < total; index++) {
+    for (let index = 0; index < trialPlan.length; index++) {
+      const planned = trialPlan[index]!;
       currentTrial = index + 1;
-      const isPractice = usePractice && index < practiceTrials;
       let result: ReactionTrialResult;
       try {
-        result = await engine.runTrial(
-          buildTrialConfig(index + 1, isPractice),
-          abortController.signal
-        );
+        result = await engine.runTrial(planned.trial, abortController.signal);
       } catch (error) {
         if (isAbortError(error)) {
-          state = 'ready';
+          phase = 'ready';
           return;
         }
         throw error;
       }
 
-      const trialRecord = mapResultToRecord(result, index + 1, isPractice);
+      const trialRecord = mapResultToRecord(result, index + 1, planned);
       responses.push(trialRecord);
 
       onInteraction?.({
@@ -162,7 +197,8 @@
         timestamp: Date.now(),
         data: {
           trialNumber: index + 1,
-          isPractice,
+          isPractice: planned.isPractice,
+          taskType: planned.taskType,
           reactionTime: trialRecord.reactionTime,
           timeout: trialRecord.timeout,
         },
@@ -184,7 +220,7 @@
         : [],
     });
 
-    state = 'complete';
+    phase = 'complete';
 
     onInteraction?.({
       type: 'complete' as any,
@@ -196,7 +232,110 @@
     });
   }
 
-  function buildTrialConfig(trialNumber: number, isPractice: boolean): ReactionTrialConfig {
+  function buildTrialPlan(): PlannedTrial[] {
+    const taskType: ReactionTaskType = config.task?.type || 'standard';
+
+    if (taskType === 'n-back') {
+      return buildNBackPlan();
+    }
+
+    if (taskType === 'custom') {
+      const custom = buildCustomPlan();
+      if (custom.length > 0) {
+        return custom;
+      }
+    }
+
+    return buildStandardPlan();
+  }
+
+  function buildStandardPlan(): PlannedTrial[] {
+    const plan: PlannedTrial[] = [];
+    const practiceCount = usePractice ? practiceTrials : 0;
+    const total = practiceCount + testTrials;
+
+    for (let index = 0; index < total; index++) {
+      const isPractice = index < practiceCount;
+      plan.push({
+        trial: buildStandardTrialConfig(index + 1, isPractice),
+        isPractice,
+        taskType: 'standard',
+      });
+    }
+
+    return plan;
+  }
+
+  function buildNBackPlan(): PlannedTrial[] {
+    const nBack = config.task?.nBack;
+    const n = Math.max(1, nBack?.n || 2);
+    const sequenceLength = Math.max(3, nBack?.sequenceLength || testTrials || 20);
+    const targetRate = Math.min(1, Math.max(0, nBack?.targetRate ?? 0.3));
+    const stimulusSet = toNBackStimuli(nBack?.stimulusSet || ['A', 'B', 'C', 'D']);
+    const targetKey = nBack?.targetKey || validKeys[0] || 'j';
+    const nonTargetKey = nBack?.nonTargetKey || validKeys[1] || validKeys[0] || 'f';
+    const fixationMs = nBack?.fixationMs || 400;
+    const responseTimeoutMs = nBack?.responseTimeoutMs || 1200;
+
+    const practiceCount = usePractice ? practiceTrials : 0;
+    const practiceLength = Math.max(n + 2, practiceCount);
+
+    const practicePlan =
+      practiceCount > 0
+        ? createNBackTrials({
+            n,
+            sequenceLength: practiceLength,
+            targetRate,
+            stimulusSet,
+            validKeys,
+            targetKey,
+            nonTargetKey,
+            fixationMs,
+            responseTimeoutMs,
+            targetFPS: config.targetFPS || 120,
+            seed: `${question.id}:nback:practice`,
+          }).slice(0, practiceCount)
+        : [];
+
+    const mainPlan = createNBackTrials({
+      n,
+      sequenceLength,
+      targetRate,
+      stimulusSet,
+      validKeys,
+      targetKey,
+      nonTargetKey,
+      fixationMs,
+      responseTimeoutMs,
+      targetFPS: config.targetFPS || 120,
+      seed: `${question.id}:nback:test`,
+    });
+
+    return [
+      ...practicePlan.map((trial) => ({ trial, isPractice: true, taskType: 'n-back' as const })),
+      ...mainPlan.map((trial) => ({ trial, isPractice: false, taskType: 'n-back' as const })),
+    ];
+  }
+
+  function buildCustomPlan(): PlannedTrial[] {
+    const customTrials = config.task?.customTrials || [];
+    const plan: PlannedTrial[] = [];
+
+    customTrials.forEach((candidate, index) => {
+      const trial = normalizeCustomTrial(candidate, index + 1);
+      if (!trial) return;
+
+      plan.push({
+        trial,
+        isPractice: Boolean(candidate.isPractice),
+        taskType: 'custom',
+      });
+    });
+
+    return plan;
+  }
+
+  function buildStandardTrialConfig(trialNumber: number, isPractice: boolean): ReactionTrialConfig {
     const stimulusType = config.stimulus?.type || 'shape';
     const stimulusContent = config.stimulus?.content || 'circle';
 
@@ -243,17 +382,86 @@
     };
   }
 
+  function normalizeCustomTrial(
+    trial: Partial<ReactionTrialConfig> & {
+      stimulus?: ReactionStimulusConfig | string;
+    },
+    trialNumber: number
+  ): ReactionTrialConfig | null {
+    const stimulus = normalizeStimulusCandidate(trial.stimulus);
+    if (!stimulus) return null;
+
+    return {
+      id: trial.id || `${question.id}-custom-${trialNumber}`,
+      responseMode: trial.responseMode || 'keyboard',
+      validKeys: trial.validKeys || validKeys,
+      correctResponse: trial.correctResponse,
+      requireCorrect: trial.requireCorrect ?? config.response?.requireCorrect,
+      fixation: {
+        enabled: trial.fixation?.enabled ?? true,
+        type: trial.fixation?.type || config.stimulus?.fixation?.type || 'cross',
+        durationMs: trial.fixation?.durationMs ?? (config.stimulus?.fixation?.duration || 500),
+      },
+      preStimulusDelayMs: trial.preStimulusDelayMs,
+      stimulus,
+      stimulusDurationMs: trial.stimulusDurationMs,
+      responseTimeoutMs: trial.responseTimeoutMs ?? (config.response?.timeout || 2000),
+      interTrialIntervalMs: trial.interTrialIntervalMs ?? 300,
+      targetFPS: trial.targetFPS ?? (config.targetFPS || 120),
+      vsync: trial.vsync,
+      backgroundColor: trial.backgroundColor,
+      allowResponseDuringPreStimulus: trial.allowResponseDuringPreStimulus,
+    };
+  }
+
+  function normalizeStimulusCandidate(
+    stimulus?: ReactionStimulusConfig | string
+  ): ReactionStimulusConfig | null {
+    if (!stimulus) return null;
+    if (typeof stimulus === 'string') {
+      return {
+        kind: 'text',
+        text: stimulus,
+      };
+    }
+    if (!stimulus.kind) return null;
+    return stimulus;
+  }
+
+  function toNBackStimuli(stimulusSet: Array<string | ReactionStimulusConfig>): ReactionStimulusConfig[] {
+    const mapped = stimulusSet.map((stimulus) => {
+      if (typeof stimulus === 'string') {
+        return {
+          kind: 'text' as const,
+          text: stimulus,
+          fontPx: 72,
+        };
+      }
+      return stimulus;
+    });
+
+    return mapped.length
+      ? mapped
+      : [
+          { kind: 'text', text: 'A', fontPx: 72 },
+          { kind: 'text', text: 'B', fontPx: 72 },
+          { kind: 'text', text: 'C', fontPx: 72 },
+          { kind: 'text', text: 'D', fontPx: 72 },
+        ];
+  }
+
   function mapResultToRecord(
     result: ReactionTrialResult,
     trialNumber: number,
-    isPractice: boolean
+    planned: PlannedTrial
   ): TrialRecord {
     const key =
       result.response && typeof result.response.value === 'string' ? result.response.value : null;
 
     return {
       trialNumber,
-      isPractice,
+      isPractice: planned.isPractice,
+      taskType: planned.taskType,
       key,
       reactionTime: result.response?.reactionTimeMs ?? null,
       isCorrect: result.isCorrect,
@@ -268,7 +476,7 @@
   }
 
   async function showTrialFeedback(trial: TrialRecord): Promise<void> {
-    state = 'feedback';
+    phase = 'feedback';
 
     if (trial.timeout) {
       feedbackText = 'Too slow';
@@ -282,7 +490,7 @@
     }
 
     await delay(650);
-    state = 'running';
+    phase = 'running';
   }
 
   function computeResultValue(responses: TrialRecord[]): ReactionTimeValue {
@@ -312,8 +520,9 @@
 
   function resetTask() {
     abortController?.abort();
-    state = 'ready';
+    phase = 'ready';
     currentTrial = 0;
+    totalTrials = 0;
   }
 
   function delay(ms: number): Promise<void> {
@@ -329,7 +538,7 @@
   <div class="reaction-container">
     <canvas bind:this={canvas} class="reaction-canvas"></canvas>
 
-    {#if state === 'ready'}
+    {#if phase === 'ready'}
       <div class="overlay-instructions">
         <h3>Reaction Time Task</h3>
         <p>{config.prompt || 'Respond as quickly as possible when the stimulus appears.'}</p>
@@ -338,19 +547,19 @@
       </div>
     {/if}
 
-    {#if state === 'running'}
+    {#if phase === 'running'}
       <div class="status-overlay">
-        <p>Trial {currentTrial} / {usePractice ? practiceTrials + testTrials : testTrials}</p>
+        <p>Trial {currentTrial} / {totalTrials}</p>
       </div>
     {/if}
 
-    {#if state === 'feedback'}
+    {#if phase === 'feedback'}
       <div class="status-overlay">
         <p class="feedback" style="color: {feedbackColor}">{feedbackText}</p>
       </div>
     {/if}
 
-    {#if state === 'complete'}
+    {#if phase === 'complete'}
       <div class="overlay-instructions">
         <h3>Complete</h3>
         {#if value?.averageRT !== null}

@@ -227,7 +227,7 @@ class DesignerStore {
             created: draft.created.toISOString(),
             modified: draft.modified.toISOString(),
           },
-          settings: draft.settings,
+          settings: draft.settings as Record<string, unknown>,
         });
         createdId = persisted.id;
       } catch (error) {

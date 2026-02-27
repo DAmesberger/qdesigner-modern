@@ -17,6 +17,7 @@
 
   let query = $state('');
   let selectedIndex = $state(0);
+  let searchInput = $state<HTMLInputElement | undefined>();
 
   const commands = $derived<CommandItem[]>([
     {
@@ -110,6 +111,7 @@
     }
 
     selectedIndex = 0;
+    queueMicrotask(() => searchInput?.focus());
   });
 
   function closePalette() {
@@ -168,9 +170,9 @@
     <div class="relative mx-auto mt-20 w-[min(680px,92vw)] rounded-xl border bg-background shadow-2xl">
       <div class="border-b px-4 py-3">
         <input
+          bind:this={searchInput}
           type="text"
           bind:value={query}
-          autofocus
           data-testid="command-search"
           placeholder="Search commands..."
           class="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"

@@ -20,6 +20,8 @@ export const load: PageLoad = async ({ params, parent, url }) => {
   let questionnaire = null;
   const questionnaireId = params.questionnaireId;
   const isOnline = offlineData.isOnline();
+  const resolveProjectOrganizationId = (input: any): string | null =>
+    parentData.organizationId || input?.organizationId || input?.organization_id || null;
 
   // Try to load project data
   // Use mock data for test projects
@@ -28,9 +30,9 @@ export const load: PageLoad = async ({ params, parent, url }) => {
       id: 'test-project-1',
       name: 'Test Project',
       description: 'Test project for media rendering',
-      organization_id: parentData.organizationId || 'test-org',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      organizationId: parentData.organizationId || 'test-org',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   } else if (isOnline) {
     try {
@@ -66,10 +68,10 @@ export const load: PageLoad = async ({ params, parent, url }) => {
         id: questionnaireId,
         name: `Test Questionnaire ${questionnaireId}`,
         description: 'Test questionnaire for media rendering',
-        project_id: params.projectId,
-        organizationId: parentData.organizationId || project.organization_id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        projectId: params.projectId,
+        organizationId: resolveProjectOrganizationId(project),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         definition: {
           pages: [],
           questions: [],
@@ -93,7 +95,7 @@ export const load: PageLoad = async ({ params, parent, url }) => {
             ...networkQuestionnaire,
             definition,
             content: definition, // Also provide as content for compatibility
-            organizationId: parentData.organizationId || project.organization_id
+            organizationId: resolveProjectOrganizationId(project),
           };
           // Cache for offline use
           await offlineData.cacheQuestionnaire(questionnaire);
@@ -114,7 +116,7 @@ export const load: PageLoad = async ({ params, parent, url }) => {
       }
       questionnaire = {
         ...cachedQuestionnaire,
-        organizationId: parentData.organizationId || project.organization_id
+        organizationId: resolveProjectOrganizationId(project),
       };
     }
   } else if (questionnaireId === 'new') {
@@ -127,7 +129,7 @@ export const load: PageLoad = async ({ params, parent, url }) => {
       name,
       description,
       projectId: params.projectId,
-      organizationId: parentData.organizationId || project.organization_id,
+      organizationId: resolveProjectOrganizationId(project),
       isNew: true
     };
   }
@@ -135,7 +137,7 @@ export const load: PageLoad = async ({ params, parent, url }) => {
   // Save session context for offline use
   await offlineData.saveSessionData('currentProject', {
     projectId: params.projectId,
-    organizationId: parentData.organizationId || project.organization_id
+    organizationId: resolveProjectOrganizationId(project),
   });
 
   return {

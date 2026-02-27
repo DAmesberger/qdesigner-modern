@@ -17,12 +17,10 @@
     class: className = '',
   }: Props = $props();
 
-  let internalValue = $state(value ?? config.min);
+  let internalValue = $state(0);
 
   $effect(() => {
-    if (value !== undefined) {
-      internalValue = value;
-    }
+    internalValue = value ?? config.min;
   });
 
   function handleChange(newValue: number) {

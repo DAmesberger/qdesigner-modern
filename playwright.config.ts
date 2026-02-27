@@ -12,6 +12,7 @@ export default defineConfig({
   reporter: [['html', { outputFolder: 'playwright-report', open: 'never' }]],
   use: {
     baseURL: process.env.VITE_APP_URL || 'http://localhost:5173',
+    testIdAttribute: 'data-testid',
     trace: 'on-first-retry',
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',

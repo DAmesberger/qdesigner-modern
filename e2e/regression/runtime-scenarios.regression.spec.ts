@@ -117,4 +117,30 @@ test.describe('@regression focused runtime scenarios', () => {
 
     await assertNoRuntimeErrors(page);
   });
+
+  test('n-back task runs with task metadata and expected trial count', async ({ page }) => {
+    const fixture = getRuntimeScenarioFixture('n-back');
+
+    await startRuntimeFixture(page, fixture);
+    const state = await waitForCompletion(page);
+
+    if (!fixture.expectedReaction) {
+      throw new Error('Missing n-back expectation configuration');
+    }
+
+    const response = state.responses.find(
+      (entry) => entry.questionId === fixture.expectedReaction?.questionId
+    );
+
+    expect(response).toBeTruthy();
+    const payload = response?.value as {
+      responses?: Array<{ taskType?: string }>;
+    };
+    expect(payload?.responses?.length).toBeGreaterThanOrEqual(fixture.expectedReaction.minTrials);
+
+    const taskTypes = (payload?.responses || []).map((trial) => trial.taskType);
+    expect(taskTypes.every((taskType) => taskType === fixture.expectedReaction?.taskType)).toBe(true);
+
+    await assertNoRuntimeErrors(page);
+  });
 });

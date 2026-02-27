@@ -136,7 +136,7 @@
     // Generate a simple avatar based on user ID
     const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500', 'bg-yellow-500'];
     const hash = user.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
+    return colors[hash % colors.length] ?? 'bg-gray-500';
   }
 
   function getUserInitials(name: string): string {

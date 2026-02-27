@@ -1,6 +1,7 @@
 import {
   createAutoAdvanceQuestion,
   createChartFeedbackQuestion,
+  createNBackReactionQuestion,
   createSingleChoiceQuestion,
   pageWithQuestions,
   pageWithRandomizedBlock,
@@ -13,7 +14,8 @@ export type RuntimeScenarioName =
   | 'randomization'
   | 'programmability'
   | 'answer-options'
-  | 'chart-feedback';
+  | 'chart-feedback'
+  | 'n-back';
 
 export interface RuntimeScenarioFixture {
   name: RuntimeScenarioName;
@@ -37,6 +39,11 @@ export interface RuntimeScenarioFixture {
   expectedFixedPositions?: {
     firstQuestionId: string;
     lastQuestionId: string;
+  };
+  expectedReaction?: {
+    questionId: string;
+    taskType: 'n-back' | 'standard' | 'custom';
+    minTrials: number;
   };
 }
 
@@ -216,8 +223,8 @@ function buildChartFeedbackFixture(): RuntimeScenarioFixture {
         id: 'q_chart_input',
         text: 'Pick A or B to trigger instant feedback.',
         options: [
-          { value: 'alpha', label: 'Alpha', key: 'a' },
-          { value: 'beta', label: 'Beta', key: 'b' },
+          { value: 1, label: 'Alpha', key: 'a' },
+          { value: 2, label: 'Beta', key: 'b' },
         ],
       })
     )
@@ -227,6 +234,7 @@ function buildChartFeedbackFixture(): RuntimeScenarioFixture {
         title: 'Instant Feedback',
         description: 'Feedback should appear right after the answer.',
         conditionFormula: 'q_chart_input_value != null',
+        currentVariable: 'q_chart_input_value',
       })
     );
 
@@ -237,11 +245,43 @@ function buildChartFeedbackFixture(): RuntimeScenarioFixture {
     keySequence: ['a'],
     expectedResponse: {
       questionId: 'q_chart_input',
-      value: 'alpha',
+      value: 1,
     },
     expectedImmediateFollowUp: {
       firstQuestionId: 'q_chart_input',
       secondQuestionId: 'q_chart_feedback',
+    },
+  };
+}
+
+function buildNBackFixture(): RuntimeScenarioFixture {
+  const builder = new QuestionnaireBuilder('N-Back Fixture', {
+    id: 'fixture-n-back',
+    randomizationSeed: 'seed-n-back',
+  });
+
+  builder.addPage(pageWithQuestions('p1', ['q_nback'])).addQuestion(
+    createNBackReactionQuestion({
+      id: 'q_nback',
+      text: '2-back task',
+      n: 2,
+      sequenceLength: 8,
+      targetRate: 0.35,
+      fixationMs: 80,
+      responseTimeoutMs: 120,
+    })
+  );
+
+  return {
+    name: 'n-back',
+    questionnaire: builder.build(),
+    expectedPresented: {
+      include: ['q_nback'],
+    },
+    expectedReaction: {
+      questionId: 'q_nback',
+      taskType: 'n-back',
+      minTrials: 8,
     },
   };
 }
@@ -252,6 +292,7 @@ export const runtimeScenarioFixtures: Record<RuntimeScenarioName, RuntimeScenari
   programmability: buildProgrammabilityFixture(),
   'answer-options': buildAnswerOptionsFixture(),
   'chart-feedback': buildChartFeedbackFixture(),
+  'n-back': buildNBackFixture(),
 };
 
 export function getRuntimeScenarioFixture(name: RuntimeScenarioName): RuntimeScenarioFixture {

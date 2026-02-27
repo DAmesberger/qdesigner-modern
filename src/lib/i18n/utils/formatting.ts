@@ -221,7 +221,7 @@ export class LocaleFormatter {
     const { type = 'conjunction', style = 'long' } = options || {};
     
     if (items.length === 0) return '';
-    if (items.length === 1) return items[0];
+    if (items.length === 1) return items[0] ?? '';
     
     // Check for modern ListFormat support
     if ('ListFormat' in Intl) {

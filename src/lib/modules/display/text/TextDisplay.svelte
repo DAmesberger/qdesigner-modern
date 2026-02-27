@@ -146,7 +146,7 @@
   });
 </script>
 
-<BaseInstruction {instruction} {mode} {onContinue} {onInteraction}>
+<BaseInstruction {instruction} {mode} {onInteraction}>
   <div class="text-display-content" style={contentStyle()}>
     {#if instruction.config.markdown}
       {@html processedContent}

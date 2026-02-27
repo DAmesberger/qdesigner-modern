@@ -80,7 +80,7 @@
       console.log('[BaseAnalytics] variables object:', variables);
 
       // Get data for each variable
-      const variableData = analytics.dataSource.variables.map((varId) => {
+      const variableData = analytics.dataSource.variables.map((varId: string) => {
         const value = variables[varId];
         console.log(`[BaseAnalytics] Mapping variable ${varId}, value: ${value}`);
         return {
@@ -160,8 +160,10 @@
   }
 
   // Base classes for consistent styling
-  const baseClasses = `analytics-block analytics-${analytics.type} mode-${mode}`;
-  const containerClasses = $derived(`${baseClasses} ${className} ${!isVisible ? 'hidden' : ''}`);
+  const containerClasses = $derived.by(() => {
+    const baseClasses = `analytics-block analytics-${analytics.type} mode-${mode}`;
+    return `${baseClasses} ${className} ${!isVisible ? 'hidden' : ''}`;
+  });
 </script>
 
 {#if isVisible || mode === 'edit'}

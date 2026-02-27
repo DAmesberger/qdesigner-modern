@@ -14,7 +14,7 @@ test.describe('@smoke questionnaire creation and preview fillout', () => {
     await projectPage.createQuestionnaire(name, 'Created by smoke e2e');
 
     await designerPage.expectLoaded();
-    await expect(page.locator('[data-testid="designer-header"]')).toContainText(name);
+    await expect(page.getByTestId('designer-header')).toContainText(name);
 
     await designerPage.openPreview();
     await expect(designerPage.previewModal).toBeVisible();
@@ -24,11 +24,11 @@ test.describe('@smoke questionnaire creation and preview fillout', () => {
   test('runtime fillout harness starts successfully', async ({ page }) => {
     await page.goto('/test-runtime');
 
-    const startButton = page.getByRole('button', { name: 'Start Test' });
+    const startButton = page.getByTestId('test-runtime-start-button');
     await expect(startButton).toBeVisible();
     await startButton.click();
 
     await expect(startButton).toBeHidden({ timeout: 30000 });
-    await expect(page.locator('canvas')).toBeVisible();
+    await expect(page.getByTestId('test-runtime-canvas')).toBeVisible();
   });
 });

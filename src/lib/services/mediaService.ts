@@ -6,13 +6,20 @@ import type {
   MediaFilter,
   MediaReference
 } from '$lib/shared/types/media';
-import { validateMediaFile, MIME_TYPE_EXTENSIONS } from '$lib/shared/types/media';
+import { validateMediaFile } from '$lib/shared/types/media';
 import type { MediaAsset as ApiMediaAsset } from '$lib/types/api';
 
 /**
  * Transform API media asset to local interface
  */
 function transformMediaAsset(apiAsset: ApiMediaAsset): MediaAsset {
+  const accessLevel =
+    apiAsset.accessLevel === 'private' ||
+    apiAsset.accessLevel === 'organization' ||
+    apiAsset.accessLevel === 'public'
+      ? apiAsset.accessLevel
+      : 'organization';
+
   return {
     id: apiAsset.id,
     organizationId: apiAsset.organizationId,
@@ -22,13 +29,13 @@ function transformMediaAsset(apiAsset: ApiMediaAsset): MediaAsset {
     mimeType: apiAsset.mimeType,
     sizeBytes: apiAsset.sizeBytes,
     storagePath: apiAsset.storagePath,
-    width: apiAsset.width,
-    height: apiAsset.height,
-    durationSeconds: apiAsset.durationSeconds,
-    thumbnailPath: apiAsset.thumbnailPath,
+    width: apiAsset.width ?? undefined,
+    height: apiAsset.height ?? undefined,
+    durationSeconds: apiAsset.durationSeconds ?? undefined,
+    thumbnailPath: apiAsset.thumbnailPath ?? undefined,
     metadata: apiAsset.metadata,
-    isPublic: apiAsset.accessLevel === 'public',
-    accessLevel: apiAsset.accessLevel,
+    isPublic: accessLevel === 'public',
+    accessLevel,
     createdAt: new Date(apiAsset.createdAt),
     updatedAt: new Date(apiAsset.updatedAt)
   };
@@ -36,6 +43,15 @@ function transformMediaAsset(apiAsset: ApiMediaAsset): MediaAsset {
 
 export class MediaService {
   private uploadAbortController: AbortController | null = null;
+  private currentUserId: string | null = null;
+
+  setUserId(userId: string): void {
+    this.currentUserId = userId;
+  }
+
+  async setupBucket(): Promise<void> {
+    // Buckets are managed server-side. Keep for backwards-compatible callers.
+  }
 
   /**
    * Upload a media file with progress tracking
@@ -90,7 +106,7 @@ export class MediaService {
   /**
    * Get multiple URLs at once
    */
-  async getSignedUrls(mediaIds: string[]): Promise<Record<string, string>> {
+  async getSignedUrls(mediaIds: string[], _expiresInSeconds?: number): Promise<Record<string, string>> {
     const urls: Record<string, string> = {};
 
     await Promise.all(

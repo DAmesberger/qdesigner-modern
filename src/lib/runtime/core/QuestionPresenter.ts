@@ -12,6 +12,11 @@ import { AudioRenderer } from '../renderers/AudioRenderer';
 import { HTMLRenderer } from '../renderers/HTMLRenderer';
 import { CompositeRenderer } from '../renderers/CompositeRenderer';
 import type { IQuestionRenderer, RendererConfig } from '../renderers/QuestionRenderer';
+import {
+  normalizeStatisticalFeedbackConfig,
+  resolveStatisticalFeedbackSeries,
+  type StatisticalFeedbackConfig,
+} from '$lib/modules/display/statistical-feedback/engine';
 
 /**
  * Handles presenting questions using the WebGL renderer
@@ -420,8 +425,10 @@ export class QuestionPresenter {
     analytics: any,
     variableEngine: VariableEngine
   ): Promise<IQuestionRenderer | null> {
-    // For analytics, we'll show a placeholder for now
-    // In a real implementation, this would create appropriate chart renderers
+    if (analytics.type === 'statistical-feedback') {
+      return this.buildStatisticalFeedbackRenderer(analytics, variableEngine);
+    }
+
     const renderers: IQuestionRenderer[] = [];
 
     // Add title
@@ -467,6 +474,132 @@ export class QuestionPresenter {
       id: analytics.id,
       children: renderers,
     });
+  }
+
+  private async buildStatisticalFeedbackRenderer(
+    analytics: any,
+    variableEngine: VariableEngine
+  ): Promise<IQuestionRenderer | null> {
+    const config = normalizeStatisticalFeedbackConfig(analytics);
+    const variables = variableEngine.getAllVariables();
+
+    let series:
+      | {
+          mode: string;
+          metric: string;
+          points: Array<{ label: string; value: number | null }>;
+          summary?: Record<string, number | null>;
+        }
+      | null = null;
+    let errorMessage: string | null = null;
+
+    try {
+      series = await resolveStatisticalFeedbackSeries(config, variables);
+    } catch (error) {
+      errorMessage =
+        error instanceof Error ? error.message : 'Unable to load statistical feedback data';
+    }
+
+    const html = this.renderStatisticalFeedbackHtml(config, series, errorMessage);
+
+    return new HTMLRenderer({
+      id: `${analytics.id}_stats_html`,
+      html,
+      width: 1024,
+      height: 640,
+      css: 'font-size: 18px;',
+    });
+  }
+
+  private renderStatisticalFeedbackHtml(
+    config: StatisticalFeedbackConfig,
+    series: {
+      mode: string;
+      metric: string;
+      points: Array<{ label: string; value: number | null }>;
+      summary?: Record<string, number | null>;
+    } | null,
+    errorMessage: string | null
+  ): string {
+    const points = series?.points || [];
+    const numericValues = points
+      .map((point) => point.value)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    const maxMagnitude =
+      numericValues.length > 0
+        ? Math.max(1, ...numericValues.map((value) => Math.abs(value)))
+        : 1;
+
+    const rows = points
+      .map((point) => {
+        const value = point.value;
+        const label = this.escapeHtml(point.label);
+        const displayValue =
+          typeof value === 'number' && Number.isFinite(value) ? value.toFixed(3) : 'N/A';
+        const width =
+          typeof value === 'number' && Number.isFinite(value)
+            ? Math.min(100, (Math.abs(value) / maxMagnitude) * 100)
+            : 0;
+        const barColor =
+          typeof value === 'number' && Number.isFinite(value) && value < 0
+            ? 'linear-gradient(90deg, #ef4444 0%, #f97316 100%)'
+            : 'linear-gradient(90deg, #2563eb 0%, #0ea5e9 100%)';
+
+        return `
+          <div style=\"display:grid;grid-template-columns:minmax(160px,1fr) 1fr auto;gap:12px;align-items:center;margin:8px 0;\">
+            <span style=\"color:#334155;font-size:14px;\">${label}</span>
+            <span style=\"display:block;height:10px;border-radius:999px;background:#e2e8f0;overflow:hidden;\">
+              <span style=\"display:block;height:100%;width:${width}%;background:${barColor};\"></span>
+            </span>
+            <span style=\"font-family:ui-monospace,Menlo,monospace;color:#0f172a;font-size:14px;\">${displayValue}</span>
+          </div>
+        `;
+      })
+      .join('');
+
+    const summary = Object.entries(series?.summary || {})
+      .map(([key, value]) => {
+        const displayValue =
+          typeof value === 'number' && Number.isFinite(value) ? value.toFixed(3) : 'N/A';
+        return `
+          <div style=\"background:#eef2ff;border-radius:8px;padding:8px 10px;\">
+            <div style=\"font-size:12px;color:#475569;\">${this.escapeHtml(key)}</div>
+            <div style=\"font-size:14px;font-weight:700;color:#0f172a;\">${displayValue}</div>
+          </div>
+        `;
+      })
+      .join('');
+
+    const safeTitle = this.escapeHtml(config.title || 'Statistical Feedback');
+    const safeSubtitle = this.escapeHtml(config.subtitle || '');
+    const safeMeta = this.escapeHtml(`Mode: ${config.sourceMode} | Metric: ${config.metric}`);
+    const safeError = errorMessage ? this.escapeHtml(errorMessage) : '';
+
+    return `
+      <div style=\"display:grid;gap:12px;padding:20px;border-radius:16px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border:1px solid #dbe3ed;color:#0f172a;\">
+        <div>
+          <div style=\"font-size:20px;font-weight:700;\">${safeTitle}</div>
+          ${safeSubtitle ? `<div style=\"margin-top:4px;color:#475569;font-size:14px;\">${safeSubtitle}</div>` : ''}
+          <div style=\"margin-top:4px;color:#64748b;font-size:12px;font-family:ui-monospace,Menlo,monospace;\">${safeMeta}</div>
+        </div>
+        ${
+          safeError
+            ? `<div style=\"padding:10px 12px;border-radius:10px;background:#fee2e2;color:#991b1b;font-size:13px;\">${safeError}</div>`
+            : ''
+        }
+        ${rows || '<div style=\"color:#64748b;font-size:14px;\">No statistical data available.</div>'}
+        ${config.showSummary && summary ? `<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;\">${summary}</div>` : ''}
+      </div>
+    `;
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   /**

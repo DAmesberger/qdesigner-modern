@@ -11,6 +11,8 @@ export interface NBackPresetConfig {
   fixationMs?: number;
   responseTimeoutMs?: number;
   targetFPS?: number;
+  seed?: string;
+  rng?: () => number;
 }
 
 export interface NBackTrialConfig extends ReactionTrialConfig {
@@ -35,13 +37,14 @@ export function createNBackTrials(config: NBackPresetConfig): NBackTrialConfig[]
   const targetRate = Math.max(0, Math.min(1, config.targetRate ?? 0.3));
   const trialCount = config.sequenceLength;
   const targetCount = Math.round((trialCount - config.n) * targetRate);
-  const targetPositions = chooseTargetPositions(config.n, trialCount, targetCount);
+  const rng = config.rng || createSeededRng(config.seed || 'n-back-default');
+  const targetPositions = chooseTargetPositions(config.n, trialCount, targetCount, rng);
 
   const sequence: ReactionStimulusConfig[] = [];
 
   for (let i = 0; i < trialCount; i++) {
     if (i < config.n) {
-      sequence.push(sampleStimulus(config.stimulusSet));
+      sequence.push(sampleStimulus(config.stimulusSet, rng));
       continue;
     }
 
@@ -51,7 +54,7 @@ export function createNBackTrials(config: NBackPresetConfig): NBackTrialConfig[]
     }
 
     const previousTarget = sequence[i - config.n]!;
-    sequence.push(sampleStimulus(config.stimulusSet, previousTarget));
+    sequence.push(sampleStimulus(config.stimulusSet, rng, previousTarget));
   }
 
   const validKeys = config.validKeys || ['f', 'j'];
@@ -86,30 +89,32 @@ export function createNBackTrials(config: NBackPresetConfig): NBackTrialConfig[]
 function chooseTargetPositions(
   n: number,
   sequenceLength: number,
-  targetCount: number
+  targetCount: number,
+  rng: () => number
 ): Set<number> {
   const candidatePositions: number[] = [];
   for (let index = n; index < sequenceLength; index++) {
     candidatePositions.push(index);
   }
 
-  shuffle(candidatePositions);
+  shuffle(candidatePositions, rng);
   return new Set(candidatePositions.slice(0, targetCount));
 }
 
 function sampleStimulus(
   stimulusSet: ReactionStimulusConfig[],
+  rng: () => number,
   notEqualTo?: ReactionStimulusConfig
 ): ReactionStimulusConfig {
   if (stimulusSet.length === 1) {
     return structuredClone(stimulusSet[0]!);
   }
 
-  let selected = stimulusSet[Math.floor(Math.random() * stimulusSet.length)]!;
+  let selected = stimulusSet[Math.floor(rng() * stimulusSet.length)]!;
   if (notEqualTo) {
     let guard = 0;
     while (guard < 10 && stimuliEqual(selected, notEqualTo)) {
-      selected = stimulusSet[Math.floor(Math.random() * stimulusSet.length)]!;
+      selected = stimulusSet[Math.floor(rng() * stimulusSet.length)]!;
       guard++;
     }
   }
@@ -121,11 +126,41 @@ function stimuliEqual(a: ReactionStimulusConfig, b: ReactionStimulusConfig): boo
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-function shuffle<T>(array: T[]): void {
+function shuffle<T>(array: T[], rng: () => number): void {
   for (let index = array.length - 1; index > 0; index--) {
-    const randomIndex = Math.floor(Math.random() * (index + 1));
+    const randomIndex = Math.floor(rng() * (index + 1));
     const temp = array[index];
     array[index] = array[randomIndex]!;
     array[randomIndex] = temp!;
   }
+}
+
+function createSeededRng(seed: string): () => number {
+  const hash = xmur3(seed);
+  return mulberry32(hash());
+}
+
+function xmur3(input: string): () => number {
+  let h = 1779033703 ^ input.length;
+  for (let index = 0; index < input.length; index++) {
+    h = Math.imul(h ^ input.charCodeAt(index), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return h >>> 0;
+  };
+}
+
+function mulberry32(seed: number): () => number {
+  let t = seed;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
 }

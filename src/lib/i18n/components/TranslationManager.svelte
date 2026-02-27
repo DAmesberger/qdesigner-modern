@@ -393,17 +393,21 @@
         let current = exportData[lang][namespace];
 
         for (let i = 0; i < keys.length - 1; i++) {
-          if (!(current as any)[keys[i]]) {
-            (current as any)[keys[i]] = {};
+          const segment = keys[i];
+          if (!segment) continue;
+          if (!(current as any)[segment]) {
+            (current as any)[segment] = {};
           }
-          current = (current as any)[keys[i]];
+          current = (current as any)[segment];
         }
 
-        (current as any)[keys[keys.length - 1]] = translation;
+        const leaf = keys[keys.length - 1];
+        if (!leaf) continue;
+        (current as any)[leaf] = translation;
 
         // Add metadata if requested
         if (options.includeMetadata) {
-          current[`${keys[keys.length - 1]}_meta`] = {
+          current[`${leaf}_meta`] = {
             lastModified: entry.lastModified,
             modifiedBy: entry.modifiedBy,
             missing: entry.missing,

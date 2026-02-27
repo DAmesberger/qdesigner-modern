@@ -25,8 +25,9 @@
     // Get organization
     try {
       const orgs = await api.organizations.list();
-      if (orgs.length > 0) {
-        organizationId = orgs[0].id;
+      const firstOrg = orgs[0];
+      if (firstOrg) {
+        organizationId = firstOrg.id;
         addLog(`Organization ID: ${organizationId}`);
       } else {
         addLog('No organizations found');

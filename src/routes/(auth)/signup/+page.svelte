@@ -76,11 +76,7 @@
       }
 
       if (signedUpUser) {
-        // Send verification code without userId for now
-        const verificationResult = await sendVerificationCode({
-          email,
-          userId: undefined, // Will be null in database
-        });
+        const verificationResult = await sendVerificationCode({ email });
 
         if (verificationResult.success) {
           showVerification = true;

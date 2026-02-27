@@ -31,7 +31,21 @@ pnpm test:e2e:all             # all configured projects
 
 ## Selector Contract
 
-Use `data-testid` selectors for stability. Core selectors used by smoke/regression include:
+Use `data-testid` selectors for stability. Active specs should prefer `page.getByTestId(...)` over CSS selectors.
+
+Selector priority:
+
+1. `getByTestId` for deterministic UI hooks.
+2. `getByRole` / `getByLabel` only when asserting accessibility semantics.
+3. Avoid placeholder/text/class selectors for interactions in smoke/regression/fullstack suites.
+
+This is lint-enforced for active suites (`smoke`, `regression`, `fullstack`, `page-objects`) via:
+
+```bash
+pnpm lint:e2e:selectors
+```
+
+Core selectors used by smoke/regression include:
 
 - `create-questionnaire-button`
 - `questionnaire-name-input`
