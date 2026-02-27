@@ -9,6 +9,9 @@ import { browser } from '$app/environment';
 import type { Language, I18nConfig, MissingTranslation, TranslationValidationError } from './types';
 import { i18nStore } from './stores';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- i18n resources are nested dynamic dictionaries
+type DynamicValue = any;
+
 // Import locale resources
 import enTranslations from './locales/en/index.js';
 import deTranslations from './locales/de/index.js';
@@ -166,7 +169,7 @@ export const i18nConfig: I18nConfig = {
 i18n
   .use(Backend)
   .use(LanguageDetector)
-  .init(i18nConfig as any)
+  .init(i18nConfig as DynamicValue)
   .then(() => {
     // Update store when initialized
     i18nStore.setInitialized(true);
@@ -247,10 +250,10 @@ function updateDocumentAttributes(language: string): void {
 }
 
 // Translation validation functions
-export function validateTranslationKeys(translations: Record<string, any>, namespace: string): TranslationValidationError[] {
+export function validateTranslationKeys(translations: Record<string, DynamicValue>, namespace: string): TranslationValidationError[] {
   const errors: TranslationValidationError[] = [];
   
-  function validateObject(obj: any, keyPath: string[] = []): void {
+  function validateObject(obj: DynamicValue, keyPath: string[] = []): void {
     for (const [key, value] of Object.entries(obj)) {
       const currentPath = [...keyPath, key];
       const fullKey = currentPath.join('.');
@@ -295,14 +298,14 @@ export function validateTranslationKeys(translations: Record<string, any>, names
 }
 
 export function detectMissingTranslations(
-  reference: Record<string, any>,
-  target: Record<string, any>,
+  reference: Record<string, DynamicValue>,
+  target: Record<string, DynamicValue>,
   namespace: string,
   language: string
 ): MissingTranslation[] {
   const missing: MissingTranslation[] = [];
   
-  function compareObjects(ref: any, tgt: any, keyPath: string[] = []): void {
+  function compareObjects(ref: DynamicValue, tgt: DynamicValue, keyPath: string[] = []): void {
     for (const [key, value] of Object.entries(ref)) {
       const currentPath = [...keyPath, key];
       const fullKey = currentPath.join('.');

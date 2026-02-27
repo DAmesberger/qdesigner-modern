@@ -7,20 +7,6 @@ export const ssr = false;
 export const load: PageLoad = async ({ params, parent }) => {
   const { organizationId } = await parent();
 
-  if (params.projectId === 'test-project-1') {
-    return {
-      project: {
-        id: 'test-project-1',
-        organization_id: organizationId || 'test-org',
-        name: 'Test Project',
-        code: 'TEST-001',
-        description: 'Mock project for designer E2E coverage',
-      },
-      questionnaires: [],
-      organizationId,
-    };
-  }
-
   if (!organizationId) {
     throw error(403, 'No organization found');
   }

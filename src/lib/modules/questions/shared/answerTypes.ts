@@ -2,6 +2,9 @@
 
 import type { AnswerType } from '$lib/modules/types';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- answer utilities aggregate heterogeneous values
+type DynamicValue = any;
+
 // Standard answer types
 export const AnswerTypes = {
   // Single value types
@@ -69,7 +72,7 @@ export const AnswerTypes = {
     schema: {
       selectedIds: 'string[]',
       selectedLabels: 'string[]',
-      selectedValues: 'any[]'
+      selectedValues: 'DynamicValue[]'
     }
   } as AnswerType,
   
@@ -114,7 +117,7 @@ export const AnswerTypes = {
     aggregations: ['row_means', 'column_means', 'correlation_matrix'],
     transformations: ['flatten', 'pivot', 'aggregate_by_row'],
     schema: {
-      responses: 'Record<string, Record<string, any>>'
+      responses: 'Record<string, Record<string, DynamicValue>>'
     }
   } as AnswerType,
   
@@ -174,7 +177,7 @@ export function getTransformationFunctions(answerType: AnswerType): string[] {
   return answerType.transformations || [];
 }
 
-export function validateAnswerData(data: any, answerType: AnswerType): boolean {
+export function validateAnswerData(data: DynamicValue, answerType: AnswerType): boolean {
   // Basic type checking based on dataType
   switch (answerType.dataType) {
     case 'string':
@@ -220,8 +223,8 @@ export const Aggregations = {
       ? (sorted[mid] ?? 0)
       : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
   },
-  mode: (values: any[]) => {
-    const counts = new Map<any, number>();
+  mode: (values: DynamicValue[]) => {
+    const counts = new Map<DynamicValue, number>();
     values.forEach(v => counts.set(v, (counts.get(v) || 0) + 1));
     let maxCount = 0;
     let mode = null;
@@ -242,16 +245,16 @@ export const Aggregations = {
   },
   
   // Count aggregations
-  count: (values: any[]) => values.length,
-  unique: (values: any[]) => new Set(values).size,
-  percentage: (values: any[], target: any) => {
+  count: (values: DynamicValue[]) => values.length,
+  unique: (values: DynamicValue[]) => new Set(values).size,
+  percentage: (values: DynamicValue[], target: DynamicValue) => {
     const count = values.filter(v => v === target).length;
     return values.length ? (count / values.length) * 100 : 0;
   },
   
   // Distribution
-  distribution: (values: any[]) => {
-    const counts = new Map<any, number>();
+  distribution: (values: DynamicValue[]) => {
+    const counts = new Map<DynamicValue, number>();
     values.forEach(v => counts.set(v, (counts.get(v) || 0) + 1));
     const total = values.length;
     const dist: Record<string, { count: number; percentage: number }> = {};
@@ -280,9 +283,9 @@ export const Transformations = {
   normalize: (value: number, min: number, max: number) => (value - min) / (max - min),
   
   // Array transformations
-  flatten: (value: any[]) => value.flat(),
-  unique: (value: any[]) => [...new Set(value)],
-  sort: (value: any[]) => [...value].sort(),
+  flatten: (value: DynamicValue[]) => value.flat(),
+  unique: (value: DynamicValue[]) => [...new Set(value)],
+  sort: (value: DynamicValue[]) => [...value].sort(),
   
   // Boolean transformations
   invert: (value: boolean) => !value,

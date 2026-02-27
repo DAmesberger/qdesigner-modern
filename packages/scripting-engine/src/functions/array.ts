@@ -1,5 +1,8 @@
 import type { FormulaFunction } from '../types';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- array formulas accept heterogeneous values
+type DynamicValue = any;
+
 // Array Operation Functions
 export const arrayFunctions: FormulaFunction[] = [
   {
@@ -11,7 +14,7 @@ export const arrayFunctions: FormulaFunction[] = [
       { name: 'condition', type: 'function|string', description: 'Filter condition or expression' }
     ],
     returns: 'array',
-    implementation: (array: any[], condition: any) => {
+    implementation: (array: DynamicValue[], condition: DynamicValue) => {
       if (!Array.isArray(array)) return [];
       
       if (typeof condition === 'function') {
@@ -22,7 +25,7 @@ export const arrayFunctions: FormulaFunction[] = [
       if (typeof condition === 'string') {
         const operators = ['>=', '<=', '!=', '==', '>', '<', '='];
         let op = '';
-        let value: any = '';
+        let value: DynamicValue = '';
         
         for (const operator of operators) {
           if (condition.includes(operator)) {
@@ -71,7 +74,7 @@ export const arrayFunctions: FormulaFunction[] = [
       { name: 'transform', type: 'function|string', description: 'Transformation function or expression' }
     ],
     returns: 'array',
-    implementation: (array: any[], transform: any) => {
+    implementation: (array: DynamicValue[], transform: DynamicValue) => {
       if (!Array.isArray(array)) return [];
       
       if (typeof transform === 'function') {
@@ -82,7 +85,7 @@ export const arrayFunctions: FormulaFunction[] = [
       if (typeof transform === 'string') {
         const operators = ['+', '-', '*', '/', '^'];
         let op = '';
-        let value: any = '';
+        let value: DynamicValue = '';
         
         for (const operator of operators) {
           if (transform.includes(operator)) {
@@ -132,7 +135,7 @@ export const arrayFunctions: FormulaFunction[] = [
       { name: 'initial', type: 'any', description: 'Initial value', optional: true }
     ],
     returns: 'any',
-    implementation: (array: any[], operation: string, initial?: any) => {
+    implementation: (array: DynamicValue[], operation: string, initial?: DynamicValue) => {
       if (!Array.isArray(array)) return initial;
       
       switch (operation.toLowerCase()) {
@@ -182,7 +185,7 @@ export const arrayFunctions: FormulaFunction[] = [
       { name: 'order', type: 'string', description: 'Sort order: "asc" or "desc"', optional: true, default: 'asc' }
     ],
     returns: 'array',
-    implementation: (array: any[], order: string = 'asc') => {
+    implementation: (array: DynamicValue[], order: string = 'asc') => {
       if (!Array.isArray(array)) return [];
       
       const sorted = [...array].sort((a, b) => {
@@ -213,7 +216,7 @@ export const arrayFunctions: FormulaFunction[] = [
       { name: 'array', type: 'array', description: 'Array with potential duplicates' }
     ],
     returns: 'array',
-    implementation: (array: any[]) => {
+    implementation: (array: DynamicValue[]) => {
       if (!Array.isArray(array)) return [];
       return Array.from(new Set(array));
     },
@@ -232,10 +235,10 @@ export const arrayFunctions: FormulaFunction[] = [
       { name: 'depth', type: 'number', description: 'Depth to flatten', optional: true, default: 1 }
     ],
     returns: 'array',
-    implementation: (array: any[], depth: number = 1) => {
+    implementation: (array: DynamicValue[], depth: number = 1) => {
       if (!Array.isArray(array)) return [];
       
-      const flatten = (arr: any[], d: number): any[] => {
+      const flatten = (arr: DynamicValue[], d: number): DynamicValue[] => {
         if (d <= 0) return arr;
         
         return arr.reduce((flat, item) => {
@@ -263,7 +266,7 @@ export const arrayFunctions: FormulaFunction[] = [
       { name: 'property', type: 'string', description: 'Property to group by' }
     ],
     returns: 'object',
-    implementation: (array: any[], property: string) => {
+    implementation: (array: DynamicValue[], property: string) => {
       if (!Array.isArray(array)) return {};
       
       return array.reduce((groups, item) => {
@@ -275,7 +278,7 @@ export const arrayFunctions: FormulaFunction[] = [
           groups[key].push(item);
         }
         return groups;
-      }, {} as Record<string, any[]>);
+      }, {} as Record<string, DynamicValue[]>);
     },
     examples: [
       'GROUP_BY([{name: "Alice", age: 25}, {name: "Bob", age: 25}], "age")'
@@ -291,7 +294,7 @@ export const arrayFunctions: FormulaFunction[] = [
       { name: 'property', type: 'string', description: 'Property to extract' }
     ],
     returns: 'array',
-    implementation: (array: any[], property: string) => {
+    implementation: (array: DynamicValue[], property: string) => {
       if (!Array.isArray(array)) return [];
       
       return array.map(item => {
@@ -316,7 +319,7 @@ export const arrayFunctions: FormulaFunction[] = [
       { name: 'end', type: 'number', description: 'End index', optional: true }
     ],
     returns: 'array',
-    implementation: (array: any[], start: number, end?: number) => {
+    implementation: (array: DynamicValue[], start: number, end?: number) => {
       if (!Array.isArray(array)) return [];
       return array.slice(start, end);
     },
@@ -334,7 +337,7 @@ export const arrayFunctions: FormulaFunction[] = [
       { name: 'array', type: 'array', description: 'Array to reverse' }
     ],
     returns: 'array',
-    implementation: (array: any[]) => {
+    implementation: (array: DynamicValue[]) => {
       if (!Array.isArray(array)) return [];
       return [...array].reverse();
     },

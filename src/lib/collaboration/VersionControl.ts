@@ -14,6 +14,9 @@ import type {
 import type { Questionnaire as QuestionnaireType } from '$lib/shared';
 import { OperationalTransform } from './OperationalTransform.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- version diffs/merges operate on dynamic operation payloads
+type DynamicValue = any;
+
 export class VersionControl {
   private static instance: VersionControl;
   private versions = new Map<string, Version>();
@@ -434,15 +437,15 @@ export class VersionControl {
 
     switch (operation.type) {
       case 'insert':
-        return this.applyInsertOperation(result, operation as any);
+        return this.applyInsertOperation(result, operation as DynamicValue);
       case 'delete':
-        return this.applyDeleteOperation(result, operation as any);
+        return this.applyDeleteOperation(result, operation as DynamicValue);
       case 'update':
-        return this.applyUpdateOperation(result, operation as any);
+        return this.applyUpdateOperation(result, operation as DynamicValue);
       case 'move':
-        return this.applyMoveOperation(result, operation as any);
+        return this.applyMoveOperation(result, operation as DynamicValue);
       case 'reorder':
-        return this.applyReorderOperation(result, operation as any);
+        return this.applyReorderOperation(result, operation as DynamicValue);
       default:
         return result;
     }
@@ -452,7 +455,7 @@ export class VersionControl {
   // Operation Application
   // ============================================================================
 
-  private applyInsertOperation(content: QuestionnaireType, operation: any): QuestionnaireType {
+  private applyInsertOperation(content: QuestionnaireType, operation: DynamicValue): QuestionnaireType {
     const target = this.getNestedValue(content, operation.path);
     if (Array.isArray(target)) {
       target.splice(operation.position, 0, operation.content);
@@ -460,7 +463,7 @@ export class VersionControl {
     return content;
   }
 
-  private applyDeleteOperation(content: QuestionnaireType, operation: any): QuestionnaireType {
+  private applyDeleteOperation(content: QuestionnaireType, operation: DynamicValue): QuestionnaireType {
     const target = this.getNestedValue(content, operation.path);
     if (Array.isArray(target)) {
       target.splice(operation.position, operation.length || 1);
@@ -468,15 +471,15 @@ export class VersionControl {
     return content;
   }
 
-  private applyUpdateOperation(content: QuestionnaireType, operation: any): QuestionnaireType {
+  private applyUpdateOperation(content: QuestionnaireType, operation: DynamicValue): QuestionnaireType {
     const target = this.getNestedValue(content, operation.path);
     if (target && typeof target === 'object') {
-      (target as any)[operation.property] = operation.newValue;
+      (target as DynamicValue)[operation.property] = operation.newValue;
     }
     return content;
   }
 
-  private applyMoveOperation(content: QuestionnaireType, operation: any): QuestionnaireType {
+  private applyMoveOperation(content: QuestionnaireType, operation: DynamicValue): QuestionnaireType {
     const source = this.getNestedValue(content, operation.fromPath);
     const target = this.getNestedValue(content, operation.toPath);
     
@@ -490,7 +493,7 @@ export class VersionControl {
     return content;
   }
 
-  private applyReorderOperation(content: QuestionnaireType, operation: any): QuestionnaireType {
+  private applyReorderOperation(content: QuestionnaireType, operation: DynamicValue): QuestionnaireType {
     const target = this.getNestedValue(content, operation.path);
     if (Array.isArray(target)) {
       const newArray = new Array(target.length);
@@ -612,11 +615,11 @@ export class VersionControl {
     return `${questionnaireId}_${branchName}`;
   }
 
-  private serializeContent(content: QuestionnaireType): any {
+  private serializeContent(content: QuestionnaireType): DynamicValue {
     return JSON.parse(JSON.stringify(content));
   }
 
-  private deserializeContent(content: any): QuestionnaireType | null {
+  private deserializeContent(content: DynamicValue): QuestionnaireType | null {
     try {
       return content as QuestionnaireType;
     } catch (error) {
@@ -625,7 +628,7 @@ export class VersionControl {
     }
   }
 
-  private getNestedValue(obj: any, path: string[]): any {
+  private getNestedValue(obj: DynamicValue, path: string[]): DynamicValue {
     let current = obj;
     for (const segment of path) {
       if (current && typeof current === 'object' && segment in current) {

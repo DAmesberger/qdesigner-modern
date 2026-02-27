@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
   import {
     Plus,
     FileText,
@@ -9,10 +7,9 @@
     MoreVertical,
     Play,
     Edit,
-    Copy,
-    Archive,
   } from 'lucide-svelte';
   import { Modal } from '$lib/components/ui';
+  import { appPaths } from '$lib/routing/paths';
   import type { PageData } from './$types';
 
   interface Props {
@@ -29,7 +26,10 @@
 
     // Navigate to designer with new questionnaire context
     if (typeof window !== 'undefined') {
-      window.location.href = `/projects/${data.project.id}/designer/new?name=${encodeURIComponent(questionnaireName)}&description=${encodeURIComponent(questionnaireDescription)}`;
+      window.location.href = appPaths.projectDesignerNew(data.project.id, {
+        name: questionnaireName,
+        description: questionnaireDescription,
+      });
     }
   }
 
@@ -59,7 +59,7 @@
         <nav class="flex mb-4" aria-label="Breadcrumb">
           <ol class="flex items-center space-x-4">
             <li>
-              <a href="/projects" class="text-gray-500 hover:text-gray-700">Projects</a>
+              <a href={appPaths.projects()} class="text-gray-500 hover:text-gray-700">Projects</a>
             </li>
             <li class="flex items-center">
               <svg
@@ -156,7 +156,10 @@
                         <button
                           onclick={() => {
                             if (typeof window !== 'undefined') {
-                              window.location.href = `/projects/${data.project.id}/questionnaires/${questionnaire.id}/run`;
+                              window.location.href = appPaths.projectQuestionnaireRun(
+                                data.project.id,
+                                questionnaire.id
+                              );
                             }
                           }}
                           class="text-gray-600 hover:text-gray-900"
@@ -168,7 +171,10 @@
                       <button
                         onclick={() => {
                           if (typeof window !== 'undefined') {
-                            window.location.href = `/projects/${data.project.id}/designer/${questionnaire.id}`;
+                            window.location.href = appPaths.projectDesigner(
+                              data.project.id,
+                              questionnaire.id
+                            );
                           }
                         }}
                         class="text-gray-600 hover:text-gray-900"

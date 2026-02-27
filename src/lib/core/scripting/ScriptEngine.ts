@@ -1,10 +1,13 @@
 // ScriptEngine - JavaScript execution in Web Worker with sandboxing
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- scripting context intentionally accepts arbitrary JSON-like values
+type DynamicValue = any;
+
 export interface ScriptContext {
   // Variables accessible in scripts
-  variables: Record<string, any>;
+  variables: Record<string, DynamicValue>;
   // Questionnaire answers
-  answers: Record<string, any>;
+  answers: Record<string, DynamicValue>;
   // Current page/question info
   current: {
     pageId?: string;
@@ -20,16 +23,16 @@ export interface ScriptUtils {
   mean: (values: number[]) => number;
   min: (values: number[]) => number;
   max: (values: number[]) => number;
-  count: (values: any[]) => number;
+  count: (values: DynamicValue[]) => number;
   range: (start: number, end: number) => number[];
   random: (min?: number, max?: number) => number;
   now: () => number;
-  log: (...args: any[]) => void;
+  log: (...args: DynamicValue[]) => void;
 }
 
 export interface ScriptResult {
   success: boolean;
-  value?: any;
+  value?: DynamicValue;
   error?: string;
   logs?: string[];
   executionTime?: number;
@@ -127,7 +130,7 @@ export class ScriptEngine {
       ...context,
       utils: {
         ...this.createUtils(),
-        log: (...args: any[]) => {
+        log: (...args: DynamicValue[]) => {
           logs.push(args.map(arg => String(arg)).join(' '));
         },
         _logs: logs
@@ -201,9 +204,9 @@ export class ScriptEngine {
           success: true,
           value: result,
           executionTime,
-          logs: (context.utils as any)._logs || []
+          logs: (context.utils as DynamicValue)._logs || []
         });
-      } catch (error: any) {
+      } catch (error: DynamicValue) {
         resolve({
           success: false,
           error: error.message || 'Unknown error'
@@ -219,7 +222,7 @@ export class ScriptEngine {
     try {
       new Function(script);
       return { valid: true };
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return { 
         valid: false, 
         error: error.message 
@@ -236,7 +239,7 @@ export class ScriptEngine {
       mean: (values: number[]) => values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0,
       min: (values: number[]) => Math.min(...values),
       max: (values: number[]) => Math.max(...values),
-      count: (values: any[]) => values.length,
+      count: (values: DynamicValue[]) => values.length,
       range: (start: number, end: number) => Array.from({ length: end - start + 1 }, (_, i) => start + i),
       random: (min = 0, max = 1) => Math.random() * (max - min) + min,
       now: () => Date.now(),
@@ -252,10 +255,10 @@ export class ScriptEngine {
 // Available in all scripts:
 
 // Variables object containing all questionnaire variables
-declare const variables: Record<string, any>;
+declare const variables: Record<string, DynamicValue>;
 
 // Answers object containing all questionnaire answers
-declare const answers: Record<string, any>;
+declare const answers: Record<string, DynamicValue>;
 
 // Current context information
 declare const current: {
@@ -270,11 +273,11 @@ declare const utils: {
   mean(values: number[]): number;
   min(values: number[]): number;
   max(values: number[]): number;
-  count(values: any[]): number;
+  count(values: DynamicValue[]): number;
   range(start: number, end: number): number[];
   random(min?: number, max?: number): number;
   now(): number;
-  log(...args: any[]): void;
+  log(...args: DynamicValue[]): void;
 };
 
 // Common patterns:

@@ -7,6 +7,9 @@ import type { MediaConfig } from '$lib/modules/types';
 import { mediaService } from './mediaService';
 import { processMarkdownContent, processMarkdownContentSync } from './markdownProcessor';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- media helpers process dynamic display payloads
+type DynamicValue = any;
+
 /**
  * Load media URLs for a collection of media items
  */
@@ -36,7 +39,7 @@ export async function processContentWithMedia(
   options: {
     format?: 'text' | 'markdown' | 'html';
     processVariables?: boolean;
-    variables?: Record<string, any>;
+    variables?: Record<string, DynamicValue>;
   } = {}
 ): Promise<string> {
   if (!content) return '';
@@ -64,7 +67,7 @@ export function processContentWithMediaSync(
   options: {
     format?: 'text' | 'markdown' | 'html';
     processVariables?: boolean;
-    variables?: Record<string, any>;
+    variables?: Record<string, DynamicValue>;
   } = {}
 ): string {
   if (!content) return '';
@@ -125,14 +128,14 @@ export function cleanOrphanedMediaReferences(
 /**
  * Extract media configuration from a component's display object
  */
-export function extractMediaFromDisplay(display?: any): MediaConfig[] {
+export function extractMediaFromDisplay(display?: DynamicValue): MediaConfig[] {
   return display?.media || [];
 }
 
 /**
  * Update media in a component's display object
  */
-export function updateMediaInDisplay(display: any = {}, media: MediaConfig[]): any {
+export function updateMediaInDisplay(display: DynamicValue = {}, media: MediaConfig[]): DynamicValue {
   return {
     ...display,
     media
@@ -163,11 +166,11 @@ export class MediaHandler {
     }
   }
   
-  processContent(content: string, options?: any): string {
+  processContent(content: string, options?: DynamicValue): string {
     return processContentWithMediaSync(content, this.media, this.mediaUrls, options);
   }
   
-  async processContentAsync(content: string, options?: any): Promise<string> {
+  async processContentAsync(content: string, options?: DynamicValue): Promise<string> {
     if (Object.keys(this.mediaUrls).length === 0) {
       await this.loadUrls();
     }

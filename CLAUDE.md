@@ -18,18 +18,20 @@ For local development, use these credentials to log in (use playwright MCP to cr
 For faster development, you can enable test mode to automatically log in as the demo user:
 
 1. **Enable test mode** (in browser console):
+
    ```javascript
-   window.testMode.enable()
+   window.testMode.enable();
    ```
 
 2. **Or set directly in localStorage**:
+
    ```javascript
-   localStorage.setItem('qdesigner-test-mode', 'true')
+   localStorage.setItem('qdesigner-test-mode', 'true');
    ```
 
 3. **Disable test mode**:
    ```javascript
-   window.testMode.disable()
+   window.testMode.disable();
    ```
 
 When enabled, navigating to any protected route (e.g., `/dashboard`, `/designer`) will automatically log you in as `demo@example.com`. This only works in development mode.
@@ -84,7 +86,7 @@ pnpm test:e2e             # Run E2E tests
 - **Database**: PostgreSQL 18 via Docker
 - **Cache**: Redis 7 (optional, for rate limiting)
 - **Storage**: MinIO (S3-compatible, for file uploads)
-- **Email**: MailPit (dev SMTP, web UI at http://localhost:8026)
+- **Email**: MailPit (dev SMTP, web UI at http://localhost:18026)
 - **Auth**: JWT with Argon2id password hashing
 
 ### Project Structure
@@ -107,10 +109,10 @@ pnpm test:e2e             # Run E2E tests
 
 - Frontend: **5173** (SvelteKit dev server)
 - Backend: **3000** (Rust/Axum)
-- PostgreSQL: **5434** (mapped from container 5432)
-- Redis: **6381** (mapped from container 6379)
-- MinIO API: **9003** / Console: **9004**
-- MailPit SMTP: **1026** / Web UI: **8026**
+- PostgreSQL: **15434** (mapped from container 5432)
+- Redis: **16381** (mapped from container 6379)
+- MinIO API: **19003** / Console: **19004**
+- MailPit SMTP: **11026** / Web UI: **18026**
 
 ### Key Design Patterns
 

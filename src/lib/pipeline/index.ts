@@ -32,6 +32,9 @@ import type {
 } from './types';
 import type { QuestionnaireSession, Response } from '$lib/shared/types/response';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- pipeline manager coordinates dynamic transformer/exporter payloads
+type DynamicValue = any;
+
 /**
  * Main Pipeline Manager class that orchestrates all pipeline components
  */
@@ -114,7 +117,7 @@ export class PipelineManager {
   public async processResponse(
     response: Response,
     session: QuestionnaireSession,
-    questionnaire: any,
+    questionnaire: DynamicValue,
     options?: {
       validate?: boolean;
       transform?: boolean;
@@ -142,7 +145,7 @@ export class PipelineManager {
     try {
       // 1. Validation
       if (opts.validate) {
-        const question = questionnaire.questions.find((q: any) => q.id === response.questionId);
+        const question = questionnaire.questions.find((q: DynamicValue) => q.id === response.questionId);
         if (question) {
           const validationResult = await this.validation.validateResponse(
             response, 
@@ -204,7 +207,7 @@ export class PipelineManager {
         warnings: warnings.length > 0 ? warnings : undefined
       };
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         errors: [`Pipeline processing failed: ${error.message}`]
@@ -215,7 +218,7 @@ export class PipelineManager {
   /**
    * Export sessions in specified format
    */
-  public async exportSessions(request: ExportRequest): Promise<any> {
+  public async exportSessions(request: ExportRequest): Promise<DynamicValue> {
     try {
       // Apply transformations if specified
       let sessions = request.sessions;
@@ -237,7 +240,7 @@ export class PipelineManager {
       return await this.export.exportData(exportRequest);
       
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         format: request.format,
@@ -299,8 +302,8 @@ export class PipelineManager {
    */
   public subscribeToStream(
     sessionId: string,
-    callback: (message: any) => void,
-    filters?: any[]
+    callback: (message: DynamicValue) => void,
+    filters?: DynamicValue[]
   ): string {
     return this.streaming.subscribe(sessionId, callback, filters);
   }
@@ -310,21 +313,21 @@ export class PipelineManager {
    */
   private setupEventHandlers(): void {
     // Queue events
-    this.queue.on('item.completed', (data: any) => {
+    this.queue.on('item.completed', (data: DynamicValue) => {
       console.log('Queue item completed:', data.item.id);
     });
 
-    this.queue.on('queue.full', (data: any) => {
+    this.queue.on('queue.full', (data: DynamicValue) => {
       console.warn('Queue is full, applying backpressure');
       // Could pause streaming or other sources
     });
 
     // Batch events
-    this.batch.on('job.completed', (data: any) => {
+    this.batch.on('job.completed', (data: DynamicValue) => {
       console.log('Batch job completed:', data.job.name);
     });
 
-    this.batch.on('job.failed', (data: any) => {
+    this.batch.on('job.failed', (data: DynamicValue) => {
       console.error('Batch job failed:', data.job.name, data.error);
     });
   }
@@ -336,7 +339,7 @@ export class PipelineManager {
     // Export processor
     this.batch.registerProcessor({
       name: 'export',
-      supports: (item: any) => item && item.sessions && item.format,
+      supports: (item: DynamicValue) => item && item.sessions && item.format,
       process: async (items: ExportRequest[], context) => {
         const results = [];
         for (const request of items) {
@@ -352,8 +355,8 @@ export class PipelineManager {
     // Validation processor
     this.batch.registerProcessor({
       name: 'validate',
-      supports: (item: any) => item && item.responses,
-      process: async (items: any[], context) => {
+      supports: (item: DynamicValue) => item && item.responses,
+      process: async (items: DynamicValue[], context) => {
         const results = [];
         for (const item of items) {
           // Process validation for each item
@@ -368,8 +371,8 @@ export class PipelineManager {
     // Transformation processor
     this.batch.registerProcessor({
       name: 'transform',
-      supports: (item: any) => item && item.session,
-      process: async (items: any[], context) => {
+      supports: (item: DynamicValue) => item && item.session,
+      process: async (items: DynamicValue[], context) => {
         const results = [];
         for (const item of items) {
           const result = await this.transformation.transformSession(

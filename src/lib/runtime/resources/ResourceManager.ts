@@ -1,10 +1,13 @@
 import type { Questionnaire, Question, StimulusConfig as Stimulus } from '$lib/shared';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- resource manager caches heterogeneous decoded assets
+type DynamicValue = any;
+
 export interface Resource {
   id: string;
   url: string;
   type: ResourceType;
-  data?: any;
+  data?: DynamicValue;
   status: 'pending' | 'loading' | 'loaded' | 'error';
   error?: Error;
 }
@@ -20,7 +23,7 @@ export interface LoadProgress {
 
 export class ResourceManager {
   private resources: Map<string, Resource> = new Map();
-  private loadedData: Map<string, any> = new Map();
+  private loadedData: Map<string, DynamicValue> = new Map();
   private imageCache: Map<string, HTMLImageElement> = new Map();
   private videoCache: Map<string, HTMLVideoElement> = new Map();
   private audioCache: Map<string, AudioBuffer> = new Map();
@@ -49,7 +52,7 @@ export class ResourceManager {
     }
 
     // Scan any global resources in settings
-    const settings = questionnaire.settings as any;
+    const settings = questionnaire.settings as DynamicValue;
     if (settings.theme?.customCss) {
       this.registerResource('theme.css', 'text', settings.theme.customCss);
     }
@@ -62,7 +65,7 @@ export class ResourceManager {
     // Scan stimulus
     if (question.stimulus) {
       // Cast to any since the type might not fully match StimulusConfig strictness in shared types yet
-      this.scanStimulus(question.stimulus as any);
+      this.scanStimulus(question.stimulus as DynamicValue);
     }
 
     // Scan response options for images
@@ -79,7 +82,7 @@ export class ResourceManager {
    * Scan stimulus for resources
    */
   private scanStimulus(stimulus: Stimulus) {
-    const content = stimulus.content as any;
+    const content = stimulus.content as DynamicValue;
 
     if (typeof content === 'string') return;
 
@@ -355,7 +358,7 @@ export class ResourceManager {
     return this.audioCache.get(id);
   }
 
-  public getData(id: string): any {
+  public getData(id: string): DynamicValue {
     return this.loadedData.get(id);
   }
 

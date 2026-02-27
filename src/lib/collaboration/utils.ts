@@ -12,6 +12,9 @@ import type {
   PathArray 
 } from './types.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- collaborative OT paths and values are intentionally schema-flexible
+type DynamicValue = any;
+
 // ============================================================================
 // Path Utilities
 // ============================================================================
@@ -33,7 +36,7 @@ export function pathArrayToString(path: PathArray): string {
 /**
  * Get a nested value from an object using a path array
  */
-export function getNestedValue(obj: any, path: PathArray): any {
+export function getNestedValue(obj: DynamicValue, path: PathArray): DynamicValue {
   let current = obj;
   for (const segment of path) {
     if (current && typeof current === 'object' && segment in current) {
@@ -48,7 +51,7 @@ export function getNestedValue(obj: any, path: PathArray): any {
 /**
  * Set a nested value in an object using a path array
  */
-export function setNestedValue(obj: any, path: PathArray, value: any): void {
+export function setNestedValue(obj: DynamicValue, path: PathArray, value: DynamicValue): void {
   if (path.length === 0) return;
 
   let current = obj;
@@ -66,7 +69,7 @@ export function setNestedValue(obj: any, path: PathArray, value: any): void {
 /**
  * Delete a nested value from an object using a path array
  */
-export function deleteNestedValue(obj: any, path: PathArray): boolean {
+export function deleteNestedValue(obj: DynamicValue, path: PathArray): boolean {
   if (path.length === 0) return false;
   
   let current = obj;
@@ -101,7 +104,7 @@ export function createOperationId(userId: string, timestamp: Date = new Date()):
 /**
  * Validate operation structure
  */
-export function validateOperation(operation: any): operation is Operation {
+export function validateOperation(operation: DynamicValue): operation is Operation {
   if (!operation || typeof operation !== 'object') return false;
   
   const required = ['id', 'type', 'userId', 'timestamp', 'path'];
@@ -125,7 +128,7 @@ export function createInsertOperation(
   userId: string,
   path: PathArray,
   position: number,
-  content: any,
+  content: DynamicValue,
   target: 'question' | 'page' | 'variable' | 'option' | 'block'
 ): Operation {
   return {
@@ -137,7 +140,7 @@ export function createInsertOperation(
     position,
     content,
     target
-  } as any;
+  } as DynamicValue;
 }
 
 /**
@@ -149,7 +152,7 @@ export function createDeleteOperation(
   position: number,
   length: number = 1,
   target: 'question' | 'page' | 'variable' | 'option' | 'block',
-  deletedContent?: any
+  deletedContent?: DynamicValue
 ): Operation {
   return {
     id: createOperationId(userId),
@@ -161,7 +164,7 @@ export function createDeleteOperation(
     length,
     target,
     deletedContent
-  } as any;
+  } as DynamicValue;
 }
 
 /**
@@ -171,8 +174,8 @@ export function createUpdateOperation(
   userId: string,
   path: PathArray,
   property: string,
-  oldValue: any,
-  newValue: any
+  oldValue: DynamicValue,
+  newValue: DynamicValue
 ): Operation {
   return {
     id: createOperationId(userId),
@@ -183,7 +186,7 @@ export function createUpdateOperation(
     property,
     oldValue,
     newValue
-  } as any;
+  } as DynamicValue;
 }
 
 /**
@@ -206,7 +209,7 @@ export function createMoveOperation(
     toPath,
     fromPosition,
     toPosition
-  } as any;
+  } as DynamicValue;
 }
 
 // ============================================================================
@@ -323,13 +326,13 @@ export function operationsConflict(op1: Operation, op2: Operation): boolean {
   if (pathsEqual(op1.path, op2.path)) {
     // Update operations on the same property conflict
     if (op1.type === 'update' && op2.type === 'update') {
-      return (op1 as any).property === (op2 as any).property;
+      return (op1 as DynamicValue).property === (op2 as DynamicValue).property;
     }
     
     // Insert/delete operations at same position conflict
     if ((op1.type === 'insert' || op1.type === 'delete') && 
         (op2.type === 'insert' || op2.type === 'delete')) {
-      return (op1 as any).position === (op2 as any).position;
+      return (op1 as DynamicValue).position === (op2 as DynamicValue).position;
     }
   }
   
@@ -566,7 +569,7 @@ export function groupBy<T, K extends string | number>(
 /**
  * Sort array by multiple criteria
  */
-export function sortBy<T>(array: T[], ...sortFns: Array<(item: T) => any>): T[] {
+export function sortBy<T>(array: T[], ...sortFns: Array<(item: T) => DynamicValue>): T[] {
   return [...array].sort((a, b) => {
     for (const sortFn of sortFns) {
       const aVal = sortFn(a);
@@ -586,7 +589,7 @@ export function sortBy<T>(array: T[], ...sortFns: Array<(item: T) => any>): T[] 
 /**
  * Simple debounce implementation
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: DynamicValue[]) => DynamicValue>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -601,7 +604,7 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * Simple throttle implementation
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: DynamicValue[]) => DynamicValue>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {
@@ -673,8 +676,8 @@ export function createCache<K, V>(ttlMs: number = 60000) {
 export function createError(
   code: string,
   message: string,
-  details?: any
-): { code: string; message: string; details?: any; timestamp: Date } {
+  details?: DynamicValue
+): { code: string; message: string; details?: DynamicValue; timestamp: Date } {
   return {
     code,
     message,

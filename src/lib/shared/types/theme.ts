@@ -210,7 +210,7 @@ export interface QuestionnaireTheme {
       secondary: ResponseOptionStyles;
     };
     navigation: {
-      container: any;
+      container: unknown;
       button: ResponseOptionStyles;
     };
   };

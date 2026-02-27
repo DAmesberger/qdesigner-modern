@@ -38,13 +38,34 @@
   let QuestionComponent = $state<ComponentType | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let loadRequestId = $state(0);
+  const COMPONENT_LOAD_TIMEOUT_MS = 10000;
+
+  function withLoadTimeout<T>(promise: Promise<T>, type: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`Timed out loading component "${type}"`));
+      }, COMPONENT_LOAD_TIMEOUT_MS);
+
+      promise
+        .then((value) => {
+          clearTimeout(timeoutId);
+          resolve(value);
+        })
+        .catch((err) => {
+          clearTimeout(timeoutId);
+          reject(err);
+        });
+    });
+  }
 
   // Load component from module registry
   $effect(() => {
-    loadComponent(question.type);
+    void loadComponent(question.type);
   });
 
   async function loadComponent(type: string) {
+    const requestId = ++loadRequestId;
     loading = true;
     error = null;
 
@@ -55,22 +76,41 @@
       const metadata = moduleRegistry.get(type);
       console.log('[QuestionRenderer] Metadata found:', metadata);
 
-      if (metadata && (metadata.category === 'question' || metadata.category === 'display')) {
+      if (
+        metadata &&
+        (metadata.category === 'question' ||
+          metadata.category === 'display' ||
+          metadata.category === 'instruction' ||
+          metadata.category === 'analytics')
+      ) {
         // Map mode to registry mode (runtime/designer)
         const loadMode = mode === 'preview' || mode === 'runtime' ? 'runtime' : 'designer';
-        QuestionComponent = await moduleRegistry.loadComponent(type, loadMode);
+
+        const component = await withLoadTimeout(moduleRegistry.loadComponent(type, loadMode), type);
+
+        if (requestId !== loadRequestId) {
+          return;
+        }
+
+        QuestionComponent = component;
         console.log('[QuestionRenderer] Component loaded successfully');
       } else {
         console.error(`Component not found in module registry: ${type}`);
-        error = `Component not found: ${type}`;
-        QuestionComponent = null;
+        if (requestId === loadRequestId) {
+          error = `Component not found: ${type}`;
+          QuestionComponent = null;
+        }
       }
     } catch (err) {
       console.error(`Failed to load component: ${type}`, err);
-      error = `Failed to load component: ${type}`;
-      QuestionComponent = null;
+      if (requestId === loadRequestId) {
+        error = `Failed to load component: ${type}`;
+        QuestionComponent = null;
+      }
     } finally {
-      loading = false;
+      if (requestId === loadRequestId) {
+        loading = false;
+      }
     }
   }
 
@@ -120,7 +160,7 @@
   </div>
 {:else if QuestionComponent}
   {@const metadata = moduleRegistry.get(question.type)}
-  {#if metadata?.category === 'display'}
+  {#if metadata?.category === 'display' || metadata?.category === 'analytics'}
     <!-- Display modules (analytics, instructions) use analytics prop -->
     <QuestionComponent
       analytics={analyticsData()}
@@ -130,6 +170,8 @@
         /* Handle events if needed */
       }}
     />
+  {:else if metadata?.category === 'instruction'}
+    <QuestionComponent instruction={fullQuestion} {mode} {variables} />
   {:else}
     <!-- Question modules use question prop -->
     <QuestionComponent

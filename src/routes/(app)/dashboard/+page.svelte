@@ -8,6 +8,7 @@
     QuestionnaireStats,
     QuestionnaireListItem,
   } from '$lib/types/dashboard';
+  import { appPaths } from '$lib/routing/paths';
 
   interface Props {
     data: PageData;
@@ -55,12 +56,14 @@
     return `${minutes}m ${remainingSeconds}s`;
   }
 
-  function navigateToQuestionnaire(id: string) {
-    // Navigate to the designer with a test project ID
-    // Using a test project ID for now
-    const testProjectId = 'test-project-1';
-    const url = `/projects/${testProjectId}/designer/${id}`;
-    console.log('Navigating to:', url, 'with id:', id);
+  function navigateToQuestionnaire(projectId: string, questionnaireId: string) {
+    if (!projectId) {
+      console.warn('Missing projectId for questionnaire:', questionnaireId);
+      goto(appPaths.projects());
+      return;
+    }
+    const url = appPaths.projectDesigner(projectId, questionnaireId);
+    console.log('Navigating to:', url, 'with questionnaireId:', questionnaireId);
 
     // Use window.location for now to bypass the goto issue
     if (typeof window !== 'undefined') {
@@ -71,7 +74,7 @@
   function createNewQuestionnaire() {
     // Navigate to projects page to select/create project first
     if (typeof window !== 'undefined') {
-      window.location.href = '/projects';
+      window.location.href = appPaths.projects();
     }
   }
 
@@ -234,7 +237,11 @@
             <button
               type="button"
               class="glass-card p-6 w-full text-left group hover:bg-[hsl(var(--layer-surface))]/50 border-l-4 border-l-transparent hover:border-l-indigo-500"
-              onclick={() => navigateToQuestionnaire(questionnaire.questionnaire_id)}
+              onclick={() =>
+                navigateToQuestionnaire(
+                  questionnaire.project_id || questionnaire.projectId || '',
+                  questionnaire.questionnaire_id
+                )}
             >
               <div class="flex items-start justify-between">
                 <div class="flex-1">

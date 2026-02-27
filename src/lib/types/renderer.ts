@@ -14,13 +14,13 @@ export interface FrameStats {
 
 export interface Stimulus {
   type: 'color' | 'image' | 'text' | 'shape' | 'custom';
-  data: any;
+  data: unknown;
   duration?: number;
   transition?: 'none' | 'fade' | 'slide';
 }
 
 export interface RenderCommand {
   type: 'clear' | 'drawRect' | 'drawCircle' | 'drawImage' | 'drawText' | 'drawCustom';
-  params: any;
+  params: unknown;
   timestamp?: number;
 }

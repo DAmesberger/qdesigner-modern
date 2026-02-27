@@ -16,16 +16,29 @@ export const load: LayoutLoad = async ({ url, route, depends }) => {
     if (!session && import.meta.env.DEV) {
       const testMode = localStorage.getItem('qdesigner-test-mode');
       if (testMode === 'true') {
-        console.log('Test mode enabled - auto-logging in as demo user');
-        const { session: newSession, error } = await auth.signIn('demo@example.com', 'demo123456');
+        const testModeEmail = import.meta.env.VITE_TEST_MODE_EMAIL;
+        const testModePassword = import.meta.env.VITE_TEST_MODE_PASSWORD;
 
-        if (error) {
-          console.error('Test mode auto-login failed:', error);
-          // Clear test mode on failure
+        if (!testModeEmail || !testModePassword) {
+          console.warn(
+            'Test mode is enabled but credentials are not configured. Set VITE_TEST_MODE_EMAIL and VITE_TEST_MODE_PASSWORD.'
+          );
           localStorage.removeItem('qdesigner-test-mode');
         } else {
-          session = newSession;
-          console.log('Test mode auto-login successful');
+          console.log('Test mode enabled - auto-logging in with configured credentials');
+          const { session: newSession, error } = await auth.signIn(
+            testModeEmail,
+            testModePassword
+          );
+
+          if (error) {
+            console.error('Test mode auto-login failed:', error);
+            // Clear test mode on failure
+            localStorage.removeItem('qdesigner-test-mode');
+          } else {
+            session = newSession;
+            console.log('Test mode auto-login successful');
+          }
         }
       }
     }

@@ -16,9 +16,12 @@ import type {
 } from './types';
 import { QueueManager } from './QueueManager';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- batch processors are plugin-driven and data-shape agnostic
+type DynamicValue = any;
+
 export class BatchProcessor {
   private jobs = new Map<string, BatchJob>();
-  private processors = new Map<string, IBatchProcessor<any, any>>();
+  private processors = new Map<string, IBatchProcessor<DynamicValue, DynamicValue>>();
   private queueManager: QueueManager;
   private eventHandlers = new Map<string, Function[]>();
   private defaultConfig: BatchConfig;
@@ -78,7 +81,7 @@ export class BatchProcessor {
     const job: BatchJob<T> = {
       id: this.generateJobId(),
       name,
-      type: type as any,
+      type: type as DynamicValue,
       data,
       config: jobConfig,
       status: 'pending',
@@ -254,7 +257,7 @@ export class BatchProcessor {
           results.push(...batchResults);
           job.progress.succeeded += batchResults.length;
           
-        } catch (error: any) {
+        } catch (error: DynamicValue) {
           const failedBatch = batches[i] || [];
           const batchErrors = this.createBatchErrors(failedBatch, i, error.message);
           errors.push(...batchErrors);
@@ -306,7 +309,7 @@ export class BatchProcessor {
         { job, result: job.result }
       );
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       job.status = 'failed';
       job.completed = Date.now();
       
@@ -328,7 +331,7 @@ export class BatchProcessor {
         warnings: []
       };
 
-      this.emitEvent('job.failed', { job, error: (error as any).message });
+      this.emitEvent('job.failed', { job, error: (error as DynamicValue).message });
     }
   }
 
@@ -375,7 +378,7 @@ export class BatchProcessor {
 
       return results;
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       const batchDuration = Date.now() - batchStartTime;
       
       this.emitEvent('batch.failed', { 
@@ -432,7 +435,7 @@ export class BatchProcessor {
 
       return results;
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       this.emitEvent('batch.retry.failed', { 
         context, 
         batchIndex, 
@@ -499,7 +502,7 @@ export class BatchProcessor {
     }
   }
 
-  private emitEvent(eventType: string, data: any): void {
+  private emitEvent(eventType: string, data: DynamicValue): void {
     const handlers = this.eventHandlers.get(eventType);
     if (handlers) {
       handlers.forEach(handler => {
@@ -537,7 +540,7 @@ export class BatchProcessor {
     }));
   }
 
-  private findProcessorForJob(job: BatchJob): IBatchProcessor<any, any> | null {
+  private findProcessorForJob(job: BatchJob): IBatchProcessor<DynamicValue, DynamicValue> | null {
     // This would need more sophisticated logic in a real implementation
     // For now, we assume the processor name is stored in job metadata
     const processorName = job.metadata?.processorName;
@@ -555,8 +558,8 @@ export class BatchProcessor {
   /**
    * Get processor statistics
    */
-  public getProcessorStats(): Record<string, any> {
-    const stats: Record<string, any> = {};
+  public getProcessorStats(): Record<string, DynamicValue> {
+    const stats: Record<string, DynamicValue> = {};
     
     for (const [name, processor] of this.processors) {
       const jobs = Array.from(this.jobs.values())

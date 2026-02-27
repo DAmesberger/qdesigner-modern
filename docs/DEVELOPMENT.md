@@ -112,12 +112,12 @@ pnpm clean:all          # Remove everything (including node_modules)
 
 ## Service URLs
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| App | http://localhost:5173 | QDesigner application |
-| Supabase Studio | http://localhost:54321 | Database management UI |
-| Mailhog | http://localhost:8025 | Email testing interface |
-| PostgreSQL | localhost:54322 | Database connection |
+| Service         | URL                    | Description             |
+| --------------- | ---------------------- | ----------------------- |
+| App             | http://localhost:5173  | QDesigner application   |
+| Supabase Studio | http://localhost:54321 | Database management UI  |
+| Mailhog         | http://localhost:18026 | Email testing interface |
+| PostgreSQL      | localhost:54322        | Database connection     |
 
 ## Default Credentials
 
@@ -132,6 +132,7 @@ The development environment uses these default values:
 ## Environment Variables
 
 Development environment variables are automatically loaded from:
+
 - `.env.development` - Shared development settings
 - `apps/designer/.env` - App-specific settings
 
@@ -140,6 +141,7 @@ No manual configuration needed!
 ## Troubleshooting
 
 ### Services won't start
+
 ```bash
 # Reset everything
 docker-compose down -v
@@ -147,6 +149,7 @@ pnpm dev:setup
 ```
 
 ### Database connection issues
+
 ```bash
 # Check if services are running
 docker-compose ps
@@ -156,11 +159,13 @@ pnpm dev:services:logs
 ```
 
 ### Port conflicts
+
 If ports are already in use, stop conflicting services or modify `docker-compose.yml`.
 
 ## Architecture
 
 The development setup includes:
+
 - **PostgreSQL 15**: Main database
 - **Supabase Auth**: Authentication service
 - **Supabase Realtime**: WebSocket connections

@@ -15,7 +15,7 @@ export interface MediaAsset {
   height?: number;
   durationSeconds?: number;
   thumbnailPath?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   
   // Access control
   isPublic: boolean;
@@ -32,7 +32,7 @@ export interface MediaUsage {
   questionnaireId?: string;
   questionId?: string;
   usageType: 'stimulus' | 'instruction' | 'feedback' | 'background' | 'option';
-  usageContext?: Record<string, any>;
+  usageContext?: Record<string, unknown>;
   createdAt: Date;
 }
 
@@ -97,7 +97,7 @@ export interface MediaFilter {
 export interface MediaError {
   code: 'UPLOAD_FAILED' | 'ACCESS_DENIED' | 'NOT_FOUND' | 'INVALID_TYPE' | 'SIZE_EXCEEDED';
   message: string;
-  details?: any;
+  details?: unknown;
 }
 
 export type MediaAccessLevel = 'owner' | 'delete' | 'edit' | 'view' | null;

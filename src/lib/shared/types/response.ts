@@ -18,7 +18,7 @@ export interface Response {
   questionId: string;
   pageId?: string;
   timestamp: number;
-  value: any;
+  value: unknown;
   reactionTime?: number; // ms from stimulus onset
   stimulusOnsetTime?: number;
   keyPressTime?: number;
@@ -43,7 +43,7 @@ export interface Position {
 
 export interface VariableState {
   variableId: string;
-  value: any;
+  value: unknown;
   timestamp: number;
   source?: string; // What set this value
 }
@@ -55,9 +55,9 @@ export interface SessionMetadata {
   webGLSupported?: boolean;
   timezone?: string;
   locale?: string;
-  custom?: Record<string, any>;
-  computedVariables?: Record<string, any>;
-  aggregations?: Record<string, any>;
+  custom?: Record<string, unknown>;
+  computedVariables?: Record<string, unknown>;
+  aggregations?: Record<string, unknown>;
 }
 
 export interface ResponseMetadata {
@@ -130,7 +130,7 @@ export interface VariableMetadata {
 }
 
 export interface ValueLabel {
-  value: any;
+  value: unknown;
   label: string;
 }
 

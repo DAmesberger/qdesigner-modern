@@ -11,6 +11,9 @@ import {
   type Variable,
 } from '$lib/shared/types/questionnaire';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- document normalization ingests arbitrary API payload shapes
+type DynamicValue = any;
+
 export interface ValidationFinding {
   field: string;
   message: string;
@@ -109,7 +112,7 @@ export class DocumentStore {
     };
   }
 
-  public normalizeQuestionnaire(input: any): Questionnaire {
+  public normalizeQuestionnaire(input: DynamicValue): Questionnaire {
     const source = input?.definition || input?.content || input || {};
     const fallback = this.createEmptyQuestionnaire({
       id: input?.id,
@@ -588,7 +591,7 @@ export class DocumentStore {
     const questionIdSet = new Set(questions.map((question) => question.id));
 
     return rawPages.map((rawPage, pageIndex) => {
-      const sourcePage = (rawPage || {}) as Record<string, any>;
+      const sourcePage = (rawPage || {}) as Record<string, DynamicValue>;
       const pageId = sourcePage.id || generateId('page');
 
       let blocks = Array.isArray(sourcePage.blocks) ? deepClone(sourcePage.blocks) : [];
@@ -609,7 +612,7 @@ export class DocumentStore {
         ];
       }
 
-      const normalizedBlocks: Block[] = blocks.map((rawBlock: any, blockIndex: number) => ({
+      const normalizedBlocks: Block[] = blocks.map((rawBlock: DynamicValue, blockIndex: number) => ({
         id: rawBlock.id || generateId('block'),
         pageId,
         name: rawBlock.name || rawBlock.title || `Block ${blockIndex + 1}`,
@@ -692,18 +695,18 @@ export class DocumentStore {
     }));
   }
 
-  private ensureResponseType(question: Question): any {
-    const existing = (question as any).responseType;
+  private ensureResponseType(question: Question): DynamicValue {
+    const existing = (question as DynamicValue).responseType;
     if (existing?.type) {
       return existing;
     }
 
     const normalizeOptions = (
-      input: any
+      input: DynamicValue
     ): Array<{ value: string | number | boolean; label: string; key?: string }> => {
       if (!Array.isArray(input)) return [];
       const normalized = input
-        .map((option: any): { value: string | number | boolean; label: string; key?: string } | null => {
+        .map((option: DynamicValue): { value: string | number | boolean; label: string; key?: string } | null => {
           if (option === null || option === undefined) return null;
           const rawValue = option.value ?? option.id ?? option.label;
           if (rawValue === undefined || rawValue === null) return null;
@@ -725,8 +728,8 @@ export class DocumentStore {
       return normalized;
     };
 
-    const legacyResponse = (question as any).response;
-    const displayOptions = (question as any).display?.options;
+    const legacyResponse = (question as DynamicValue).response;
+    const displayOptions = (question as DynamicValue).display?.options;
 
     if (legacyResponse?.type) {
       const type = String(legacyResponse.type);

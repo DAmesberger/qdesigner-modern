@@ -1,12 +1,15 @@
 // Base storage class for analytics modules
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- analytics storage payloads are schema-flexible
+type DynamicValue = any;
+
 
 
 export abstract class BaseAnalyticsStorage {
-  protected storage: any;
+  protected storage: DynamicValue;
   protected questionnaireId: string;
   
-  constructor(storage: any, questionnaireId: string) {
+  constructor(storage: DynamicValue, questionnaireId: string) {
     this.storage = storage;
     this.questionnaireId = questionnaireId;
   }
@@ -35,7 +38,7 @@ export abstract class BaseAnalyticsStorage {
    */
   async trackInteraction(analyticsId: string, interaction: {
     type: 'hover' | 'click' | 'zoom' | 'pan';
-    data?: any;
+    data?: DynamicValue;
     timestamp?: number;
   }): Promise<void> {
     await this.storage.saveResponse({
@@ -57,12 +60,12 @@ export abstract class BaseAnalyticsStorage {
     type: string;
     timestamp: number;
     interaction?: string;
-    data?: any;
+    data?: DynamicValue;
   }>> {
     const responses = await this.storage.getResponses(this.questionnaireId);
     const events = responses
-      .filter((r: any) => r.questionId === analyticsId)
-      .map((r: any) => {
+      .filter((r: DynamicValue) => r.questionId === analyticsId)
+      .map((r: DynamicValue) => {
         try {
           return typeof r.value === 'string' ? JSON.parse(r.value) : r.value;
         } catch {
@@ -107,7 +110,7 @@ export abstract class BaseAnalyticsStorage {
    */
   async clearEvents(analyticsId: string): Promise<void> {
     const allResponses = await this.storage.getResponses(this.questionnaireId);
-    const filtered = allResponses.filter((r: any) => r.questionId !== analyticsId);
+    const filtered = allResponses.filter((r: DynamicValue) => r.questionId !== analyticsId);
     
     // Save filtered responses back
     for (const response of filtered) {

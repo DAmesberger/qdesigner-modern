@@ -4,6 +4,7 @@
   import PropertiesPanel from '$lib/components/designer/PropertiesPanel.svelte';
 
   let isMobile = $state(false);
+  const hasSelection = $derived(Boolean(designerStore.selectedItem));
 
   const panelLabel = $derived.by(() => {
     if (!designerStore.selectedItemType) return 'Properties';
@@ -37,6 +38,18 @@
 
   function toggleCollapse() {
     designerStore.setSidebarCollapsed('right', !designerStore.rightCollapsed);
+  }
+
+  function focusFirstQuestion() {
+    const firstQuestion = designerStore.currentBlockQuestions[0];
+    if (firstQuestion) {
+      designerStore.selectItem(firstQuestion.id, 'question');
+    } else {
+      designerStore.setActiveLeftTab('questions');
+      if (isMobile) {
+        designerStore.toggleDrawer('left', true);
+      }
+    }
   }
 </script>
 
@@ -129,9 +142,58 @@
   </div>
 
   {#if !designerStore.rightCollapsed || isMobile}
-    <div class="min-h-0 flex-1 overflow-hidden" data-testid="right-sidebar-content">
-      <PropertiesPanel />
-    </div>
+    {#if hasSelection}
+      <div class="min-h-0 flex-1 overflow-hidden" data-testid="right-sidebar-content">
+        <PropertiesPanel />
+      </div>
+    {:else}
+      <div
+        class="flex h-full flex-col gap-4 p-4 text-sm text-muted-foreground"
+        data-testid="right-sidebar-empty-state"
+      >
+        <div class="rounded-lg border border-dashed border-border bg-muted/30 p-4">
+          <h3 class="mb-2 text-sm font-semibold text-foreground">Configure Step</h3>
+          <p class="mb-3">
+            Select a question to edit its configuration. Keep this panel focused only on the
+            selected item.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              class="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
+              onclick={focusFirstQuestion}
+              data-testid="right-sidebar-select-first-question"
+            >
+              Select First Question
+            </button>
+            <button
+              type="button"
+              class="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
+              onclick={() => designerStore.toggleCommandPalette(true)}
+              data-testid="right-sidebar-open-command-palette"
+            >
+              Open Commands
+            </button>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-border p-3">
+          <p class="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Keyboard</p>
+          <div class="flex flex-wrap gap-2 text-xs">
+            <kbd class="rounded bg-muted px-1.5 py-0.5">Ctrl/Cmd+K</kbd>
+            <span>Command palette</span>
+          </div>
+          <div class="mt-1 flex flex-wrap gap-2 text-xs">
+            <kbd class="rounded bg-muted px-1.5 py-0.5">Alt+↑/↓</kbd>
+            <span>Move selected question</span>
+          </div>
+          <div class="mt-1 flex flex-wrap gap-2 text-xs">
+            <kbd class="rounded bg-muted px-1.5 py-0.5">Del</kbd>
+            <span>Delete selected question</span>
+          </div>
+        </div>
+      </div>
+    {/if}
   {:else}
     <div class="flex flex-1 items-start justify-center py-3">
       <span class="rounded bg-muted px-2 py-1 text-[10px] text-muted-foreground">Props</span>

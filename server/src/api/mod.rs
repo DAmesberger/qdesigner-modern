@@ -6,6 +6,7 @@ use axum::{
 use crate::state::AppState;
 
 pub mod auth;
+pub mod dev;
 pub mod health;
 pub mod media;
 pub mod organizations;
@@ -107,7 +108,7 @@ pub fn router(state: AppState) -> Router {
 
     let ws_route = Router::new().route("/ws", get(crate::websocket::handler::ws_upgrade));
 
-    Router::new()
+    let base = Router::new()
         .route("/health", get(health::health))
         .route("/ready", get(health::ready))
         .nest("/api/auth", auth_routes)
@@ -117,6 +118,26 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/questionnaires", questionnaire_routes)
         .nest("/api/sessions", session_routes)
         .nest("/api/media", media_routes)
-        .nest("/api", ws_route)
-        .with_state(state)
+        .nest("/api", ws_route);
+
+    let dev_helpers_enabled = cfg!(debug_assertions)
+        || matches!(
+            std::env::var("DEV_HELPERS_ENABLED")
+                .ok()
+                .as_deref()
+                .map(str::to_ascii_lowercase)
+                .as_deref(),
+            Some("1" | "true" | "yes" | "on")
+        );
+
+    let app = if dev_helpers_enabled {
+        base.nest(
+            "/api/dev",
+            Router::new().route("/bootstrap-personas", post(dev::bootstrap_personas)),
+        )
+    } else {
+        base
+    };
+
+    app.with_state(state)
 }

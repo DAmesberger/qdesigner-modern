@@ -52,6 +52,9 @@
       question: q,
     })) || []
   );
+  let selectedQuestionId = $derived(
+    designerStore.selectedItemType === 'question' ? designerStore.selectedItem?.id : null
+  );
 
   function handleDndConsider(e: CustomEvent) {
     if (!e.detail?.items || !designerStore.currentBlock) return;
@@ -83,6 +86,13 @@
       firstPage?.id;
     if (!target) return;
     designerStore.addQuestion(target, type);
+  }
+
+  function openQuestionPicker() {
+    designerStore.setActiveLeftTab('questions');
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      designerStore.toggleDrawer('left', true);
+    }
   }
 
   function resolveDroppedQuestionType(payload: Record<string, any>): string | null {
@@ -185,28 +195,50 @@
       </button>
     </div>
 
-    <button
-      onclick={() => (showTestRunner = true)}
-      class="flex items-center gap-1.5 px-3 py-1.5 {uiTheme.components.button.variants
-        .outline} {uiTheme.components.button.sizes.sm} rounded-md"
-      data-testid="designer-live-test-button"
-    >
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-        />
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-        />
-      </svg>
-      Test
-    </button>
+    <div class="flex items-center gap-2">
+      <button
+        onclick={() => addQuestionOfType('text-input')}
+        class="hidden sm:inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
+        data-testid="designer-toolbar-add-question"
+      >
+        <span>+ Add</span>
+        <kbd class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
+          >Ctrl/Cmd+Shift+A</kbd
+        >
+      </button>
+
+      <button
+        onclick={() => designerStore.toggleCommandPalette(true)}
+        class="hidden sm:inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
+        data-testid="designer-toolbar-command-palette"
+      >
+        Commands
+        <kbd class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">Ctrl/Cmd+K</kbd>
+      </button>
+
+      <button
+        onclick={() => (showTestRunner = true)}
+        class="flex items-center gap-1.5 px-3 py-1.5 {uiTheme.components.button.variants
+          .outline} {uiTheme.components.button.sizes.sm} rounded-md"
+        data-testid="designer-live-test-button"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+          />
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+        Test
+      </button>
+    </div>
   </div>
 
   <!-- Canvas Area -->
@@ -279,7 +311,7 @@
           {#if items.length === 0 || !designerStore.currentBlock}
             <!-- Empty State -->
             <div
-              class="flex flex-col items-center justify-center py-20 text-center"
+              class="mx-auto flex max-w-2xl flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-6 py-14 text-center"
               data-testid="designer-empty-state"
             >
               <div class="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-4">
@@ -297,49 +329,100 @@
                   />
                 </svg>
               </div>
-              <h3 class="text-base font-medium text-foreground mb-1">Add your first question</h3>
-              <p class="text-sm text-muted-foreground max-w-sm mb-4">
-                Drag from the left palette, or add one now.
+              <h3 class="text-lg font-semibold text-foreground mb-1">Start with Add</h3>
+              <p class="text-sm text-muted-foreground max-w-lg mb-5">
+                This block is empty. Add a first question, then configure it in the right panel, run
+                Preview, and publish once validation is clean.
               </p>
 
-              <div class="flex items-center gap-2">
+              <div class="grid w-full gap-2 sm:grid-cols-3">
                 <button
-                  class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                  class="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 transition-colors"
                   onclick={() => addQuestionOfType('text-input')}
                   title="Add text question"
                   data-testid="designer-empty-add-text-question"
                 >
-                  + Text Question
+                  + Text Input
                 </button>
                 <button
-                  class="px-4 py-2 border border-border rounded-md text-foreground hover:bg-accent transition-colors"
+                  class="rounded-md border border-border px-4 py-2 text-foreground hover:bg-accent transition-colors"
                   onclick={() => addQuestionOfType('multiple-choice')}
                   title="Add multiple choice question"
                   data-testid="designer-empty-add-choice-question"
                 >
-                  + Choice Question
+                  + Multiple Choice
                 </button>
                 <button
-                  class="px-4 py-2 border border-border rounded-md text-foreground hover:bg-accent transition-colors"
+                  class="rounded-md border border-border px-4 py-2 text-foreground hover:bg-accent transition-colors"
                   onclick={() => addQuestionOfType('reaction-time')}
                   title="Add reaction-time question"
                   data-testid="designer-empty-add-reaction-question"
                 >
                   + Reaction Time
                 </button>
+              </div>
+
+              <div class="mt-4 w-full rounded-lg border border-border bg-background p-4 text-left">
+                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                  Guided Flow
+                </p>
+                <div class="space-y-2 text-sm">
+                  <div class="flex items-start gap-2">
+                    <span
+                      class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
+                      >1</span
+                    >
+                    <span>Add a question type to this block.</span>
+                  </div>
+                  <div class="flex items-start gap-2">
+                    <span
+                      class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
+                      >2</span
+                    >
+                    <span>Select it and tune settings in <strong>Properties</strong>.</span>
+                  </div>
+                  <div class="flex items-start gap-2">
+                    <span
+                      class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
+                      >3</span
+                    >
+                    <span>Open Preview and validate behavior before publishing.</span>
+                  </div>
+                </div>
+
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-accent"
+                    onclick={openQuestionPicker}
+                    data-testid="designer-empty-open-question-palette"
+                  >
+                    Open Question Palette
+                  </button>
+                  <button
+                    class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-accent transition-colors"
+                    onclick={() => designerStore.toggleCommandPalette(true)}
+                    title="Open command palette"
+                    data-testid="designer-empty-open-command-palette"
+                  >
+                    Open Commands
+                  </button>
+                </div>
+              </div>
+
+              <div
+                class="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground"
+              >
+                <kbd class="rounded bg-muted px-1 py-0.5">Ctrl/Cmd + Shift + A</kbd>
+                <span>Add question</span>
+                <kbd class="rounded bg-muted px-1 py-0.5">Ctrl/Cmd + K</kbd>
+                <span>Quick actions</span>
                 <button
-                  class="px-4 py-2 border border-border rounded-md text-foreground hover:bg-accent transition-colors"
-                  onclick={() => designerStore.toggleCommandPalette(true)}
-                  title="Open command palette"
-                  data-testid="designer-empty-open-command-palette"
+                  class="rounded border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  onclick={() => designerStore.togglePreview(true)}
                 >
-                  Open Commands
+                  Preview now
                 </button>
               </div>
-              <p class="mt-3 text-xs text-muted-foreground">
-                Shortcut: <kbd class="rounded bg-muted px-1">Ctrl/Cmd + Shift + A</kbd> to add a text
-                question.
-              </p>
             </div>
           {:else}
             <!-- Questions List -->
@@ -363,10 +446,23 @@
                 data-testid="designer-question-list"
               >
                 {#each items as item (item.id)}
+                  {@const isSelected = selectedQuestionId === item.id}
                   <div
                     animate:flip={{ duration: 300 }}
+                    class="relative rounded-xl border p-1 transition-colors {isSelected
+                      ? 'border-primary bg-primary/5'
+                      : 'border-transparent'}"
                     data-testid={`designer-question-${item.id}`}
                   >
+                    {#if isSelected}
+                      <div
+                        class="mb-1 flex items-center justify-between rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-[11px] text-primary"
+                        data-testid={`designer-question-selected-${item.id}`}
+                      >
+                        <span class="font-medium">Selected</span>
+                        <span class="text-primary/80">Alt+↑/↓ move · Del delete</span>
+                      </div>
+                    {/if}
                     {#if item && item.question}
                       {@const isDisplay = [
                         'text-display',

@@ -20,11 +20,19 @@
 
   interface Props {
     question: Question & { config: TextInputConfig };
+    onUpdate?: any;
   }
 
-  let { question = $bindable() }: Props = $props();
+  let { question = $bindable(), onUpdate }: Props = $props();
 
   let newSuggestion = $state('');
+  let hasInitializedConfig = $state(false);
+  let lastConfigSnapshot = $state('');
+  let emitConfigUpdate = $state(false);
+
+  function markConfigDirty() {
+    emitConfigUpdate = true;
+  }
 
   function addSuggestion() {
     if (!newSuggestion.trim()) return;
@@ -35,6 +43,7 @@
 
     if (!question.config.suggestions.includes(newSuggestion.trim())) {
       question.config.suggestions = [...question.config.suggestions, newSuggestion.trim()];
+      markConfigDirty();
     }
 
     newSuggestion = '';
@@ -43,21 +52,44 @@
   function removeSuggestion(index: number) {
     if (!question.config.suggestions) return;
     question.config.suggestions = question.config.suggestions.filter((_, i) => i !== index);
+    markConfigDirty();
   }
 
   // Update validation based on input type
   $effect(() => {
     if (question.config.inputType === 'email' && !question.config.pattern) {
-      question.config.pattern = '^[^\s@]+@[^\s@]+\.[^\s@]+$';
+      question.config.pattern = '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$';
+      markConfigDirty();
     } else if (question.config.inputType === 'url' && !question.config.pattern) {
       question.config.pattern = '^https?://.*';
+      markConfigDirty();
     } else if (question.config.inputType === 'tel' && !question.config.pattern) {
-      question.config.pattern = '^[\d\s\-\+\(\)]+$';
+      question.config.pattern = '^[\\d\\s\\-\\+\\(\\)]+$';
+      markConfigDirty();
     }
+  });
+
+  // Keep parent question config in sync whenever this designer mutates config state.
+  $effect(() => {
+    const snapshot = JSON.stringify(question.config ?? {});
+
+    if (!hasInitializedConfig) {
+      hasInitializedConfig = true;
+      lastConfigSnapshot = snapshot;
+      return;
+    }
+
+    if (snapshot === lastConfigSnapshot) return;
+
+    lastConfigSnapshot = snapshot;
+    if (!emitConfigUpdate) return;
+
+    emitConfigUpdate = false;
+    onUpdate?.({ config: { ...question.config } } as Partial<Question>);
   });
 </script>
 
-<div class="designer-panel">
+<div class="designer-panel" oninput={markConfigDirty} onchange={markConfigDirty}>
   <!-- Input Type Selection -->
   <div class="form-group">
     <label for="input-type">Input Type</label>

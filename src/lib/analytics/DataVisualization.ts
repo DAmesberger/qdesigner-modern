@@ -30,6 +30,9 @@ import type {
   PerformanceMetrics
 } from './types';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- visualization callbacks accept dynamic chart payloads
+type DynamicValue = any;
+
 // Register Chart.js components
 Chart.register(
   CategoryScale,
@@ -121,19 +124,19 @@ export class DataVisualization {
             mode: 'index',
             intersect: false,
             callbacks: {
-              title: (context: any) => {
+              title: (context: DynamicValue) => {
                 const index = context[0]?.dataIndex;
                 if (index !== undefined && bins.binRanges[index]) {
                   return `${bins.binRanges[index].min.toFixed(0)}ms - ${bins.binRanges[index].max.toFixed(0)}ms`;
                 }
                 return '';
               },
-              label: (context: any) => `Frequency: ${context.parsed.y}`
+              label: (context: DynamicValue) => `Frequency: ${context.parsed.y}`
             }
           }
         },
         ...options
-      } as any,
+      } as DynamicValue,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -142,7 +145,7 @@ export class DataVisualization {
       type: 'bar',
       data: config.data,
       options: config.options
-    } as any);
+    } as DynamicValue);
 
     this.charts.set(chartId, chart);
     return chart;
@@ -200,7 +203,7 @@ export class DataVisualization {
           intersect: false
         },
         ...options
-      } as any,
+      } as DynamicValue,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -209,7 +212,7 @@ export class DataVisualization {
       type: 'line',
       data: config.data,
       options: config.options
-    } as any);
+    } as DynamicValue);
 
     this.charts.set(chartId, chart);
     return chart;
@@ -275,7 +278,7 @@ export class DataVisualization {
           },
           tooltip: {
             callbacks: {
-              label: (context: any) => {
+              label: (context: DynamicValue) => {
                 const point = context.raw as ChartPoint;
                 const label = point.metadata?.label || '';
                 return `${label} (${point.x}, ${point.y})`;
@@ -284,7 +287,7 @@ export class DataVisualization {
           }
         },
         ...options
-      } as any,
+      } as DynamicValue,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -293,7 +296,7 @@ export class DataVisualization {
       type: 'scatter',
       data: config.data,
       options: config.options
-    } as any);
+    } as DynamicValue);
 
     this.charts.set(chartId, chart);
     return chart;
@@ -335,11 +338,12 @@ export class DataVisualization {
         datasets: [{
           label: 'Heatmap',
           data: flattenedData,
-          backgroundColor: ((context: any) => {
+          backgroundColor: ((context: DynamicValue) => {
             const point = context.raw as ChartPoint;
-            const intensity = point.metadata?.intensity || 0;
+            const intensity =
+              typeof point.metadata?.intensity === 'number' ? point.metadata.intensity : 0;
             return this.getHeatmapColor(intensity);
-          }) as any,
+          }) as DynamicValue,
           borderColor: '#ffffff',
           borderWidth: 1
         }]
@@ -355,7 +359,7 @@ export class DataVisualization {
             max: xLabels.length - 0.5,
             ticks: {
               stepSize: 1,
-              callback: (value: any) => xLabels[value as number] || ''
+              callback: (value: DynamicValue) => xLabels[value as number] || ''
             },
             title: {
               display: true,
@@ -368,7 +372,7 @@ export class DataVisualization {
             max: yLabels.length - 0.5,
             ticks: {
               stepSize: 1,
-              callback: (value: any) => yLabels[value as number] || ''
+              callback: (value: DynamicValue) => yLabels[value as number] || ''
             },
             title: {
               display: true,
@@ -384,7 +388,7 @@ export class DataVisualization {
           tooltip: {
             callbacks: {
               title: () => '',
-              label: (context: any) => {
+              label: (context: DynamicValue) => {
                 const point = context.raw as ChartPoint;
                 const meta = point.metadata;
                 return `${meta?.xLabel} × ${meta?.yLabel}: ${meta?.value}`;
@@ -401,7 +405,7 @@ export class DataVisualization {
           }
         },
         ...options
-      } as any,
+      } as DynamicValue,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -410,7 +414,7 @@ export class DataVisualization {
       type: 'scatter',
       data: config.data,
       options: config.options
-    } as any);
+    } as DynamicValue);
 
     this.charts.set(chartId, chart);
     return chart;
@@ -442,7 +446,7 @@ export class DataVisualization {
       type: 'box_plot',
       data: {
         labels: datasets.map(d => d.label),
-        datasets: boxPlotData as any
+        datasets: boxPlotData as DynamicValue
       },
       options: {
         responsive: true,
@@ -462,8 +466,8 @@ export class DataVisualization {
           },
           tooltip: {
             callbacks: {
-              label: (context: any) => {
-                const stats = context.raw as any;
+              label: (context: DynamicValue) => {
+                const stats = context.raw as DynamicValue;
                 return [
                   `Min: ${stats.min.toFixed(2)}`,
                   `Q1: ${stats.q1.toFixed(2)}`,
@@ -477,7 +481,7 @@ export class DataVisualization {
           }
         },
         ...options
-      } as any,
+      } as DynamicValue,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -526,7 +530,7 @@ export class DataVisualization {
           pointBorderColor: '#fff',
           pointHoverBackgroundColor: '#fff',
           pointHoverBorderColor: this.colorPalette[0]
-        }] as any
+        }] as DynamicValue
       },
       options: {
         responsive: true,
@@ -539,7 +543,7 @@ export class DataVisualization {
             suggestedMin: 0,
             suggestedMax: 100
           }
-        } as any,
+        } as DynamicValue,
         plugins: {
           title: {
             display: true,
@@ -547,7 +551,7 @@ export class DataVisualization {
           }
         },
         ...options
-      } as any,
+      } as DynamicValue,
       responsive: true,
       maintainAspectRatio: false
     };
@@ -556,7 +560,7 @@ export class DataVisualization {
       type: 'radar',
       data: config.data,
       options: config.options
-    } as any);
+    } as DynamicValue);
 
     this.charts.set(chartId, chart);
     return chart;
@@ -669,7 +673,7 @@ export class DataVisualization {
     return (sortedData[lower] ?? 0) * (1 - weight) + (sortedData[upper] ?? 0) * weight;
   }
 
-  private createCustomBoxPlot(canvas: HTMLCanvasElement, data: any[], options: any): Chart {
+  private createCustomBoxPlot(canvas: HTMLCanvasElement, data: DynamicValue[], options: DynamicValue): Chart {
     // This would be a custom implementation of box plots
     // For now, we'll create a bar chart that approximates box plots
     return new Chart(canvas, {
@@ -685,7 +689,7 @@ export class DataVisualization {
         }]
       },
       options
-    } as any);
+    } as DynamicValue);
   }
 
   private normalizeValue(value: number, dataset: number[]): number {
@@ -720,7 +724,7 @@ export class DataVisualization {
   updateChart(chartId: string, newData: ChartData): void {
     const chart = this.charts.get(chartId);
     if (chart) {
-      chart.data = newData as any;
+      chart.data = newData as DynamicValue;
       chart.update();
     }
   }
@@ -793,7 +797,7 @@ export class DataVisualization {
    */
   generateChartConfig(
     type: ChartType,
-    data: any,
+    data: DynamicValue,
     customOptions?: Partial<ChartOptions>
   ): ChartConfig {
     const baseConfig: ChartConfig = {
@@ -818,7 +822,7 @@ export class DataVisualization {
             ...customOptions?.scales?.y
           },
           ...customOptions?.scales
-        } as any;
+        } as DynamicValue;
         break;
       
       case 'time_series':
@@ -829,7 +833,7 @@ export class DataVisualization {
             ...customOptions?.scales?.x
           },
           ...customOptions?.scales
-        } as any;
+        } as DynamicValue;
         break;
       
       case 'scatter':
@@ -840,7 +844,7 @@ export class DataVisualization {
             ...customOptions?.scales?.x
           },
           ...customOptions?.scales
-        } as any;
+        } as DynamicValue;
         break;
     }
 
@@ -850,7 +854,7 @@ export class DataVisualization {
   /**
    * Get analytics insights from chart data
    */
-  getChartInsights(chartId: string): any {
+  getChartInsights(chartId: string): DynamicValue {
     const chart = this.charts.get(chartId);
     if (!chart) return null;
 

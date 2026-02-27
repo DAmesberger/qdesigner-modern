@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
   import { Plus, FolderOpen, Users, Calendar, ChevronRight } from 'lucide-svelte';
   import { api } from '$lib/services/api';
   import { Modal } from '$lib/components/ui';
+  import { appPaths } from '$lib/routing/paths';
   import type { PageData } from './$types';
 
   interface Props {
@@ -29,7 +28,7 @@
 
       showCreateModal = false;
       if (typeof window !== 'undefined') {
-        window.location.href = `/projects/${project.id}`;
+        window.location.href = appPaths.project(project.id);
       }
     } catch (error) {
       console.error('Error creating project:', error);
@@ -90,7 +89,7 @@
           <div class="bg-white overflow-hidden shadow rounded-lg hover:shadow-md transition-shadow">
             <button
               onclick={() => {
-                const url = `/projects/${project.id}`;
+                const url = appPaths.project(project.id);
                 console.log('Navigating to:', url, 'project.id:', project.id);
                 if (project.id) {
                   // Use window.location as a workaround for the goto issue

@@ -2,18 +2,19 @@
  * Test Mode Utilities
  * 
  * Provides functions to enable/disable test mode for development.
- * When test mode is enabled, the app will automatically log in as the demo user.
+ * When test mode is enabled, the app will automatically log in with
+ * the credentials configured via VITE_TEST_MODE_EMAIL and VITE_TEST_MODE_PASSWORD.
  */
 
 export const TEST_MODE_KEY = 'qdesigner-test-mode';
 
 /**
- * Enable test mode - auto-login as demo user on page reload
+ * Enable test mode - auto-login with configured test user on page reload
  */
 export function enableTestMode() {
   if (import.meta.env.DEV) {
     localStorage.setItem(TEST_MODE_KEY, 'true');
-    console.log('🧪 Test mode enabled. Reload the page to auto-login as demo@example.com');
+    console.log('🧪 Test mode enabled. Reload the page to auto-login with configured credentials.');
     return true;
   } else {
     console.warn('Test mode is only available in development');

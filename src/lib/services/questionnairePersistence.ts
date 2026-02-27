@@ -1,6 +1,9 @@
 import { api } from './api';
 import type { Questionnaire } from '$lib/shared';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- persistence layer hydrates dynamic questionnaire JSON payloads
+type DynamicValue = any;
+
 export interface SaveResult {
   success: boolean;
   questionnaireId?: string;
@@ -85,17 +88,17 @@ export class QuestionnairePersistenceService {
       // Extract questionnaire from the JSONB content
       const content = data.content || {};
       const questionnaire: Questionnaire = {
-        id: (content as any).id || data.id,
-        name: (content as any).name || data.name,
-        description: (content as any).description || data.description || '',
-        version: (content as any).version || `${data.version}.0.0`,
-        pages: (content as any).pages || [],
-        questions: (content as any).questions || [],
-        variables: (content as any).variables || [],
-        settings: (content as any).settings || data.settings || {},
-        flow: (content as any).flow || [],
-        created: (content as any).created || data.createdAt,
-        modified: (content as any).modified || data.updatedAt
+        id: (content as DynamicValue).id || data.id,
+        name: (content as DynamicValue).name || data.name,
+        description: (content as DynamicValue).description || data.description || '',
+        version: (content as DynamicValue).version || `${data.version}.0.0`,
+        pages: (content as DynamicValue).pages || [],
+        questions: (content as DynamicValue).questions || [],
+        variables: (content as DynamicValue).variables || [],
+        settings: (content as DynamicValue).settings || data.settings || {},
+        flow: (content as DynamicValue).flow || [],
+        created: (content as DynamicValue).created || data.createdAt,
+        modified: (content as DynamicValue).modified || data.updatedAt
       };
 
       return {

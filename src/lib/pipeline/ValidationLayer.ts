@@ -14,6 +14,9 @@ import type {
 import type { Response, QuestionnaireSession } from '$lib/shared/types/response';
 import type { Question } from '$lib/shared/types/questionnaire';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- validation rules operate on dynamic response payloads
+type DynamicValue = any;
+
 export class ValidationLayer {
   private rules = new Map<string, ValidationRule>();
   private schemas = new Map<string, SchemaDefinition>();
@@ -94,7 +97,7 @@ export class ValidationLayer {
       warnings.push(...validationResult.warnings);
       transformed = validationResult.transformed || response.value;
       
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       errors.push({
         field: 'value',
         code: 'SCHEMA_VALIDATION_ERROR',
@@ -268,7 +271,7 @@ export class ValidationLayer {
             transformed = result.transformed;
           }
           
-        } catch (error: any) {
+        } catch (error: DynamicValue) {
           errors.push({
             field: 'value',
             code: 'CUSTOM_RULE_ERROR',
@@ -311,7 +314,7 @@ export class ValidationLayer {
   /**
    * Validate value against schema
    */
-  private validateAgainstSchema(value: any, schema: SchemaDefinition): ValidationResult {
+  private validateAgainstSchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
     const errors: ValidationError[] = [];
     const warnings: ValidationWarning[] = [];
     let transformed = value;
@@ -348,7 +351,7 @@ export class ValidationLayer {
   /**
    * Validate schema type
    */
-  private validateSchemaType(value: any, schema: SchemaDefinition): ValidationResult {
+  private validateSchemaType(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
     const errors: ValidationError[] = [];
     const warnings: ValidationWarning[] = [];
     let transformed = value;
@@ -381,7 +384,7 @@ export class ValidationLayer {
   /**
    * Validate string schema
    */
-  private validateStringSchema(value: any, schema: SchemaDefinition): ValidationResult {
+  private validateStringSchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
     const errors: ValidationError[] = [];
     const warnings: ValidationWarning[] = [];
     let transformed = value;
@@ -447,7 +450,7 @@ export class ValidationLayer {
   /**
    * Validate number schema
    */
-  private validateNumberSchema(value: any, schema: SchemaDefinition): ValidationResult {
+  private validateNumberSchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
     const errors: ValidationError[] = [];
     const warnings: ValidationWarning[] = [];
     let transformed = value;
@@ -506,7 +509,7 @@ export class ValidationLayer {
     this.addValidationRule({
       name: 'email',
       type: 'custom',
-      rule: (value: any) => {
+      rule: (value: DynamicValue) => {
         const errors: ValidationError[] = [];
         const warnings: ValidationWarning[] = [];
         
@@ -530,7 +533,7 @@ export class ValidationLayer {
     this.addValidationRule({
       name: 'url',
       type: 'custom',
-      rule: (value: any) => {
+      rule: (value: DynamicValue) => {
         const errors: ValidationError[] = [];
         const warnings: ValidationWarning[] = [];
         
@@ -572,18 +575,18 @@ export class ValidationLayer {
   /**
    * Helper methods
    */
-  private isEmpty(value: any): boolean {
+  private isEmpty(value: DynamicValue): boolean {
     return value === null || value === undefined || value === '' || 
            (Array.isArray(value) && value.length === 0);
   }
 
-  private getValueType(value: any): string {
+  private getValueType(value: DynamicValue): string {
     if (value === null) return 'null';
     if (Array.isArray(value)) return 'array';
     return typeof value;
   }
 
-  private coerceType(value: any, targetType: string): { success: boolean; value?: any } {
+  private coerceType(value: DynamicValue, targetType: string): { success: boolean; value?: DynamicValue } {
     try {
       switch (targetType) {
         case 'string':
@@ -697,7 +700,7 @@ export class ValidationLayer {
   private mergeValidationResults(results: ValidationResult[]): ValidationResult {
     const allErrors: ValidationError[] = [];
     const allWarnings: ValidationWarning[] = [];
-    let finalTransformed: any;
+    let finalTransformed: DynamicValue;
 
     for (const result of results) {
       allErrors.push(...result.errors);
@@ -717,22 +720,22 @@ export class ValidationLayer {
   }
 
   // Additional schema validation methods would be implemented here
-  private validateBooleanSchema(value: any, schema: SchemaDefinition): ValidationResult {
+  private validateBooleanSchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
     // Implementation for boolean validation
     return { isValid: true, errors: [], warnings: [] };
   }
 
-  private validateArraySchema(value: any, schema: SchemaDefinition): ValidationResult {
+  private validateArraySchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
     // Implementation for array validation
     return { isValid: true, errors: [], warnings: [] };
   }
 
-  private validateObjectSchema(value: any, schema: SchemaDefinition): ValidationResult {
+  private validateObjectSchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
     // Implementation for object validation
     return { isValid: true, errors: [], warnings: [] };
   }
 
-  private validateDateSchema(value: any, schema: SchemaDefinition): ValidationResult {
+  private validateDateSchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
     // Implementation for date validation
     return { isValid: true, errors: [], warnings: [] };
   }

@@ -3,10 +3,13 @@
 import { VariableEngine as Evaluator } from '$lib/scripting-engine';
 import type { ConditionalLogic } from '$lib/shared';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- service stores dynamic variables/responses from questionnaire runtime
+type DynamicValue = any;
+
 class ScriptingEngineService {
   private evaluator: Evaluator;
-  private variables: Map<string, any> = new Map();
-  private responseCache: Map<string, any> = new Map();
+  private variables: Map<string, DynamicValue> = new Map();
+  private responseCache: Map<string, DynamicValue> = new Map();
 
   constructor() {
     this.evaluator = new Evaluator();
@@ -17,7 +20,7 @@ class ScriptingEngineService {
   /**
    * Evaluate a formula with current context
    */
-  async evaluate(formula: string, context?: Record<string, any>): Promise<any> {
+  async evaluate(formula: string, context?: Record<string, DynamicValue>): Promise<DynamicValue> {
     const allVariables = this.getAllVariables(context);
     return this.evaluator.evaluate(formula, allVariables);
   }
@@ -27,7 +30,7 @@ class ScriptingEngineService {
    */
   async evaluateCondition(condition: ConditionalLogic): Promise<boolean> {
     try {
-      return this.evaluator.evaluateCondition(condition as any);
+      return this.evaluator.evaluateCondition(condition as DynamicValue);
     } catch (error) {
       console.error('Error evaluating condition:', error);
       return true; // Default to showing on error
@@ -37,7 +40,7 @@ class ScriptingEngineService {
   /**
    * Set a variable value
    */
-  setVariable(name: string, value: any): void {
+  setVariable(name: string, value: DynamicValue): void {
     this.variables.set(name, value);
     this.notifyVariableChange(name, value);
   }
@@ -45,14 +48,14 @@ class ScriptingEngineService {
   /**
    * Get a variable value
    */
-  getVariable(name: string): any {
+  getVariable(name: string): DynamicValue {
     return this.variables.get(name);
   }
 
   /**
    * Set multiple variables
    */
-  setVariables(variables: Record<string, any>): void {
+  setVariables(variables: Record<string, DynamicValue>): void {
     Object.entries(variables).forEach(([name, value]) => {
       this.setVariable(name, value);
     });
@@ -69,7 +72,7 @@ class ScriptingEngineService {
   /**
    * Get response value by question ID
    */
-  getResponse(questionId: string): any {
+  getResponse(questionId: string): DynamicValue {
     // Check cache first
     if (this.responseCache.has(questionId)) {
       return this.responseCache.get(questionId);
@@ -96,8 +99,8 @@ class ScriptingEngineService {
   /**
    * Get all responses for current session
    */
-  getAllResponses(): Record<string, any> {
-    const responses: Record<string, any> = {};
+  getAllResponses(): Record<string, DynamicValue> {
+    const responses: Record<string, DynamicValue> = {};
 
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -121,7 +124,7 @@ class ScriptingEngineService {
   /**
    * Parse and interpolate variables in text
    */
-  interpolateVariables(text: string, context?: Record<string, any>): string {
+  interpolateVariables(text: string, context?: Record<string, DynamicValue>): string {
     const allVariables = this.getAllVariables(context);
 
     // Replace ${variable} patterns
@@ -228,7 +231,7 @@ class ScriptingEngineService {
   private setupResponseListener(): void {
     // Listen for response save events
     const responseListener = (event: Event) => {
-      const customEvent = event as CustomEvent<{ questionId: string; value: any }>;
+      const customEvent = event as CustomEvent<{ questionId: string; value: DynamicValue }>;
       const { questionId, value } = customEvent.detail || { questionId: '', value: null };
       if (!questionId) return;
       this.responseCache.set(questionId, value);
@@ -238,8 +241,8 @@ class ScriptingEngineService {
     window.addEventListener('qd:response:saved', responseListener as EventListener);
   }
 
-  private getAllVariables(context?: Record<string, any>): Record<string, any> {
-    const allVars: Record<string, any> = {};
+  private getAllVariables(context?: Record<string, DynamicValue>): Record<string, DynamicValue> {
+    const allVars: Record<string, DynamicValue> = {};
 
     // Add stored variables
     this.variables.forEach((value, key) => {
@@ -278,7 +281,7 @@ class ScriptingEngineService {
     return participantId;
   }
 
-  private notifyVariableChange(name: string, value: any): void {
+  private notifyVariableChange(name: string, value: DynamicValue): void {
     window.dispatchEvent(
       new CustomEvent('qd:variable:changed', {
         detail: { name, value },

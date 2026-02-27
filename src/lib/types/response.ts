@@ -2,19 +2,19 @@
 
 export interface ResponseData {
 	questionId: string;
-	value: any;
+	value: unknown;
 	stimulusOnset?: number;
 	responseTime?: number;
 	reactionTime?: number;
 	timeOnQuestion?: number;
 	valid: boolean;
-	metadata?: Record<string, any>;
+	metadata?: Record<string, unknown>;
 }
 
 export interface InteractionEvent {
 	questionId: string | null;
 	eventType: string;
-	eventData: any;
+	eventData: unknown;
 	timestamp: number;
 	relativeTime?: number;
 	frameNumber?: number;

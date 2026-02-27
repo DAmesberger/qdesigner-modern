@@ -2,6 +2,9 @@ import type { FormulaContext, EvaluationResult, FormulaFunction, FormulaError } 
 import { statisticalFunctions } from './functions/statistical';
 import { arrayFunctions } from './functions/array';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- evaluator dispatches dynamic arguments/results for formula functions
+type DynamicValue = any;
+
 export class FormulaEvaluator {
   private functions: Map<string, FormulaFunction>;
   private context: FormulaContext;
@@ -70,9 +73,9 @@ export class FormulaEvaluator {
       description: 'Sum of values',
       parameters: [{ name: 'values', type: 'array|...number', description: 'Values to sum' }],
       returns: 'number',
-      implementation: (...args: any[]) => {
+      implementation: (...args: DynamicValue[]) => {
         const values = Array.isArray(args[0]) ? args[0] : args;
-        return values.reduce((sum: number, val: any) => {
+        return values.reduce((sum: number, val: DynamicValue) => {
           const num = typeof val === 'number' ? val : 0;
           return sum + num;
         }, 0);
@@ -85,7 +88,7 @@ export class FormulaEvaluator {
       description: 'Count non-empty values',
       parameters: [{ name: 'values', type: 'array|...any', description: 'Values to count' }],
       returns: 'number',
-      implementation: (...args: any[]) => {
+      implementation: (...args: DynamicValue[]) => {
         const values = Array.isArray(args[0]) ? args[0] : args;
         return values.filter(v => v !== null && v !== undefined && v !== '').length;
       }
@@ -97,9 +100,9 @@ export class FormulaEvaluator {
       description: 'Minimum value',
       parameters: [{ name: 'values', type: 'array|...number', description: 'Values to find minimum' }],
       returns: 'number',
-      implementation: (...args: any[]) => {
+      implementation: (...args: DynamicValue[]) => {
         const values = Array.isArray(args[0]) ? args[0] : args;
-        const numbers = values.filter((v: any) => typeof v === 'number' && !isNaN(v));
+        const numbers = values.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
         return numbers.length > 0 ? Math.min(...numbers) : NaN;
       }
     });
@@ -110,9 +113,9 @@ export class FormulaEvaluator {
       description: 'Maximum value',
       parameters: [{ name: 'values', type: 'array|...number', description: 'Values to find maximum' }],
       returns: 'number',
-      implementation: (...args: any[]) => {
+      implementation: (...args: DynamicValue[]) => {
         const values = Array.isArray(args[0]) ? args[0] : args;
-        const numbers = values.filter((v: any) => typeof v === 'number' && !isNaN(v));
+        const numbers = values.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
         return numbers.length > 0 ? Math.max(...numbers) : NaN;
       }
     });
@@ -128,7 +131,7 @@ export class FormulaEvaluator {
         { name: 'falseValue', type: 'any', description: 'Value if false' }
       ],
       returns: 'any',
-      implementation: (condition: any, trueValue: any, falseValue: any) => {
+      implementation: (condition: DynamicValue, trueValue: DynamicValue, falseValue: DynamicValue) => {
         return condition ? trueValue : falseValue;
       }
     });
@@ -139,7 +142,7 @@ export class FormulaEvaluator {
       description: 'Logical AND',
       parameters: [{ name: 'values', type: '...boolean', description: 'Values to AND' }],
       returns: 'boolean',
-      implementation: (...args: any[]) => {
+      implementation: (...args: DynamicValue[]) => {
         return args.every(v => Boolean(v));
       }
     });
@@ -150,7 +153,7 @@ export class FormulaEvaluator {
       description: 'Logical OR',
       parameters: [{ name: 'values', type: '...boolean', description: 'Values to OR' }],
       returns: 'boolean',
-      implementation: (...args: any[]) => {
+      implementation: (...args: DynamicValue[]) => {
         return args.some(v => Boolean(v));
       }
     });
@@ -161,7 +164,7 @@ export class FormulaEvaluator {
       description: 'Logical NOT',
       parameters: [{ name: 'value', type: 'boolean', description: 'Value to negate' }],
       returns: 'boolean',
-      implementation: (value: any) => !value
+      implementation: (value: DynamicValue) => !value
     });
     
     // Text functions
@@ -171,7 +174,7 @@ export class FormulaEvaluator {
       description: 'Concatenate strings',
       parameters: [{ name: 'values', type: '...any', description: 'Values to concatenate' }],
       returns: 'string',
-      implementation: (...args: any[]) => {
+      implementation: (...args: DynamicValue[]) => {
         return args.map(v => String(v)).join('');
       }
     });
@@ -182,7 +185,7 @@ export class FormulaEvaluator {
       description: 'String length',
       parameters: [{ name: 'text', type: 'string', description: 'Text to measure' }],
       returns: 'number',
-      implementation: (text: any) => String(text).length
+      implementation: (text: DynamicValue) => String(text).length
     });
     
     this.registerFunction({
@@ -191,7 +194,7 @@ export class FormulaEvaluator {
       description: 'Convert to uppercase',
       parameters: [{ name: 'text', type: 'string', description: 'Text to convert' }],
       returns: 'string',
-      implementation: (text: any) => String(text).toUpperCase()
+      implementation: (text: DynamicValue) => String(text).toUpperCase()
     });
     
     this.registerFunction({
@@ -200,7 +203,7 @@ export class FormulaEvaluator {
       description: 'Convert to lowercase',
       parameters: [{ name: 'text', type: 'string', description: 'Text to convert' }],
       returns: 'string',
-      implementation: (text: any) => String(text).toLowerCase()
+      implementation: (text: DynamicValue) => String(text).toLowerCase()
     });
     
     // Date/Time functions
@@ -303,7 +306,7 @@ export class FormulaEvaluator {
     }
   }
   
-  private parseAndEvaluate(formula: string): { value: any; dependencies: string[] } {
+  private parseAndEvaluate(formula: string): { value: DynamicValue; dependencies: string[] } {
     // Remove leading = if present
     formula = formula.trim();
     if (formula.startsWith('=')) {
@@ -367,10 +370,10 @@ export class FormulaEvaluator {
     });
   }
   
-  private parseArguments(argsString: string): any[] {
+  private parseArguments(argsString: string): DynamicValue[] {
     if (!argsString.trim()) return [];
     
-    const args: any[] = [];
+    const args: DynamicValue[] = [];
     let current = '';
     let depth = 0;
     let inString = false;
@@ -407,7 +410,7 @@ export class FormulaEvaluator {
     return args;
   }
   
-  private parseValue(value: string): any {
+  private parseValue(value: string): DynamicValue {
     // Try to parse as JSON
     try {
       return JSON.parse(value);
@@ -417,7 +420,7 @@ export class FormulaEvaluator {
     }
   }
   
-  private getType(value: any): string {
+  private getType(value: DynamicValue): string {
     if (value === null || value === undefined) return 'null';
     if (Array.isArray(value)) return 'array';
     return typeof value;

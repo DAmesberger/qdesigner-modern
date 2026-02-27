@@ -7,15 +7,14 @@
     onclose?: () => void;
   }
 
-  let { isOpen = $bindable(false), onclose }: Props = $props();
+  let { isOpen = false, onclose }: Props = $props();
 
   function handleClose() {
-    isOpen = false;
     onclose?.();
   }
 </script>
 
-<Modal bind:open={isOpen} onclose={handleClose} size="xl">
+<Modal open={isOpen} onclose={handleClose} size="xl">
   <div class="h-[80vh] flex flex-col" data-testid="designer-preview-modal">
     <div class="flex items-center justify-between px-6 py-4 border-b">
       <h2 class="text-lg font-semibold">Preview</h2>

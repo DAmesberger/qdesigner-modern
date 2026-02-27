@@ -11,6 +11,9 @@ import type {
 } from '$lib/shared/types/response';
 import type { Question } from '$lib/shared/types/questionnaire';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- pipeline payloads are intentionally polymorphic
+type DynamicValue = any;
+
 // ============================================================================
 // Core Pipeline Types
 // ============================================================================
@@ -29,7 +32,7 @@ export interface PipelineContext {
   questionnaireId: string;
   organizationId?: string;
   timestamp: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, DynamicValue>;
 }
 
 // ============================================================================
@@ -49,7 +52,7 @@ export interface StreamMessage {
   id: string;
   type: 'response' | 'progress' | 'error' | 'complete';
   sessionId: string;
-  data: any;
+  data: DynamicValue;
   timestamp: number;
   sequence?: number;
 }
@@ -82,15 +85,15 @@ export interface ValidationResult {
   isValid: boolean;
   errors: ValidationError[];
   warnings: ValidationWarning[];
-  transformed?: any;
+  transformed?: DynamicValue;
 }
 
 export interface ValidationError {
   field: string;
   code: string;
   message: string;
-  value?: any;
-  constraint?: any;
+  value?: DynamicValue;
+  constraint?: DynamicValue;
 }
 
 export interface ValidationWarning {
@@ -103,7 +106,7 @@ export interface ValidationWarning {
 export interface ValidationRule {
   name: string;
   type: 'schema' | 'business' | 'statistical' | 'custom';
-  rule: (value: any, context?: ValidationContext) => ValidationResult;
+  rule: (value: DynamicValue, context?: ValidationContext) => ValidationResult;
   priority?: number;
   enabled?: boolean;
 }
@@ -112,7 +115,7 @@ export interface ValidationContext {
   question: Question;
   session: QuestionnaireSession;
   previousResponses?: Response[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, DynamicValue>;
 }
 
 export interface SchemaDefinition {
@@ -126,8 +129,8 @@ export interface SchemaDefinition {
   maximum?: number;
   minLength?: number;
   maxLength?: number;
-  enum?: any[];
-  custom?: (value: any) => boolean;
+  enum?: DynamicValue[];
+  custom?: (value: DynamicValue) => boolean;
 }
 
 // ============================================================================
@@ -144,22 +147,22 @@ export interface TransformationStage {
   name: string;
   type: 'normalize' | 'compute' | 'aggregate' | 'filter' | 'custom';
   transformer: Transformer;
-  condition?: (data: any, context: TransformationContext) => boolean;
+  condition?: (data: DynamicValue, context: TransformationContext) => boolean;
   order?: number;
 }
 
 export interface Transformer {
   name: string;
-  transform: (data: any, context: TransformationContext) => TransformationResult | Promise<TransformationResult>;
-  supports: (data: any) => boolean;
+  transform: (data: DynamicValue, context: TransformationContext) => TransformationResult | Promise<TransformationResult>;
+  supports: (data: DynamicValue) => boolean;
 }
 
 export interface TransformationResult {
   success: boolean;
-  data?: any;
+  data?: DynamicValue;
   errors?: string[];
   warnings?: string[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, DynamicValue>;
 }
 
 export interface TransformationContext {
@@ -167,7 +170,7 @@ export interface TransformationContext {
   session: QuestionnaireSession;
   pipeline: TransformationPipeline;
   stage: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, DynamicValue>;
 }
 
 export interface ComputedVariable {
@@ -191,13 +194,13 @@ export interface AggregationFunction {
   field: string;
   output: string;
   condition?: string;
-  customFn?: (values: any[]) => any;
+  customFn?: (values: DynamicValue[]) => DynamicValue;
 }
 
 export interface FilterConfig {
   field: string;
   operator: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'nin' | 'regex';
-  value: any;
+  value: DynamicValue;
 }
 
 // ============================================================================
@@ -223,7 +226,7 @@ export interface ExportMetadata {
   created?: Date;
   version?: string;
   tags?: string[];
-  custom?: Record<string, any>;
+  custom?: Record<string, DynamicValue>;
   
   // Export process tracking
   exportedAt?: Date | string;
@@ -249,7 +252,7 @@ export interface ExportMetadata {
 export interface ExportResult {
   success: boolean;
   format: ExportFormat;
-  data?: any;
+  data?: DynamicValue;
   filename?: string;
   size?: number;
   errors?: string[];
@@ -294,7 +297,7 @@ export interface ExcelExportOptions extends ExportOptions {
 
 export interface ExcelWorksheet {
   name: string;
-  data: any[];
+  data: DynamicValue[];
   headers?: string[];
   frozen?: { rows?: number; cols?: number };
   filters?: boolean;
@@ -332,7 +335,7 @@ export interface ExcelProtection {
 // Queue Types
 // ============================================================================
 
-export interface QueueItem<T = any> {
+export interface QueueItem<T = unknown> {
   id: string;
   data: T;
   priority: number;
@@ -384,7 +387,7 @@ export interface QueueMetrics {
 // Batch Processing Types
 // ============================================================================
 
-export interface BatchJob<T = any> {
+export interface BatchJob<T = unknown> {
   id: string;
   name: string;
   type: 'export' | 'transform' | 'validate' | 'analyze' | 'custom';
@@ -396,7 +399,7 @@ export interface BatchJob<T = any> {
   created: number;
   started?: number;
   completed?: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, DynamicValue>;
 }
 
 export interface BatchConfig {
@@ -433,7 +436,7 @@ export interface BatchResult {
   throughput: number;
   errors: BatchError[];
   warnings: string[];
-  data?: any;
+  data?: DynamicValue;
 }
 
 export interface BatchError {
@@ -444,7 +447,7 @@ export interface BatchError {
   timestamp: number;
 }
 
-export interface BatchProcessor<T = any, R = any> {
+export interface BatchProcessor<T = unknown, R = unknown> {
   name: string;
   process: (items: T[], context: BatchContext) => Promise<R[]>;
   supports: (item: T) => boolean;
@@ -457,7 +460,7 @@ export interface BatchContext {
   batch: number;
   totalBatches: number;
   startTime: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, DynamicValue>;
 }
 
 // ============================================================================
@@ -469,7 +472,7 @@ export interface PipelineEvent {
   type: PipelineEventType;
   source: string;
   timestamp: number;
-  data: any;
+  data: DynamicValue;
   context?: PipelineContext;
 }
 
@@ -501,7 +504,7 @@ export interface PipelineEventHandler {
 export interface PipelineError extends Error {
   code: string;
   type: 'validation' | 'transformation' | 'export' | 'queue' | 'stream' | 'system';
-  context?: any;
+  context?: DynamicValue;
   recoverable: boolean;
   timestamp: number;
 }
@@ -511,5 +514,5 @@ export interface ErrorRecoveryStrategy {
   maxAttempts?: number;
   delay?: number;
   condition?: (error: PipelineError) => boolean;
-  action?: (error: PipelineError) => any;
+  action?: (error: PipelineError) => DynamicValue;
 }

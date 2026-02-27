@@ -59,6 +59,7 @@ pnpm dev:full
 ```
 
 That's it! No manual configuration needed. The development environment includes:
+
 - 🐘 PostgreSQL database (via Supabase)
 - 🔐 Authentication service
 - 📦 File storage
@@ -66,11 +67,11 @@ That's it! No manual configuration needed. The development environment includes:
 
 ### Service URLs
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| App | http://localhost:5173 | QDesigner application |
-| Supabase | http://localhost:54321 | Database management UI |
-| Mailhog | http://localhost:8025 | Email testing interface |
+| Service  | URL                    | Description             |
+| -------- | ---------------------- | ----------------------- |
+| App      | http://localhost:5173  | QDesigner application   |
+| Supabase | http://localhost:54321 | Database management UI  |
+| Mailhog  | http://localhost:18026 | Email testing interface |
 
 ### Test Credentials
 
@@ -85,8 +86,8 @@ For faster development, enable test mode to automatically log in as the demo use
 
 ```javascript
 // In browser console (dev mode only):
-window.testMode.enable()   // Enable auto-login
-window.testMode.disable()  // Disable auto-login
+window.testMode.enable(); // Enable auto-login
+window.testMode.disable(); // Disable auto-login
 ```
 
 When enabled, navigating to protected routes automatically logs you in.
@@ -103,8 +104,9 @@ The variable system supports complex formulas with:
 - **Random Functions**: `RANDOM()`, `RANDINT(min, max)`
 
 Example formula:
+
 ```javascript
-IF(reactionTime < 300, "Fast", IF(reactionTime < 500, "Normal", "Slow"))
+IF(reactionTime < 300, 'Fast', IF(reactionTime < 500, 'Normal', 'Slow'));
 ```
 
 ## 🎯 Question Types

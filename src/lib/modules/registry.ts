@@ -1,7 +1,7 @@
 // Module Registry System
 
-import type { ComponentType } from 'svelte';
 import type { ModuleMetadata, ModuleCategory, ModuleRegistry as IModuleRegistry } from './types';
+import type { ComponentType } from 'svelte';
 
 class ModuleRegistryImpl implements IModuleRegistry {
   private modules = new Map<string, ModuleMetadata>();
@@ -74,7 +74,7 @@ class ModuleRegistryImpl implements IModuleRegistry {
     
     try {
       const module = await loader();
-      const component = module.default;
+      const component = module.default as ComponentType;
       
       // Cache the loaded component
       this.componentCache.set(cacheKey, component);

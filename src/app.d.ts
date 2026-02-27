@@ -5,10 +5,10 @@ declare global {
     // interface Error {}
     interface Locals {
       getSession: () => Promise<{
-        user: any;
+        user: unknown;
         access_token: string;
       } | null>;
-      user?: any;
+      user?: unknown;
     }
     // interface PageData {}
     // interface Platform {}

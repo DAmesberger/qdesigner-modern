@@ -4,7 +4,7 @@ export interface Variable {
   id: string;
   name: string;
   type: 'numeric' | 'text' | 'boolean' | 'date' | 'array' | 'object';
-  value: any;
+  value: unknown;
   formula?: string;
   dependencies?: string[];
   metadata?: {
@@ -17,15 +17,15 @@ export interface Variable {
 
 export interface ValidationRule {
   type: 'required' | 'min' | 'max' | 'pattern' | 'custom';
-  value?: any;
+  value?: unknown;
   message?: string;
   condition?: string;
 }
 
 export interface FormulaContext {
   variables: Map<string, Variable>;
-  responses?: Map<string, any>;
-  metadata?: Map<string, any>;
+  responses?: Map<string, unknown>;
+  metadata?: Map<string, unknown>;
   currentTime?: number;
   randomSeed?: number;
 }
@@ -36,7 +36,7 @@ export interface FormulaFunction {
   description: string;
   parameters: FunctionParameter[];
   returns: string;
-  implementation: (...args: any[]) => any;
+  implementation: (...args: unknown[]) => unknown;
   examples?: string[];
 }
 
@@ -45,11 +45,11 @@ export interface FunctionParameter {
   type: string;
   description: string;
   optional?: boolean;
-  default?: any;
+  default?: unknown;
 }
 
 export interface EvaluationResult {
-  value: any;
+  value: unknown;
   type: string;
   error?: string;
   dependencies?: string[];

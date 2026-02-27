@@ -4,10 +4,23 @@ import prettier from 'eslint-config-prettier';
 import ts from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import svelteParser from 'svelte-eslint-parser';
+import globals from 'globals';
 
 export default [
   js.configs.recommended,
   prettier,
+  {
+    files: ['**/*.{js,ts,svelte}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        ...globals.es2024,
+      },
+    },
+  },
   {
     files: ['**/*.{js,ts}'],
     languageOptions: {
@@ -21,19 +34,23 @@ export default [
       '@typescript-eslint': ts,
     },
     rules: {
+      'no-undef': 'off',
       ...ts.configs.recommended.rules,
+    },
+  },
+  {
+    files: ['**/*.{test,spec}.{js,ts}', 'tests/**/*.ts', 'e2e/**/*.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.vitest,
+      },
     },
   },
   {
     files: ['e2e/{smoke,regression,fullstack,page-objects}/**/*.ts'],
     languageOptions: {
       globals: {
-        window: 'readonly',
-        document: 'readonly',
-        URL: 'readonly',
-        URLSearchParams: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
+        ...globals.browser,
       },
     },
     rules: {

@@ -19,11 +19,11 @@ export interface Session {
   current_question_id?: string;
   current_page_id?: string;
   progress_percentage?: number;
-  device_info?: Record<string, any>;
-  browser_info?: Record<string, any>;
-  metadata?: Record<string, any>;
+  device_info?: Record<string, unknown>;
+  browser_info?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   access_code?: string;
-  state_snapshot?: any;
+  state_snapshot?: unknown;
   offline_start?: boolean;
   sync_status?: 'synced' | 'pending' | 'conflict';
   last_sync_at?: string;

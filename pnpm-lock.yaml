@@ -139,6 +139,9 @@ devDependencies:
   fake-indexeddb:
     specifier: ^6.0.1
     version: 6.2.5
+  globals:
+    specifier: ^17.3.0
+    version: 17.3.0
   isomorphic-dompurify:
     specifier: ^2.26.0
     version: 2.36.0
@@ -3170,6 +3173,11 @@ packages:
 
   /globals@16.5.0:
     resolution: {integrity: sha512-c/c15i26VrJ4IRt5Z89DnIzCGDn9EcebibhAOjw5ibqEHsE1wLUgkPn9RDmNcUKyU87GeaL633nyJ+pplFR2ZQ==}
+    engines: {node: '>=18'}
+    dev: true
+
+  /globals@17.3.0:
+    resolution: {integrity: sha512-yMqGUQVVCkD4tqjOJf3TnrvaaHDMYp4VlUSObbkIiuCPe/ofdMBFIAcBbCSRFWOnos6qRiTVStDwqPLUclaxIw==}
     engines: {node: '>=18'}
     dev: true
 

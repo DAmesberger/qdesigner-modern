@@ -1,6 +1,5 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { browser } from '$app/environment';
   import Button from '$lib/components/common/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
@@ -14,24 +13,91 @@
   let error: string | null = null;
   let successMessage: string | null = null;
 
-  async function handleSignIn(e: Event) {
-    e.preventDefault();
+  interface DevQuickLoginPersona {
+    id: string;
+    label: string;
+    email: string;
+    password: string;
+  }
+
+  function normalizeErrorMessage(value: unknown, fallback: string): string {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value;
+    }
+
+    if (value && typeof value === 'object') {
+      const maybe = value as { message?: unknown; error?: unknown };
+      if (typeof maybe.message === 'string' && maybe.message.trim().length > 0) {
+        return maybe.message;
+      }
+      if (typeof maybe.error === 'string' && maybe.error.trim().length > 0) {
+        return maybe.error;
+      }
+    }
+
+    return fallback;
+  }
+
+  function getDevQuickLoginPersonas(): DevQuickLoginPersona[] {
+    if (!import.meta.env.DEV || import.meta.env.VITE_DEV_QUICK_LOGIN_ENABLED !== 'true') {
+      return [];
+    }
+
+    const personas: Array<DevQuickLoginPersona | null> = [
+      {
+        id: 'admin',
+        label: 'Admin',
+        email: import.meta.env.VITE_DEV_LOGIN_ADMIN_EMAIL || '',
+        password: import.meta.env.VITE_DEV_LOGIN_ADMIN_PASSWORD || '',
+      },
+      {
+        id: 'editor',
+        label: 'Editor',
+        email: import.meta.env.VITE_DEV_LOGIN_EDITOR_EMAIL || '',
+        password: import.meta.env.VITE_DEV_LOGIN_EDITOR_PASSWORD || '',
+      },
+      {
+        id: 'viewer',
+        label: 'Viewer',
+        email: import.meta.env.VITE_DEV_LOGIN_VIEWER_EMAIL || '',
+        password: import.meta.env.VITE_DEV_LOGIN_VIEWER_PASSWORD || '',
+      },
+      {
+        id: 'participant',
+        label: 'Participant',
+        email: import.meta.env.VITE_DEV_LOGIN_PARTICIPANT_EMAIL || '',
+        password: import.meta.env.VITE_DEV_LOGIN_PARTICIPANT_PASSWORD || '',
+      },
+    ].map((persona) => {
+      if (!persona.email || !persona.password) return null;
+      return persona;
+    });
+
+    return personas.filter((persona): persona is DevQuickLoginPersona => persona !== null);
+  }
+
+  const devQuickLoginPersonas = getDevQuickLoginPersonas();
+  const showDevQuickLogin = import.meta.env.DEV && devQuickLoginPersonas.length > 0;
+
+  async function signInAndRedirect(signInEmail: string, signInPassword: string) {
     loading = true;
     error = null;
+    successMessage = null;
 
     try {
-      const { session, user: signedInUser, error: signInError } = await auth.signIn(email, password);
+      const { user: signedInUser, error: signInError } = await auth.signIn(
+        signInEmail,
+        signInPassword
+      );
 
       if (signInError) {
-        error = signInError;
-        loading = false;
+        error = normalizeErrorMessage(signInError, 'Sign in failed');
         return;
       }
 
       if (signedInUser) {
         console.log('Login successful, user:', signedInUser.email);
 
-        // Check if user has any organizations
         const orgs = await api.organizations.list();
         if (orgs.length === 0) {
           console.log('No organizations, redirecting to onboarding');
@@ -44,8 +110,21 @@
     } catch (err) {
       console.error('Login error:', err);
       error = err instanceof Error ? err.message : 'An error occurred during sign in';
+    } finally {
       loading = false;
     }
+  }
+
+  async function handleSignIn(e: Event) {
+    e.preventDefault();
+    await signInAndRedirect(email, password);
+  }
+
+  async function handleDevQuickLogin(persona: DevQuickLoginPersona) {
+    email = persona.email;
+    password = persona.password;
+    await auth.ensureDevQuickLoginPersonas();
+    await signInAndRedirect(persona.email, persona.password);
   }
 
   async function handleSignUp() {
@@ -55,7 +134,7 @@
     const { error: signUpError } = await auth.signUp(email, password, '');
 
     if (signUpError) {
-      error = signUpError;
+      error = normalizeErrorMessage(signUpError, 'Sign up failed');
       loading = false;
     } else {
       successMessage = 'Check your email for the confirmation link!';
@@ -134,6 +213,37 @@
       <div>
         <Button type="submit" variant="primary" size="lg" class="w-full" {loading}>Sign in</Button>
       </div>
+
+      {#if showDevQuickLogin}
+        <div
+          class="rounded-md border border-dashed border-amber-500/40 bg-amber-500/10 p-3"
+          data-testid="dev-quick-login-panel"
+        >
+          <div class="mb-2 flex items-center justify-between">
+            <p
+              class="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300"
+            >
+              Dev Quick Login
+            </p>
+            <span class="text-[11px] text-amber-700 dark:text-amber-300">Development only</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            {#each devQuickLoginPersonas as persona}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="justify-start border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/15"
+                onclick={() => handleDevQuickLogin(persona)}
+                {loading}
+                data-testid={`dev-quick-login-${persona.id}`}
+              >
+                {persona.label}
+              </Button>
+            {/each}
+          </div>
+        </div>
+      {/if}
 
       <div class="mt-6">
         <div class="relative">

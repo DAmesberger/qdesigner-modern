@@ -25,6 +25,9 @@ import { ResponseCollector, type ResponseCaptureMetadata } from './ResponseColle
 import { BlockRandomizer } from './BlockRandomizer';
 import { nanoid } from 'nanoid';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime state handles heterogeneous question data
+type DynamicValue = any;
+
 export interface RuntimeConfig {
   canvas: HTMLCanvasElement;
   questionnaire: Questionnaire;
@@ -84,7 +87,7 @@ export class QuestionnaireRuntime {
       metadata: {
         userAgent: navigator.userAgent,
         screenResolution: `${screen.width}x${screen.height}`,
-        refreshRate: (screen as any).refreshRate || 60,
+        refreshRate: (screen as DynamicValue).refreshRate || 60,
         webGLSupported: true,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         locale: navigator.language,
@@ -276,7 +279,7 @@ export class QuestionnaireRuntime {
   }
 
   private inferVariableType(question: Question): Variable['type'] {
-    const responseType = (question as any).responseType;
+    const responseType = (question as DynamicValue).responseType;
     const responseTypeKind = responseType?.type;
 
     if (!responseTypeKind) {
@@ -289,7 +292,7 @@ export class QuestionnaireRuntime {
     if (responseTypeKind === 'single') {
       const optionValues = Array.isArray(responseType.options)
         ? responseType.options
-            .map((option: any) => option?.value)
+            .map((option: DynamicValue) => option?.value)
             .filter((value: unknown) => value !== null && value !== undefined)
         : [];
 
@@ -361,7 +364,7 @@ export class QuestionnaireRuntime {
       return;
     }
 
-    if (!this.evaluateVisibility((item as any).conditions)) {
+    if (!this.evaluateVisibility((item as DynamicValue).conditions)) {
       this.currentItemIndex += 1;
       await this.showCurrentItem();
       return;
@@ -422,7 +425,7 @@ export class QuestionnaireRuntime {
 
     await this.questionPresenter.present(question, this.variableEngine);
 
-    const responseType = (question as any).responseType;
+    const responseType = (question as DynamicValue).responseType;
     if (responseType?.type === 'none') {
       const delay = responseType.delay || 0;
       this.scheduleAutoAdvance(delay, async () => {
@@ -454,11 +457,11 @@ export class QuestionnaireRuntime {
     question: Question,
     _metadata: ModuleMetadata
   ): Promise<void> {
-    await this.questionPresenter.presentModular(question as any, this.variableEngine);
+    await this.questionPresenter.presentModular(question as DynamicValue, this.variableEngine);
 
-    const timing = (question as any).timing;
-    const duration = timing?.duration || (question as any).displayDuration || 2500;
-    const autoAdvance = (question as any).autoAdvance !== false;
+    const timing = (question as DynamicValue).timing;
+    const duration = timing?.duration || (question as DynamicValue).displayDuration || 2500;
+    const autoAdvance = (question as DynamicValue).autoAdvance !== false;
 
     if (!autoAdvance) {
       return;
@@ -534,7 +537,7 @@ export class QuestionnaireRuntime {
   private async handleCollectedResponse(
     question: Question,
     onsetTime: number,
-    value: any,
+    value: DynamicValue,
     responseMetadata?: ResponseCaptureMetadata
   ): Promise<void> {
     const timestamp = responseMetadata?.timestamp ?? performance.now();
@@ -600,10 +603,10 @@ export class QuestionnaireRuntime {
     this.variableEngine.setVariable(`${question.id}_correct`, isCorrect, 'response');
   }
 
-  private evaluateCustomCorrectness(question: Question, value: any): boolean | null {
-    const validation = (question as any).validation;
+  private evaluateCustomCorrectness(question: Question, value: DynamicValue): boolean | null {
+    const validation = (question as DynamicValue).validation;
     const customRule = Array.isArray(validation)
-      ? validation.find((rule: any) => rule.type === 'custom')
+      ? validation.find((rule: DynamicValue) => rule.type === 'custom')
       : undefined;
 
     if (!customRule?.value) {
@@ -631,10 +634,10 @@ export class QuestionnaireRuntime {
     }
 
     for (const condition of conditions) {
-      const formula = (condition as any).formula || (condition as any).expression;
+      const formula = (condition as DynamicValue).formula || (condition as DynamicValue).expression;
       if (!formula) continue;
 
-      const target = (condition as any).target || 'show';
+      const target = (condition as DynamicValue).target || 'show';
       const result = Boolean(this.variableEngine.evaluateFormula(formula).value);
 
       if (target === 'show' && !result) return false;

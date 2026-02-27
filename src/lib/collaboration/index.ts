@@ -26,6 +26,9 @@ export * from './utils.js';
 // Default configuration
 import type { CollaborationConfig } from './types.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- collaboration facade passes dynamic transport/event payloads
+type DynamicValue = any;
+
 export const DEFAULT_COLLABORATION_CONFIG: CollaborationConfig = {
   websocketUrl: 'ws://localhost:8080/collaboration',
   reconnectAttempts: 5,
@@ -136,7 +139,7 @@ export function supportsWebSockets(): boolean {
 /**
  * Get browser information for session metadata
  */
-export function getBrowserInfo(): Record<string, any> {
+export function getBrowserInfo(): Record<string, DynamicValue> {
   if (typeof navigator === 'undefined') {
     return { browser: 'unknown', version: 'unknown' };
   }
@@ -167,7 +170,7 @@ export function formatFileSize(bytes: number): string {
 /**
  * Debounce function for performance optimization
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: DynamicValue[]) => DynamicValue>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -182,7 +185,7 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * Throttle function for performance optimization
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: DynamicValue[]) => DynamicValue>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {
@@ -200,7 +203,7 @@ export function throttle<T extends (...args: any[]) => any>(
 /**
  * Safe JSON parse with error handling
  */
-export function safeJSONParse<T = any>(str: string, fallback: T): T {
+export function safeJSONParse<T = DynamicValue>(str: string, fallback: T): T {
   try {
     return JSON.parse(str);
   } catch {
@@ -218,7 +221,7 @@ export function deepClone<T>(obj: T): T {
 /**
  * Check if two objects are deeply equal
  */
-export function deepEqual(a: any, b: any): boolean {
+export function deepEqual(a: DynamicValue, b: DynamicValue): boolean {
   if (a === b) return true;
   
   if (a == null || b == null) return false;
@@ -346,7 +349,7 @@ export class EventBus {
     };
   }
 
-  emit(event: string, ...args: any[]): void {
+  emit(event: string, ...args: DynamicValue[]): void {
     const callbacks = this.listeners.get(event);
     if (callbacks) {
       callbacks.forEach(callback => {

@@ -11,13 +11,16 @@ import type {
   ConditionalLogic 
 } from '$lib/shared';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- extensible question modules pass dynamic payloads
+type DynamicValue = any;
+
 // Base interface for all question components
 export interface BaseQuestionComponent {
   question: Question;
   mode: 'edit' | 'preview' | 'runtime';
-  value?: any;
+  value?: DynamicValue;
   disabled?: boolean;
-  onResponse?: (value: any) => void;
+  onResponse?: (value: DynamicValue) => void;
   onValidation?: (isValid: boolean, errors: string[]) => void;
 }
 
@@ -54,7 +57,7 @@ export interface ExtendedQuestion {
   media?: MediaConfig[];
 
   // Validation properties
-  validation?: ValidationRule[] | any;
+  validation?: ValidationRule[] | DynamicValue;
   
   // Advanced properties
   scoring?: ScoringConfig;
@@ -62,7 +65,7 @@ export interface ExtendedQuestion {
   analytics?: AnalyticsConfig;
   
   // Config can be any of the specific question configs
-  config?: any;
+  config?: DynamicValue;
 }
 
 export interface QuestionLayout {
@@ -104,7 +107,7 @@ export interface MediaConfig {
 }
 
 export interface ScoringConfig {
-  correctAnswer?: any;
+  correctAnswer?: DynamicValue;
   points?: number;
   partialCredit?: boolean;
   scoringFunction?: string; // Custom JS function
@@ -205,7 +208,7 @@ export interface MatrixRow {
 export interface MatrixColumn {
   id: string;
   label: string;
-  value: any;
+  value: DynamicValue;
   width?: string;
 }
 
@@ -219,7 +222,7 @@ export interface ReactionTimeConfig {
 
 export interface StimulusConfig {
   type: 'text' | 'image' | 'shape' | 'custom';
-  content: any;
+  content: DynamicValue;
   duration?: number;
   fixation?: {
     show: boolean;
@@ -268,7 +271,7 @@ export interface WebGLStimulusConfig {
 
 export interface WebGLContent {
   type: 'circle' | 'rectangle' | 'text' | 'custom';
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
 }
 
 export interface WebGLResponseConfig {
@@ -347,10 +350,10 @@ export interface PrecisionTimingConfig {
 // Question registry for extensibility
 export interface QuestionComponentRegistry {
   [key: string]: {
-    component: any; // Svelte component
-    configComponent?: any; // Configuration UI component
-    defaultConfig: any;
-    validator?: (config: any) => ValidationResult;
+    component: DynamicValue; // Svelte component
+    configComponent?: DynamicValue; // Configuration UI component
+    defaultConfig: DynamicValue;
+    validator?: (config: DynamicValue) => ValidationResult;
     icon: string;
     category: string;
     description: string;
@@ -377,7 +380,7 @@ export interface QuestionEditorProps {
 // Response data structure
 export interface QuestionResponse {
   questionId: string;
-  value: any;
+  value: DynamicValue;
   timestamp: number;
   reactionTime?: number;
   interactions?: InteractionEvent[];
@@ -388,5 +391,5 @@ export interface QuestionResponse {
 export interface InteractionEvent {
   type: 'click' | 'keypress' | 'focus' | 'blur' | 'change';
   timestamp: number;
-  data?: any;
+  data?: DynamicValue;
 }

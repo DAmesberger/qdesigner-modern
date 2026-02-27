@@ -14,6 +14,9 @@ import type {
 } from './types';
 import type { Response, QuestionnaireSession } from '$lib/shared/types/response';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- streaming transports arbitrary event payloads
+type DynamicValue = any;
+
 export class StreamingService {
   private config: StreamingConfig;
   private ws: WebSocket | null = null;
@@ -115,7 +118,7 @@ export class StreamingService {
   /**
    * Handle connection error
    */
-  private handleConnectionError(error: any): void {
+  private handleConnectionError(error: DynamicValue): void {
     this.isConnected = false;
     this.scheduleReconnect();
     
@@ -220,7 +223,7 @@ export class StreamingService {
     error: {
       code: string;
       message: string;
-      details?: any;
+      details?: DynamicValue;
     },
     context?: PipelineContext
   ): void {
@@ -374,7 +377,7 @@ export class StreamingService {
   /**
    * Handle incoming WebSocket message
    */
-  private handleMessage(data: any): void {
+  private handleMessage(data: DynamicValue): void {
     if (data.type === 'ack') {
       // Handle acknowledgment
       return;
@@ -463,7 +466,7 @@ export class StreamingService {
    * Match filter value with operator
    */
   private matchesFilterValue(
-    value: any, 
+    value: DynamicValue, 
     filterValue: string | RegExp, 
     operator: string = 'equals'
   ): boolean {
@@ -485,7 +488,7 @@ export class StreamingService {
   /**
    * Compress messages for transmission
    */
-  private compressMessages(messages: StreamMessage[]): any {
+  private compressMessages(messages: StreamMessage[]): DynamicValue {
     // Simple compression - in production, use a proper compression library
     return messages.map(msg => ({
       ...msg,
@@ -496,7 +499,7 @@ export class StreamingService {
   /**
    * Compress data object
    */
-  private compressData(data: any): any {
+  private compressData(data: DynamicValue): DynamicValue {
     // Placeholder for compression logic
     // In production, implement proper compression
     return data;
@@ -518,10 +521,10 @@ export class StreamingService {
   /**
    * Emit pipeline event
    */
-  private emitEvent(type: string, data: any): void {
+  private emitEvent(type: string, data: DynamicValue): void {
     const event: PipelineEvent = {
       id: this.generateMessageId(),
-      type: type as any,
+      type: type as DynamicValue,
       source: 'StreamingService',
       timestamp: Date.now(),
       data

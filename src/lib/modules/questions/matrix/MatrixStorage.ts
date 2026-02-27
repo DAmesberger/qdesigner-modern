@@ -1,6 +1,9 @@
 import { BaseQuestionStorage } from '../shared/BaseStorage';
 import type { QuestionResponse } from '../shared/types';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- matrix answers can be heterogeneous nested values
+type DynamicValue = any;
+
 export class MatrixStorage extends BaseQuestionStorage {
   constructor() {
     super();
@@ -14,12 +17,12 @@ export class MatrixStorage extends BaseQuestionStorage {
     return this.getAllForSession();
   }
   
-  parseValue(value: any): Record<string, any> {
+  parseValue(value: DynamicValue): Record<string, DynamicValue> {
     if (!value || typeof value !== 'object') return {};
     return value;
   }
   
-  formatValue(value: Record<string, any>): any {
+  formatValue(value: Record<string, DynamicValue>): DynamicValue {
     return value || {};
   }
   
@@ -69,9 +72,9 @@ export class MatrixStorage extends BaseQuestionStorage {
     return completionRates;
   }
   
-  async getColumnDistribution(questionId: string, rowId: string): Promise<Record<any, number>> {
+  async getColumnDistribution(questionId: string, rowId: string): Promise<Record<string, number>> {
     const responses = await this.getResponses(questionId);
-    const distribution: Record<any, number> = {};
+    const distribution: Record<string, number> = {};
     
     responses.forEach((response: QuestionResponse) => {
       const value = this.parseValue(response.value);

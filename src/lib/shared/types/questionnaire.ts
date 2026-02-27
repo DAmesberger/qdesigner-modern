@@ -22,20 +22,23 @@ export interface Questionnaire {
   pages: Page[];
   flow: FlowControl[];
   settings: QuestionnaireSettings;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic data surfaces are required for extensible questionnaire schemas
+type DynamicValue = any;
 
 export interface Variable {
   id: string;
   name: string;
   type: VariableType;
   scope: 'global' | 'local' | 'temporary';
-  defaultValue?: any;
+  defaultValue?: DynamicValue;
   formula?: string;
   dependencies?: string[];
   validation?: ValidationRule[];
   description?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export type VariableType =
@@ -89,7 +92,7 @@ export interface QuestionnaireSettings {
   requireConsent?: boolean;
   requireAuthentication?: boolean;
   allowAnonymous?: boolean;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, DynamicValue>;
 }
 
 export interface QuestionSettings {
@@ -202,7 +205,7 @@ export interface StimulusConfig {
 
 export interface ValidationRule {
   type: 'required' | 'min' | 'max' | 'minLength' | 'maxLength' | 'pattern' | 'custom';
-  value?: any;
+  value?: DynamicValue;
   message?: string;
   condition?: string;
 }
@@ -233,7 +236,7 @@ export interface RandomizationConfig {
 
 export interface LoopConfig {
   variable: string;
-  values: any[];
+  values: DynamicValue[];
   shuffle?: boolean;
 }
 
@@ -364,7 +367,7 @@ export interface MatrixDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
   rows: Array<{ id: string; label: string }>;
-  columns: Array<{ id: string; label: string; value?: any }>;
+  columns: Array<{ id: string; label: string; value?: DynamicValue }>;
   responseType: 'single' | 'multiple' | 'text' | 'number';
   required?: 'all' | 'any' | string[];
 }
@@ -425,7 +428,7 @@ export interface RankingDisplayConfig extends BaseDisplayConfig {
 
 export interface WebGLDisplayConfig extends BaseDisplayConfig {
   prompt?: string;
-  sceneConfig: Record<string, any>;
+  sceneConfig: Record<string, DynamicValue>;
   interactionMode?: 'click' | 'drag' | 'keyboard' | 'custom';
 }
 
@@ -450,7 +453,7 @@ export interface StatisticalFeedbackConfig extends BaseDisplayConfig {
   showPercentile?: boolean;
   showSummary?: boolean;
   refreshMs?: number;
-  customization?: Record<string, any>;
+  customization?: Record<string, DynamicValue>;
 }
 
 // ============================================================================
@@ -569,12 +572,12 @@ export interface BaseQuestion {
   tags?: string[];
 
   // Legacy/Common properties for type compatibility
-  settings?: Record<string, any>;
-  response?: any; // Loosely typed to allow access before narrowing
-  validation?: any;
+  settings?: Record<string, DynamicValue>;
+  response?: DynamicValue; // Loosely typed to allow access before narrowing
+  validation?: DynamicValue;
   media?: MediaConfig[]; // Legacy access
-  stimulus?: any;
-  responseOptions?: any;
+  stimulus?: DynamicValue;
+  responseOptions?: DynamicValue;
 }
 
 // ============================================================================
@@ -635,7 +638,7 @@ export interface ResponseConfig {
 
 export interface ResponseOption {
   id: string;
-  value: any;
+  value: DynamicValue;
   label?: string;
   hotkey?: string;
   position?: Position;

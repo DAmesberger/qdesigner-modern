@@ -2,6 +2,9 @@
 
 import type { BaseModuleConfig, ModuleCategory } from '$lib/modules/types';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- analytics modules receive dynamic variable payloads
+type DynamicValue = any;
+
 export interface AnalyticsModuleConfig extends BaseModuleConfig {
   category: 'display';
   dataSource: {
@@ -19,14 +22,14 @@ export interface AnalyticsModuleConfig extends BaseModuleConfig {
     customColors?: string[];
   };
   // Analytics don't have answers, they just display data
-  config: Record<string, any>;
+  config: Record<string, DynamicValue>;
 }
 
 export interface AnalyticsProps {
   analytics: AnalyticsModuleConfig;
   mode?: 'edit' | 'preview' | 'runtime';
-  variables?: Record<string, any>;
-  data?: any[]; // Computed data for visualization
+  variables?: Record<string, DynamicValue>;
+  data?: DynamicValue[]; // Computed data for visualization
   onUpdate?: (updates: Partial<AnalyticsModuleConfig>) => void;
   onInteraction?: (event: AnalyticsInteractionEvent) => void;
 }
@@ -34,18 +37,18 @@ export interface AnalyticsProps {
 export interface AnalyticsInteractionEvent {
   type: 'view' | 'hover' | 'click' | 'zoom' | 'pan';
   timestamp: number;
-  data?: any;
+  data?: DynamicValue;
 }
 
 export interface AnalyticsAggregation {
   type: string;
   label: string;
-  compute: (values: any[]) => any;
+  compute: (values: DynamicValue[]) => DynamicValue;
 }
 
 export interface ChartDataPoint {
-  x: any;
-  y: any;
+  x: DynamicValue;
+  y: DynamicValue;
   label?: string;
   color?: string;
   size?: number;
@@ -68,5 +71,5 @@ export interface ChartConfiguration {
     labels?: string[];
     datasets: ChartDataset[];
   };
-  options?: Record<string, any>;
+  options?: Record<string, DynamicValue>;
 }

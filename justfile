@@ -63,8 +63,8 @@ db-seed-test:
 db-reset:
     #!/usr/bin/env bash
     echo "Dropping and recreating database..."
-    psql "postgresql://qdesigner:qdesigner@localhost:5432/postgres" -c "DROP DATABASE IF EXISTS qdesigner;"
-    psql "postgresql://qdesigner:qdesigner@localhost:5432/postgres" -c "CREATE DATABASE qdesigner OWNER qdesigner;"
+    psql "postgresql://qdesigner:qdesigner@localhost:15434/postgres" -c "DROP DATABASE IF EXISTS qdesigner;"
+    psql "postgresql://qdesigner:qdesigner@localhost:15434/postgres" -c "CREATE DATABASE qdesigner OWNER qdesigner;"
     echo "Running migrations..."
     just db-migrate
     echo "Seeding baseline data..."
@@ -145,28 +145,28 @@ health:
     echo "Checking service health..."
 
     # PostgreSQL
-    if pg_isready -h localhost -p 5432 -U qdesigner > /dev/null 2>&1; then
+    if pg_isready -h localhost -p 15434 -U qdesigner > /dev/null 2>&1; then
         echo "  ✓ PostgreSQL"
     else
         echo "  ✗ PostgreSQL"
     fi
 
     # Redis
-    if redis-cli -p 6379 ping > /dev/null 2>&1; then
+    if redis-cli -p 16381 ping > /dev/null 2>&1; then
         echo "  ✓ Redis"
     else
         echo "  ✗ Redis"
     fi
 
     # MinIO
-    if curl -sf http://localhost:9000/minio/health/live > /dev/null 2>&1; then
+    if curl -sf http://localhost:19003/minio/health/live > /dev/null 2>&1; then
         echo "  ✓ MinIO"
     else
         echo "  ✗ MinIO"
     fi
 
     # MailPit
-    if curl -sf http://localhost:8025/api/v1/info > /dev/null 2>&1; then
+    if curl -sf http://localhost:18026/api/v1/info > /dev/null 2>&1; then
         echo "  ✓ MailPit"
     else
         echo "  ✗ MailPit"

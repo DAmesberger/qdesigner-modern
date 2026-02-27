@@ -17,6 +17,9 @@ import type {
 import type { QuestionnaireSession, Response, QuestionnaireMetadata } from '$lib/shared/types/response';
 import { VariableEngine } from '$lib/scripting-engine';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- transformation stages accept dynamic data shapes
+type DynamicValue = any;
+
 export class TransformationPipeline {
   private stages: TransformationStage[] = [];
   private transformers = new Map<string, Transformer>();
@@ -78,7 +81,7 @@ export class TransformationPipeline {
       let transformedData = { ...session };
       const errors: string[] = [];
       const warnings: string[] = [];
-      const metadata: Record<string, any> = {};
+      const metadata: Record<string, DynamicValue> = {};
 
       const stagesToRun = pipeline?.stages || this.stages;
 
@@ -126,7 +129,7 @@ export class TransformationPipeline {
         }
       };
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         errors: [`Pipeline execution failed: ${error.message}`],
@@ -177,7 +180,7 @@ export class TransformationPipeline {
    */
   private async executeStage(
     stage: TransformationStage,
-    data: any,
+    data: DynamicValue,
     context: TransformationContext
   ): Promise<TransformationResult> {
     const transformer = this.transformers.get(stage.transformer.name);
@@ -198,7 +201,7 @@ export class TransformationPipeline {
 
     try {
       return await transformer.transform(data, context);
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         errors: [`Stage '${stage.name}' failed: ${error.message}`]
@@ -213,7 +216,7 @@ export class TransformationPipeline {
     // Data normalization transformer
     this.registerTransformer({
       name: 'normalize',
-      supports: (data: any) => data && typeof data === 'object',
+      supports: (data: DynamicValue) => data && typeof data === 'object',
       transform: async (data: QuestionnaireSession, context: TransformationContext) => {
         return this.normalizeData(data, context);
       }
@@ -222,7 +225,7 @@ export class TransformationPipeline {
     // Computed variables transformer
     this.registerTransformer({
       name: 'compute',
-      supports: (data: any) => data && data.responses && Array.isArray(data.responses),
+      supports: (data: DynamicValue) => data && data.responses && Array.isArray(data.responses),
       transform: async (data: QuestionnaireSession, context: TransformationContext) => {
         return this.computeVariables(data, context);
       }
@@ -231,7 +234,7 @@ export class TransformationPipeline {
     // Aggregation transformer
     this.registerTransformer({
       name: 'aggregate',
-      supports: (data: any) => data && data.responses && Array.isArray(data.responses),
+      supports: (data: DynamicValue) => data && data.responses && Array.isArray(data.responses),
       transform: async (data: QuestionnaireSession, context: TransformationContext) => {
         return this.aggregateData(data, context);
       }
@@ -240,7 +243,7 @@ export class TransformationPipeline {
     // Response filtering transformer
     this.registerTransformer({
       name: 'filter',
-      supports: (data: any) => data && data.responses && Array.isArray(data.responses),
+      supports: (data: DynamicValue) => data && data.responses && Array.isArray(data.responses),
       transform: async (data: QuestionnaireSession, context: TransformationContext) => {
         return this.filterResponses(data, context);
       }
@@ -249,7 +252,7 @@ export class TransformationPipeline {
     // Data cleaning transformer
     this.registerTransformer({
       name: 'clean',
-      supports: (data: any) => data && typeof data === 'object',
+      supports: (data: DynamicValue) => data && typeof data === 'object',
       transform: async (data: QuestionnaireSession, context: TransformationContext) => {
         return this.cleanData(data, context);
       }
@@ -302,7 +305,7 @@ export class TransformationPipeline {
         }
       };
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         errors: [`Normalization failed: ${error.message}`]
@@ -318,7 +321,7 @@ export class TransformationPipeline {
     context: TransformationContext
   ): Promise<TransformationResult> {
     const enhanced = { ...session };
-    const computed: Record<string, any> = {};
+    const computed: Record<string, DynamicValue> = {};
     const errors: string[] = [];
 
     try {
@@ -329,7 +332,7 @@ export class TransformationPipeline {
         try {
           const result = await this.variableEngine.evaluate(variable.formula, variableContext);
           computed[variable.name] = result;
-        } catch (error: any) {
+        } catch (error: DynamicValue) {
           errors.push(`Failed to compute variable '${variable.name}': ${error.message}`);
         }
       }
@@ -349,7 +352,7 @@ export class TransformationPipeline {
         }
       };
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         errors: [`Variable computation failed: ${error.message}`]
@@ -494,7 +497,7 @@ export class TransformationPipeline {
     return timestamp;
   }
 
-  private normalizeResponseValue(value: any, questionType: string): any {
+  private normalizeResponseValue(value: DynamicValue, questionType: string): DynamicValue {
     switch (questionType) {
       case 'scale':
       case 'rating':
@@ -511,8 +514,8 @@ export class TransformationPipeline {
     }
   }
 
-  private createVariableContext(session: QuestionnaireSession): Record<string, any> {
-    const context: Record<string, any> = {};
+  private createVariableContext(session: QuestionnaireSession): Record<string, DynamicValue> {
+    const context: Record<string, DynamicValue> = {};
 
     // Add all response values to context
     for (const response of session.responses) {

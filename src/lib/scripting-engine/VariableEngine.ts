@@ -1,6 +1,9 @@
 import { create, all, type FactoryFunctionMap } from 'mathjs';
 import type { Variable, VariableType } from '$lib/shared';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- variable engine evaluates dynamic formula payloads
+type DynamicValue = any;
+
 const factories = all as FactoryFunctionMap;
 const math = create(factories);
 
@@ -17,17 +20,17 @@ const BUILTIN_FUNCTIONS = {
   derivative: () => {
     throw new Error('Function derivative is disabled');
   },
-  IF: (condition: boolean, trueValue: any, falseValue: any) => (condition ? trueValue : falseValue),
+  IF: (condition: boolean, trueValue: DynamicValue, falseValue: DynamicValue) => (condition ? trueValue : falseValue),
   NOW: () => Date.now(),
   TIME_SINCE: (timestamp: number) => Date.now() - timestamp,
-  COUNT: (arr: any[]) => (Array.isArray(arr) ? arr.length : 0),
+  COUNT: (arr: DynamicValue[]) => (Array.isArray(arr) ? arr.length : 0),
   SUM: (arr: number[]) => (Array.isArray(arr) ? arr.reduce((a, b) => a + b, 0) : 0),
   AVG: (arr: number[]) => {
     if (!Array.isArray(arr) || arr.length === 0) return 0;
     return arr.reduce((a, b) => a + b, 0) / arr.length;
   },
-  CONCAT: (...args: any[]) => args.join(''),
-  LENGTH: (value: string | any[]) => value?.length ?? 0,
+  CONCAT: (...args: DynamicValue[]) => args.join(''),
+  LENGTH: (value: string | DynamicValue[]) => value?.length ?? 0,
   RANDOM: () => Math.random(),
   RANDINT: (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min,
 };
@@ -36,7 +39,7 @@ math.import(BUILTIN_FUNCTIONS, { override: true });
 
 export interface VariableValue {
   id: string;
-  value: any;
+  value: DynamicValue;
   timestamp: number;
   source?: string;
 }
@@ -46,7 +49,7 @@ export interface VariableContext {
 }
 
 export interface EvaluationResult {
-  value: any;
+  value: DynamicValue;
   error?: string;
   dependencies?: string[];
 }
@@ -84,7 +87,7 @@ export class VariableEngine {
     this.clearCache(varId);
   }
 
-  public setVariable(id: string, value: any, source?: string): void {
+  public setVariable(id: string, value: DynamicValue, source?: string): void {
     const variable = this.variables.get(id);
     if (!variable) {
       throw new Error(`Variable ${id} not found`);
@@ -100,7 +103,7 @@ export class VariableEngine {
     this.clearCache(id);
   }
 
-  public getVariable(id: string): any {
+  public getVariable(id: string): DynamicValue {
     const variable = this.variables.get(id);
     if (!variable) {
       throw new Error(`Variable ${id} not found`);
@@ -118,7 +121,7 @@ export class VariableEngine {
     return result.value;
   }
 
-  public evaluate(expression: string, scope?: Record<string, any>): any {
+  public evaluate(expression: string, scope?: Record<string, DynamicValue>): DynamicValue {
     return math.evaluate(expression, scope || {});
   }
 
@@ -156,7 +159,7 @@ export class VariableEngine {
 
   public registerFunction(
     name: string,
-    fn: (...args: any[]) => any,
+    fn: (...args: DynamicValue[]) => DynamicValue,
     options?: { override?: boolean }
   ): void {
     math.import(
@@ -174,8 +177,8 @@ export class VariableEngine {
     return [...Object.keys(BUILTIN_FUNCTIONS), ...Array.from(this.customFunctions)].sort();
   }
 
-  public getAllVariables(): Record<string, any> {
-    const result: Record<string, any> = {};
+  public getAllVariables(): Record<string, DynamicValue> {
+    const result: Record<string, DynamicValue> = {};
 
     for (const [id, variable] of this.variables) {
       try {
@@ -188,7 +191,7 @@ export class VariableEngine {
     return result;
   }
 
-  public setValue(name: string, value: any): void {
+  public setValue(name: string, value: DynamicValue): void {
     this.setVariable(name, value, 'runtime');
   }
 
@@ -273,7 +276,7 @@ export class VariableEngine {
     try {
       const node = math.parse(formula);
 
-      node.traverse((traversed: any, path: string, parent: any) => {
+      node.traverse((traversed: DynamicValue, path: string, parent: DynamicValue) => {
         if (traversed.type !== 'SymbolNode') return;
 
         const symbolName = traversed.name;
@@ -308,8 +311,8 @@ export class VariableEngine {
     return Array.from(dependencies);
   }
 
-  private createEvaluationScope(dependencies: string[], stack: Set<string>): Record<string, any> {
-    const scope: Record<string, any> = {};
+  private createEvaluationScope(dependencies: string[], stack: Set<string>): Record<string, DynamicValue> {
+    const scope: Record<string, DynamicValue> = {};
 
     for (const dependencyId of dependencies) {
       const variable = this.variables.get(dependencyId);
@@ -374,7 +377,7 @@ export class VariableEngine {
     }
   }
 
-  private validateType(value: any, type: VariableType): any {
+  private validateType(value: DynamicValue, type: VariableType): DynamicValue {
     switch (type) {
       case 'number': {
         const parsed = Number(value);

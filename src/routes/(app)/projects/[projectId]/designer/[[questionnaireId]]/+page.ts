@@ -24,17 +24,7 @@ export const load: PageLoad = async ({ params, parent, url }) => {
     parentData.organizationId || input?.organizationId || input?.organization_id || null;
 
   // Try to load project data
-  // Use mock data for test projects
-  if (params.projectId === 'test-project-1') {
-    project = {
-      id: 'test-project-1',
-      name: 'Test Project',
-      description: 'Test project for media rendering',
-      organizationId: parentData.organizationId || 'test-org',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  } else if (isOnline) {
+  if (isOnline) {
     try {
       // Try network first when online
       const networkProject = await api.projects.get(params.projectId);
@@ -62,23 +52,7 @@ export const load: PageLoad = async ({ params, parent, url }) => {
 
   // Load questionnaire data
   if (questionnaireId && questionnaireId !== 'new') {
-    // Use mock data for test questionnaires
-    if (questionnaireId === '1' || questionnaireId === '2' || questionnaireId === 'test-questionnaire-1') {
-      questionnaire = {
-        id: questionnaireId,
-        name: `Test Questionnaire ${questionnaireId}`,
-        description: 'Test questionnaire for media rendering',
-        projectId: params.projectId,
-        organizationId: resolveProjectOrganizationId(project),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        definition: {
-          pages: [],
-          questions: [],
-          settings: {}
-        }
-      };
-    } else if (isOnline) {
+    if (isOnline) {
       try {
         // Try network first
         const networkQuestionnaire = await api.questionnaires.get(params.projectId, questionnaireId);

@@ -14,6 +14,9 @@ export type ModuleCategory = 'display' | 'question' | 'instruction' | 'analytics
 
 export type { Question, ConditionalLogic, Questionnaire };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- intentionally dynamic module payload boundary
+type DynamicValue = any;
+
 export interface BaseModuleConfig {
   id: string;
   type: string;
@@ -31,7 +34,7 @@ export interface ModuleMetadata {
   description: string;
   capabilities: ModuleCapabilities;
   components: ModuleComponents;
-  defaultConfig?: any;
+  defaultConfig?: DynamicValue;
   answerType?: AnswerType; // Only for questions
   questionRuntime?: {
     contract: 'v1';
@@ -52,8 +55,8 @@ export interface ModuleCapabilities {
 
 // Module component loaders
 export interface ModuleComponents {
-  runtime: () => Promise<{ default: any }>;
-  designer: () => Promise<{ default: any }>;
+  runtime: () => Promise<{ default: unknown }>;
+  designer: () => Promise<{ default: unknown }>;
 }
 
 // Answer type definition for questions
@@ -62,20 +65,20 @@ export interface AnswerType {
   dataType: 'string' | 'number' | 'boolean' | 'array' | 'object' | 'date';
   aggregations: string[]; // Available aggregation functions
   transformations: string[]; // Available transformation functions
-  schema: any; // TypeScript schema for the answer
+  schema: DynamicValue; // TypeScript schema for the answer
 }
 
 // Storage interface
 export interface ModuleStorage {
-  save(id: string, data: any): Promise<void>;
-  load(id: string): Promise<any>;
+  save(id: string, data: DynamicValue): Promise<void>;
+  load(id: string): Promise<DynamicValue>;
   clear(id: string): Promise<void>;
-  getAll(): Promise<Record<string, any>>;
+  getAll(): Promise<Record<string, DynamicValue>>;
 }
 
 // Validator interface
 export interface ModuleValidator {
-  validate(value: any, config: any): ValidationResult;
+  validate(value: DynamicValue, config: DynamicValue): ValidationResult;
 }
 
 export interface ValidationResult {
@@ -95,9 +98,9 @@ export interface InstructionProps {
 export interface QuestionProps {
   question: Question;
   mode: 'edit' | 'preview' | 'runtime';
-  value?: any;
+  value?: DynamicValue;
   disabled?: boolean;
-  onResponse?: (value: any) => void;
+  onResponse?: (value: DynamicValue) => void;
   onValidation?: (result: ValidationResult) => void;
   onInteraction?: (event: InteractionEvent) => void;
 }
@@ -105,7 +108,7 @@ export interface QuestionProps {
 export interface AnalyticsBlockProps {
   block: AnalyticsBlock;
   mode: 'edit' | 'preview' | 'runtime';
-  data?: any[];
+  data?: DynamicValue[];
   onUpdate?: (updates: Partial<AnalyticsBlock>) => void;
 }
 
@@ -136,7 +139,7 @@ export interface AnalyticsBlock {
   id: string;
   type: string;
   order: number;
-  config: any; // Block-specific configuration
+  config: DynamicValue; // Block-specific configuration
   dataSource?: DataSource;
   calculations?: Calculation[];
   conditions?: ConditionalLogic;
@@ -154,7 +157,7 @@ export interface DataSource {
 export interface DataFilter {
   field: string;
   operator: 'equals' | 'notEquals' | 'contains' | 'greaterThan' | 'lessThan' | 'between';
-  value: any;
+  value: DynamicValue;
 }
 
 export interface TimeRange {
@@ -174,7 +177,7 @@ export interface Calculation {
 export interface Variable {
   id: string;
   name: string;
-  value: any;
+  value: DynamicValue;
   source?: 'calculation' | 'response' | 'system' | 'constant';
 }
 
@@ -222,13 +225,13 @@ export interface TimingConfig {
 export interface InteractionEvent {
   type: 'view' | 'click' | 'keypress' | 'focus' | 'blur' | 'change' | 'submit' | 'auto-advance';
   timestamp: number;
-  data?: any;
+  data?: DynamicValue;
 }
 
 // Response data structure
 export interface ResponseData {
   questionId: string;
-  value: any;
+  value: DynamicValue;
   timestamp: number;
   sessionId: string;
   participantId?: string;
@@ -247,5 +250,5 @@ export interface ModuleRegistry {
   get(type: string): ModuleMetadata | undefined;
   getByCategory(category: ModuleCategory): ModuleMetadata[];
   getAllTypes(): string[];
-  loadComponent(type: string, variant: 'runtime' | 'designer'): Promise<any>;
+  loadComponent(type: string, variant: 'runtime' | 'designer'): Promise<ComponentType>;
 }

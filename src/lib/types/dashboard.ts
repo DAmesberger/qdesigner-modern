@@ -19,6 +19,8 @@ export interface QuestionnaireStats {
 
 export interface DashboardQuestionnaire {
   questionnaire_id: string;
+  project_id: string;
+  projectId?: string;
   name: string;
   description?: string;
   status: 'draft' | 'published' | 'archived';

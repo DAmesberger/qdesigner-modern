@@ -1,5 +1,8 @@
 import type { FormulaFunction } from '../types';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- formula functions operate on dynamic values
+type DynamicValue = any;
+
 // Statistical Functions
 export const statisticalFunctions: FormulaFunction[] = [
   {
@@ -10,9 +13,9 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'values', type: 'array|...number', description: 'Array of numbers or individual numbers' }
     ],
     returns: 'number',
-    implementation: (...args: any[]) => {
+    implementation: (...args: DynamicValue[]) => {
       const values = Array.isArray(args[0]) ? args[0] : args;
-      const numbers = values.filter((v: any) => typeof v === 'number' && !isNaN(v));
+      const numbers = values.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
       if (numbers.length === 0) return NaN;
       return numbers.reduce((sum: number, val: number) => sum + val, 0) / numbers.length;
     },
@@ -27,10 +30,10 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'values', type: 'array|...number', description: 'Array of numbers or individual numbers' }
     ],
     returns: 'number',
-    implementation: (...args: any[]) => {
+    implementation: (...args: DynamicValue[]) => {
       const values = Array.isArray(args[0]) ? args[0] : args;
       const numbers = values
-        .filter((v: any) => typeof v === 'number' && !isNaN(v))
+        .filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v))
         .sort((a: number, b: number) => a - b);
       
       if (numbers.length === 0) return NaN;
@@ -51,11 +54,11 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'values', type: 'array|...number', description: 'Array of values' }
     ],
     returns: 'any|array',
-    implementation: (...args: any[]) => {
+    implementation: (...args: DynamicValue[]) => {
       const values = Array.isArray(args[0]) ? args[0] : args;
       const frequency = new Map<any, number>();
       
-      values.forEach((val: any) => {
+      values.forEach((val: DynamicValue) => {
         frequency.set(val, (frequency.get(val) || 0) + 1);
       });
       
@@ -77,9 +80,9 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'values', type: 'array|...number', description: 'Array of numbers or individual numbers' }
     ],
     returns: 'number',
-    implementation: (...args: any[]) => {
+    implementation: (...args: DynamicValue[]) => {
       const values = Array.isArray(args[0]) ? args[0] : args;
-      const numbers = values.filter((v: any) => typeof v === 'number' && !isNaN(v));
+      const numbers = values.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
       
       if (numbers.length < 2) return NaN;
       
@@ -100,9 +103,9 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'values', type: 'array|...number', description: 'Array of numbers or individual numbers' }
     ],
     returns: 'number',
-    implementation: (...args: any[]) => {
+    implementation: (...args: DynamicValue[]) => {
       const values = Array.isArray(args[0]) ? args[0] : args;
-      const numbers = values.filter((v: any) => typeof v === 'number' && !isNaN(v));
+      const numbers = values.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
       
       if (numbers.length < 2) return NaN;
       
@@ -123,8 +126,8 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'percentile', type: 'number', description: 'Percentile (0-1 or 0-100)' }
     ],
     returns: 'number',
-    implementation: (values: any[], percentile: number) => {
-      const numbers = values.filter((v: any) => typeof v === 'number' && !isNaN(v)).sort((a: number, b: number) => a - b);
+    implementation: (values: DynamicValue[], percentile: number) => {
+      const numbers = values.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v)).sort((a: number, b: number) => a - b);
       
       if (numbers.length === 0) return NaN;
       
@@ -152,14 +155,14 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'y', type: 'array', description: 'Second array of numbers' }
     ],
     returns: 'number',
-    implementation: (x: any[], y: any[]) => {
+    implementation: (x: DynamicValue[], y: DynamicValue[]) => {
       if (!Array.isArray(x) || !Array.isArray(y) || x.length !== y.length) return NaN;
       
       const n = x.length;
       if (n < 2) return NaN;
       
-      const xNum = x.filter((v: any) => typeof v === 'number' && !isNaN(v));
-      const yNum = y.filter((v: any) => typeof v === 'number' && !isNaN(v));
+      const xNum = x.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
+      const yNum = y.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
       
       if (xNum.length !== n || yNum.length !== n) return NaN;
       
@@ -208,9 +211,9 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'tails', type: 'number', description: 'Number of tails (1 or 2)', optional: true, default: 2 }
     ],
     returns: 'object',
-    implementation: (group1: any[], group2: any[], tails: number = 2) => {
-      const g1 = group1.filter((v: any) => typeof v === 'number' && !isNaN(v));
-      const g2 = group2.filter((v: any) => typeof v === 'number' && !isNaN(v));
+    implementation: (group1: DynamicValue[], group2: DynamicValue[], tails: number = 2) => {
+      const g1 = group1.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
+      const g2 = group2.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
       
       const n1 = g1.length;
       const n2 = g2.length;
@@ -249,9 +252,9 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'values', type: 'array|...number', description: 'Array of numbers or individual numbers' }
     ],
     returns: 'number',
-    implementation: (...args: any[]) => {
+    implementation: (...args: DynamicValue[]) => {
       const values = Array.isArray(args[0]) ? args[0] : args;
-      const numbers = values.filter((v: any) => typeof v === 'number' && !isNaN(v));
+      const numbers = values.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
       
       const n = numbers.length;
       if (n < 3) return NaN;
@@ -276,9 +279,9 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'values', type: 'array|...number', description: 'Array of numbers or individual numbers' }
     ],
     returns: 'number',
-    implementation: (...args: any[]) => {
+    implementation: (...args: DynamicValue[]) => {
       const values = Array.isArray(args[0]) ? args[0] : args;
-      const numbers = values.filter((v: any) => typeof v === 'number' && !isNaN(v));
+      const numbers = values.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
       
       const n = numbers.length;
       if (n < 4) return NaN;

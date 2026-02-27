@@ -3,6 +3,7 @@ import { db } from './db/indexeddb';
 import { toast } from '$lib/stores/toast';
 import { isOnline } from './offline';
 import type { Questionnaire } from '$lib/shared';
+import { get } from 'svelte/store';
 
 interface AutoSaveConfig {
   enabled: boolean;
@@ -15,11 +16,11 @@ class AutoSaveService {
   private lastSavedContent: string = '';
   private isAutoSaving = false;
   private cleanupEffect: (() => void) | null = null;
-  
+
   config = $state<AutoSaveConfig>({
     enabled: true,
     intervalMs: 30000, // 30 seconds
-    showNotifications: false
+    showNotifications: false,
   });
 
   constructor() {}
@@ -31,29 +32,29 @@ class AutoSaveService {
     if (this.cleanupEffect) {
       return; // Already running
     }
-    
+
     // In Svelte 5 .svelte.ts files, we can use $effect.root to create effects that live outside component tree
     this.cleanupEffect = $effect.root(() => {
-        $effect(() => {
-            const state = designerStore;
-            if (!this.config.enabled || !state.userId || !state.questionnaire.id) {
-                return;
-            }
-            
-            // This will track questionnaire because it is a rune
-            const currentContent = JSON.stringify(state.questionnaire);
-            
-            if (currentContent !== this.lastSavedContent) {
-                // Determine if this is the FIRST run (init) to avoid saving immediately on load?
-                // lastSavedContent is empty initially.
-                // If we want to avoid saving on load, we should init lastSavedContent elsewhere or check 'isDirty'
-                if (this.lastSavedContent !== '') {
-                     this.scheduleAutoSave(state.questionnaire, state.userId);
-                } else {
-                    this.lastSavedContent = currentContent;
-                }
-            }
-        });
+      $effect(() => {
+        const state = designerStore;
+        if (!this.config.enabled || !state.userId) {
+          return;
+        }
+
+        // This will track questionnaire because it is a rune
+        const currentContent = JSON.stringify(state.questionnaire);
+
+        if (currentContent !== this.lastSavedContent) {
+          // Determine if this is the FIRST run (init) to avoid saving immediately on load?
+          // lastSavedContent is empty initially.
+          // If we want to avoid saving on load, we should init lastSavedContent elsewhere or check 'isDirty'
+          if (this.lastSavedContent !== '') {
+            this.scheduleAutoSave(state.questionnaire, state.userId);
+          } else {
+            this.lastSavedContent = currentContent;
+          }
+        }
+      });
     });
 
     // Load config from localStorage
@@ -102,10 +103,10 @@ class AutoSaveService {
 
     try {
       // Save to IndexedDB as draft
-      await db.saveDraft(questionnaire.id, questionnaire, userId, true);
-      
+      await db.saveDraft(this.getDraftKey(questionnaire), questionnaire, userId, true);
+
       this.lastSavedContent = JSON.stringify(questionnaire);
-      
+
       if (this.config.showNotifications) {
         toast.info('Auto-saved', { duration: 2000 });
       }
@@ -113,9 +114,9 @@ class AutoSaveService {
       // Update last saved timestamp in store (setLastSaved is inferred?)
       // designerStore.lastSaved = Date.now(); // handled by saveQuestionnaire if actually saving or we can set it
       // But we are saving DRAFT here.
-      
+
       // If online, also save to server
-      if (isOnline) {
+      if (get(isOnline) && designerStore.projectId) {
         try {
           await designerStore.saveQuestionnaire();
         } catch (error) {
@@ -136,8 +137,8 @@ class AutoSaveService {
    */
   async saveNow(): Promise<boolean> {
     const state = designerStore;
-    
-    if (!state.userId || !state.questionnaire.id) {
+
+    if (!state.userId) {
       return false;
     }
 
@@ -176,12 +177,12 @@ class AutoSaveService {
    */
   private loadConfig() {
     try {
-        if (typeof localStorage !== 'undefined') {
-            const saved = localStorage.getItem('qdesigner_autosave_config');
-            if (saved) {
-                this.config = { ...this.config, ...JSON.parse(saved) };
-            }
+      if (typeof localStorage !== 'undefined') {
+        const saved = localStorage.getItem('qdesigner_autosave_config');
+        if (saved) {
+          this.config = { ...this.config, ...JSON.parse(saved) };
         }
+      }
     } catch (error) {
       console.error('Failed to load auto-save config:', error as Error);
     }
@@ -193,7 +194,7 @@ class AutoSaveService {
   private saveConfig() {
     try {
       if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('qdesigner_autosave_config', JSON.stringify(this.config));
+        localStorage.setItem('qdesigner_autosave_config', JSON.stringify(this.config));
       }
     } catch (error) {
       console.error('Failed to save auto-save config:', error as Error);
@@ -215,6 +216,21 @@ class AutoSaveService {
   resetTracking() {
     const state = designerStore;
     this.lastSavedContent = JSON.stringify(state.questionnaire);
+  }
+
+  private getDraftKey(questionnaire: Questionnaire): string {
+    if (questionnaire.id?.trim()) {
+      return questionnaire.id;
+    }
+
+    const createdAt =
+      questionnaire.created instanceof Date
+        ? questionnaire.created.getTime()
+        : new Date(questionnaire.created).getTime();
+
+    const safeCreatedAt = Number.isFinite(createdAt) ? createdAt : Date.now();
+    const projectKey = questionnaire.projectId || 'no-project';
+    return `local:${projectKey}:${safeCreatedAt}`;
   }
 }
 

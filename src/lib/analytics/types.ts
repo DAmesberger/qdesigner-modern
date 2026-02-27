@@ -22,7 +22,7 @@ export interface AnalyticsData {
 
 export interface AnalyticsMetadata {
   participantId?: string;
-  demographicData?: Record<string, any>;
+  demographicData?: Record<string, unknown>;
   deviceInfo?: DeviceInfo;
   browserInfo?: BrowserInfo;
   environmentalFactors?: EnvironmentalFactors;
@@ -190,7 +190,7 @@ export interface RealtimeConfig {
 export interface RealtimeEvent {
   type: RealtimeEventType;
   timestamp: number;
-  data: any;
+  data: unknown;
   sessionId: string;
   questionnaireId: string;
 }
@@ -268,7 +268,7 @@ export interface ChartPoint {
   x: number | string | Date;
   y: number;
   z?: number; // For bubble charts
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ChartOptions {
@@ -299,7 +299,7 @@ export interface ScaleConfig {
   ticks?: {
     stepSize?: number;
     precision?: number;
-    callback?: (value: any, index: number, values: any[]) => string;
+    callback?: (value: unknown, index: number, values: unknown[]) => string;
   };
 }
 
@@ -320,9 +320,9 @@ export interface TooltipConfig {
   mode: 'point' | 'nearest' | 'index' | 'dataset' | 'x' | 'y';
   intersect: boolean;
   callbacks?: {
-    title?: (context: any[]) => string;
-    label?: (context: any) => string;
-    footer?: (context: any[]) => string;
+    title?: (context: unknown[]) => string;
+    label?: (context: unknown) => string;
+    footer?: (context: unknown[]) => string;
   };
 }
 
@@ -377,7 +377,7 @@ export interface ExportResult {
 export interface DataTransformation {
   type: TransformationType;
   column?: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
 }
 
 export type TransformationType = 
@@ -426,10 +426,10 @@ export type DisplayMetric =
 export interface FilterConfig {
   field: string;
   operator: FilterOperator;
-  value: any;
+  value: unknown;
   label: string;
   type: 'text' | 'number' | 'date' | 'select' | 'multiselect' | 'boolean';
-  options?: { value: any; label: string }[];
+  options?: { value: unknown; label: string }[];
 }
 
 export type FilterOperator = 
@@ -495,7 +495,7 @@ export interface AnalyticsError {
   code: string;
   message: string;
   timestamp: number;
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   stack?: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
 }

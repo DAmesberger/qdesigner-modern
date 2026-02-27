@@ -18,6 +18,9 @@ import {
   type StatisticalFeedbackConfig,
 } from '$lib/modules/display/statistical-feedback/engine';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime presenter must support heterogeneous question schemas
+type DynamicValue = any;
+
 /**
  * Handles presenting questions using the WebGL renderer
  */
@@ -54,7 +57,7 @@ export class QuestionPresenter {
     this.currentRenderer = renderer;
 
     // Safe access for optional/missing properties
-    const q: any = question;
+    const q: DynamicValue = question;
 
     // Prepare renderer
     renderer.prepare(gl, {
@@ -66,7 +69,7 @@ export class QuestionPresenter {
     });
 
     // Handle timing phases
-    const timing: any = question.timing || {};
+    const timing: DynamicValue = question.timing || {};
 
     // 1. Fixation phase
     if (timing.fixationDuration && timing.fixationDuration > 0) {
@@ -115,7 +118,7 @@ export class QuestionPresenter {
     variableEngine: VariableEngine
   ): Promise<IQuestionRenderer | null> {
     const renderers: IQuestionRenderer[] = [];
-    const q = question as any;
+    const q = question as DynamicValue;
 
     // Add question text if present
     if (q.text) {
@@ -156,7 +159,7 @@ export class QuestionPresenter {
     // Add response options for choice questions
     if (q.responseType.type === 'single' || q.responseType.type === 'multiple') {
       const options = q.responseType.options || [];
-      options.forEach((option: any, index: number) => {
+      options.forEach((option: DynamicValue, index: number) => {
         const yPos = 0.4 + index * 0.08;
         renderers.push(
           new TextRenderer({
@@ -202,7 +205,7 @@ export class QuestionPresenter {
    * Create media renderer from definition
    */
   private async createMediaRenderer(
-    media: any,
+    media: DynamicValue,
     questionId: string
   ): Promise<IQuestionRenderer | null> {
     switch (media.type) {
@@ -315,7 +318,7 @@ export class QuestionPresenter {
   /**
    * Present a modular item (question/instruction/analytics)
    */
-  public async presentModular(item: any, variableEngine: VariableEngine): Promise<void> {
+  public async presentModular(item: DynamicValue, variableEngine: VariableEngine): Promise<void> {
     const gl = this.renderer.getContext();
 
     // Get module metadata
@@ -377,7 +380,7 @@ export class QuestionPresenter {
    * Build renderer for instruction content
    */
   private async buildInstructionRenderer(
-    instruction: any,
+    instruction: DynamicValue,
     variableEngine: VariableEngine
   ): Promise<IQuestionRenderer | null> {
     const renderers: IQuestionRenderer[] = [];
@@ -422,7 +425,7 @@ export class QuestionPresenter {
    * Build renderer for analytics visualization
    */
   private async buildAnalyticsRenderer(
-    analytics: any,
+    analytics: DynamicValue,
     variableEngine: VariableEngine
   ): Promise<IQuestionRenderer | null> {
     if (analytics.type === 'statistical-feedback') {
@@ -477,7 +480,7 @@ export class QuestionPresenter {
   }
 
   private async buildStatisticalFeedbackRenderer(
-    analytics: any,
+    analytics: DynamicValue,
     variableEngine: VariableEngine
   ): Promise<IQuestionRenderer | null> {
     const config = normalizeStatisticalFeedbackConfig(analytics);
@@ -607,7 +610,7 @@ export class QuestionPresenter {
    * Display modules can be plain text instructions or visual feedback components.
    */
   private async buildDisplayRenderer(
-    displayItem: any,
+    displayItem: DynamicValue,
     variableEngine: VariableEngine
   ): Promise<IQuestionRenderer | null> {
     if (displayItem.type === 'statistical-feedback' || displayItem.type === 'bar-chart') {

@@ -200,7 +200,12 @@
 
   function renderTextQuestion(question: Question, theme: QuestionnaireTheme) {
     const q = question as any;
-    const multiline = q.settings?.multiline || false;
+    const multiline = q.config?.multiline || q.display?.multiline || q.settings?.multiline || false;
+    const placeholder =
+      q.config?.placeholder ||
+      q.display?.placeholder ||
+      q.settings?.placeholder ||
+      'Enter your response...';
     const styles = multiline
       ? theme.components.response.text.textarea
       : theme.components.response.text.input;
@@ -208,6 +213,7 @@
     return {
       component: 'text' as const,
       multiline,
+      placeholder,
       styles,
     };
   }
@@ -318,7 +324,11 @@
   role="button"
   tabindex="0"
   onkeydown={(e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
+    const target = e.target as HTMLElement | null;
+    const isEditable =
+      target?.isContentEditable || target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+
+    if (!isEditable && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
       onselect?.();
     }
@@ -405,7 +415,7 @@
       {@const textConfig = responseConfig}
       {#if textConfig.multiline}
         <textarea
-          placeholder="Enter your response..."
+          placeholder={textConfig.placeholder}
           rows="4"
           class="w-full p-2 border border-input rounded-md bg-background text-foreground"
           disabled={mode === 'edit'}
@@ -413,7 +423,7 @@
       {:else}
         <input
           type="text"
-          placeholder="Enter your response..."
+          placeholder={textConfig.placeholder}
           class="w-full p-2 border border-input rounded-md bg-background text-foreground"
           disabled={mode === 'edit'}
         />

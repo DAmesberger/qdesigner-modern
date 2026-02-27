@@ -7,11 +7,15 @@
   import FlowControlManager from '$lib/components/designer/FlowControlManager.svelte';
 
   const tabs = [
-    { id: 'blocks', label: 'Structure' },
-    { id: 'questions', label: 'Questions' },
-    { id: 'variables', label: 'Variables' },
-    { id: 'flow', label: 'Flow' },
+    { id: 'blocks', label: 'Structure', advanced: false },
+    { id: 'questions', label: 'Questions', advanced: false },
+    { id: 'variables', label: 'Variables', advanced: true },
+    { id: 'flow', label: 'Flow', advanced: true },
   ] as const;
+
+  let showAdvancedTools = $state(false);
+  const primaryTabs = tabs.filter((tab) => !tab.advanced);
+  const advancedTabs = tabs.filter((tab) => tab.advanced);
 
   let isMobile = $state(false);
 
@@ -37,6 +41,12 @@
   function closeDrawer() {
     designerStore.toggleDrawer('left', false);
   }
+
+  $effect(() => {
+    if (designerStore.activeLeftTab === 'variables' || designerStore.activeLeftTab === 'flow') {
+      showAdvancedTools = true;
+    }
+  });
 </script>
 
 {#if isMobile && designerStore.isLeftDrawerOpen}
@@ -119,23 +129,63 @@
   </div>
 
   {#if !designerStore.leftCollapsed || isMobile}
-    <div class="grid grid-cols-4 border-b border-border">
-      {#each tabs as tab}
+    <div class="border-b border-border">
+      <div class="grid grid-cols-2">
+        {#each primaryTabs as tab}
+          <button
+            type="button"
+            class="px-2 py-2 text-xs"
+            class:bg-accent={designerStore.activeLeftTab === tab.id}
+            class:text-foreground={designerStore.activeLeftTab === tab.id}
+            class:text-muted-foreground={designerStore.activeLeftTab !== tab.id}
+            onclick={() => designerStore.setActiveLeftTab(tab.id)}
+            data-testid={`left-tab-${tab.id}`}
+          >
+            {tab.label}
+          </button>
+        {/each}
+      </div>
+
+      {#if showAdvancedTools}
+        <div class="grid grid-cols-2 border-t border-border">
+          {#each advancedTabs as tab}
+            <button
+              type="button"
+              class="px-2 py-2 text-xs"
+              class:bg-accent={designerStore.activeLeftTab === tab.id}
+              class:text-foreground={designerStore.activeLeftTab === tab.id}
+              class:text-muted-foreground={designerStore.activeLeftTab !== tab.id}
+              onclick={() => designerStore.setActiveLeftTab(tab.id)}
+              data-testid={`left-tab-${tab.id}`}
+            >
+              {tab.label}
+            </button>
+          {/each}
+        </div>
+      {:else}
         <button
           type="button"
-          class="px-2 py-2 text-xs"
-          class:bg-accent={designerStore.activeLeftTab === tab.id}
-          class:text-foreground={designerStore.activeLeftTab === tab.id}
-          class:text-muted-foreground={designerStore.activeLeftTab !== tab.id}
-          onclick={() => designerStore.setActiveLeftTab(tab.id)}
-          data-testid={`left-tab-${tab.id}`}
+          class="w-full border-t border-border px-2 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          onclick={() => (showAdvancedTools = true)}
+          data-testid="left-tab-show-advanced"
         >
-          {tab.label}
+          Show Advanced Tools (Variables, Flow)
         </button>
-      {/each}
+      {/if}
     </div>
 
     <div class="min-h-0 flex-1 overflow-auto" data-testid="left-sidebar-content">
+      <div class="border-b border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        {#if designerStore.activeLeftTab === 'questions'}
+          Add question modules to the current block. Shortcut: Ctrl/Cmd+Shift+A.
+        {:else if designerStore.activeLeftTab === 'blocks'}
+          Organize pages, blocks, order, and randomization scope.
+        {:else if designerStore.activeLeftTab === 'variables'}
+          Define computed variables and formulas used by flow and analytics.
+        {:else}
+          Build branching and skip logic using formulas and conditions.
+        {/if}
+      </div>
       {#if designerStore.activeLeftTab === 'blocks'}
         <BlockManager />
       {:else if designerStore.activeLeftTab === 'questions'}

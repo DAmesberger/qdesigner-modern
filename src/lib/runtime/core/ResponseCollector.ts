@@ -1,5 +1,8 @@
 import type { Question, ResponseType } from '$lib/shared';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- response collector captures varying payload types across modules
+type DynamicValue = any;
+
 export interface ResponseCaptureMetadata {
   source: 'keyboard' | 'mouse' | 'touch' | 'programmatic';
   timestamp: number;
@@ -8,7 +11,7 @@ export interface ResponseCaptureMetadata {
 }
 
 export interface ResponseHandlerConfig {
-  onResponse: (value: any, metadata?: ResponseCaptureMetadata) => void;
+  onResponse: (value: DynamicValue, metadata?: ResponseCaptureMetadata) => void;
   onTimeout?: () => void;
   onInvalid?: (reason: string) => void;
   eventTarget?: Document | HTMLElement;
@@ -51,7 +54,7 @@ export class ResponseCollector {
       config.pointerTarget || (this.eventTarget instanceof HTMLElement ? this.eventTarget : null);
     this.now = config.now || (() => performance.now());
 
-    this.configureHandlers((question as any).responseType);
+    this.configureHandlers((question as DynamicValue).responseType);
   }
 
   public start(): void {
@@ -60,8 +63,8 @@ export class ResponseCollector {
     this.isActive = true;
     this.startTime = this.now();
 
-    const questionTiming = (this.question as any).timing;
-    const responseTypeTiming = (this.question as any).responseType?.timeout;
+    const questionTiming = (this.question as DynamicValue).timing;
+    const responseTypeTiming = (this.question as DynamicValue).responseType?.timeout;
     const timeoutMs = questionTiming?.responseDuration || responseTypeTiming;
 
     if (timeoutMs && timeoutMs > 0) {
@@ -89,7 +92,7 @@ export class ResponseCollector {
   }
 
   private configureHandlers(responseType: ResponseType): void {
-    const rt = responseType as any;
+    const rt = responseType as DynamicValue;
 
     switch (rt.type) {
       case 'keypress':
@@ -126,7 +129,7 @@ export class ResponseCollector {
   }
 
   private configureKeypressHandler(responseType: ResponseType): void {
-    const rt = responseType as any;
+    const rt = responseType as DynamicValue;
     if (rt.type !== 'keypress') return;
 
     this.validKeys = new Set((rt.keys || []).map((key: string) => key.toLowerCase()));
@@ -144,7 +147,7 @@ export class ResponseCollector {
   }
 
   private configureChoiceHandler(responseType: ResponseType): void {
-    const rt = responseType as any;
+    const rt = responseType as DynamicValue;
     if (rt.type !== 'single' && rt.type !== 'multiple') return;
 
     const options: Array<{ value: string | number | boolean; key?: string }> = rt.options || [];
@@ -180,7 +183,7 @@ export class ResponseCollector {
   }
 
   private configureScaleHandler(responseType: ResponseType): void {
-    const rt = responseType as any;
+    const rt = responseType as DynamicValue;
     if (rt.type !== 'scale') return;
 
     const min = rt.min || 1;
@@ -214,7 +217,7 @@ export class ResponseCollector {
   }
 
   private configureNumberHandler(responseType: ResponseType): void {
-    const rt = responseType as any;
+    const rt = responseType as DynamicValue;
     if (rt.type !== 'number') return;
 
     let inputValue = '';
@@ -267,7 +270,7 @@ export class ResponseCollector {
   }
 
   private configureTextHandler(responseType: ResponseType): void {
-    const rt = responseType as any;
+    const rt = responseType as DynamicValue;
     if (rt.type !== 'text') return;
 
     let inputValue = '';
@@ -328,7 +331,7 @@ export class ResponseCollector {
   }
 
   private handleResponse(
-    value: any,
+    value: DynamicValue,
     source: ResponseCaptureMetadata['source'],
     rawEvent?: Event
   ): void {

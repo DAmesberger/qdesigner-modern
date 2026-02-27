@@ -54,6 +54,33 @@
       run: () => designerStore.addPage(),
     },
     {
+      id: 'step-add',
+      title: 'Go to Add Step',
+      shortcut: 'Ctrl+1',
+      run: () => {
+        designerStore.setActiveLeftTab('questions');
+        designerStore.toggleDrawer('left', true);
+      },
+    },
+    {
+      id: 'step-configure',
+      title: 'Go to Configure Step',
+      shortcut: 'Ctrl+2',
+      run: () => {
+        const firstQuestion = designerStore.currentBlockQuestions[0];
+        if (firstQuestion) {
+          designerStore.selectItem(firstQuestion.id, 'question');
+        }
+        designerStore.toggleDrawer('right', true);
+      },
+    },
+    {
+      id: 'step-preview',
+      title: 'Go to Preview Step',
+      shortcut: 'Ctrl+3',
+      run: () => designerStore.togglePreview(true),
+    },
+    {
       id: 'save',
       title: 'Save Questionnaire',
       shortcut: 'Ctrl+S',
@@ -167,7 +194,9 @@
       onclick={closePalette}
     ></button>
 
-    <div class="relative mx-auto mt-20 w-[min(680px,92vw)] rounded-xl border bg-background shadow-2xl">
+    <div
+      class="relative mx-auto mt-20 w-[min(680px,92vw)] rounded-xl border bg-background shadow-2xl"
+    >
       <div class="border-b px-4 py-3">
         <input
           bind:this={searchInput}
@@ -193,7 +222,9 @@
             >
               <span>{command.title}</span>
               {#if command.shortcut}
-                <kbd class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">{command.shortcut}</kbd>
+                <kbd class="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                  >{command.shortcut}</kbd
+                >
               {/if}
             </button>
           {/each}

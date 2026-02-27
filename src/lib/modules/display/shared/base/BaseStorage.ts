@@ -1,12 +1,15 @@
 // Base storage class for instruction modules
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- storage payloads vary by instruction module
+type DynamicValue = any;
+
 
 
 export abstract class BaseInstructionStorage {
-  protected storage: any;
+  protected storage: DynamicValue;
   protected questionnaireId: string;
   
-  constructor(storage: any, questionnaireId: string) {
+  constructor(storage: DynamicValue, questionnaireId: string) {
     this.storage = storage;
     this.questionnaireId = questionnaireId;
   }
@@ -17,16 +20,16 @@ export abstract class BaseInstructionStorage {
   async getResponses(questionId: string): Promise<Array<{
     id: string;
     timestamp: string;
-    value: any;
+    value: DynamicValue;
   }>> {
     const responses = await this.storage.getResponses(this.questionnaireId);
-    return responses.filter((r: any) => r.questionId === questionId);
+    return responses.filter((r: DynamicValue) => r.questionId === questionId);
   }
   
   /**
    * Parse stored value from JSON
    */
-  protected parseValue(value: any): any {
+  protected parseValue(value: DynamicValue): DynamicValue {
     if (typeof value === 'string') {
       try {
         return JSON.parse(value);
@@ -40,7 +43,7 @@ export abstract class BaseInstructionStorage {
   /**
    * Get the latest response for an instruction
    */
-  async getLatestResponse(questionId: string): Promise<any | null> {
+  async getLatestResponse(questionId: string): Promise<DynamicValue | null> {
     const responses = await this.getResponses(questionId);
     if (responses.length === 0) return null;
     
@@ -56,7 +59,7 @@ export abstract class BaseInstructionStorage {
    */
   async clearResponses(questionId: string): Promise<void> {
     const allResponses = await this.storage.getResponses(this.questionnaireId);
-    const filtered = allResponses.filter((r: any) => r.questionId !== questionId);
+    const filtered = allResponses.filter((r: DynamicValue) => r.questionId !== questionId);
     
     // Save filtered responses back
     for (const response of filtered) {

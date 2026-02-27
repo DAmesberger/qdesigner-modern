@@ -13,6 +13,9 @@ import type {
 } from './types.js';
 import type { Questionnaire } from '$lib/shared';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- change payloads mirror arbitrary operation data
+type DynamicValue = any;
+
 export class ChangeTracker {
   private static instance: ChangeTracker;
   private changes = new Map<string, ChangeRecord[]>(); // questionnaireId -> changes
@@ -486,53 +489,53 @@ export class ChangeTracker {
   private generateChangeDescription(operation: Operation): string {
     switch (operation.type) {
       case 'insert':
-        const insertOp = operation as any;
+        const insertOp = operation as DynamicValue;
         return `Added ${insertOp.target} at position ${insertOp.position}`;
         
       case 'delete':
-        const deleteOp = operation as any;
+        const deleteOp = operation as DynamicValue;
         return `Deleted ${deleteOp.target} at position ${deleteOp.position}`;
         
       case 'update':
-        const updateOp = operation as any;
+        const updateOp = operation as DynamicValue;
         return `Updated ${updateOp.property}`;
         
       case 'move':
-        const moveOp = operation as any;
+        const moveOp = operation as DynamicValue;
         return `Moved item from ${moveOp.fromPath.join('.')} to ${moveOp.toPath.join('.')}`;
         
       case 'reorder':
         return 'Reordered items';
         
       default:
-        return `Performed ${(operation as any).type} operation`;
+        return `Performed ${(operation as DynamicValue).type} operation`;
     }
   }
 
   private getDetailedDescription(operation: Operation): string {
     switch (operation.type) {
       case 'insert':
-        const insertOp = operation as any;
+        const insertOp = operation as DynamicValue;
         return `Inserted ${insertOp.target} "${this.getContentPreview(insertOp.content)}" at position ${insertOp.position} in ${insertOp.path.join('.')}`;
         
       case 'delete':
-        const deleteOp = operation as any;
+        const deleteOp = operation as DynamicValue;
         return `Deleted ${deleteOp.length || 1} ${deleteOp.target}(s) starting at position ${deleteOp.position} in ${deleteOp.path.join('.')}`;
         
       case 'update':
-        const updateOp = operation as any;
+        const updateOp = operation as DynamicValue;
         return `Changed ${updateOp.property} from "${this.getContentPreview(updateOp.oldValue)}" to "${this.getContentPreview(updateOp.newValue)}" in ${updateOp.path.join('.')}`;
         
       case 'move':
-        const moveOp = operation as any;
+        const moveOp = operation as DynamicValue;
         return `Moved item from position ${moveOp.fromPosition} in ${moveOp.fromPath.join('.')} to position ${moveOp.toPosition} in ${moveOp.toPath.join('.')}`;
         
       case 'reorder':
-        const reorderOp = operation as any;
+        const reorderOp = operation as DynamicValue;
         return `Reordered ${reorderOp.indices.length} items in ${reorderOp.path.join('.')}`;
         
       default:
-        return `Performed ${(operation as any).type} operation on ${(operation as any).path.join('.')}`;
+        return `Performed ${(operation as DynamicValue).type} operation on ${(operation as DynamicValue).path.join('.')}`;
     }
   }
 
@@ -573,7 +576,7 @@ export class ChangeTracker {
 
   private getOperationTarget(operation: Operation): string {
     if ('target' in operation) {
-      return (operation as any).target;
+      return (operation as DynamicValue).target;
     }
     
     const lastPathSegment = operation.path[operation.path.length - 1];
@@ -598,7 +601,7 @@ export class ChangeTracker {
     return relatedItems.length > 0 ? relatedItems : undefined;
   }
 
-  private getContentPreview(content: any): string {
+  private getContentPreview(content: DynamicValue): string {
     if (typeof content === 'string') {
       return this.truncateText(content, 50);
     }

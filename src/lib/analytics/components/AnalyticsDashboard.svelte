@@ -217,9 +217,9 @@
       case 'not_equals':
         return value !== filter.value;
       case 'greater_than':
-        return value > filter.value;
+        return Number(value) > Number(filter.value);
       case 'less_than':
-        return value < filter.value;
+        return Number(value) < Number(filter.value);
       case 'contains':
         return String(value).toLowerCase().includes(String(filter.value).toLowerCase());
       case 'in':

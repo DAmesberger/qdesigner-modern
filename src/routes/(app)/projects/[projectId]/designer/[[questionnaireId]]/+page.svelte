@@ -57,6 +57,9 @@
 
   function handleKeydown(event: KeyboardEvent) {
     const isMeta = event.ctrlKey || event.metaKey;
+    const target = event.target as HTMLElement | null;
+    const isInput =
+      target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
 
     if (isMeta) {
       const key = event.key.toLowerCase();
@@ -105,13 +108,33 @@
       if (key === 'enter' && event.shiftKey) {
         event.preventDefault();
         void designerStore.publishQuestionnaire();
+        return;
+      }
+
+      if (key === '1') {
+        event.preventDefault();
+        designerStore.setActiveLeftTab('questions');
+        designerStore.toggleDrawer('left', true);
+        return;
+      }
+
+      if (key === '2') {
+        event.preventDefault();
+        const firstQuestion = designerStore.currentBlockQuestions[0];
+        if (firstQuestion) {
+          designerStore.selectItem(firstQuestion.id, 'question');
+        }
+        designerStore.toggleDrawer('right', true);
+        return;
+      }
+
+      if (key === '3') {
+        event.preventDefault();
+        designerStore.togglePreview(true);
       }
     }
 
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      const target = event.target as HTMLElement | null;
-      const isInput =
-        target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
       if (!isInput) {
         event.preventDefault();
         designerStore.deleteSelected();
@@ -119,9 +142,6 @@
     }
 
     if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-      const target = event.target as HTMLElement | null;
-      const isInput =
-        target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
       if (!isInput) {
         event.preventDefault();
         designerStore.moveSelectedQuestion(event.key === 'ArrowUp' ? 'up' : 'down');
@@ -129,6 +149,10 @@
     }
 
     if (event.key === 'Escape') {
+      if (designerStore.previewMode) {
+        designerStore.togglePreview(false);
+        return;
+      }
       designerStore.toggleCommandPalette(false);
       designerStore.toggleDrawer('left', false);
       designerStore.toggleDrawer('right', false);

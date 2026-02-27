@@ -2,12 +2,15 @@
 
 import { scriptingEngine } from './scriptingEngine';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- interpolation evaluates dynamic variable maps and expression results
+type DynamicValue = any;
+
 /**
  * Interpolate variables in a string using {{variable}} syntax
  */
 export function interpolateVariables(
   template: string, 
-  variables: Record<string, any> = {}
+  variables: Record<string, DynamicValue> = {}
 ): string {
   if (!template) return '';
   
@@ -35,11 +38,11 @@ export function interpolateVariables(
 /**
  * Interpolate variables in an object recursively
  */
-export function interpolateObject<T extends Record<string, any>>(
+export function interpolateObject<T extends Record<string, DynamicValue>>(
   obj: T,
-  variables: Record<string, any> = {}
+  variables: Record<string, DynamicValue> = {}
 ): T {
-  const result: any = {};
+  const result: DynamicValue = {};
   
   for (const [key, value] of Object.entries(obj)) {
     if (typeof value === 'string') {
@@ -89,7 +92,7 @@ export function extractVariables(template: string): string[] {
 /**
  * Evaluate an expression with variables
  */
-function evaluateExpression(expression: string, variables: Record<string, any>): any {
+function evaluateExpression(expression: string, variables: Record<string, DynamicValue>): DynamicValue {
   // Use the scripting engine if available
   if (scriptingEngine && scriptingEngine.evaluate) {
     return scriptingEngine.evaluate(expression, variables);
@@ -107,7 +110,7 @@ function evaluateExpression(expression: string, variables: Record<string, any>):
 /**
  * Format a value for display
  */
-function formatValue(value: any): string {
+function formatValue(value: DynamicValue): string {
   if (value === null || value === undefined) {
     return '';
   }
@@ -126,7 +129,7 @@ function formatValue(value: any): string {
 /**
  * Create a template function for repeated interpolation
  */
-export function createTemplate(template: string): (variables: Record<string, any>) => string {
+export function createTemplate(template: string): (variables: Record<string, DynamicValue>) => string {
   // Pre-parse the template for better performance
   const parts: Array<string | { expression: string }> = [];
   let lastIndex = 0;
@@ -150,7 +153,7 @@ export function createTemplate(template: string): (variables: Record<string, any
   }
   
   // Return compiled template function
-  return (variables: Record<string, any> = {}) => {
+  return (variables: Record<string, DynamicValue> = {}) => {
     return parts.map(part => {
       if (typeof part === 'string') {
         return part;

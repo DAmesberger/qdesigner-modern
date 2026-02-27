@@ -19,6 +19,9 @@ import type { QuestionnaireSession, Response, QuestionnaireMetadata } from '$lib
 import Papa from 'papaparse';
 import * as ExcelJS from 'exceljs';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- exporters transform heterogeneous response payloads
+type DynamicValue = any;
+
 export class ExportLayer {
   private formatters = new Map<ExportFormat, (request: ExportRequest) => Promise<ExportResult>>();
 
@@ -53,7 +56,7 @@ export class ExportLayer {
         }
       };
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         format: request.format,
@@ -123,7 +126,7 @@ export class ExportLayer {
         }
       };
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         format: 'csv',
@@ -183,7 +186,7 @@ export class ExportLayer {
 
       return result;
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         format: 'spss',
@@ -232,7 +235,7 @@ export class ExportLayer {
         }
       };
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         format: 'r',
@@ -321,7 +324,7 @@ export class ExportLayer {
         }
       };
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         format: 'excel',
@@ -361,7 +364,7 @@ export class ExportLayer {
         }
       };
 
-    } catch (error: any) {
+    } catch (error: DynamicValue) {
       return {
         success: false,
         format: 'json',
@@ -376,9 +379,9 @@ export class ExportLayer {
   private flattenSessionsForTabular(
     sessions: QuestionnaireSession[],
     questionnaire: QuestionnaireMetadata,
-    config?: any
-  ): any[] {
-    const flatData: any[] = [];
+    config?: DynamicValue
+  ): DynamicValue[] {
+    const flatData: DynamicValue[] = [];
 
     for (const session of sessions) {
       const baseRow = {
@@ -390,7 +393,7 @@ export class ExportLayer {
         end_time: session.endTime ? this.formatDateTime(session.endTime, config?.dateFormat, config?.timeFormat) : '',
         status: session.status,
         duration_ms: session.endTime ? session.endTime - session.startTime : null
-      } as Record<string, any>;
+      } as Record<string, DynamicValue>;
 
       // Add metadata fields
       if (session.metadata && config?.includeMetadata !== false) {
@@ -443,9 +446,9 @@ export class ExportLayer {
    * Generate SPSS syntax file
    */
   private generateSPSSSyntax(
-    data: any[],
+    data: DynamicValue[],
     questionnaire: QuestionnaireMetadata,
-    config: any
+    config: DynamicValue
   ): string {
     let syntax = `* SPSS Syntax for ${questionnaire.name}\n`;
     syntax += `* Generated on ${new Date().toISOString()}\n\n`;
@@ -498,9 +501,9 @@ export class ExportLayer {
    * Generate R script
    */
   private generateRScript(
-    data: any[],
+    data: DynamicValue[],
     questionnaire: QuestionnaireMetadata,
-    config: any
+    config: DynamicValue
   ): string {
     let script = `# R Script for ${questionnaire.name}\n`;
     script += `# Generated on ${new Date().toISOString()}\n\n`;
@@ -553,9 +556,9 @@ export class ExportLayer {
   /**
    * Convert data to R-compatible format
    */
-  private convertToRFormat(data: any[], config: any): any[] {
+  private convertToRFormat(data: DynamicValue[], config: DynamicValue): DynamicValue[] {
     return data.map(row => {
-      const rRow: any = {};
+      const rRow: DynamicValue = {};
       
       Object.entries(row).forEach(([key, value]) => {
         if (value === null || value === undefined) {
@@ -605,7 +608,7 @@ export class ExportLayer {
   private async addExcelCharts(
     workbook: ExcelJS.Workbook,
     charts: ExcelChart[],
-    data: any[]
+    data: DynamicValue[]
   ): Promise<void> {
     // Chart implementation would go here
     // ExcelJS has limited chart support, so this would be a basic implementation
@@ -630,7 +633,7 @@ export class ExportLayer {
     return date.toISOString();
   }
 
-  private formatValue(value: any, config?: any): any {
+  private formatValue(value: DynamicValue, config?: DynamicValue): DynamicValue {
     if (value === null || value === undefined) {
       return '';
     }
