@@ -3,7 +3,7 @@
   import type { FlowControl } from '$lib/shared/types/questionnaire';
   import { nanoid } from 'nanoid';
   import FlowControlEditor from './flow/FlowControlEditor.svelte';
-  import theme from '$lib/theme';
+  import { CornerDownRight, GitBranch, Repeat, Square, HelpCircle, Pencil, Trash2, Plus, Map, X } from 'lucide-svelte';
 
   // Use derived state instead of local state + subscribe
   let flowControls = $derived(designerStore.questionnaire.flow || []);
@@ -110,16 +110,6 @@
     };
   }
 
-  function getFlowIcon(type: FlowControl['type']): string {
-    const icons: Record<string, string> = {
-      skip: '⤵️',
-      branch: '🔀',
-      loop: '🔁',
-      terminate: '⏹️',
-    };
-    return icons[type] || '❓';
-  }
-
   function getTargetLabel(targetId?: string): string {
     if (!targetId) return 'No target';
     const match = availableTargets.find((target) => target.id === targetId);
@@ -144,41 +134,25 @@
   }
 </script>
 
-<div class="{theme.components.container.card} p-4">
+<div class="bg-card rounded-[var(--radius)] shadow-[var(--shadow-sm)] border border-border text-card-foreground p-4">
   <div class="flex items-center justify-between mb-4">
-    <h3 class="{theme.typography.h4} {theme.semantic.textPrimary}">Flow Control</h3>
+    <h3 class="text-sm font-semibold text-foreground">Flow Control</h3>
     <div class="flex gap-2">
       <button
         onclick={() => (showFlowEditor = true)}
-        class="{theme.components.button.variants.outline} {theme.components.button.sizes
-          .sm} rounded-md"
+        class="border border-border text-foreground hover:bg-accent hover:text-accent-foreground h-8 px-3 text-xs rounded-md"
         title="Visual Flow Editor"
         aria-label="Open Visual Flow Editor"
         data-testid="flow-open-visual-editor"
       >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-          />
-        </svg>
+        <Map class="w-4 h-4" />
       </button>
       <button
         onclick={() => (showAddFlow = true)}
-        class="{theme.components.button.variants.default} {theme.components.button.sizes
-          .sm} rounded-md"
+        class="bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 text-xs rounded-md flex items-center"
         data-testid="flow-open-add-modal"
       >
-        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 4v16m8-8H4"
-          />
-        </svg>
+        <Plus class="w-4 h-4 mr-1" />
         Add Flow
       </button>
     </div>
@@ -186,8 +160,8 @@
 
   {#if flowControls.length === 0}
     <div class="text-center py-8">
-      <p class={theme.semantic.textSecondary}>No flow controls defined</p>
-      <p class="{theme.typography.caption} text-gray-400 mt-2">
+      <p class="text-muted-foreground">No flow controls defined</p>
+      <p class="text-xs text-muted-foreground/60 mt-2">
         Add flow controls to create conditional logic, loops, and branching
       </p>
     </div>
@@ -195,48 +169,55 @@
     <div class="space-y-3">
       {#each flowControls as flow}
         <div
-          class="{theme.semantic.bgSubtle} p-3 rounded-md border {theme.semantic.borderDefault}"
+          class="bg-muted/50 p-3 rounded-md border border-border"
           data-testid={`flow-card-${flow.id}`}
         >
           <div class="flex items-start justify-between">
             <div class="flex-1">
               <div class="flex items-center gap-2 mb-1">
-                <span class="text-lg">{getFlowIcon(flow.type)}</span>
-                <span class="{theme.typography.label} {theme.semantic.textPrimary} capitalize">
+                <span class="text-foreground">
+                  {#if flow.type === 'skip'}<CornerDownRight class="w-5 h-5" />
+                  {:else if flow.type === 'branch'}<GitBranch class="w-5 h-5" />
+                  {:else if flow.type === 'loop'}<Repeat class="w-5 h-5" />
+                  {:else if flow.type === 'terminate'}<Square class="w-5 h-5" />
+                  {:else}<HelpCircle class="w-5 h-5" />
+                  {/if}
+                </span>
+                <span class="text-sm font-medium text-foreground capitalize">
                   {flow.type}
                 </span>
               </div>
 
               <div class="space-y-1">
                 <div class="flex items-center gap-2">
-                  <span class="{theme.typography.caption} {theme.semantic.textSecondary}"
+                  <span class="text-xs text-muted-foreground"
                     >Condition:</span
                   >
-                  <code class="text-xs bg-gray-100 px-2 py-1 rounded">{flow.condition}</code>
+                  <code class="text-xs bg-muted px-2 py-1 rounded font-mono">{flow.condition}</code>
                 </div>
 
                 {#if flow.target}
                   <div class="flex items-center gap-2">
-                    <span class="{theme.typography.caption} {theme.semantic.textSecondary}"
+                    <span class="text-xs text-muted-foreground"
                       >Target:</span
                     >
-                    <span class={theme.typography.caption}>{getTargetLabel(flow.target)}</span>
+                    <span class="text-xs text-foreground">{getTargetLabel(flow.target)}</span>
                   </div>
                 {/if}
 
                 {#if flow.iterations}
                   <div class="flex items-center gap-2">
-                    <span class="{theme.typography.caption} {theme.semantic.textSecondary}"
+                    <span class="text-xs text-muted-foreground"
                       >Iterations:</span
                     >
-                    <span class={theme.typography.caption}>{flow.iterations}</span>
+                    <span class="text-xs text-foreground">{flow.iterations}</span>
                   </div>
                 {/if}
               </div>
 
               {#if validateFlow(flow).length > 0}
                 <div
-                  class="mt-2 rounded-md bg-red-100 px-2 py-1 text-xs text-red-700"
+                  class="mt-2 rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive"
                   data-testid={`flow-validation-${flow.id}`}
                 >
                   {validateFlow(flow).join(' ')}
@@ -256,33 +237,19 @@
                   };
                   showAddFlow = true;
                 }}
-                class="p-1 {theme.semantic.interactive.ghost} rounded"
+                class="p-1 hover:bg-accent hover:text-accent-foreground rounded"
                 title="Edit"
                 aria-label="Edit Flow"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                  />
-                </svg>
+                <Pencil class="w-4 h-4" />
               </button>
               <button
                 onclick={() => handleDeleteFlow(flow.id)}
-                class="p-1 {theme.semantic.interactive.ghost} rounded text-red-600"
+                class="p-1 hover:bg-destructive/10 rounded text-destructive"
                 title="Delete"
                 aria-label="Delete Flow"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
+                <Trash2 class="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -295,7 +262,7 @@
 <!-- Add/Edit Flow Modal -->
 {#if showAddFlow}
   <div class="fixed inset-0 z-50 overflow-y-auto">
-    <div class="fixed inset-0 bg-black bg-opacity-50" aria-hidden="true"></div>
+    <div class="fixed inset-0 bg-black/50" aria-hidden="true"></div>
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
@@ -308,10 +275,11 @@
       data-testid="flow-add-modal-overlay"
     >
       <div
-        class="{theme.components.container.card} relative max-w-md w-full p-6"
+        class="bg-card rounded-[var(--radius)] shadow-lg border border-border relative max-w-md w-full p-6"
+        onclick={(e) => e.stopPropagation()}
         data-testid="flow-add-modal"
       >
-        <h3 class="{theme.typography.h4} {theme.semantic.textPrimary} mb-4">
+        <h3 class="text-base font-semibold text-foreground mb-4">
           {editingFlow ? 'Edit' : 'Add'} Flow Control
         </h3>
 
@@ -320,14 +288,14 @@
           <div>
             <label
               for="flow-type"
-              class="{theme.typography.label} {theme.semantic.textPrimary} mb-2 block"
+              class="text-sm font-medium text-foreground mb-2 block"
             >
               Type
             </label>
             <select
               id="flow-type"
               bind:value={newFlow.type}
-              class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+              class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
               disabled={editingFlow !== null}
               data-testid="flow-type-select"
             >
@@ -342,7 +310,7 @@
           <div>
             <label
               for="flow-condition"
-              class="{theme.typography.label} {theme.semantic.textPrimary} mb-2 block"
+              class="text-sm font-medium text-foreground mb-2 block"
             >
               Condition
             </label>
@@ -351,10 +319,10 @@
               type="text"
               bind:value={newFlow.condition}
               placeholder="e.g., age >= 18 && consent === true"
-              class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+              class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary font-mono text-sm"
               data-testid="flow-condition-input"
             />
-            <p class="{theme.typography.caption} {theme.semantic.textSecondary} mt-1">
+            <p class="text-xs text-muted-foreground mt-1">
               Use variable names and JavaScript expressions
             </p>
           </div>
@@ -364,14 +332,14 @@
             <div>
               <label
                 for="flow-target"
-                class="{theme.typography.label} {theme.semantic.textPrimary} mb-2 block"
+                class="text-sm font-medium text-foreground mb-2 block"
               >
                 Target
               </label>
               <select
                 id="flow-target"
                 bind:value={newFlow.target}
-                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
                 data-testid="flow-target-select"
               >
                 <option value="">Select target...</option>
@@ -392,7 +360,7 @@
             <div>
               <label
                 for="flow-iterations"
-                class="{theme.typography.label} {theme.semantic.textPrimary} mb-2 block"
+                class="text-sm font-medium text-foreground mb-2 block"
               >
                 Max Iterations
               </label>
@@ -402,7 +370,7 @@
                 bind:value={newFlow.iterations}
                 min="1"
                 max="100"
-                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
                 data-testid="flow-iterations-input"
               />
             </div>
@@ -416,8 +384,7 @@
               editingFlow = null;
               resetForm();
             }}
-            class="{theme.components.button.variants.outline} {theme.components.button.sizes
-              .sm} rounded-md"
+            class="border border-border text-foreground hover:bg-accent h-8 px-3 text-xs rounded-md"
             data-testid="flow-cancel-button"
           >
             Cancel
@@ -441,8 +408,7 @@
             disabled={!newFlow.condition ||
               ((newFlow.type === 'skip' || newFlow.type === 'branch') && !newFlow.target) ||
               (newFlow.type === 'loop' && (!newFlow.iterations || newFlow.iterations < 1))}
-            class="{theme.components.button.variants.default} {theme.components.button.sizes
-              .sm} rounded-md disabled:opacity-50"
+            class="bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 text-xs rounded-md disabled:opacity-50"
             data-testid="flow-save-button"
           >
             {editingFlow ? 'Update' : 'Add'} Flow
@@ -455,31 +421,24 @@
 
 <!-- Visual Flow Editor Modal -->
 {#if showFlowEditor}
-  <div class="fixed inset-0 bg-black bg-opacity-50" aria-hidden="true"></div>
+  <div class="fixed inset-0 bg-black/50" aria-hidden="true"></div>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
     <div
-      class="fixed inset-4 {theme.components.container.card} flex flex-col pointer-events-auto"
+      class="fixed inset-4 bg-card rounded-[var(--radius)] shadow-lg border border-border flex flex-col pointer-events-auto"
       onclick={(e) => e.stopPropagation()}
     >
-      <div class="flex items-center justify-between p-4 border-b {theme.semantic.borderDefault}">
-        <h3 class="{theme.typography.h3} {theme.semantic.textPrimary}">
+      <div class="flex items-center justify-between p-4 border-b border-border">
+        <h3 class="text-lg font-semibold text-foreground">
           Flow Control Visual Editor
         </h3>
         <button
           onclick={() => (showFlowEditor = false)}
-          class="p-2 {theme.semantic.interactive.ghost} rounded-md"
+          class="p-2 hover:bg-accent hover:text-accent-foreground rounded-md"
           aria-label="Close editor"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
+          <X class="w-5 h-5" />
         </button>
       </div>
 

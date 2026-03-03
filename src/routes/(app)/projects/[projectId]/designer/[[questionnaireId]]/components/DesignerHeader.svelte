@@ -1,58 +1,56 @@
 <script lang="ts">
   import { appPaths } from '$lib/routing/paths';
   import { designerStore } from '$lib/stores/designer.svelte';
+  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck } from 'lucide-svelte';
+  import DistributionPanel from './DistributionPanel.svelte';
+  import ExperimentalDesignPanel from '$lib/components/designer/ExperimentalDesignPanel.svelte';
+  import DataQualityPanel from '$lib/components/designer/DataQualityPanel.svelte';
 
   interface Props {
     questionnaireName: string;
-    pageCount: number;
-    blockCount: number;
-    questionCount: number;
-    viewMode: 'structural' | 'wysiwyg';
+    projectName?: string;
   }
 
-  let { questionnaireName, pageCount, blockCount, questionCount, viewMode }: Props = $props();
-  const flowOrder = ['add', 'configure', 'preview', 'publish'] as const;
-  type FlowStep = (typeof flowOrder)[number];
+  let { questionnaireName, projectName = '' }: Props = $props();
 
-  const formattedSaveTime = $derived(
-    designerStore.lastSaved
-      ? new Date(designerStore.lastSaved).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : 'Never'
-  );
+  let isEditingTitle = $state(false);
+  let titleValue = $state('Untitled Questionnaire');
+  let titleInput = $state<HTMLInputElement | undefined>();
+  let showDistribution = $state(false);
+  let showExperimentalDesign = $state(false);
+  let showDataQuality = $state(false);
+
+  $effect(() => {
+    titleValue = questionnaireName || 'Untitled Questionnaire';
+  });
 
   const validationState = $derived(designerStore.validate());
-  const validationErrorCount = $derived(validationState.validationErrors.length);
-  const validationWarningCount = $derived(validationState.warnings.length);
+  const hasValidationErrors = $derived(validationState.validationErrors.length > 0);
+  const questionCount = $derived(designerStore.questionnaire.questions.length);
   const canPublish = $derived(
-    validationErrorCount === 0 &&
+    !hasValidationErrors &&
       questionCount > 0 &&
       !designerStore.isSaving &&
       !designerStore.isPublishing
   );
-  const hasQuestions = $derived(questionCount > 0);
-  const hasSelection = $derived(Boolean(designerStore.selectedItem));
 
-  const activeFlowStep = $derived.by<FlowStep>(() => {
-    if (designerStore.previewMode) return 'preview';
-    if (!hasQuestions) return 'add';
-    if (hasSelection || designerStore.isDirty || !designerStore.questionnaire.id)
-      return 'configure';
-    return canPublish ? 'publish' : 'configure';
+  const saveStatus = $derived.by<'saved' | 'unsaved' | 'saving' | 'error'>(() => {
+    if (designerStore.isSaving) return 'saving';
+    if (designerStore.saveError) return 'error';
+    if (designerStore.isDirty) return 'unsaved';
+    return 'saved';
   });
-  const activeFlowIndex = $derived(flowOrder.indexOf(activeFlowStep));
 
-  async function handleSave() {
-    await designerStore.saveQuestionnaire();
-  }
-
-  async function handlePublish() {
-    const saved = await designerStore.saveQuestionnaire();
-    if (!saved) return;
-    await designerStore.publishQuestionnaire();
-  }
+  const saveTooltip = $derived.by(() => {
+    if (designerStore.isSaving) return 'Saving...';
+    if (designerStore.isPublishing) return 'Publishing...';
+    if (designerStore.saveError) return `Save failed: ${designerStore.saveError}`;
+    if (designerStore.isDirty) return 'Unsaved changes';
+    if (designerStore.lastSaved) {
+      return `Saved ${new Date(designerStore.lastSaved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    return 'Not saved yet';
+  });
 
   function goBackToProject() {
     if (!designerStore.projectId) {
@@ -62,291 +60,199 @@
     window.location.href = appPaths.project(designerStore.projectId);
   }
 
-  function goToAddStep() {
-    designerStore.setActiveLeftTab('questions');
-    if (window.matchMedia('(max-width: 767px)').matches) {
-      designerStore.toggleDrawer('left', true);
+  function startEditingTitle() {
+    isEditingTitle = true;
+    queueMicrotask(() => {
+      titleInput?.focus();
+      titleInput?.select();
+    });
+  }
+
+  function finishEditingTitle() {
+    isEditingTitle = false;
+    const trimmed = titleValue.trim();
+    if (trimmed && trimmed !== questionnaireName) {
+      designerStore.updateQuestionnaire({ name: trimmed });
+    } else {
+      titleValue = questionnaireName || 'Untitled Questionnaire';
     }
   }
 
-  function goToConfigureStep() {
-    if (!designerStore.selectedItem) {
-      const firstQuestion = designerStore.currentBlockQuestions[0];
-      if (firstQuestion) {
-        designerStore.selectItem(firstQuestion.id, 'question');
-      }
-    }
-    if (window.matchMedia('(max-width: 767px)').matches) {
-      designerStore.toggleDrawer('right', true);
-    }
-  }
-
-  function goToPreviewStep() {
-    designerStore.togglePreview(true);
-  }
-
-  function goToPublishStep() {
-    void handlePublish();
-  }
-
-  function runStepAction(step: FlowStep) {
-    if (step === 'add') return goToAddStep();
-    if (step === 'configure') return goToConfigureStep();
-    if (step === 'preview') return goToPreviewStep();
-    return goToPublishStep();
+  async function handlePublish() {
+    const saved = await designerStore.saveQuestionnaire();
+    if (!saved) return;
+    await designerStore.publishQuestionnaire();
   }
 </script>
 
-<header class="border-b border-border bg-background px-3 py-2" data-testid="designer-header">
-  <div class="flex items-center gap-3">
-    <button
-      type="button"
-      onclick={goBackToProject}
-      class="inline-flex items-center gap-2 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-      data-testid="designer-back"
-    >
-      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M10 19l-7-7m0 0l7-7m-7 7h18"
-        />
-      </svg>
-      <span class="hidden sm:inline">Project</span>
-    </button>
-
-    <div class="h-6 w-px bg-border"></div>
-
-    <div class="min-w-0 flex-1">
-      <h1 class="truncate text-base font-semibold text-foreground">
-        {questionnaireName || 'Untitled Questionnaire'}
-      </h1>
-      <p class="truncate text-xs text-muted-foreground" data-testid="designer-counts">
-        {pageCount} page{pageCount === 1 ? '' : 's'} · {blockCount} block{blockCount === 1
-          ? ''
-          : 's'}
-        · {questionCount} question{questionCount === 1 ? '' : 's'}
-      </p>
-    </div>
-
-    <div class="flex items-center gap-2">
-      <button
-        type="button"
-        class="md:hidden rounded-md border border-border p-1.5 text-muted-foreground hover:bg-accent"
-        onclick={() => designerStore.toggleDrawer('left')}
-        data-testid="designer-toggle-left-drawer"
-        aria-label="Toggle left panel"
-      >
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 6h16M4 12h16M4 18h16"
-          />
-        </svg>
-      </button>
-
-      <button
-        type="button"
-        class="md:hidden rounded-md border border-border p-1.5 text-muted-foreground hover:bg-accent"
-        onclick={() => designerStore.toggleDrawer('right')}
-        data-testid="designer-toggle-right-drawer"
-        aria-label="Toggle right panel"
-      >
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 5h5v14H4V5zm11 0h5v14h-5V5z"
-          />
-        </svg>
-      </button>
-
-      <div
-        class="hidden md:flex items-center rounded-md bg-muted p-0.5"
-        data-testid="designer-view-toggle"
-      >
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-xs"
-          class:bg-background={viewMode === 'structural'}
-          class:text-foreground={viewMode === 'structural'}
-          class:text-muted-foreground={viewMode !== 'structural'}
-          onclick={() => designerStore.setViewMode('structural')}
-          data-testid="designer-view-structure"
-        >
-          Structure
-        </button>
-        <button
-          type="button"
-          class="rounded px-2 py-1 text-xs"
-          class:bg-background={viewMode === 'wysiwyg'}
-          class:text-foreground={viewMode === 'wysiwyg'}
-          class:text-muted-foreground={viewMode !== 'wysiwyg'}
-          onclick={() => designerStore.setViewMode('wysiwyg')}
-          data-testid="designer-view-visual"
-        >
-          Visual
-        </button>
-      </div>
-
-      <button
-        type="button"
-        class="hidden md:inline-flex rounded-md border border-border p-1.5 text-muted-foreground disabled:opacity-50"
-        onclick={() => designerStore.undo()}
-        disabled={!designerStore.canUndo}
-        data-testid="designer-undo"
-        title="Undo"
-      >
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
-          />
-        </svg>
-      </button>
-
-      <button
-        type="button"
-        class="hidden md:inline-flex rounded-md border border-border p-1.5 text-muted-foreground disabled:opacity-50"
-        onclick={() => designerStore.redo()}
-        disabled={!designerStore.canRedo}
-        data-testid="designer-redo"
-        title="Redo"
-      >
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"
-          />
-        </svg>
-      </button>
-
-      <button
-        type="button"
-        class="hidden sm:inline-flex rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
-        onclick={() => designerStore.toggleCommandPalette(true)}
-        data-testid="designer-command-button"
-        title="Command palette (Ctrl/Cmd+K)"
-      >
-        Command
-      </button>
-
-      <button
-        type="button"
-        class="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
-        onclick={() => designerStore.togglePreview()}
-        data-testid="designer-preview-button"
-        title="Preview (Ctrl/Cmd+P)"
-      >
-        Preview
-      </button>
-
-      <button
-        type="button"
-        class="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
-        onclick={handleSave}
-        data-testid="designer-save-button"
-        disabled={designerStore.isSaving || designerStore.isPublishing}
-        title="Save (Ctrl/Cmd+S)"
-      >
-        {designerStore.isSaving ? 'Saving...' : 'Save'}
-      </button>
-
-      <button
-        type="button"
-        class="rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-        onclick={handlePublish}
-        data-testid="designer-publish-button"
-        disabled={!canPublish}
-        title="Publish (Ctrl/Cmd+Shift+Enter)"
-      >
-        {designerStore.isPublishing ? 'Publishing...' : 'Publish'}
-      </button>
-
-      <div
-        class="hidden md:flex items-center gap-2 text-xs text-muted-foreground"
-        data-testid="designer-save-status"
-      >
-        {#if validationErrorCount > 0}
-          <span
-            class="rounded bg-red-100 px-2 py-0.5 text-red-700"
-            data-testid="designer-validation-errors"
-          >
-            {validationErrorCount} validation error{validationErrorCount === 1 ? '' : 's'}
-          </span>
-        {/if}
-
-        {#if validationWarningCount > 0}
-          <span
-            class="rounded bg-amber-100 px-2 py-0.5 text-amber-700"
-            data-testid="designer-validation-warnings"
-          >
-            {validationWarningCount} warning{validationWarningCount === 1 ? '' : 's'}
-          </span>
-        {/if}
-
-        {#if designerStore.isSaving}
-          Saving...
-        {:else if designerStore.isPublishing}
-          Publishing...
-        {:else if designerStore.saveError}
-          Save failed
-        {:else if designerStore.isDirty}
-          Unsaved changes
-        {:else}
-          Saved {formattedSaveTime}
-        {/if}
-      </div>
-    </div>
-  </div>
-
-  <div
-    class="mt-2 hidden items-center gap-2 overflow-x-auto pb-1 md:flex"
-    data-testid="designer-flow-strip"
+<header
+  class="flex h-11 items-center gap-3 px-3 bg-[hsl(var(--glass-bg))] backdrop-blur-[var(--glass-blur)] border-b border-[hsl(var(--glass-border))] shadow-[var(--shadow-sm)]"
+  data-testid="designer-header"
+>
+  <!-- Back button (mobile only) -->
+  <button
+    type="button"
+    onclick={goBackToProject}
+    class="sm:hidden inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors duration-150"
+    data-testid="designer-back"
+    aria-label="Back to project"
+    title="Back to project"
   >
-    {#each flowOrder as step, index}
-      {@const isCurrent = index === activeFlowIndex}
-      {@const isComplete = index < activeFlowIndex}
+    <ArrowLeft class="h-4 w-4" />
+  </button>
+
+  <div class="h-5 w-px bg-border sm:hidden"></div>
+
+  <!-- Breadcrumb (desktop) -->
+  <nav class="hidden sm:flex items-center gap-1 text-xs text-muted-foreground" aria-label="Breadcrumb">
+    <a href="/projects" class="hover:text-foreground transition-colors">Projects</a>
+    <span class="text-muted-foreground/50">›</span>
+    <a href={designerStore.projectId ? `/projects/${designerStore.projectId}` : '/projects'} class="hover:text-foreground transition-colors truncate max-w-32">
+      {projectName || 'Project'}
+    </a>
+    <span class="text-muted-foreground/50">›</span>
+  </nav>
+
+  <!-- Editable title -->
+  <div class="min-w-0 flex-1">
+    {#if isEditingTitle}
+      <input
+        bind:this={titleInput}
+        bind:value={titleValue}
+        type="text"
+        class="w-full bg-transparent text-sm font-semibold text-foreground outline-none border-b-2 border-primary px-0.5 py-0"
+        onblur={finishEditingTitle}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') finishEditingTitle();
+          if (e.key === 'Escape') {
+            titleValue = questionnaireName || 'Untitled Questionnaire';
+            isEditingTitle = false;
+          }
+        }}
+        data-testid="designer-title-input"
+      />
+    {:else}
       <button
         type="button"
-        class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors {isCurrent ||
-        isComplete
-          ? 'border-primary bg-primary/10 text-primary'
-          : 'border-border text-muted-foreground'}"
-        class:border-primary={isCurrent || isComplete}
-        disabled={step === 'publish' && !canPublish}
-        onclick={() => runStepAction(step)}
-        data-testid={`designer-flow-step-${step}`}
+        class="truncate text-sm font-semibold text-foreground hover:text-primary transition-colors duration-150 cursor-text text-left max-w-full"
+        onclick={startEditingTitle}
+        title="Click to edit title"
+        data-testid="designer-title"
       >
-        <span
-          class="inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px]"
-          class:border-primary={isCurrent || isComplete}
-          class:bg-primary={isCurrent || isComplete}
-          class:text-primary-foreground={isCurrent || isComplete}
-        >
-          {index + 1}
-        </span>
-        <span class="capitalize">{step}</span>
+        {questionnaireName || 'Untitled Questionnaire'}
       </button>
-      {#if index < flowOrder.length - 1}
-        <div class="h-px w-4 bg-border"></div>
-      {/if}
-    {/each}
+    {/if}
+  </div>
 
-    <div class="ml-auto hidden items-center gap-2 text-xs text-muted-foreground xl:flex">
-      <span>Quick keys:</span>
-      <kbd class="rounded bg-muted px-1.5 py-0.5">Ctrl/Cmd+K</kbd>
-      <kbd class="rounded bg-muted px-1.5 py-0.5">Ctrl/Cmd+P</kbd>
-      <kbd class="rounded bg-muted px-1.5 py-0.5">Ctrl/Cmd+S</kbd>
-      <kbd class="rounded bg-muted px-1.5 py-0.5">Del</kbd>
+  <!-- Save indicator dot -->
+  <div class="relative group" data-testid="designer-save-indicator">
+    <div
+      class="w-2 h-2 rounded-full transition-colors duration-200 {saveStatus === 'saved'
+        ? 'bg-emerald-500'
+        : saveStatus === 'unsaved'
+          ? 'bg-amber-500 animate-pulse'
+          : saveStatus === 'saving'
+            ? 'bg-primary animate-spin'
+            : 'bg-destructive'}"
+      class:rounded-sm={saveStatus === 'saving'}
+    ></div>
+    <!-- Tooltip -->
+    <div class="absolute right-0 top-full mt-2 hidden group-hover:block z-50">
+      <div class="rounded-md bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-[var(--shadow-md)] border border-border whitespace-nowrap">
+        {saveTooltip}
+      </div>
     </div>
   </div>
+
+  <!-- Mobile drawer toggles -->
+  <button
+    type="button"
+    class="md:hidden rounded-md p-1.5 text-muted-foreground hover:bg-accent transition-colors duration-150"
+    onclick={() => designerStore.toggleDrawer('left')}
+    data-testid="designer-toggle-left-drawer"
+    aria-label="Toggle left panel"
+  >
+    <Menu class="h-4 w-4" />
+  </button>
+
+  <button
+    type="button"
+    class="md:hidden rounded-md p-1.5 text-muted-foreground hover:bg-accent transition-colors duration-150"
+    onclick={() => designerStore.toggleDrawer('right')}
+    data-testid="designer-toggle-right-drawer"
+    aria-label="Toggle right panel"
+  >
+    <PanelLeft class="h-4 w-4" />
+  </button>
+
+  <!-- Experimental design button -->
+  <button
+    type="button"
+    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
+    onclick={() => (showExperimentalDesign = true)}
+    data-testid="designer-experimental-design-button"
+    title="Experimental Design"
+  >
+    <FlaskConical class="h-3.5 w-3.5" />
+    Design
+  </button>
+
+  <!-- Data quality button -->
+  <button
+    type="button"
+    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
+    onclick={() => (showDataQuality = true)}
+    data-testid="designer-data-quality-button"
+    title="Data Quality"
+  >
+    <ShieldCheck class="h-3.5 w-3.5" />
+    Quality
+  </button>
+
+  <!-- Share button -->
+  <button
+    type="button"
+    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
+    onclick={() => (showDistribution = true)}
+    data-testid="designer-share-button"
+    title="Share"
+  >
+    <Share2 class="h-3.5 w-3.5" />
+    Share
+  </button>
+
+  <!-- Preview button -->
+  <button
+    type="button"
+    class="hidden sm:inline-flex items-center rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
+    onclick={() => designerStore.togglePreview()}
+    data-testid="designer-preview-button"
+    title="Preview (Ctrl+P)"
+  >
+    Preview
+  </button>
+
+  <!-- Publish button with gradient + validation dot -->
+  <button
+    type="button"
+    class="relative hidden sm:inline-flex items-center rounded-md bg-gradient-to-r from-primary to-[hsl(280,80%,60%)] px-3 py-1 text-xs text-primary-foreground shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-glow)] hover:brightness-110 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:shadow-[var(--shadow-sm)] disabled:hover:brightness-100"
+    onclick={handlePublish}
+    data-testid="designer-publish-button"
+    disabled={!canPublish}
+    title="Publish (Ctrl+Shift+Enter)"
+  >
+    {designerStore.isPublishing ? 'Publishing...' : 'Publish'}
+    {#if hasValidationErrors}
+      <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-destructive border-2 border-background"></span>
+    {/if}
+  </button>
 </header>
+
+<DistributionPanel
+  isOpen={showDistribution}
+  onclose={() => (showDistribution = false)}
+/>
+
+<ExperimentalDesignPanel bind:open={showExperimentalDesign} />
+
+<DataQualityPanel bind:open={showDataQuality} />

@@ -55,6 +55,9 @@ export class WebGLRuntime implements IQuestionRuntime {
       renderer: context.renderer,
       eventTarget: document,
     });
+
+    // Seed the engine's caches with preloaded assets from ResourceManager
+    this.engine.seedFromResourceManager(context.resourceManager);
   }
 
   public async run(context: QuestionRuntimeContext): Promise<QuestionRuntimeResult> {

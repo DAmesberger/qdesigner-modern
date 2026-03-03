@@ -361,6 +361,27 @@ pub async fn add_member(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
+    // Validate role value
+    if !matches!(body.role.as_str(), "owner" | "admin" | "member" | "viewer") {
+        return Err(ApiError::BadRequest(
+            "Invalid role. Must be one of: owner, admin, member, viewer".into(),
+        ));
+    }
+
+    // Only owners can assign the owner role
+    if body.role == "owner"
+        && !state
+            .rbac
+            .has_org_role(
+                user.user_id,
+                org_id,
+                &crate::rbac::models::OrgRole::Owner,
+            )
+            .await?
+    {
+        return Err(ApiError::Forbidden("Only owners can assign the owner role".into()));
+    }
+
     if !state
         .rbac
         .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
@@ -484,6 +505,13 @@ pub async fn create_invitation(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
+    // Validate role value
+    if !matches!(body.role.as_str(), "owner" | "admin" | "member" | "viewer") {
+        return Err(ApiError::BadRequest(
+            "Invalid role. Must be one of: owner, admin, member, viewer".into(),
+        ));
+    }
+
     if !state
         .rbac
         .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
@@ -513,4 +541,175 @@ pub async fn create_invitation(
     tracing::info!("Invitation sent to {} for org {org_id}", body.email);
 
     Ok((axum::http::StatusCode::CREATED, Json(invitation)))
+}
+
+// ── Invitation accept / decline / revoke ─────────────────────────────
+
+/// Model returned for pending-invitation list (includes org context).
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct PendingInvitation {
+    pub id: Uuid,
+    pub organization_id: Uuid,
+    pub organization_name: String,
+    pub email: String,
+    pub role: String,
+    pub invited_by: Option<Uuid>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// GET /api/invitations/pending
+/// Returns all pending invitations addressed to the authenticated user's email.
+pub async fn list_pending_invitations(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+) -> Result<Json<Vec<PendingInvitation>>, ApiError> {
+    // Look up the user's email
+    let email = sqlx::query_scalar::<_, String>(
+        "SELECT email FROM users WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(user.user_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
+
+    let invitations = sqlx::query_as::<_, PendingInvitation>(
+        r#"
+        SELECT i.id, i.organization_id, o.name AS organization_name,
+               i.email, i.role, i.invited_by, i.created_at, i.expires_at
+        FROM organization_invitations i
+        JOIN organizations o ON o.id = i.organization_id AND o.deleted_at IS NULL
+        WHERE i.email = $1 AND i.status = 'pending' AND i.expires_at > NOW()
+        ORDER BY i.created_at DESC
+        "#,
+    )
+    .bind(&email)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(invitations))
+}
+
+/// POST /api/invitations/:id/accept
+pub async fn accept_invitation(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(invitation_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // Look up the user's email
+    let email = sqlx::query_scalar::<_, String>(
+        "SELECT email FROM users WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(user.user_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
+
+    // Fetch the invitation — must be pending, not expired, and addressed to this user
+    let row = sqlx::query_as::<_, (Uuid, String)>(
+        r#"
+        SELECT organization_id, role
+        FROM organization_invitations
+        WHERE id = $1 AND email = $2 AND status = 'pending' AND expires_at > NOW()
+        "#,
+    )
+    .bind(invitation_id)
+    .bind(&email)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Invitation not found or expired".into()))?;
+
+    let (org_id, role) = row;
+
+    // Mark invitation as accepted
+    sqlx::query(
+        "UPDATE organization_invitations SET status = 'accepted', accepted_at = NOW() WHERE id = $1",
+    )
+    .bind(invitation_id)
+    .execute(&state.pool)
+    .await?;
+
+    // Add user as org member (upsert in case they were previously removed)
+    sqlx::query(
+        r#"
+        INSERT INTO organization_members (organization_id, user_id, role, status, joined_at)
+        VALUES ($1, $2, $3, 'active', NOW())
+        ON CONFLICT (organization_id, user_id) DO UPDATE SET role = $3, status = 'active', joined_at = NOW()
+        "#,
+    )
+    .bind(org_id)
+    .bind(user.user_id)
+    .bind(&role)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "message": "Invitation accepted" })))
+}
+
+/// POST /api/invitations/:id/decline
+pub async fn decline_invitation(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(invitation_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let email = sqlx::query_scalar::<_, String>(
+        "SELECT email FROM users WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(user.user_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
+
+    let rows_affected = sqlx::query(
+        r#"
+        UPDATE organization_invitations
+        SET status = 'declined', declined_at = NOW()
+        WHERE id = $1 AND email = $2 AND status = 'pending'
+        "#,
+    )
+    .bind(invitation_id)
+    .bind(&email)
+    .execute(&state.pool)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(ApiError::NotFound("Invitation not found or already processed".into()));
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Invitation declined" })))
+}
+
+/// DELETE /api/organizations/:id/invitations/:inv_id  (revoke)
+pub async fn revoke_invitation(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path((org_id, invitation_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !state
+        .rbac
+        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .await?
+    {
+        return Err(ApiError::Forbidden("Requires admin role".into()));
+    }
+
+    let rows_affected = sqlx::query(
+        r#"
+        UPDATE organization_invitations
+        SET status = 'revoked'
+        WHERE id = $1 AND organization_id = $2 AND status = 'pending'
+        "#,
+    )
+    .bind(invitation_id)
+    .bind(org_id)
+    .execute(&state.pool)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(ApiError::NotFound("Invitation not found or already processed".into()));
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Invitation revoked" })))
 }

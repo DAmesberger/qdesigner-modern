@@ -24,6 +24,7 @@ pub struct Config {
     // SMTP
     pub smtp_host: String,
     pub smtp_port: u16,
+    pub smtp_from: String,
 
     // CORS
     pub cors_origins: Vec<String>,
@@ -66,6 +67,7 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(1025),
+            smtp_from: env_or("SMTP_FROM", "noreply@qdesigner.local"),
             cors_origins: std::env::var("CORS_ORIGINS")
                 .unwrap_or_else(|_| "http://localhost:5173,http://localhost:5174".into())
                 .split(',')

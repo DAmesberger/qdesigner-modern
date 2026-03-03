@@ -1,5 +1,4 @@
 export { ReactionEngine } from './ReactionEngine';
-export { createNBackTrials } from './presets/nBack';
 export type {
   ReactionEngineHooks,
   ReactionTrialConfig,
@@ -9,4 +8,38 @@ export type {
   ReactionFixationConfig,
   ScheduledPhase,
 } from './types';
-export type { NBackPresetConfig, NBackTrialConfig } from './presets/nBack';
+
+// Preset re-exports
+export {
+  createNBackTrials,
+  createStroopTrials,
+  createFlankerTrials,
+  createIATBlocks,
+  flattenIATTrials,
+  computeDScore,
+  createDotProbeTrials,
+  computeAttentionalBias,
+} from './presets';
+
+export type {
+  NBackPresetConfig,
+  NBackTrialConfig,
+  StroopPresetConfig,
+  StroopTrialConfig,
+  StroopColor,
+  StroopCongruency,
+  FlankerPresetConfig,
+  FlankerTrialConfig,
+  FlankerCongruency,
+  IATPresetConfig,
+  IATTrialConfig,
+  IATBlockConfig,
+  IATBlockType,
+  IATCategory,
+  IATDScoreResult,
+  DotProbePresetConfig,
+  DotProbeTrialConfig,
+  DotProbeStimulusPair,
+  DotProbeCongruency,
+  AttentionalBiasResult,
+} from './presets';

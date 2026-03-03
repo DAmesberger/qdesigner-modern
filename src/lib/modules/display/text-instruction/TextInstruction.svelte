@@ -5,6 +5,7 @@
   import type { MediaConfig } from '$lib/modules/types';
   import { processMarkdownContent } from '$lib/services/markdownProcessor';
   import { mediaService } from '$lib/services/mediaService';
+  import { scriptingEngine } from '$lib/services/scriptingEngine';
   import { onMount } from 'svelte';
 
   interface TextInstructionConfig extends InstructionModuleConfig {
@@ -99,7 +100,7 @@
         mediaUrls: mediaUrls,
         format: (instruction.display?.enableMarkdown ?? true) ? 'markdown' : 'text',
         processVariables: instruction.display?.variables ?? true,
-        variables: {}, // TODO: Get from context or scriptingEngine
+        variables: mode === 'runtime' ? scriptingEngine.getAllVariables() : {},
       });
 
       // If markdown is disabled and we still have plain text, convert newlines

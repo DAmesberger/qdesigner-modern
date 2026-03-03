@@ -2,7 +2,11 @@ import type { PageLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { api } from '$lib/services/api';
-import type { DashboardData, DashboardQuestionnaire } from '$lib/types/dashboard';
+import type {
+  DashboardData,
+  DashboardQuestionnaire,
+  DashboardActivity,
+} from '$lib/types/dashboard';
 
 export const load: PageLoad = async ({ parent, depends }) => {
   depends('app:organization');
@@ -19,8 +23,8 @@ export const load: PageLoad = async ({ parent, depends }) => {
         totalQuestionnaires: 0,
         totalResponses: 0,
         activeQuestionnaires: 0,
-        avgCompletionRate: 0
-      }
+        avgCompletionRate: 0,
+      },
     };
   }
 
@@ -32,62 +36,64 @@ export const load: PageLoad = async ({ parent, depends }) => {
     throw redirect(302, '/onboarding/organization');
   }
 
-  // Fetch real data from the API
   let questionnaires: DashboardQuestionnaire[] = [];
+  let recentActivity: DashboardActivity[] = [];
+  let stats = {
+    totalQuestionnaires: 0,
+    totalResponses: 0,
+    activeQuestionnaires: 0,
+    avgCompletionRate: 0,
+  };
 
   try {
-    // Get all projects for this organization
-    const projects = await api.projects.list(organizationId);
+    const dashboard = await api.sessions.dashboard(organizationId);
 
-    // Fetch questionnaires from each project
-    const allQuestionnaires = await Promise.all(
-      projects.map(async (project) => {
-        try {
-          const qs = await api.questionnaires.list(project.id);
-          return qs.map((q) => ({
-            questionnaire_id: q.id,
-            project_id: project.id,
-            name: q.name,
-            description: q.description ?? undefined,
-            status: (q.status || 'draft') as 'draft' | 'published' | 'archived',
-            total_responses: 0, // TODO: add response count API
-            completed_responses: 0,
-            avg_completion_time: undefined,
-            response_rate_7d: 0,
-            created_at: q.createdAt || q.created_at || new Date().toISOString(),
-            updated_at: q.updatedAt || q.updated_at || new Date().toISOString()
-          }));
-        } catch {
-          return [];
-        }
-      })
-    );
+    questionnaires = dashboard.questionnaires.map((q) => ({
+      questionnaire_id: q.id,
+      project_id: q.project_id,
+      name: q.name,
+      status: (q.status || 'draft') as 'draft' | 'published' | 'archived',
+      total_responses: q.total_responses,
+      completed_responses: q.completed_sessions,
+      avg_completion_time: q.avg_completion_time_ms ?? undefined,
+      response_rate_7d: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
 
-    questionnaires = allQuestionnaires.flat();
+    recentActivity = dashboard.recent_activity.map((a) => ({
+      id: a.session_id,
+      questionnaire_id: a.session_id,
+      questionnaire_name: a.questionnaire_name,
+      participant_id: a.participant_id ?? undefined,
+      participant_email: a.participant_id || 'Anonymous',
+      status: (a.status === 'active' ? 'in_progress' : a.status) as
+        | 'completed'
+        | 'in_progress'
+        | 'abandoned',
+      started_at: a.started_at || new Date().toISOString(),
+      completed_at: a.completed_at ?? undefined,
+      response_time_ms:
+        a.started_at && a.completed_at
+          ? new Date(a.completed_at).getTime() - new Date(a.started_at).getTime()
+          : undefined,
+    }));
+
+    stats = {
+      totalQuestionnaires: dashboard.stats.total_questionnaires,
+      totalResponses: dashboard.stats.total_responses,
+      activeQuestionnaires: dashboard.stats.active_questionnaires,
+      avgCompletionRate: Math.round(dashboard.stats.avg_completion_rate * 100),
+    };
   } catch (err) {
     console.error('Error fetching dashboard data:', err);
   }
 
-  const totalQuestionnaires = questionnaires.length;
-  const activeQuestionnaires = questionnaires.filter((q) => q.status === 'published').length;
-  const totalResponses = questionnaires.reduce((sum, q) => sum + q.total_responses, 0);
-  const avgCompletionRate =
-    totalResponses > 0
-      ? Math.round(
-          (questionnaires.reduce((sum, q) => sum + q.completed_responses, 0) / totalResponses) * 100
-        )
-      : 0;
-
   const dashboardData: DashboardData = {
     user,
     questionnaires,
-    recentActivity: [], // TODO: add activity API endpoint
-    stats: {
-      totalQuestionnaires,
-      totalResponses,
-      activeQuestionnaires,
-      avgCompletionRate
-    }
+    recentActivity,
+    stats,
   };
 
   return dashboardData;

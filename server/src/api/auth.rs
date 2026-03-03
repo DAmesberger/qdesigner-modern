@@ -1,5 +1,8 @@
 use axum::{extract::State, Json};
 use chrono::{DateTime, Utc};
+use lettre::message::header::ContentType;
+use lettre::transport::smtp::client::Tls;
+use lettre::{Message, SmtpTransport, Transport};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -418,11 +421,110 @@ pub async fn password_reset(
         .execute(&state.pool)
         .await?;
 
-        // In production, send the email here via lettre.
-        tracing::info!("Password reset token for {}: {token}", body.email);
+        // Determine the frontend URL from CORS origins (first origin)
+        let app_url = state
+            .config
+            .cors_origins
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "http://localhost:5173".to_string());
+
+        let reset_link = format!("{}/reset-password?token={}", app_url, token);
+
+        let email_body = format!(
+            "Hello,\n\n\
+             You requested a password reset for your QDesigner account.\n\n\
+             Click the link below to reset your password:\n\
+             {}\n\n\
+             This link expires in 1 hour.\n\n\
+             If you didn't request this, you can safely ignore this email.\n\n\
+             - QDesigner Team",
+            reset_link
+        );
+
+        let email_msg = Message::builder()
+            .from(
+                state
+                    .config
+                    .smtp_from
+                    .parse()
+                    .unwrap_or_else(|_| "noreply@qdesigner.local".parse().unwrap()),
+            )
+            .to(body
+                .email
+                .parse()
+                .map_err(|_| ApiError::BadRequest("Invalid email address".into()))?)
+            .subject("Reset your QDesigner password")
+            .header(ContentType::TEXT_PLAIN)
+            .body(email_body)
+            .map_err(|e| ApiError::Internal(format!("Failed to build email: {e}")))?;
+
+        let smtp_host = state.config.smtp_host.clone();
+        let smtp_port = state.config.smtp_port;
+        let recipient_email = body.email.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let mailer = SmtpTransport::builder_dangerous(&smtp_host)
+                .port(smtp_port)
+                .tls(Tls::None)
+                .build();
+
+            match mailer.send(&email_msg) {
+                Ok(_) => tracing::info!("Password reset email sent to {}", recipient_email),
+                Err(e) => tracing::error!("Failed to send password reset email: {e}"),
+            }
+        })
+        .await
+        .ok();
     }
 
     Ok(Json(
         serde_json::json!({ "message": "If the email exists, a reset link has been sent" }),
+    ))
+}
+
+/// POST /api/auth/password-reset/confirm
+pub async fn confirm_password_reset(
+    State(state): State<AppState>,
+    Json(body): Json<PasswordResetConfirm>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    body.validate()
+        .map_err(|e| ApiError::Validation(e.to_string()))?;
+
+    // Look up the token
+    let row = sqlx::query_as::<_, (Uuid,)>(
+        r#"
+        SELECT user_id FROM password_resets
+        WHERE token = $1 AND expires_at > NOW() AND used_at IS NULL
+        "#,
+    )
+    .bind(&body.token)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::BadRequest("Invalid or expired reset token".into()))?;
+
+    let user_id = row.0;
+
+    // Hash the new password with Argon2id
+    let hash = password::hash_password(&body.new_password)?;
+
+    // Update the user's password
+    sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&hash)
+        .bind(user_id)
+        .execute(&state.pool)
+        .await?;
+
+    // Mark the token as used
+    sqlx::query("UPDATE password_resets SET used_at = NOW() WHERE token = $1")
+        .bind(&body.token)
+        .execute(&state.pool)
+        .await?;
+
+    // Revoke all existing sessions for security
+    session::revoke_all_user_tokens(&state.pool, user_id).await?;
+
+    Ok(Json(
+        serde_json::json!({ "message": "Password has been reset successfully" }),
     ))
 }

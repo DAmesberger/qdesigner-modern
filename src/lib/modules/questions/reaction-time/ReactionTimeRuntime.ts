@@ -31,8 +31,17 @@ interface ReactionTimeQuestionConfig {
     >;
   };
   stimulus?: {
-    type?: 'text' | 'shape' | 'image';
+    type?: 'text' | 'shape' | 'image' | 'video' | 'audio';
     content?: string;
+    mediaRef?: {
+      mediaId: string;
+      mediaUrl?: string;
+      filename?: string;
+      mimeType?: string;
+      width?: number;
+      height?: number;
+      durationSeconds?: number;
+    };
     fixation?: {
       type?: 'cross' | 'dot';
       duration?: number;
@@ -74,8 +83,17 @@ interface NormalizedReactionConfig {
     >;
   };
   stimulus: {
-    type: 'text' | 'shape' | 'image';
+    type: 'text' | 'shape' | 'image' | 'video' | 'audio';
     content: string;
+    mediaRef?: {
+      mediaId: string;
+      mediaUrl?: string;
+      filename?: string;
+      mimeType?: string;
+      width?: number;
+      height?: number;
+      durationSeconds?: number;
+    };
     fixation: {
       type: 'cross' | 'dot';
       duration: number;
@@ -139,6 +157,11 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       renderer: context.renderer,
       eventTarget: document,
     });
+
+    // Seed the engine's internal caches with assets already preloaded by
+    // ResourceManager so that stimuli are served from memory instead of
+    // hitting the network on first access.
+    this.engine.seedFromResourceManager(context.resourceManager);
   }
 
   public async run(context: QuestionRuntimeContext): Promise<QuestionRuntimeResult> {
@@ -153,6 +176,15 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
 
     const config = this.getConfig(context.question);
     const trialPlan = this.buildTrialPlan(config, context);
+
+    // Pre-trial warm-up: ensure all stimuli for this block are cached
+    // before the first trial starts. This catches any media that wasn't
+    // covered by the questionnaire-level preload scan.
+    const blockStimuli = trialPlan
+      .map((planned) => planned.trial.stimulus)
+      .filter(Boolean);
+    await engine.warmUpStimuli(blockStimuli);
+
     const allResponses: TrialResponse[] = [];
 
     for (let index = 0; index < trialPlan.length; index++) {
@@ -253,6 +285,7 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       stimulus: {
         type: config.stimulus?.type || 'shape',
         content: config.stimulus?.content || 'circle',
+        mediaRef: config.stimulus?.mediaRef,
         fixation: {
           type: config.stimulus?.fixation?.type || 'cross',
           duration: config.stimulus?.fixation?.duration || 500,
@@ -483,30 +516,50 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
     const stimulusContent = config.stimulus.content || '';
     const fixation = config.stimulus.fixation ?? { type: 'cross' as const, duration: 500 };
 
-    const stimulus =
-      stimulusType === 'text'
-        ? {
-            kind: 'text' as const,
-            text: stimulusContent,
-            fontPx: 72,
-          }
-        : stimulusType === 'image'
-          ? {
-              kind: 'image' as const,
-              src: stimulusContent,
-              widthPx: 360,
-              heightPx: 360,
-            }
-          : {
-              kind: 'shape' as const,
-              shape:
-                stimulusContent === 'square'
-                  ? ('square' as const)
-                  : stimulusContent === 'triangle'
-                    ? ('triangle' as const)
-                    : ('circle' as const),
-              radiusPx: 80,
-            };
+    const mediaSrc = config.stimulus.mediaRef?.mediaUrl || stimulusContent;
+
+    let stimulus: ReactionStimulusConfig;
+    if (stimulusType === 'text') {
+      stimulus = {
+        kind: 'text' as const,
+        text: stimulusContent,
+        fontPx: 72,
+      };
+    } else if (stimulusType === 'image') {
+      stimulus = {
+        kind: 'image' as const,
+        src: mediaSrc,
+        widthPx: config.stimulus.mediaRef?.width || 360,
+        heightPx: config.stimulus.mediaRef?.height || 360,
+      };
+    } else if (stimulusType === 'video') {
+      stimulus = {
+        kind: 'video' as const,
+        src: mediaSrc,
+        autoplay: true,
+        muted: true,
+        widthPx: config.stimulus.mediaRef?.width || 640,
+        heightPx: config.stimulus.mediaRef?.height || 360,
+      };
+    } else if (stimulusType === 'audio') {
+      stimulus = {
+        kind: 'audio' as const,
+        src: mediaSrc,
+        autoplay: true,
+        volume: 1,
+      };
+    } else {
+      stimulus = {
+        kind: 'shape' as const,
+        shape:
+          stimulusContent === 'square'
+            ? ('square' as const)
+            : stimulusContent === 'triangle'
+              ? ('triangle' as const)
+              : ('circle' as const),
+        radiusPx: 80,
+      };
+    }
 
     return {
       id: `reaction-time-${trialNumber}`,

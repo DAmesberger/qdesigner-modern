@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import type { editor } from 'monaco-editor';
+  import { registerFormulaProviders, qdesignerTheme, qdesignerDarkTheme } from '$lib/core/scripting/MonacoConfig';
 
   interface Props {
     value?: string;
@@ -32,6 +33,7 @@
   let monacoEditor: editor.IStandaloneCodeEditor | null = null;
   let monaco: any;
   let isLoading = $state(true);
+  let formulaProviders: ReturnType<typeof registerFormulaProviders> | null = null;
 
   // Load Monaco Editor
   onMount(async () => {
@@ -46,46 +48,9 @@
       // Dynamically import Monaco
       monaco = await import('monaco-editor');
 
-      // Register custom theme
-      monaco.editor.defineTheme('qdesigner-light', {
-        base: 'vs',
-        inherit: true,
-        rules: [
-          { token: 'keyword', foreground: '0000FF' },
-          { token: 'comment', foreground: '008000', fontStyle: 'italic' },
-          { token: 'string', foreground: 'A31515' },
-          { token: 'number', foreground: '098658' },
-          { token: 'variable', foreground: '001080' },
-          { token: 'function', foreground: '795E26' },
-        ],
-        colors: {
-          'editor.background': '#FFFFFF',
-          'editor.foreground': '#000000',
-          'editor.lineHighlightBackground': '#F7F7F7',
-          'editorCursor.foreground': '#000000',
-          'editor.selectionBackground': '#ADD6FF',
-        },
-      });
-
-      monaco.editor.defineTheme('qdesigner-dark', {
-        base: 'vs-dark',
-        inherit: true,
-        rules: [
-          { token: 'keyword', foreground: '569CD6' },
-          { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
-          { token: 'string', foreground: 'CE9178' },
-          { token: 'number', foreground: 'B5CEA8' },
-          { token: 'variable', foreground: '9CDCFE' },
-          { token: 'function', foreground: 'DCDCAA' },
-        ],
-        colors: {
-          'editor.background': '#1E1E1E',
-          'editor.foreground': '#D4D4D4',
-          'editor.lineHighlightBackground': '#2A2A2A',
-          'editorCursor.foreground': '#D4D4D4',
-          'editor.selectionBackground': '#264F78',
-        },
-      });
+      // Register custom themes
+      monaco.editor.defineTheme('qdesigner-light', qdesignerTheme);
+      monaco.editor.defineTheme('qdesigner-dark', qdesignerDarkTheme);
 
       // Create editor
       const createdEditor = monaco.editor.create(container, {
@@ -120,51 +85,8 @@
 
       monacoEditor = createdEditor;
 
-      // Register completion provider for variables
-      monaco.languages.registerCompletionItemProvider('javascript', {
-        provideCompletionItems: (model: any, position: any) => {
-          const suggestions: any[] = [];
-
-          // Add variables
-          Object.keys(variables).forEach((varName) => {
-            suggestions.push({
-              label: varName,
-              kind: monaco.languages.CompletionItemKind.Variable,
-              documentation: `Variable: ${varName}`,
-              insertText: varName,
-              detail: typeof variables[varName],
-            });
-          });
-
-          // Add built-in functions
-          const functions = [
-            { name: 'SUM', args: '(...values)', desc: 'Sum of values' },
-            { name: 'AVG', args: '(...values)', desc: 'Average of values' },
-            { name: 'MIN', args: '(...values)', desc: 'Minimum value' },
-            { name: 'MAX', args: '(...values)', desc: 'Maximum value' },
-            { name: 'COUNT', args: '(...values)', desc: 'Count of values' },
-            { name: 'IF', args: '(condition, trueValue, falseValue)', desc: 'Conditional logic' },
-            { name: 'CONCAT', args: '(...strings)', desc: 'Concatenate strings' },
-            { name: 'LENGTH', args: '(string)', desc: 'String length' },
-            { name: 'NOW', args: '()', desc: 'Current timestamp' },
-            { name: 'RANDOM', args: '()', desc: 'Random number 0-1' },
-            { name: 'RANDINT', args: '(min, max)', desc: 'Random integer' },
-          ];
-
-          functions.forEach((fn) => {
-            suggestions.push({
-              label: fn.name,
-              kind: monaco.languages.CompletionItemKind.Function,
-              documentation: fn.desc,
-              insertText: `${fn.name}${fn.args}`,
-              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-              detail: `function ${fn.args}`,
-            });
-          });
-
-          return { suggestions };
-        },
-      });
+      // Register formula completion + signature help providers
+      formulaProviders = registerFormulaProviders(monaco, language, variables);
 
       // Handle changes
       createdEditor.onDidChangeModelContent(() => {
@@ -205,15 +127,16 @@
     }
   });
 
-  // Update variables for completion
+  // Reactively update variables for completion
   $effect(() => {
-    if (monacoEditor && variables) {
-      // Variables update will be picked up by completion provider
+    if (formulaProviders && variables) {
+      formulaProviders.setVariables(variables);
     }
   });
 
   // Cleanup
   onDestroy(() => {
+    formulaProviders?.dispose();
     if (monacoEditor) {
       monacoEditor.dispose();
     }

@@ -25,4 +25,6 @@ export const appPaths = {
   },
   projectQuestionnaireRun: (projectId: string, questionnaireId: string): string =>
     `/projects/${encodeSegment(projectId)}/questionnaires/${encodeSegment(questionnaireId)}/run`,
+  projectAnalytics: (projectId: string): string =>
+    `/projects/${encodeSegment(projectId)}/analytics`,
 };

@@ -241,7 +241,7 @@ class ScriptingEngineService {
     window.addEventListener('qd:response:saved', responseListener as EventListener);
   }
 
-  private getAllVariables(context?: Record<string, DynamicValue>): Record<string, DynamicValue> {
+  getAllVariables(context?: Record<string, DynamicValue>): Record<string, DynamicValue> {
     const allVars: Record<string, DynamicValue> = {};
 
     // Add stored variables

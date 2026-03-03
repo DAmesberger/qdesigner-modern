@@ -35,6 +35,9 @@ dependencies:
   immer:
     specifier: ^10.1.1
     version: 10.2.0
+  jszip:
+    specifier: ^3.10.1
+    version: 3.10.1
   lucide-svelte:
     specifier: ^0.536.0
     version: 0.536.0(svelte@5.53.5)

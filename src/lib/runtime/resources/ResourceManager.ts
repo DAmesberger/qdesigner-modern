@@ -367,6 +367,28 @@ export class ResourceManager {
   }
 
   /**
+   * Get all preloaded images (keyed by URL/id).
+   * Used to seed ReactionEngine caches and avoid on-demand network loads.
+   */
+  public getImageCache(): ReadonlyMap<string, HTMLImageElement> {
+    return this.imageCache;
+  }
+
+  /**
+   * Get all preloaded videos (keyed by URL/id).
+   */
+  public getVideoCache(): ReadonlyMap<string, HTMLVideoElement> {
+    return this.videoCache;
+  }
+
+  /**
+   * Get all preloaded audio buffers (keyed by URL/id).
+   */
+  public getAudioBufferCache(): ReadonlyMap<string, AudioBuffer> {
+    return this.audioCache;
+  }
+
+  /**
    * Get loading statistics
    */
   public getStats(): { total: number; loaded: number; errors: number } {

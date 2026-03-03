@@ -5,16 +5,23 @@ import type {
   Invitation,
   Project,
   QuestionnaireDefinition,
+  QuestionTemplate,
   SessionData,
   SessionAggregateData,
   SessionCompareData,
   SessionStatsSummary,
   ResponseSubmission,
+  SessionResponseRecord,
+  InteractionEventRecord,
+  SessionVariableRecord,
+  DashboardSummary,
+  ExportRow,
   MediaAsset,
   MediaUploadResponse,
   DomainConfig,
   DomainAutoJoinCheck,
   VerificationResult,
+  CrossProjectAnalyticsData,
   ApiError,
 } from '$lib/types/api';
 
@@ -72,6 +79,43 @@ function mapCompareData(raw: any): SessionCompareData {
       zScore: delta.z_score ?? delta.zScore ?? null,
     },
   };
+}
+
+function mapCrossProjectAnalytics(raw: any): CrossProjectAnalyticsData {
+  const questionnaires = (raw.questionnaires || []).map((q: any) => ({
+    questionnaireId: String(q.questionnaire_id ?? q.questionnaireId ?? ''),
+    name: String(q.name ?? ''),
+    responseCount: Number(q.response_count ?? q.responseCount ?? 0),
+    completedSessions: Number(q.completed_sessions ?? q.completedSessions ?? 0),
+    completionRate: Number(q.completion_rate ?? q.completionRate ?? 0),
+    timingStats: q.timing_stats ? mapStatsSummary(q.timing_stats) : null,
+    variableStats: q.variable_stats ? mapStatsSummary(q.variable_stats) : null,
+  }));
+
+  const agg = raw.aggregate || {};
+  const aggregate = {
+    totalResponses: Number(agg.total_responses ?? agg.totalResponses ?? 0),
+    totalCompletedSessions: Number(agg.total_completed_sessions ?? agg.totalCompletedSessions ?? 0),
+    overallCompletionRate: Number(agg.overall_completion_rate ?? agg.overallCompletionRate ?? 0),
+    overallTimingStats: agg.overall_timing_stats
+      ? mapStatsSummary(agg.overall_timing_stats)
+      : null,
+    overallVariableStats: agg.overall_variable_stats
+      ? mapStatsSummary(agg.overall_variable_stats)
+      : null,
+  };
+
+  const crossComparisons = raw.cross_comparisons
+    ? (raw.cross_comparisons as any[]).map((c: any) => ({
+        questionnaireA: String(c.questionnaire_a ?? c.questionnaireA ?? ''),
+        questionnaireB: String(c.questionnaire_b ?? c.questionnaireB ?? ''),
+        meanDelta: c.mean_delta ?? c.meanDelta ?? null,
+        medianDelta: c.median_delta ?? c.medianDelta ?? null,
+        correlation: c.correlation ?? null,
+      }))
+    : null;
+
+  return { questionnaires, aggregate, crossComparisons };
 }
 
 class ApiClient {
@@ -193,6 +237,25 @@ class ApiClient {
       checkAutoJoin: (email: string) =>
         this.get<DomainAutoJoinCheck>(`/api/domains/auto-join?email=${encodeURIComponent(email)}`),
     },
+
+    // Analytics
+    analytics: async (
+      orgId: string,
+      params: {
+        questionnaireIds: string[];
+        metrics?: string[];
+        source?: 'variable' | 'response';
+        key?: string;
+      }
+    ): Promise<CrossProjectAnalyticsData> => {
+      const query = new URLSearchParams();
+      query.set('questionnaire_ids', params.questionnaireIds.join(','));
+      if (params.metrics?.length) query.set('metrics', params.metrics.join(','));
+      if (params.source) query.set('source', params.source);
+      if (params.key) query.set('key', params.key);
+      const raw = await this.get<any>(`/api/organizations/${orgId}/analytics?${query.toString()}`);
+      return mapCrossProjectAnalytics(raw);
+    },
   };
 
   // === Projects ===
@@ -250,6 +313,10 @@ class ApiClient {
       this.delete(`/api/projects/${projectId}/questionnaires/${id}`),
     publish: (projectId: string, id: string) =>
       this.post<QuestionnaireDefinition>(`/api/projects/${projectId}/questionnaires/${id}/publish`),
+    export: (projectId: string, id: string, format: 'json' | 'csv' = 'json') =>
+      this.get<ExportRow[]>(
+        `/api/projects/${projectId}/questionnaires/${id}/export?format=${format}`
+      ),
   };
 
   // === Sessions ===
@@ -291,6 +358,27 @@ class ApiClient {
       this.post<{ count: number }>(`/api/sessions/${sessionId}/events`, events),
     upsertVariable: (sessionId: string, data: { name: string; value: unknown }) =>
       this.post<{ success: boolean }>(`/api/sessions/${sessionId}/variables`, data),
+    getResponses: (
+      sessionId: string,
+      params?: { questionId?: string; limit?: number; offset?: number }
+    ) => {
+      const query = new URLSearchParams();
+      if (params?.questionId) query.set('question_id', params.questionId);
+      if (params?.limit !== undefined) query.set('limit', String(params.limit));
+      if (params?.offset !== undefined) query.set('offset', String(params.offset));
+      const qs = query.toString();
+      return this.get<SessionResponseRecord[]>(
+        `/api/sessions/${sessionId}/responses${qs ? `?${qs}` : ''}`
+      );
+    },
+    getEvents: (sessionId: string) =>
+      this.get<InteractionEventRecord[]>(`/api/sessions/${sessionId}/events`),
+    getVariables: (sessionId: string) =>
+      this.get<SessionVariableRecord[]>(`/api/sessions/${sessionId}/variables`),
+    dashboard: (organizationId: string) =>
+      this.get<DashboardSummary>(
+        `/api/sessions/dashboard?organization_id=${organizationId}`
+      ),
     aggregate: async (params: {
       questionnaireId: string;
       source?: 'variable' | 'response';
@@ -353,6 +441,41 @@ class ApiClient {
     delete: (id: string) => this.delete(`/api/media/${id}`),
   };
 
+  // === Question Templates ===
+  templates = {
+    list: (orgId: string, params?: { category?: string; search?: string; type?: string; limit?: number; offset?: number }) => {
+      const query = new URLSearchParams();
+      if (params?.category) query.set('category', params.category);
+      if (params?.search) query.set('search', params.search);
+      if (params?.type) query.set('type', params.type);
+      if (params?.limit !== undefined) query.set('limit', String(params.limit));
+      if (params?.offset !== undefined) query.set('offset', String(params.offset));
+      const qs = query.toString();
+      return this.get<QuestionTemplate[]>(`/api/organizations/${orgId}/templates${qs ? `?${qs}` : ''}`);
+    },
+    get: (orgId: string, templateId: string) =>
+      this.get<QuestionTemplate>(`/api/organizations/${orgId}/templates/${templateId}`),
+    create: (orgId: string, data: {
+      name: string;
+      description?: string;
+      category?: string;
+      tags?: string[];
+      question_type: string;
+      question_config: Record<string, unknown>;
+      is_shared?: boolean;
+    }) => this.post<QuestionTemplate>(`/api/organizations/${orgId}/templates`, data),
+    update: (orgId: string, templateId: string, data: {
+      name?: string;
+      description?: string;
+      category?: string;
+      tags?: string[];
+      question_config?: Record<string, unknown>;
+      is_shared?: boolean;
+    }) => this.patch<QuestionTemplate>(`/api/organizations/${orgId}/templates/${templateId}`, data),
+    delete: (orgId: string, templateId: string) =>
+      this.delete(`/api/organizations/${orgId}/templates/${templateId}`),
+  };
+
   // === Email Verification ===
   emailVerification = {
     send: (email: string) =>
@@ -364,6 +487,17 @@ class ApiClient {
       }),
     resend: (email: string) =>
       this.post<VerificationResult>('/api/auth/verify-email/resend', { email }),
+  };
+
+  // === Password Reset ===
+  passwordReset = {
+    request: (email: string) =>
+      this.post<{ message: string }>('/api/auth/password-reset', { email }),
+    confirm: (token: string, newPassword: string) =>
+      this.post<{ message: string }>('/api/auth/password-reset/confirm', {
+        token,
+        new_password: newPassword,
+      }),
   };
 }
 

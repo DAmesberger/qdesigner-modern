@@ -1,23 +1,35 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
+  import type { DesignerPanel } from '$lib/stores/designer/UiStore';
   import QuestionPalette from '$lib/components/designer/QuestionPalette.svelte';
+  import TemplateLibrary from '$lib/components/designer/TemplateLibrary.svelte';
   import BlockManager from '$lib/components/designer/BlockManager.svelte';
   import VariableManager from '$lib/components/designer/VariableManager.svelte';
   import FlowControlManager from '$lib/components/designer/FlowControlManager.svelte';
+  import { Layers, Plus, Library, Variable, GitBranch, Eye, LayoutGrid, HelpCircle, X } from 'lucide-svelte';
 
-  const tabs = [
-    { id: 'blocks', label: 'Structure', advanced: false },
-    { id: 'questions', label: 'Questions', advanced: false },
-    { id: 'variables', label: 'Variables', advanced: true },
-    { id: 'flow', label: 'Flow', advanced: true },
-  ] as const;
-
-  let showAdvancedTools = $state(false);
-  const primaryTabs = tabs.filter((tab) => !tab.advanced);
-  const advancedTabs = tabs.filter((tab) => tab.advanced);
+  const railItems: { id: Exclude<DesignerPanel, null | 'help'>; label: string; position: 'top' }[] = [
+    { id: 'structure', label: 'Structure', position: 'top' },
+    { id: 'add', label: 'Add', position: 'top' },
+    { id: 'templates', label: 'Templates', position: 'top' },
+    { id: 'variables', label: 'Variables', position: 'top' },
+    { id: 'flow', label: 'Flow', position: 'top' },
+  ];
 
   let isMobile = $state(false);
+  const flyoutOpen = $derived(designerStore.activePanel !== null && designerStore.activePanel !== 'help');
+
+  const flyoutTitle = $derived.by(() => {
+    switch (designerStore.activePanel) {
+      case 'structure': return 'Structure';
+      case 'add': return 'Add Question';
+      case 'templates': return 'Template Library';
+      case 'variables': return 'Variables';
+      case 'flow': return 'Flow Control';
+      default: return '';
+    }
+  });
 
   onMount(() => {
     const media = window.matchMedia('(max-width: 767px)');
@@ -30,186 +42,226 @@
 
     apply();
     media.addEventListener('change', apply);
-
     return () => media.removeEventListener('change', apply);
   });
 
-  function toggleCollapse() {
-    designerStore.setSidebarCollapsed('left', !designerStore.leftCollapsed);
-  }
-
-  function closeDrawer() {
-    designerStore.toggleDrawer('left', false);
-  }
-
-  $effect(() => {
-    if (designerStore.activeLeftTab === 'variables' || designerStore.activeLeftTab === 'flow') {
-      showAdvancedTools = true;
+  function handleRailClick(panel: Exclude<DesignerPanel, null>) {
+    if (isMobile) {
+      designerStore.setPanel(panel);
+      designerStore.toggleDrawer('left', true);
+    } else {
+      designerStore.togglePanel(panel);
     }
-  });
+  }
+
+  function closeFlyout() {
+    designerStore.setPanel(null);
+    if (isMobile) {
+      designerStore.toggleDrawer('left', false);
+    }
+  }
+
+  function handleBackdropClick() {
+    closeFlyout();
+  }
+
+  function toggleViewMode() {
+    designerStore.setViewMode(
+      designerStore.viewMode === 'wysiwyg' ? 'structural' : 'wysiwyg'
+    );
+  }
+
+  function showKeyboardHelp() {
+    designerStore.toggleCommandPalette(true);
+  }
 </script>
 
+<!-- Mobile backdrop -->
 {#if isMobile && designerStore.isLeftDrawerOpen}
   <button
     type="button"
     class="fixed inset-0 z-30 bg-black/40 md:hidden"
-    aria-label="Close left panel"
-    onclick={closeDrawer}
+    aria-label="Close panel"
+    onclick={handleBackdropClick}
     data-testid="designer-left-sidebar-backdrop"
   ></button>
 {/if}
 
-<aside
-  class="designer-sidebar z-40 flex h-full flex-col border-r border-border bg-background transition-all duration-200"
-  class:w-80={!designerStore.leftCollapsed && !isMobile}
-  class:w-14={designerStore.leftCollapsed && !isMobile}
-  class:fixed={isMobile}
-  class:inset-y-0={isMobile}
-  class:left-0={isMobile}
-  class:w-[86vw]={isMobile}
-  class:max-w-sm={isMobile}
-  class:translate-x-0={isMobile && designerStore.isLeftDrawerOpen}
-  class:-translate-x-full={isMobile && !designerStore.isLeftDrawerOpen}
-  data-testid="designer-left-sidebar"
->
-  <div class="flex items-center justify-between border-b border-border px-3 py-2">
-    {#if !designerStore.leftCollapsed || isMobile}
-      <h2 class="text-sm font-semibold text-foreground">Builder</h2>
-      <div class="flex items-center gap-1">
-        {#if isMobile}
-          <button
-            type="button"
-            class="rounded p-1 text-muted-foreground hover:bg-accent"
-            aria-label="Close left panel"
-            onclick={closeDrawer}
-            data-testid="designer-left-sidebar-close"
-          >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        {/if}
-        {#if !isMobile}
-          <button
-            type="button"
-            class="rounded p-1 text-muted-foreground hover:bg-accent"
-            aria-label="Collapse left panel"
-            onclick={toggleCollapse}
-            data-testid="left-sidebar-collapse"
-          >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </button>
-        {/if}
-      </div>
-    {:else}
+<div class="flex h-full" data-testid="designer-left-sidebar">
+  <!-- Icon Rail — always visible on desktop -->
+  <nav
+    class="hidden md:flex w-12 flex-col items-center bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-sm)] border-r border-[hsl(var(--glass-border))] z-20 py-2"
+    data-testid="designer-icon-rail"
+  >
+    <!-- Top icons -->
+    <div class="flex flex-col items-center gap-1">
+      {#each railItems as item (item.id)}
+        {@const isActive = designerStore.activePanel === item.id}
+        <button
+          type="button"
+          class="w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-150 {isActive
+            ? 'bg-accent text-primary'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+          onclick={() => handleRailClick(item.id)}
+          title={item.label}
+          aria-label={item.label}
+          data-testid={`rail-${item.id}`}
+        >
+          {#if item.id === 'structure'}
+            <Layers class="w-5 h-5" />
+          {:else if item.id === 'add'}
+            <Plus class="w-5 h-5" />
+          {:else if item.id === 'templates'}
+            <Library class="w-5 h-5" />
+          {:else if item.id === 'variables'}
+            <Variable class="w-5 h-5" />
+          {:else if item.id === 'flow'}
+            <GitBranch class="w-5 h-5" />
+          {/if}
+        </button>
+      {/each}
+    </div>
+
+    <!-- Spacer -->
+    <div class="flex-1"></div>
+
+    <!-- Bottom icons -->
+    <div class="flex flex-col items-center gap-1 mb-1">
+      <!-- View toggle -->
       <button
         type="button"
-        class="mx-auto rounded p-1 text-muted-foreground hover:bg-accent"
-        aria-label="Expand left panel"
-        onclick={toggleCollapse}
-        data-testid="left-sidebar-expand"
+        class="w-9 h-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150"
+        onclick={toggleViewMode}
+        title="{designerStore.viewMode === 'wysiwyg' ? 'Switch to Structure view' : 'Switch to Visual view'}"
+        aria-label="Toggle view mode"
+        data-testid="rail-view-toggle"
       >
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-        </svg>
+        {#if designerStore.viewMode === 'wysiwyg'}
+          <Eye class="w-5 h-5" />
+        {:else}
+          <LayoutGrid class="w-5 h-5" />
+        {/if}
       </button>
-    {/if}
-  </div>
 
-  {#if !designerStore.leftCollapsed || isMobile}
-    <div class="border-b border-border">
-      <div class="grid grid-cols-2">
-        {#each primaryTabs as tab}
+      <!-- Help / keyboard shortcuts -->
+      <button
+        type="button"
+        class="w-9 h-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150"
+        onclick={showKeyboardHelp}
+        title="Keyboard shortcuts (Ctrl+K)"
+        aria-label="Help"
+        data-testid="rail-help"
+      >
+        <HelpCircle class="w-5 h-5" />
+      </button>
+    </div>
+  </nav>
+
+  <!-- Flyout Panel — overlays canvas -->
+  {#if flyoutOpen && !isMobile}
+    <!-- Desktop flyout backdrop — click to close -->
+    <button
+      type="button"
+      class="fixed inset-0 z-10"
+      aria-label="Close flyout"
+      onclick={closeFlyout}
+    ></button>
+
+    <aside
+      class="absolute left-12 top-0 bottom-0 z-20 w-72 lg:w-80 xl:w-96 bg-[hsl(var(--glass-bg))] backdrop-blur-[var(--glass-blur)] shadow-[var(--shadow-lg)] border-r border-[hsl(var(--glass-border))] flex flex-col animate-slide-in-left"
+      data-testid="designer-flyout-panel"
+    >
+      <div class="flex items-center justify-between px-3 py-2.5 border-b border-[hsl(var(--glass-border))]">
+        <h2 class="text-sm font-semibold text-foreground">{flyoutTitle}</h2>
+        <button
+          type="button"
+          class="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors duration-150"
+          onclick={closeFlyout}
+          aria-label="Close panel"
+          data-testid="designer-flyout-close"
+        >
+          <X class="h-4 w-4" />
+        </button>
+      </div>
+
+      <div class="min-h-0 flex-1 overflow-auto" data-testid="flyout-content">
+        {#if designerStore.activePanel === 'structure'}
+          <BlockManager />
+        {:else if designerStore.activePanel === 'add'}
+          <QuestionPalette />
+        {:else if designerStore.activePanel === 'templates'}
+          <TemplateLibrary />
+        {:else if designerStore.activePanel === 'variables'}
+          <VariableManager />
+        {:else if designerStore.activePanel === 'flow'}
+          <FlowControlManager />
+        {/if}
+      </div>
+    </aside>
+  {/if}
+
+  <!-- Mobile drawer — full-width overlay -->
+  {#if isMobile && designerStore.isLeftDrawerOpen}
+    <aside
+      class="fixed inset-y-0 left-0 z-40 w-[86vw] max-w-sm bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-lg)] flex flex-col animate-slide-in-left"
+      data-testid="designer-mobile-left-drawer"
+    >
+      <div class="flex items-center justify-between px-3 py-2.5 border-b border-border">
+        <h2 class="text-sm font-semibold text-foreground">{flyoutTitle || 'Builder'}</h2>
+        <button
+          type="button"
+          class="rounded-md p-1 text-muted-foreground hover:bg-accent transition-colors duration-150"
+          onclick={closeFlyout}
+          aria-label="Close panel"
+          data-testid="designer-left-sidebar-close"
+        >
+          <X class="h-4 w-4" />
+        </button>
+      </div>
+
+      <!-- Mobile panel tabs -->
+      <div class="flex border-b border-border">
+        {#each railItems as item (item.id)}
+          {@const isActive = designerStore.activePanel === item.id}
           <button
             type="button"
-            class="px-2 py-2 text-xs"
-            class:bg-accent={designerStore.activeLeftTab === tab.id}
-            class:text-foreground={designerStore.activeLeftTab === tab.id}
-            class:text-muted-foreground={designerStore.activeLeftTab !== tab.id}
-            onclick={() => designerStore.setActiveLeftTab(tab.id)}
-            data-testid={`left-tab-${tab.id}`}
+            class="flex-1 py-2 text-xs text-center transition-colors duration-150 {isActive
+              ? 'bg-accent text-primary border-b-2 border-primary'
+              : 'text-muted-foreground hover:bg-muted'}"
+            onclick={() => designerStore.setPanel(item.id)}
+            data-testid={`mobile-tab-${item.id}`}
           >
-            {tab.label}
+            {item.label}
           </button>
         {/each}
       </div>
 
-      {#if showAdvancedTools}
-        <div class="grid grid-cols-2 border-t border-border">
-          {#each advancedTabs as tab}
-            <button
-              type="button"
-              class="px-2 py-2 text-xs"
-              class:bg-accent={designerStore.activeLeftTab === tab.id}
-              class:text-foreground={designerStore.activeLeftTab === tab.id}
-              class:text-muted-foreground={designerStore.activeLeftTab !== tab.id}
-              onclick={() => designerStore.setActiveLeftTab(tab.id)}
-              data-testid={`left-tab-${tab.id}`}
-            >
-              {tab.label}
-            </button>
-          {/each}
-        </div>
-      {:else}
-        <button
-          type="button"
-          class="w-full border-t border-border px-2 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-          onclick={() => (showAdvancedTools = true)}
-          data-testid="left-tab-show-advanced"
-        >
-          Show Advanced Tools (Variables, Flow)
-        </button>
-      {/if}
-    </div>
-
-    <div class="min-h-0 flex-1 overflow-auto" data-testid="left-sidebar-content">
-      <div class="border-b border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        {#if designerStore.activeLeftTab === 'questions'}
-          Add question modules to the current block. Shortcut: Ctrl/Cmd+Shift+A.
-        {:else if designerStore.activeLeftTab === 'blocks'}
-          Organize pages, blocks, order, and randomization scope.
-        {:else if designerStore.activeLeftTab === 'variables'}
-          Define computed variables and formulas used by flow and analytics.
+      <div class="min-h-0 flex-1 overflow-auto">
+        {#if designerStore.activePanel === 'structure'}
+          <BlockManager />
+        {:else if designerStore.activePanel === 'add'}
+          <QuestionPalette />
+        {:else if designerStore.activePanel === 'templates'}
+          <TemplateLibrary />
+        {:else if designerStore.activePanel === 'variables'}
+          <VariableManager />
+        {:else if designerStore.activePanel === 'flow'}
+          <FlowControlManager />
         {:else}
-          Build branching and skip logic using formulas and conditions.
+          <div class="p-4 text-sm text-muted-foreground">Select a tool from the tabs above.</div>
         {/if}
       </div>
-      {#if designerStore.activeLeftTab === 'blocks'}
-        <BlockManager />
-      {:else if designerStore.activeLeftTab === 'questions'}
-        <QuestionPalette />
-      {:else if designerStore.activeLeftTab === 'variables'}
-        <VariableManager />
-      {:else}
-        <FlowControlManager />
-      {/if}
-    </div>
-  {:else}
-    <div class="flex flex-1 flex-col items-center gap-2 py-3">
-      {#each tabs as tab}
-        <button
-          type="button"
-          class="w-10 rounded px-1 py-1 text-[10px] text-muted-foreground hover:bg-accent"
-          class:bg-accent={designerStore.activeLeftTab === tab.id}
-          onclick={() => designerStore.setActiveLeftTab(tab.id)}
-          title={tab.label}
-          data-testid={`left-tab-mini-${tab.id}`}
-        >
-          {tab.label.slice(0, 1)}
-        </button>
-      {/each}
-    </div>
+    </aside>
   {/if}
-</aside>
+</div>
+
+<style>
+  @keyframes slide-in-left {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  .animate-slide-in-left {
+    animation: slide-in-left 200ms ease-out;
+  }
+</style>

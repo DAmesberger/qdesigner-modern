@@ -1,5 +1,5 @@
 use axum::{
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
     Router,
 };
 
@@ -13,6 +13,7 @@ pub mod organizations;
 pub mod projects;
 pub mod questionnaires;
 pub mod sessions;
+pub mod templates;
 pub mod users;
 
 /// Assemble the full application router.
@@ -27,7 +28,11 @@ pub fn router(state: AppState) -> Router {
         .route("/verify-email/send", post(auth::send_verification_code))
         .route("/verify-email/verify", post(auth::verify_code))
         .route("/verify-email/resend", post(auth::send_verification_code))
-        .route("/password-reset", post(auth::password_reset));
+        .route("/password-reset", post(auth::password_reset))
+        .route(
+            "/password-reset/confirm",
+            post(auth::confirm_password_reset),
+        );
 
     let user_routes =
         Router::new().route("/me", get(users::get_profile).patch(users::update_profile));
@@ -54,6 +59,24 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/invitations",
             get(organizations::list_invitations).post(organizations::create_invitation),
+        )
+        .route(
+            "/{id}/invitations/{inv_id}",
+            delete(organizations::revoke_invitation),
+        )
+        .route(
+            "/{id}/templates",
+            get(templates::list_templates).post(templates::create_template),
+        )
+        .route(
+            "/{id}/templates/{tid}",
+            get(templates::get_template)
+                .patch(templates::update_template)
+                .delete(templates::delete_template),
+        )
+        .route(
+            "/{id}/analytics",
+            get(sessions::cross_project_analytics),
         );
 
     let project_routes = Router::new()
@@ -80,7 +103,24 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/questionnaires/{qid}/publish",
             post(questionnaires::publish_questionnaire),
+        )
+        .route(
+            "/{id}/questionnaires/{qid}/export",
+            get(questionnaires::export_responses),
+        )
+        .route(
+            "/{id}/members",
+            get(projects::list_project_members).post(projects::add_project_member),
+        )
+        .route(
+            "/{id}/members/{uid}",
+            patch(projects::update_project_member).delete(projects::remove_project_member),
         );
+
+    let invitation_routes = Router::new()
+        .route("/pending", get(organizations::list_pending_invitations))
+        .route("/{id}/accept", post(organizations::accept_invitation))
+        .route("/{id}/decline", post(organizations::decline_invitation));
 
     let questionnaire_routes = Router::new().route(
         "/by-code/{code}",
@@ -94,13 +134,14 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/aggregate", get(sessions::aggregate_sessions))
         .route("/compare", get(sessions::compare_sessions))
+        .route("/dashboard", get(sessions::dashboard_summary))
         .route(
             "/{id}",
             get(sessions::get_session).patch(sessions::update_session),
         )
-        .route("/{id}/responses", post(sessions::submit_response))
-        .route("/{id}/events", post(sessions::submit_events))
-        .route("/{id}/variables", post(sessions::upsert_variable));
+        .route("/{id}/responses", get(sessions::get_responses).post(sessions::submit_response))
+        .route("/{id}/events", get(sessions::get_events).post(sessions::submit_events))
+        .route("/{id}/variables", get(sessions::get_variables).post(sessions::upsert_variable));
 
     let media_routes = Router::new()
         .route("/", get(media::list_media).post(media::upload_media))
@@ -115,6 +156,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/users", user_routes)
         .nest("/api/organizations", org_routes)
         .nest("/api/projects", project_routes)
+        .nest("/api/invitations", invitation_routes)
         .nest("/api/questionnaires", questionnaire_routes)
         .nest("/api/sessions", session_routes)
         .nest("/api/media", media_routes)

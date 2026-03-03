@@ -149,6 +149,86 @@ export interface SessionCompareData {
 	};
 }
 
+// Session response record (from GET /sessions/:id/responses)
+export interface SessionResponseRecord {
+	id: string;
+	session_id: string;
+	question_id: string;
+	value: unknown;
+	reaction_time_us: number | null;
+	presented_at: string | null;
+	answered_at: string | null;
+	metadata: Record<string, unknown>;
+	created_at: string | null;
+}
+
+// Session event record (from GET /sessions/:id/events)
+export interface InteractionEventRecord {
+	id: string;
+	session_id: string;
+	event_type: string;
+	question_id: string | null;
+	timestamp_us: number;
+	metadata: Record<string, unknown> | null;
+	created_at: string | null;
+}
+
+// Session variable record (from GET /sessions/:id/variables)
+export interface SessionVariableRecord {
+	id: string;
+	session_id: string;
+	variable_name: string;
+	variable_value: unknown;
+	updated_at: string | null;
+}
+
+// Dashboard types
+export interface QuestionnaireSummary {
+	id: string;
+	name: string;
+	project_id: string;
+	status: string;
+	total_responses: number;
+	completed_sessions: number;
+	avg_completion_time_ms: number | null;
+}
+
+export interface ActivityRecord {
+	session_id: string;
+	participant_id: string | null;
+	questionnaire_name: string;
+	status: string;
+	started_at: string | null;
+	completed_at: string | null;
+}
+
+export interface DashboardStats {
+	total_questionnaires: number;
+	total_responses: number;
+	active_questionnaires: number;
+	avg_completion_rate: number;
+}
+
+export interface DashboardSummary {
+	questionnaires: QuestionnaireSummary[];
+	recent_activity: ActivityRecord[];
+	stats: DashboardStats;
+}
+
+// Export row (from GET /projects/:id/questionnaires/:qid/export?format=json)
+export interface ExportRow {
+	session_id: string;
+	participant_id: string | null;
+	session_status: string;
+	started_at: string | null;
+	completed_at: string | null;
+	question_id: string;
+	value: unknown;
+	reaction_time_us: number | null;
+	presented_at: string | null;
+	answered_at: string | null;
+}
+
 // Media types
 export interface MediaAsset {
 	id: string;
@@ -172,6 +252,31 @@ export interface MediaAsset {
 export interface MediaUploadResponse {
 	asset: MediaAsset;
 	url: string;
+}
+
+// Question Template types
+export interface QuestionTemplate {
+	id: string;
+	organizationId: string;
+	createdBy: string;
+	name: string;
+	description: string | null;
+	category: string | null;
+	tags: string[] | null;
+	questionType: string;
+	questionConfig: Record<string, unknown>;
+	isShared: boolean;
+	usageCount: number;
+	createdAt: string;
+	updatedAt: string;
+	organization_id?: string;
+	created_by?: string;
+	question_type?: string;
+	question_config?: Record<string, unknown>;
+	is_shared?: boolean;
+	usage_count?: number;
+	created_at?: string;
+	updated_at?: string;
 }
 
 // API Error
@@ -219,4 +324,37 @@ export interface VerificationResult {
 	success: boolean;
 	message?: string;
 	error?: string;
+}
+
+// Cross-project analytics types
+export interface QuestionnaireAnalytics {
+	questionnaireId: string;
+	name: string;
+	responseCount: number;
+	completedSessions: number;
+	completionRate: number;
+	timingStats: SessionStatsSummary | null;
+	variableStats: SessionStatsSummary | null;
+}
+
+export interface AggregateOverview {
+	totalResponses: number;
+	totalCompletedSessions: number;
+	overallCompletionRate: number;
+	overallTimingStats: SessionStatsSummary | null;
+	overallVariableStats: SessionStatsSummary | null;
+}
+
+export interface CrossComparison {
+	questionnaireA: string;
+	questionnaireB: string;
+	meanDelta: number | null;
+	medianDelta: number | null;
+	correlation: number | null;
+}
+
+export interface CrossProjectAnalyticsData {
+	questionnaires: QuestionnaireAnalytics[];
+	aggregate: AggregateOverview;
+	crossComparisons: CrossComparison[] | null;
 }

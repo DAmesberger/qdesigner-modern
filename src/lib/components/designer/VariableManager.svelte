@@ -3,6 +3,7 @@
   import type { Variable, VariableType } from '$lib/shared';
   import FormulaEditor from './FormulaEditor.svelte';
   import { onMount } from 'svelte';
+  import { Hash, Type, ToggleLeft, Calendar, Clock, List, Box, Zap, Target, HelpCircle, Pencil, Trash2, Network, Plus } from 'lucide-svelte';
 
   let showAddVariable = $state(false);
   let editingVariable = $state<Variable | null>(null);
@@ -139,20 +140,17 @@
     }
   }
 
-  function getVariableIcon(type: VariableType): string {
-    const icons: Record<VariableType, string> = {
-      number: '🔢',
-      string: '📝',
-      boolean: '✓',
-      date: '📅',
-      time: '⏰',
-      array: '📋',
-      object: '📦',
-      reaction_time: '⚡',
-      stimulus_onset: '🎯',
-    };
-    return icons[type] || '❓';
-  }
+  const variableTypeIcons: Record<VariableType, string> = {
+    number: 'hash',
+    string: 'type',
+    boolean: 'toggle',
+    date: 'calendar',
+    time: 'clock',
+    array: 'list',
+    object: 'box',
+    reaction_time: 'zap',
+    stimulus_onset: 'target',
+  };
 
   // Calculate variable dependencies
   function calculateDependencies(): Map<string, Set<string>> {
@@ -207,8 +205,17 @@
       nodePositions.set(variable.name, { x, y });
     });
 
+    // Theme-aware canvas colors
+    const isDark = document.documentElement.classList.contains('dark');
+    const borderColor = isDark ? '#475569' : '#cbd5e1';
+    const nodeActiveBg = isDark ? '#1e3a5f' : '#dbeafe';
+    const nodeActiveBorder = '#3b82f6';
+    const nodeDefaultBg = isDark ? '#374151' : '#f3f4f6';
+    const nodeDefaultBorder = isDark ? '#6b7280' : '#9ca3af';
+    const textColor = isDark ? '#e5e7eb' : '#374151';
+
     // Draw edges (dependencies)
-    ctx.strokeStyle = '#cbd5e1';
+    ctx.strokeStyle = borderColor;
     ctx.lineWidth = 1;
 
     dependencies.forEach((deps, varName) => {
@@ -260,8 +267,8 @@
       if (!pos) return;
 
       // Node background
-      ctx.fillStyle = selectedVariableId === variable.id ? '#dbeafe' : '#f3f4f6';
-      ctx.strokeStyle = selectedVariableId === variable.id ? '#3b82f6' : '#9ca3af';
+      ctx.fillStyle = selectedVariableId === variable.id ? nodeActiveBg : nodeDefaultBg;
+      ctx.strokeStyle = selectedVariableId === variable.id ? nodeActiveBorder : nodeDefaultBorder;
       ctx.lineWidth = 2;
 
       ctx.beginPath();
@@ -273,11 +280,16 @@
       ctx.font = '16px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(getVariableIcon(variable.type), pos.x, pos.y - 5);
+      const canvasIcons: Record<string, string> = {
+        number: '#', string: 'T', boolean: '?', date: 'D', time: 'C',
+        array: '[]', object: '{}', reaction_time: 'Z', stimulus_onset: 'O',
+      };
+      ctx.fillStyle = textColor;
+      ctx.fillText(canvasIcons[variable.type] || '?', pos.x, pos.y - 5);
 
       // Variable name
       ctx.font = '12px sans-serif';
-      ctx.fillStyle = '#374151';
+      ctx.fillStyle = textColor;
       ctx.fillText(variable.name, pos.x, pos.y + 35);
     });
   }
@@ -295,29 +307,22 @@
   });
 </script>
 
-<div class="bg-white rounded-lg shadow-sm border border-gray-200">
-  <div class="p-4 border-b border-gray-200">
+<div class="bg-card rounded-[var(--radius)] shadow-[var(--shadow-sm)] border border-border">
+  <div class="p-4 border-b border-border">
     <div class="flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-gray-800">Variables</h3>
+      <h3 class="text-sm font-semibold text-foreground">Variables</h3>
       <div class="flex items-center space-x-2">
         <button
           onclick={() => (showDependencyGraph = !showDependencyGraph)}
-          class="px-3 py-1 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors text-sm flex items-center space-x-1"
+          class="px-3 py-1 text-foreground bg-muted rounded-md hover:bg-muted/80 transition-colors text-sm flex items-center space-x-1"
           title={showDependencyGraph ? 'Hide dependency graph' : 'Show dependency graph'}
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zM9 9V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2zm6 0v6a2 2 0 002 2h2a2 2 0 002-2v-6a2 2 0 00-2-2h-2a2 2 0 00-2 2z"
-            />
-          </svg>
+          <Network class="w-4 h-4" />
           <span>{showDependencyGraph ? 'Hide' : 'Show'} Graph</span>
         </button>
         <button
           onclick={() => (showAddVariable = true)}
-          class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+          class="px-3 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm"
         >
           Add Variable
         </button>
@@ -326,9 +331,9 @@
   </div>
 
   {#if showDependencyGraph && variables.length > 0}
-    <div class="p-4 bg-gray-50 border-b border-gray-200">
-      <h4 class="text-sm font-medium text-gray-700 mb-2">Variable Dependencies</h4>
-      <div class="bg-white rounded-lg border border-gray-200 p-4">
+    <div class="p-4 bg-muted/50 border-b border-border">
+      <h4 class="text-sm font-medium text-foreground mb-2">Variable Dependencies</h4>
+      <div class="bg-card rounded-lg border border-border p-4">
         <canvas
           bind:this={dependencyCanvas}
           width="400"
@@ -337,7 +342,7 @@
           style="max-width: 400px; margin: 0 auto; display: block;"
         ></canvas>
       </div>
-      <p class="text-xs text-gray-500 mt-2 text-center">
+      <p class="text-xs text-muted-foreground mt-2 text-center">
         Arrows show which variables depend on others
       </p>
     </div>
@@ -356,38 +361,48 @@
               designerStore.selectItem(variable.id, 'variable')}
             class="p-3 border rounded-lg cursor-pointer transition-all
                    {selectedVariableId === variable.id
-              ? 'border-blue-500 bg-blue-50'
-              : 'border-gray-200 hover:border-gray-300'}"
+              ? 'border-primary bg-primary/10'
+              : 'border-border hover:border-border/80'}"
           >
             <div class="flex items-start justify-between">
               <div class="flex items-start space-x-2 flex-1">
-                <span class="text-lg mt-0.5" role="img" aria-label={variable.type}>
-                  {getVariableIcon(variable.type)}
+                <span class="mt-0.5 text-muted-foreground">
+                  {#if variable.type === 'number'}<Hash class="w-4 h-4" />
+                  {:else if variable.type === 'reaction_time'}<Zap class="w-4 h-4" />
+                  {:else if variable.type === 'stimulus_onset'}<Target class="w-4 h-4" />
+                  {:else if variable.type === 'string'}<Type class="w-4 h-4" />
+                  {:else if variable.type === 'boolean'}<ToggleLeft class="w-4 h-4" />
+                  {:else if variable.type === 'date'}<Calendar class="w-4 h-4" />
+                  {:else if variable.type === 'time'}<Clock class="w-4 h-4" />
+                  {:else if variable.type === 'array'}<List class="w-4 h-4" />
+                  {:else if variable.type === 'object'}<Box class="w-4 h-4" />
+                  {:else}<HelpCircle class="w-4 h-4" />
+                  {/if}
                 </span>
 
                 <div class="flex-1">
                   <div class="flex items-center space-x-2">
-                    <h4 class="font-medium text-gray-900">{variable.name}</h4>
-                    <span class="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600">
+                    <h4 class="font-medium text-foreground">{variable.name}</h4>
+                    <span class="text-xs px-2 py-0.5 bg-muted rounded text-muted-foreground">
                       {variable.type}
                     </span>
                     {#if variable.formula}
-                      <span class="text-xs px-2 py-0.5 bg-purple-100 rounded text-purple-700">
+                      <span class="text-xs px-2 py-0.5 bg-violet-500/10 rounded text-violet-600 dark:text-violet-400">
                         formula
                       </span>
                     {/if}
                   </div>
 
                   {#if variable.description}
-                    <p class="text-sm text-gray-600 mt-1">{variable.description}</p>
+                    <p class="text-sm text-muted-foreground mt-1">{variable.description}</p>
                   {/if}
 
                   {#if variable.formula}
-                    <p class="text-xs font-mono bg-gray-50 rounded px-2 py-1 mt-2">
+                    <p class="text-xs font-mono bg-muted rounded px-2 py-1 mt-2">
                       = {variable.formula}
                     </p>
                   {:else if variable.defaultValue !== undefined}
-                    <p class="text-sm text-gray-500 mt-1">
+                    <p class="text-sm text-muted-foreground mt-1">
                       Default: {formatValue(variable.defaultValue, variable.type)}
                     </p>
                   {/if}
@@ -400,23 +415,11 @@
                     e.stopPropagation();
                     handleEditVariable(variable);
                   }}
-                  class="p-1 hover:bg-gray-100 rounded"
+                  class="p-1 hover:bg-accent rounded"
                   title="Edit"
                   aria-label="Edit"
                 >
-                  <svg
-                    class="w-4 h-4 text-gray-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                    />
-                  </svg>
+                  <Pencil class="w-4 h-4 text-muted-foreground" />
                 </button>
 
                 <button
@@ -424,23 +427,11 @@
                     e.stopPropagation();
                     handleDeleteVariable(variable.id);
                   }}
-                  class="p-1 hover:bg-red-100 rounded"
+                  class="p-1 hover:bg-destructive/10 rounded"
                   title="Delete"
                   aria-label="Delete"
                 >
-                  <svg
-                    class="w-4 h-4 text-red-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
+                  <Trash2 class="w-4 h-4 text-destructive" />
                 </button>
               </div>
             </div>
@@ -448,15 +439,15 @@
         {/each}
       </div>
     {:else}
-      <p class="text-sm text-gray-500 text-center py-8">
+      <p class="text-sm text-muted-foreground text-center py-8">
         No variables defined. Add variables to store values and create formulas.
       </p>
     {/if}
   </div>
 
-  <div class="p-4 border-t border-gray-200 bg-gray-50">
-    <h4 class="text-sm font-medium text-gray-700 mb-2">Available Functions</h4>
-    <div class="grid grid-cols-2 gap-2 text-xs text-gray-600">
+  <div class="p-4 border-t border-border bg-muted/50">
+    <h4 class="text-sm font-medium text-foreground mb-2">Available Functions</h4>
+    <div class="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
       <div>• IF(condition, true, false)</div>
       <div>• SUM(array)</div>
       <div>• AVG(array)</div>
@@ -471,15 +462,15 @@
 
 <!-- Add/Edit Variable Modal -->
 {#if showAddVariable || editingVariable}
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-card rounded-lg shadow-xl p-6 w-full max-w-md border border-border">
       <h3 class="text-lg font-semibold mb-4">
         {editingVariable ? 'Edit Variable' : 'Add Variable'}
       </h3>
 
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1" for="var-name">Name</label>
+          <label class="block text-sm font-medium text-foreground mb-1" for="var-name">Name</label>
           <input
             id="var-name"
             type="text"
@@ -492,13 +483,13 @@
                 newVariable.name = value;
               }
             }}
-            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            class="w-full px-3 py-2 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
             placeholder="e.g., score, reactionTime"
           />
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1" for="var-type">Type</label>
+          <label class="block text-sm font-medium text-foreground mb-1" for="var-type">Type</label>
           <select
             id="var-type"
             value={editingVariable ? editingVariable.type : newVariable.type}
@@ -510,7 +501,7 @@
                 newVariable.type = value;
               }
             }}
-            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            class="w-full px-3 py-2 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
           >
             {#each variableTypes as type}
               <option value={type.value}>{type.label}</option>
@@ -519,7 +510,7 @@
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1" for="var-default"
+          <label class="block text-sm font-medium text-foreground mb-1" for="var-default"
             >Default Value (optional)</label
           >
           <input
@@ -536,20 +527,20 @@
                 newVariable.defaultValue = value;
               }
             }}
-            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            class="w-full px-3 py-2 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
             placeholder="Leave empty for no default"
           />
         </div>
 
         <div>
           <div class="flex items-center justify-between mb-1">
-            <label class="block text-sm font-medium text-gray-700" for="var-formula"
+            <label class="block text-sm font-medium text-foreground" for="var-formula"
               >Formula (optional)</label
             >
             <button
               type="button"
               onclick={() => (showAdvancedEditor = !showAdvancedEditor)}
-              class="text-xs text-blue-600 hover:text-blue-700"
+              class="text-xs text-primary hover:text-primary/80"
             >
               {showAdvancedEditor ? 'Simple Editor' : 'Advanced Editor'}
             </button>
@@ -582,16 +573,16 @@
               }}
               id="var-formula"
               rows="3"
-              class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+              class="w-full px-3 py-2 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground font-mono text-sm"
               placeholder="e.g., age * 10 + reactionTime"
             ></textarea>
           {/if}
 
-          <p class="text-xs text-gray-500 mt-1">Use other variable names directly in formulas</p>
+          <p class="text-xs text-muted-foreground mt-1">Use other variable names directly in formulas</p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1" for="var-desc"
+          <label class="block text-sm font-medium text-foreground mb-1" for="var-desc"
             >Description (optional)</label
           >
           <input
@@ -606,7 +597,7 @@
                 newVariable.description = value;
               }
             }}
-            class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            class="w-full px-3 py-2 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
             placeholder="What is this variable for?"
           />
         </div>
@@ -618,13 +609,13 @@
             showAddVariable = false;
             editingVariable = null;
           }}
-          class="px-4 py-2 text-gray-700 hover:text-gray-900"
+          class="px-4 py-2 text-muted-foreground hover:text-foreground"
         >
           Cancel
         </button>
         <button
           onclick={editingVariable ? handleUpdateVariable : handleAddVariable}
-          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
           {editingVariable ? 'Update' : 'Add'} Variable
         </button>

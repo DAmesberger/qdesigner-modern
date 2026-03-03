@@ -170,6 +170,95 @@ export interface FactorAnalysis {
 }
 
 // ============================================================================
+// Non-Parametric Test Types
+// ============================================================================
+
+export interface MannWhitneyResult {
+  U1: number;
+  U2: number;
+  z: number;
+  pValue: number;
+  effectSize_r: number;
+  rankBiserialCorrelation: number;
+}
+
+export interface WilcoxonSignedRankResult {
+  W_plus: number;
+  W_minus: number;
+  z: number;
+  pValue: number;
+  effectSize_r: number;
+}
+
+export interface DunnResult {
+  group1: number;
+  group2: number;
+  z: number;
+  pValue: number;
+  adjustedPValue: number;
+  significant: boolean;
+}
+
+export interface KruskalWallisResult {
+  H: number;
+  df: number;
+  pValue: number;
+  etaSquared: number;
+  postHoc: DunnResult[];
+}
+
+// ============================================================================
+// Chi-Square Test Types
+// ============================================================================
+
+export interface ChiSquareGoodnessOfFitResult {
+  chiSquare: number;
+  df: number;
+  pValue: number;
+  cramersV: number;
+  residuals: number[];
+}
+
+export interface ChiSquareIndependenceResult {
+  chiSquare: number;
+  df: number;
+  pValue: number;
+  cramersV: number;
+  phi: number;
+  expectedFrequencies: number[][];
+  residuals: number[][];
+}
+
+export interface FisherExactResult {
+  pValue: number;
+  oddsRatio: number;
+  ci95: [number, number];
+}
+
+// ============================================================================
+// Post-Hoc Test Types
+// ============================================================================
+
+export interface TukeyComparison {
+  group1: number;
+  group2: number;
+  diff: number;
+  q: number;
+  pValue: number;
+  ci: [number, number];
+  significant: boolean;
+}
+
+export interface TukeyHSDResult {
+  comparisons: TukeyComparison[];
+}
+
+export interface CorrectionResult {
+  adjustedPValues: number[];
+  significant: boolean[];
+}
+
+// ============================================================================
 // Real-time Analytics Types
 // ============================================================================
 

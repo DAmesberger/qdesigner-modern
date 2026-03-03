@@ -104,7 +104,6 @@ pub struct VerifyCodeRequest {
     pub code: String,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, Validate)]
 pub struct PasswordResetConfirm {
     pub token: String,

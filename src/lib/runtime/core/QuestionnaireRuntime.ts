@@ -23,6 +23,13 @@ import { MediaValidator } from '../validation/MediaValidator';
 import { QuestionPresenter } from './QuestionPresenter';
 import { ResponseCollector, type ResponseCaptureMetadata } from './ResponseCollector';
 import { BlockRandomizer } from './BlockRandomizer';
+import { ScriptExecutor } from './ScriptExecutor';
+import { ConditionAssigner, getBlockOrder } from '../experimental';
+import type { ExperimentalDesignConfig } from '$lib/shared';
+import { QualityReport } from '../quality/QualityReport';
+import type { AttentionCheckConfig } from '../quality/AttentionCheck';
+import { resolveCarryForward, applyCarryForward } from './CarryForward';
+import type { CarryForwardConfig } from '$lib/shared';
 import { nanoid } from 'nanoid';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime state handles heterogeneous question data
@@ -32,6 +39,8 @@ export interface RuntimeConfig {
   canvas: HTMLCanvasElement;
   questionnaire: Questionnaire;
   participantId?: string;
+  participantNumber?: number;
+  conditionGroupCounts?: number[];
   onComplete?: (session: QuestionnaireSession) => void;
   onProgress?: (pageIndex: number, totalPages: number) => void;
   onQuestionPresented?: (event: QuestionPresentedEvent) => void;
@@ -56,6 +65,8 @@ export class QuestionnaireRuntime {
   private readonly questionPresenter: QuestionPresenter;
   private readonly responseCollector: ResponseCollector;
   private readonly blockRandomizer: BlockRandomizer;
+  private readonly scriptExecutor: ScriptExecutor;
+  private readonly qualityReport: QualityReport;
 
   private currentPageIndex = 0;
   private currentItemIndex = 0;
@@ -65,12 +76,16 @@ export class QuestionnaireRuntime {
 
   private isRunning = false;
   private isPaused = false;
+  private preloaded = false;
 
   private currentAbortController: AbortController | null = null;
   private autoAdvanceTimeoutId: number | null = null;
 
   private readonly questionRuntimeCache = new Map<string, IQuestionRuntime>();
   private readonly loopIterations = new Map<string, number>();
+
+  private assignedCondition: string | null = null;
+  private conditionBlockOrder: number[] | null = null;
 
   constructor(config: RuntimeConfig) {
     this.config = config;
@@ -107,8 +122,22 @@ export class QuestionnaireRuntime {
     this.blockRandomizer = new BlockRandomizer(
       config.questionnaire.settings.randomizationSeed || config.questionnaire.id
     );
+    this.scriptExecutor = new ScriptExecutor();
+
+    const dq = config.questionnaire.settings.dataQuality;
+    this.qualityReport = new QualityReport({
+      speeder: {
+        minPageTimeMs: dq?.minPageTimeMs,
+        minTotalTimeMs: dq?.minTotalTimeMs,
+      },
+      flatliner: {
+        threshold: dq?.flatlineThreshold,
+      },
+      attentionFailureThreshold: dq?.attentionFailureThreshold,
+    });
 
     this.initializeVariables();
+    this.initializeExperimentalDesign();
   }
 
   public async preload(onProgress?: (progress: number) => void): Promise<void> {
@@ -125,10 +154,19 @@ export class QuestionnaireRuntime {
     await this.resourceManager.preloadAll((progress) => {
       onProgress?.(progress.percentage);
     });
+
+    this.preloaded = true;
   }
 
   public async start(): Promise<void> {
     if (this.isRunning) return;
+
+    // Auto-preload if the caller did not explicitly call preload() first.
+    // This ensures media assets are in cache before any trial starts,
+    // eliminating 10-500ms network latency on first stimulus presentation.
+    if (!this.preloaded) {
+      await this.preload();
+    }
 
     this.isRunning = true;
     this.renderer.start();
@@ -171,6 +209,7 @@ export class QuestionnaireRuntime {
       runtime.teardown();
     }
     this.questionRuntimeCache.clear();
+    this.scriptExecutor.clearCache();
   }
 
   public async navigateBack(): Promise<void> {
@@ -223,6 +262,59 @@ export class QuestionnaireRuntime {
       scope: 'global',
       defaultValue: this.config.questionnaire.pages.length,
     });
+  }
+
+  private initializeExperimentalDesign(): void {
+    const design = this.config.questionnaire.settings.experimentalDesign;
+    if (!design || design.conditions.length === 0) return;
+
+    const participantNumber = this.config.participantNumber ?? 0;
+
+    // Assign condition
+    const assigner = new ConditionAssigner(
+      design.conditions,
+      design.assignmentStrategy,
+      design.seed
+    );
+    const assignment = assigner.assign(participantNumber, this.config.conditionGroupCounts);
+    this.assignedCondition = assignment.conditionName;
+
+    // Register condition as session variables accessible via {{condition}}
+    this.registerVariableIfMissing({
+      id: '_condition',
+      name: 'condition',
+      type: 'string',
+      scope: 'global',
+      defaultValue: this.assignedCondition,
+    });
+    this.variableEngine.setVariable('_condition', this.assignedCondition, 'system');
+
+    this.registerVariableIfMissing({
+      id: '_conditionIndex',
+      name: 'conditionIndex',
+      type: 'number',
+      scope: 'global',
+      defaultValue: assignment.conditionIndex,
+    });
+    this.variableEngine.setVariable('_conditionIndex', assignment.conditionIndex, 'system');
+
+    // Store in session metadata via the custom field
+    if (this.session.metadata) {
+      this.session.metadata.custom = {
+        ...this.session.metadata.custom,
+        assignedCondition: this.assignedCondition,
+        conditionIndex: assignment.conditionIndex,
+      };
+    }
+
+    // Compute counterbalanced block order if applicable
+    if (design.counterbalancing !== 'none') {
+      this.conditionBlockOrder = getBlockOrder(
+        participantNumber,
+        design.conditions.length,
+        design.counterbalancing
+      );
+    }
   }
 
   private registerQuestionVariables(question: Question): void {
@@ -322,7 +414,24 @@ export class QuestionnaireRuntime {
       return;
     }
 
+    // Execute onNavigate hook on the current question before leaving
+    if (this.currentQuestion) {
+      const direction = pageIndex > this.currentPageIndex ? 'forward' : 'back';
+      const allowed = this.scriptExecutor.executeOnNavigate(
+        this.currentQuestion,
+        direction,
+        this.variableEngine,
+        this.getResponseMap()
+      );
+      if (!allowed) {
+        return;
+      }
+    }
+
     this.cancelCurrentExecution();
+
+    // Track page timing for speeder detection
+    this.qualityReport.speeder.leavePage();
 
     this.currentPageIndex = pageIndex;
     this.currentPage = this.config.questionnaire.pages[pageIndex] || null;
@@ -335,6 +444,11 @@ export class QuestionnaireRuntime {
       return;
     }
 
+    // Record entering this page
+    if (this.currentPage) {
+      this.qualityReport.speeder.enterPage(this.currentPage.id);
+    }
+
     this.currentPageItems = this.getPageItems();
 
     this.config.onProgress?.(pageIndex + 1, this.config.questionnaire.pages.length);
@@ -344,10 +458,12 @@ export class QuestionnaireRuntime {
   private getPageItems(): Question[] {
     if (!this.currentPage) return [];
 
+    const page = this.applyExperimentalDesignToPage(this.currentPage);
+
     const questionMap = new Map(
       this.config.questionnaire.questions.map((question) => [question.id, question])
     );
-    const orderedIds = this.blockRandomizer.randomizePage(this.currentPage, questionMap);
+    const orderedIds = this.blockRandomizer.randomizePage(page, questionMap);
 
     return orderedIds
       .map((id) => questionMap.get(id))
@@ -355,10 +471,53 @@ export class QuestionnaireRuntime {
       .sort((a, b) => (a.order || 0) - (b.order || 0));
   }
 
+  private applyExperimentalDesignToPage(page: Page): Page {
+    if (!this.assignedCondition || !page.blocks || page.blocks.length === 0) {
+      return page;
+    }
+
+    const design = this.config.questionnaire.settings.experimentalDesign;
+    if (!design) return page;
+
+    const unconditionalBlocks: typeof page.blocks = [];
+    const conditionBlocks: typeof page.blocks = [];
+
+    for (const block of page.blocks) {
+      if (!block.condition) {
+        unconditionalBlocks.push(block);
+      } else if (block.condition === this.assignedCondition) {
+        conditionBlocks.push(block);
+      }
+    }
+
+    let orderedConditionBlocks = conditionBlocks;
+    if (this.conditionBlockOrder && conditionBlocks.length > 1) {
+      const reordered: typeof page.blocks = [];
+      const maxIdx = Math.min(this.conditionBlockOrder.length, conditionBlocks.length);
+      for (let i = 0; i < maxIdx; i++) {
+        const sourceIdx = this.conditionBlockOrder[i]!;
+        if (sourceIdx < conditionBlocks.length) {
+          reordered.push(conditionBlocks[sourceIdx]!);
+        }
+      }
+      for (const block of conditionBlocks) {
+        if (!reordered.includes(block)) {
+          reordered.push(block);
+        }
+      }
+      orderedConditionBlocks = reordered;
+    }
+
+    return {
+      ...page,
+      blocks: [...unconditionalBlocks, ...orderedConditionBlocks],
+    };
+  }
+
   private async showCurrentItem(): Promise<void> {
     if (!this.isRunning || this.isPaused) return;
 
-    const item = this.currentPageItems[this.currentItemIndex];
+    let item = this.currentPageItems[this.currentItemIndex];
     if (!item) {
       await this.handleFlowControl();
       return;
@@ -369,6 +528,9 @@ export class QuestionnaireRuntime {
       await this.showCurrentItem();
       return;
     }
+
+    // Resolve carry-forward before presenting the question
+    item = this.resolveCarryForwardForQuestion(item);
 
     const metadata = moduleRegistry.get(item.type);
     if (!metadata) {
@@ -408,6 +570,15 @@ export class QuestionnaireRuntime {
   private async presentQuestion(question: Question, metadata: ModuleMetadata): Promise<void> {
     const onsetTime = performance.now();
     this.variableEngine.setVariable(`${question.id}_onset`, onsetTime, 'system');
+
+    // Apply carry-forward default value if resolved
+    const cfInitialValue = (question as DynamicValue)._carryForwardInitialValue;
+    if (cfInitialValue !== undefined) {
+      this.variableEngine.setVariable(`${question.id}_value`, cfInitialValue, 'carry-forward');
+    }
+
+    // Execute onMount hook when question becomes active
+    this.scriptExecutor.executeOnMount(question, this.variableEngine, this.getResponseMap());
 
     const runtime = await this.resolveQuestionRuntime(metadata);
     if (runtime) {
@@ -457,6 +628,9 @@ export class QuestionnaireRuntime {
     question: Question,
     _metadata: ModuleMetadata
   ): Promise<void> {
+    // Execute onMount hook for non-interactive items too (e.g. instructions with scripts)
+    this.scriptExecutor.executeOnMount(question, this.variableEngine, this.getResponseMap());
+
     await this.questionPresenter.presentModular(question as DynamicValue, this.variableEngine);
 
     const timing = (question as DynamicValue).timing;
@@ -510,6 +684,14 @@ export class QuestionnaireRuntime {
     onsetTime: number,
     runtimeResult: QuestionRuntimeResult
   ): Promise<void> {
+    // Execute onValidate hook for runtime-collected responses
+    const validationResult = this.scriptExecutor.executeOnValidate(
+      question,
+      runtimeResult.value,
+      this.variableEngine,
+      this.getResponseMap()
+    );
+
     const timestamp = performance.now();
     const reactionTime = runtimeResult.reactionTimeMs ?? Math.max(0, timestamp - onsetTime);
 
@@ -521,12 +703,27 @@ export class QuestionnaireRuntime {
       value: runtimeResult.value,
       reactionTime,
       stimulusOnsetTime: onsetTime,
-      valid: !runtimeResult.timedOut,
+      valid: !runtimeResult.timedOut && validationResult.valid,
       metadata: runtimeResult.metadata,
     };
 
     this.session.responses.push(response);
     this.updateQuestionVariables(question, response, runtimeResult.isCorrect ?? null);
+
+    // Validate attention check if configured
+    this.qualityReport.attention.validate(
+      question.id,
+      runtimeResult.value,
+      question.attentionCheck as AttentionCheckConfig | undefined
+    );
+
+    // Execute onResponse hook after the response is recorded
+    this.scriptExecutor.executeOnResponse(
+      question,
+      runtimeResult.value,
+      this.variableEngine,
+      this.getResponseMap()
+    );
 
     await this.questionPresenter.clear();
 
@@ -540,6 +737,20 @@ export class QuestionnaireRuntime {
     value: DynamicValue,
     responseMetadata?: ResponseCaptureMetadata
   ): Promise<void> {
+    // Execute onValidate hook before accepting the response
+    const validationResult = this.scriptExecutor.executeOnValidate(
+      question,
+      value,
+      this.variableEngine,
+      this.getResponseMap()
+    );
+    if (!validationResult.valid) {
+      // Validation failed -- log warning but don't block (response collector already stopped)
+      console.warn(
+        `[ScriptExecutor] Validation blocked response for ${question.name || question.id}: ${validationResult.error}`
+      );
+    }
+
     const timestamp = responseMetadata?.timestamp ?? performance.now();
     const reactionTime = responseMetadata?.responseTimeMs ?? Math.max(0, timestamp - onsetTime);
 
@@ -551,16 +762,29 @@ export class QuestionnaireRuntime {
       value,
       reactionTime,
       stimulusOnsetTime: onsetTime,
-      valid: true,
-      metadata: {
-        ...(responseMetadata ? { firstInteraction: responseMetadata.responseTimeMs } : {}),
-      },
+      valid: validationResult.valid,
+      metadata: responseMetadata ? { firstInteraction: responseMetadata.responseTimeMs } : undefined,
     };
 
     this.session.responses.push(response);
 
     const isCorrect = this.evaluateCustomCorrectness(question, value);
     this.updateQuestionVariables(question, response, isCorrect);
+
+    // Validate attention check if configured
+    this.qualityReport.attention.validate(
+      question.id,
+      value,
+      question.attentionCheck as AttentionCheckConfig | undefined
+    );
+
+    // Execute onResponse hook after the response is recorded
+    this.scriptExecutor.executeOnResponse(
+      question,
+      value,
+      this.variableEngine,
+      this.getResponseMap()
+    );
 
     this.responseCollector.stop();
     await this.questionPresenter.clear();
@@ -709,6 +933,18 @@ export class QuestionnaireRuntime {
     this.session.status = 'completed';
     this.session.endTime = Date.now();
 
+    // Finalize speeder timing for the last page
+    this.qualityReport.speeder.leavePage();
+
+    // Run flatline detection across blocks
+    this.runFlatlineDetection();
+
+    // Store quality report in session metadata
+    if (!this.session.metadata) {
+      this.session.metadata = {};
+    }
+    this.session.metadata.qualityReport = this.qualityReport.generate() as unknown as Record<string, unknown>;
+
     const allVariables = this.variableEngine.getAllVariables();
     for (const [variableId, value] of Object.entries(allVariables)) {
       this.session.variables.push({
@@ -722,6 +958,21 @@ export class QuestionnaireRuntime {
     this.renderer.stop();
 
     this.config.onComplete?.(this.session);
+  }
+
+  private runFlatlineDetection(): void {
+    for (const page of this.config.questionnaire.pages) {
+      for (const block of page.blocks || []) {
+        const blockQuestionIds = new Set(block.questions || []);
+        const blockValues = this.session.responses
+          .filter((r) => blockQuestionIds.has(r.questionId))
+          .map((r) => r.value);
+
+        if (blockValues.length > 0) {
+          this.qualityReport.flatliner.analyzeBlock(block.id, blockValues);
+        }
+      }
+    }
   }
 
   private scheduleAutoAdvance(delayMs: number, callback: () => Promise<void>): void {
@@ -756,5 +1007,45 @@ export class QuestionnaireRuntime {
 
   private isAbortError(error: unknown): boolean {
     return error instanceof DOMException && error.name === 'AbortError';
+  }
+
+  /**
+   * Resolve carry-forward configuration for a question, returning a modified
+   * clone if carry-forward is configured, or the original question if not.
+   */
+  private resolveCarryForwardForQuestion(question: Question): Question {
+    const cfConfig = (question as DynamicValue).carryForward as CarryForwardConfig | undefined;
+    if (!cfConfig?.sourceQuestionId || !cfConfig.mode) {
+      return question;
+    }
+
+    const responseMap = this.getResponseMap();
+    const result = resolveCarryForward(
+      cfConfig,
+      responseMap,
+      this.config.questionnaire.questions
+    );
+
+    // Nothing resolved (source not yet answered)
+    if (
+      result.defaultValue === undefined &&
+      result.options === undefined &&
+      result.textContent === undefined
+    ) {
+      return question;
+    }
+
+    return applyCarryForward(question, result, cfConfig);
+  }
+
+  /**
+   * Build a map of questionId -> response value from all collected session responses.
+   */
+  private getResponseMap(): Record<string, DynamicValue> {
+    const map: Record<string, DynamicValue> = {};
+    for (const response of this.session.responses) {
+      map[response.questionId] = response.value;
+    }
+    return map;
   }
 }

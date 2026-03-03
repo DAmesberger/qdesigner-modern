@@ -2,18 +2,18 @@
   import { onMount } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
   import PropertiesPanel from '$lib/components/designer/PropertiesPanel.svelte';
+  import { Pin, PinOff, X } from 'lucide-svelte';
 
   let isMobile = $state(false);
   const hasSelection = $derived(Boolean(designerStore.selectedItem));
+  const isVisible = $derived(hasSelection || designerStore.rightPanelPinned);
 
   const panelLabel = $derived.by(() => {
     if (!designerStore.selectedItemType) return 'Properties';
-
     if (designerStore.selectedItemType === 'question') return 'Question Properties';
     if (designerStore.selectedItemType === 'page') return 'Page Properties';
     if (designerStore.selectedItemType === 'block') return 'Block Properties';
     if (designerStore.selectedItemType === 'variable') return 'Variable Properties';
-
     return 'Properties';
   });
 
@@ -28,7 +28,6 @@
 
     apply();
     media.addEventListener('change', apply);
-
     return () => media.removeEventListener('change', apply);
   });
 
@@ -36,23 +35,12 @@
     designerStore.toggleDrawer('right', false);
   }
 
-  function toggleCollapse() {
-    designerStore.setSidebarCollapsed('right', !designerStore.rightCollapsed);
-  }
-
-  function focusFirstQuestion() {
-    const firstQuestion = designerStore.currentBlockQuestions[0];
-    if (firstQuestion) {
-      designerStore.selectItem(firstQuestion.id, 'question');
-    } else {
-      designerStore.setActiveLeftTab('questions');
-      if (isMobile) {
-        designerStore.toggleDrawer('left', true);
-      }
-    }
+  function togglePin() {
+    designerStore.setRightPanelPinned(!designerStore.rightPanelPinned);
   }
 </script>
 
+<!-- Mobile backdrop -->
 {#if isMobile && designerStore.isRightDrawerOpen}
   <button
     type="button"
@@ -63,140 +51,100 @@
   ></button>
 {/if}
 
-<aside
-  class="designer-right-sidebar z-40 flex h-full flex-col border-l border-border bg-background transition-all duration-200"
-  class:w-96={!designerStore.rightCollapsed && !isMobile}
-  class:w-14={designerStore.rightCollapsed && !isMobile}
-  class:fixed={isMobile}
-  class:inset-y-0={isMobile}
-  class:right-0={isMobile}
-  class:w-[86vw]={isMobile}
-  class:max-w-md={isMobile}
-  class:translate-x-0={isMobile && designerStore.isRightDrawerOpen}
-  class:translate-x-full={isMobile && !designerStore.isRightDrawerOpen}
-  data-testid="designer-right-sidebar"
->
-  <div class="flex items-center justify-between border-b border-border px-3 py-2">
-    {#if !designerStore.rightCollapsed || isMobile}
+<!-- Desktop panel — auto show/hide based on selection -->
+{#if !isMobile && isVisible}
+  <aside
+    class="w-72 lg:w-80 flex h-full flex-col bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-lg)] border-l border-[hsl(var(--glass-border))] animate-slide-in-right"
+    data-testid="designer-right-sidebar"
+  >
+    <div class="flex items-center justify-between px-3 py-2 border-b border-[hsl(var(--glass-border))]">
       <h2 class="truncate text-sm font-semibold text-foreground" data-testid="right-sidebar-title">
         {panelLabel}
       </h2>
-
-      <div class="flex items-center gap-1">
-        {#if isMobile}
-          <button
-            type="button"
-            class="rounded p-1 text-muted-foreground hover:bg-accent"
-            aria-label="Close right panel"
-            onclick={closeDrawer}
-            data-testid="designer-right-sidebar-close"
-          >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        {/if}
-
-        {#if !isMobile}
-          <button
-            type="button"
-            class="rounded p-1 text-muted-foreground hover:bg-accent"
-            aria-label="Collapse right panel"
-            onclick={toggleCollapse}
-            data-testid="right-sidebar-collapse"
-          >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </button>
-        {/if}
+      <div class="flex items-center gap-0.5">
+        <!-- Pin button -->
+        <button
+          type="button"
+          class="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors duration-150"
+          onclick={togglePin}
+          title={designerStore.rightPanelPinned ? 'Unpin panel' : 'Pin panel open'}
+          aria-label={designerStore.rightPanelPinned ? 'Unpin panel' : 'Pin panel open'}
+          data-testid="right-sidebar-pin"
+        >
+          {#if designerStore.rightPanelPinned}
+            <Pin class="h-3.5 w-3.5" />
+          {:else}
+            <PinOff class="h-3.5 w-3.5" />
+          {/if}
+        </button>
+        <!-- Close button -->
+        <button
+          type="button"
+          class="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors duration-150"
+          onclick={() => {
+            designerStore.selectItem(null);
+            designerStore.setRightPanelPinned(false);
+          }}
+          aria-label="Close panel"
+          data-testid="right-sidebar-close"
+        >
+          <X class="h-3.5 w-3.5" />
+        </button>
       </div>
-    {:else}
-      <button
-        type="button"
-        class="mx-auto rounded p-1 text-muted-foreground hover:bg-accent"
-        aria-label="Expand right panel"
-        onclick={toggleCollapse}
-        data-testid="right-sidebar-expand"
-      >
-        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15 19l-7-7 7-7"
-          />
-        </svg>
-      </button>
-    {/if}
-  </div>
+    </div>
 
-  {#if !designerStore.rightCollapsed || isMobile}
     {#if hasSelection}
       <div class="min-h-0 flex-1 overflow-hidden" data-testid="right-sidebar-content">
         <PropertiesPanel />
       </div>
     {:else}
-      <div
-        class="flex h-full flex-col gap-4 p-4 text-sm text-muted-foreground"
-        data-testid="right-sidebar-empty-state"
-      >
-        <div class="rounded-lg border border-dashed border-border bg-muted/30 p-4">
-          <h3 class="mb-2 text-sm font-semibold text-foreground">Configure Step</h3>
-          <p class="mb-3">
-            Select a question to edit its configuration. Keep this panel focused only on the
-            selected item.
-          </p>
-          <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
-              onclick={focusFirstQuestion}
-              data-testid="right-sidebar-select-first-question"
-            >
-              Select First Question
-            </button>
-            <button
-              type="button"
-              class="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
-              onclick={() => designerStore.toggleCommandPalette(true)}
-              data-testid="right-sidebar-open-command-palette"
-            >
-              Open Commands
-            </button>
-          </div>
-        </div>
-
-        <div class="rounded-lg border border-border p-3">
-          <p class="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Keyboard</p>
-          <div class="flex flex-wrap gap-2 text-xs">
-            <kbd class="rounded bg-muted px-1.5 py-0.5">Ctrl/Cmd+K</kbd>
-            <span>Command palette</span>
-          </div>
-          <div class="mt-1 flex flex-wrap gap-2 text-xs">
-            <kbd class="rounded bg-muted px-1.5 py-0.5">Alt+↑/↓</kbd>
-            <span>Move selected question</span>
-          </div>
-          <div class="mt-1 flex flex-wrap gap-2 text-xs">
-            <kbd class="rounded bg-muted px-1.5 py-0.5">Del</kbd>
-            <span>Delete selected question</span>
-          </div>
-        </div>
+      <div class="flex-1 flex items-center justify-center p-4">
+        <p class="text-sm text-muted-foreground text-center">Select a question to edit its properties</p>
       </div>
     {/if}
-  {:else}
-    <div class="flex flex-1 items-start justify-center py-3">
-      <span class="rounded bg-muted px-2 py-1 text-[10px] text-muted-foreground">Props</span>
+  </aside>
+{/if}
+
+<!-- Mobile drawer -->
+{#if isMobile && designerStore.isRightDrawerOpen}
+  <aside
+    class="fixed inset-y-0 right-0 z-40 w-[86vw] max-w-md flex flex-col bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-lg)] animate-slide-in-right"
+    data-testid="designer-right-sidebar"
+  >
+    <div class="flex items-center justify-between px-3 py-2 border-b border-border">
+      <h2 class="truncate text-sm font-semibold text-foreground" data-testid="right-sidebar-title">
+        {panelLabel}
+      </h2>
+      <button
+        type="button"
+        class="rounded-md p-1 text-muted-foreground hover:bg-accent transition-colors duration-150"
+        onclick={closeDrawer}
+        aria-label="Close panel"
+        data-testid="designer-right-sidebar-close"
+      >
+        <X class="h-4 w-4" />
+      </button>
     </div>
-  {/if}
-</aside>
+
+    {#if hasSelection}
+      <div class="min-h-0 flex-1 overflow-hidden" data-testid="right-sidebar-content">
+        <PropertiesPanel />
+      </div>
+    {:else}
+      <div class="flex-1 flex items-center justify-center p-4">
+        <p class="text-sm text-muted-foreground text-center">Select a question to edit its properties</p>
+      </div>
+    {/if}
+  </aside>
+{/if}
+
+<style>
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 200ms ease-out;
+  }
+</style>

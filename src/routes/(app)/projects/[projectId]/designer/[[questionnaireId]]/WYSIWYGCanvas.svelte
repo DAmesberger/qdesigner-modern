@@ -6,19 +6,17 @@
   import { defaultTheme } from '$lib/shared';
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
-  import uiTheme from '$lib/theme';
+  import { Plus, Minus } from 'lucide-svelte';
 
-  // Theme management - in real app would come from store
   let questionnaireTheme = defaultTheme;
   let showTestRunner = $state(false);
 
-  // Get variables from the store for analytics components
   let questionnaire = $derived(designerStore.questionnaire);
   let variables = $derived(
     questionnaire.variables.reduce(
       (acc, v) => {
         acc[v.id] = v.defaultValue;
-        acc[v.name] = v.defaultValue; // Index by both ID and name
+        acc[v.name] = v.defaultValue;
         return acc;
       },
       {} as Record<string, any>
@@ -45,7 +43,17 @@
     }
   }
 
-  // DnD items - show questions from current block
+  function resetZoom() {
+    zoomLevel = 100;
+  }
+
+  // Make zoom functions accessible for command palette
+  if (typeof window !== 'undefined') {
+    (window as any).__designerZoom = { zoomIn, zoomOut, resetZoom, getLevel: () => zoomLevel };
+    (window as any).__designerTestRunner = { show: () => (showTestRunner = true) };
+  }
+
+  // DnD items
   let items = $derived(
     designerStore.currentBlockQuestions?.map((q) => ({
       id: q.id,
@@ -58,9 +66,7 @@
 
   function handleDndConsider(e: CustomEvent) {
     if (!e.detail?.items || !designerStore.currentBlock) return;
-
     const newItems = e.detail.items;
-    // Update order in store
     const questionIds = newItems.map((item: any) => item.id).filter(Boolean);
     if (questionIds.length > 0) {
       designerStore.updateBlockQuestions(designerStore.currentBlock.id, questionIds);
@@ -88,22 +94,13 @@
     designerStore.addQuestion(target, type);
   }
 
-  function openQuestionPicker() {
-    designerStore.setActiveLeftTab('questions');
-    if (window.matchMedia('(max-width: 767px)').matches) {
-      designerStore.toggleDrawer('left', true);
-    }
-  }
-
   function resolveDroppedQuestionType(payload: Record<string, any>): string | null {
     if (payload.type === 'new-question' && payload.questionType) {
       return payload.questionType;
     }
-
     if (payload.type === 'new-module' && payload.moduleType) {
       return payload.moduleType;
     }
-
     return null;
   }
 
@@ -120,137 +117,25 @@
       // Ignore invalid drag payload.
     }
   }
+
+  function openAddPanel() {
+    designerStore.setPanel('add');
+  }
 </script>
 
 <div
-  class="h-full overflow-auto {uiTheme.components.designerCanvas.base}"
+  class="relative h-full overflow-auto canvas-bg"
   data-testid="designer-wysiwyg-canvas"
 >
-  <!-- Canvas Controls -->
-  <div
-    class="sticky top-0 z-10 {uiTheme.semantic.bgBase} {uiTheme.semantic
-      .borderDefault} border-b px-4 py-2 flex items-center justify-between backdrop-blur-sm bg-opacity-95"
-    data-testid="designer-canvas-toolbar"
-  >
-    <div class="flex items-center gap-2">
-      <!-- Zoom Controls -->
-      <div
-        class="flex items-center {uiTheme.semantic.bgSurface} rounded-md {uiTheme.semantic
-          .borderDefault} border"
-      >
-        <button
-          onclick={zoomOut}
-          disabled={zoomLevel === 50}
-          class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost} disabled:opacity-50"
-          aria-label="Zoom out"
-          data-testid="designer-canvas-zoom-out"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"
-            />
-          </svg>
-        </button>
-        <span
-          class="px-2 py-1 text-sm {uiTheme.semantic.textPrimary} border-x {uiTheme.semantic
-            .borderDefault}"
-          data-testid="designer-canvas-zoom-level">{zoomLevel}%</span
-        >
-        <button
-          onclick={zoomIn}
-          disabled={zoomLevel === 150}
-          class="px-2 py-1 text-sm {uiTheme.semantic.interactive.ghost} disabled:opacity-50"
-          aria-label="Zoom in"
-          data-testid="designer-canvas-zoom-in"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"
-            />
-          </svg>
-        </button>
-      </div>
-
-      <!-- Grid Toggle -->
-      <button
-        class="p-1.5 {uiTheme.semantic.textSecondary} {uiTheme.semantic.interactive
-          .ghost} rounded-md"
-        aria-label="Toggle grid"
-        data-testid="designer-canvas-grid-toggle"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-          />
-        </svg>
-      </button>
-    </div>
-
-    <div class="flex items-center gap-2">
-      <button
-        onclick={() => addQuestionOfType('text-input')}
-        class="hidden sm:inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
-        data-testid="designer-toolbar-add-question"
-      >
-        <span>+ Add</span>
-        <kbd class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
-          >Ctrl/Cmd+Shift+A</kbd
-        >
-      </button>
-
-      <button
-        onclick={() => designerStore.toggleCommandPalette(true)}
-        class="hidden sm:inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-accent"
-        data-testid="designer-toolbar-command-palette"
-      >
-        Commands
-        <kbd class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">Ctrl/Cmd+K</kbd>
-      </button>
-
-      <button
-        onclick={() => (showTestRunner = true)}
-        class="flex items-center gap-1.5 px-3 py-1.5 {uiTheme.components.button.variants
-          .outline} {uiTheme.components.button.sizes.sm} rounded-md"
-        data-testid="designer-live-test-button"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-          />
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-        Test
-      </button>
-    </div>
-  </div>
-
   <!-- Canvas Area -->
   <div class="min-h-full p-8 overflow-auto">
     <div
       class="mx-auto transition-transform duration-200 origin-top"
-      style="transform: scale({zoomLevel / 100}); width: {100 /
-        (zoomLevel / 100)}%; max-width: {(300 * 100) / zoomLevel}%;"
+      style="transform: scale({zoomLevel / 100}); width: {100 / (zoomLevel / 100)}%; max-width: {(300 * 100) / zoomLevel}%;"
     >
       <!-- Page Background -->
       <div
-        class="{uiTheme.components.container.card} min-h-[600px] max-w-3xl mx-auto"
+        class="bg-card rounded-[var(--radius)] shadow-[var(--shadow-sm)] border border-transparent min-h-[600px] max-w-3xl mx-auto transition-all duration-200"
         role="group"
         aria-label="Canvas area"
         ondrop={handleDrop}
@@ -258,24 +143,18 @@
         data-testid="designer-page-canvas"
       >
         <!-- Page Header -->
-        <div class="px-8 pt-8 pb-4 border-b {uiTheme.semantic.borderDefault}">
+        <div class="px-8 pt-8 pb-4 border-b border-border">
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="{uiTheme.typography.h3} {uiTheme.semantic.textPrimary}">
+              <h2 class="text-lg font-semibold text-foreground">
                 {designerStore.currentPage?.name || 'Page 1'}
               </h2>
               {#if designerStore.currentBlock}
-                <p
-                  class="{uiTheme.typography.bodySmall} {uiTheme.semantic
-                    .textSecondary} mt-1 flex items-center"
-                >
-                  <span class="text-muted-foreground mr-1">›</span>
+                <p class="text-sm text-muted-foreground mt-1 flex items-center">
+                  <span class="text-muted-foreground mr-1">&rsaquo;</span>
                   {designerStore.currentBlock.name || 'Untitled Block'}
                   {#if designerStore.currentBlock.type !== 'standard'}
-                    <span
-                      class="ml-2 {uiTheme.components.badge.default} {uiTheme.components.badge
-                        .outline}"
-                    >
+                    <span class="ml-2 rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
                       {designerStore.currentBlock.type}
                     </span>
                   {/if}
@@ -283,7 +162,6 @@
               {/if}
             </div>
 
-            <!-- Block selector -->
             {#if designerStore.currentPageBlocks.length > 1}
               <div class="flex items-center space-x-2">
                 <label for="block-select" class="text-sm text-muted-foreground">Block:</label>
@@ -291,7 +169,7 @@
                   id="block-select"
                   value={designerStore.currentBlock?.id}
                   onchange={(e) => designerStore.setCurrentBlock(e.currentTarget.value)}
-                  class="text-sm px-3 py-1 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
+                  class="text-sm px-3 py-1 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary bg-background"
                   data-testid="designer-block-select"
                 >
                   {#each designerStore.currentPageBlocks as block}
@@ -309,121 +187,20 @@
         <!-- Questions Area -->
         <div class="px-8 py-6">
           {#if items.length === 0 || !designerStore.currentBlock}
-            <!-- Empty State -->
-            <div
-              class="mx-auto flex max-w-2xl flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-6 py-14 text-center"
+            <!-- Minimal Empty State -->
+            <button
+              type="button"
+              class="group w-full flex flex-col items-center justify-center rounded-xl py-20 text-center cursor-pointer hover:bg-muted/30 transition-colors duration-200"
+              onclick={openAddPanel}
               data-testid="designer-empty-state"
             >
-              <div class="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-4">
-                <svg
-                  class="w-10 h-10 text-muted-foreground"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                  />
-                </svg>
+              <div class="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-muted-foreground/50 group-hover:bg-accent group-hover:text-primary transition-all duration-200">
+                <Plus class="w-6 h-6" />
               </div>
-              <h3 class="text-lg font-semibold text-foreground mb-1">Start with Add</h3>
-              <p class="text-sm text-muted-foreground max-w-lg mb-5">
-                This block is empty. Add a first question, then configure it in the right panel, run
-                Preview, and publish once validation is clean.
+              <p class="mt-3 text-sm text-muted-foreground">
+                Click <strong>+</strong> or press <kbd class="rounded bg-muted px-1 py-0.5 text-xs">Ctrl+K</kbd> to add your first question
               </p>
-
-              <div class="grid w-full gap-2 sm:grid-cols-3">
-                <button
-                  class="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 transition-colors"
-                  onclick={() => addQuestionOfType('text-input')}
-                  title="Add text question"
-                  data-testid="designer-empty-add-text-question"
-                >
-                  + Text Input
-                </button>
-                <button
-                  class="rounded-md border border-border px-4 py-2 text-foreground hover:bg-accent transition-colors"
-                  onclick={() => addQuestionOfType('multiple-choice')}
-                  title="Add multiple choice question"
-                  data-testid="designer-empty-add-choice-question"
-                >
-                  + Multiple Choice
-                </button>
-                <button
-                  class="rounded-md border border-border px-4 py-2 text-foreground hover:bg-accent transition-colors"
-                  onclick={() => addQuestionOfType('reaction-time')}
-                  title="Add reaction-time question"
-                  data-testid="designer-empty-add-reaction-question"
-                >
-                  + Reaction Time
-                </button>
-              </div>
-
-              <div class="mt-4 w-full rounded-lg border border-border bg-background p-4 text-left">
-                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                  Guided Flow
-                </p>
-                <div class="space-y-2 text-sm">
-                  <div class="flex items-start gap-2">
-                    <span
-                      class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
-                      >1</span
-                    >
-                    <span>Add a question type to this block.</span>
-                  </div>
-                  <div class="flex items-start gap-2">
-                    <span
-                      class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
-                      >2</span
-                    >
-                    <span>Select it and tune settings in <strong>Properties</strong>.</span>
-                  </div>
-                  <div class="flex items-start gap-2">
-                    <span
-                      class="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-xs"
-                      >3</span
-                    >
-                    <span>Open Preview and validate behavior before publishing.</span>
-                  </div>
-                </div>
-
-                <div class="mt-3 flex flex-wrap items-center gap-2">
-                  <button
-                    class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-accent"
-                    onclick={openQuestionPicker}
-                    data-testid="designer-empty-open-question-palette"
-                  >
-                    Open Question Palette
-                  </button>
-                  <button
-                    class="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-accent transition-colors"
-                    onclick={() => designerStore.toggleCommandPalette(true)}
-                    title="Open command palette"
-                    data-testid="designer-empty-open-command-palette"
-                  >
-                    Open Commands
-                  </button>
-                </div>
-              </div>
-
-              <div
-                class="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground"
-              >
-                <kbd class="rounded bg-muted px-1 py-0.5">Ctrl/Cmd + Shift + A</kbd>
-                <span>Add question</span>
-                <kbd class="rounded bg-muted px-1 py-0.5">Ctrl/Cmd + K</kbd>
-                <span>Quick actions</span>
-                <button
-                  class="rounded border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  onclick={() => designerStore.togglePreview(true)}
-                >
-                  Preview now
-                </button>
-              </div>
-            </div>
+            </button>
           {:else}
             <!-- Questions List -->
             {#key designerStore.currentBlock?.id}
@@ -433,9 +210,9 @@
                   items: items || [],
                   flipDurationMs: 300,
                   dropTargetStyle: {
-                    outline: '2px dashed #3B82F6',
+                    outline: '2px dashed hsl(var(--primary))',
                     outlineOffset: '4px',
-                    backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                    backgroundColor: 'hsl(var(--primary) / 0.05)',
                   },
                   dropFromOthersDisabled: false,
                   dragDisabled: false,
@@ -449,20 +226,11 @@
                   {@const isSelected = selectedQuestionId === item.id}
                   <div
                     animate:flip={{ duration: 300 }}
-                    class="relative rounded-xl border p-1 transition-colors {isSelected
-                      ? 'border-primary bg-primary/5'
-                      : 'border-transparent'}"
+                    class="relative rounded-xl transition-all duration-200 {isSelected
+                      ? 'ring-2 ring-primary shadow-[var(--shadow-glow)]'
+                      : 'hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5'}"
                     data-testid={`designer-question-${item.id}`}
                   >
-                    {#if isSelected}
-                      <div
-                        class="mb-1 flex items-center justify-between rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-[11px] text-primary"
-                        data-testid={`designer-question-selected-${item.id}`}
-                      >
-                        <span class="font-medium">Selected</span>
-                        <span class="text-primary/80">Alt+↑/↓ move · Del delete</span>
-                      </div>
-                    {/if}
                     {#if item && item.question}
                       {@const isDisplay = [
                         'text-display',
@@ -473,7 +241,6 @@
                         'bar-chart',
                       ].includes(item.question.type)}
                       {#if isDisplay}
-                        <!-- Use QuestionRenderer for display components -->
                         <div
                           role="button"
                           tabindex="0"
@@ -484,21 +251,16 @@
                             e.key === 'Enter' && designerStore.selectItem(item.id, 'question')}
                         >
                           <QuestionRenderer question={item.question} mode="preview" {variables} />
-
-                          <!-- Overlay for selection (to prevent interaction with chart/content during edit) -->
-                          <div
-                            class="absolute inset-0 z-10 cursor-pointer pointer-events-none group-hover:bg-blue-50/10"
-                          ></div>
+                          <div class="absolute inset-0 z-10 cursor-pointer pointer-events-none group-hover:bg-primary/5"></div>
                         </div>
                       {:else}
-                        <!-- Use QuestionVisualRenderer for regular questions and instructions -->
                         <QuestionVisualRenderer
                           question={item.question}
                           theme={questionnaireTheme}
                           mode="edit"
                           selected={designerStore.selectedItem?.id === item.id}
                           onselect={() => designerStore.selectItem(item.id, 'question')}
-                          onupdate={(updates) => handleQuestionUpdate(item.id, updates)}
+                          onupdate={(updates: any) => handleQuestionUpdate(item.id, updates)}
                           ondelete={() => designerStore.deleteQuestion(item.id)}
                           oneditproperties={() => {
                             designerStore.selectItem(item.id, 'question');
@@ -517,12 +279,13 @@
 
       <!-- Page Navigation -->
       {#if designerStore.questionnaire.pages.length > 1}
-        <div class="mt-6 flex items-center justify-center gap-2">
+        <div class="mt-6 flex items-center justify-center gap-1.5">
           {#each designerStore.questionnaire.pages as page, index}
+            {@const isActive = page.id === designerStore.currentPage?.id}
             <button
-              class="w-2 h-2 rounded-full transition-colors"
-              class:bg-blue-600={page.id === designerStore.currentPage?.id}
-              class:bg-muted={page.id !== designerStore.currentPage?.id}
+              class="rounded-full transition-all duration-200 {isActive
+                ? 'w-6 h-2 bg-primary'
+                : 'w-2 h-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'}"
               onclick={() => designerStore.setCurrentPage(page.id)}
               title="Page {index + 1}"
               aria-label="Go to page {index + 1}"
@@ -531,6 +294,39 @@
         </div>
       {/if}
     </div>
+  </div>
+
+  <!-- Floating Zoom Pill -->
+  <div
+    class="absolute bottom-4 right-4 flex items-center bg-[hsl(var(--glass-bg))] backdrop-blur-[var(--glass-blur)] shadow-[var(--shadow-md)] rounded-full px-1 py-0.5 text-xs text-muted-foreground border border-[hsl(var(--glass-border))]"
+    data-testid="designer-zoom-pill"
+  >
+    <button
+      onclick={zoomOut}
+      disabled={zoomLevel === 50}
+      class="px-1.5 py-0.5 rounded-full hover:bg-accent hover:text-foreground transition-colors duration-150 disabled:opacity-40"
+      aria-label="Zoom out"
+      data-testid="designer-canvas-zoom-out"
+    >
+      <Minus class="w-3 h-3" />
+    </button>
+    <button
+      onclick={resetZoom}
+      class="px-1.5 py-0.5 min-w-[3rem] text-center hover:bg-accent hover:text-foreground rounded-full transition-colors duration-150"
+      data-testid="designer-canvas-zoom-level"
+      title="Reset zoom"
+    >
+      {zoomLevel}%
+    </button>
+    <button
+      onclick={zoomIn}
+      disabled={zoomLevel === 150}
+      class="px-1.5 py-0.5 rounded-full hover:bg-accent hover:text-foreground transition-colors duration-150 disabled:opacity-40"
+      aria-label="Zoom in"
+      data-testid="designer-canvas-zoom-in"
+    >
+      <Plus class="w-3 h-3" />
+    </button>
   </div>
 </div>
 
@@ -546,33 +342,10 @@
 {/if}
 
 <style>
-  .page-canvas {
-    min-height: 600px;
-    background: white;
-    border-radius: 0.5rem;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-    padding: 2rem;
-  }
-
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 400px;
-    text-align: center;
-  }
-
-  .question-wrapper {
-    position: relative;
-  }
-
-  :global(.questions-container > div) {
-    transition: transform 0.2s ease;
-  }
-
-  :global(.questions-container > div:hover) {
-    transform: translateY(-1px);
+  .canvas-bg {
+    background-color: hsl(var(--background));
+    background-image: radial-gradient(circle, hsl(var(--border) / 0.4) 1px, transparent 1px);
+    background-size: 20px 20px;
   }
 
   .analytics-wrapper {
@@ -582,28 +355,7 @@
   }
 
   .analytics-wrapper.selected {
-    outline: 2px solid #3b82f6;
+    outline: 2px solid hsl(var(--primary));
     outline-offset: 2px;
-  }
-
-  .analytics-wrapper .edit-controls {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .analytics-wrapper .edit-controls button {
-    padding: 0.25rem 0.5rem;
-    background: white;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    cursor: pointer;
-  }
-
-  .analytics-wrapper .edit-controls button:hover {
-    background: #f3f4f6;
   }
 </style>

@@ -1,16 +1,12 @@
 export type DesignerViewMode = 'structural' | 'wysiwyg';
-export type DesignerLeftTab = 'blocks' | 'questions' | 'variables' | 'flow';
-export type DrawerSide = 'left' | 'right';
+export type DesignerPanel = 'structure' | 'add' | 'templates' | 'variables' | 'flow' | 'help' | null;
 
 export interface UiState {
   viewMode: DesignerViewMode;
-  activeLeftTab: DesignerLeftTab;
+  activePanel: DesignerPanel;
   showPreview: boolean;
   showCommandPalette: boolean;
-  isLeftDrawerOpen: boolean;
-  isRightDrawerOpen: boolean;
-  leftCollapsed: boolean;
-  rightCollapsed: boolean;
+  rightPanelPinned: boolean;
 }
 
 export class UiStore {
@@ -19,13 +15,10 @@ export class UiStore {
   constructor() {
     this.state = {
       viewMode: 'wysiwyg',
-      activeLeftTab: 'blocks',
+      activePanel: null,
       showPreview: false,
       showCommandPalette: false,
-      isLeftDrawerOpen: false,
-      isRightDrawerOpen: false,
-      leftCollapsed: false,
-      rightCollapsed: false,
+      rightPanelPinned: false,
     };
   }
 
@@ -38,8 +31,13 @@ export class UiStore {
     return this.getState();
   }
 
-  public setLeftTab(tab: DesignerLeftTab): UiState {
-    this.state.activeLeftTab = tab;
+  public setPanel(panel: DesignerPanel): UiState {
+    this.state.activePanel = panel;
+    return this.getState();
+  }
+
+  public togglePanel(panel: Exclude<DesignerPanel, null>): UiState {
+    this.state.activePanel = this.state.activePanel === panel ? null : panel;
     return this.getState();
   }
 
@@ -53,38 +51,24 @@ export class UiStore {
     return this.getState();
   }
 
-  public toggleDrawer(side: DrawerSide, force?: boolean): UiState {
-    if (side === 'left') {
-      this.state.isLeftDrawerOpen = typeof force === 'boolean' ? force : !this.state.isLeftDrawerOpen;
-      return this.getState();
-    }
-
-    this.state.isRightDrawerOpen = typeof force === 'boolean' ? force : !this.state.isRightDrawerOpen;
-    return this.getState();
-  }
-
-  public setCollapsed(side: DrawerSide, collapsed: boolean): UiState {
-    if (side === 'left') {
-      this.state.leftCollapsed = collapsed;
-    } else {
-      this.state.rightCollapsed = collapsed;
-    }
-
+  public setRightPanelPinned(pinned: boolean): UiState {
+    this.state.rightPanelPinned = pinned;
     return this.getState();
   }
 
   public syncFromStorage(storage: Storage | null): UiState {
     if (!storage) return this.getState();
 
-    this.state.leftCollapsed = storage.getItem('designer-left-sidebar-collapsed') === 'true';
-    this.state.rightCollapsed = storage.getItem('designer-right-sidebar-collapsed') === 'true';
+    const pinned = storage.getItem('designer-right-panel-pinned');
+    if (pinned !== null) {
+      this.state.rightPanelPinned = pinned === 'true';
+    }
 
     return this.getState();
   }
 
-  public persistCollapsed(storage: Storage | null): void {
+  public persistToStorage(storage: Storage | null): void {
     if (!storage) return;
-    storage.setItem('designer-left-sidebar-collapsed', String(this.state.leftCollapsed));
-    storage.setItem('designer-right-sidebar-collapsed', String(this.state.rightCollapsed));
+    storage.setItem('designer-right-panel-pinned', String(this.state.rightPanelPinned));
   }
 }

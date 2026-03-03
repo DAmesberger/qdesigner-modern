@@ -18,21 +18,17 @@ pub async fn set_rls_context(
         let user_id = user.user_id.to_string();
         let primary_role = user.roles.first().cloned().unwrap_or_default();
 
-        sqlx::query(&format!(
-            "SELECT set_config('app.user_id', '{}', false)",
-            user_id
-        ))
-        .execute(&state.pool)
-        .await
-        .map_err(|e| ApiError::Internal(format!("Failed to set RLS context: {e}")))?;
+        sqlx::query("SELECT set_config('app.user_id', $1, false)")
+            .bind(&user_id)
+            .execute(&state.pool)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Failed to set RLS context: {e}")))?;
 
-        sqlx::query(&format!(
-            "SELECT set_config('app.user_role', '{}', false)",
-            primary_role
-        ))
-        .execute(&state.pool)
-        .await
-        .map_err(|e| ApiError::Internal(format!("Failed to set RLS context: {e}")))?;
+        sqlx::query("SELECT set_config('app.user_role', $1, false)")
+            .bind(&primary_role)
+            .execute(&state.pool)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Failed to set RLS context: {e}")))?;
     }
 
     Ok(next.run(request).await)

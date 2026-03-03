@@ -13,7 +13,17 @@ import type {
   RegressionResult,
   ReliabilityAnalysis,
   FactorAnalysis,
-  AnalyticsError
+  AnalyticsError,
+  MannWhitneyResult,
+  WilcoxonSignedRankResult,
+  KruskalWallisResult,
+  DunnResult,
+  ChiSquareGoodnessOfFitResult,
+  ChiSquareIndependenceResult,
+  FisherExactResult,
+  TukeyHSDResult,
+  TukeyComparison,
+  CorrectionResult
 } from './types';
 
 export class StatisticalEngine {
@@ -736,6 +746,660 @@ export class StatisticalEngine {
 
     this.setCache(cacheKey, result);
     return result;
+  }
+
+  // ============================================================================
+  // Non-Parametric Tests
+  // ============================================================================
+
+  /**
+   * Mann-Whitney U test for two independent samples
+   */
+  mannWhitneyU(group1: number[], group2: number[]): MannWhitneyResult {
+    if (group1.length === 0 || group2.length === 0) {
+      throw new Error('Both groups must be non-empty');
+    }
+
+    const n1 = group1.length;
+    const n2 = group2.length;
+
+    // Combine and rank all data
+    const combined = [
+      ...group1.map(v => ({ value: v, group: 1 })),
+      ...group2.map(v => ({ value: v, group: 2 }))
+    ];
+    const values = combined.map(c => c.value);
+    const ranks = this.rankData(values);
+
+    // Sum of ranks for each group
+    let R1 = 0;
+    let R2 = 0;
+    for (let i = 0; i < combined.length; i++) {
+      if (combined[i]!.group === 1) {
+        R1 += ranks[i]!;
+      } else {
+        R2 += ranks[i]!;
+      }
+    }
+
+    const U1 = R1 - (n1 * (n1 + 1)) / 2;
+    const U2 = R2 - (n2 * (n2 + 1)) / 2;
+
+    // Normal approximation with tie correction
+    const N = n1 + n2;
+    const meanU = (n1 * n2) / 2;
+
+    // Tie correction factor
+    const tieGroups = this.countTieGroups(values);
+    const tieCorrection = tieGroups.reduce((sum, t) => sum + (t ** 3 - t), 0);
+    const varianceU = (n1 * n2 / 12) * (N + 1 - tieCorrection / (N * (N - 1)));
+
+    const z = (U1 - meanU) / Math.sqrt(varianceU);
+    const pValue = 2 * (1 - this.standardNormalCDF(Math.abs(z)));
+    const effectSize_r = Math.abs(z) / Math.sqrt(N);
+    const rankBiserialCorrelation = (U1 - U2) / (n1 * n2);
+
+    return { U1, U2, z, pValue, effectSize_r, rankBiserialCorrelation };
+  }
+
+  /**
+   * Wilcoxon signed-rank test for paired samples
+   */
+  wilcoxonSignedRank(before: number[], after: number[]): WilcoxonSignedRankResult {
+    if (before.length !== after.length) {
+      throw new Error('Paired data must have equal length');
+    }
+    if (before.length === 0) {
+      throw new Error('Data arrays must be non-empty');
+    }
+
+    // Calculate differences and remove zeros
+    const diffs: { diff: number; absDiff: number }[] = [];
+    for (let i = 0; i < before.length; i++) {
+      const diff = after[i]! - before[i]!;
+      if (diff !== 0) {
+        diffs.push({ diff, absDiff: Math.abs(diff) });
+      }
+    }
+
+    if (diffs.length === 0) {
+      return { W_plus: 0, W_minus: 0, z: 0, pValue: 1, effectSize_r: 0 };
+    }
+
+    // Rank absolute differences
+    const absDiffs = diffs.map(d => d.absDiff);
+    const ranks = this.rankData(absDiffs);
+
+    // Sum signed ranks
+    let W_plus = 0;
+    let W_minus = 0;
+    for (let i = 0; i < diffs.length; i++) {
+      if (diffs[i]!.diff > 0) {
+        W_plus += ranks[i]!;
+      } else {
+        W_minus += ranks[i]!;
+      }
+    }
+
+    const n = diffs.length;
+    const meanW = (n * (n + 1)) / 4;
+
+    // Tie correction
+    const tieGroups = this.countTieGroups(absDiffs);
+    const tieCorrection = tieGroups.reduce((sum, t) => sum + (t ** 3 - t), 0);
+    const varianceW = (n * (n + 1) * (2 * n + 1)) / 24 - tieCorrection / 48;
+
+    const W = Math.min(W_plus, W_minus);
+    const z = (W - meanW) / Math.sqrt(varianceW);
+    const pValue = 2 * (1 - this.standardNormalCDF(Math.abs(z)));
+    const effectSize_r = Math.abs(z) / Math.sqrt(n);
+
+    return { W_plus, W_minus, z, pValue, effectSize_r };
+  }
+
+  /**
+   * Kruskal-Wallis H test for k independent samples with Dunn post-hoc
+   */
+  kruskalWallis(groups: number[][]): KruskalWallisResult {
+    if (groups.length < 2) {
+      throw new Error('Need at least 2 groups');
+    }
+    for (let i = 0; i < groups.length; i++) {
+      if (groups[i]!.length === 0) {
+        throw new Error(`Group ${i} is empty`);
+      }
+    }
+
+    const allValues: number[] = [];
+    const groupLabels: number[] = [];
+    for (let g = 0; g < groups.length; g++) {
+      for (const val of groups[g]!) {
+        allValues.push(val);
+        groupLabels.push(g);
+      }
+    }
+
+    const N = allValues.length;
+    const ranks = this.rankData(allValues);
+
+    // Sum of ranks per group
+    const groupRankSums: number[] = new Array(groups.length).fill(0);
+    const groupSizes: number[] = groups.map(g => g.length);
+    for (let i = 0; i < N; i++) {
+      const gIdx = groupLabels[i]!;
+      groupRankSums[gIdx] = (groupRankSums[gIdx] ?? 0) + ranks[i]!;
+    }
+
+    // H statistic
+    let H = 0;
+    for (let g = 0; g < groups.length; g++) {
+      const meanRank = groupRankSums[g]! / groupSizes[g]!;
+      H += groupSizes[g]! * (meanRank - (N + 1) / 2) ** 2;
+    }
+    H = (12 / (N * (N + 1))) * groups.reduce((sum, group, g) => {
+      return sum + (groupRankSums[g]! ** 2) / groupSizes[g]!;
+    }, 0) - 3 * (N + 1);
+
+    // Tie correction
+    const tieGroups = this.countTieGroups(allValues);
+    const tieCorrection = tieGroups.reduce((sum, t) => sum + (t ** 3 - t), 0);
+    if (tieCorrection > 0) {
+      H = H / (1 - tieCorrection / (N ** 3 - N));
+    }
+
+    const df = groups.length - 1;
+    const pValue = 1 - this.chiSquareCDF(H, df);
+    const etaSquared = (H - df) / (N - 1);
+
+    // Dunn's post-hoc test
+    const postHoc: DunnResult[] = [];
+    const numComparisons = (groups.length * (groups.length - 1)) / 2;
+    const groupMeanRanks = groupRankSums.map((sum, g) => sum / groupSizes[g]!);
+
+    for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const diff = Math.abs(groupMeanRanks[i]! - groupMeanRanks[j]!);
+        const se = Math.sqrt(
+          ((N * (N + 1)) / 12 - tieCorrection / (12 * (N - 1))) *
+          (1 / groupSizes[i]! + 1 / groupSizes[j]!)
+        );
+        const z = diff / se;
+        const rawP = 2 * (1 - this.standardNormalCDF(Math.abs(z)));
+        const adjustedP = Math.min(1, rawP * numComparisons); // Bonferroni
+
+        postHoc.push({
+          group1: i,
+          group2: j,
+          z,
+          pValue: rawP,
+          adjustedPValue: adjustedP,
+          significant: adjustedP < 0.05
+        });
+      }
+    }
+
+    return { H, df, pValue, etaSquared: Math.max(0, etaSquared), postHoc };
+  }
+
+  // ============================================================================
+  // Chi-Square Tests
+  // ============================================================================
+
+  /**
+   * Chi-square goodness-of-fit test
+   */
+  chiSquareGoodnessOfFit(observed: number[], expected?: number[]): ChiSquareGoodnessOfFitResult {
+    if (observed.length < 2) {
+      throw new Error('Need at least 2 categories');
+    }
+
+    const n = observed.reduce((sum, o) => sum + o, 0);
+    const exp = expected || observed.map(() => n / observed.length);
+
+    if (observed.length !== exp.length) {
+      throw new Error('Observed and expected arrays must have equal length');
+    }
+
+    let chiSquare = 0;
+    const residuals: number[] = [];
+    for (let i = 0; i < observed.length; i++) {
+      const o = observed[i]!;
+      const e = exp[i]!;
+      if (e <= 0) throw new Error('Expected frequencies must be positive');
+      chiSquare += (o - e) ** 2 / e;
+      residuals.push((o - e) / Math.sqrt(e));
+    }
+
+    const df = observed.length - 1;
+    const pValue = 1 - this.chiSquareCDF(chiSquare, df);
+    const cramersV = Math.sqrt(chiSquare / (n * df));
+
+    return { chiSquare, df, pValue, cramersV, residuals };
+  }
+
+  /**
+   * Chi-square test of independence for a contingency table
+   */
+  chiSquareIndependence(table: number[][]): ChiSquareIndependenceResult {
+    const nRows = table.length;
+    if (nRows < 2) throw new Error('Need at least 2 rows');
+    const nCols = table[0]!.length;
+    if (nCols < 2) throw new Error('Need at least 2 columns');
+
+    // Row and column totals
+    const rowTotals = table.map(row => row.reduce((s, v) => s + v, 0));
+    const colTotals: number[] = new Array(nCols).fill(0);
+    for (let j = 0; j < nCols; j++) {
+      for (let i = 0; i < nRows; i++) {
+        colTotals[j] = (colTotals[j] ?? 0) + table[i]![j]!;
+      }
+    }
+    const n = rowTotals.reduce((s, v) => s + v, 0);
+
+    // Expected frequencies
+    const expectedFrequencies: number[][] = [];
+    for (let i = 0; i < nRows; i++) {
+      expectedFrequencies.push([]);
+      for (let j = 0; j < nCols; j++) {
+        expectedFrequencies[i]!.push((rowTotals[i]! * colTotals[j]!) / n);
+      }
+    }
+
+    // Chi-square statistic
+    let chiSquare = 0;
+    const residuals: number[][] = [];
+    for (let i = 0; i < nRows; i++) {
+      residuals.push([]);
+      for (let j = 0; j < nCols; j++) {
+        const o = table[i]![j]!;
+        const e = expectedFrequencies[i]![j]!;
+        chiSquare += (o - e) ** 2 / e;
+        residuals[i]!.push((o - e) / Math.sqrt(e));
+      }
+    }
+
+    const df = (nRows - 1) * (nCols - 1);
+    const pValue = 1 - this.chiSquareCDF(chiSquare, df);
+    const minDim = Math.min(nRows, nCols);
+    const cramersV = Math.sqrt(chiSquare / (n * (minDim - 1)));
+    const phi = nRows === 2 && nCols === 2
+      ? Math.sqrt(chiSquare / n)
+      : Math.sqrt(chiSquare / n);
+
+    return { chiSquare, df, pValue, cramersV, phi, expectedFrequencies, residuals };
+  }
+
+  /**
+   * Fisher's exact test for 2x2 contingency tables
+   */
+  fisherExactTest(table: [[number, number], [number, number]]): FisherExactResult {
+    const a = table[0][0];
+    const b = table[0][1];
+    const c = table[1][0];
+    const d = table[1][1];
+
+    const n = a + b + c + d;
+    const r1 = a + b;
+    const r2 = c + d;
+    const c1 = a + c;
+    const c2 = b + d;
+
+    // Calculate probability of observing this exact table
+    const pExact = (
+      this.factorialLn(r1) + this.factorialLn(r2) +
+      this.factorialLn(c1) + this.factorialLn(c2) -
+      this.factorialLn(n) - this.factorialLn(a) -
+      this.factorialLn(b) - this.factorialLn(c) -
+      this.factorialLn(d)
+    );
+    const pObserved = Math.exp(pExact);
+
+    // Two-tailed p-value: sum probabilities <= observed probability
+    let pValue = 0;
+    const minA = Math.max(0, c1 - r2);
+    const maxA = Math.min(r1, c1);
+    for (let ai = minA; ai <= maxA; ai++) {
+      const bi = r1 - ai;
+      const ci = c1 - ai;
+      const di = r2 - ci;
+      const pTable = Math.exp(
+        this.factorialLn(r1) + this.factorialLn(r2) +
+        this.factorialLn(c1) + this.factorialLn(c2) -
+        this.factorialLn(n) - this.factorialLn(ai) -
+        this.factorialLn(bi) - this.factorialLn(ci) -
+        this.factorialLn(di)
+      );
+      if (pTable <= pObserved + 1e-10) {
+        pValue += pTable;
+      }
+    }
+    pValue = Math.min(1, pValue);
+
+    // Odds ratio
+    const oddsRatio = (b === 0 || c === 0) ? Infinity : (a * d) / (b * c);
+
+    // 95% CI for odds ratio (Woolf logit method)
+    let ci95: [number, number];
+    if (a === 0 || b === 0 || c === 0 || d === 0) {
+      // Use Haldane correction
+      const ah = a + 0.5;
+      const bh = b + 0.5;
+      const ch = c + 0.5;
+      const dh = d + 0.5;
+      const logOR = Math.log((ah * dh) / (bh * ch));
+      const se = Math.sqrt(1 / ah + 1 / bh + 1 / ch + 1 / dh);
+      ci95 = [Math.exp(logOR - 1.96 * se), Math.exp(logOR + 1.96 * se)];
+    } else {
+      const logOR = Math.log(oddsRatio);
+      const se = Math.sqrt(1 / a + 1 / b + 1 / c + 1 / d);
+      ci95 = [Math.exp(logOR - 1.96 * se), Math.exp(logOR + 1.96 * se)];
+    }
+
+    return { pValue, oddsRatio, ci95 };
+  }
+
+  // ============================================================================
+  // Post-Hoc Tests
+  // ============================================================================
+
+  /**
+   * Tukey's Honestly Significant Difference (HSD) test
+   */
+  tukeyHSD(groups: number[][], alpha: number = 0.05): TukeyHSDResult {
+    if (groups.length < 2) {
+      throw new Error('Need at least 2 groups');
+    }
+
+    const anova = this.performANOVA(groups);
+    const MSW = anova.meanSquareWithin;
+    const dfW = anova.degreesOfFreedomWithin;
+    const k = groups.length;
+
+    const comparisons: TukeyComparison[] = [];
+
+    for (let i = 0; i < k; i++) {
+      for (let j = i + 1; j < k; j++) {
+        const ni = groups[i]!.length;
+        const nj = groups[j]!.length;
+        const meani = this.calculateMean(groups[i]!);
+        const meanj = this.calculateMean(groups[j]!);
+        const diff = meani - meanj;
+
+        // Standard error (harmonic mean of sample sizes for unequal n)
+        const se = Math.sqrt(MSW * (1 / ni + 1 / nj) / 2);
+        const q = Math.abs(diff) / se;
+
+        // Approximate p-value using studentized range distribution
+        const pValue = this.studentizedRangePValue(q, k, dfW);
+
+        // Confidence interval
+        const qCritical = this.studentizedRangeInverse(alpha, k, dfW);
+        const margin = qCritical * se;
+        const ci: [number, number] = [diff - margin, diff + margin];
+
+        comparisons.push({
+          group1: i,
+          group2: j,
+          diff,
+          q,
+          pValue,
+          ci,
+          significant: pValue < alpha
+        });
+      }
+    }
+
+    return { comparisons };
+  }
+
+  /**
+   * Bonferroni correction for multiple comparisons
+   */
+  bonferroniCorrection(pValues: number[], alpha: number = 0.05): CorrectionResult {
+    if (pValues.length === 0) {
+      throw new Error('pValues array must be non-empty');
+    }
+    const m = pValues.length;
+    const adjustedPValues = pValues.map(p => Math.min(1, p * m));
+    const significant = adjustedPValues.map(p => p < alpha);
+    return { adjustedPValues, significant };
+  }
+
+  /**
+   * Holm-Bonferroni step-down correction for multiple comparisons
+   */
+  holmBonferroni(pValues: number[], alpha: number = 0.05): CorrectionResult {
+    if (pValues.length === 0) {
+      throw new Error('pValues array must be non-empty');
+    }
+    const m = pValues.length;
+
+    // Sort by p-value, keeping track of original indices
+    const indexed = pValues.map((p, i) => ({ p, i }));
+    indexed.sort((a, b) => a.p - b.p);
+
+    const adjustedPValues = new Array<number>(m);
+    let maxSoFar = 0;
+
+    for (let rank = 0; rank < m; rank++) {
+      const adjusted = indexed[rank]!.p * (m - rank);
+      // Enforce monotonicity: adjusted p can't decrease
+      maxSoFar = Math.max(maxSoFar, adjusted);
+      adjustedPValues[indexed[rank]!.i] = Math.min(1, maxSoFar);
+    }
+
+    const significant = adjustedPValues.map(p => p < alpha);
+    return { adjustedPValues, significant };
+  }
+
+  // ============================================================================
+  // Effect Size Measures
+  // ============================================================================
+
+  /**
+   * Glass's delta: effect size using control group standard deviation
+   */
+  glassDelta(treatment: number[], control: number[]): number {
+    if (treatment.length === 0 || control.length === 0) {
+      throw new Error('Both arrays must be non-empty');
+    }
+    const meanT = this.calculateMean(treatment);
+    const meanC = this.calculateMean(control);
+    const sdC = Math.sqrt(this.calculateVariance(control, meanC));
+    if (sdC === 0) return 0;
+    return (meanT - meanC) / sdC;
+  }
+
+  /**
+   * Hedges' g: bias-corrected effect size for two independent groups
+   */
+  hedgesG(group1: number[], group2: number[]): number {
+    if (group1.length === 0 || group2.length === 0) {
+      throw new Error('Both arrays must be non-empty');
+    }
+    const n1 = group1.length;
+    const n2 = group2.length;
+    const mean1 = this.calculateMean(group1);
+    const mean2 = this.calculateMean(group2);
+    const var1 = this.calculateVariance(group1, mean1);
+    const var2 = this.calculateVariance(group2, mean2);
+
+    const pooledSD = Math.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2));
+    if (pooledSD === 0) return 0;
+
+    const cohensD = (mean1 - mean2) / pooledSD;
+
+    // Hedges' correction factor (exact)
+    const df = n1 + n2 - 2;
+    const correction = 1 - 3 / (4 * df - 1);
+    return cohensD * correction;
+  }
+
+  /**
+   * Cramer's V: effect size for chi-square test
+   */
+  cramersV(chiSquare: number, n: number, minDim: number): number {
+    if (n <= 0 || minDim <= 1) return 0;
+    return Math.sqrt(chiSquare / (n * (minDim - 1)));
+  }
+
+  /**
+   * Omega squared: less biased effect size for ANOVA
+   */
+  omegaSquared(anovaResult: AnovaResult): number {
+    const { fStatistic, degreesOfFreedomBetween: dfB, degreesOfFreedomWithin: dfW, meanSquareWithin: MSW } = anovaResult;
+    const SSB = anovaResult.meanSquareBetween * dfB;
+    const SST = SSB + MSW * dfW;
+    const omega2 = (SSB - dfB * MSW) / (SST + MSW);
+    return Math.max(0, omega2);
+  }
+
+  // ============================================================================
+  // Helper Methods for Non-Parametric Tests
+  // ============================================================================
+
+  /**
+   * Assign ranks to data with tied rank averaging
+   */
+  private rankData(data: number[]): number[] {
+    const indexed = data.map((value, index) => ({ value, index }));
+    indexed.sort((a, b) => a.value - b.value);
+
+    const ranks = new Array<number>(data.length);
+    let i = 0;
+    while (i < indexed.length) {
+      let j = i;
+      while (j < indexed.length && indexed[j]!.value === indexed[i]!.value) {
+        j++;
+      }
+      // Average rank for ties
+      const avgRank = (i + 1 + j) / 2; // ranks are 1-based
+      for (let k = i; k < j; k++) {
+        ranks[indexed[k]!.index] = avgRank;
+      }
+      i = j;
+    }
+    return ranks;
+  }
+
+  /**
+   * Count sizes of groups of tied values
+   */
+  private countTieGroups(data: number[]): number[] {
+    const sorted = [...data].sort((a, b) => a - b);
+    const groups: number[] = [];
+    let i = 0;
+    while (i < sorted.length) {
+      let count = 1;
+      while (i + count < sorted.length && sorted[i] === sorted[i + count]) {
+        count++;
+      }
+      if (count > 1) {
+        groups.push(count);
+      }
+      i += count;
+    }
+    return groups;
+  }
+
+  /**
+   * Log factorial using Stirling's approximation for large n
+   */
+  private factorialLn(n: number): number {
+    if (n < 0) return 0;
+    if (n <= 1) return 0;
+    // Use logGamma: ln(n!) = logGamma(n+1)
+    return this.logGamma(n + 1);
+  }
+
+  /**
+   * Chi-square CDF approximation
+   */
+  private chiSquareCDF(x: number, df: number): number {
+    if (x <= 0) return 0;
+    // Chi-square is gamma(df/2, 2), use regularized incomplete gamma
+    return this.regularizedGammaP(df / 2, x / 2);
+  }
+
+  /**
+   * Regularized lower incomplete gamma function P(a, x)
+   */
+  private regularizedGammaP(a: number, x: number): number {
+    if (x <= 0) return 0;
+    if (x < a + 1) {
+      // Series expansion
+      return this.gammaPSeries(a, x);
+    } else {
+      // Continued fraction
+      return 1 - this.gammaQContinuedFraction(a, x);
+    }
+  }
+
+  private gammaPSeries(a: number, x: number): number {
+    const maxIter = 200;
+    const eps = 1e-15;
+    let sum = 1 / a;
+    let term = 1 / a;
+    for (let n = 1; n < maxIter; n++) {
+      term *= x / (a + n);
+      sum += term;
+      if (Math.abs(term) < eps * Math.abs(sum)) break;
+    }
+    return sum * Math.exp(-x + a * Math.log(x) - this.logGamma(a));
+  }
+
+  private gammaQContinuedFraction(a: number, x: number): number {
+    const maxIter = 200;
+    const eps = 1e-15;
+    let b = x + 1 - a;
+    let c = 1 / 1e-30;
+    let d = 1 / b;
+    let h = d;
+    for (let i = 1; i <= maxIter; i++) {
+      const an = -i * (i - a);
+      b += 2;
+      d = an * d + b;
+      if (Math.abs(d) < 1e-30) d = 1e-30;
+      c = b + an / c;
+      if (Math.abs(c) < 1e-30) c = 1e-30;
+      d = 1 / d;
+      const del = d * c;
+      h *= del;
+      if (Math.abs(del - 1) < eps) break;
+    }
+    return h * Math.exp(-x + a * Math.log(x) - this.logGamma(a));
+  }
+
+  /**
+   * Approximate p-value for the studentized range distribution
+   * Uses an approximation based on the normal distribution
+   */
+  private studentizedRangePValue(q: number, k: number, df: number): number {
+    // Gleason (1999) approximation for studentized range p-value
+    // Transform to approximate standard normal
+    const v = df;
+    // Rough approximation: convert q to z-like statistic
+    // The studentized range for k groups with df degrees of freedom
+    // can be approximated via simulation tables, but for a pure-math
+    // implementation we use a conservative bound based on Bonferroni
+    const numComparisons = (k * (k - 1)) / 2;
+    // Each pairwise comparison is approximately a t-test
+    const tApprox = q / Math.sqrt(2);
+    const pPairwise = 2 * (1 - this.studentTCDF(tApprox, v));
+    // Sidak correction gives tighter bound than Bonferroni
+    const pValue = 1 - (1 - pPairwise) ** numComparisons;
+    return Math.max(0, Math.min(1, pValue));
+  }
+
+  /**
+   * Approximate critical value for studentized range distribution
+   */
+  private studentizedRangeInverse(alpha: number, k: number, df: number): number {
+    // Approximate using Bonferroni-corrected t critical value
+    const numComparisons = (k * (k - 1)) / 2;
+    const adjustedAlpha = alpha / numComparisons;
+    const tCrit = Math.abs(this.studentTInverse(adjustedAlpha / 2, df));
+    return tCrit * Math.sqrt(2);
   }
 
   // ============================================================================

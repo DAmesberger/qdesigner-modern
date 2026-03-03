@@ -9,6 +9,8 @@ export {
   qdesignerDarkTheme,
   javascriptLanguageConfig,
   editorOptions,
-  createCompletionItems
+  createCompletionItems,
+  registerFormulaProviders,
+  formulaFunctions,
 } from './MonacoConfig';
-export type { MonacoTheme } from './MonacoConfig';
+export type { MonacoTheme, FunctionDef, FunctionParam } from './MonacoConfig';

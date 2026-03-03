@@ -2,9 +2,8 @@ import type { Block, FlowControl, Page, Question, Questionnaire, Variable } from
 import { DocumentStore, type DocumentValidationResult } from './designer/DocumentStore';
 import {
   UiStore,
-  type DesignerLeftTab,
+  type DesignerPanel,
   type DesignerViewMode,
-  type DrawerSide,
 } from './designer/UiStore';
 import { DesignerPersistenceService } from './designer/PersistenceService';
 import { generateId } from '$lib/shared/utils/id';
@@ -50,15 +49,16 @@ class DesignerStore {
   projectId = $state<string | null>(null);
   organizationId = $state<string | null>(null);
 
-  // Preview/UI state
+  // UI state
   previewMode = $state(false);
   viewMode = $state<DesignerViewMode>('wysiwyg');
-  activeLeftTab = $state<DesignerLeftTab>('blocks');
+  activePanel = $state<DesignerPanel>(null);
   showCommandPalette = $state(false);
+  rightPanelPinned = $state(false);
+
+  // Mobile drawer state
   isLeftDrawerOpen = $state(false);
   isRightDrawerOpen = $state(false);
-  leftCollapsed = $state(false);
-  rightCollapsed = $state(false);
 
   constructor() {
     this.syncUiState(this.uiStore.getState());
@@ -170,8 +170,12 @@ class DesignerStore {
     this.syncUiState(this.uiStore.setViewMode(mode));
   }
 
-  setActiveLeftTab(tab: DesignerLeftTab) {
-    this.syncUiState(this.uiStore.setLeftTab(tab));
+  setPanel(panel: DesignerPanel) {
+    this.syncUiState(this.uiStore.setPanel(panel));
+  }
+
+  togglePanel(panel: Exclude<DesignerPanel, null>) {
+    this.syncUiState(this.uiStore.togglePanel(panel));
   }
 
   togglePreview(force?: boolean) {
@@ -184,14 +188,18 @@ class DesignerStore {
     this.syncUiState(this.uiStore.toggleCommandPalette(force));
   }
 
-  toggleDrawer(side: DrawerSide, force?: boolean) {
-    this.syncUiState(this.uiStore.toggleDrawer(side, force));
+  toggleDrawer(side: 'left' | 'right', force?: boolean) {
+    if (side === 'left') {
+      this.isLeftDrawerOpen = typeof force === 'boolean' ? force : !this.isLeftDrawerOpen;
+    } else {
+      this.isRightDrawerOpen = typeof force === 'boolean' ? force : !this.isRightDrawerOpen;
+    }
   }
 
-  setSidebarCollapsed(side: DrawerSide, collapsed: boolean) {
-    this.syncUiState(this.uiStore.setCollapsed(side, collapsed));
+  setRightPanelPinned(pinned: boolean) {
+    this.syncUiState(this.uiStore.setRightPanelPinned(pinned));
     if (typeof localStorage !== 'undefined') {
-      this.uiStore.persistCollapsed(localStorage);
+      this.uiStore.persistToStorage(localStorage);
     }
   }
 
@@ -667,13 +675,10 @@ class DesignerStore {
 
   private syncUiState(state: ReturnType<UiStore['getState']>) {
     this.viewMode = state.viewMode;
-    this.activeLeftTab = state.activeLeftTab;
+    this.activePanel = state.activePanel;
     this.previewMode = state.showPreview;
     this.showCommandPalette = state.showCommandPalette;
-    this.isLeftDrawerOpen = state.isLeftDrawerOpen;
-    this.isRightDrawerOpen = state.isRightDrawerOpen;
-    this.leftCollapsed = state.leftCollapsed;
-    this.rightCollapsed = state.rightCollapsed;
+    this.rightPanelPinned = state.rightPanelPinned;
   }
 }
 

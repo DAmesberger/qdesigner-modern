@@ -4,6 +4,10 @@ import {
   type AnalyticsMetric,
   type ChartSeriesContract,
 } from '$lib/services/sessionAnalytics';
+import type {
+  ScoreInterpreterConfig,
+  ScoreInterpretationRange,
+} from '$lib/runtime/feedback/ScoreInterpreter';
 
 export type StatisticalSourceMode =
   | 'current-session'
@@ -30,6 +34,12 @@ export interface StatisticalFeedbackConfig {
   showSummary: boolean;
   refreshMs: number;
   dataSource: StatisticalFeedbackDataSourceConfig;
+  /** Score interpretation scales (optional) */
+  scoreInterpretation?: ScoreInterpreterConfig[];
+  /** Whether to show a "Download Report" button at runtime */
+  enableReportDownload?: boolean;
+  /** Custom report title (falls back to config.title) */
+  reportTitle?: string;
 }
 
 export const defaultStatisticalFeedbackConfig: StatisticalFeedbackConfig = {
@@ -49,7 +59,12 @@ export const defaultStatisticalFeedbackConfig: StatisticalFeedbackConfig = {
     participantId: '',
     comparisonParticipantId: '',
   },
+  scoreInterpretation: [],
+  enableReportDownload: false,
+  reportTitle: '',
 };
+
+export type { ScoreInterpreterConfig, ScoreInterpretationRange };
 
 function parseNumeric(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -98,6 +113,11 @@ export function normalizeStatisticalFeedbackConfig(candidate: any): StatisticalF
           ? 'response'
           : 'variable',
     },
+    scoreInterpretation: Array.isArray(config.scoreInterpretation)
+      ? config.scoreInterpretation
+      : [],
+    enableReportDownload: config.enableReportDownload ?? false,
+    reportTitle: config.reportTitle ?? '',
   };
 }
 

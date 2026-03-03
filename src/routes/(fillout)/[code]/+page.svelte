@@ -12,6 +12,7 @@
   import { WebGLRenderer } from '$lib/renderer/WebGLRenderer';
   import type { Questionnaire } from '$lib/shared/types/questionnaire';
   import { QuestionnaireAccessService } from '$lib/fillout/services/QuestionnaireAccessService';
+  import { api } from '$lib/services/api';
 
   interface Props {
     data: PageData;
@@ -89,9 +90,15 @@
 
       session = newSession;
 
-      // TODO: Store consent if provided
+      // Store consent data in session metadata
       if (consentData) {
-        // await storeConsent(session.id, consentData);
+        try {
+          await api.sessions.update(session.id, {
+            metadata: { consent: { ...consentData, timestamp: new Date().toISOString() } },
+          } as any);
+        } catch (err) {
+          console.error('Failed to store consent data:', err);
+        }
       }
 
       currentScreen = 'runtime';

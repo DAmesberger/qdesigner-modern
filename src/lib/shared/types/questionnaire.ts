@@ -71,6 +71,7 @@ export interface Block {
   randomization?: RandomizationConfig;
   loop?: LoopConfig;
   conditions?: DisplayCondition[];
+  condition?: string; // Experimental condition this block belongs to
 }
 
 export interface FlowControl {
@@ -79,6 +80,29 @@ export interface FlowControl {
   condition: string; // Formula
   target?: string; // Page/Question ID for skip/branch
   iterations?: number; // For loops
+}
+
+export interface ExperimentalCondition {
+  name: string;
+  weight: number;
+}
+
+export interface ExperimentalDesignConfig {
+  conditions: ExperimentalCondition[];
+  assignmentStrategy: 'random' | 'sequential' | 'balanced';
+  counterbalancing: 'none' | 'latin-square' | 'balanced-latin-square' | 'full';
+  seed?: number;
+}
+
+export interface DataQualitySettings {
+  /** Minimum time in ms a respondent should spend on a page (default: 2000) */
+  minPageTimeMs?: number;
+  /** Minimum total time in ms for the entire questionnaire */
+  minTotalTimeMs?: number;
+  /** Fraction of identical responses in a block to flag as flatline (0-1, default: 0.8) */
+  flatlineThreshold?: number;
+  /** Number of attention check failures before flagging (default: 1) */
+  attentionFailureThreshold?: number;
 }
 
 export interface QuestionnaireSettings {
@@ -92,6 +116,8 @@ export interface QuestionnaireSettings {
   requireConsent?: boolean;
   requireAuthentication?: boolean;
   allowAnonymous?: boolean;
+  experimentalDesign?: ExperimentalDesignConfig;
+  dataQuality?: DataQualitySettings;
   metadata?: Record<string, DynamicValue>;
 }
 
@@ -244,6 +270,27 @@ export interface WebGLSettings {
   targetFPS?: number;
   antialias?: boolean;
   pixelRatio?: number;
+}
+
+// ============================================================================
+// Carry-Forward Configuration
+// ============================================================================
+
+export type CarryForwardMode =
+  | 'default-value'
+  | 'selected-options'
+  | 'unselected-options'
+  | 'text-content';
+
+export type CarryForwardTargetField = 'value' | 'options' | 'prompt';
+
+export interface CarryForwardConfig {
+  /** The question whose response is being carried forward */
+  sourceQuestionId: string;
+  /** How to interpret the source response */
+  mode: CarryForwardMode;
+  /** Where to apply the resolved data on the target question */
+  targetField: CarryForwardTargetField;
 }
 
 export interface Position {
@@ -402,6 +449,23 @@ export interface FileUploadDisplayConfig extends BaseDisplayConfig {
   maxSize?: number;
   maxFiles?: number;
   dragDrop?: boolean;
+}
+
+export interface MediaResponseDisplayConfig extends BaseDisplayConfig {
+  prompt: string;
+  instruction?: string;
+  recordingMode?: 'audio' | 'video-audio' | 'video-only';
+  maxDuration?: number;
+  maxFileSize?: number;
+  audioQuality?: 'low' | 'medium' | 'high';
+  videoQuality?: 'low' | 'medium' | 'high';
+  allowRerecord?: boolean;
+  countdown?: number;
+}
+
+export interface MediaResponseResponseConfig extends BaseResponseConfig {
+  storage: 'base64' | 'url' | 'reference';
+  saveMetadata?: boolean;
 }
 
 export interface DrawingDisplayConfig extends BaseDisplayConfig {
@@ -570,6 +634,16 @@ export interface BaseQuestion {
   // Metadata
   name?: string;
   tags?: string[];
+
+  // Carry-forward: use responses from earlier questions as defaults, options, or prompt text
+  carryForward?: CarryForwardConfig;
+
+  // Data quality
+  attentionCheck?: {
+    enabled: boolean;
+    correctAnswer: DynamicValue;
+    type: 'instructed' | 'trap';
+  };
 
   // Legacy/Common properties for type compatibility
   settings?: Record<string, DynamicValue>;
@@ -755,8 +829,8 @@ export interface FileUploadQuestion extends BaseQuestion {
 
 export interface MediaResponseQuestion extends BaseQuestion {
   type: typeof QuestionTypes.MEDIA_RESPONSE;
-  display: FileUploadDisplayConfig;
-  response: FileUploadResponseConfig;
+  display: MediaResponseDisplayConfig;
+  response: MediaResponseResponseConfig;
   validation?: FileValidation;
 }
 

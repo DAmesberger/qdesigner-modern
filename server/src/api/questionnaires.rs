@@ -1,5 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -389,6 +390,143 @@ pub async fn delete_questionnaire(
     Ok(Json(
         serde_json::json!({ "message": "Questionnaire deleted" }),
     ))
+}
+
+// ── Export ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct ExportQuery {
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct ExportRow {
+    session_id: Uuid,
+    participant_id: Option<String>,
+    session_status: String,
+    started_at: Option<chrono::DateTime<chrono::Utc>>,
+    completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    question_id: String,
+    value: serde_json::Value,
+    reaction_time_us: Option<i64>,
+    presented_at: Option<chrono::DateTime<chrono::Utc>>,
+    answered_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// GET /api/projects/:id/questionnaires/:qid/export
+pub async fn export_responses(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(path): Path<ProjectQuestionnairePath>,
+    Query(query): Query<ExportQuery>,
+) -> Result<Response, ApiError> {
+    verify_project_access(&state, user.user_id, path.id).await?;
+
+    // Verify questionnaire exists
+    let exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM questionnaire_definitions WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL)",
+    )
+    .bind(path.qid)
+    .bind(path.id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    if !exists {
+        return Err(ApiError::NotFound("Questionnaire not found".into()));
+    }
+
+    let rows = sqlx::query_as::<_, ExportRow>(
+        r#"
+        SELECT
+            s.id AS session_id,
+            s.participant_id,
+            s.status AS session_status,
+            s.started_at,
+            s.completed_at,
+            r.question_id,
+            r.value,
+            r.reaction_time_us,
+            r.presented_at,
+            r.answered_at
+        FROM sessions s
+        JOIN responses r ON r.session_id = s.id
+        WHERE s.questionnaire_id = $1
+        ORDER BY s.created_at ASC, r.created_at ASC
+        "#,
+    )
+    .bind(path.qid)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let format = query.format.as_deref().unwrap_or("json");
+
+    match format {
+        "csv" => {
+            let mut csv_out = String::from(
+                "session_id,participant_id,session_status,started_at,completed_at,question_id,value,reaction_time_us,presented_at,answered_at\n",
+            );
+
+            for row in &rows {
+                let value_str = match &row.value {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                // Escape CSV fields that may contain commas or quotes
+                let escaped_value = csv_escape(&value_str);
+
+                csv_out.push_str(&format!(
+                    "{},{},{},{},{},{},{},{},{},{}\n",
+                    row.session_id,
+                    row.participant_id.as_deref().unwrap_or(""),
+                    row.session_status,
+                    row.started_at
+                        .map(|t| t.to_rfc3339())
+                        .unwrap_or_default(),
+                    row.completed_at
+                        .map(|t| t.to_rfc3339())
+                        .unwrap_or_default(),
+                    row.question_id,
+                    escaped_value,
+                    row.reaction_time_us
+                        .map(|v| v.to_string())
+                        .unwrap_or_default(),
+                    row.presented_at
+                        .map(|t| t.to_rfc3339())
+                        .unwrap_or_default(),
+                    row.answered_at
+                        .map(|t| t.to_rfc3339())
+                        .unwrap_or_default(),
+                ));
+            }
+
+            Ok((
+                [
+                    (
+                        axum::http::header::CONTENT_TYPE,
+                        "text/csv; charset=utf-8",
+                    ),
+                    (
+                        axum::http::header::CONTENT_DISPOSITION,
+                        "attachment; filename=\"export.csv\"",
+                    ),
+                ],
+                csv_out,
+            )
+                .into_response())
+        }
+        _ => {
+            // JSON format
+            Ok(Json(serde_json::json!(rows)).into_response())
+        }
+    }
+}
+
+fn csv_escape(field: &str) -> String {
+    if field.contains(',') || field.contains('"') || field.contains('\n') {
+        format!("\"{}\"", field.replace('"', "\"\""))
+    } else {
+        field.to_string()
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

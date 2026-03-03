@@ -1,9 +1,9 @@
 <script lang="ts">
-  import theme from '$lib/theme';
   import { designerStore } from '$lib/stores/designer.svelte';
   import { moduleRegistry, getModulesByCategory } from '$lib/modules/registry';
   import type { ModuleMetadata, ModuleCategory } from '$lib/modules/types';
   import { onMount } from 'svelte';
+  import { Monitor, MessageSquare, CheckSquare, Star, Type, Grid3x3, ListOrdered, Calendar, Paperclip, Pen, Zap, Gamepad2, Plus, Search } from 'lucide-svelte';
 
   // Module categories with display configuration
   const categories = [
@@ -92,10 +92,10 @@
 </script>
 
 <div
-  class="{theme.components.container.card} p-4 flex flex-col h-full"
+  class="p-4 flex flex-col h-full"
   data-testid="designer-module-palette"
 >
-  <h3 class="{theme.typography.h4} mb-4 {theme.semantic.textPrimary}">Module Palette</h3>
+  <h3 class="text-sm font-semibold text-foreground mb-4">Module Palette</h3>
 
   <!-- Search -->
   <div class="mb-4">
@@ -103,34 +103,36 @@
       type="text"
       bind:value={searchQuery}
       placeholder="Search modules..."
-      class="w-full px-3 py-2 border {theme.semantic.borderDefault} rounded-lg {theme.typography
-        .body} 
-             focus:outline-none focus:ring-2 focus:ring-primary"
+      class="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
       data-testid="designer-module-search"
     />
   </div>
 
   <!-- Category Tabs -->
-  <div class="flex space-x-1 mb-4 p-1 bg-gray-100 rounded-lg">
+  <div class="flex space-x-1 mb-4 p-1 bg-muted rounded-lg">
     {#each categories as category}
       <button
         onclick={() => (selectedCategory = category.id as ModuleCategory)}
         class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all
                {selectedCategory === category.id
-          ? 'bg-white shadow-sm {theme.semantic.textPrimary}'
-          : 'text-gray-600 hover:text-gray-900'}"
+          ? 'bg-card shadow-sm text-foreground'
+          : 'text-muted-foreground hover:text-foreground'}"
         data-testid={`designer-module-category-${category.id}`}
       >
-        <span class="mr-1">{category.icon}</span>
+        <span class="mr-1 inline-flex">
+          {#if category.id === 'display'}<Monitor class="w-3.5 h-3.5" />
+          {:else}<MessageSquare class="w-3.5 h-3.5" />
+          {/if}
+        </span>
         {category.label}
       </button>
     {/each}
   </div>
 
   <!-- Module List -->
-  <div class="space-y-2 flex-1 overflow-y-auto" style="max-height: calc(100vh - 400px);">
+  <div class="space-y-2 flex-1 overflow-y-auto min-h-0">
     {#if filteredModules.length === 0}
-      <div class="text-center py-8 {theme.semantic.textSecondary}">
+      <div class="text-center py-8 text-muted-foreground">
         {#if searchQuery}
           <p>No modules found matching "{searchQuery}"</p>
         {:else}
@@ -147,51 +149,50 @@
           onkeydown={(e) => e.key === 'Enter' && handleModuleClick(module)}
           role="button"
           tabindex="0"
-          class="group p-3 {theme.semantic.bgSubtle} rounded-lg cursor-pointer {theme.semantic
-            .interactive.ghost} 
-                 transition-all transform hover:scale-[1.02] hover:shadow-md
+          class="group p-3 bg-muted/50 rounded-lg cursor-pointer hover:bg-accent hover:text-accent-foreground transition-all transform hover:scale-[1.02] hover:shadow-md
                  {draggedItem === module ? 'opacity-50 shadow-lg ring-2 ring-primary' : ''}"
           data-testid={`designer-module-${module.type}`}
         >
           <div class="flex items-start space-x-3">
-            <span class="text-2xl" role="img" aria-label={module.name}>
-              {module.icon}
+            <span class="text-muted-foreground">
+              {#if module.type === 'text-display' || module.type === 'instruction'}<Monitor class="w-6 h-6" />
+              {:else if module.type === 'multiple-choice'}<CheckSquare class="w-6 h-6" />
+              {:else if module.type === 'single-choice'}<CheckSquare class="w-6 h-6" />
+              {:else if module.type === 'scale' || module.type === 'rating'}<Star class="w-6 h-6" />
+              {:else if module.type === 'text-input' || module.type === 'number-input'}<Type class="w-6 h-6" />
+              {:else if module.type === 'matrix'}<Grid3x3 class="w-6 h-6" />
+              {:else if module.type === 'ranking'}<ListOrdered class="w-6 h-6" />
+              {:else if module.type === 'date-time'}<Calendar class="w-6 h-6" />
+              {:else if module.type === 'file-upload'}<Paperclip class="w-6 h-6" />
+              {:else if module.type === 'drawing'}<Pen class="w-6 h-6" />
+              {:else if module.type === 'reaction-time'}<Zap class="w-6 h-6" />
+              {:else if module.type === 'webgl'}<Gamepad2 class="w-6 h-6" />
+              {:else}<MessageSquare class="w-6 h-6" />
+              {/if}
             </span>
             <div class="flex-1">
-              <h4 class="{theme.typography.label} {theme.semantic.textPrimary}">{module.name}</h4>
-              <p class={theme.typography.caption}>{module.description}</p>
+              <h4 class="text-sm font-medium text-foreground">{module.name}</h4>
+              <p class="text-xs text-muted-foreground">{module.description}</p>
               <div class="flex items-center mt-1 space-x-2">
                 {#if module.capabilities.supportsVariables}
-                  <span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full"
+                  <span class="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full"
                     >Variables</span
                   >
                 {/if}
                 {#if module.capabilities.supportsConditionals}
-                  <span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full"
+                  <span class="text-xs px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full"
                     >Conditionals</span
                   >
                 {/if}
                 {#if module.capabilities.supportsTiming}
-                  <span class="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full"
+                  <span class="text-xs px-2 py-0.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-full"
                     >Timing</span
                   >
                 {/if}
               </div>
             </div>
             <div class="opacity-0 group-hover:opacity-100 transition-opacity">
-              <svg
-                class="w-5 h-5 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
+              <Plus class="w-5 h-5 text-muted-foreground/60" />
             </div>
           </div>
         </div>
@@ -199,9 +200,9 @@
     {/if}
   </div>
 
-  <div class="mt-6 pt-4 border-t {theme.semantic.borderDefault}">
-    <h4 class="{theme.typography.label} {theme.semantic.textSecondary} mb-2">Tips</h4>
-    <ul class="{theme.typography.caption} {theme.spacing.stack.xs}">
+  <div class="mt-6 pt-4 border-t border-border">
+    <h4 class="text-sm font-medium text-muted-foreground mb-2">Tips</h4>
+    <ul class="text-xs text-muted-foreground space-y-1">
       <li>• Click or drag modules to add</li>
       <li>• Use tabs to switch categories</li>
       <li>• Display modules include instructions and analytics</li>

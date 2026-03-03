@@ -1,6 +1,7 @@
 import type { FrameSample, FrameStats, RGBAColor } from '$lib/shared';
 import { WebGLRenderer } from '$lib/renderer';
 import type { Renderable } from '$lib/renderer';
+import type { ResourceManager } from '../resources/ResourceManager';
 import type {
   ReactionEngineHooks,
   ReactionResponseCapture,
@@ -65,6 +66,68 @@ export class ReactionEngine {
 
   public setEventTarget(target: Document | HTMLElement): void {
     this.eventTarget = target;
+  }
+
+  /**
+   * Seed internal media caches from a ResourceManager that has already
+   * preloaded assets. This eliminates on-demand network fetches during
+   * trials, which would otherwise add 10-500ms latency and destroy
+   * frame-exact stimulus onset timing.
+   */
+  public seedFromResourceManager(rm: ResourceManager): void {
+    for (const [key, img] of rm.getImageCache()) {
+      if (!this.imageCache.has(key)) {
+        this.imageCache.set(key, img);
+      }
+    }
+
+    for (const [key, video] of rm.getVideoCache()) {
+      if (!this.videoCache.has(key)) {
+        this.videoCache.set(key, video);
+      }
+    }
+
+    // ResourceManager stores AudioBuffer objects, but ReactionEngine uses
+    // HTMLAudioElement. Create HTMLAudioElements from the same URLs so the
+    // browser can serve them from the HTTP cache without a network round-trip.
+    // We cannot convert an AudioBuffer back to an HTMLAudioElement directly,
+    // but the underlying URL was already fetched and should be in the browser
+    // disk/memory cache after ResourceManager.preloadAll().
+  }
+
+  /**
+   * Pre-warm the cache for a batch of stimuli that will be used in an
+   * upcoming block of trials. Call this before the first trial in a block
+   * to ensure all media is loaded and ready.
+   */
+  public async warmUpStimuli(stimuli: ReactionStimulusConfig[]): Promise<void> {
+    const promises: Promise<void>[] = [];
+
+    for (const stimulus of stimuli) {
+      if (stimulus.kind === 'image' && !this.imageCache.has(stimulus.src)) {
+        promises.push(
+          this.loadImage(stimulus.src).then((img) => {
+            if (img) this.imageCache.set(stimulus.src, img);
+          })
+        );
+      }
+      if (stimulus.kind === 'video' && !this.videoCache.has(stimulus.src)) {
+        promises.push(
+          this.loadVideo(stimulus.src).then((video) => {
+            if (video) this.videoCache.set(stimulus.src, video);
+          })
+        );
+      }
+      if (stimulus.kind === 'audio' && !this.audioCache.has(stimulus.src)) {
+        promises.push(
+          this.loadAudio(stimulus.src).then((audio) => {
+            if (audio) this.audioCache.set(stimulus.src, audio);
+          })
+        );
+      }
+    }
+
+    await Promise.all(promises);
   }
 
   public schedulePhase(phase: ScheduledPhase): void {

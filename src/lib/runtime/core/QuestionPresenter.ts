@@ -5,6 +5,7 @@ import type { WebGLRenderer } from '$lib/renderer';
 import type { ResourceManager } from '../resources/ResourceManager';
 import type { ModuleCategory } from '$lib/modules/types';
 import { moduleRegistry } from '$lib/modules/registry';
+import { interpolateVariables } from '$lib/services/variableInterpolation';
 import { TextRenderer } from '../renderers/TextRenderer';
 import { ImageRenderer } from '../renderers/ImageRenderer';
 import { VideoRenderer } from '../renderers/VideoRenderer';
@@ -161,10 +162,11 @@ export class QuestionPresenter {
       const options = q.responseType.options || [];
       options.forEach((option: DynamicValue, index: number) => {
         const yPos = 0.4 + index * 0.08;
+        const processedLabel = this.processVariables(option.label || '', variableEngine);
         renderers.push(
           new TextRenderer({
             id: `${question.id}_option_${index}`,
-            text: `${option.value}: ${option.label}`,
+            text: `${option.value}: ${processedLabel}`,
             fontSize: 20,
             color: 'rgba(230, 230, 230, 1)',
             position: { x: 0.5, y: yPos },
@@ -176,7 +178,9 @@ export class QuestionPresenter {
     // Add scale visualization for scale questions
     if (q.responseType.type === 'scale') {
       const scale = q.responseType;
-      const scaleText = `${scale.min} ${scale.minLabel || ''} ──────── ${scale.maxLabel || ''} ${scale.max}`;
+      const minLabel = this.processVariables(scale.minLabel || '', variableEngine);
+      const maxLabel = this.processVariables(scale.maxLabel || '', variableEngine);
+      const scaleText = `${scale.min} ${minLabel} ──────── ${maxLabel} ${scale.max}`;
       renderers.push(
         new TextRenderer({
           id: `${question.id}_scale`,
@@ -292,13 +296,26 @@ export class QuestionPresenter {
   }
 
   /**
-   * Process variables in text
+   * Process variables in text using the standard {{var}} interpolation service,
+   * with fallback support for legacy {var} single-brace syntax.
    */
   private processVariables(text: string, variableEngine: VariableEngine): string {
-    return text.replace(/\{([^}]+)\}/g, (match, varName) => {
-      const value = variableEngine.getVariable(varName);
-      return value !== null ? String(value) : match;
+    const variables = variableEngine.getAllVariables();
+
+    // First pass: standard {{var}} interpolation via the shared service
+    let result = interpolateVariables(text, variables);
+
+    // Second pass: legacy {var} single-brace syntax for backwards compatibility
+    result = result.replace(/\{([^{}]+)\}/g, (match, varName) => {
+      const trimmed = varName.trim();
+      if (trimmed in variables) {
+        const value = variables[trimmed];
+        return value !== null && value !== undefined ? String(value) : '';
+      }
+      return match;
     });
+
+    return result;
   }
 
   /**

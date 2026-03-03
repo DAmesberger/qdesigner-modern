@@ -239,7 +239,7 @@
         >
           {#each currentQuestions as question (question.id)}
             <div class="question-wrapper">
-              <QuestionVisualRenderer {question} {theme} mode="preview" />
+              <QuestionVisualRenderer {question} {theme} mode="preview" variables={variableValues} />
 
               {#if showDebugInfo && responses[question.id]}
                 <div class="debug-info">

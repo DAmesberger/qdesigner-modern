@@ -7,7 +7,13 @@
     validateStatisticalFeedbackConfig,
     type StatisticalFeedbackConfig,
     type StatisticalSourceMode,
+    type ScoreInterpreterConfig,
+    type ScoreInterpretationRange,
   } from './engine';
+  import {
+    DEFAULT_RANGE_COLORS,
+    validateScoreInterpreterConfig,
+  } from '$lib/runtime/feedback/ScoreInterpreter';
 
   interface Props {
     analytics?: any;
@@ -93,6 +99,110 @@
   function applyDefaults(): void {
     updateConfig(defaultStatisticalFeedbackConfig);
   }
+
+  // --- Score Interpretation Management ---
+
+  const defaultColors = [
+    DEFAULT_RANGE_COLORS.veryLow,
+    DEFAULT_RANGE_COLORS.low,
+    DEFAULT_RANGE_COLORS.moderate,
+    DEFAULT_RANGE_COLORS.high,
+    DEFAULT_RANGE_COLORS.veryHigh,
+  ];
+
+  function addScoreScale(): void {
+    const existingScales = config.scoreInterpretation || [];
+    const newScale: ScoreInterpreterConfig = {
+      variableId: '',
+      scaleName: `Scale ${existingScales.length + 1}`,
+      ranges: [
+        { min: 0, max: 10, label: 'Low', description: 'Score falls in the low range', color: DEFAULT_RANGE_COLORS.low },
+        { min: 11, max: 20, label: 'Moderate', description: 'Score falls in the moderate range', color: DEFAULT_RANGE_COLORS.moderate },
+        { min: 21, max: 30, label: 'High', description: 'Score falls in the high range', color: DEFAULT_RANGE_COLORS.high },
+      ],
+    };
+    updateConfig({ scoreInterpretation: [...existingScales, newScale] });
+  }
+
+  function removeScoreScale(index: number): void {
+    const scales = [...(config.scoreInterpretation || [])];
+    scales.splice(index, 1);
+    updateConfig({ scoreInterpretation: scales });
+  }
+
+  function updateScoreScale(index: number, patch: Partial<ScoreInterpreterConfig>): void {
+    const scales = [...(config.scoreInterpretation || [])];
+    const existing = scales[index];
+    if (!existing) return;
+    const updated: ScoreInterpreterConfig = {
+      variableId: patch.variableId ?? existing.variableId,
+      scaleName: patch.scaleName ?? existing.scaleName,
+      ranges: patch.ranges ?? existing.ranges,
+    };
+    scales[index] = updated;
+    updateConfig({ scoreInterpretation: scales });
+  }
+
+  function addRangeToScale(scaleIndex: number): void {
+    const scales = [...(config.scoreInterpretation || [])];
+    const scale = scales[scaleIndex];
+    if (!scale) return;
+    const lastRange = scale.ranges[scale.ranges.length - 1];
+    const nextMin = lastRange ? lastRange.max + 1 : 0;
+    const colorIdx = scale.ranges.length % defaultColors.length;
+    const color = defaultColors[colorIdx] ?? DEFAULT_RANGE_COLORS.moderate;
+    const updatedScale: ScoreInterpreterConfig = {
+      ...scale,
+      ranges: [
+        ...scale.ranges,
+        {
+          min: nextMin,
+          max: nextMin + 10,
+          label: `Level ${scale.ranges.length + 1}`,
+          description: '',
+          color,
+        },
+      ],
+    };
+    scales[scaleIndex] = updatedScale;
+    updateConfig({ scoreInterpretation: scales });
+  }
+
+  function removeRangeFromScale(scaleIndex: number, rangeIndex: number): void {
+    const scales = [...(config.scoreInterpretation || [])];
+    const scale = scales[scaleIndex];
+    if (!scale) return;
+    const updatedScale: ScoreInterpreterConfig = {
+      ...scale,
+      ranges: scale.ranges.filter((_: ScoreInterpretationRange, i: number) => i !== rangeIndex),
+    };
+    scales[scaleIndex] = updatedScale;
+    updateConfig({ scoreInterpretation: scales });
+  }
+
+  function updateRangeInScale(
+    scaleIndex: number,
+    rangeIndex: number,
+    patch: Partial<ScoreInterpretationRange>
+  ): void {
+    const scales = [...(config.scoreInterpretation || [])];
+    const scale = scales[scaleIndex];
+    if (!scale) return;
+    const updatedScale: ScoreInterpreterConfig = {
+      ...scale,
+      ranges: scale.ranges.map((r: ScoreInterpretationRange, i: number) =>
+        i === rangeIndex ? { ...r, ...patch } : r
+      ),
+    };
+    scales[scaleIndex] = updatedScale;
+    updateConfig({ scoreInterpretation: scales });
+  }
+
+  const scaleValidationErrors = $derived.by((): string[][] => {
+    return (config.scoreInterpretation || []).map((scale) =>
+      validateScoreInterpreterConfig(scale)
+    );
+  });
 </script>
 
 {#if item}
@@ -325,6 +435,130 @@
       </label>
     </div>
 
+    <!-- Score Interpretation Configuration -->
+    <div class="section-header" data-testid="score-interpretation-section">
+      <strong>Score Interpretation</strong>
+      <button type="button" class="link" onclick={addScoreScale}>+ Add Scale</button>
+    </div>
+
+    {#each config.scoreInterpretation || [] as scale, scaleIdx}
+      <div class="score-scale-card" data-testid={`score-scale-${scaleIdx}`}>
+        <div class="scale-header">
+          <span class="scale-title">Scale: {scale.scaleName || 'Unnamed'}</span>
+          <button type="button" class="link danger" onclick={() => removeScoreScale(scaleIdx)}>Remove</button>
+        </div>
+
+        <div class="grid-two">
+          <div class="row">
+            <label for={`scale-name-${scaleIdx}`}>Scale Name</label>
+            <input
+              id={`scale-name-${scaleIdx}`}
+              class="input"
+              type="text"
+              value={scale.scaleName}
+              oninput={(event) =>
+                updateScoreScale(scaleIdx, { scaleName: (event.currentTarget as HTMLInputElement).value })}
+            />
+          </div>
+          <div class="row">
+            <label for={`scale-variable-${scaleIdx}`}>Variable</label>
+            <select
+              id={`scale-variable-${scaleIdx}`}
+              class="input"
+              value={scale.variableId}
+              onchange={(event) =>
+                updateScoreScale(scaleIdx, { variableId: (event.currentTarget as HTMLSelectElement).value })}
+            >
+              <option value="">Select variable...</option>
+              {#each designerStore.questionnaire.variables as variable}
+                <option value={variable.name}>{variable.name}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+
+        <div class="ranges-header">
+          <span>Ranges</span>
+          <button type="button" class="link" onclick={() => addRangeToScale(scaleIdx)}>+ Add Range</button>
+        </div>
+
+        {#each scale.ranges as range, rangeIdx}
+          <div class="range-row" data-testid={`range-${scaleIdx}-${rangeIdx}`}>
+            <input
+              class="input range-input"
+              type="number"
+              value={range.min}
+              title="Min"
+              oninput={(event) =>
+                updateRangeInScale(scaleIdx, rangeIdx, { min: Number((event.currentTarget as HTMLInputElement).value) })}
+            />
+            <span class="range-sep">-</span>
+            <input
+              class="input range-input"
+              type="number"
+              value={range.max}
+              title="Max"
+              oninput={(event) =>
+                updateRangeInScale(scaleIdx, rangeIdx, { max: Number((event.currentTarget as HTMLInputElement).value) })}
+            />
+            <input
+              class="input range-label-input"
+              type="text"
+              value={range.label}
+              placeholder="Label"
+              oninput={(event) =>
+                updateRangeInScale(scaleIdx, rangeIdx, { label: (event.currentTarget as HTMLInputElement).value })}
+            />
+            <input
+              class="color-picker"
+              type="color"
+              value={range.color}
+              title="Color"
+              oninput={(event) =>
+                updateRangeInScale(scaleIdx, rangeIdx, { color: (event.currentTarget as HTMLInputElement).value })}
+            />
+            <button type="button" class="link danger range-remove" onclick={() => removeRangeFromScale(scaleIdx, rangeIdx)}>x</button>
+          </div>
+        {/each}
+
+        {#if scaleValidationErrors[scaleIdx]?.length}
+          <div class="validation scale-validation">
+            {#each scaleValidationErrors[scaleIdx] as error}
+              <p>{error}</p>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/each}
+
+    <!-- Report Download Toggle -->
+    <div class="toggles">
+      <label class="toggle">
+        <input
+          type="checkbox"
+          checked={config.enableReportDownload}
+          onchange={(event) =>
+            updateConfig({ enableReportDownload: (event.currentTarget as HTMLInputElement).checked })}
+        />
+        Enable "Download Report" Button
+      </label>
+    </div>
+
+    {#if config.enableReportDownload}
+      <div class="row">
+        <label for="report-title">Report Title (optional)</label>
+        <input
+          id="report-title"
+          class="input"
+          type="text"
+          value={config.reportTitle || ''}
+          placeholder="Defaults to feedback title"
+          oninput={(event) =>
+            updateConfig({ reportTitle: (event.currentTarget as HTMLInputElement).value })}
+        />
+      </div>
+    {/if}
+
     {#if validationErrors.length > 0}
       <div class="validation" data-testid="stats-feedback-validation">
         {#each validationErrors as message}
@@ -431,5 +665,89 @@
     cursor: pointer;
     font-size: 0.75rem;
     padding: 0;
+  }
+
+  .link.danger {
+    color: #dc2626;
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.82rem;
+    color: #0f172a;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .score-scale-card {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.6rem;
+    border: 1px solid #dbe3ed;
+    border-radius: 0.5rem;
+    background: #f8fafc;
+  }
+
+  .scale-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .scale-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #334155;
+  }
+
+  .ranges-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: #475569;
+    font-weight: 600;
+  }
+
+  .range-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .range-input {
+    width: 60px;
+    text-align: center;
+  }
+
+  .range-sep {
+    font-size: 0.75rem;
+    color: #94a3b8;
+  }
+
+  .range-label-input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .color-picker {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+  }
+
+  .range-remove {
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .scale-validation {
+    font-size: 0.72rem;
   }
 </style>

@@ -58,6 +58,7 @@ export interface SessionMetadata {
   custom?: Record<string, unknown>;
   computedVariables?: Record<string, unknown>;
   aggregations?: Record<string, unknown>;
+  qualityReport?: Record<string, unknown>;
 }
 
 export interface ResponseMetadata {

@@ -342,3 +342,262 @@ pub async fn delete_project(
 
     Ok(Json(serde_json::json!({ "message": "Project deleted" })))
 }
+
+// ── Project Members ──────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ProjectMember {
+    pub user_id: Uuid,
+    pub email: String,
+    pub full_name: Option<String>,
+    pub role: String,
+    pub joined_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct AddProjectMemberRequest {
+    #[validate(email)]
+    pub email: String,
+    pub role: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProjectMemberRequest {
+    pub role: String,
+}
+
+/// GET /api/projects/:id/members
+pub async fn list_project_members(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(project_id): Path<Uuid>,
+) -> Result<Json<Vec<ProjectMember>>, ApiError> {
+    // Verify the user has access to this project (org membership or project membership)
+    let org_id =
+        sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1 AND deleted_at IS NULL")
+            .bind(project_id)
+            .fetch_optional(&state.pool)
+            .await?
+            .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
+
+    let is_org_member = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active')",
+    )
+    .bind(org_id)
+    .bind(user.user_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    if !is_org_member {
+        return Err(ApiError::Forbidden("Not a member of this organization".into()));
+    }
+
+    let members = sqlx::query_as::<_, ProjectMember>(
+        r#"
+        SELECT u.id AS user_id, u.email, u.full_name, pm.role, pm.joined_at
+        FROM project_members pm
+        JOIN users u ON u.id = pm.user_id
+        WHERE pm.project_id = $1
+        ORDER BY pm.joined_at
+        "#,
+    )
+    .bind(project_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(members))
+}
+
+/// POST /api/projects/:id/members
+pub async fn add_project_member(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(project_id): Path<Uuid>,
+    Json(body): Json<AddProjectMemberRequest>,
+) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ApiError> {
+    body.validate()
+        .map_err(|e| ApiError::Validation(e.to_string()))?;
+
+    // Validate role value
+    if !matches!(body.role.as_str(), "owner" | "admin" | "editor" | "viewer") {
+        return Err(ApiError::BadRequest(
+            "Invalid role. Must be one of: owner, admin, editor, viewer".into(),
+        ));
+    }
+
+    // Require project admin+ or org admin+
+    let has_project_admin = state
+        .rbac
+        .has_project_role(
+            user.user_id,
+            project_id,
+            &crate::rbac::models::ProjectRole::Admin,
+        )
+        .await?;
+
+    if !has_project_admin {
+        let org_id =
+            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&state.pool)
+                .await?
+                .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
+
+        if !state
+            .rbac
+            .has_org_role(user.user_id, org_id, &OrgRole::Admin)
+            .await?
+        {
+            return Err(ApiError::Forbidden("Requires admin role".into()));
+        }
+    }
+
+    let target_user = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL",
+    )
+    .bind(&body.email)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO project_members (project_id, user_id, role)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (project_id, user_id) DO UPDATE SET role = $3
+        "#,
+    )
+    .bind(project_id)
+    .bind(target_user)
+    .bind(&body.role)
+    .execute(&state.pool)
+    .await?;
+
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({ "message": "Member added" })),
+    ))
+}
+
+/// PATCH /api/projects/:id/members/:uid
+pub async fn update_project_member(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path((project_id, target_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<UpdateProjectMemberRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // Validate role value
+    if !matches!(body.role.as_str(), "owner" | "admin" | "editor" | "viewer") {
+        return Err(ApiError::BadRequest(
+            "Invalid role. Must be one of: owner, admin, editor, viewer".into(),
+        ));
+    }
+
+    // Require project admin+ or org admin+
+    let has_project_admin = state
+        .rbac
+        .has_project_role(
+            user.user_id,
+            project_id,
+            &crate::rbac::models::ProjectRole::Admin,
+        )
+        .await?;
+
+    if !has_project_admin {
+        let org_id =
+            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&state.pool)
+                .await?
+                .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
+
+        if !state
+            .rbac
+            .has_org_role(user.user_id, org_id, &OrgRole::Admin)
+            .await?
+        {
+            return Err(ApiError::Forbidden("Requires admin role".into()));
+        }
+    }
+
+    let rows_affected = sqlx::query(
+        "UPDATE project_members SET role = $1 WHERE project_id = $2 AND user_id = $3",
+    )
+    .bind(&body.role)
+    .bind(project_id)
+    .bind(target_id)
+    .execute(&state.pool)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(ApiError::NotFound("Project member not found".into()));
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Member updated" })))
+}
+
+/// DELETE /api/projects/:id/members/:uid
+pub async fn remove_project_member(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path((project_id, target_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // Require project admin+ or org admin+
+    let has_project_admin = state
+        .rbac
+        .has_project_role(
+            user.user_id,
+            project_id,
+            &crate::rbac::models::ProjectRole::Admin,
+        )
+        .await?;
+
+    if !has_project_admin {
+        let org_id =
+            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&state.pool)
+                .await?
+                .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
+
+        if !state
+            .rbac
+            .has_org_role(user.user_id, org_id, &OrgRole::Admin)
+            .await?
+        {
+            return Err(ApiError::Forbidden("Requires admin role".into()));
+        }
+    }
+
+    // Prevent removing the last owner
+    let target_role = sqlx::query_scalar::<_, String>(
+        "SELECT role FROM project_members WHERE project_id = $1 AND user_id = $2",
+    )
+    .bind(project_id)
+    .bind(target_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Project member not found".into()))?;
+
+    if target_role == "owner" {
+        let owner_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM project_members WHERE project_id = $1 AND role = 'owner'",
+        )
+        .bind(project_id)
+        .fetch_one(&state.pool)
+        .await?;
+
+        if owner_count <= 1 {
+            return Err(ApiError::BadRequest("Cannot remove the last project owner".into()));
+        }
+    }
+
+    sqlx::query("DELETE FROM project_members WHERE project_id = $1 AND user_id = $2")
+        .bind(project_id)
+        .bind(target_id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "message": "Member removed" })))
+}

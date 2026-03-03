@@ -106,6 +106,7 @@ export class QuestionFactory {
       'ranking': 'ranking',
       'date-time': 'datetime',
       'file-upload': 'file',
+      'media-response': 'file',
       'drawing': 'drawing',
       'reaction-time': 'keypress',
       'webgl': 'custom'

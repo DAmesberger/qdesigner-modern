@@ -7,6 +7,7 @@
     MoreVertical,
     Play,
     Edit,
+    BarChart3,
   } from 'lucide-svelte';
   import { Modal } from '$lib/components/ui';
   import { appPaths } from '$lib/routing/paths';
@@ -93,10 +94,18 @@
               </p>
             {/if}
           </div>
-          <div class="mt-4 flex md:mt-0 md:ml-4">
+          <div class="mt-4 flex items-center gap-3 md:mt-0 md:ml-4">
+            <a
+              href={appPaths.projectAnalytics(data.project.id)}
+              class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              data-testid="analytics-link"
+            >
+              <BarChart3 class="-ml-1 mr-2 h-5 w-5" />
+              Analytics
+            </a>
             <button
               onclick={() => (showCreateModal = true)}
-              class="ml-3 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               data-testid="create-questionnaire-button"
             >
               <Plus class="-ml-1 mr-2 h-5 w-5" />

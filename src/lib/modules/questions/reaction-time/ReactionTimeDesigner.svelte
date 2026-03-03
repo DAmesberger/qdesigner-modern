@@ -1,8 +1,22 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
   import type { ReactionTrialConfig } from '$lib/runtime/reaction';
+  import type { MediaAsset } from '$lib/shared/types/media';
+  import MediaManagerModal from '$lib/components/designer/MediaManagerModal.svelte';
+  import { mediaService } from '$lib/services/mediaService';
 
-  type ReactionTaskType = 'standard' | 'n-back' | 'custom';
+  type ReactionTaskType = 'standard' | 'n-back' | 'stroop' | 'flanker' | 'iat' | 'dot-probe' | 'custom';
+  type StimulusType = 'text' | 'shape' | 'image' | 'video' | 'audio';
+
+  interface MediaStimulusRef {
+    mediaId: string;
+    mediaUrl?: string;
+    filename?: string;
+    mimeType?: string;
+    width?: number;
+    height?: number;
+    durationSeconds?: number;
+  }
 
   interface ReactionTimeConfig {
     task: {
@@ -17,11 +31,57 @@
         fixationMs: number;
         responseTimeoutMs: number;
       };
+      stroop: {
+        trialCount: number;
+        colors: string[];
+        congruentRatio: number;
+        stimulusDuration: number;
+        isi: number;
+        fixationMs: number;
+        responseTimeoutMs: number;
+      };
+      flanker: {
+        trialCount: number;
+        stimulusSet: [string, string];
+        congruentRatio: number;
+        includeNeutral: boolean;
+        neutralRatio: number;
+        flankerCount: number;
+        stimulusDuration: number;
+        isi: number;
+        fixationMs: number;
+        responseTimeoutMs: number;
+      };
+      iat: {
+        category1Name: string;
+        category1Items: string[];
+        category2Name: string;
+        category2Items: string[];
+        attribute1Name: string;
+        attribute1Items: string[];
+        attribute2Name: string;
+        attribute2Items: string[];
+        trialsPerBlock: number;
+        practiceTrialsPerBlock: number;
+        fixationMs: number;
+        responseTimeoutMs: number;
+      };
+      dotProbe: {
+        trialCount: number;
+        cueDuration: number;
+        isi: number;
+        congruentRatio: number;
+        probeSymbol: string;
+        stimulusPairs: Array<{ salient: string; neutral: string }>;
+        fixationMs: number;
+        responseTimeoutMs: number;
+      };
       customTrials: Array<Partial<ReactionTrialConfig>>;
     };
     stimulus: {
-      type: 'text' | 'shape' | 'image';
+      type: StimulusType;
       content: string;
+      mediaRef?: MediaStimulusRef;
       fixation?: {
         type: 'cross' | 'dot';
         duration: number;
@@ -42,9 +102,11 @@
 
   interface Props {
     question: Question & { config: ReactionTimeConfig };
+    organizationId?: string;
+    userId?: string;
   }
 
-  let { question = $bindable() }: Props = $props();
+  let { question = $bindable(), organizationId = '', userId = '' }: Props = $props();
 
   // Key presets
   const keyPresets = [
@@ -66,38 +128,169 @@
 
   let newKey = $state('');
   let newNBackStimulus = $state('');
+  let newStroopColor = $state('');
+  let newIatItem = $state('');
+  let iatItemTarget = $state<'cat1' | 'cat2' | 'attr1' | 'attr2'>('cat1');
+  let newDotProbeSalient = $state('');
+  let newDotProbeNeutral = $state('');
   let selectedKeyPreset = $state('');
   let selectedTimingPreset = $state('');
   let customTrialsDraft = $state('[]');
   let customTrialsError = $state<string | null>(null);
+
+  // Media picker state
+  let showMediaPicker = $state(false);
+  let mediaThumbnailUrl = $state<string | null>(null);
+
+  // Whether the current stimulus type uses media files
+  let stimulusUsesMedia = $derived(
+    question.config.stimulus?.type === 'image' ||
+    question.config.stimulus?.type === 'video' ||
+    question.config.stimulus?.type === 'audio'
+  );
+
+  // Load thumbnail URL for existing media reference
+  $effect(() => {
+    const mediaRef = question.config.stimulus?.mediaRef;
+    if (mediaRef?.mediaId) {
+      mediaService.getSignedUrl(mediaRef.mediaId).then((url) => {
+        mediaThumbnailUrl = url;
+        // Also keep the mediaUrl fresh in case it expired
+        if (question.config.stimulus.mediaRef) {
+          question.config.stimulus.mediaRef.mediaUrl = url;
+        }
+      }).catch(() => {
+        mediaThumbnailUrl = null;
+      });
+    } else {
+      mediaThumbnailUrl = null;
+    }
+  });
+
+  function handleMediaSelected(event: { media: MediaAsset[]; asset: MediaAsset }) {
+    const asset = event.asset;
+    if (!asset) return;
+
+    // Get signed URL for the media
+    mediaService.getSignedUrl(asset.id).then((url) => {
+      // Store the media reference in the stimulus config
+      question.config.stimulus.mediaRef = {
+        mediaId: asset.id,
+        mediaUrl: url,
+        filename: asset.originalFilename,
+        mimeType: asset.mimeType,
+        width: asset.width,
+        height: asset.height,
+        durationSeconds: asset.durationSeconds,
+      };
+      // Set the content to the URL for runtime consumption
+      question.config.stimulus.content = url;
+      mediaThumbnailUrl = url;
+    }).catch((error) => {
+      console.error('Failed to get signed URL for media:', error);
+    });
+  }
+
+  function removeMediaSelection() {
+    question.config.stimulus.mediaRef = undefined;
+    question.config.stimulus.content = '';
+    mediaThumbnailUrl = null;
+  }
+
+  function handleStimulusTypeChange() {
+    // Clear media ref when switching stimulus types
+    const type = question.config.stimulus.type;
+    if (type !== 'image' && type !== 'video' && type !== 'audio') {
+      question.config.stimulus.mediaRef = undefined;
+      mediaThumbnailUrl = null;
+    }
+    // Reset content for non-media types
+    if (type === 'text') {
+      question.config.stimulus.content = question.config.stimulus.content || 'GO!';
+    } else if (type === 'shape') {
+      question.config.stimulus.content = 'circle';
+    } else if (!question.config.stimulus.mediaRef) {
+      question.config.stimulus.content = '';
+    }
+  }
 
   function ensureTaskDefaults() {
     if (!question.config.task) {
       question.config.task = {
         type: 'standard',
         nBack: {
-          n: 2,
-          sequenceLength: 20,
-          targetRate: 0.3,
+          n: 2, sequenceLength: 20, targetRate: 0.3,
           stimulusSet: ['A', 'B', 'C', 'D'],
-          targetKey: 'j',
-          nonTargetKey: 'f',
-          fixationMs: 400,
-          responseTimeoutMs: 1200,
+          targetKey: 'j', nonTargetKey: 'f',
+          fixationMs: 400, responseTimeoutMs: 1200,
+        },
+        stroop: {
+          trialCount: 40, colors: ['red', 'blue', 'green', 'yellow'],
+          congruentRatio: 0.5, stimulusDuration: 0, isi: 250,
+          fixationMs: 500, responseTimeoutMs: 2000,
+        },
+        flanker: {
+          trialCount: 40, stimulusSet: ['>', '<'],
+          congruentRatio: 0.5, includeNeutral: false, neutralRatio: 0.2,
+          flankerCount: 2, stimulusDuration: 0, isi: 250,
+          fixationMs: 500, responseTimeoutMs: 1500,
+        },
+        iat: {
+          category1Name: 'Flowers', category1Items: ['Rose', 'Lily', 'Tulip', 'Daisy'],
+          category2Name: 'Insects', category2Items: ['Ant', 'Beetle', 'Wasp', 'Moth'],
+          attribute1Name: 'Pleasant', attribute1Items: ['Happy', 'Joyful', 'Love', 'Peace'],
+          attribute2Name: 'Unpleasant', attribute2Items: ['Ugly', 'Nasty', 'Evil', 'Hurt'],
+          trialsPerBlock: 20, practiceTrialsPerBlock: 10,
+          fixationMs: 400, responseTimeoutMs: 3000,
+        },
+        dotProbe: {
+          trialCount: 40, cueDuration: 500, isi: 500,
+          congruentRatio: 0.5, probeSymbol: '*',
+          stimulusPairs: [{ salient: 'THREAT', neutral: 'NEUTRAL' }],
+          fixationMs: 500, responseTimeoutMs: 2000,
         },
         customTrials: [],
       };
     }
     if (!question.config.task.nBack) {
       question.config.task.nBack = {
-        n: 2,
-        sequenceLength: 20,
-        targetRate: 0.3,
+        n: 2, sequenceLength: 20, targetRate: 0.3,
         stimulusSet: ['A', 'B', 'C', 'D'],
-        targetKey: 'j',
-        nonTargetKey: 'f',
-        fixationMs: 400,
-        responseTimeoutMs: 1200,
+        targetKey: 'j', nonTargetKey: 'f',
+        fixationMs: 400, responseTimeoutMs: 1200,
+      };
+    }
+    if (!question.config.task.stroop) {
+      question.config.task.stroop = {
+        trialCount: 40, colors: ['red', 'blue', 'green', 'yellow'],
+        congruentRatio: 0.5, stimulusDuration: 0, isi: 250,
+        fixationMs: 500, responseTimeoutMs: 2000,
+      };
+    }
+    if (!question.config.task.flanker) {
+      question.config.task.flanker = {
+        trialCount: 40, stimulusSet: ['>', '<'],
+        congruentRatio: 0.5, includeNeutral: false, neutralRatio: 0.2,
+        flankerCount: 2, stimulusDuration: 0, isi: 250,
+        fixationMs: 500, responseTimeoutMs: 1500,
+      };
+    }
+    if (!question.config.task.iat) {
+      question.config.task.iat = {
+        category1Name: 'Flowers', category1Items: ['Rose', 'Lily', 'Tulip', 'Daisy'],
+        category2Name: 'Insects', category2Items: ['Ant', 'Beetle', 'Wasp', 'Moth'],
+        attribute1Name: 'Pleasant', attribute1Items: ['Happy', 'Joyful', 'Love', 'Peace'],
+        attribute2Name: 'Unpleasant', attribute2Items: ['Ugly', 'Nasty', 'Evil', 'Hurt'],
+        trialsPerBlock: 20, practiceTrialsPerBlock: 10,
+        fixationMs: 400, responseTimeoutMs: 3000,
+      };
+    }
+    if (!question.config.task.dotProbe) {
+      question.config.task.dotProbe = {
+        trialCount: 40, cueDuration: 500, isi: 500,
+        congruentRatio: 0.5, probeSymbol: '*',
+        stimulusPairs: [{ salient: 'THREAT', neutral: 'NEUTRAL' }],
+        fixationMs: 500, responseTimeoutMs: 2000,
       };
     }
     if (!Array.isArray(question.config.task.customTrials)) {
@@ -203,6 +396,64 @@
     question.config.task!.nBack!.stimulusSet = set.filter((entry) => entry !== value);
   }
 
+  function addStroopColor() {
+    const value = newStroopColor.trim().toLowerCase();
+    if (!value || !question.config.task?.stroop) return;
+    const colors = question.config.task.stroop.colors || [];
+    if (!colors.includes(value)) {
+      question.config.task.stroop.colors = [...colors, value];
+    }
+    newStroopColor = '';
+  }
+
+  function removeStroopColor(value: string) {
+    const colors = question.config.task?.stroop?.colors || [];
+    question.config.task!.stroop!.colors = colors.filter((c) => c !== value);
+  }
+
+  function addIatItem() {
+    const value = newIatItem.trim();
+    if (!value || !question.config.task?.iat) return;
+    const iat = question.config.task.iat;
+    const targetMap = {
+      cat1: 'category1Items',
+      cat2: 'category2Items',
+      attr1: 'attribute1Items',
+      attr2: 'attribute2Items',
+    } as const;
+    const key = targetMap[iatItemTarget];
+    const items = iat[key] || [];
+    if (!items.includes(value)) {
+      iat[key] = [...items, value];
+    }
+    newIatItem = '';
+  }
+
+  function removeIatItem(target: 'category1Items' | 'category2Items' | 'attribute1Items' | 'attribute2Items', value: string) {
+    if (!question.config.task?.iat) return;
+    const items = question.config.task.iat[target] || [];
+    question.config.task.iat[target] = items.filter((i) => i !== value);
+  }
+
+  function addDotProbePair() {
+    const salient = newDotProbeSalient.trim();
+    const neutral = newDotProbeNeutral.trim();
+    if (!salient || !neutral || !question.config.task?.dotProbe) return;
+    question.config.task.dotProbe.stimulusPairs = [
+      ...question.config.task.dotProbe.stimulusPairs,
+      { salient, neutral },
+    ];
+    newDotProbeSalient = '';
+    newDotProbeNeutral = '';
+  }
+
+  function removeDotProbePair(index: number) {
+    if (!question.config.task?.dotProbe) return;
+    question.config.task.dotProbe.stimulusPairs = question.config.task.dotProbe.stimulusPairs.filter(
+      (_, i) => i !== index
+    );
+  }
+
   function applyCustomTrialsJson() {
     try {
       const parsed = JSON.parse(customTrialsDraft);
@@ -227,6 +478,10 @@
       <select id="task-type" bind:value={question.config.task.type} class="select">
         <option value="standard">Standard Reaction Time</option>
         <option value="n-back">N-Back</option>
+        <option value="stroop">Stroop</option>
+        <option value="flanker">Flanker (Eriksen)</option>
+        <option value="iat">Implicit Association Test (IAT)</option>
+        <option value="dot-probe">Dot-Probe</option>
         <option value="custom">Custom Trial Plan</option>
       </select>
     </div>
@@ -340,6 +595,500 @@
       </div>
     {/if}
 
+    {#if question.config.task.type === 'stroop'}
+      <div class="subsection">
+        <h5 class="subsection-title">Stroop Configuration</h5>
+        <p class="help-text">
+          Color words displayed in congruent or incongruent ink colors. Participants respond to the ink color, not the word.
+        </p>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="stroop-trial-count">Trial Count</label>
+            <input
+              id="stroop-trial-count"
+              type="number"
+              min="4"
+              max="500"
+              bind:value={question.config.task.stroop.trialCount}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="stroop-congruent-ratio">Congruent Ratio</label>
+            <input
+              id="stroop-congruent-ratio"
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              bind:value={question.config.task.stroop.congruentRatio}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="stroop-fixation-ms">Fixation (ms)</label>
+            <input
+              id="stroop-fixation-ms"
+              type="number"
+              min="0"
+              max="5000"
+              step="10"
+              bind:value={question.config.task.stroop.fixationMs}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="stroop-timeout-ms">Response Timeout (ms)</label>
+            <input
+              id="stroop-timeout-ms"
+              type="number"
+              min="100"
+              max="10000"
+              step="10"
+              bind:value={question.config.task.stroop.responseTimeoutMs}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="stroop-isi">Inter-Stimulus Interval (ms)</label>
+            <input
+              id="stroop-isi"
+              type="number"
+              min="0"
+              max="5000"
+              step="10"
+              bind:value={question.config.task.stroop.isi}
+              class="input"
+            />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <span class="label-text">Colors</span>
+          <div class="key-input">
+            <input
+              type="text"
+              bind:value={newStroopColor}
+              placeholder="e.g., red"
+              class="input"
+              onkeydown={(e) => e.key === 'Enter' && addStroopColor()}
+            />
+            <button class="btn btn-secondary" onclick={addStroopColor} disabled={!newStroopColor}>Add</button>
+          </div>
+          <div class="key-list">
+            {#each question.config.task.stroop.colors || [] as color}
+              <div class="key-item">
+                <span class="color-swatch" style="background-color: {color};"></span>
+                <span class="key-label">{color}</span>
+                <button class="remove-btn" onclick={() => removeStroopColor(color)}>&#10005;</button>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if question.config.task.type === 'flanker'}
+      <div class="subsection">
+        <h5 class="subsection-title">Flanker Configuration</h5>
+        <p class="help-text">
+          A central target surrounded by flankers. Congruent: flankers match target. Incongruent: flankers differ.
+        </p>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="flanker-trial-count">Trial Count</label>
+            <input
+              id="flanker-trial-count"
+              type="number"
+              min="4"
+              max="500"
+              bind:value={question.config.task.flanker.trialCount}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="flanker-congruent-ratio">Congruent Ratio</label>
+            <input
+              id="flanker-congruent-ratio"
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              bind:value={question.config.task.flanker.congruentRatio}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="flanker-count">Flankers per Side</label>
+            <input
+              id="flanker-count"
+              type="number"
+              min="1"
+              max="6"
+              bind:value={question.config.task.flanker.flankerCount}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="flanker-fixation-ms">Fixation (ms)</label>
+            <input
+              id="flanker-fixation-ms"
+              type="number"
+              min="0"
+              max="5000"
+              step="10"
+              bind:value={question.config.task.flanker.fixationMs}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="flanker-timeout-ms">Response Timeout (ms)</label>
+            <input
+              id="flanker-timeout-ms"
+              type="number"
+              min="100"
+              max="10000"
+              step="10"
+              bind:value={question.config.task.flanker.responseTimeoutMs}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="flanker-isi">Inter-Stimulus Interval (ms)</label>
+            <input
+              id="flanker-isi"
+              type="number"
+              min="0"
+              max="5000"
+              step="10"
+              bind:value={question.config.task.flanker.isi}
+              class="input"
+            />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              bind:checked={question.config.task.flanker.includeNeutral}
+              class="checkbox"
+            />
+            <span>Include neutral condition (e.g., --&lt;--)</span>
+          </label>
+        </div>
+
+        {#if question.config.task.flanker.includeNeutral}
+          <div class="form-group">
+            <label for="flanker-neutral-ratio">Neutral Ratio</label>
+            <input
+              id="flanker-neutral-ratio"
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              bind:value={question.config.task.flanker.neutralRatio}
+              class="input"
+            />
+          </div>
+        {/if}
+
+        <div class="form-group">
+          <span class="label-text">Stimulus Characters</span>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="flanker-stim-0">Left Response</label>
+              <input
+                id="flanker-stim-0"
+                type="text"
+                maxlength="1"
+                bind:value={question.config.task.flanker.stimulusSet[0]}
+                class="input"
+              />
+            </div>
+            <div class="form-group">
+              <label for="flanker-stim-1">Right Response</label>
+              <input
+                id="flanker-stim-1"
+                type="text"
+                maxlength="1"
+                bind:value={question.config.task.flanker.stimulusSet[1]}
+                class="input"
+              />
+            </div>
+          </div>
+          <p class="help-text">
+            Preview: {question.config.task.flanker.stimulusSet[0].repeat(question.config.task.flanker.flankerCount)}{question.config.task.flanker.stimulusSet[0]}{question.config.task.flanker.stimulusSet[0].repeat(question.config.task.flanker.flankerCount)} (congruent) |
+            {question.config.task.flanker.stimulusSet[1].repeat(question.config.task.flanker.flankerCount)}{question.config.task.flanker.stimulusSet[0]}{question.config.task.flanker.stimulusSet[1].repeat(question.config.task.flanker.flankerCount)} (incongruent)
+          </p>
+        </div>
+      </div>
+    {/if}
+
+    {#if question.config.task.type === 'iat'}
+      <div class="subsection">
+        <h5 class="subsection-title">IAT Configuration</h5>
+        <p class="help-text">
+          Standard 7-block Implicit Association Test. Categories are sorted with E (left) and I (right) keys.
+        </p>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="iat-trials-per-block">Trials per Test Block</label>
+            <input
+              id="iat-trials-per-block"
+              type="number"
+              min="4"
+              max="100"
+              bind:value={question.config.task.iat.trialsPerBlock}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="iat-practice-trials">Trials per Practice Block</label>
+            <input
+              id="iat-practice-trials"
+              type="number"
+              min="4"
+              max="50"
+              bind:value={question.config.task.iat.practiceTrialsPerBlock}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="iat-fixation-ms">Fixation (ms)</label>
+            <input
+              id="iat-fixation-ms"
+              type="number"
+              min="0"
+              max="5000"
+              step="10"
+              bind:value={question.config.task.iat.fixationMs}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="iat-timeout-ms">Response Timeout (ms)</label>
+            <input
+              id="iat-timeout-ms"
+              type="number"
+              min="100"
+              max="10000"
+              step="10"
+              bind:value={question.config.task.iat.responseTimeoutMs}
+              class="input"
+            />
+          </div>
+        </div>
+
+        <h5 class="subsection-title" style="margin-top: 1rem;">Categories &amp; Attributes</h5>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="iat-cat1-name">Category 1 Name</label>
+            <input
+              id="iat-cat1-name"
+              type="text"
+              bind:value={question.config.task.iat.category1Name}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="iat-cat2-name">Category 2 Name</label>
+            <input
+              id="iat-cat2-name"
+              type="text"
+              bind:value={question.config.task.iat.category2Name}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="iat-attr1-name">Attribute 1 Name</label>
+            <input
+              id="iat-attr1-name"
+              type="text"
+              bind:value={question.config.task.iat.attribute1Name}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="iat-attr2-name">Attribute 2 Name</label>
+            <input
+              id="iat-attr2-name"
+              type="text"
+              bind:value={question.config.task.iat.attribute2Name}
+              class="input"
+            />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <span class="label-text">Add Items</span>
+          <div class="key-input">
+            <select bind:value={iatItemTarget} class="select select-small">
+              <option value="cat1">{question.config.task.iat.category1Name}</option>
+              <option value="cat2">{question.config.task.iat.category2Name}</option>
+              <option value="attr1">{question.config.task.iat.attribute1Name}</option>
+              <option value="attr2">{question.config.task.iat.attribute2Name}</option>
+            </select>
+            <input
+              type="text"
+              bind:value={newIatItem}
+              placeholder="Item text"
+              class="input"
+              onkeydown={(e) => e.key === 'Enter' && addIatItem()}
+            />
+            <button class="btn btn-secondary" onclick={addIatItem} disabled={!newIatItem}>Add</button>
+          </div>
+        </div>
+
+        {#each [
+          { label: question.config.task.iat.category1Name, key: 'category1Items' as const, items: question.config.task.iat.category1Items },
+          { label: question.config.task.iat.category2Name, key: 'category2Items' as const, items: question.config.task.iat.category2Items },
+          { label: question.config.task.iat.attribute1Name, key: 'attribute1Items' as const, items: question.config.task.iat.attribute1Items },
+          { label: question.config.task.iat.attribute2Name, key: 'attribute2Items' as const, items: question.config.task.iat.attribute2Items },
+        ] as group}
+          <div class="form-group">
+            <span class="label-text">{group.label}</span>
+            <div class="key-list">
+              {#each group.items as item}
+                <div class="key-item">
+                  <span class="key-label">{item}</span>
+                  <button class="remove-btn" onclick={() => removeIatItem(group.key, item)}>&#10005;</button>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    {#if question.config.task.type === 'dot-probe'}
+      <div class="subsection">
+        <h5 class="subsection-title">Dot-Probe Configuration</h5>
+        <p class="help-text">
+          Two stimuli are shown briefly, then a probe replaces one. Congruent = probe at salient location. Measures attentional bias.
+        </p>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="dotprobe-trial-count">Trial Count</label>
+            <input
+              id="dotprobe-trial-count"
+              type="number"
+              min="4"
+              max="500"
+              bind:value={question.config.task.dotProbe.trialCount}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="dotprobe-congruent-ratio">Congruent Ratio</label>
+            <input
+              id="dotprobe-congruent-ratio"
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              bind:value={question.config.task.dotProbe.congruentRatio}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="dotprobe-cue-duration">Cue Duration (ms)</label>
+            <input
+              id="dotprobe-cue-duration"
+              type="number"
+              min="50"
+              max="5000"
+              step="10"
+              bind:value={question.config.task.dotProbe.cueDuration}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="dotprobe-probe-symbol">Probe Symbol</label>
+            <input
+              id="dotprobe-probe-symbol"
+              type="text"
+              maxlength="3"
+              bind:value={question.config.task.dotProbe.probeSymbol}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="dotprobe-fixation-ms">Fixation (ms)</label>
+            <input
+              id="dotprobe-fixation-ms"
+              type="number"
+              min="0"
+              max="5000"
+              step="10"
+              bind:value={question.config.task.dotProbe.fixationMs}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="dotprobe-timeout-ms">Response Timeout (ms)</label>
+            <input
+              id="dotprobe-timeout-ms"
+              type="number"
+              min="100"
+              max="10000"
+              step="10"
+              bind:value={question.config.task.dotProbe.responseTimeoutMs}
+              class="input"
+            />
+          </div>
+          <div class="form-group">
+            <label for="dotprobe-isi">Inter-Trial Interval (ms)</label>
+            <input
+              id="dotprobe-isi"
+              type="number"
+              min="0"
+              max="5000"
+              step="10"
+              bind:value={question.config.task.dotProbe.isi}
+              class="input"
+            />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <span class="label-text">Stimulus Pairs (Salient / Neutral)</span>
+          <div class="key-input">
+            <input
+              type="text"
+              bind:value={newDotProbeSalient}
+              placeholder="Salient stimulus"
+              class="input"
+            />
+            <input
+              type="text"
+              bind:value={newDotProbeNeutral}
+              placeholder="Neutral stimulus"
+              class="input"
+            />
+            <button
+              class="btn btn-secondary"
+              onclick={addDotProbePair}
+              disabled={!newDotProbeSalient || !newDotProbeNeutral}
+            >Add</button>
+          </div>
+          <div class="key-list" style="flex-direction: column;">
+            {#each question.config.task.dotProbe.stimulusPairs as pair, idx}
+              <div class="key-item" style="width: 100%; justify-content: space-between;">
+                <span class="key-label">{pair.salient} / {pair.neutral}</span>
+                <button class="remove-btn" onclick={() => removeDotProbePair(idx)}>&#10005;</button>
+              </div>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
+
     {#if question.config.task.type === 'custom'}
       <div class="subsection">
         <h5 class="subsection-title">Custom Trial JSON</h5>
@@ -366,41 +1115,119 @@
 
     <div class="form-group">
       <label for="stimulus-type">Stimulus Type</label>
-      <select id="stimulus-type" bind:value={question.config.stimulus.type} class="select">
+      <select
+        id="stimulus-type"
+        bind:value={question.config.stimulus.type}
+        onchange={handleStimulusTypeChange}
+        class="select"
+      >
         <option value="text">Text</option>
         <option value="shape">Shape</option>
         <option value="image">Image</option>
+        <option value="video">Video</option>
+        <option value="audio">Audio</option>
       </select>
     </div>
 
-    <div class="form-group">
-      <label for="stimulus-content">
-        {#if question.config.stimulus.type === 'text'}
-          Text to Display
-        {:else if question.config.stimulus.type === 'shape'}
-          Shape Type
-        {:else}
-          Image URL
-        {/if}
-      </label>
-
-      {#if question.config.stimulus.type === 'shape'}
+    {#if question.config.stimulus.type === 'shape'}
+      <div class="form-group">
+        <label for="stimulus-content">Shape Type</label>
         <select id="stimulus-content" bind:value={question.config.stimulus.content} class="select">
           <option value="circle">Circle</option>
           <option value="square">Square</option>
         </select>
-      {:else}
+      </div>
+    {:else if question.config.stimulus.type === 'text'}
+      <div class="form-group">
+        <label for="stimulus-content">Text to Display</label>
         <input
           id="stimulus-content"
           type="text"
           bind:value={question.config.stimulus.content}
-          placeholder={question.config.stimulus.type === 'text'
-            ? 'GO!'
-            : 'https://example.com/image.png'}
+          placeholder="GO!"
           class="input"
         />
-      {/if}
-    </div>
+      </div>
+    {:else if stimulusUsesMedia}
+      <!-- Media stimulus: Image, Video, or Audio -->
+      <div class="form-group">
+        <span class="label-text">
+          {question.config.stimulus.type === 'image' ? 'Image' : question.config.stimulus.type === 'video' ? 'Video' : 'Audio'} Stimulus
+        </span>
+
+        {#if question.config.stimulus.mediaRef}
+          <!-- Media preview card -->
+          <div class="media-preview-card">
+            {#if question.config.stimulus.type === 'image' && mediaThumbnailUrl}
+              <div class="media-thumbnail">
+                <img
+                  src={mediaThumbnailUrl}
+                  alt={question.config.stimulus.mediaRef.filename || 'Stimulus image'}
+                  class="media-thumbnail-img"
+                />
+              </div>
+            {:else if question.config.stimulus.type === 'video'}
+              <div class="media-thumbnail media-icon-container">
+                <svg class="media-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </div>
+            {:else if question.config.stimulus.type === 'audio'}
+              <div class="media-thumbnail media-icon-container">
+                <svg class="media-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+              </div>
+            {/if}
+
+            <div class="media-info">
+              <span class="media-filename">{question.config.stimulus.mediaRef.filename || 'Media file'}</span>
+              {#if question.config.stimulus.mediaRef.mimeType}
+                <span class="media-meta">{question.config.stimulus.mediaRef.mimeType}</span>
+              {/if}
+              {#if question.config.stimulus.mediaRef.width && question.config.stimulus.mediaRef.height}
+                <span class="media-meta">{question.config.stimulus.mediaRef.width} x {question.config.stimulus.mediaRef.height}</span>
+              {/if}
+              {#if question.config.stimulus.mediaRef.durationSeconds}
+                <span class="media-meta">{question.config.stimulus.mediaRef.durationSeconds.toFixed(1)}s</span>
+              {/if}
+            </div>
+
+            <button class="remove-media-btn" onclick={removeMediaSelection} aria-label="Remove media">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        {:else}
+          <!-- No media selected - show select button and manual URL option -->
+          <div class="media-select-area">
+            <button
+              class="btn btn-media-select"
+              onclick={() => (showMediaPicker = true)}
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span>Select from Media Library</span>
+            </button>
+            <div class="media-url-divider">
+              <span>or enter URL directly</span>
+            </div>
+            <input
+              type="text"
+              bind:value={question.config.stimulus.content}
+              placeholder={question.config.stimulus.type === 'image'
+                ? 'https://example.com/image.png'
+                : question.config.stimulus.type === 'video'
+                  ? 'https://example.com/video.mp4'
+                  : 'https://example.com/audio.mp3'}
+              class="input"
+            />
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <div class="subsection">
       <h5 class="subsection-title">Fixation Settings</h5>
@@ -548,7 +1375,7 @@
       </div>
     {/if}
 
-    {#if question.config.task.type !== 'n-back'}
+    {#if question.config.task.type === 'standard' || question.config.task.type === 'custom'}
       <div class="form-group">
         <label for="test-trials">Number of Test Trials</label>
         <input
@@ -622,9 +1449,13 @@
           <span class="preview-label">Stimulus:</span>
           <span class="preview-value">
             {question.config.stimulus.type}
-            ({question.config.stimulus.type === 'shape'
-              ? question.config.stimulus.content
-              : 'custom'})
+            {#if question.config.stimulus.type === 'shape'}
+              ({question.config.stimulus.content})
+            {:else if question.config.stimulus.mediaRef?.filename}
+              ({question.config.stimulus.mediaRef.filename})
+            {:else if question.config.stimulus.content}
+              (custom)
+            {/if}
           </span>
         </div>
 
@@ -656,6 +1487,14 @@
             {#if question.config.task.type === 'n-back'}
               {question.config.practice ? `${question.config.practiceTrials} practice + ` : ''}
               {question.config.task.nBack.sequenceLength} n-back
+            {:else if question.config.task.type === 'stroop'}
+              {question.config.task.stroop.trialCount} stroop ({Math.round(question.config.task.stroop.congruentRatio * 100)}% congruent)
+            {:else if question.config.task.type === 'flanker'}
+              {question.config.task.flanker.trialCount} flanker ({Math.round(question.config.task.flanker.congruentRatio * 100)}% congruent)
+            {:else if question.config.task.type === 'iat'}
+              7-block IAT ({question.config.task.iat.trialsPerBlock}/block)
+            {:else if question.config.task.type === 'dot-probe'}
+              {question.config.task.dotProbe.trialCount} dot-probe ({Math.round(question.config.task.dotProbe.congruentRatio * 100)}% congruent)
             {:else if question.config.task.type === 'custom'}
               {(question.config.task.customTrials || []).length} custom trials
             {:else}
@@ -681,6 +1520,15 @@
     </div>
   </div>
 </div>
+
+<MediaManagerModal
+  bind:isOpen={showMediaPicker}
+  {organizationId}
+  {userId}
+  allowMultiple={false}
+  title="Select {question.config.stimulus.type === 'image' ? 'Image' : question.config.stimulus.type === 'video' ? 'Video' : 'Audio'} Stimulus"
+  onselect={handleMediaSelected}
+/>
 
 <style>
   .designer-panel {
@@ -848,6 +1696,15 @@
     color: #dc2626;
   }
 
+  .color-swatch {
+    display: inline-block;
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 0.25rem;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    flex-shrink: 0;
+  }
+
   /* Buttons */
   .btn {
     padding: 0.5rem 1rem;
@@ -876,6 +1733,126 @@
   .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* Media picker */
+  .media-preview-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+  }
+
+  .media-thumbnail {
+    width: 4rem;
+    height: 4rem;
+    flex-shrink: 0;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    background: #e5e7eb;
+  }
+
+  .media-thumbnail-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .media-icon-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .media-icon {
+    width: 2rem;
+    height: 2rem;
+    color: #6b7280;
+  }
+
+  .media-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .media-filename {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .media-meta {
+    font-size: 0.75rem;
+    color: #6b7280;
+  }
+
+  .remove-media-btn {
+    flex-shrink: 0;
+    padding: 0.375rem;
+    border: none;
+    background: none;
+    color: #6b7280;
+    cursor: pointer;
+    border-radius: 0.25rem;
+    transition: all 0.15s;
+  }
+
+  .remove-media-btn:hover {
+    color: #dc2626;
+    background: #fef2f2;
+  }
+
+  .media-select-area {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .btn-media-select {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: #f3f4f6;
+    border: 2px dashed #d1d5db;
+    border-radius: 0.5rem;
+    color: #374151;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-media-select:hover {
+    background: #e5e7eb;
+    border-color: #9ca3af;
+  }
+
+  .media-url-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #9ca3af;
+    font-size: 0.75rem;
+  }
+
+  .media-url-divider::before,
+  .media-url-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e5e7eb;
   }
 
   /* Preview */

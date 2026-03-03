@@ -2,12 +2,20 @@
   import Button from '$lib/components/common/Button.svelte';
   import Card from '$lib/components/common/Card.svelte';
   import type { QuestionnaireSession } from '$lib/shared';
+  import type { ScoreInterpreterConfig } from '$lib/runtime/feedback/ScoreInterpreter';
+  import { generateReport, type ReportConfig } from '$lib/runtime/feedback/ReportGenerator';
 
   interface Props {
     session?: QuestionnaireSession;
     customMessage?: string;
     showStatistics?: boolean;
     showDownload?: boolean;
+    /** Score interpretation configs for PDF report generation */
+    scoreConfigs?: ScoreInterpreterConfig[];
+    /** Variables/scores available for interpretation */
+    variables?: Record<string, unknown>;
+    /** Report title override */
+    reportTitle?: string;
     onClose?: () => void;
     onDownload?: () => void;
   }
@@ -17,9 +25,14 @@
     customMessage,
     showStatistics = true,
     showDownload = false,
+    scoreConfigs = [],
+    variables = {},
+    reportTitle,
     onClose,
     onDownload,
   }: Props = $props();
+
+  let generatingReport = $state(false);
 
   // Calculate statistics
   const duration = $derived(() => {
@@ -43,6 +56,26 @@
       window.location.href = '/';
     }
   }
+
+  async function handleDownloadReport() {
+    if (generatingReport || scoreConfigs.length === 0) return;
+    generatingReport = true;
+    try {
+      const config: ReportConfig = {
+        title: reportTitle || 'Participant Feedback Report',
+        participantId: session?.participantId ?? undefined,
+        scoreConfigs,
+        includeChart: true,
+      };
+      await generateReport(config, { variables });
+    } catch (err) {
+      console.error('Failed to generate PDF report:', err);
+    } finally {
+      generatingReport = false;
+    }
+  }
+
+  const showReportButton = $derived(scoreConfigs.length > 0);
 </script>
 
 <div class="completion-screen" data-testid="fillout-completion-screen">
@@ -103,6 +136,17 @@
       <div class="actions">
         {#if showDownload && onDownload}
           <Button variant="outline" size="lg" onclick={onDownload}>Download Responses</Button>
+        {/if}
+
+        {#if showReportButton}
+          <Button
+            variant="outline"
+            size="lg"
+            onclick={handleDownloadReport}
+            disabled={generatingReport}
+          >
+            {generatingReport ? 'Generating...' : 'Download Report (PDF)'}
+          </Button>
         {/if}
 
         <Button variant="default" size="lg" onclick={handleClose}>

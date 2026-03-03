@@ -11,12 +11,33 @@
   import WYSIWYGCanvas from './WYSIWYGCanvas.svelte';
   import StructuralCanvas from './StructuralCanvas.svelte';
   import DesignerCommandPalette from './components/DesignerCommandPalette.svelte';
+  import ScriptEditorOverlay from '$lib/components/designer/ScriptEditorOverlay.svelte';
 
   interface Props {
     data: PageData;
   }
 
   let { data }: Props = $props();
+
+  let scriptEditorOpen = $state(false);
+  let scriptEditorQuestion = $state<any>(null);
+  let scriptEditorCleanup: (() => void) | null = null;
+
+  function openScriptEditor(question: any) {
+    scriptEditorQuestion = question;
+    scriptEditorOpen = true;
+  }
+
+  function handleScriptEditorSave(script: string) {
+    if (scriptEditorQuestion) {
+      designerStore.updateQuestion(scriptEditorQuestion.id, {
+        settings: {
+          ...scriptEditorQuestion.settings,
+          script,
+        },
+      });
+    }
+  }
 
   async function initializeDesigner() {
     try {
@@ -110,28 +131,6 @@
         void designerStore.publishQuestionnaire();
         return;
       }
-
-      if (key === '1') {
-        event.preventDefault();
-        designerStore.setActiveLeftTab('questions');
-        designerStore.toggleDrawer('left', true);
-        return;
-      }
-
-      if (key === '2') {
-        event.preventDefault();
-        const firstQuestion = designerStore.currentBlockQuestions[0];
-        if (firstQuestion) {
-          designerStore.selectItem(firstQuestion.id, 'question');
-        }
-        designerStore.toggleDrawer('right', true);
-        return;
-      }
-
-      if (key === '3') {
-        event.preventDefault();
-        designerStore.togglePreview(true);
-      }
     }
 
     if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -153,18 +152,37 @@
         designerStore.togglePreview(false);
         return;
       }
-      designerStore.toggleCommandPalette(false);
-      designerStore.toggleDrawer('left', false);
-      designerStore.toggleDrawer('right', false);
+      if (designerStore.showCommandPalette) {
+        designerStore.toggleCommandPalette(false);
+        return;
+      }
+      // Close flyout panel
+      if (designerStore.activePanel) {
+        designerStore.setPanel(null);
+        return;
+      }
+      // Deselect → right panel slides out
+      if (designerStore.selectedItem) {
+        designerStore.selectItem(null);
+        return;
+      }
     }
   }
 
   onMount(() => {
     void initializeDesigner();
+
+    const handleOpenScriptEditor = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.question) openScriptEditor(detail.question);
+    };
+    window.addEventListener('open-script-editor', handleOpenScriptEditor);
+    scriptEditorCleanup = () => window.removeEventListener('open-script-editor', handleOpenScriptEditor);
   });
 
   onDestroy(() => {
     autoSave.stop();
+    scriptEditorCleanup?.();
   });
 </script>
 
@@ -173,19 +191,13 @@
 <div class="h-screen flex flex-col bg-background" data-testid="designer-root">
   <DesignerHeader
     questionnaireName={designerStore.questionnaire.name}
-    pageCount={designerStore.questionnaire.pages.length}
-    blockCount={designerStore.questionnaire.pages.reduce(
-      (acc, page) => acc + (page.blocks?.length || 0),
-      0
-    )}
-    questionCount={designerStore.questionnaire.questions.length}
-    viewMode={designerStore.viewMode}
+    projectName={(data as any)?.projectName || (data as any)?.project?.name || ''}
   />
 
   <div class="flex-1 flex overflow-hidden relative" data-testid="designer-main-layout">
     <LeftSidebar />
 
-    <main class="flex-1 overflow-hidden bg-muted/30 relative" data-testid="designer-canvas">
+    <main class="flex-1 overflow-hidden relative" data-testid="designer-canvas">
       {#if designerStore.viewMode === 'structural'}
         <StructuralCanvas />
       {:else}
@@ -205,3 +217,11 @@
   isOpen={designerStore.showCommandPalette}
   onclose={() => designerStore.toggleCommandPalette(false)}
 />
+{#if scriptEditorOpen && scriptEditorQuestion}
+  <ScriptEditorOverlay
+    question={scriptEditorQuestion}
+    variables={designerStore.questionnaire.variables}
+    onclose={() => { scriptEditorOpen = false; scriptEditorQuestion = null; }}
+    onsave={handleScriptEditorSave}
+  />
+{/if}

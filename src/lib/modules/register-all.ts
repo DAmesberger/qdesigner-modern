@@ -17,11 +17,14 @@ export async function registerAllModules() {
     // Question modules
     { metadata: multipleChoiceMetadata },
     { metadata: scaleMetadata },
+    { metadata: ratingMetadata },
     { metadata: textInputMetadata },
+    { metadata: numberInputMetadata },
     { metadata: matrixMetadata },
     { metadata: rankingMetadata },
     { metadata: dateTimeMetadata },
     { metadata: fileUploadMetadata },
+    { metadata: mediaResponseMetadata },
     { metadata: drawingMetadata },
     { metadata: reactionTimeMetadata },
     { metadata: webglMetadata },
@@ -34,11 +37,14 @@ export async function registerAllModules() {
     // Question modules
     import('./questions/multiple-choice/metadata'),
     import('./questions/scale/metadata'),
+    import('./questions/rating/metadata'),
     import('./questions/text-input/metadata'),
+    import('./questions/number-input/metadata'),
     import('./questions/matrix/metadata'),
     import('./questions/ranking/metadata'),
     import('./questions/date-time/metadata'),
     import('./questions/file-upload/metadata'),
+    import('./questions/media-response/metadata'),
     import('./questions/drawing/metadata'),
     import('./questions/reaction-time/metadata'),
     import('./questions/webgl/metadata'),
@@ -54,11 +60,14 @@ export async function registerAllModules() {
   // Register all question modules
   registerModule(multipleChoiceMetadata);
   registerModule(scaleMetadata);
+  registerModule(ratingMetadata);
   registerModule(textInputMetadata);
+  registerModule(numberInputMetadata);
   registerModule(matrixMetadata);
   registerModule(rankingMetadata);
   registerModule(dateTimeMetadata);
   registerModule(fileUploadMetadata);
+  registerModule(mediaResponseMetadata);
   registerModule(drawingMetadata);
   registerModule(reactionTimeMetadata);
   registerModule(webglMetadata);
