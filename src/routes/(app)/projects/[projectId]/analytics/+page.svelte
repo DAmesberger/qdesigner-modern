@@ -18,7 +18,10 @@
 		FileJson,
 		FileSpreadsheet,
 		MessageSquare,
+		PieChart,
+		Timer,
 	} from 'lucide-svelte';
+	import { StatisticalEngine } from '$lib/analytics/StatisticalEngine';
 
 	interface Props {
 		data: PageData;
@@ -48,6 +51,59 @@
 			: 0
 	);
 
+	let analyticsTab = $state<'overview' | 'per-question'>('overview');
+	let exportData = $state<ExportRow[]>([]);
+
+	// Per-question analytics derived data
+	let questionAnalytics = $derived.by(() => {
+		if (exportData.length === 0) return [];
+
+		const byQuestion = new Map<string, { values: unknown[]; reactionTimes: number[]; responseCount: number }>();
+		for (const row of exportData) {
+			if (!byQuestion.has(row.question_id)) {
+				byQuestion.set(row.question_id, { values: [], reactionTimes: [], responseCount: 0 });
+			}
+			const entry = byQuestion.get(row.question_id)!;
+			entry.values.push(row.value);
+			entry.responseCount++;
+			if (row.reaction_time_us != null) {
+				entry.reactionTimes.push(row.reaction_time_us / 1000); // Convert to ms
+			}
+		}
+
+		const engine = StatisticalEngine.getInstance();
+		const results: Array<{
+			questionId: string;
+			responseCount: number;
+			distribution: Map<string, number>;
+			rtStats: { mean: number; median: number; sd: number } | null;
+		}> = [];
+
+		for (const [questionId, entry] of byQuestion) {
+			// Build value distribution
+			const distribution = new Map<string, number>();
+			for (const val of entry.values) {
+				const key = val == null ? '(no answer)' : String(val);
+				distribution.set(key, (distribution.get(key) || 0) + 1);
+			}
+
+			// RT stats
+			let rtStats: { mean: number; median: number; sd: number } | null = null;
+			if (entry.reactionTimes.length >= 2) {
+				try {
+					const stats = engine.calculateDescriptiveStats(entry.reactionTimes);
+					rtStats = { mean: stats.mean, median: stats.median, sd: stats.standardDeviation };
+				} catch {
+					// Not enough valid data
+				}
+			}
+
+			results.push({ questionId, responseCount: entry.responseCount, distribution, rtStats });
+		}
+
+		return results;
+	});
+
 	// Auto-select first questionnaire on load
 	$effect(() => {
 		if (data.questionnaires.length > 0 && !selectedQuestionnaireId) {
@@ -61,6 +117,21 @@
 			loadSessions(selectedQuestionnaireId);
 		}
 	});
+
+	// Load export data for per-question analytics when tab switches
+	$effect(() => {
+		if (analyticsTab === 'per-question' && selectedQuestionnaireId && sessions.length > 0) {
+			loadExportData();
+		}
+	});
+
+	async function loadExportData() {
+		try {
+			exportData = await fetchExportData();
+		} catch {
+			exportData = [];
+		}
+	}
 
 	async function loadSessions(questionnaireId: string) {
 		loading = true;
@@ -188,6 +259,16 @@
 			abandoned: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
 		};
 		return classes[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+	}
+
+	function getDistributionEntries(distribution: Map<string, number>) {
+		const entries = [...distribution.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+		const maxCount = entries.length > 0 ? Math.max(...entries.map(e => e[1])) : 0;
+		return entries.map(([label, count]) => ({
+			label,
+			count,
+			pct: maxCount > 0 ? (count / maxCount) * 100 : 0,
+		}));
 	}
 
 	const EXPORT_FORMATS = [
@@ -432,6 +513,126 @@
 				</div>
 			</div>
 		{:else}
+			<!-- Tab Switcher -->
+			<div class="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
+				<button
+					onclick={() => { analyticsTab = 'overview'; }}
+					class="px-4 py-2 text-sm font-medium rounded-md transition-colors {analyticsTab === 'overview' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}"
+				>
+					Overview
+				</button>
+				<button
+					onclick={() => { analyticsTab = 'per-question'; }}
+					class="px-4 py-2 text-sm font-medium rounded-md transition-colors {analyticsTab === 'per-question' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}"
+				>
+					Per Question
+				</button>
+			</div>
+
+			{#if analyticsTab === 'per-question'}
+				<!-- Per-Question Analytics -->
+				{#if questionAnalytics.length === 0}
+					<div class="text-center py-12 bg-white dark:bg-gray-800 shadow rounded-lg">
+						<PieChart class="mx-auto h-10 w-10 text-gray-400" />
+						<h4 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No response data</h4>
+						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+							Response data will appear once participants complete the questionnaire.
+						</p>
+					</div>
+				{:else}
+					<div class="space-y-6">
+						{#each questionAnalytics as qa (qa.questionId)}
+							<div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+								<div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+									<h3 class="text-sm font-semibold text-gray-900 dark:text-white font-mono">
+										{qa.questionId}
+									</h3>
+									<span class="text-xs text-gray-500 dark:text-gray-400">
+										{qa.responseCount} responses
+									</span>
+								</div>
+
+								<div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+									<!-- Distribution Chart -->
+									<div>
+										<h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Response Distribution</h4>
+										<div class="space-y-2">
+											{#each getDistributionEntries(qa.distribution) as { label, count, pct }}
+												<div class="flex items-center gap-3">
+													<span class="text-xs text-gray-700 dark:text-gray-300 w-24 truncate flex-shrink-0" title={label}>{label}</span>
+													<div class="flex-1 h-5 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden">
+														<div
+															class="h-full bg-blue-500 dark:bg-blue-400 rounded transition-all"
+															style="width: {pct}%"
+														></div>
+													</div>
+													<span class="text-xs text-gray-500 dark:text-gray-400 w-8 text-right flex-shrink-0">{count}</span>
+												</div>
+											{/each}
+										</div>
+										{#if qa.distribution.size > 10}
+											<p class="text-xs text-gray-400 mt-2">Showing top 10 of {qa.distribution.size} values</p>
+										{/if}
+									</div>
+
+									<!-- Reaction Time Stats -->
+									<div>
+										<h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Reaction Time</h4>
+										{#if qa.rtStats}
+											<div class="grid grid-cols-3 gap-4">
+												<div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
+													<div class="text-lg font-semibold text-gray-900 dark:text-white">
+														{Math.round(qa.rtStats.mean)}
+													</div>
+													<div class="text-xs text-gray-500 dark:text-gray-400">Mean (ms)</div>
+												</div>
+												<div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
+													<div class="text-lg font-semibold text-gray-900 dark:text-white">
+														{Math.round(qa.rtStats.median)}
+													</div>
+													<div class="text-xs text-gray-500 dark:text-gray-400">Median (ms)</div>
+												</div>
+												<div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
+													<div class="text-lg font-semibold text-gray-900 dark:text-white">
+														{Math.round(qa.rtStats.sd)}
+													</div>
+													<div class="text-xs text-gray-500 dark:text-gray-400">SD (ms)</div>
+												</div>
+											</div>
+										{:else}
+											<div class="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500 py-4">
+												<Timer class="h-4 w-4" />
+												<span>No reaction time data for this question</span>
+											</div>
+										{/if}
+									</div>
+								</div>
+							</div>
+						{/each}
+					</div>
+
+					<!-- Completion rates per page -->
+					<div class="mt-6 bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+						<div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+							<h3 class="text-sm font-semibold text-gray-900 dark:text-white">Completion Summary</h3>
+						</div>
+						<div class="p-6">
+							<div class="flex items-center gap-4">
+								<div class="flex-1 h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+									<div
+										class="h-full bg-green-500 dark:bg-green-400 rounded-full transition-all"
+										style="width: {completionRate}%"
+									></div>
+								</div>
+								<span class="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+									{completedSessions.length} / {sessions.length} completed ({completionRate}%)
+								</span>
+							</div>
+						</div>
+					</div>
+				{/if}
+			{:else}
+
 			<!-- Summary Cards -->
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
 				<StatisticsCard
@@ -574,6 +775,9 @@
 					</div>
 				{/if}
 			</div>
+
+			{/if}
+			<!-- end analyticsTab -->
 		{/if}
 	</main>
 </div>

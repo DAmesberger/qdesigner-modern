@@ -3,6 +3,7 @@
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
   import { onMount } from 'svelte';
+  import { api } from '$lib/services/api';
 
   type RecordingMode = 'audio' | 'video-audio' | 'video-only';
   type AudioQuality = 'low' | 'medium' | 'high';
@@ -54,7 +55,10 @@
   const hasVideo = $derived(recordingMode === 'video-audio' || recordingMode === 'video-only');
   const hasAudio = $derived(recordingMode === 'audio' || recordingMode === 'video-audio');
 
+  const BLOB_SIZE_WARNING_BYTES = 5 * 1024 * 1024; // 5 MB
+
   // State
+  let blobSizeWarning = $state('');
   let phase = $state<'idle' | 'requesting' | 'countdown' | 'recording' | 'recorded' | 'error'>('idle');
   let errorMessage = $state('');
   let stream = $state<MediaStream | null>(null);
@@ -304,6 +308,13 @@
       return;
     }
 
+    // Warn if blob is large (> 5 MB) but still allow it
+    if (blob.size > BLOB_SIZE_WARNING_BYTES) {
+      blobSizeWarning = `Recording is ${formatBytes(blob.size)}. Large files may take longer to upload. Consider using lower quality settings for smaller files.`;
+    } else {
+      blobSizeWarning = '';
+    }
+
     recordedBlob = blob;
     recordedUrl = URL.createObjectURL(blob);
     phase = 'recorded';
@@ -325,6 +336,34 @@
       timestamp: Date.now(),
       data: { action: 'recording-complete', duration: elapsedTime, size: blob.size },
     });
+
+    // Upload to server in background if a session is active
+    uploadMediaToServer(blob, mimeType);
+  }
+
+  async function uploadMediaToServer(blob: Blob, mimeType: string) {
+    const sessionId = sessionStorage.getItem('qd_api_session_id');
+    if (!sessionId) return;
+
+    const ext = mimeType.includes('video') ? 'webm' : mimeType.includes('audio') ? 'webm' : 'bin';
+    const filename = `recording_${Date.now()}.${ext}`;
+
+    try {
+      const result = await api.sessions.uploadMedia(sessionId, blob, filename);
+
+      // Replace blob URL with server URL in response value
+      if (value && typeof value === 'object' && 'mediaUrl' in value) {
+        const updated: MediaResponseValue = {
+          ...(value as MediaResponseValue),
+          mediaUrl: result.url,
+        };
+        value = updated;
+        onResponse?.(updated);
+      }
+    } catch (err) {
+      // Upload failure is non-critical; the blob URL still works locally
+      console.warn('Media upload failed, keeping local blob URL:', err);
+    }
   }
 
   function reRecord() {
@@ -335,6 +374,7 @@
     }
     recordedBlob = null;
     recordedChunks = [];
+    blobSizeWarning = '';
     value = null;
     onResponse?.(null);
     phase = 'idle';
@@ -614,6 +654,17 @@
           <span class="meta-separator">&middot;</span>
           <span class="meta-item">Size: {recordedBlob ? formatBytes(recordedBlob.size) : '---'}</span>
         </div>
+
+        {#if blobSizeWarning}
+          <div class="blob-size-warning">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span>{blobSizeWarning}</span>
+          </div>
+        {/if}
 
         {#if allowRerecord}
           <button
@@ -964,6 +1015,26 @@
 
   .meta-separator {
     color: #d1d5db;
+  }
+
+  .blob-size-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin: 0 1rem;
+    padding: 0.625rem 0.875rem;
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    color: #92400e;
+    line-height: 1.4;
+  }
+
+  .blob-size-warning svg {
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+    color: #d97706;
   }
 
   .re-record-btn {

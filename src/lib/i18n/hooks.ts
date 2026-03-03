@@ -16,22 +16,25 @@ import {
 } from './stores';
 import { changeLanguage } from './config';
 
+// Simplified translation function type for store usage
+type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
+
 // Create a derived store for translations that updates when language changes
-export const t = derived(
+export const t = derived<[typeof currentLanguage, typeof isInitialized], TranslateFn>(
   [currentLanguage, isInitialized],
-  ([$currentLanguage, $isInitialized]) => {
+  ([$currentLanguage, $isInitialized]): TranslateFn => {
     if (!$isInitialized) {
-      return ((key: string, options?: any) => key) as TFunction;
+      return (key: string) => key;
     }
-    
-    return ((key: string, options?: any) => {
+
+    return (key: string, options?: Record<string, unknown>) => {
       try {
-        return i18n.t(key, options);
+        return i18n.t(key, options) as string;
       } catch (error) {
         console.warn(`Translation failed for key: ${key}`, error);
         return key;
       }
-    }) as TFunction;
+    };
   }
 );
 

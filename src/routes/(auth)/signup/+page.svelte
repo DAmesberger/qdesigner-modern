@@ -7,6 +7,7 @@
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
+  import { t } from '$lib/i18n/hooks';
   import {
     sendVerificationCode,
     verifyCode,
@@ -201,12 +202,12 @@
   <div class="sm:mx-auto sm:w-full sm:max-w-md">
     <div class="text-center">
       <h2 class="mt-6 text-3xl font-bold tracking-tight text-foreground">
-        {showVerification ? 'Verify Your Email' : 'Create Your Account'}
+        {showVerification ? 'Verify Your Email' : $t('auth.signup.title')}
       </h2>
       <p class="mt-2 text-lg text-muted-foreground">
         {showVerification
           ? `We've sent a verification code to ${email}`
-          : 'Join QDesigner to start building questionnaires'}
+          : $t('auth.signup.subtitle')}
       </p>
     </div>
   </div>
@@ -239,7 +240,7 @@
             </Alert>
           {/if}
 
-          <FormGroup label="Full Name" id="full-name">
+          <FormGroup label={$t('auth.signup.firstName')} id="full-name">
             <Input
               id="full-name"
               type="text"
@@ -249,7 +250,7 @@
             />
           </FormGroup>
 
-          <FormGroup label="Email Address" id="email">
+          <FormGroup label={$t('auth.signup.email')} id="email">
             <Input
               id="email"
               type="email"
@@ -259,7 +260,7 @@
             />
           </FormGroup>
 
-          <FormGroup label="Password" id="password">
+          <FormGroup label={$t('auth.signup.password')} id="password">
             <Input
               id="password"
               type="password"
@@ -323,14 +324,14 @@
           {/if}
 
           <Button type="submit" variant="primary" size="lg" class="w-full" {loading}>
-            Create Account
+            {$t('auth.signup.submit')}
           </Button>
 
           <div class="text-center">
             <span class="text-sm text-muted-foreground">
-              Already have an account?
+              {$t('auth.signup.hasAccount')}
               <a href="/login" class="font-medium text-primary hover:text-primary/80 ml-1">
-                Sign in
+                {$t('auth.signup.signIn')}
               </a>
             </span>
           </div>

@@ -31,6 +31,7 @@
   let currentScreen = $state<'welcome' | 'consent' | 'runtime' | 'complete'>('welcome');
   let session = $state<any>(null);
   let completedSession = $state<any>(null);
+  let conditionGroupCounts = $state<number[] | undefined>(undefined);
 
   // Initialize on mount
   onMount(() => {
@@ -39,6 +40,7 @@
       // If we have an existing session, skip welcome/consent
       if (data.existingSession) {
         session = data.existingSession;
+        sessionStorage.setItem('qd_api_session_id', session.id);
         if (session.status === 'in_progress' || session.status === 'active') {
           currentScreen = 'runtime';
           await initializeRuntime();
@@ -57,6 +59,7 @@
       runtime?.dispose();
       renderer?.destroy();
       document.body.classList.remove('fillout');
+      sessionStorage.removeItem('qd_api_session_id');
     };
   });
 
@@ -89,6 +92,9 @@
       );
 
       session = newSession;
+
+      // Store API session ID so media components can upload
+      sessionStorage.setItem('qd_api_session_id', session.id);
 
       // Store consent data in session metadata
       if (consentData) {
@@ -130,12 +136,23 @@
 
       loadingMessage = 'Loading questionnaire...';
 
+      // Fetch condition counts for balanced between-subjects assignment
+      try {
+        const counts = await api.questionnaires.conditionCounts(data.questionnaire.id);
+        if (counts) {
+          conditionGroupCounts = Object.values(counts).map(Number);
+        }
+      } catch {
+        // Non-critical: condition balancing will use default if unavailable
+      }
+
       // Initialize runtime with persistence
       runtime = new FilloutRuntime({
         canvas,
         questionnaire: data.questionnaire.definition,
         sessionId: session.id,
         participantId: data.participantId || undefined,
+        conditionGroupCounts,
         enableOfflineSync: true,
         onComplete: async (completed) => {
           completedSession = completed;

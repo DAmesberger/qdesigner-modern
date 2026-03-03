@@ -8,16 +8,24 @@
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
 
-  let loading = true;
-  let saving = false;
-  let error: string | null = null;
-  let success: string | null = null;
+  let loading = $state(true);
+  let saving = $state(false);
+  let error: string | null = $state(null);
+  let success: string | null = $state(null);
 
-  let currentOrg: any = null;
+  let currentOrg: any = $state(null);
 
   // Settings form
-  let orgName = '';
-  let orgSlug = '';
+  let orgName = $state('');
+  let orgSlug = $state('');
+
+  // Defaults form
+  let defaultTimeLimit = $state('30');
+  let defaultRandomization = $state(false);
+  let defaultRandomSeed = $state('');
+  let emailNotifications = $state(true);
+  let digestFrequency = $state<'daily' | 'weekly' | 'none'>('weekly');
+  let savingDefaults = $state(false);
 
   onMount(async () => {
     await loadData();
@@ -43,6 +51,35 @@
       error = 'Failed to load settings';
     } finally {
       loading = false;
+    }
+  }
+
+  async function handleSaveDefaults() {
+    if (!currentOrg) return;
+
+    savingDefaults = true;
+    error = null;
+    success = null;
+
+    try {
+      // Store defaults in organization metadata via the existing update API
+      await api.organizations.update(currentOrg.id, {
+        name: orgName,
+        settings: {
+          defaults: {
+            timeLimit: parseInt(defaultTimeLimit, 10) || 30,
+            randomization: defaultRandomization,
+            randomSeed: defaultRandomSeed || null,
+            emailNotifications,
+            digestFrequency,
+          },
+        },
+      });
+      success = 'Defaults saved successfully';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to save defaults';
+    } finally {
+      savingDefaults = false;
     }
   }
 
@@ -94,7 +131,7 @@
     <div class="space-y-6">
       <Card>
         <h3 class="text-lg font-semibold mb-4">Organization</h3>
-        <form on:submit|preventDefault={handleSave} class="space-y-4">
+        <form onsubmit={(e) => { e.preventDefault(); handleSave(); }} class="space-y-4">
           <FormGroup label="Organization Name" id="org-name">
             <Input id="org-name" type="text" required bind:value={orgName} />
           </FormGroup>
@@ -114,10 +151,87 @@
 
       <Card>
         <h3 class="text-lg font-semibold mb-4">Defaults</h3>
-        <p class="text-muted-foreground">
-          Default questionnaire settings, notification preferences, and other organization-wide
-          defaults will be configurable here in a future update.
-        </p>
+        <form onsubmit={(e) => { e.preventDefault(); handleSaveDefaults(); }} class="space-y-6">
+          <!-- Time Limits -->
+          <fieldset class="space-y-3">
+            <legend class="text-sm font-medium text-foreground">Time Limits</legend>
+            <FormGroup label="Default Time Limit (minutes)" id="default-time-limit">
+              <input
+                id="default-time-limit"
+                type="number"
+                min="1"
+                max="180"
+                bind:value={defaultTimeLimit}
+                class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              />
+              <p class="text-sm text-muted-foreground mt-1">
+                Maximum time allowed per questionnaire session. Participants will be warned when time is running low.
+              </p>
+            </FormGroup>
+          </fieldset>
+
+          <!-- Randomization -->
+          <fieldset class="space-y-3">
+            <legend class="text-sm font-medium text-foreground">Randomization</legend>
+            <div class="flex items-center gap-3">
+              <input
+                id="default-randomization"
+                type="checkbox"
+                bind:checked={defaultRandomization}
+                class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label for="default-randomization" class="text-sm text-foreground">
+                Enable randomization by default for new questionnaires
+              </label>
+            </div>
+            {#if defaultRandomization}
+              <FormGroup label="Random Seed (optional)" id="default-random-seed">
+                <Input
+                  id="default-random-seed"
+                  type="text"
+                  placeholder="Leave empty for random seed"
+                  bind:value={defaultRandomSeed}
+                />
+                <p class="text-sm text-muted-foreground mt-1">
+                  A fixed seed ensures reproducible ordering across sessions.
+                </p>
+              </FormGroup>
+            {/if}
+          </fieldset>
+
+          <!-- Notifications -->
+          <fieldset class="space-y-3">
+            <legend class="text-sm font-medium text-foreground">Notification Preferences</legend>
+            <div class="flex items-center gap-3">
+              <input
+                id="email-notifications"
+                type="checkbox"
+                bind:checked={emailNotifications}
+                class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label for="email-notifications" class="text-sm text-foreground">
+                Enable email notifications for new responses
+              </label>
+            </div>
+            {#if emailNotifications}
+              <FormGroup label="Digest Frequency" id="digest-frequency">
+                <select
+                  id="digest-frequency"
+                  bind:value={digestFrequency}
+                  class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="daily">Daily digest</option>
+                  <option value="weekly">Weekly digest</option>
+                  <option value="none">Instant (no digest)</option>
+                </select>
+              </FormGroup>
+            {/if}
+          </fieldset>
+
+          <div class="flex justify-end">
+            <Button type="submit" variant="primary" loading={savingDefaults}>Save Defaults</Button>
+          </div>
+        </form>
       </Card>
     </div>
   {/if}

@@ -1,8 +1,10 @@
 use axum::{
+    middleware as axum_mw,
     routing::{delete, get, patch, post},
     Router,
 };
 
+use crate::middleware::rate_limit::rate_limit_middleware;
 use crate::state::AppState;
 
 pub mod auth;
@@ -32,7 +34,11 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/password-reset/confirm",
             post(auth::confirm_password_reset),
-        );
+        )
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ));
 
     let user_routes =
         Router::new().route("/me", get(users::get_profile).patch(users::update_profile));
@@ -122,10 +128,19 @@ pub fn router(state: AppState) -> Router {
         .route("/{id}/accept", post(organizations::accept_invitation))
         .route("/{id}/decline", post(organizations::decline_invitation));
 
-    let questionnaire_routes = Router::new().route(
-        "/by-code/{code}",
-        get(questionnaires::get_questionnaire_by_code),
-    );
+    let questionnaire_routes = Router::new()
+        .route(
+            "/by-code/{code}",
+            get(questionnaires::get_questionnaire_by_code),
+        )
+        .route(
+            "/{id}/versions",
+            get(questionnaires::list_versions),
+        )
+        .route(
+            "/{id}/condition-counts",
+            get(sessions::condition_counts),
+        );
 
     let session_routes = Router::new()
         .route(
@@ -141,7 +156,8 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/{id}/responses", get(sessions::get_responses).post(sessions::submit_response))
         .route("/{id}/events", get(sessions::get_events).post(sessions::submit_events))
-        .route("/{id}/variables", get(sessions::get_variables).post(sessions::upsert_variable));
+        .route("/{id}/variables", get(sessions::get_variables).post(sessions::upsert_variable))
+        .route("/{id}/media", post(media::upload_session_media));
 
     let media_routes = Router::new()
         .route("/", get(media::list_media).post(media::upload_media))

@@ -279,6 +279,19 @@ export interface QuestionTemplate {
 	updated_at?: string;
 }
 
+// Session media upload response
+export interface SessionMediaUploadResponse {
+	url: string;
+	filename: string;
+	size: number;
+	mimeType: string;
+}
+
+// Condition group counts (for balanced between-subjects assignment)
+export interface ConditionGroupCounts {
+	[conditionGroup: string]: number;
+}
+
 // API Error
 export interface ApiError {
 	error: string;

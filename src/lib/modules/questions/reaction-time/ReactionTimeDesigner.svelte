@@ -827,6 +827,64 @@
       </div>
     {/if}
 
+    <!-- Stimulus Preview Panel -->
+    {#if question.config.task.type === 'stroop' || question.config.task.type === 'flanker'}
+      <div class="subsection">
+        <h5 class="subsection-title">Stimulus Preview</h5>
+        <div class="stimulus-preview-box">
+          {#if question.config.task.type === 'stroop'}
+            {@const colors = question.config.task.stroop.colors || []}
+            {@const congruent = colors.length >= 1}
+            <div class="stimulus-preview-content">
+              <div class="preview-fixation">+</div>
+              <div class="preview-arrow">&#x2192;</div>
+              <div class="preview-stimuli">
+                {#if congruent && colors.length >= 2}
+                  <div class="stroop-example">
+                    <span class="stroop-label">Congruent:</span>
+                    <span class="stroop-word" style="color: {colors[0]}; font-size: 1.5rem; font-weight: 700;">
+                      {(colors[0] ?? 'RED').toUpperCase()}
+                    </span>
+                  </div>
+                  <div class="stroop-example">
+                    <span class="stroop-label">Incongruent:</span>
+                    <span class="stroop-word" style="color: {colors[1]}; font-size: 1.5rem; font-weight: 700;">
+                      {(colors[0] ?? 'RED').toUpperCase()}
+                    </span>
+                  </div>
+                {:else}
+                  <span class="preview-placeholder">Add at least 2 colors to see preview</span>
+                {/if}
+              </div>
+            </div>
+          {:else if question.config.task.type === 'flanker'}
+            {@const stim = question.config.task.flanker.stimulusSet}
+            {@const n = question.config.task.flanker.flankerCount}
+            <div class="stimulus-preview-content">
+              <div class="preview-fixation">+</div>
+              <div class="preview-arrow">&#x2192;</div>
+              <div class="preview-stimuli">
+                <div class="flanker-example">
+                  <span class="flanker-label">Congruent:</span>
+                  <span class="flanker-display">{stim[0].repeat(n)}{stim[0]}{stim[0].repeat(n)}</span>
+                </div>
+                <div class="flanker-example">
+                  <span class="flanker-label">Incongruent:</span>
+                  <span class="flanker-display">{stim[1].repeat(n)}{stim[0]}{stim[1].repeat(n)}</span>
+                </div>
+                {#if question.config.task.flanker.includeNeutral}
+                  <div class="flanker-example">
+                    <span class="flanker-label">Neutral:</span>
+                    <span class="flanker-display">{'-'.repeat(n)}{stim[0]}{'-'.repeat(n)}</span>
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
     {#if question.config.task.type === 'iat'}
       <div class="subsection">
         <h5 class="subsection-title">IAT Configuration</h5>
@@ -1883,5 +1941,76 @@
     font-weight: 500;
     color: #111827;
     text-align: right;
+  }
+
+  /* Stimulus Preview */
+  .stimulus-preview-box {
+    background: #111827;
+    border: 1px solid #374151;
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    overflow: hidden;
+  }
+
+  .stimulus-preview-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    justify-content: center;
+  }
+
+  .preview-fixation {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #9ca3af;
+    font-family: monospace;
+    flex-shrink: 0;
+  }
+
+  .preview-arrow {
+    font-size: 1.25rem;
+    color: #4b5563;
+    flex-shrink: 0;
+  }
+
+  .preview-stimuli {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .preview-placeholder {
+    color: #6b7280;
+    font-size: 0.8125rem;
+    font-style: italic;
+  }
+
+  .stroop-example,
+  .flanker-example {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .stroop-label,
+  .flanker-label {
+    font-size: 0.6875rem;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    width: 5.5rem;
+    flex-shrink: 0;
+  }
+
+  .stroop-word {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .flanker-display {
+    font-family: monospace;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 0.15em;
   }
 </style>

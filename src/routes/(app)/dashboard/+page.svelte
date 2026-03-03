@@ -9,6 +9,7 @@
     QuestionnaireListItem,
   } from '$lib/types/dashboard';
   import { appPaths } from '$lib/routing/paths';
+  import { t } from '$lib/i18n/hooks';
 
   interface Props {
     data: PageData;
@@ -106,7 +107,7 @@
       class="glass-card p-6 flex items-center justify-between border-l-4 border-l-indigo-500 animate-in zoom-in duration-300 delay-0"
     >
       <div>
-        <p class="text-sm font-medium text-[hsl(var(--muted-foreground))]">Total Questionnaires</p>
+        <p class="text-sm font-medium text-[hsl(var(--muted-foreground))]">{$t('analytics.overview.totalResponses', { defaultValue: 'Total Questionnaires' })}</p>
         <p class="text-3xl font-bold text-[hsl(var(--foreground))] mt-1">
           {stats.totalQuestionnaires}
         </p>
@@ -127,7 +128,7 @@
       class="glass-card p-6 flex items-center justify-between border-l-4 border-l-purple-500 animate-in zoom-in duration-300 delay-100"
     >
       <div>
-        <p class="text-sm font-medium text-[hsl(var(--muted-foreground))]">Total Responses</p>
+        <p class="text-sm font-medium text-[hsl(var(--muted-foreground))]">{$t('analytics.overview.totalResponses')}</p>
         <p class="text-3xl font-bold text-[hsl(var(--foreground))] mt-1">{stats.totalResponses}</p>
       </div>
       <div class="p-3 bg-purple-500/10 rounded-full text-purple-600">
@@ -146,7 +147,7 @@
       class="glass-card p-6 flex items-center justify-between border-l-4 border-l-emerald-500 animate-in zoom-in duration-300 delay-200"
     >
       <div>
-        <p class="text-sm font-medium text-[hsl(var(--muted-foreground))]">Active</p>
+        <p class="text-sm font-medium text-[hsl(var(--muted-foreground))]">{$t('common.status.active')}</p>
         <p class="text-3xl font-bold text-[hsl(var(--foreground))] mt-1">
           {stats.activeQuestionnaires}
         </p>
@@ -167,7 +168,7 @@
       class="glass-card p-6 flex items-center justify-between border-l-4 border-l-amber-500 animate-in zoom-in duration-300 delay-300"
     >
       <div>
-        <p class="text-sm font-medium text-[hsl(var(--muted-foreground))]">Avg. Completion</p>
+        <p class="text-sm font-medium text-[hsl(var(--muted-foreground))]">{$t('analytics.overview.completionRate')}</p>
         <p class="text-3xl font-bold text-[hsl(var(--foreground))] mt-1">
           {stats.avgCompletionRate}%
         </p>

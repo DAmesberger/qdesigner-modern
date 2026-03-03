@@ -256,12 +256,16 @@ pub async fn update_questionnaire(
 
     verify_project_write_access(&state, user.user_id, path.id).await?;
 
+    // Snapshot current state into questionnaire_versions before updating
+    snapshot_questionnaire_version(&state, path.qid, user.user_id).await?;
+
     // Handle publish action
     if body.status.as_deref() == Some("published") {
         let q = sqlx::query_as::<_, Questionnaire>(
             r#"
             UPDATE questionnaire_definitions
-            SET status = 'published', published_at = NOW(), updated_at = NOW()
+            SET status = 'published', published_at = NOW(), updated_at = NOW(),
+                version = version + 1
             WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
             RETURNING id, project_id, name, description, version, content, status,
                       settings, created_by, created_at, updated_at, published_at
@@ -277,7 +281,7 @@ pub async fn update_questionnaire(
     }
 
     // Build dynamic update
-    let mut parts: Vec<String> = Vec::new();
+    let mut parts: Vec<String> = vec!["version = version + 1".into()];
     let mut bind_idx = 3u32; // $1 = qid, $2 = project_id
 
     if body.name.is_some() {
@@ -300,7 +304,8 @@ pub async fn update_questionnaire(
         parts.push(format!("settings = ${bind_idx}"));
     }
 
-    if parts.is_empty() {
+    if parts.len() == 1 {
+        // Only the version increment, no actual fields to update
         return Err(ApiError::BadRequest("No fields to update".into()));
     }
     parts.push("updated_at = NOW()".into());
@@ -527,6 +532,88 @@ fn csv_escape(field: &str) -> String {
     } else {
         field.to_string()
     }
+}
+
+// ── Version History ──────────────────────────────────────────────
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct QuestionnaireVersion {
+    pub id: Uuid,
+    pub questionnaire_id: Uuid,
+    pub version: i32,
+    pub content: serde_json::Value,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub created_by: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VersionListQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+/// GET /api/questionnaires/:id/versions
+pub async fn list_versions(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(questionnaire_id): Path<Uuid>,
+    Query(q): Query<VersionListQuery>,
+) -> Result<Json<Vec<QuestionnaireVersion>>, ApiError> {
+    // Verify access via the questionnaire's project
+    let project_id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT project_id FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(questionnaire_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+
+    verify_project_access(&state, user.user_id, project_id).await?;
+
+    let limit = q.limit.unwrap_or(50).min(100);
+    let offset = q.offset.unwrap_or(0);
+
+    let versions = sqlx::query_as::<_, QuestionnaireVersion>(
+        r#"
+        SELECT id, questionnaire_id, version, content, title, description,
+               created_at, created_by
+        FROM questionnaire_versions
+        WHERE questionnaire_id = $1
+        ORDER BY version DESC
+        LIMIT $2 OFFSET $3
+        "#,
+    )
+    .bind(questionnaire_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(versions))
+}
+
+/// Snapshot the current questionnaire state into the versions table.
+async fn snapshot_questionnaire_version(
+    state: &AppState,
+    questionnaire_id: Uuid,
+    user_id: Uuid,
+) -> Result<(), ApiError> {
+    sqlx::query(
+        r#"
+        INSERT INTO questionnaire_versions (questionnaire_id, version, content, title, description, created_by)
+        SELECT id, version, content, name, description, $2
+        FROM questionnaire_definitions
+        WHERE id = $1 AND deleted_at IS NULL
+        "#,
+    )
+    .bind(questionnaire_id)
+    .bind(user_id)
+    .execute(&state.pool)
+    .await?;
+
+    Ok(())
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

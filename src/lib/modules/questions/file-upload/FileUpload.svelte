@@ -2,6 +2,7 @@
   import BaseQuestion from '../shared/BaseQuestion.svelte';
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
+  import { api } from '$lib/services/api';
 
   interface FileUploadConfig {
     accept?: string[];
@@ -245,6 +246,34 @@
       value = results[0] || null;
     }
 
+    onResponse?.(value);
+
+    // Upload files to server in background if a session is active
+    uploadFilesToServer(filesToProcess, results);
+  }
+
+  async function uploadFilesToServer(filesToProcess: File[], results: FileData[]) {
+    const sessionId = sessionStorage.getItem('qd_api_session_id');
+    if (!sessionId) return;
+
+    for (let i = 0; i < filesToProcess.length; i++) {
+      const file = filesToProcess[i];
+      if (!file) continue;
+
+      try {
+        const result = await api.sessions.uploadMedia(sessionId, file, file.name);
+
+        // Update the file data with the server URL
+        const fileResult = results[i];
+        if (fileResult) {
+          fileResult.data = result.url;
+        }
+      } catch (err) {
+        console.warn(`File upload failed for ${file.name}, keeping local data:`, err);
+      }
+    }
+
+    // Re-emit value with updated URLs
     onResponse?.(value);
   }
 

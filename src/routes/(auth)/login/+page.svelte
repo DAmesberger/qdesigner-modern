@@ -6,6 +6,7 @@
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
+  import { t } from '$lib/i18n/hooks';
 
   let email = '';
   let password = '';
@@ -157,13 +158,13 @@
       </div>
     </div>
     <h2 class="mt-10 text-center text-2xl font-bold leading-9 tracking-tight text-foreground">
-      Sign in to QDesigner
+      {$t('auth.login.title')}
     </h2>
   </div>
 
   <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
     <form class="space-y-6" onsubmit={handleSignIn}>
-      <FormGroup label="Email address" id="email">
+      <FormGroup label={$t('auth.login.email')} id="email">
         <Input
           id="email"
           name="email"
@@ -176,14 +177,14 @@
       </FormGroup>
 
       <div>
-        <FormGroup label="Password" id="password">
+        <FormGroup label={$t('auth.login.password')} id="password">
           <div slot="label" class="flex items-center justify-between w-full">
-            <span>Password</span>
+            <span>{$t('auth.login.password')}</span>
             <a
               href="/forgot-password"
               class="text-sm font-semibold text-primary hover:text-primary/80"
             >
-              Forgot password?
+              {$t('auth.login.forgot')}
             </a>
           </div>
           <Input
@@ -211,7 +212,7 @@
       {/if}
 
       <div>
-        <Button type="submit" variant="primary" size="lg" class="w-full" {loading}>Sign in</Button>
+        <Button type="submit" variant="primary" size="lg" class="w-full" {loading}>{$t('auth.login.submit')}</Button>
       </div>
 
       {#if showDevQuickLogin}
@@ -264,7 +265,7 @@
             onclick={handleSignUp}
             {loading}
           >
-            Create new account
+            {$t('auth.signup.submit')}
           </Button>
         </div>
       </div>

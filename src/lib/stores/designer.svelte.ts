@@ -7,6 +7,7 @@ import {
 } from './designer/UiStore';
 import { DesignerPersistenceService } from './designer/PersistenceService';
 import { generateId } from '$lib/shared/utils/id';
+import { VariableEngine } from '$lib/scripting-engine';
 
 export type SelectedItem = Question | Page | Block | Variable;
 export type SelectedItemType = 'question' | 'page' | 'block' | 'variable' | null;
@@ -19,6 +20,8 @@ interface CommitOptions {
   markDirty?: boolean;
   pushHistory?: boolean;
 }
+
+const MAX_HISTORY = 100;
 
 class DesignerStore {
   private readonly documentStore = new DocumentStore();
@@ -59,6 +62,9 @@ class DesignerStore {
   // Mobile drawer state
   isLeftDrawerOpen = $state(false);
   isRightDrawerOpen = $state(false);
+
+  // Variable engine
+  variableEngine: VariableEngine | null = null;
 
   constructor() {
     this.syncUiState(this.uiStore.getState());
@@ -141,7 +147,11 @@ class DesignerStore {
   }
 
   initVariableEngine() {
-    // Runtime variable engine is initialized in runtime context.
+    const engine = new VariableEngine();
+    for (const v of this.questionnaire.variables) {
+      engine.registerVariable(v);
+    }
+    this.variableEngine = engine;
   }
 
   setUserId(id: string) {
@@ -575,6 +585,52 @@ class DesignerStore {
     return true;
   }
 
+  async copyQuestions(questionIds: string[]) {
+    const questions = this.questionnaire.questions.filter((q) => questionIds.includes(q.id));
+    if (questions.length === 0) return;
+
+    const payload = JSON.stringify({ __qdesigner_clipboard: true, questions });
+    try {
+      await navigator.clipboard.writeText(payload);
+    } catch {
+      // Clipboard API may be unavailable
+    }
+  }
+
+  async pasteQuestions() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) return;
+
+      const parsed = JSON.parse(text);
+      if (!parsed?.__qdesigner_clipboard || !Array.isArray(parsed.questions)) return;
+
+      const block = this.currentBlock;
+      if (!block) return;
+
+      let lastQuestionId: string | null = null;
+      for (const q of parsed.questions) {
+        const inserted = this.documentStore.addQuestion(this.questionnaire, block.id, q.type);
+        this.questionnaire = this.documentStore.normalizeQuestionnaire(inserted.questionnaire);
+
+        // Apply pasted data onto the newly created question (keeping the new ID)
+        const { id: _ignored, ...updates } = q;
+        this.questionnaire = this.documentStore.updateQuestion(this.questionnaire, inserted.questionId, updates);
+        lastQuestionId = inserted.questionId;
+      }
+
+      if (lastQuestionId) {
+        this.commit(this.questionnaire, {
+          selectedItemId: lastQuestionId,
+          selectedItemType: 'question',
+          markDirty: true,
+        });
+      }
+    } catch {
+      // Invalid clipboard content or API unavailable
+    }
+  }
+
   exportQuestionnaire() {
     return this.documentStore.exportQuestionnaire(this.questionnaire);
   }
@@ -652,6 +708,11 @@ class DesignerStore {
     }
 
     this.history.push(snapshot);
+
+    if (this.history.length > MAX_HISTORY) {
+      this.history = this.history.slice(this.history.length - MAX_HISTORY);
+    }
+
     this.historyIndex = this.history.length - 1;
   }
 

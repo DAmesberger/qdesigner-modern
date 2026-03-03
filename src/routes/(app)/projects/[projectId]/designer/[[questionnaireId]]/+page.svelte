@@ -2,6 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
   import { autoSave } from '$lib/services/autoSave.svelte';
+  import { initializeCollaboration } from '$lib/collaboration';
+  import type { CollaborationUser } from '$lib/collaboration';
   import type { PageData } from './$types';
 
   import DesignerHeader from './components/DesignerHeader.svelte';
@@ -22,6 +24,48 @@
   let scriptEditorOpen = $state(false);
   let scriptEditorQuestion = $state<any>(null);
   let scriptEditorCleanup: (() => void) | null = null;
+
+  // Collaboration state
+  let collaborationUsers = $state<CollaborationUser[]>([]);
+  const collaboration = initializeCollaboration();
+
+  function connectCollaboration() {
+    const questionnaireId = designerStore.questionnaire?.id;
+    if (!questionnaireId) return;
+
+    collaboration.client.connect().then(() => {
+      const userId = designerStore.userId || 'anonymous';
+      const user: CollaborationUser = {
+        id: userId,
+        name: (data as any)?.user?.fullName || (data as any)?.user?.email || 'Anonymous',
+        email: (data as any)?.user?.email || '',
+        role: 'editor',
+        color: '#3B82F6',
+        status: 'online',
+        lastSeen: new Date(),
+      };
+      collaboration.client.joinSession(questionnaireId, user).catch(() => {
+        // WebSocket backend may not yet implement join_session acks
+      });
+    }).catch(() => {
+      // Collaboration is optional; silently ignore connection failures
+    });
+
+    collaboration.client.on('presence:updated', (detail) => {
+      // Update collaborator list when presence changes
+      const session = collaboration.client.getCurrentSession();
+      if (session) {
+        collaborationUsers = session.participants.filter(
+          (p) => p.id !== designerStore.userId
+        );
+      }
+    });
+  }
+
+  function disconnectCollaboration() {
+    collaboration.client.leaveSession().catch(() => {});
+    collaboration.client.disconnect();
+  }
 
   function openScriptEditor(question: any) {
     scriptEditorQuestion = question;
@@ -114,6 +158,18 @@
         return;
       }
 
+      if (key === 'c' && !isInput && designerStore.selectedItemKind === 'question' && designerStore.selectedItem) {
+        event.preventDefault();
+        void designerStore.copyQuestions([designerStore.selectedItem.id]);
+        return;
+      }
+
+      if (key === 'v' && !isInput) {
+        event.preventDefault();
+        void designerStore.pasteQuestions();
+        return;
+      }
+
       if (key === 'd') {
         event.preventDefault();
         designerStore.duplicateSelected();
@@ -170,7 +226,10 @@
   }
 
   onMount(() => {
-    void initializeDesigner();
+    void initializeDesigner().then(() => {
+      // Connect collaboration after designer is initialized (questionnaire ID is available)
+      connectCollaboration();
+    });
 
     const handleOpenScriptEditor = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -182,6 +241,7 @@
 
   onDestroy(() => {
     autoSave.stop();
+    disconnectCollaboration();
     scriptEditorCleanup?.();
   });
 </script>
@@ -192,6 +252,7 @@
   <DesignerHeader
     questionnaireName={designerStore.questionnaire.name}
     projectName={(data as any)?.projectName || (data as any)?.project?.name || ''}
+    {collaborationUsers}
   />
 
   <div class="flex-1 flex overflow-hidden relative" data-testid="designer-main-layout">

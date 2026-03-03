@@ -9,6 +9,8 @@
   import OfflineIndicator from '$lib/components/ui/OfflineIndicator.svelte';
   import { theme } from '$lib/stores/theme';
   import { offline, requestPersistentStorage } from '$lib/services/offline';
+  // i18n — importing config triggers i18next initialization
+  import '$lib/i18n/config';
 
   let { children } = $props();
   let user = $state<any>(null);

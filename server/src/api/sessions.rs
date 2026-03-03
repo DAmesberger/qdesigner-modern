@@ -1567,6 +1567,40 @@ fn merge_event_metadata(metadata: Option<Value>, event_data: Option<Value>) -> V
     }
 }
 
+// ── Condition Counts ─────────────────────────────────────────────
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct ConditionCount {
+    pub condition_name: Option<String>,
+    pub count: i64,
+}
+
+/// GET /api/questionnaires/:id/condition-counts
+pub async fn condition_counts(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(questionnaire_id): Path<Uuid>,
+) -> Result<Json<Vec<ConditionCount>>, ApiError> {
+    // Verify access via the questionnaire's project
+    verify_questionnaire_access(&state, user.user_id, questionnaire_id).await?;
+
+    let counts = sqlx::query_as::<_, ConditionCount>(
+        r#"
+        SELECT metadata->>'assignedCondition' AS condition_name, COUNT(*)::bigint AS count
+        FROM sessions
+        WHERE questionnaire_id = $1
+          AND metadata->>'assignedCondition' IS NOT NULL
+        GROUP BY metadata->>'assignedCondition'
+        ORDER BY count DESC
+        "#,
+    )
+    .bind(questionnaire_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(counts))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{compute_numeric_stats, json_value_to_f64, parse_aggregate_source};

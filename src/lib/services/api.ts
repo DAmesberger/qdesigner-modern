@@ -18,6 +18,8 @@ import type {
   ExportRow,
   MediaAsset,
   MediaUploadResponse,
+  SessionMediaUploadResponse,
+  ConditionGroupCounts,
   DomainConfig,
   DomainAutoJoinCheck,
   VerificationResult,
@@ -317,6 +319,10 @@ class ApiClient {
       this.get<ExportRow[]>(
         `/api/projects/${projectId}/questionnaires/${id}/export?format=${format}`
       ),
+    conditionCounts: (questionnaireId: string) =>
+      this.get<ConditionGroupCounts>(
+        `/api/questionnaires/${questionnaireId}/condition-counts`
+      ),
   };
 
   // === Sessions ===
@@ -410,6 +416,18 @@ class ApiClient {
 
       const raw = await this.get<any>(`/api/sessions/compare?${query.toString()}`);
       return mapCompareData(raw);
+    },
+    uploadMedia: (
+      sessionId: string,
+      file: File | Blob,
+      filename: string
+    ): Promise<SessionMediaUploadResponse> => {
+      const formData = new FormData();
+      formData.append('file', file, filename);
+      return this.post<SessionMediaUploadResponse>(
+        `/api/sessions/${sessionId}/media`,
+        formData
+      );
     },
   };
 

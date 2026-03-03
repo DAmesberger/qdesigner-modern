@@ -59,7 +59,9 @@ export class CollaborationClient extends CollaborationEventEmitter {
     super();
     
     this.config = {
-      websocketUrl: config.websocketUrl || 'ws://localhost:8080/collaboration',
+      websocketUrl: config.websocketUrl || (typeof window !== 'undefined'
+        ? (import.meta.env.VITE_API_URL || window.location.origin).replace(/^http/, 'ws') + '/api/ws'
+        : 'ws://localhost:4000/api/ws'),
       reconnectAttempts: config.reconnectAttempts || 5,
       reconnectDelay: config.reconnectDelay || 1000,
       heartbeatInterval: config.heartbeatInterval || 30000,

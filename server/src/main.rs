@@ -18,6 +18,7 @@ mod websocket;
 use crate::auth::jwt::JwtManager;
 use crate::config::Config;
 use crate::middleware::cors::cors_layer;
+use crate::middleware::csrf::csrf_middleware;
 use crate::middleware::rate_limit::RateLimiter;
 use crate::rbac::manager::RbacManager;
 use crate::state::AppState;
@@ -90,7 +91,7 @@ async fn main() {
     };
 
     // ── Rate Limiter ─────────────────────────────────────────────────
-    let rate_limiter = RateLimiter::new(200, 60); // 200 req / 60s
+    let rate_limiter = RateLimiter::new(10, 60); // 10 req / 60s (applied to auth routes)
 
     // ── WebSocket ────────────────────────────────────────────────────
     let websocket_state = WebSocketState::new();
@@ -109,6 +110,7 @@ async fn main() {
 
     // ── Router ───────────────────────────────────────────────────────
     let app = api::router(state)
+        .layer(axum::middleware::from_fn(csrf_middleware))
         .layer(cors_layer(&config.cors_origins))
         .layer(TraceLayer::new_for_http());
 

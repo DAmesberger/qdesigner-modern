@@ -4,6 +4,7 @@
   import { auth } from '$lib/services/auth';
   import Button from '../../common/Button.svelte';
   import ThemeToggle from '../ThemeToggle.svelte';
+  import LanguageSwitcher from '$lib/i18n/components/LanguageSwitcher.svelte';
   import { onMount } from 'svelte';
   
   interface Props {
@@ -144,6 +145,7 @@
           
           <!-- User menu -->
           <div class="flex items-center gap-3">
+            <LanguageSwitcher size="sm" showNativeNames={false} />
             <ThemeToggle />
             <div class="relative user-menu">
               <button

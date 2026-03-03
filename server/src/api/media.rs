@@ -263,3 +263,105 @@ pub async fn delete_media(
 
     Ok(Json(serde_json::json!({ "message": "Media deleted" })))
 }
+
+// ── Session-scoped anonymous media upload ────────────────────────
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct SessionMediaAsset {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub filename: String,
+    pub s3_key: String,
+    pub content_type: String,
+    pub size_bytes: i64,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionMediaWithUrl {
+    #[serde(flatten)]
+    pub asset: SessionMediaAsset,
+    pub url: String,
+}
+
+/// POST /api/sessions/:id/media — anonymous multipart upload scoped to a session.
+/// No JWT required; validates the session exists and is active.
+pub async fn upload_session_media(
+    State(state): State<AppState>,
+    Path(session_id): Path<Uuid>,
+    mut multipart: Multipart,
+) -> Result<(axum::http::StatusCode, Json<SessionMediaWithUrl>), ApiError> {
+    // Validate session exists and is active
+    let session_status =
+        sqlx::query_scalar::<_, String>("SELECT status FROM sessions WHERE id = $1")
+            .bind(session_id)
+            .fetch_optional(&state.pool)
+            .await?
+            .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
+
+    if session_status != "active" {
+        return Err(ApiError::BadRequest("Session is not active".into()));
+    }
+
+    // Extract the file from multipart
+    let mut file_data: Option<(String, Vec<u8>, String)> = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| ApiError::BadRequest(format!("Multipart error: {e}")))?
+    {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "file" {
+            let filename = field.file_name().unwrap_or("upload.bin").to_string();
+            let content_type = field
+                .content_type()
+                .unwrap_or("application/octet-stream")
+                .to_string();
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|e| ApiError::BadRequest(format!("File read error: {e}")))?;
+            file_data = Some((filename, bytes.to_vec(), content_type));
+        }
+    }
+
+    let (filename, bytes, content_type) =
+        file_data.ok_or_else(|| ApiError::BadRequest("file is required".into()))?;
+
+    let size_bytes = bytes.len() as i64;
+    let file_id = Uuid::new_v4();
+    let s3_key = format!("sessions/{session_id}/media/{file_id}_{filename}");
+
+    // Upload to S3
+    state
+        .storage
+        .upload(&s3_key, bytes, &content_type)
+        .await?;
+
+    // Store metadata in DB
+    let asset = sqlx::query_as::<_, SessionMediaAsset>(
+        r#"
+        INSERT INTO session_media (session_id, filename, s3_key, content_type, size_bytes)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, session_id, filename, s3_key, content_type, size_bytes, created_at
+        "#,
+    )
+    .bind(session_id)
+    .bind(&filename)
+    .bind(&s3_key)
+    .bind(&content_type)
+    .bind(size_bytes)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let url = state
+        .storage
+        .presigned_url(&s3_key, Duration::from_secs(3600))
+        .await?;
+
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(SessionMediaWithUrl { asset, url }),
+    ))
+}

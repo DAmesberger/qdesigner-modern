@@ -29,8 +29,14 @@ import type { CollaborationConfig } from './types.js';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- collaboration facade passes dynamic transport/event payloads
 type DynamicValue = any;
 
+function deriveWebSocketUrl(): string {
+  if (typeof window === 'undefined') return 'ws://localhost:4000/api/ws';
+  const base = import.meta.env.VITE_API_URL || window.location.origin;
+  return base.replace(/^http/, 'ws') + '/api/ws';
+}
+
 export const DEFAULT_COLLABORATION_CONFIG: CollaborationConfig = {
-  websocketUrl: 'ws://localhost:8080/collaboration',
+  websocketUrl: deriveWebSocketUrl(),
   reconnectAttempts: 5,
   reconnectDelay: 1000,
   heartbeatInterval: 30000,

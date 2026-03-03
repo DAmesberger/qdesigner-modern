@@ -5,13 +5,16 @@
   import DistributionPanel from './DistributionPanel.svelte';
   import ExperimentalDesignPanel from '$lib/components/designer/ExperimentalDesignPanel.svelte';
   import DataQualityPanel from '$lib/components/designer/DataQualityPanel.svelte';
+  import PresenceIndicator from '$lib/collaboration/components/PresenceIndicator.svelte';
+  import type { CollaborationUser } from '$lib/collaboration';
 
   interface Props {
     questionnaireName: string;
     projectName?: string;
+    collaborationUsers?: CollaborationUser[];
   }
 
-  let { questionnaireName, projectName = '' }: Props = $props();
+  let { questionnaireName, projectName = '', collaborationUsers = [] }: Props = $props();
 
   let isEditingTitle = $state(false);
   let titleValue = $state('Untitled Questionnaire');
@@ -163,6 +166,13 @@
       </div>
     </div>
   </div>
+
+  <!-- Collaboration presence indicator -->
+  {#if collaborationUsers.length > 0}
+    <div class="hidden sm:block">
+      <PresenceIndicator users={collaborationUsers} maxVisible={3} size="sm" />
+    </div>
+  {/if}
 
   <!-- Mobile drawer toggles -->
   <button

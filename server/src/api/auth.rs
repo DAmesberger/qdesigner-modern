@@ -334,8 +334,53 @@ pub async fn send_verification_code(
     .execute(&state.pool)
     .await?;
 
-    // In dev, log the code; in production, send via email
-    tracing::info!("Verification code for {}: {code}", body.email);
+    // Send the verification code via SMTP
+    tracing::info!("Sending verification code to {}", body.email);
+
+    let email_body = format!(
+        "Hello,\n\n\
+         Your QDesigner verification code is:\n\n\
+         {}\n\n\
+         This code expires in 10 minutes.\n\n\
+         If you didn't request this, you can safely ignore this email.\n\n\
+         - QDesigner Team",
+        code
+    );
+
+    let email_msg = Message::builder()
+        .from(
+            state
+                .config
+                .smtp_from
+                .parse()
+                .unwrap_or_else(|_| "noreply@qdesigner.local".parse().unwrap()),
+        )
+        .to(body
+            .email
+            .parse()
+            .map_err(|_| ApiError::BadRequest("Invalid email address".into()))?)
+        .subject("Your QDesigner verification code")
+        .header(ContentType::TEXT_PLAIN)
+        .body(email_body)
+        .map_err(|e| ApiError::Internal(format!("Failed to build email: {e}")))?;
+
+    let smtp_host = state.config.smtp_host.clone();
+    let smtp_port = state.config.smtp_port;
+    let recipient_email = body.email.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let mailer = SmtpTransport::builder_dangerous(&smtp_host)
+            .port(smtp_port)
+            .tls(Tls::None)
+            .build();
+
+        match mailer.send(&email_msg) {
+            Ok(_) => tracing::info!("Verification email sent to {}", recipient_email),
+            Err(e) => tracing::error!("Failed to send verification email: {e}"),
+        }
+    })
+    .await
+    .ok();
 
     Ok(Json(serde_json::json!({
         "success": true,
