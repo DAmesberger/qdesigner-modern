@@ -110,11 +110,10 @@ pub struct DomainRecord {
     pub auto_join_enabled: bool,
     pub include_subdomains: bool,
     pub default_role: String,
-    pub email_whitelist: Vec<String>,
-    pub email_blacklist: Vec<String>,
+    pub email_whitelist: sqlx::types::Json<Vec<String>>,
+    pub email_blacklist: sqlx::types::Json<Vec<String>>,
     pub welcome_message: Option<String>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -834,7 +833,7 @@ pub async fn list_domains(
         r#"
         SELECT id, organization_id, domain, verification_token, verification_method,
                verified_at, auto_join_enabled, include_subdomains, default_role,
-               email_whitelist, email_blacklist, welcome_message, created_at, updated_at
+               email_whitelist, email_blacklist, welcome_message, created_at
         FROM organization_domains
         WHERE organization_id = $1
         ORDER BY created_at
@@ -870,7 +869,7 @@ pub async fn create_domain(
         VALUES ($1, $2, $3, 'dns_txt')
         RETURNING id, organization_id, domain, verification_token, verification_method,
                   verified_at, auto_join_enabled, include_subdomains, default_role,
-                  email_whitelist, email_blacklist, welcome_message, created_at, updated_at
+                  email_whitelist, email_blacklist, welcome_message, created_at
         "#,
     )
     .bind(org_id)
@@ -898,7 +897,7 @@ pub async fn verify_domain(
 
     // In development, auto-verify the domain
     let rows_affected = sqlx::query(
-        "UPDATE organization_domains SET verified_at = NOW(), updated_at = NOW() WHERE id = $1 AND organization_id = $2",
+        "UPDATE organization_domains SET verified_at = NOW() WHERE id = $1 AND organization_id = $2",
     )
     .bind(domain_id)
     .bind(org_id)
@@ -952,13 +951,11 @@ pub async fn update_domain(
         return Err(ApiError::BadRequest("No fields to update".into()));
     }
 
-    sets.push("updated_at = NOW()".into());
-
     let sql = format!(
         "UPDATE organization_domains SET {} WHERE id = $1 AND organization_id = $2 \
          RETURNING id, organization_id, domain, verification_token, verification_method, \
          verified_at, auto_join_enabled, include_subdomains, default_role, \
-         email_whitelist, email_blacklist, welcome_message, created_at, updated_at",
+         email_whitelist, email_blacklist, welcome_message, created_at",
         sets.join(", ")
     );
 
