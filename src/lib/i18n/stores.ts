@@ -10,12 +10,14 @@ import type {
   TranslationValidationError,
   TranslationEntry 
 } from './types';
-import { supportedLanguages, defaultLanguage } from './config';
+// Import from languages.ts (not config.ts) to avoid circular dependency:
+// stores.ts ← config.ts ← stores.ts
+import { supportedLanguages, defaultLanguage as DEFAULT_LANGUAGE } from './languages';
 
 // Create reactive store for i18n state
 function createI18nStore() {
   const initialState: I18nStore = {
-    currentLanguage: defaultLanguage,
+    currentLanguage: DEFAULT_LANGUAGE,
     isRTL: false,
     isInitialized: false,
     translations: {},
@@ -192,12 +194,12 @@ export const translationManagerStore = createTranslationManagerStore();
 // Language preferences store (persisted in localStorage)
 function createLanguagePreferencesStore() {
   const getStoredLanguage = (): string => {
-    if (!browser) return defaultLanguage;
+    if (!browser) return DEFAULT_LANGUAGE;
     
     try {
-      return localStorage.getItem('preferredLanguage') || defaultLanguage;
+      return localStorage.getItem('preferredLanguage') || DEFAULT_LANGUAGE;
     } catch {
-      return defaultLanguage;
+      return DEFAULT_LANGUAGE;
     }
   };
 
