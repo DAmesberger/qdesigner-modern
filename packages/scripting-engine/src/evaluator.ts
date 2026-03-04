@@ -318,6 +318,12 @@ export class FormulaEvaluator {
     // Simple tokenizer and evaluator
     // This is a simplified version - in production you'd use a proper parser
     
+    // Resolve iteration context variables ($item, $index)
+    if (this.context.iterationContext) {
+      formula = formula.replace(/\$item\b/g, JSON.stringify(this.context.iterationContext.item));
+      formula = formula.replace(/\$index\b/g, String(this.context.iterationContext.index));
+    }
+
     // Replace variable references
     const variablePattern = /\b([A-Za-z_]\w*)\b(?!\s*\()/g;
     formula = formula.replace(variablePattern, (match, varName) => {

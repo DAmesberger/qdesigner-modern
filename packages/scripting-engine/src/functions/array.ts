@@ -345,5 +345,71 @@ export const arrayFunctions: FormulaFunction[] = [
       'REVERSE([1, 2, 3, 4, 5])',
       'REVERSE(["a", "b", "c"])'
     ]
+  },
+
+  {
+    name: 'FOREACH',
+    category: 'array',
+    description: 'Execute an expression for each element in an array (for side effects)',
+    parameters: [
+      { name: 'array', type: 'array', description: 'Array to iterate over' },
+      { name: 'callback', type: 'function', description: 'Function to call for each element. Receives (item, index).' }
+    ],
+    returns: 'number',
+    implementation: (array: DynamicValue[], callback: DynamicValue) => {
+      if (!Array.isArray(array)) return 0;
+
+      if (typeof callback === 'function') {
+        let count = 0;
+        for (let i = 0; i < array.length; i++) {
+          callback(array[i], i);
+          count++;
+        }
+        return count;
+      }
+
+      return array.length;
+    },
+    examples: [
+      'FOREACH([1, 2, 3], (item, index) => console.log(item))',
+      'FOREACH(RANGE(1, 5), (item) => SET("var_" + item, item * 10))'
+    ]
+  },
+
+  {
+    name: 'RANGE',
+    category: 'array',
+    description: 'Generate a sequence of numbers',
+    parameters: [
+      { name: 'start', type: 'number', description: 'Start value (inclusive)' },
+      { name: 'end', type: 'number', description: 'End value (exclusive)' },
+      { name: 'step', type: 'number', description: 'Step increment', optional: true, default: 1 }
+    ],
+    returns: 'array',
+    implementation: (start: number, end: number, step: number = 1) => {
+      if (typeof start !== 'number' || typeof end !== 'number') return [];
+      if (step === 0) return [];
+
+      // Safety: limit to 10000 elements to prevent runaway loops
+      const maxElements = 10000;
+      const result: number[] = [];
+
+      if (step > 0) {
+        for (let i = start; i < end && result.length < maxElements; i += step) {
+          result.push(i);
+        }
+      } else {
+        for (let i = start; i > end && result.length < maxElements; i += step) {
+          result.push(i);
+        }
+      }
+
+      return result;
+    },
+    examples: [
+      'RANGE(1, 5)',        // [1, 2, 3, 4]
+      'RANGE(0, 10, 2)',    // [0, 2, 4, 6, 8]
+      'RANGE(5, 0, -1)'     // [5, 4, 3, 2, 1]
+    ]
   }
 ];

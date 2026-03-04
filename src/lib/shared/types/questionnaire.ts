@@ -59,6 +59,7 @@ export interface Page {
   blocks?: Block[];
   layout?: LayoutConfig;
   conditions?: DisplayCondition[];
+  script?: string;
 }
 
 export interface Block {

@@ -57,14 +57,38 @@ export const hooks = {
   // Control navigation
   onNavigate: (direction, context) => {
     // Return true to allow navigation, false to prevent
-    
+
     // Example: Require response before continuing
     // if (direction === 'next' && !context.hasResponse) {
     //   context.showError('Please provide a response before continuing');
     //   return false;
     // }
-    
+
     return true;
+  },
+
+  // === Page-Level Hooks ===
+
+  // Called when entering a page
+  onPageEnter: (context) => {
+    console.log('Entered page:', context.pageId);
+    // Example: Start a page timer
+    // context.setVariable('pageStartTime', Date.now());
+  },
+
+  // Called when leaving a page
+  onPageExit: (context) => {
+    console.log('Leaving page:', context.pageId);
+    // Example: Calculate time spent
+    // const startTime = context.getVariable('pageStartTime');
+    // context.setVariable('pageTimeSpent', Date.now() - startTime);
+  },
+
+  // Called periodically while on a page (configure interval in page settings)
+  onTimer: (context) => {
+    // Example: Update elapsed time display
+    // const elapsed = Date.now() - context.getVariable('pageStartTime');
+    // context.setVariable('elapsedSeconds', Math.floor(elapsed / 1000));
   }
 };
 

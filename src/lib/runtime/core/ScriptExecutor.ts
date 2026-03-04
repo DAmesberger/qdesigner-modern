@@ -7,7 +7,14 @@ type DynamicValue = any;
 /**
  * Hook names supported by the script system.
  */
-export type HookName = 'onMount' | 'onResponse' | 'onValidate' | 'onNavigate';
+export type HookName =
+  | 'onMount'
+  | 'onResponse'
+  | 'onValidate'
+  | 'onNavigate'
+  | 'onPageEnter'
+  | 'onPageExit'
+  | 'onTimer';
 
 /**
  * Parsed hooks extracted from a question script.
@@ -17,6 +24,9 @@ export interface ParsedHooks {
   onResponse?: (response: DynamicValue, context: HookContext) => void;
   onValidate?: (value: DynamicValue, context: HookContext) => boolean | string;
   onNavigate?: (direction: string, context: HookContext) => boolean;
+  onPageEnter?: (context: PageHookContext) => void;
+  onPageExit?: (context: PageHookContext) => void;
+  onTimer?: (context: PageHookContext) => void;
 }
 
 /**
@@ -29,6 +39,28 @@ export interface HookContext {
   setVariable: (name: string, value: DynamicValue) => void;
   getVariable: (name: string) => DynamicValue;
   log: (...args: DynamicValue[]) => void;
+}
+
+/**
+ * Context passed to page-level hook functions.
+ */
+export interface PageHookContext {
+  pageId: string;
+  pageName?: string;
+  pageIndex: number;
+  variables: Record<string, DynamicValue>;
+  responses: Record<string, DynamicValue>;
+  setVariable: (name: string, value: DynamicValue) => void;
+  getVariable: (name: string) => DynamicValue;
+  log: (...args: DynamicValue[]) => void;
+}
+
+/**
+ * Configuration for page timer hooks.
+ */
+export interface TimerConfig {
+  interval: number; // ms
+  maxTicks?: number;
 }
 
 /**
@@ -46,6 +78,7 @@ export interface ValidationResult {
  */
 export class ScriptExecutor {
   private hookCache = new Map<string, ParsedHooks>();
+  private pageHookCache = new Map<string, ParsedHooks>();
 
   /**
    * Parse a script string and extract hook functions.
@@ -75,7 +108,6 @@ export class ScriptExecutor {
         const XMLHttpRequest = undefined;
         const WebSocket = undefined;
         const importScripts = undefined;
-        const eval = undefined;
 
         ${cleaned}
 
@@ -101,6 +133,15 @@ export class ScriptExecutor {
       }
       if (typeof hooks.onNavigate === 'function') {
         parsed.onNavigate = hooks.onNavigate;
+      }
+      if (typeof hooks.onPageEnter === 'function') {
+        parsed.onPageEnter = hooks.onPageEnter;
+      }
+      if (typeof hooks.onPageExit === 'function') {
+        parsed.onPageExit = hooks.onPageExit;
+      }
+      if (typeof hooks.onTimer === 'function') {
+        parsed.onTimer = hooks.onTimer;
       }
 
       return parsed;
@@ -278,10 +319,140 @@ export class ScriptExecutor {
   }
 
   /**
+   * Get hooks for a page, using a cache to avoid re-parsing.
+   */
+  public getPageHooks(pageId: string, scriptText: string): ParsedHooks {
+    if (!scriptText) return {};
+
+    const cacheKey = `${pageId}:${scriptText}`;
+    const cached = this.pageHookCache.get(cacheKey);
+    if (cached) return cached;
+
+    const hooks = this.parseHooks(scriptText);
+    this.pageHookCache.set(cacheKey, hooks);
+    return hooks;
+  }
+
+  /**
+   * Build a PageHookContext from the current runtime state.
+   */
+  public buildPageContext(
+    pageId: string,
+    pageName: string | undefined,
+    pageIndex: number,
+    variableEngine: VariableEngine,
+    responseMap: Record<string, DynamicValue>
+  ): PageHookContext {
+    return {
+      pageId,
+      pageName,
+      pageIndex,
+      variables: variableEngine.getAllVariables(),
+      responses: responseMap,
+      setVariable: (name: string, value: DynamicValue) => {
+        try {
+          variableEngine.setVariable(name, value, 'script');
+        } catch (error) {
+          console.warn(
+            `[ScriptExecutor] setVariable("${name}") failed:`,
+            error instanceof Error ? error.message : error
+          );
+        }
+      },
+      getVariable: (name: string) => {
+        try {
+          return variableEngine.getVariable(name);
+        } catch {
+          return undefined;
+        }
+      },
+      log: (...args: DynamicValue[]) => {
+        console.log(`[Script:Page:${pageName || pageId}]`, ...args);
+      },
+    };
+  }
+
+  /**
+   * Execute the onPageEnter hook for a page.
+   */
+  public executeOnPageEnter(
+    pageId: string,
+    pageName: string | undefined,
+    pageIndex: number,
+    scriptText: string,
+    variableEngine: VariableEngine,
+    responseMap: Record<string, DynamicValue>
+  ): void {
+    const hooks = this.getPageHooks(pageId, scriptText);
+    if (!hooks.onPageEnter) return;
+
+    const context = this.buildPageContext(pageId, pageName, pageIndex, variableEngine, responseMap);
+    try {
+      hooks.onPageEnter(context);
+    } catch (error) {
+      console.warn(
+        `[ScriptExecutor] onPageEnter error (${pageName || pageId}):`,
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  /**
+   * Execute the onPageExit hook for a page.
+   */
+  public executeOnPageExit(
+    pageId: string,
+    pageName: string | undefined,
+    pageIndex: number,
+    scriptText: string,
+    variableEngine: VariableEngine,
+    responseMap: Record<string, DynamicValue>
+  ): void {
+    const hooks = this.getPageHooks(pageId, scriptText);
+    if (!hooks.onPageExit) return;
+
+    const context = this.buildPageContext(pageId, pageName, pageIndex, variableEngine, responseMap);
+    try {
+      hooks.onPageExit(context);
+    } catch (error) {
+      console.warn(
+        `[ScriptExecutor] onPageExit error (${pageName || pageId}):`,
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  /**
+   * Execute the onTimer hook for a page.
+   */
+  public executeOnTimer(
+    pageId: string,
+    pageName: string | undefined,
+    pageIndex: number,
+    scriptText: string,
+    variableEngine: VariableEngine,
+    responseMap: Record<string, DynamicValue>
+  ): void {
+    const hooks = this.getPageHooks(pageId, scriptText);
+    if (!hooks.onTimer) return;
+
+    const context = this.buildPageContext(pageId, pageName, pageIndex, variableEngine, responseMap);
+    try {
+      hooks.onTimer(context);
+    } catch (error) {
+      console.warn(
+        `[ScriptExecutor] onTimer error (${pageName || pageId}):`,
+        error instanceof Error ? error.message : error
+      );
+    }
+  }
+
+  /**
    * Clear the hook cache, e.g. when a questionnaire is reloaded.
    */
   public clearCache(): void {
     this.hookCache.clear();
+    this.pageHookCache.clear();
   }
 
   /**

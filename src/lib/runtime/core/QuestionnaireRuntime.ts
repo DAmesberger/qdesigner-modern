@@ -80,6 +80,7 @@ export class QuestionnaireRuntime {
 
   private currentAbortController: AbortController | null = null;
   private autoAdvanceTimeoutId: number | null = null;
+  private pageTimerIntervalId: ReturnType<typeof setInterval> | null = null;
 
   private readonly questionRuntimeCache = new Map<string, IQuestionRuntime>();
   private readonly loopIterations = new Map<string, number>();
@@ -195,6 +196,7 @@ export class QuestionnaireRuntime {
     this.isPaused = false;
 
     this.cancelCurrentExecution();
+    this.clearPageTimer();
 
     if (this.session.status === 'in_progress') {
       this.session.status = 'abandoned';
@@ -428,6 +430,18 @@ export class QuestionnaireRuntime {
       }
     }
 
+    // Execute onPageExit for the outgoing page before cancelling execution
+    if (this.currentPage?.script) {
+      this.scriptExecutor.executeOnPageExit(
+        this.currentPage.id,
+        this.currentPage.name,
+        this.currentPageIndex,
+        this.currentPage.script,
+        this.variableEngine,
+        this.getResponseMap()
+      );
+    }
+
     this.cancelCurrentExecution();
 
     // Track page timing for speeder detection
@@ -447,6 +461,39 @@ export class QuestionnaireRuntime {
     // Record entering this page
     if (this.currentPage) {
       this.qualityReport.speeder.enterPage(this.currentPage.id);
+    }
+
+    // Execute onPageEnter for the incoming page and set up timer if configured
+    if (this.currentPage?.script) {
+      this.scriptExecutor.executeOnPageEnter(
+        this.currentPage.id,
+        this.currentPage.name,
+        this.currentPageIndex,
+        this.currentPage.script,
+        this.variableEngine,
+        this.getResponseMap()
+      );
+
+      // Set up onTimer interval if the page script defines an onTimer hook
+      const pageHooks = this.scriptExecutor.getPageHooks(
+        this.currentPage.id,
+        this.currentPage.script
+      );
+      if (pageHooks.onTimer) {
+        const page = this.currentPage;
+        const pageIdx = this.currentPageIndex;
+        const timerInterval = 1000; // Default: 1 second
+        this.pageTimerIntervalId = setInterval(() => {
+          this.scriptExecutor.executeOnTimer(
+            page.id,
+            page.name,
+            pageIdx,
+            page.script!,
+            this.variableEngine,
+            this.getResponseMap()
+          );
+        }, timerInterval);
+      }
     }
 
     this.currentPageItems = this.getPageItems();
@@ -1001,8 +1048,16 @@ export class QuestionnaireRuntime {
       this.currentAbortController = null;
     }
 
+    this.clearPageTimer();
     this.responseCollector.stop();
     this.renderer.clearRenderables();
+  }
+
+  private clearPageTimer(): void {
+    if (this.pageTimerIntervalId !== null) {
+      clearInterval(this.pageTimerIntervalId);
+      this.pageTimerIntervalId = null;
+    }
   }
 
   private isAbortError(error: unknown): boolean {

@@ -28,6 +28,7 @@ export interface FormulaContext {
   metadata?: Map<string, unknown>;
   currentTime?: number;
   randomSeed?: number;
+  iterationContext?: { item: unknown; index: number };
 }
 
 export interface FormulaFunction {
