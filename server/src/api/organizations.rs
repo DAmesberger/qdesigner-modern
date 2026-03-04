@@ -2,6 +2,9 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
+use lettre::message::header::ContentType;
+use lettre::transport::smtp::client::Tls;
+use lettre::{Message, SmtpTransport, Transport};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
@@ -87,12 +90,49 @@ pub struct CreateInvitationRequest {
     #[validate(email)]
     pub email: String,
     pub role: String,
+    pub custom_message: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct DomainRecord {
+    pub id: Uuid,
+    pub organization_id: Uuid,
+    pub domain: String,
+    pub verification_token: Option<String>,
+    pub verification_method: Option<String>,
+    pub verified_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub auto_join_enabled: bool,
+    pub include_subdomains: bool,
+    pub default_role: String,
+    pub email_whitelist: Vec<String>,
+    pub email_blacklist: Vec<String>,
+    pub welcome_message: Option<String>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateDomainRequest {
+    pub domain: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateDomainRequest {
+    pub auto_join_enabled: Option<bool>,
+    pub include_subdomains: Option<bool>,
+    pub default_role: Option<String>,
+    pub welcome_message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AutoJoinQuery {
+    pub email: String,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────
@@ -537,8 +577,68 @@ pub async fn create_invitation(
     .fetch_one(&state.pool)
     .await?;
 
-    // In production, send invitation email via lettre here.
-    tracing::info!("Invitation sent to {} for org {org_id}", body.email);
+    // Send invitation email
+    let org_name = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM organizations WHERE id = $1",
+    )
+    .bind(org_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .unwrap_or_else(|| "your organization".to_string());
+
+    let invite_link = format!("http://localhost:5173/invite/{}", invitation.id);
+
+    let mut email_body = format!(
+        "Hello,\n\n\
+         You've been invited to join \"{}\" on QDesigner as a {}.\n\n",
+        org_name, body.role
+    );
+
+    if let Some(ref msg) = body.custom_message {
+        email_body.push_str(&format!("Message from the inviter:\n{}\n\n", msg));
+    }
+
+    email_body.push_str(&format!(
+        "Click the link below to accept the invitation:\n{}\n\n\
+         This invitation expires in 7 days.\n\n\
+         - QDesigner Team",
+        invite_link
+    ));
+
+    let email_msg = Message::builder()
+        .from(
+            state
+                .config
+                .smtp_from
+                .parse()
+                .unwrap_or_else(|_| "noreply@qdesigner.local".parse().unwrap()),
+        )
+        .to(body
+            .email
+            .parse()
+            .map_err(|_| ApiError::BadRequest("Invalid email address".into()))?)
+        .subject(format!("You've been invited to join {} on QDesigner", org_name))
+        .header(ContentType::TEXT_PLAIN)
+        .body(email_body)
+        .map_err(|e| ApiError::Internal(format!("Failed to build email: {e}")))?;
+
+    let smtp_host = state.config.smtp_host.clone();
+    let smtp_port = state.config.smtp_port;
+    let recipient_email = body.email.clone();
+
+    tokio::task::spawn_blocking(move || {
+        let mailer = SmtpTransport::builder_dangerous(&smtp_host)
+            .port(smtp_port)
+            .tls(Tls::None)
+            .build();
+
+        match mailer.send(&email_msg) {
+            Ok(_) => tracing::info!("Invitation email sent to {}", recipient_email),
+            Err(e) => tracing::error!("Failed to send invitation email: {e}"),
+        }
+    })
+    .await
+    .ok();
 
     Ok((axum::http::StatusCode::CREATED, Json(invitation)))
 }
@@ -712,4 +812,256 @@ pub async fn revoke_invitation(
     }
 
     Ok(Json(serde_json::json!({ "message": "Invitation revoked" })))
+}
+
+// ── Domains ──────────────────────────────────────────────────────────
+
+/// GET /api/organizations/:id/domains
+pub async fn list_domains(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(org_id): Path<Uuid>,
+) -> Result<Json<Vec<DomainRecord>>, ApiError> {
+    if !state
+        .rbac
+        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .await?
+    {
+        return Err(ApiError::Forbidden("Requires admin role".into()));
+    }
+
+    let domains = sqlx::query_as::<_, DomainRecord>(
+        r#"
+        SELECT id, organization_id, domain, verification_token, verification_method,
+               verified_at, auto_join_enabled, include_subdomains, default_role,
+               email_whitelist, email_blacklist, welcome_message, created_at, updated_at
+        FROM organization_domains
+        WHERE organization_id = $1
+        ORDER BY created_at
+        "#,
+    )
+    .bind(org_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(domains))
+}
+
+/// POST /api/organizations/:id/domains
+pub async fn create_domain(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(org_id): Path<Uuid>,
+    Json(body): Json<CreateDomainRequest>,
+) -> Result<(axum::http::StatusCode, Json<DomainRecord>), ApiError> {
+    if !state
+        .rbac
+        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .await?
+    {
+        return Err(ApiError::Forbidden("Requires admin role".into()));
+    }
+
+    let verification_token = Uuid::new_v4().to_string();
+
+    let record = sqlx::query_as::<_, DomainRecord>(
+        r#"
+        INSERT INTO organization_domains (organization_id, domain, verification_token, verification_method)
+        VALUES ($1, $2, $3, 'dns_txt')
+        RETURNING id, organization_id, domain, verification_token, verification_method,
+                  verified_at, auto_join_enabled, include_subdomains, default_role,
+                  email_whitelist, email_blacklist, welcome_message, created_at, updated_at
+        "#,
+    )
+    .bind(org_id)
+    .bind(&body.domain)
+    .bind(&verification_token)
+    .fetch_one(&state.pool)
+    .await?;
+
+    Ok((axum::http::StatusCode::CREATED, Json(record)))
+}
+
+/// POST /api/organizations/:id/domains/:did/verify
+pub async fn verify_domain(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path((org_id, domain_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !state
+        .rbac
+        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .await?
+    {
+        return Err(ApiError::Forbidden("Requires admin role".into()));
+    }
+
+    // In development, auto-verify the domain
+    let rows_affected = sqlx::query(
+        "UPDATE organization_domains SET verified_at = NOW(), updated_at = NOW() WHERE id = $1 AND organization_id = $2",
+    )
+    .bind(domain_id)
+    .bind(org_id)
+    .execute(&state.pool)
+    .await?
+    .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(ApiError::NotFound("Domain not found".into()));
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Domain verified" })))
+}
+
+/// PATCH /api/organizations/:id/domains/:did
+pub async fn update_domain(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path((org_id, domain_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<UpdateDomainRequest>,
+) -> Result<Json<DomainRecord>, ApiError> {
+    if !state
+        .rbac
+        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .await?
+    {
+        return Err(ApiError::Forbidden("Requires admin role".into()));
+    }
+
+    let mut sets: Vec<String> = Vec::new();
+    let mut idx = 3u32;
+
+    if body.auto_join_enabled.is_some() {
+        sets.push(format!("auto_join_enabled = ${idx}"));
+        idx += 1;
+    }
+    if body.include_subdomains.is_some() {
+        sets.push(format!("include_subdomains = ${idx}"));
+        idx += 1;
+    }
+    if body.default_role.is_some() {
+        sets.push(format!("default_role = ${idx}"));
+        idx += 1;
+    }
+    if body.welcome_message.is_some() {
+        sets.push(format!("welcome_message = ${idx}"));
+        let _ = idx; // suppress unused warning
+    }
+
+    if sets.is_empty() {
+        return Err(ApiError::BadRequest("No fields to update".into()));
+    }
+
+    sets.push("updated_at = NOW()".into());
+
+    let sql = format!(
+        "UPDATE organization_domains SET {} WHERE id = $1 AND organization_id = $2 \
+         RETURNING id, organization_id, domain, verification_token, verification_method, \
+         verified_at, auto_join_enabled, include_subdomains, default_role, \
+         email_whitelist, email_blacklist, welcome_message, created_at, updated_at",
+        sets.join(", ")
+    );
+
+    let mut query = sqlx::query_as::<_, DomainRecord>(&sql)
+        .bind(domain_id)
+        .bind(org_id);
+
+    if let Some(v) = body.auto_join_enabled {
+        query = query.bind(v);
+    }
+    if let Some(v) = body.include_subdomains {
+        query = query.bind(v);
+    }
+    if let Some(ref v) = body.default_role {
+        query = query.bind(v);
+    }
+    if let Some(ref v) = body.welcome_message {
+        query = query.bind(v);
+    }
+
+    let record = query
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Domain not found".into()))?;
+
+    Ok(Json(record))
+}
+
+/// DELETE /api/organizations/:id/domains/:did
+pub async fn delete_domain(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path((org_id, domain_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !state
+        .rbac
+        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .await?
+    {
+        return Err(ApiError::Forbidden("Requires admin role".into()));
+    }
+
+    let rows_affected =
+        sqlx::query("DELETE FROM organization_domains WHERE id = $1 AND organization_id = $2")
+            .bind(domain_id)
+            .bind(org_id)
+            .execute(&state.pool)
+            .await?
+            .rows_affected();
+
+    if rows_affected == 0 {
+        return Err(ApiError::NotFound("Domain not found".into()));
+    }
+
+    Ok(Json(serde_json::json!({ "message": "Domain deleted" })))
+}
+
+/// GET /api/domains/auto-join?email=user@example.com
+pub async fn check_auto_join(
+    State(state): State<AppState>,
+    Query(q): Query<AutoJoinQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let email_domain = q
+        .email
+        .rsplit_once('@')
+        .map(|(_, d)| d.to_lowercase())
+        .ok_or_else(|| ApiError::BadRequest("Invalid email format".into()))?;
+
+    #[derive(sqlx::FromRow)]
+    struct AutoJoinRow {
+        organization_id: Uuid,
+        organization_name: String,
+        default_role: String,
+        welcome_message: Option<String>,
+    }
+
+    let row = sqlx::query_as::<_, AutoJoinRow>(
+        r#"
+        SELECT od.organization_id, o.name AS organization_name,
+               od.default_role, od.welcome_message
+        FROM organization_domains od
+        JOIN organizations o ON o.id = od.organization_id
+        WHERE od.domain = $1
+          AND od.verified_at IS NOT NULL
+          AND od.auto_join_enabled = true
+          AND o.deleted_at IS NULL
+        LIMIT 1
+        "#,
+    )
+    .bind(&email_domain)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    match row {
+        Some(r) => Ok(Json(serde_json::json!({
+            "can_auto_join": true,
+            "organization_id": r.organization_id,
+            "organization_name": r.organization_name,
+            "default_role": r.default_role,
+            "welcome_message": r.welcome_message,
+        }))),
+        None => Ok(Json(serde_json::json!({
+            "can_auto_join": false,
+        }))),
+    }
 }

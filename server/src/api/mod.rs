@@ -71,6 +71,18 @@ pub fn router(state: AppState) -> Router {
             delete(organizations::revoke_invitation),
         )
         .route(
+            "/{id}/domains",
+            get(organizations::list_domains).post(organizations::create_domain),
+        )
+        .route(
+            "/{id}/domains/{did}",
+            patch(organizations::update_domain).delete(organizations::delete_domain),
+        )
+        .route(
+            "/{id}/domains/{did}/verify",
+            post(organizations::verify_domain),
+        )
+        .route(
             "/{id}/templates",
             get(templates::list_templates).post(templates::create_template),
         )
@@ -176,7 +188,8 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/questionnaires", questionnaire_routes)
         .nest("/api/sessions", session_routes)
         .nest("/api/media", media_routes)
-        .nest("/api", ws_route);
+        .nest("/api", ws_route)
+        .route("/api/domains/auto-join", get(organizations::check_auto_join));
 
     let dev_helpers_enabled = cfg!(debug_assertions)
         || matches!(

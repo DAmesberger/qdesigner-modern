@@ -240,8 +240,18 @@
   {/if}
 
   {#if loading}
-    <div class="flex justify-center py-8">
-      <div class="text-muted-foreground">Loading domains...</div>
+    <div class="space-y-4">
+      {#each Array(3) as _}
+        <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div class="flex-1">
+              <div class="h-5 w-48 animate-pulse rounded bg-muted mb-2"></div>
+              <div class="h-3 w-64 animate-pulse rounded bg-muted"></div>
+            </div>
+            <div class="h-8 w-20 animate-pulse rounded bg-muted"></div>
+          </div>
+        </div>
+      {/each}
     </div>
   {:else if domains.length === 0}
     <Card>

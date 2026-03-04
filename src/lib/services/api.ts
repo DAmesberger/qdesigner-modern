@@ -494,6 +494,13 @@ class ApiClient {
       this.delete(`/api/organizations/${orgId}/templates/${templateId}`),
   };
 
+  // === Users ===
+  users = {
+    getProfile: () => this.get<any>('/api/users/me'),
+    updateProfile: (data: { full_name?: string; avatar_url?: string; timezone?: string; locale?: string }) =>
+      this.patch<any>('/api/users/me', data),
+  };
+
   // === Email Verification ===
   emailVerification = {
     send: (email: string) =>

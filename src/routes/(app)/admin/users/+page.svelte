@@ -104,8 +104,16 @@
   {/if}
 
   {#if loading}
-    <div class="flex justify-center py-8">
-      <div class="text-muted-foreground">Loading users...</div>
+    <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
+      <div class="space-y-4">
+        {#each Array(5) as _}
+          <div class="flex items-center gap-4">
+            <div class="h-4 w-40 animate-pulse rounded bg-muted"></div>
+            <div class="h-4 w-20 animate-pulse rounded bg-muted"></div>
+            <div class="h-4 w-24 animate-pulse rounded bg-muted"></div>
+          </div>
+        {/each}
+      </div>
     </div>
   {:else if members.length === 0}
     <Card>

@@ -1,189 +1,303 @@
 <script lang="ts">
-  import AppShell from '$lib/components/AppShell.svelte';
-  import Card from '$lib/components/common/Card.svelte';
-  import { onMount } from 'svelte';
+  import { auth } from '$lib/services/auth';
+  import { api } from '$lib/services/api';
+  import type { DashboardSummary } from '$lib/types/api';
+  import {
+    Users,
+    FileText,
+    BarChart3,
+    Clock,
+    Mail,
+    Globe,
+    ClipboardList,
+    Settings,
+    CheckCircle,
+    Activity,
+  } from 'lucide-svelte';
 
-  let stats = {
-    totalUsers: 0,
-    activeQuestionnaires: 0,
-    totalResponses: 0,
-    avgCompletionTime: '0m'
-  };
+  let loading = $state(true);
+  let error = $state<string | null>(null);
+  let dashboard = $state<DashboardSummary | null>(null);
 
-  onMount(() => {
-    // Fetch stats from API
-    stats = {
-      totalUsers: 156,
-      activeQuestionnaires: 12,
-      totalResponses: 1284,
-      avgCompletionTime: '8m 32s'
-    };
+  $effect(() => {
+    loadData();
   });
+
+  async function loadData() {
+    try {
+      const user = await auth.getUser();
+      if (!user) return;
+
+      const orgs = await api.organizations.list();
+      const org = orgs?.[0];
+      if (!org) {
+        error = 'You must be part of an organization to view the dashboard';
+        loading = false;
+        return;
+      }
+
+      dashboard = await api.sessions.dashboard(org.id);
+    } catch (err) {
+      console.error('Error loading dashboard:', err);
+      error = 'Failed to load dashboard data';
+    } finally {
+      loading = false;
+    }
+  }
+
+  function formatRelativeTime(dateStr: string | null): string {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffDay < 30) return `${diffDay}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function formatCompletionTime(ms: number | null): string {
+    if (ms == null || ms === 0) return '--';
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    if (min === 0) return `${sec}s`;
+    return `${min}m ${sec}s`;
+  }
+
+  function formatRate(rate: number): string {
+    return `${Math.round(rate * 100)}%`;
+  }
+
+  function statusColor(status: string): string {
+    switch (status) {
+      case 'completed':
+        return 'text-green-500';
+      case 'in_progress':
+        return 'text-blue-500';
+      case 'abandoned':
+        return 'text-red-500';
+      default:
+        return 'text-muted-foreground';
+    }
+  }
+
+  function statusLabel(status: string): string {
+    switch (status) {
+      case 'completed':
+        return 'Completed';
+      case 'in_progress':
+        return 'In Progress';
+      case 'abandoned':
+        return 'Abandoned';
+      default:
+        return status;
+    }
+  }
 </script>
 
-<AppShell>
-  <div class="p-8">
-    <div class="mb-8">
-      <h1 class="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-      <p class="mt-2 text-gray-600">Manage your questionnaires and view analytics</p>
+<div class="p-8">
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold text-foreground">Admin Dashboard</h1>
+    <p class="mt-2 text-muted-foreground">Manage your questionnaires and view analytics</p>
+  </div>
+
+  {#if error}
+    <div class="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive mb-6">
+      {error}
     </div>
+  {/if}
 
-    <!-- Stats Grid -->
-    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-      <Card class="bg-white">
-        <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-          </div>
-          <div class="ml-5 w-0 flex-1">
-            <dl>
-              <dt class="text-sm font-medium text-gray-500 truncate">Total Users</dt>
-              <dd class="text-lg font-semibold text-gray-900">{stats.totalUsers}</dd>
-            </dl>
+  <!-- Stats Grid -->
+  <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+    {#if loading}
+      {#each Array(4) as _}
+        <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
+          <div class="flex items-center">
+            <div class="h-10 w-10 animate-pulse rounded-lg bg-muted"></div>
+            <div class="ml-4 flex-1">
+              <div class="h-3 w-24 animate-pulse rounded bg-muted mb-2"></div>
+              <div class="h-6 w-16 animate-pulse rounded bg-muted"></div>
+            </div>
           </div>
         </div>
-      </Card>
-
-      <Card class="bg-white">
+      {/each}
+    {:else if dashboard}
+      <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
         <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <ClipboardList class="h-5 w-5 text-primary" />
           </div>
-          <div class="ml-5 w-0 flex-1">
-            <dl>
-              <dt class="text-sm font-medium text-gray-500 truncate">Active Questionnaires</dt>
-              <dd class="text-lg font-semibold text-gray-900">{stats.activeQuestionnaires}</dd>
-            </dl>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-muted-foreground">Total Questionnaires</p>
+            <p class="text-2xl font-semibold text-foreground">{dashboard.stats.total_questionnaires}</p>
           </div>
         </div>
-      </Card>
+      </div>
 
-      <Card class="bg-white">
+      <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
         <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <FileText class="h-5 w-5 text-primary" />
           </div>
-          <div class="ml-5 w-0 flex-1">
-            <dl>
-              <dt class="text-sm font-medium text-gray-500 truncate">Total Responses</dt>
-              <dd class="text-lg font-semibold text-gray-900">{stats.totalResponses}</dd>
-            </dl>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-muted-foreground">Total Responses</p>
+            <p class="text-2xl font-semibold text-foreground">{dashboard.stats.total_responses}</p>
           </div>
         </div>
-      </Card>
+      </div>
 
-      <Card class="bg-white">
+      <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
         <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <BarChart3 class="h-5 w-5 text-primary" />
           </div>
-          <div class="ml-5 w-0 flex-1">
-            <dl>
-              <dt class="text-sm font-medium text-gray-500 truncate">Avg. Completion Time</dt>
-              <dd class="text-lg font-semibold text-gray-900">{stats.avgCompletionTime}</dd>
-            </dl>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-muted-foreground">Active Questionnaires</p>
+            <p class="text-2xl font-semibold text-foreground">{dashboard.stats.active_questionnaires}</p>
           </div>
         </div>
-      </Card>
-    </div>
+      </div>
 
+      <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
+        <div class="flex items-center">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+            <CheckCircle class="h-5 w-5 text-primary" />
+          </div>
+          <div class="ml-4">
+            <p class="text-sm font-medium text-muted-foreground">Avg. Completion Rate</p>
+            <p class="text-2xl font-semibold text-foreground">{formatRate(dashboard.stats.avg_completion_rate)}</p>
+          </div>
+        </div>
+      </div>
+    {/if}
+  </div>
+
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
     <!-- Quick Actions -->
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <Card>
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-        <div class="space-y-3">
-          <a href="/admin/users" class="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors">
-            <svg class="h-5 w-5 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-            <span class="text-gray-900">Manage Users</span>
-          </a>
-          <a href="/admin/invitations" class="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors">
-            <svg class="h-5 w-5 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-            <span class="text-gray-900">Manage Invitations</span>
-          </a>
-          <a href="/admin/domains" class="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors">
-            <svg class="h-5 w-5 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-            </svg>
-            <span class="text-gray-900">Domain Auto-Join</span>
-          </a>
-          <a href="/admin/questionnaires" class="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors">
-            <svg class="h-5 w-5 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <span class="text-gray-900">View All Questionnaires</span>
-          </a>
-          <a href="/admin/analytics" class="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors">
-            <svg class="h-5 w-5 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            <span class="text-gray-900">View Analytics</span>
-          </a>
-          <a href="/admin/settings" class="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors">
-            <svg class="h-5 w-5 text-indigo-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <span class="text-gray-900">System Settings</span>
-          </a>
-        </div>
-      </Card>
+    <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
+      <h3 class="text-lg font-semibold text-foreground mb-4">Quick Actions</h3>
+      <div class="space-y-1">
+        <a href="/admin/users" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
+          <Users class="h-5 w-5 text-primary mr-3" />
+          <span class="text-foreground">Manage Users</span>
+        </a>
+        <a href="/admin/invitations" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
+          <Mail class="h-5 w-5 text-primary mr-3" />
+          <span class="text-foreground">Manage Invitations</span>
+        </a>
+        <a href="/admin/domains" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
+          <Globe class="h-5 w-5 text-primary mr-3" />
+          <span class="text-foreground">Domain Auto-Join</span>
+        </a>
+        <a href="/projects" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
+          <ClipboardList class="h-5 w-5 text-primary mr-3" />
+          <span class="text-foreground">View All Questionnaires</span>
+        </a>
+        <a href="/projects" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
+          <BarChart3 class="h-5 w-5 text-primary mr-3" />
+          <span class="text-foreground">View Analytics</span>
+        </a>
+        <a href="/settings" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
+          <Settings class="h-5 w-5 text-primary mr-3" />
+          <span class="text-foreground">System Settings</span>
+        </a>
+      </div>
+    </div>
 
-      <Card>
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
-        <div class="space-y-3">
-          <div class="flex items-start">
-            <div class="flex-shrink-0">
-              <div class="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
-                <svg class="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
+    <!-- Recent Activity -->
+    <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
+      <h3 class="text-lg font-semibold text-foreground mb-4">Recent Activity</h3>
+      {#if loading}
+        <div class="space-y-4">
+          {#each Array(3) as _}
+            <div class="flex items-start">
+              <div class="h-8 w-8 animate-pulse rounded-full bg-muted"></div>
+              <div class="ml-3 flex-1">
+                <div class="h-3 w-40 animate-pulse rounded bg-muted mb-2"></div>
+                <div class="h-2 w-28 animate-pulse rounded bg-muted"></div>
               </div>
             </div>
-            <div class="ml-3">
-              <p class="text-sm text-gray-900">New questionnaire created</p>
-              <p class="text-xs text-gray-500">Employee Satisfaction Survey - 2 hours ago</p>
-            </div>
-          </div>
-          <div class="flex items-start">
-            <div class="flex-shrink-0">
-              <div class="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
-                <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              </div>
-            </div>
-            <div class="ml-3">
-              <p class="text-sm text-gray-900">New user registered</p>
-              <p class="text-xs text-gray-500">john.doe@example.com - 3 hours ago</p>
-            </div>
-          </div>
-          <div class="flex items-start">
-            <div class="flex-shrink-0">
-              <div class="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center">
-                <svg class="h-4 w-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-            <div class="ml-3">
-              <p class="text-sm text-gray-900">100 responses collected</p>
-              <p class="text-xs text-gray-500">Customer Feedback Form - 5 hours ago</p>
-            </div>
-          </div>
+          {/each}
         </div>
-      </Card>
+      {:else if dashboard && dashboard.recent_activity.length > 0}
+        <div class="space-y-3">
+          {#each dashboard.recent_activity as activity}
+            <div class="flex items-start">
+              <div class="flex-shrink-0">
+                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                  <Activity class="h-4 w-4 {statusColor(activity.status)}" />
+                </div>
+              </div>
+              <div class="ml-3 min-w-0">
+                <p class="text-sm text-foreground truncate">{activity.questionnaire_name}</p>
+                <p class="text-xs text-muted-foreground">
+                  <span class={statusColor(activity.status)}>{statusLabel(activity.status)}</span>
+                  {#if activity.started_at}
+                    &middot; {formatRelativeTime(activity.started_at)}
+                  {/if}
+                  {#if activity.participant_id}
+                    &middot; {activity.participant_id}
+                  {/if}
+                </p>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class="text-sm text-muted-foreground">No recent activity</p>
+      {/if}
     </div>
   </div>
-</AppShell>
+
+  <!-- Questionnaires Table -->
+  {#if loading}
+    <div class="mt-6 rounded-lg border border-border bg-card p-5 shadow-sm">
+      <div class="h-5 w-40 animate-pulse rounded bg-muted mb-4"></div>
+      <div class="space-y-3">
+        {#each Array(3) as _}
+          <div class="h-10 w-full animate-pulse rounded bg-muted"></div>
+        {/each}
+      </div>
+    </div>
+  {:else if dashboard && dashboard.questionnaires.length > 0}
+    <div class="mt-6 rounded-lg border border-border bg-card p-5 shadow-sm">
+      <h3 class="text-lg font-semibold text-foreground mb-4">Questionnaires</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-border text-left">
+              <th class="pb-3 text-sm font-medium text-muted-foreground">Name</th>
+              <th class="pb-3 text-sm font-medium text-muted-foreground">Status</th>
+              <th class="pb-3 text-sm font-medium text-muted-foreground text-right">Responses</th>
+              <th class="pb-3 text-sm font-medium text-muted-foreground text-right">Completed</th>
+              <th class="pb-3 text-sm font-medium text-muted-foreground text-right">Avg. Time</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            {#each dashboard.questionnaires as q}
+              <tr class="hover:bg-muted/50 transition-colors">
+                <td class="py-3 text-sm font-medium text-foreground">{q.name}</td>
+                <td class="py-3">
+                  <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+                    {q.status === 'published' ? 'bg-green-500/10 text-green-500' : q.status === 'draft' ? 'bg-yellow-500/10 text-yellow-500' : 'bg-muted text-muted-foreground'}">
+                    {q.status}
+                  </span>
+                </td>
+                <td class="py-3 text-sm text-muted-foreground text-right">{q.total_responses}</td>
+                <td class="py-3 text-sm text-muted-foreground text-right">{q.completed_sessions}</td>
+                <td class="py-3 text-sm text-muted-foreground text-right">{formatCompletionTime(q.avg_completion_time_ms)}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {/if}
+</div>
