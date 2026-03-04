@@ -6,7 +6,6 @@ import {
   type DesignerViewMode,
 } from './designer/UiStore';
 import { DesignerPersistenceService } from './designer/PersistenceService';
-import { generateId } from '$lib/shared/utils/id';
 import { VariableEngine } from '$lib/scripting-engine';
 
 export type SelectedItem = Question | Page | Block | Variable;
@@ -260,11 +259,13 @@ class DesignerStore {
     this.init(draft);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API/import data with dynamic shape
   loadQuestionnaireFromDefinition(data: any) {
     const normalized = this.documentStore.normalizeQuestionnaire(data);
     this.init(normalized);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw import data with dynamic shape
   importQuestionnaire(data: any) {
     this.loadQuestionnaireFromDefinition(data);
   }

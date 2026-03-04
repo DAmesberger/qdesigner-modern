@@ -21,7 +21,8 @@ export type QuestionModuleConfig = Question & {
   responseTransform?: string; // Formula to transform response
 
   // Logic
-  conditions?: any; // Should be ConditionalLogic but avoiding recursive import issues for now
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- should be ConditionalLogic but avoiding recursive import
+  conditions?: any;
 
   // Common/Legacy Text Properties (for BaseQuestion compatibility)
   title?: string;
@@ -35,7 +36,8 @@ export interface QuestionResponse extends ResponseData {
   answerType: AnswerType;
   valid: boolean;
   errors?: string[];
-  processed?: any; // Processed/transformed response
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic processed response shape
+  processed?: any;
 }
 
 // Question module metadata extension

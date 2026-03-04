@@ -28,7 +28,9 @@ export class AudioRenderer extends BaseRenderer {
   private texture: WebGLTexture | null = null;
   private playing: boolean = false;
   private animationId: number | null = null;
-  
+  public timingMethod: 'audioContext' | 'performance.now' = 'performance.now';
+  public audioOnsetTime: number | null = null;
+
   constructor(config: AudioRendererConfig) {
     super(config.id, 'audio', config);
     this.audioConfig = config;
@@ -68,6 +70,7 @@ export class AudioRenderer extends BaseRenderer {
     this.config = { ...this.config, ...config };
     
     // Get audio from resource manager (as AudioBuffer)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL context extended with resourceManager at runtime
     const resourceManager = (gl as any).resourceManager as ResourceManager;
     if (resourceManager) {
       const audioBuffer = resourceManager.getAudioBuffer(this.audioConfig.id);
@@ -104,7 +107,7 @@ export class AudioRenderer extends BaseRenderer {
     }
   }
   
-  protected renderContent(gl: WebGL2RenderingContext, context: RenderContext): void {
+  protected renderContent(gl: WebGL2RenderingContext, _context: RenderContext): void {
     if (!this.audio) return;
     
     // Start playback on first render
@@ -118,10 +121,17 @@ export class AudioRenderer extends BaseRenderer {
         console.warn('Audio autoplay failed:', err);
       });
       this.playing = true;
-      
-      // Mark onset time
+
+      // Mark onset time using AudioContext.currentTime for precise audio timing
       if (!this.onsetTime) {
-        this.onsetTime = performance.now();
+        if (this.audioContext) {
+          this.audioOnsetTime = this.audioContext.currentTime;
+          this.onsetTime = performance.now();
+          this.timingMethod = 'audioContext';
+        } else {
+          this.onsetTime = performance.now();
+          this.timingMethod = 'performance.now';
+        }
       }
       
       // Start visualization

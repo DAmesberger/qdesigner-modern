@@ -1,10 +1,11 @@
 // Analytics block types
 
-import type { AnalyticsBlock, DataSource, Calculation } from '$lib/modules/types';
+import type { AnalyticsBlock } from '$lib/modules/types';
 
 // Extended analytics block configuration
 export interface AnalyticsBlockConfig extends AnalyticsBlock {
   // Visualization-specific config will be added by each block type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- visualization config varies by block type
   visualConfig?: any;
   
   // Update frequency for real-time data
@@ -17,9 +18,11 @@ export interface AnalyticsBlockConfig extends AnalyticsBlock {
 
 // Base calculation result
 export interface CalculationResult {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calculation result can be any type
   value: any;
   formula: string;
   timestamp: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic calculation inputs
   inputs: Record<string, any>;
   error?: string;
 }
@@ -28,7 +31,7 @@ export interface CalculationResult {
 export interface DataPoint {
   label: string;
   value: number | string | boolean;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // Series data for multi-series visualizations

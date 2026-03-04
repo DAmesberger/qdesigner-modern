@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { provisionWorkspace, type ProvisionedWorkspace } from '../helpers/fullstack-api';
-import { TEST_CONFIG } from '../helpers/test-config';
+
 
 test.describe('@regression platform-gaps', () => {
   // -------- Auth & Security --------
@@ -24,7 +24,9 @@ test.describe('@regression platform-gaps', () => {
     await page.goto('/this-route-does-not-exist-12345');
 
     // SvelteKit +error.svelte renders the status code and "Not Found"
+    // eslint-disable-next-line no-restricted-syntax -- checking body text on error page, no testid available
     await expect(page.locator('body')).toContainText('404');
+    // eslint-disable-next-line no-restricted-syntax -- checking body text on error page, no testid available
     await expect(page.locator('body')).toContainText('Not Found');
   });
 
@@ -34,6 +36,7 @@ test.describe('@regression platform-gaps', () => {
     await page.goto('/login');
 
     // The LanguageSwitcher uses aria-label="Select language" on its button
+    // eslint-disable-next-line no-restricted-syntax -- selecting by aria-label, no testid on third-party widget
     const langButton = page.locator('button[aria-label="Select language"]');
     const buttonVisible = await langButton.isVisible({ timeout: 3000 }).catch(() => false);
     if (!buttonVisible) {
@@ -43,6 +46,7 @@ test.describe('@regression platform-gaps', () => {
     }
 
     // Record the current submit button text before switching
+    // eslint-disable-next-line no-restricted-syntax -- selecting by type attribute, no testid on generic submit button
     const submitBtn = page.locator('button[type="submit"]');
     const initialText = await submitBtn.textContent();
 
@@ -50,6 +54,7 @@ test.describe('@regression platform-gaps', () => {
     await langButton.click();
 
     // Pick Deutsch (de)
+    // eslint-disable-next-line no-restricted-syntax -- selecting by role + text, no testid on language options
     const deOption = page.locator('[role="option"]', { hasText: 'Deutsch' });
     await expect(deOption).toBeVisible({ timeout: 2000 });
     await deOption.click();

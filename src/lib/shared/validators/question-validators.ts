@@ -3,10 +3,9 @@
  * Runtime validation for question configurations with detailed error reporting
  */
 
-import type { 
+import type {
   Question,
   TextDisplayConfig,
-  MediaDisplayConfig,
   SingleChoiceDisplayConfig,
   MultipleChoiceDisplayConfig,
   ScaleDisplayConfig,
@@ -14,15 +13,9 @@ import type {
   TextInputDisplayConfig,
   NumberInputDisplayConfig,
   MatrixDisplayConfig,
-  ReactionTimeDisplayConfig,
-  DateTimeDisplayConfig,
   FileUploadDisplayConfig,
-  RankingDisplayConfig,
-  WebGLDisplayConfig,
-  StatisticalFeedbackConfig,
   ChoiceOption,
   MediaConfig,
-  ValidationRule,
   TimingConfig,
   NavigationConfig
 } from '../types/questionnaire';
@@ -94,6 +87,7 @@ class HTMLSafetyValidator {
 // ============================================================================
 
 class BaseValidators {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- validates any field value for presence
   static validateRequired(value: any, field: string): ValidationError | null {
     if (value === undefined || value === null || value === '') {
       return {
@@ -105,6 +99,7 @@ class BaseValidators {
     return null;
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- validates unknown value as string
   static validateString(value: any, field: string, minLength?: number, maxLength?: number): ValidationError[] {
     const errors: ValidationError[] = [];
     
@@ -136,6 +131,7 @@ class BaseValidators {
     return errors;
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- validates unknown value as number
   static validateNumber(value: any, field: string, min?: number, max?: number): ValidationError[] {
     const errors: ValidationError[] = [];
     
@@ -167,6 +163,7 @@ class BaseValidators {
     return errors;
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- validates unknown value against enum
   static validateEnum<T>(value: any, field: string, validValues: readonly T[]): ValidationError | null {
     if (!validValues.includes(value)) {
       return {
@@ -178,6 +175,7 @@ class BaseValidators {
     return null;
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- validates unknown value as array
   static validateArray(value: any, field: string, minItems?: number, maxItems?: number): ValidationError[] {
     const errors: ValidationError[] = [];
     

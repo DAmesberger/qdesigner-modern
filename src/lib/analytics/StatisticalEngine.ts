@@ -3,7 +3,6 @@
  * Advanced statistical calculations for QDesigner Modern analytics
  */
 
-import { evaluate } from 'mathjs';
 import type {
   StatisticalSummary,
   CorrelationAnalysis,
@@ -13,7 +12,6 @@ import type {
   RegressionResult,
   ReliabilityAnalysis,
   FactorAnalysis,
-  AnalyticsError,
   MannWhitneyResult,
   WilcoxonSignedRankResult,
   KruskalWallisResult,
@@ -28,7 +26,7 @@ import type {
 
 export class StatisticalEngine {
   private static instance: StatisticalEngine;
-  private cache: Map<string, any> = new Map();
+  private cache: Map<string, unknown> = new Map();
   private cacheExpiry: Map<string, number> = new Map();
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -122,7 +120,6 @@ export class StatisticalEngine {
   }
 
   private calculateQuartiles(sortedData: number[]) {
-    const n = sortedData.length;
     return {
       q1: this.calculatePercentile(sortedData, 25),
       q2: this.calculatePercentile(sortedData, 50),
@@ -665,7 +662,6 @@ export class StatisticalEngine {
     if (cached) return cached;
 
     const nVars = data.length;
-    const nObs = data[0]?.length ?? 0;
 
     // Standardize the data
     const standardizedData = data.map(variable => {
@@ -1192,6 +1188,41 @@ export class StatisticalEngine {
     return { adjustedPValues, significant };
   }
 
+  /**
+   * Holm step-down correction (alias for holmBonferroni)
+   */
+  holmCorrection(pValues: number[], alpha: number = 0.05): CorrectionResult {
+    return this.holmBonferroni(pValues, alpha);
+  }
+
+  /**
+   * Benjamini-Hochberg FDR (False Discovery Rate) correction
+   */
+  fdrCorrection(pValues: number[], alpha: number = 0.05): CorrectionResult {
+    if (pValues.length === 0) {
+      throw new Error('pValues array must be non-empty');
+    }
+    const m = pValues.length;
+
+    // Sort by p-value, keeping track of original indices
+    const indexed = pValues.map((p, i) => ({ p, i }));
+    indexed.sort((a, b) => a.p - b.p);
+
+    const adjustedPValues = new Array<number>(m);
+    let minSoFar = 1;
+
+    // Work backwards from largest p-value
+    for (let rank = m - 1; rank >= 0; rank--) {
+      const adjusted = indexed[rank]!.p * m / (rank + 1);
+      // Enforce monotonicity: adjusted p can't increase going backwards
+      minSoFar = Math.min(minSoFar, adjusted);
+      adjustedPValues[indexed[rank]!.i] = Math.min(1, minSoFar);
+    }
+
+    const significant = adjustedPValues.map(p => p < alpha);
+    return { adjustedPValues, significant };
+  }
+
   // ============================================================================
   // Effect Size Measures
   // ============================================================================
@@ -1247,7 +1278,7 @@ export class StatisticalEngine {
    * Omega squared: less biased effect size for ANOVA
    */
   omegaSquared(anovaResult: AnovaResult): number {
-    const { fStatistic, degreesOfFreedomBetween: dfB, degreesOfFreedomWithin: dfW, meanSquareWithin: MSW } = anovaResult;
+    const { degreesOfFreedomBetween: dfB, degreesOfFreedomWithin: dfW, meanSquareWithin: MSW } = anovaResult;
     const SSB = anovaResult.meanSquareBetween * dfB;
     const SST = SSB + MSW * dfW;
     const omega2 = (SSB - dfB * MSW) / (SST + MSW);
@@ -1461,7 +1492,7 @@ export class StatisticalEngine {
   }
 
   // Statistical distribution functions (simplified implementations)
-  private studentTCDF(t: number, df: number): number {
+  private studentTCDF(t: number, _df: number): number {
     // Simplified t-distribution CDF approximation
     // For large degrees of freedom, t-distribution converges to normal distribution
     return this.standardNormalCDF(t);
@@ -1647,7 +1678,7 @@ export class StatisticalEngine {
       return null;
     }
     
-    return this.cache.get(key) || null;
+    return (this.cache.get(key) as T) || null;
   }
 
   private setCache<T>(key: string, value: T): void {

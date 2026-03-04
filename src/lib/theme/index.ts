@@ -1,8 +1,6 @@
 // Unified Theme System for QDesigner Modern
 // This integrates CSS variables, Tailwind classes, and TypeScript theme configuration
 
-import type { QuestionnaireTheme } from '$lib/shared';
-
 // CSS Variable names mapping
 export const cssVariables = {
   colors: {

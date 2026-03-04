@@ -1,7 +1,8 @@
-import type { IStimulus, StimulusConfig, TransitionConfig } from './Stimulus';
+import type { IStimulus, TransitionConfig } from './Stimulus';
 
 interface StimulusDefinition {
   type: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stimulus content varies by type
   content: any;
   duration?: number;
   delay?: number;
@@ -18,6 +19,7 @@ import { CompositeStimulus } from './CompositeStimulus';
  * Factory for creating stimulus instances
  */
 export class StimulusFactory {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- custom stimulus constructors accept dynamic config
   private static customStimuli: Map<string, new (config: any) => IStimulus> = new Map();
   
   /**
@@ -25,6 +27,7 @@ export class StimulusFactory {
    */
   public static registerCustomStimulus(
     type: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- custom stimulus constructors accept dynamic config
     stimulusClass: new (config: any) => IStimulus
   ): void {
     this.customStimuli.set(type, stimulusClass);
@@ -118,17 +121,17 @@ export class StimulusFactory {
           position: baseConfig.position,
           size: baseConfig.size,
           style: baseConfig.style,
-          renderFunction: (ctx, width, height, time) => {
+          renderFunction: (_ctx, _width, _height, _time) => {
             // Custom HTML rendering logic
             // This would use a library like html2canvas or custom rendering
           }
         });
         
-      case 'composite':
+      case 'composite': {
         if (!config.content.components) {
           throw new Error('Composite stimulus must have components');
         }
-        
+
         const components = config.content.components.map((component: StimulusDefinition, index: number) => ({
           stimulus: this.createStimulus(component),
           offset: component.content.position,
@@ -136,7 +139,7 @@ export class StimulusFactory {
           opacity: component.content.style?.opacity,
           layer: index
         }));
-        
+
         return new CompositeStimulus({
           id: baseConfig.id,
           duration: baseConfig.duration,
@@ -147,15 +150,16 @@ export class StimulusFactory {
           style: baseConfig.style,
           components
         });
-        
-      default:
+      }
+      default: {
         // Check for custom stimulus
         const CustomClass = this.customStimuli.get(config.type);
         if (CustomClass) {
           return new CustomClass({ ...baseConfig, ...config.content });
         }
-        
+
         throw new Error(`Unknown stimulus type: ${config.type}`);
+      }
     }
   }
   
@@ -209,6 +213,7 @@ export class StimulusFactory {
   /**
    * Create stimuli for a question
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
   public static createQuestionStimuli(question: any): IStimulus[] {
     const stimuli: IStimulus[] = [];
     

@@ -50,6 +50,7 @@ export function toggleTestMode() {
 
 // Add to window for easy console access in development
 if (import.meta.env.DEV && typeof window !== 'undefined') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- attaching dev utilities to window global
   (window as any).testMode = {
     enable: enableTestMode,
     disable: disableTestMode,

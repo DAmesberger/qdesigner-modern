@@ -1,4 +1,4 @@
-import type { ChartConfiguration, ChartType, ChartDataset, Plugin } from 'chart.js';
+import type { ChartConfiguration, ChartType, Plugin } from 'chart.js';
 
 // Scientific chart types that extend standard Chart.js functionality
 export type ScientificChartType = 
@@ -21,6 +21,7 @@ export interface ScientificChartConfig {
   showLegend?: boolean;
   showGrid?: boolean;
   showStatistics?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic chart normative data
   normativeData?: any;
   confidenceInterval?: number;
   customOptions?: Partial<ChartConfiguration['options']>;
@@ -31,6 +32,7 @@ export interface ScientificChartConfig {
 export class ScientificChartBuilder {
   static createConfiguration(
     type: ScientificChartType,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic chart data
     data: any,
     options: ScientificChartConfig
   ): ChartConfiguration {
@@ -67,6 +69,7 @@ export class ScientificChartBuilder {
     return mapping[type] || (type as ChartType);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic chart data transformation
   private static transformData(type: ScientificChartType, data: any): any {
     // Transform data based on chart type
     switch (type) {
@@ -81,6 +84,7 @@ export class ScientificChartBuilder {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js options have complex dynamic shape
   private static buildOptions(type: ScientificChartType, config: ScientificChartConfig): any {
     const baseOptions = {
       responsive: true,
@@ -158,6 +162,7 @@ export class ScientificChartBuilder {
   }
 
   // Data transformation methods
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js data shape
   private static createDistributionData(rawData: number[]): any {
     const mean = rawData.reduce((a, b) => a + b, 0) / rawData.length;
     const variance = rawData.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / rawData.length;
@@ -188,6 +193,7 @@ export class ScientificChartBuilder {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js data shape
   private static createBoxplotData(data: Record<string, number[]>): any {
     const labels = Object.keys(data);
     const boxplotData = labels.map(label => {
@@ -218,6 +224,7 @@ export class ScientificChartBuilder {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Chart.js data shape
   private static createHistogramData(values: number[], binCount: number = 20): any {
     const min = Math.min(...values);
     const max = Math.max(...values);
@@ -251,12 +258,12 @@ export class ScientificChartBuilder {
   }
 
   // Plugin creators
-  private static createStatisticsPlugin(type: ScientificChartType): Plugin {
+  private static createStatisticsPlugin(_type: ScientificChartType): Plugin {
     return {
       id: 'statistics-overlay',
       afterDraw: (chart) => {
         const ctx = chart.ctx;
-        const chartArea = chart.chartArea;
+        const _chartArea = chart.chartArea;
         
         // Draw statistics based on chart type
         ctx.save();
@@ -273,7 +280,7 @@ export class ScientificChartBuilder {
   private static createNormalCurvePlugin(): Plugin {
     return {
       id: 'normal-curve',
-      afterDatasetsDraw: (chart) => {
+      afterDatasetsDraw: (_chart) => {
         // Overlay normal distribution curve
       }
     };
@@ -282,7 +289,7 @@ export class ScientificChartBuilder {
   private static createBoxplotPlugin(): Plugin {
     return {
       id: 'boxplot-renderer',
-      afterDatasetsDraw: (chart) => {
+      afterDatasetsDraw: (_chart) => {
         // Custom boxplot rendering with whiskers
       }
     };
@@ -291,7 +298,7 @@ export class ScientificChartBuilder {
   private static createForestPlotPlugin(): Plugin {
     return {
       id: 'forest-plot',
-      afterDatasetsDraw: (chart) => {
+      afterDatasetsDraw: (_chart) => {
         // Render forest plot with confidence intervals
       }
     };

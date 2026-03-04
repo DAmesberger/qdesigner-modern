@@ -1,6 +1,6 @@
 import { api } from '$lib/services/api';
+import { OfflineResponsePersistence } from './OfflineResponsePersistence';
 import type { ResponseData, InteractionEvent } from '$lib/types/response';
-import type { Session } from '$lib/types/session';
 
 export interface PersistenceOptions {
 	sessionId: string;
@@ -23,7 +23,7 @@ export class ResponsePersistenceService {
 		this.sessionId = options.sessionId;
 		this.batchSize = options.batchSize || 10;
 		this.syncInterval = options.syncInterval || 5000; // 5 seconds
-		this.enableOffline = options.enableOffline || true;
+		this.enableOffline = options.enableOffline ?? true;
 
 		// Start periodic sync
 		this.startPeriodicSync();
@@ -38,10 +38,10 @@ export class ResponsePersistenceService {
 			const enhancedResponse = {
 				...response,
 				session_id: this.sessionId,
-				stimulus_onset_us: response.stimulusOnset ? Math.floor(response.stimulusOnset * 1000) : null,
-				response_time_us: response.responseTime ? Math.floor(response.responseTime * 1000) : null,
-				reaction_time_us: response.reactionTime ? Math.floor(response.reactionTime * 1000) : null,
-				time_on_question_ms: response.timeOnQuestion || null,
+				stimulus_onset_us: response.stimulusOnset != null ? Math.floor(response.stimulusOnset * 1000) : null,
+				response_time_us: response.responseTime != null ? Math.floor(response.responseTime * 1000) : null,
+				reaction_time_us: response.reactionTime != null ? Math.floor(response.reactionTime * 1000) : null,
+				time_on_question_ms: response.timeOnQuestion ?? null,
 				client_timestamp: new Date().toISOString(),
 				is_current: true
 			};
@@ -49,7 +49,7 @@ export class ResponsePersistenceService {
 			if (this.enableOffline && !navigator.onLine) {
 				// Queue for later sync
 				this.responseQueue.push(enhancedResponse);
-				await this.saveToLocalStorage();
+				await this.saveToOfflineStore();
 			} else {
 				try {
 					await api.sessions.submitResponses(this.sessionId, [enhancedResponse]);
@@ -63,7 +63,7 @@ export class ResponsePersistenceService {
 			console.error('Error saving response:', error as Error);
 			if (this.enableOffline) {
 				this.responseQueue.push(response);
-				await this.saveToLocalStorage();
+				await this.saveToOfflineStore();
 			}
 		}
 	}
@@ -83,7 +83,7 @@ export class ResponsePersistenceService {
 
 			if (this.enableOffline && !navigator.onLine) {
 				this.eventQueue.push(enhancedEvent);
-				await this.saveToLocalStorage();
+				await this.saveToOfflineStore();
 			} else {
 				// Batch events for efficiency
 				this.eventQueue.push(enhancedEvent);
@@ -96,7 +96,7 @@ export class ResponsePersistenceService {
 			console.error('Error saving interaction event:', error as Error);
 			if (this.enableOffline) {
 				this.eventQueue.push(event);
-				await this.saveToLocalStorage();
+				await this.saveToOfflineStore();
 			}
 		}
 	}
@@ -114,6 +114,7 @@ export class ResponsePersistenceService {
 			await api.sessions.update(this.sessionId, {
 				...data,
 				last_activity_at: new Date().toISOString()
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
 			} as any);
 		} catch (error) {
 			console.error('Error updating session:', error as Error);
@@ -132,6 +133,7 @@ export class ResponsePersistenceService {
 			await api.sessions.update(this.sessionId, {
 				status: 'completed',
 				completed_at: new Date().toISOString()
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
 			} as any);
 		} catch (error) {
 			console.error('Error completing session:', error as Error);
@@ -141,6 +143,7 @@ export class ResponsePersistenceService {
 	/**
 	 * Save a session variable
 	 */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- scripting context accepts arbitrary values
 	async saveVariable(name: string, value: any, type: string = 'string'): Promise<void> {
 		try {
 			await api.sessions.upsertVariable(this.sessionId, {
@@ -184,10 +187,7 @@ export class ResponsePersistenceService {
 				await this.flushEventQueue();
 			}
 
-			// Load and sync from local storage
-			if (this.enableOffline) {
-				await this.syncFromLocalStorage();
-			}
+			// Note: IndexedDB offline data is synced by FilloutSyncEngine (single pipeline)
 		} finally {
 			this.isSyncing = false;
 		}
@@ -203,6 +203,7 @@ export class ResponsePersistenceService {
 		if (toSync.length === 0) return;
 
 		try {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic response payload
 			await api.sessions.submitResponses(this.sessionId, toSync as any);
 		} catch (error) {
 			// Re-queue failed items
@@ -230,55 +231,29 @@ export class ResponsePersistenceService {
 	}
 
 	/**
-	 * Save queued data to local storage
+	 * Persist queued data to IndexedDB (via OfflineResponsePersistence).
+	 * This ensures the FilloutSyncEngine can pick it up for later sync.
 	 */
-	private async saveToLocalStorage(): Promise<void> {
+	private async saveToOfflineStore(): Promise<void> {
 		try {
-			const data = {
-				sessionId: this.sessionId,
-				responses: this.responseQueue,
-				events: this.eventQueue,
-				timestamp: Date.now()
-			};
-
-			localStorage.setItem(
-				`qdesigner_offline_${this.sessionId}`,
-				JSON.stringify(data)
-			);
-		} catch (error) {
-			console.error('Failed to save to local storage:', error as Error);
-		}
-	}
-
-	/**
-	 * Load and sync data from local storage
-	 */
-	private async syncFromLocalStorage(): Promise<void> {
-		try {
-			const key = `qdesigner_offline_${this.sessionId}`;
-			const stored = localStorage.getItem(key);
-
-			if (!stored) return;
-
-			const data = JSON.parse(stored);
-
-			// Add to queues
-			if (data.responses?.length > 0) {
-				this.responseQueue.push(...data.responses);
-				await this.syncResponses();
+			for (const resp of this.responseQueue) {
+				await OfflineResponsePersistence.saveResponse(this.sessionId, {
+					questionId: resp.questionId,
+					value: resp.value,
+					reactionTimeUs: resp.reactionTime != null ? Math.floor(resp.reactionTime * 1000) : undefined,
+					metadata: resp.metadata,
+				});
 			}
-
-			if (data.events?.length > 0) {
-				this.eventQueue.push(...data.events);
-				await this.flushEventQueue();
-			}
-
-			// Clear if successful
-			if (this.responseQueue.length === 0 && this.eventQueue.length === 0) {
-				localStorage.removeItem(key);
+			for (const evt of this.eventQueue) {
+				await OfflineResponsePersistence.saveEvent(this.sessionId, {
+					eventType: evt.eventType,
+					questionId: evt.questionId ?? undefined,
+					timestampUs: Math.floor(evt.timestamp * 1000),
+					metadata: evt.eventData != null ? { eventData: evt.eventData } : undefined,
+				});
 			}
 		} catch (error) {
-			console.error('Failed to sync from local storage:', error as Error);
+			console.error('Failed to save to IndexedDB:', error as Error);
 		}
 	}
 

@@ -31,6 +31,7 @@ interface QuestionnaireDefinition {
 
 interface CachedData {
   timestamp: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cache stores heterogeneous data types
   data: any;
 }
 
@@ -38,6 +39,7 @@ interface OfflineQueue {
   id: string;
   type: 'create' | 'update' | 'delete';
   entity: 'questionnaire' | 'response';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- offline queue stores heterogeneous entity data
   data: any;
   timestamp: number;
   retries: number;
@@ -87,6 +89,7 @@ class OfflineDataService {
     return id ? `${type}:${id}` : type;
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cache stores heterogeneous data types
   async cacheData(type: string, id: string | undefined, data: any): Promise<void> {
     if (!this.db) await this.init();
     
@@ -187,6 +190,7 @@ class OfflineDataService {
     await store.delete(id);
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- session data stores heterogeneous values
   async saveSessionData(key: string, data: any): Promise<void> {
     if (!this.db) await this.init();
     

@@ -63,7 +63,7 @@ export class TextStimulus extends BaseStimulus {
     this.ctx = this.canvas.getContext('2d')!;
   }
   
-  public async preload(resourceManager: ResourceManager): Promise<void> {
+  public async preload(_resourceManager: ResourceManager): Promise<void> {
     // Text doesn't need resource preloading unless using custom fonts
     this.ready = true;
   }

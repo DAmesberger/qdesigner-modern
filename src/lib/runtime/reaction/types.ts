@@ -96,11 +96,18 @@ export interface ReactionTrialConfig {
   allowResponseDuringPreStimulus?: boolean;
 }
 
+export type TimingMethod =
+  | 'event.timeStamp'
+  | 'rvfc'
+  | 'audioContext'
+  | 'performance.now';
+
 export interface ReactionResponseCapture {
   source: ReactionResponseMode;
   value: string | { x: number; y: number };
   timestamp: number;
   reactionTimeMs: number;
+  timingMethod?: TimingMethod;
 }
 
 export interface ReactionPhaseMark {
@@ -113,6 +120,7 @@ export interface ReactionTrialResult {
   trialId: string;
   startedAt: number;
   stimulusOnsetTime: number | null;
+  stimulusTimingMethod?: TimingMethod;
   response: ReactionResponseCapture | null;
   isCorrect: boolean | null;
   timeout: boolean;

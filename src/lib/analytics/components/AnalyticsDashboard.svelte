@@ -1,10 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { StatisticalEngine } from '../StatisticalEngine';
-  import { RealtimeAnalytics } from '../RealtimeAnalytics';
   import { DataVisualization } from '../DataVisualization';
   import { ExportService } from '../ExportService';
-  import ResponseViewer from './ResponseViewer.svelte';
   import StatisticsCard from './StatisticsCard.svelte';
   import type {
     AnalyticsData,
@@ -13,20 +11,17 @@
     DisplayMetric,
     FilterConfig,
     ExportFormat,
-    RealtimeConfig,
     StatisticalSummary,
     PerformanceMetrics,
-    RealtimeEvent,
   } from '../types';
 
   // Props
   interface Props {
     questionnaireId: string;
     config?: Partial<DashboardConfig>;
-    realtimeConfig?: RealtimeConfig;
   }
 
-  let { questionnaireId, config = {}, realtimeConfig }: Props = $props();
+  let { questionnaireId, config = {} }: Props = $props();
 
   // State management using Svelte 5 runes
   let dashboardData = $state<AnalyticsData[]>([]);
@@ -41,13 +36,11 @@
   let activeFilters = $state<FilterConfig[]>([]);
   let showExportDialog = $state(false);
   let showFilterPanel = $state(false);
-  let realtimeEnabled = $state(false);
   let autoRefresh = $state(false);
 
   // Analytics instances
   // These need to be state if they are used in the template (e.g. {#if realtimeAnalytics})
   let statisticalEngine = $state<StatisticalEngine>();
-  let realtimeAnalytics = $state<RealtimeAnalytics | null>(null);
   let dataViz = $state<DataVisualization>();
   let exportService = $state<ExportService>();
 
@@ -135,11 +128,6 @@
       dataViz = DataVisualization.getInstance();
       exportService = ExportService.getInstance();
 
-      if (realtimeConfig) {
-        realtimeAnalytics = RealtimeAnalytics.getInstance(realtimeConfig);
-        setupRealtimeAnalytics();
-      }
-
       await loadData();
       // Charts will be setup via effect
 
@@ -157,8 +145,6 @@
     // Clean up chart instances
     dataViz?.destroyAllCharts();
 
-    // Disconnect realtime analytics
-    realtimeAnalytics?.disconnect();
   });
 
   // Data loading and filtering
@@ -231,31 +217,6 @@
       default:
         return true;
     }
-  }
-
-  // Real-time analytics setup
-  function setupRealtimeAnalytics() {
-    if (!realtimeAnalytics) return;
-
-    realtimeAnalytics.on('response_submitted', (event: RealtimeEvent) => {
-      // Update dashboard with new response
-      updateDashboardWithNewData(event.data);
-    });
-
-    realtimeAnalytics.on('session_completed', (event: RealtimeEvent) => {
-      // Update completion metrics
-      loadData(); // Refresh data
-    });
-
-    realtimeAnalytics.on('error', (err: Error) => {
-      console.error('Realtime analytics error:', err);
-    });
-  }
-
-  function updateDashboardWithNewData(newData: any) {
-    // Update dashboard data with new real-time data
-    // This would merge new data with existing data
-    loadData(); // For simplicity, just reload data
   }
 
   // Chart setup and management
@@ -342,18 +303,6 @@
     showExportDialog = false;
   }
 
-  function toggleRealtime() {
-    if (!realtimeAnalytics) return;
-
-    if (realtimeEnabled) {
-      realtimeAnalytics.disconnect();
-    } else {
-      realtimeAnalytics.connect();
-    }
-
-    realtimeEnabled = !realtimeEnabled;
-  }
-
   function handleBackdropClick(e: MouseEvent) {
     if (e.target === e.currentTarget) {
       showExportDialog = false;
@@ -384,21 +333,6 @@
       </div>
 
       <div class="flex items-center space-x-4">
-        <!-- Real-time toggle -->
-        {#if realtimeAnalytics}
-          <button
-            onclick={toggleRealtime}
-            class="flex items-center px-3 py-2 text-sm font-medium rounded-lg {realtimeEnabled
-              ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
-              : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}"
-          >
-            <div
-              class="w-2 h-2 rounded-full mr-2 {realtimeEnabled ? 'bg-green-500' : 'bg-gray-400'}"
-            ></div>
-            {realtimeEnabled ? 'Live' : 'Offline'}
-          </button>
-        {/if}
-
         <!-- Auto-refresh toggle -->
         <button
           onclick={() => (autoRefresh = !autoRefresh)}
@@ -546,15 +480,6 @@
       </div>
     </div>
 
-    <!-- Real-time Response Viewer -->
-    {#if realtimeEnabled && realtimeAnalytics}
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-8">
-        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h3 class="text-lg font-medium text-gray-900 dark:text-white">Live Response Monitor</h3>
-        </div>
-        <ResponseViewer {realtimeAnalytics} {questionnaireId} />
-      </div>
-    {/if}
   </div>
 {/if}
 

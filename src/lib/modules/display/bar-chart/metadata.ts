@@ -1,7 +1,7 @@
 // Bar chart display metadata
 
 import type { ModuleMetadata } from '$lib/modules/types';
-import { AnswerTypes } from '../../questions/shared/answerTypes';
+
 
 export const metadata: ModuleMetadata = {
   type: 'bar-chart',
@@ -18,7 +18,9 @@ export const metadata: ModuleMetadata = {
     supportsVariables: true
   },
   components: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Svelte component props are untyped at this boundary
     runtime: () => import('./BarChart.svelte') as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Svelte component props are untyped at this boundary
     designer: () => import('./BarChartDesigner.svelte') as any
   },
   defaultConfig: {

@@ -1,6 +1,7 @@
 // Variable interpolation service
 
-import { scriptingEngine } from './scriptingEngine';
+import { FormulaParser } from '../../../packages/scripting-engine/src/parser';
+import { ASTEvaluator } from '../../../packages/scripting-engine/src/ast-evaluator';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- interpolation evaluates dynamic variable maps and expression results
 type DynamicValue = any;
@@ -90,21 +91,14 @@ export function extractVariables(template: string): string[] {
 }
 
 /**
- * Evaluate an expression with variables
+ * Evaluate an expression with variables (synchronous — uses AST parser, no async)
  */
 function evaluateExpression(expression: string, variables: Record<string, DynamicValue>): DynamicValue {
-  // Use the scripting engine if available
-  if (scriptingEngine && scriptingEngine.evaluate) {
-    return scriptingEngine.evaluate(expression, variables);
-  }
-  
-  // Fallback to simple Function constructor
-  try {
-    const func = new Function(...Object.keys(variables), `return ${expression}`);
-    return func(...Object.values(variables));
-  } catch (error) {
-    throw new Error(`Invalid expression: ${expression}`);
-  }
+  const parser = new FormulaParser();
+  const ast = parser.parse(expression);
+  const varMap = new Map<string, DynamicValue>(Object.entries(variables));
+  const evaluator = new ASTEvaluator({ variables: varMap });
+  return evaluator.evaluate(ast);
 }
 
 /**

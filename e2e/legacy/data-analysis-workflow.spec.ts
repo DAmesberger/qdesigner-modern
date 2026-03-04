@@ -2,9 +2,13 @@ import { test, expect } from '@playwright/test';
 import { createTestUser, setupTestOrganization } from '../helpers/test-setup';
 
 test.describe('Data Analysis Workflow - Data Scientist Journey', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
   let dataScientist: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
   let organization: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
   let project: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
   let studyWithData: any;
   
   test.beforeAll(async () => {

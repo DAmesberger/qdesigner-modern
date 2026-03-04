@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { authenticateUser } from './helpers/auth';
+
 
 // Helper to set up authenticated state
 async function authenticateTestUser(page: import('@playwright/test').Page, userId: string, email: string) {

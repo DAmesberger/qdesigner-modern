@@ -8,6 +8,7 @@ export interface APIError {
   status?: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- accepts unknown error shapes from API/network
 export function handleAPIError(error: any): APIError {
   console.error('API Error:', error);
   
@@ -84,6 +85,7 @@ export function handleAPIError(error: any): APIError {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- accepts unknown error shapes
 export function showErrorToast(error: any) {
   const apiError = handleAPIError(error);
   toast.error(apiError.details || apiError.message);

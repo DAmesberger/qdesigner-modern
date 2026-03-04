@@ -56,6 +56,7 @@ export class BlockRandomizer {
       const question = questions.get(questionId);
       if (!question) continue;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
       if ((question as any).randomize) {
         const randomized = this.randomize(
           [questionId],

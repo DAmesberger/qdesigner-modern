@@ -1,6 +1,11 @@
-import type { FormulaContext, EvaluationResult, FormulaFunction, FormulaError } from './types';
+import type { FormulaContext, EvaluationResult, FormulaFunction } from './types';
 import { statisticalFunctions } from './functions/statistical';
 import { arrayFunctions } from './functions/array';
+import { psychometricFunctions } from './functions/psychometric';
+import { irtFunctions } from './functions/irt';
+import { FormulaParser } from './parser';
+import { ASTEvaluator } from './ast-evaluator';
+import { DEFAULT_POLICY } from './policies';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- evaluator dispatches dynamic arguments/results for formula functions
 type DynamicValue = any;
@@ -9,12 +14,14 @@ export class FormulaEvaluator {
   private functions: Map<string, FormulaFunction>;
   private context: FormulaContext;
   private cache: Map<string, EvaluationResult>;
-  
+  private parser: FormulaParser;
+
   constructor(context: FormulaContext) {
     this.context = context;
     this.functions = new Map();
     this.cache = new Map();
-    
+    this.parser = new FormulaParser();
+
     // Register built-in functions
     this.registerBuiltInFunctions();
   }
@@ -263,9 +270,15 @@ export class FormulaEvaluator {
     
     // Register statistical functions
     statisticalFunctions.forEach(fn => this.registerFunction(fn));
-    
+
     // Register array functions
     arrayFunctions.forEach(fn => this.registerFunction(fn));
+
+    // Register psychometric functions
+    psychometricFunctions.forEach(fn => this.registerFunction(fn));
+
+    // Register IRT functions
+    irtFunctions.forEach(fn => this.registerFunction(fn));
   }
   
   registerFunction(func: FormulaFunction) {
@@ -307,123 +320,32 @@ export class FormulaEvaluator {
   }
   
   private parseAndEvaluate(formula: string): { value: DynamicValue; dependencies: string[] } {
-    // Remove leading = if present
-    formula = formula.trim();
-    if (formula.startsWith('=')) {
-      formula = formula.substring(1);
-    }
-    
     const dependencies: string[] = [];
-    
-    // Simple tokenizer and evaluator
-    // This is a simplified version - in production you'd use a proper parser
-    
-    // Resolve iteration context variables ($item, $index)
-    if (this.context.iterationContext) {
-      formula = formula.replace(/\$item\b/g, JSON.stringify(this.context.iterationContext.item));
-      formula = formula.replace(/\$index\b/g, String(this.context.iterationContext.index));
+
+    // Collect dependencies by scanning which context variables are referenced.
+    // We do this by inspecting identifiers the AST evaluator will resolve.
+    for (const [name] of this.context.variables) {
+      // Simple heuristic: if the variable name appears in the formula as a word,
+      // it's likely referenced. The AST evaluator resolves it at runtime.
+      const pattern = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+      if (pattern.test(formula)) {
+        dependencies.push(name);
+      }
     }
 
-    // Replace variable references
-    const variablePattern = /\b([A-Za-z_]\w*)\b(?!\s*\()/g;
-    formula = formula.replace(variablePattern, (match, varName) => {
-      const variable = this.context.variables.get(varName);
-      if (variable) {
-        dependencies.push(varName);
-        return JSON.stringify(variable.value);
-      }
-      return match;
+    // Parse the formula into an AST
+    const ast = this.parser.parse(formula);
+
+    // Evaluate via tree-walking — no eval(), no new Function()
+    const evaluator = new ASTEvaluator({
+      functions: this.functions,
+      context: this.context,
+      policy: DEFAULT_POLICY,
     });
-    
-    // Replace function calls
-    const functionPattern = /\b([A-Z_]+)\s*\(/g;
-    let processedFormula = formula;
-    
-    // Recursively evaluate functions
-    while (functionPattern.test(processedFormula)) {
-      processedFormula = this.evaluateFunctions(processedFormula);
-    }
-    
-    // Evaluate the final expression
-    try {
-      // Use Function constructor for safe evaluation
-      const value = new Function('return ' + processedFormula)();
-      return { value, dependencies };
-    } catch (error) {
-      throw new Error(`Failed to evaluate expression: ${processedFormula}`);
-    }
-  }
-  
-  private evaluateFunctions(formula: string): string {
-    const functionPattern = /\b([A-Z_]+)\s*\(([^()]*)\)/;
-    
-    return formula.replace(functionPattern, (match, funcName, args) => {
-      const func = this.functions.get(funcName.toUpperCase());
-      if (!func) {
-        throw new Error(`Unknown function: ${funcName}`);
-      }
-      
-      // Parse arguments
-      const argValues = this.parseArguments(args);
-      
-      // Call function
-      try {
-        const result = func.implementation(...argValues);
-        return JSON.stringify(result);
-      } catch (error) {
-        throw new Error(`Error in ${funcName}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    });
-  }
-  
-  private parseArguments(argsString: string): DynamicValue[] {
-    if (!argsString.trim()) return [];
-    
-    const args: DynamicValue[] = [];
-    let current = '';
-    let depth = 0;
-    let inString = false;
-    let stringChar = '';
-    
-    for (let i = 0; i < argsString.length; i++) {
-      const char = argsString[i];
-      
-      if (!inString && (char === '"' || char === "'")) {
-        inString = true;
-        stringChar = char;
-        current += char;
-      } else if (inString && char === stringChar && argsString[i - 1] !== '\\') {
-        inString = false;
-        current += char;
-      } else if (!inString) {
-        if (char === '(' || char === '[') depth++;
-        else if (char === ')' || char === ']') depth--;
-        else if (char === ',' && depth === 0) {
-          args.push(this.parseValue(current.trim()));
-          current = '';
-          continue;
-        }
-        current += char;
-      } else {
-        current += char;
-      }
-    }
-    
-    if (current.trim()) {
-      args.push(this.parseValue(current.trim()));
-    }
-    
-    return args;
-  }
-  
-  private parseValue(value: string): DynamicValue {
-    // Try to parse as JSON
-    try {
-      return JSON.parse(value);
-    } catch {
-      // If not JSON, return as string
-      return value;
-    }
+    evaluator.beginTiming();
+    const value = evaluator.evaluate(ast);
+
+    return { value, dependencies };
   }
   
   private getType(value: DynamicValue): string {

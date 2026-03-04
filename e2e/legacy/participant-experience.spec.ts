@@ -81,7 +81,7 @@ test.describe('Participant Experience Journey', () => {
       
       // Wait for stimulus
       await page.waitForSelector('[data-testid="stimulus-word"]');
-      const word = await page.locator('[data-testid="stimulus-word"]').textContent();
+      const _word = await page.locator('[data-testid="stimulus-word"]').textContent();
       const color = await page.locator('[data-testid="stimulus-word"]').evaluate(el => 
         window.getComputedStyle(el).color
       );
@@ -133,6 +133,7 @@ test.describe('Participant Experience Journey', () => {
     
     // Simulate task completion (skip remaining trials for test)
     await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing global test property
       (window as any).__skipToEnd = true;
     });
     
@@ -362,6 +363,7 @@ test.describe('Participant Experience Journey', () => {
     // Verify audio cue plays
     await page.waitForSelector('[data-testid="stimulus-word"]');
     const audioPlayed = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing global test property
       return (window as any).__lastAudioCue === 'stimulus-presented';
     });
     expect(audioPlayed).toBe(true);

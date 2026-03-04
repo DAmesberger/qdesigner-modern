@@ -31,6 +31,7 @@ export async function waitForSync(page: Page, timeout = 10000) {
   // Wait for sync queue to be empty
   await page.waitForFunction(
     () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing test sync queue on window global
       const syncStatus = (window as any).__syncQueue;
       return !syncStatus || syncStatus.length === 0;
     },
@@ -99,8 +100,10 @@ export async function blockAPIEndpoint(page: Page, endpoint: string) {
 
 // Helper to monitor sync operations
 export async function monitorSyncOperations(page: Page) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tracking sync operations with dynamic shape
   const syncOps: any[] = [];
-  
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sync operation has dynamic shape
   await page.exposeFunction('recordSyncOp', (op: any) => {
     syncOps.push(op);
   });
@@ -111,6 +114,7 @@ export async function monitorSyncOperations(page: Page) {
     window.fetch = async (...args) => {
       const [url, options] = args;
       if (typeof url === 'string' && url.includes('/api/')) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- exposed function on window global
         (window as any).recordSyncOp({
           url,
           method: options?.method || 'GET',

@@ -16,7 +16,7 @@ export class MediaResponseStorage extends BaseQuestionStorage {
     return 'media-response';
   }
 
-  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+  async getResponses(_questionId: string): Promise<QuestionResponse[]> {
     return this.getAllForSession();
   }
 

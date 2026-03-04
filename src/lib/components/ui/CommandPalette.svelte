@@ -80,13 +80,14 @@
         selectedIndex = Math.max(selectedIndex - 1, 0);
         scrollToSelected();
         break;
-      case 'Enter':
+      case 'Enter': {
         e.preventDefault();
         const selectedCommand = filteredCommands[selectedIndex];
         if (selectedCommand) {
           executeCommand(selectedCommand);
         }
         break;
+      }
       case 'Escape':
         e.preventDefault();
         close();

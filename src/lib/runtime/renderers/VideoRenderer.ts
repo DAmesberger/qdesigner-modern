@@ -22,7 +22,8 @@ export class VideoRenderer extends BaseRenderer {
   private texture: WebGLTexture | null = null;
   private playing: boolean = false;
   private frameCallbackId: number | null = null;
-  
+  public timingMethod: 'rvfc' | 'performance.now' = 'performance.now';
+
   constructor(config: VideoRendererConfig) {
     super(config.id, 'video', config);
     this.videoConfig = config;
@@ -42,6 +43,7 @@ export class VideoRenderer extends BaseRenderer {
     this.config = { ...this.config, ...config };
     
     // Get video from resource manager
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL context extended with resourceManager at runtime
     const resourceManager = (gl as any).resourceManager as ResourceManager;
     if (resourceManager) {
       this.video = resourceManager.getVideo(this.videoConfig.id) || null;
@@ -76,7 +78,7 @@ export class VideoRenderer extends BaseRenderer {
     );
   }
   
-  protected renderContent(gl: WebGL2RenderingContext, context: RenderContext): void {
+  protected renderContent(gl: WebGL2RenderingContext, _context: RenderContext): void {
     if (!this.texture || !this.video) return;
     
     // Start playback on first render
@@ -85,10 +87,28 @@ export class VideoRenderer extends BaseRenderer {
         console.warn('Video autoplay failed:', err);
       });
       this.playing = true;
-      
-      // Mark onset time
+
+      // Mark onset time using requestVideoFrameCallback for precise frame timing
       if (!this.onsetTime) {
-        this.onsetTime = performance.now();
+        const video = this.video;
+        const hasRvfc = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+        if (hasRvfc) {
+          (video as HTMLVideoElement & {
+            requestVideoFrameCallback(callback: (now: DOMHighResTimeStamp, metadata: Record<string, unknown>) => void): number;
+          }).requestVideoFrameCallback((now) => {
+            if (!this.onsetTime) {
+              this.onsetTime = now;
+              this.timingMethod = 'rvfc';
+            }
+          });
+        } else {
+          video.addEventListener('playing', () => {
+            if (!this.onsetTime) {
+              this.onsetTime = performance.now();
+              this.timingMethod = 'performance.now';
+            }
+          }, { once: true });
+        }
       }
     }
     

@@ -16,8 +16,20 @@ export const metadata: ModuleMetadata = {
     supportsVariables: true,
   },
   components: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Svelte component props are untyped at this boundary
     runtime: () => import('./StatisticalFeedback.svelte') as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Svelte component props are untyped at this boundary
     designer: () => import('./StatisticalFeedbackDesigner.svelte') as any,
+  },
+  options: {
+    chartTypes: [
+      { value: 'bar', label: 'Bar Chart' },
+      { value: 'line', label: 'Line Chart' },
+      { value: 'radar', label: 'Radar Chart' },
+      { value: 'scatter', label: 'Scatter Plot' },
+      { value: 'histogram', label: 'Histogram' },
+      { value: 'box', label: 'Box Plot' },
+    ],
   },
   defaultConfig: {
     config: {

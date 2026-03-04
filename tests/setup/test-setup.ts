@@ -27,6 +27,7 @@ mockPerformanceNow.mockImplementation(() => {
 });
 
 if (typeof globalThis.performance === 'undefined') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock Performance object for test environment
   globalThis.performance = {} as any;
 }
 globalThis.performance.now = mockPerformanceNow;
@@ -35,6 +36,7 @@ globalThis.performance.now = mockPerformanceNow;
 Object.defineProperty(globalThis, 'crypto', {
   value: {
     randomUUID: () => `test-uuid-${Math.random().toString(36).substr(2, 9)}`,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock accepts any typed array
     getRandomValues: (arr: any) => {
       for (let i = 0; i < arr.length; i++) {
         arr[i] = Math.floor(Math.random() * 256);
@@ -64,6 +66,7 @@ globalThis.navigator = {
     addEventListener: vi.fn(),
     removeEventListener: vi.fn()
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock navigator with partial ServiceWorker API
 } as any;
 
 // Mock localStorage
@@ -75,6 +78,7 @@ const localStorageMock = {
   length: 0,
   key: vi.fn()
 };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock localStorage for test
 globalThis.localStorage = localStorageMock as any;
 
 // Mock sessionStorage
@@ -86,6 +90,7 @@ const sessionStorageMock = {
   length: 0,
   key: vi.fn()
 };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock sessionStorage for test
 globalThis.sessionStorage = sessionStorageMock as any;
 
 // Clear all mocks before each test
@@ -138,12 +143,14 @@ class WebGLRenderingContextMock {
   TRIANGLES = 0x0004;
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- mock canvas getContext for test */
 HTMLCanvasElement.prototype.getContext = vi.fn((contextType: string) => {
   if (contextType === 'webgl2' || contextType === 'webgl') {
     return new WebGLRenderingContextMock();
   }
   return null;
 }) as any;
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // Mock fetch for API tests
 globalThis.fetch = vi.fn();

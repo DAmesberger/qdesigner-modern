@@ -151,13 +151,14 @@ export const arrayFunctions: FormulaFunction[] = [
             return acc * num;
           }, initial || 1);
           
-        case 'min':
+        case 'min': {
           const numbers = array.filter(v => typeof v === 'number');
           return numbers.length > 0 ? Math.min(...numbers) : initial;
-          
-        case 'max':
+        }
+        case 'max': {
           const nums = array.filter(v => typeof v === 'number');
           return nums.length > 0 ? Math.max(...nums) : initial;
+        }
           
         case 'concat':
           return array.reduce((acc, val) => acc + String(val), initial || '');

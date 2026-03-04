@@ -94,7 +94,26 @@ async fn main() {
     let rate_limiter = RateLimiter::new(10, 60); // 10 req / 60s (applied to auth routes)
 
     // ── WebSocket ────────────────────────────────────────────────────
-    let websocket_state = WebSocketState::new();
+    let mut websocket_state = WebSocketState::new();
+
+    // ── Redis Bridge (optional) ──────────────────────────────────────
+    if let Some(ref redis_client) = redis {
+        let bridge =
+            crate::websocket::redis_bridge::RedisBridge::new(redis_client.clone());
+        websocket_state.set_redis_bridge(bridge);
+    }
+
+    let websocket_state = Arc::new(websocket_state);
+
+    // Start Redis bridge subscriber if configured.
+    if let Some(ref redis_client) = redis {
+        let bridge =
+            crate::websocket::redis_bridge::RedisBridge::new(redis_client.clone());
+        bridge.start(websocket_state.clone());
+    }
+
+    // ── Yjs Store ────────────────────────────────────────────────────
+    let yjs_store = crate::websocket::yjs_store::YjsStore::new();
 
     // ── App State ────────────────────────────────────────────────────
     let state = AppState {
@@ -102,7 +121,8 @@ async fn main() {
         jwt_manager: Arc::new(jwt_manager),
         rbac: Arc::new(rbac),
         storage: Arc::new(storage),
-        websocket_state: Arc::new(websocket_state),
+        websocket_state,
+        yjs_store,
         redis,
         rate_limiter,
         config: Arc::new(config.clone()),

@@ -26,7 +26,6 @@ import type {
   Dataset,
   ChartPoint,
   ChartOptions,
-  StatisticalSummary,
   PerformanceMetrics
 } from './types';
 

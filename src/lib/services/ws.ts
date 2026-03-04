@@ -1,4 +1,9 @@
-type MessageHandler = (data: unknown) => void;
+export interface WsEvent {
+	event: string;
+	payload: unknown;
+}
+
+type MessageHandler = (data: WsEvent) => void;
 type ConnectionHandler = (connected: boolean) => void;
 
 class WebSocketClient {
@@ -9,6 +14,10 @@ class WebSocketClient {
 	private maxReconnectAttempts = 10;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private token: string | null = null;
+
+	get connected(): boolean {
+		return this.ws?.readyState === WebSocket.OPEN;
+	}
 
 	connect(token: string): void {
 		this.token = token;
@@ -47,6 +56,11 @@ class WebSocketClient {
 				}
 			}
 		};
+	}
+
+	/** Send a presence announcement to a channel. */
+	sendPresence(channel: string): void {
+		this.sendMessage({ type: 'presence', channel });
 	}
 
 	onConnectionChange(callback: ConnectionHandler): () => void {
@@ -89,7 +103,7 @@ class WebSocketClient {
 				const msg = JSON.parse(event.data as string);
 				if (msg.channel && this.subscriptions.has(msg.channel)) {
 					for (const handler of this.subscriptions.get(msg.channel)!) {
-						handler(msg.data);
+						handler({ event: msg.event, payload: msg.payload });
 					}
 				}
 			} catch {

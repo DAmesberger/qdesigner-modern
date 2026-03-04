@@ -76,7 +76,7 @@ export class ValidationLayer {
   private async validateSchema(
     response: Response,
     question: Question,
-    context: ValidationContext
+    _context: ValidationContext
   ): Promise<ValidationResult> {
     const errors: ValidationError[] = [];
     const warnings: ValidationWarning[] = [];
@@ -120,7 +120,7 @@ export class ValidationLayer {
   private async validateType(
     response: Response,
     question: Question,
-    context: ValidationContext
+    _context: ValidationContext
   ): Promise<ValidationResult> {
     const errors: ValidationError[] = [];
     const warnings: ValidationWarning[] = [];
@@ -591,9 +591,10 @@ export class ValidationLayer {
       switch (targetType) {
         case 'string':
           return { success: true, value: String(value) };
-        case 'number':
+        case 'number': {
           const num = Number(value);
           return { success: !isNaN(num), value: num };
+        }
         case 'boolean':
           return { success: true, value: Boolean(value) };
         default:
@@ -650,7 +651,7 @@ export class ValidationLayer {
     };
   }
 
-  private validateReactionTime(reactionTime: number, question: Question): ValidationResult {
+  private validateReactionTime(reactionTime: number, _question: Question): ValidationResult {
     const errors: ValidationError[] = [];
     const warnings: ValidationWarning[] = [];
 
@@ -688,9 +689,9 @@ export class ValidationLayer {
   }
 
   private async validateQuestionSpecificRules(
-    response: Response,
-    question: Question,
-    context: ValidationContext
+    _response: Response,
+    _question: Question,
+    _context: ValidationContext
   ): Promise<ValidationResult> {
     // Implement question-specific validation logic
     // This would be expanded based on specific question types
@@ -720,22 +721,22 @@ export class ValidationLayer {
   }
 
   // Additional schema validation methods would be implemented here
-  private validateBooleanSchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
+  private validateBooleanSchema(_value: DynamicValue, _schema: SchemaDefinition): ValidationResult {
     // Implementation for boolean validation
     return { isValid: true, errors: [], warnings: [] };
   }
 
-  private validateArraySchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
+  private validateArraySchema(_value: DynamicValue, _schema: SchemaDefinition): ValidationResult {
     // Implementation for array validation
     return { isValid: true, errors: [], warnings: [] };
   }
 
-  private validateObjectSchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
+  private validateObjectSchema(_value: DynamicValue, _schema: SchemaDefinition): ValidationResult {
     // Implementation for object validation
     return { isValid: true, errors: [], warnings: [] };
   }
 
-  private validateDateSchema(value: DynamicValue, schema: SchemaDefinition): ValidationResult {
+  private validateDateSchema(_value: DynamicValue, _schema: SchemaDefinition): ValidationResult {
     // Implementation for date validation
     return { isValid: true, errors: [], warnings: [] };
   }

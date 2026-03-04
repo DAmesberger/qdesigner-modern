@@ -1,8 +1,7 @@
 
 import { test } from '@playwright/test';
-import { expect } from '@playwright/test';
 
-test('QDesignerUIUX_2025-07-29', async ({ page, context }) => {
+test('QDesignerUIUX_2025-07-29', async ({ page, context: _context }) => {
   
     // Click element
     await page.click('a[href="/login"]');

@@ -143,6 +143,7 @@ export class ImageStimulus extends BaseStimulus {
     
     // Get texture from resource manager (set in runtime)
     if (!this.texture) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL context extended with resourceManager at runtime
       const resourceManager = (gl as any).resourceManager as ResourceManager;
       if (resourceManager) {
         this.texture = resourceManager.getTexture(this.imageConfig.imageUrl) || null;

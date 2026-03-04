@@ -11,7 +11,7 @@ interface ProgressState {
 }
 
 function createServiceWorkerProgress() {
-  const { subscribe, set, update } = writable<ProgressState>({
+  const { subscribe, update } = writable<ProgressState>({
     type: 'idle',
     loaded: 0,
     total: 0

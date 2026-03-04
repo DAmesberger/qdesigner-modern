@@ -10,12 +10,13 @@ export class RankingStorage extends BaseQuestionStorage {
     return 'ranking';
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
   parseValue(value: any): string[] {
     if (!Array.isArray(value)) return [];
     return value.filter(v => typeof v === 'string');
   }
   
-  formatValue(value: string[]): any {
+  formatValue(value: string[]): string[] {
     return value || [];
   }
   
@@ -38,7 +39,7 @@ export class RankingStorage extends BaseQuestionStorage {
   }
   
   // Helper to get responses (mock implementation matching usage pattern)
-  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+  async getResponses(_questionId: string): Promise<QuestionResponse[]> {
     return this.getAllForSession();
   }
 

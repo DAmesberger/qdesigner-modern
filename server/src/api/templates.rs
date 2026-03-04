@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -82,7 +83,7 @@ pub async fn list_templates(
     Path(org_id): Path<Uuid>,
     Query(q): Query<TemplateListQuery>,
 ) -> Result<Json<Vec<QuestionTemplate>>, ApiError> {
-    verify_org_access(&state, user.user_id, org_id).await?;
+    access::verify_org_membership(&state.pool, user.user_id, org_id).await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -131,7 +132,7 @@ pub async fn create_template(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    verify_org_access(&state, user.user_id, org_id).await?;
+    access::verify_org_membership(&state.pool, user.user_id, org_id).await?;
 
     let is_shared = body.is_shared.unwrap_or(false);
     let tags = body.tags.unwrap_or_default();
@@ -168,7 +169,7 @@ pub async fn get_template(
     user: AuthenticatedUser,
     Path(path): Path<OrgTemplatePath>,
 ) -> Result<Json<QuestionTemplate>, ApiError> {
-    verify_org_access(&state, user.user_id, path.id).await?;
+    access::verify_org_membership(&state.pool, user.user_id, path.id).await?;
 
     let template = sqlx::query_as::<_, QuestionTemplate>(
         r#"
@@ -208,7 +209,7 @@ pub async fn update_template(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    verify_org_access(&state, user.user_id, path.id).await?;
+    access::verify_org_membership(&state.pool, user.user_id, path.id).await?;
 
     // Only the creator or org admins can update
     verify_template_write_access(&state, user.user_id, path.id, path.tid).await?;
@@ -291,7 +292,7 @@ pub async fn delete_template(
     user: AuthenticatedUser,
     Path(path): Path<OrgTemplatePath>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    verify_org_access(&state, user.user_id, path.id).await?;
+    access::verify_org_membership(&state.pool, user.user_id, path.id).await?;
     verify_template_write_access(&state, user.user_id, path.id, path.tid).await?;
 
     let result = sqlx::query(
@@ -310,30 +311,6 @@ pub async fn delete_template(
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
-
-async fn verify_org_access(
-    state: &AppState,
-    user_id: Uuid,
-    org_id: Uuid,
-) -> Result<(), ApiError> {
-    let has_access = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM organization_members
-            WHERE organization_id = $1 AND user_id = $2 AND status = 'active'
-        )
-        "#,
-    )
-    .bind(org_id)
-    .bind(user_id)
-    .fetch_one(&state.pool)
-    .await?;
-
-    if !has_access {
-        return Err(ApiError::Forbidden("No access to this organization".into()));
-    }
-    Ok(())
-}
 
 async fn verify_template_write_access(
     state: &AppState,

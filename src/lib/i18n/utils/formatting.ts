@@ -2,7 +2,7 @@
 // Locale-aware formatting functions with enhanced features
 
 import { getCurrentLanguage, getLanguageConfig } from '../config';
-import type { FormatterOptions } from '../types';
+
 
 // Enhanced locale-aware formatters
 export class LocaleFormatter {
@@ -24,7 +24,7 @@ export class LocaleFormatter {
   formatNumber(value: number, options?: Intl.NumberFormatOptions): string {
     try {
       return new Intl.NumberFormat(this.getFullLocale(), options).format(value);
-    } catch (error) {
+    } catch (_error) {
       // Fallback to basic locale if region-specific fails
       return new Intl.NumberFormat(this.locale, options).format(value);
     }
@@ -45,7 +45,7 @@ export class LocaleFormatter {
         currency: defaultCurrency,
         ...options
       }).format(value);
-    } catch (error) {
+    } catch (_error) {
       // Fallback with USD if currency is not supported
       return new Intl.NumberFormat(this.locale, {
         style: 'currency',
@@ -107,7 +107,7 @@ export class LocaleFormatter {
         ...defaultOptions,
         ...options
       }).format(dateObj);
-    } catch (error) {
+    } catch (_error) {
       return new Intl.DateTimeFormat(this.locale, {
         ...defaultOptions,
         ...options
@@ -137,7 +137,7 @@ export class LocaleFormatter {
         ...defaultOptions,
         ...options
       }).format(dateObj);
-    } catch (error) {
+    } catch (_error) {
       return new Intl.DateTimeFormat(this.locale, {
         ...defaultOptions,
         ...options
@@ -170,7 +170,7 @@ export class LocaleFormatter {
         ...defaultOptions,
         ...options
       }).format(dateObj);
-    } catch (error) {
+    } catch (_error) {
       return new Intl.DateTimeFormat(this.locale, {
         ...defaultOptions,
         ...options
@@ -204,7 +204,7 @@ export class LocaleFormatter {
       const { value, unit } = this.getRelativeTimeValue(diff);
       
       return rtf.format(value, unit);
-    } catch (error) {
+    } catch (_error) {
       // Fallback for browsers without RelativeTimeFormat
       return this.getFallbackRelativeTime(dateObj, baseObj);
     }
@@ -226,7 +226,6 @@ export class LocaleFormatter {
     // Check for modern ListFormat support
     if ('ListFormat' in Intl) {
       try {
-        // @ts-ignore - ListFormat might not be in all TypeScript versions
         return new Intl.ListFormat(this.getFullLocale(), {
           style,
           type
@@ -335,6 +334,7 @@ export class LocaleFormatter {
     start: number | Date, 
     end: number | Date, 
     type: 'number' | 'date' | 'time' = 'number',
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Intl formatting options have dynamic shape
     options?: any
   ): string {
     try {
@@ -344,7 +344,7 @@ export class LocaleFormatter {
         
         // Use NumberFormat range if available
         if ('formatRange' in Intl.NumberFormat.prototype) {
-          // @ts-ignore
+          // @ts-expect-error -- formatRange not in all TypeScript lib versions
           return new Intl.NumberFormat(this.getFullLocale(), options).formatRange(startNum, endNum);
         }
         
@@ -357,14 +357,13 @@ export class LocaleFormatter {
         
         // Use DateTimeFormat range if available
         if ('formatRange' in Intl.DateTimeFormat.prototype) {
-          // @ts-ignore
           return new Intl.DateTimeFormat(this.getFullLocale(), options).formatRange(startDate, endDate);
         }
         
         const formatter = type === 'time' ? this.formatTime : this.formatDate;
         return `${formatter.call(this, startDate, options)} – ${formatter.call(this, endDate, options)}`;
       }
-    } catch (error) {
+    } catch (_error) {
       // Fallback to simple formatting
       const startFormatted = type === 'number' 
         ? this.formatNumber(start as number, options)
@@ -424,6 +423,7 @@ export class LocaleFormatter {
       year: absValue === 1 ? 'year' : 'years'
     };
     
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic unit labels
     const label = (unitLabels as any)[unit];
     return isPast 
       ? `${absValue} ${label} ago`
@@ -556,7 +556,7 @@ export const scientificFormatter = {
 };
 
 export const surveyFormatter = {
-  formatLikertScale(value: number, min: number = 1, max: number = 5, language?: string): string {
+  formatLikertScale(value: number, _min: number = 1, max: number = 5, language?: string): string {
     const formatter = getFormatter(language);
     return `${formatter.formatNumber(value)} / ${formatter.formatNumber(max)}`;
   },

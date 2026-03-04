@@ -1,338 +1,250 @@
+<!--
+  CommentThread — displays an anchored comment thread for a questionnaire element.
+
+  Usage:
+    <CommentThread
+      questionnaireId={id}
+      anchorType="question"
+      anchorId={questionId}
+    />
+-->
 <script lang="ts">
-  import type { CommentThread, Comment, CollaborationUser, Reaction } from '../types.js';
+  import { api } from '$lib/services/api';
+
+  interface Comment {
+    id: string;
+    questionnaire_id: string;
+    parent_id: string | null;
+    author_id: string;
+    anchor_type: string;
+    anchor_id: string | null;
+    body: string;
+    resolved: boolean;
+    resolved_by: string | null;
+    resolved_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }
 
   interface Props {
-    thread: CommentThread;
-    currentUser: CollaborationUser;
-    onAddComment?: (content: string, mentions: string[]) => void;
-    onUpdateComment?: (commentId: string, content: string) => void;
-    onDeleteComment?: (commentId: string) => void;
-    onResolveThread?: (threadId: string) => void;
-    onReaction?: (commentId: string, emoji: string) => void;
+    questionnaireId: string;
+    anchorType: 'question' | 'page' | 'block' | 'variable' | 'general';
+    anchorId?: string;
+    onClose?: () => void;
   }
 
-  let {
-    thread = $bindable(),
-    currentUser,
-    onAddComment,
-    onUpdateComment,
-    onDeleteComment,
-    onResolveThread,
-    onReaction,
-  }: Props = $props();
+  let { questionnaireId, anchorType, anchorId, onClose }: Props = $props();
 
-  let newCommentContent = $state('');
-  let editingCommentId = $state<string | null>(null);
-  let editingContent = $state('');
-  let showReplyForm = $state(false);
-  let mentionSuggestions = $state<CollaborationUser[]>([]);
-  let showMentions = $state(false);
+  let comments = $state<Comment[]>([]);
+  let newBody = $state('');
+  let replyingTo = $state<string | null>(null);
+  let replyBody = $state('');
+  let loading = $state(false);
+  let error = $state<string | null>(null);
 
-  // Reactive computations
-  const sortedComments = $derived(
-    [...thread.comments].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-  );
+  // Root comments (no parent)
+  let rootComments = $derived(comments.filter((c) => !c.parent_id));
 
-  const canResolve = $derived(
-    currentUser.role === 'owner' ||
-      currentUser.role === 'admin' ||
-      thread.comments.some((c) => c.author.id === currentUser.id)
-  );
-
-  // Methods
-  function startEdit(comment: Comment) {
-    editingCommentId = comment.id;
-    editingContent = comment.content;
+  function getReplies(parentId: string): Comment[] {
+    return comments.filter((c) => c.parent_id === parentId);
   }
 
-  function cancelEdit() {
-    editingCommentId = null;
-    editingContent = '';
-  }
+  async function loadComments(): Promise<void> {
+    loading = true;
+    error = null;
+    try {
+      const params = new URLSearchParams();
+      if (anchorType) params.set('anchor_type', anchorType);
+      if (anchorId) params.set('anchor_id', anchorId);
 
-  function saveEdit() {
-    if (editingCommentId && editingContent.trim()) {
-      onUpdateComment?.(editingCommentId, editingContent.trim());
-      cancelEdit();
+      comments = await api.get<Comment[]>(
+        `/api/questionnaires/${questionnaireId}/comments?${params}`,
+      );
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to load comments';
+    } finally {
+      loading = false;
     }
   }
 
-  function deleteComment(commentId: string) {
-    if (confirm('Are you sure you want to delete this comment?')) {
-      onDeleteComment?.(commentId);
+  async function createComment(body: string, parentId?: string): Promise<void> {
+    try {
+      await api.post(`/api/questionnaires/${questionnaireId}/comments`, {
+        anchor_type: anchorType,
+        anchor_id: anchorId ?? null,
+        parent_id: parentId ?? null,
+        body,
+      });
+      await loadComments();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to create comment';
     }
   }
 
-  function addComment() {
-    if (newCommentContent.trim()) {
-      const mentions = extractMentions(newCommentContent);
-      onAddComment?.(newCommentContent.trim(), mentions);
-      newCommentContent = '';
-      showReplyForm = false;
+  async function resolveComment(commentId: string, resolved: boolean): Promise<void> {
+    try {
+      await api.patch(
+        `/api/questionnaires/${questionnaireId}/comments/${commentId}`,
+        { resolved },
+      );
+      await loadComments();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to update comment';
     }
   }
 
-  function resolveThread() {
-    onResolveThread?.(thread.id);
-  }
-
-  function addReaction(commentId: string, emoji: string) {
-    onReaction?.(commentId, emoji);
-  }
-
-  function extractMentions(content: string): string[] {
-    const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
-    const mentions: string[] = [];
-    let match;
-
-    while ((match = mentionRegex.exec(content)) !== null) {
-      mentions.push(match[2]!); // Extract user ID
+  async function deleteComment(commentId: string): Promise<void> {
+    try {
+      await api.delete(`/api/questionnaires/${questionnaireId}/comments/${commentId}`);
+      await loadComments();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to delete comment';
     }
-
-    return mentions;
   }
 
-  function formatCommentContent(content: string): string {
-    // Replace mentions with highlighted text
-    return content.replace(/@\[([^\]]+)\]\(([^)]+)\)/g, '<span class="mention">@$1</span>');
+  function handleSubmit(): void {
+    if (!newBody.trim()) return;
+    createComment(newBody.trim());
+    newBody = '';
   }
 
-  function getRelativeTime(date: Date): string {
+  function handleReply(parentId: string): void {
+    if (!replyBody.trim()) return;
+    createComment(replyBody.trim(), parentId);
+    replyBody = '';
+    replyingTo = null;
+  }
+
+  function formatDate(dateStr: string): string {
+    const date = new Date(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffMin = Math.floor(diffMs / 60000);
 
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHrs = Math.floor(diffMin / 60);
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    const diffDays = Math.floor(diffHrs / 24);
     if (diffDays < 7) return `${diffDays}d ago`;
-
     return date.toLocaleDateString();
   }
 
-  function getUserColor(userId: string): string {
-    const colors = [
-      'bg-blue-100 text-blue-800',
-      'bg-green-100 text-green-800',
-      'bg-purple-100 text-purple-800',
-      'bg-pink-100 text-pink-800',
-      'bg-yellow-100 text-yellow-800',
-      'bg-indigo-100 text-indigo-800',
-    ];
-
-    const hash = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length] ?? colors[0]!;
-  }
-
-  // Handle keyboard events
-  function handleKeydown(event: KeyboardEvent, action: () => void) {
-    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-      event.preventDefault();
-      action();
-    }
-  }
+  $effect(() => {
+    loadComments();
+  });
 </script>
 
-<div class="comment-thread border border-gray-200 rounded-lg bg-white shadow-sm">
-  <!-- Thread Header -->
-  <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <div
-        class="w-2 h-2 rounded-full {thread.isResolved ? 'bg-green-500' : 'bg-yellow-500'}"
-      ></div>
-      <span class="text-sm font-medium text-gray-700">
-        {thread.comments.length}
-        {thread.comments.length === 1 ? 'comment' : 'comments'}
-      </span>
-      {#if thread.isResolved}
-        <span class="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">Resolved</span>
+<div class="flex flex-col h-full max-h-96 w-72">
+  <!-- Header -->
+  <div class="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+      Comments
+      {#if comments.length > 0}
+        <span class="text-gray-400 font-normal">({comments.length})</span>
       {/if}
-    </div>
-
-    {#if canResolve && !thread.isResolved}
+    </h3>
+    {#if onClose}
       <button
-        onclick={resolveThread}
-        class="px-3 py-1 text-xs bg-green-100 text-green-800 rounded-full hover:bg-green-200 transition-colors"
+        onclick={onClose}
+        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        aria-label="Close comments"
       >
-        Mark as resolved
+        x
       </button>
     {/if}
   </div>
 
-  <!-- Comments List -->
-  <div class="p-4 space-y-4">
-    {#each sortedComments as comment (comment.id)}
-      <div class="comment flex gap-3">
-        <!-- Avatar -->
-        <div class="flex-shrink-0">
-          {#if comment.author.avatar}
-            <img
-              src={comment.author.avatar}
-              alt={comment.author.name}
-              class="w-8 h-8 rounded-full"
-            />
-          {:else}
-            <div
-              class="w-8 h-8 rounded-full {getUserColor(
-                comment.author.id
-              )} flex items-center justify-center text-sm font-medium"
+  <!-- Comments list -->
+  <div class="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+    {#if loading && comments.length === 0}
+      <p class="text-sm text-gray-400">Loading...</p>
+    {:else if error}
+      <p class="text-sm text-red-500">{error}</p>
+    {:else if rootComments.length === 0}
+      <p class="text-sm text-gray-400 italic">No comments yet</p>
+    {:else}
+      {#each rootComments as comment (comment.id)}
+        <div class="group" class:opacity-50={comment.resolved}>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+            {comment.author_id.slice(0, 8)} &middot; {formatDate(comment.created_at)}
+          </div>
+          <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+            {comment.body}
+          </div>
+          <div class="flex items-center gap-2 mt-1 text-xs">
+            <button
+              onclick={() => (replyingTo = replyingTo === comment.id ? null : comment.id)}
+              class="text-blue-500 hover:text-blue-700"
             >
-              {comment.author.name.charAt(0).toUpperCase()}
-            </div>
-          {/if}
-        </div>
-
-        <!-- Comment Content -->
-        <div class="flex-1 min-w-0">
-          <!-- Author and timestamp -->
-          <div class="flex items-center gap-2 mb-2">
-            <span class="text-sm font-medium text-gray-900">{comment.author.name}</span>
-            <span class="text-xs text-gray-500">{getRelativeTime(comment.createdAt)}</span>
-            {#if comment.updatedAt}
-              <span class="text-xs text-gray-400">(edited)</span>
-            {/if}
+              Reply
+            </button>
+            <button
+              onclick={() => resolveComment(comment.id, !comment.resolved)}
+              class="text-gray-400 hover:text-gray-600"
+            >
+              {comment.resolved ? 'Reopen' : 'Resolve'}
+            </button>
+            <button
+              onclick={() => deleteComment(comment.id)}
+              class="text-red-400 hover:text-red-600 hidden group-hover:inline"
+            >
+              Delete
+            </button>
           </div>
 
-          <!-- Comment body -->
-          {#if editingCommentId === comment.id}
-            <!-- Edit form -->
-            <div class="space-y-2">
-              <textarea
-                bind:value={editingContent}
-                class="w-full px-3 py-2 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows="3"
-                onkeydown={(e) => handleKeydown(e, saveEdit)}
-              ></textarea>
-              <div class="flex gap-2">
-                <button
-                  onclick={saveEdit}
-                  class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                >
-                  Save
-                </button>
-                <button
-                  onclick={cancelEdit}
-                  class="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
+          <!-- Replies -->
+          {#each getReplies(comment.id) as reply (reply.id)}
+            <div class="ml-4 mt-2 pl-2 border-l-2 border-gray-200 dark:border-gray-700">
+              <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+                {reply.author_id.slice(0, 8)} &middot; {formatDate(reply.created_at)}
+              </div>
+              <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+                {reply.body}
               </div>
             </div>
-          {:else}
-            <!-- Display content -->
-            <div class="text-sm text-gray-800 mb-2">
-              {@html formatCommentContent(comment.content)}
+          {/each}
+
+          <!-- Reply input -->
+          {#if replyingTo === comment.id}
+            <div class="ml-4 mt-2 flex gap-1">
+              <input
+                type="text"
+                bind:value={replyBody}
+                placeholder="Reply..."
+                class="flex-1 text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+                onkeydown={(e) => { if (e.key === 'Enter') handleReply(comment.id); }}
+              />
+              <button
+                onclick={() => handleReply(comment.id)}
+                class="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                Send
+              </button>
             </div>
-
-            <!-- Reactions -->
-            {#if comment.reactions && comment.reactions.length > 0}
-              <div class="flex flex-wrap gap-1 mb-2">
-                {#each comment.reactions as reaction}
-                  <button
-                    onclick={() => addReaction(comment.id, reaction.emoji)}
-                    class="px-2 py-1 text-xs bg-gray-100 rounded-full hover:bg-gray-200 transition-colors flex items-center gap-1
-                           {reaction.users.includes(currentUser.id)
-                      ? 'bg-blue-100 text-blue-800'
-                      : 'text-gray-600'}"
-                  >
-                    <span>{reaction.emoji}</span>
-                    <span>{reaction.users.length}</span>
-                  </button>
-                {/each}
-              </div>
-            {/if}
-
-            <!-- Actions -->
-            {#if !thread.isResolved}
-              <div class="flex items-center gap-2 text-xs text-gray-500">
-                <button
-                  onclick={() => addReaction(comment.id, '👍')}
-                  class="hover:text-blue-600 transition-colors"
-                >
-                  👍
-                </button>
-                <button
-                  onclick={() => addReaction(comment.id, '❤️')}
-                  class="hover:text-red-600 transition-colors"
-                >
-                  ❤️
-                </button>
-                {#if comment.author.id === currentUser.id}
-                  <button
-                    onclick={() => startEdit(comment)}
-                    class="hover:text-blue-600 transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onclick={() => deleteComment(comment.id)}
-                    class="hover:text-red-600 transition-colors"
-                  >
-                    Delete
-                  </button>
-                {/if}
-              </div>
-            {/if}
           {/if}
         </div>
-      </div>
-    {/each}
+      {/each}
+    {/if}
   </div>
 
-  <!-- Add Comment Form -->
-  {#if !thread.isResolved}
-    <div class="px-4 py-3 border-t border-gray-100">
-      {#if showReplyForm}
-        <div class="space-y-3">
-          <textarea
-            bind:value={newCommentContent}
-            placeholder="Add a comment... Use @username to mention someone"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-            rows="3"
-            onkeydown={(e) => handleKeydown(e, addComment)}
-          ></textarea>
-
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-gray-500">Ctrl+Enter to send</span>
-            <div class="flex gap-2">
-              <button
-                onclick={addComment}
-                disabled={!newCommentContent.trim()}
-                class="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Comment
-              </button>
-              <button
-                onclick={() => {
-                  showReplyForm = false;
-                  newCommentContent = '';
-                }}
-                class="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      {:else}
-        <button
-          onclick={() => (showReplyForm = true)}
-          class="w-full py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors text-left"
-        >
-          Add a comment...
-        </button>
-      {/if}
+  <!-- New comment input -->
+  <div class="border-t border-gray-200 dark:border-gray-700 px-3 py-2">
+    <div class="flex gap-1">
+      <input
+        type="text"
+        bind:value={newBody}
+        placeholder="Add a comment..."
+        class="flex-1 text-sm px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+        onkeydown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+      />
+      <button
+        onclick={handleSubmit}
+        disabled={!newBody.trim()}
+        class="text-sm px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Post
+      </button>
     </div>
-  {/if}
+  </div>
 </div>
-
-<style>
-  .mention {
-    background-color: #dbeafe;
-    color: #1e40af;
-    padding: 0 0.25rem;
-    border-radius: 0.25rem;
-  }
-</style>

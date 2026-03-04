@@ -206,12 +206,13 @@ export class ResponseCollector {
         case ' ':
           this.handleResponse(currentValue, 'keyboard', event);
           return;
-        default:
+        default: {
           const numeric = parseInt(event.key, 10);
           if (!Number.isNaN(numeric) && numeric >= min && numeric <= max) {
             this.handleResponse(numeric, 'keyboard', event);
           }
           return;
+        }
       }
     };
   }

@@ -7,12 +7,10 @@ import type {
   ExportRequest,
   ExportResult,
   ExportFormat,
-  ExportMetadata,
   CSVExportOptions,
   SPSSExportOptions,
   RExportOptions,
   ExcelExportOptions,
-  ExcelWorksheet,
   ExcelChart
 } from './types';
 import type { QuestionnaireSession, Response, QuestionnaireMetadata } from '$lib/shared/types/response';
@@ -301,7 +299,7 @@ export class ExportLayer {
       }
 
       // Add summary worksheet
-      const summaryWorksheet = this.createSummaryWorksheet(workbook, request.sessions, request.questionnaire);
+      const _summaryWorksheet = this.createSummaryWorksheet(workbook, request.sessions, request.questionnaire);
 
       // Add charts if specified
       if (options?.charts) {
@@ -556,7 +554,7 @@ export class ExportLayer {
   /**
    * Convert data to R-compatible format
    */
-  private convertToRFormat(data: DynamicValue[], config: DynamicValue): DynamicValue[] {
+  private convertToRFormat(data: DynamicValue[], _config: DynamicValue): DynamicValue[] {
     return data.map(row => {
       const rRow: DynamicValue = {};
       
@@ -606,9 +604,9 @@ export class ExportLayer {
    * Add charts to Excel workbook
    */
   private async addExcelCharts(
-    workbook: ExcelJS.Workbook,
-    charts: ExcelChart[],
-    data: DynamicValue[]
+    _workbook: ExcelJS.Workbook,
+    _charts: ExcelChart[],
+    _data: DynamicValue[]
   ): Promise<void> {
     // Chart implementation would go here
     // ExcelJS has limited chart support, so this would be a basic implementation
@@ -633,7 +631,7 @@ export class ExportLayer {
     return date.toISOString();
   }
 
-  private formatValue(value: DynamicValue, config?: DynamicValue): DynamicValue {
+  private formatValue(value: DynamicValue, _config?: DynamicValue): DynamicValue {
     if (value === null || value === undefined) {
       return '';
     }

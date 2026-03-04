@@ -27,7 +27,7 @@ export interface StatisticalFeedbackDataSourceConfig {
 export interface StatisticalFeedbackConfig {
   title: string;
   subtitle: string;
-  chartType: 'bar' | 'line';
+  chartType: 'bar' | 'line' | 'radar' | 'scatter' | 'histogram' | 'box';
   sourceMode: StatisticalSourceMode;
   metric: AnalyticsMetric;
   showPercentile: boolean;
@@ -98,6 +98,7 @@ function resolveParticipantId(raw: string, variables: Record<string, unknown>): 
   return trimmed;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- normalizes unknown config shapes
 export function normalizeStatisticalFeedbackConfig(candidate: any): StatisticalFeedbackConfig {
   const config = candidate?.config || candidate || {};
   const nestedDataSource = config.dataSource || candidate?.dataSource || {};

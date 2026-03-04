@@ -158,7 +158,7 @@
           [/\b[a-zA-Z_]\w*\b/, 'variable'],
 
           // Operators
-          [/[+\-*\/=<>!]+/, 'operator'],
+          [/[+\-*/=<>!]+/, 'operator'],
 
           // Parentheses
           [/[()]/, 'delimiter.parenthesis'],

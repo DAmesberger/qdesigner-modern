@@ -25,7 +25,6 @@ import { ResponseCollector, type ResponseCaptureMetadata } from './ResponseColle
 import { BlockRandomizer } from './BlockRandomizer';
 import { ScriptExecutor } from './ScriptExecutor';
 import { ConditionAssigner, getBlockOrder } from '../experimental';
-import type { ExperimentalDesignConfig } from '$lib/shared';
 import { QualityReport } from '../quality/QualityReport';
 import type { AttentionCheckConfig } from '../quality/AttentionCheck';
 import { resolveCarryForward, applyCarryForward } from './CarryForward';
@@ -614,6 +613,17 @@ export class QuestionnaireRuntime {
     }
   }
 
+  /**
+   * Present a question to the participant.
+   *
+   * Timing: Uses performance.now() for onset/response timestamps (~5μs precision
+   * with COOP/COEP cross-origin isolation). This is sufficient for standard survey
+   * questions where response times are measured in seconds.
+   *
+   * For sub-millisecond frame-exact timing (needed for reaction time paradigms like
+   * Stroop, IAT, Flanker), use the ReactionEngine path which captures stimulus onset
+   * via requestAnimationFrame callbacks and input via event.timeStamp.
+   */
   private async presentQuestion(question: Question, metadata: ModuleMetadata): Promise<void> {
     const onsetTime = performance.now();
     this.variableEngine.setVariable(`${question.id}_onset`, onsetTime, 'system');
@@ -874,7 +884,7 @@ export class QuestionnaireRuntime {
     this.variableEngine.setVariable(`${question.id}_correct`, isCorrect, 'response');
   }
 
-  private evaluateCustomCorrectness(question: Question, value: DynamicValue): boolean | null {
+  private evaluateCustomCorrectness(question: Question, _value: DynamicValue): boolean | null {
     const validation = (question as DynamicValue).validation;
     const customRule = Array.isArray(validation)
       ? validation.find((rule: DynamicValue) => rule.type === 'custom')

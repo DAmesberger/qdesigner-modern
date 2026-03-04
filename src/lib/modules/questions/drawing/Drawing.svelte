@@ -304,7 +304,7 @@
       case 'rectangle':
         ctx.strokeRect(x1, y1, width, height);
         break;
-      case 'circle':
+      case 'circle': {
         const radius = Math.sqrt(width * width + height * height) / 2;
         const centerX = x1 + width / 2;
         const centerY = y1 + height / 2;
@@ -312,6 +312,7 @@
         ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
         ctx.stroke();
         break;
+      }
       case 'triangle':
         ctx.beginPath();
         ctx.moveTo(x1 + width / 2, y1);

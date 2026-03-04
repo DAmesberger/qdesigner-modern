@@ -59,7 +59,7 @@ export class MediaService {
   async uploadMedia(
     file: File,
     options: MediaUploadOptions,
-    onProgress?: (progress: MediaUploadProgress) => void
+    _onProgress?: (progress: MediaUploadProgress) => void
   ): Promise<MediaAsset> {
     // Validate file
     const validation = validateMediaFile(file);
@@ -152,7 +152,9 @@ export class MediaService {
   /**
    * Extract metadata from file (client-side operation)
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- metadata shape varies by media type
   async extractMetadata(file: File): Promise<any> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- metadata built dynamically per media type
     const metadata: any = {};
 
     if (file.type.startsWith('image/')) {
@@ -224,7 +226,7 @@ export class MediaService {
   /**
    * Generate thumbnail for image/video (client-side placeholder)
    */
-  async generateThumbnail(file: File, originalPath: string): Promise<string | undefined> {
+  async generateThumbnail(_file: File, _originalPath: string): Promise<string | undefined> {
     return undefined;
   }
 

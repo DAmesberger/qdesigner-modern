@@ -1,6 +1,8 @@
 <script lang="ts">
   import MonacoEditor from '$lib/wysiwyg/MonacoEditor.svelte';
   import type { Variable } from '$lib/shared';
+  import { FormulaParser } from '../../../../packages/scripting-engine/src/parser';
+  import { ASTEvaluator } from '../../../../packages/scripting-engine/src/ast-evaluator';
 
   interface Props {
     template?: string;
@@ -16,20 +18,20 @@
   const templates = [
     {
       name: 'Simple Score',
-      template: 'Your score: $\{score} out of $\{maxScore} ($\{Math.round(score/maxScore*100)}%)',
+      template: 'Your score: ${score} out of ${maxScore} (${Math.round(score/maxScore*100)}%)',
     },
     {
       name: 'Performance Feedback',
-      template: `$\{IF(score >= 80, "Excellent performance!", IF(score >= 60, "Good job!", "Keep practicing!"))}
-      
-Your score: $\{score} points
-Time taken: $\{Math.round(responseTime/1000)} seconds`,
+      template: `\${IF(score >= 80, "Excellent performance!", IF(score >= 60, "Good job!", "Keep practicing!"))}
+
+Your score: \${score} points
+Time taken: \${Math.round(responseTime/1000)} seconds`,
     },
     {
       name: 'Comparative',
-      template: `Your result: $\{score}
-Average: $\{avgScore}
-$\{IF(score > avgScore, "You performed above average!", "You performed below average.")}`,
+      template: `Your result: \${score}
+Average: \${avgScore}
+\${IF(score > avgScore, "You performed above average!", "You performed below average.")}`,
     },
     {
       name: 'Detailed Analysis',
@@ -81,40 +83,24 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     previewVariables.categoryC = 6;
   });
 
-  // Render template with variables
+  // Render template with variables using the safe AST parser
   function renderTemplate(template: string): string {
     try {
-      // Replace IF statements
-      let processed = template.replace(
-        /\$\{IF\s*\(([^,]+),\s*"([^"]+)",\s*(?:"([^"]+)"|([^}]+))\)\}/g,
-        (match, condition, trueVal, falseVal1, falseVal2) => {
-          const falseVal = falseVal1 || falseVal2;
-          try {
-            const evalCondition = new Function(
-              ...Object.keys(previewVariables),
-              `return ${condition}`
-            );
-            const result = evalCondition(...Object.values(previewVariables));
-            return result ? trueVal : falseVal || '';
-          } catch (e) {
-            return match;
-          }
-        }
-      );
+      const parser = new FormulaParser();
+      const varMap = new Map<string, any>(Object.entries(previewVariables));
 
-      // Replace variable references
-      processed = processed.replace(/\$\{([^}]+)\}/g, (match, expression) => {
+      // Replace all ${...} expressions (including IF statements)
+      return template.replace(/\$\{([^}]+)\}/g, (match, expression) => {
         try {
-          const func = new Function(...Object.keys(previewVariables), `return ${expression}`);
-          const result = func(...Object.values(previewVariables));
-          return String(result);
-        } catch (e) {
+          const ast = parser.parse(expression.trim());
+          const evaluator = new ASTEvaluator({ variables: varMap });
+          const result = evaluator.evaluate(ast);
+          return String(result ?? '');
+        } catch {
           return match;
         }
       });
-
-      return processed;
-    } catch (e) {
+    } catch {
       return template;
     }
   }
@@ -237,18 +223,18 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
           <h5 class="section-title">Functions</h5>
           <div class="function-list">
             <button
-              onclick={() => insertFunction('$\{IF(condition, "true", "false")}')}
+              onclick={() => insertFunction('${IF(condition, "true", "false")}')}
               class="function-item"
             >
               IF(condition, true, false)
             </button>
-            <button onclick={() => insertFunction('$\{Math.round(value)}')} class="function-item">
+            <button onclick={() => insertFunction('${Math.round(value)}')} class="function-item">
               Math.round(value)
             </button>
-            <button onclick={() => insertFunction('$\{Math.floor(value)}')} class="function-item">
+            <button onclick={() => insertFunction('${Math.floor(value)}')} class="function-item">
               Math.floor(value)
             </button>
-            <button onclick={() => insertFunction('$\{value.toFixed(2)}')} class="function-item">
+            <button onclick={() => insertFunction('${value.toFixed(2)}')} class="function-item">
               toFixed(decimals)
             </button>
           </div>

@@ -12,8 +12,9 @@ import {
 import { createTestUser, loginUser } from './helpers/test-setup';
 
 test.describe('Offline/Online Sync E2E Tests', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
   let testUser: any;
-  
+
   test.beforeAll(async () => {
     // Create a test user for these tests
     testUser = await createTestUser({
@@ -34,7 +35,7 @@ test.describe('Offline/Online Sync E2E Tests', () => {
     await page.waitForSelector('[data-testid="designer-canvas"]');
   });
   
-  test('should work offline and sync when reconnected', async ({ page, context }) => {
+  test('should work offline and sync when reconnected', async ({ page, context: _context }) => {
     // Monitor sync operations
     const syncMonitor = await monitorSyncOperations(page);
     
@@ -96,7 +97,7 @@ test.describe('Offline/Online Sync E2E Tests', () => {
     expect(syncOps.some(op => op.url.includes('/api/questionnaires'))).toBe(true);
   });
   
-  test('should handle offline-first workflow', async ({ page, context }) => {
+  test('should handle offline-first workflow', async ({ page, context: _context }) => {
     // Start offline
     await simulateOffline(page);
     await verifyOfflineIndicator(page);
@@ -140,7 +141,7 @@ test.describe('Offline/Online Sync E2E Tests', () => {
     }
   });
   
-  test('should handle conflict resolution', async ({ page, context, browser }) => {
+  test('should handle conflict resolution', async ({ page, context: _context, browser }) => {
     // Create initial questionnaire
     await page.click('[data-testid="create-new"]');
     await page.fill('[data-testid="questionnaire-name"]', 'Conflict Test');
@@ -191,7 +192,7 @@ test.describe('Offline/Online Sync E2E Tests', () => {
     await context2.close();
   });
   
-  test('should handle network interruptions gracefully', async ({ page, context }) => {
+  test('should handle network interruptions gracefully', async ({ page, context: _context }) => {
     // Create questionnaire
     await page.click('[data-testid="create-new"]');
     await page.fill('[data-testid="questionnaire-name"]', 'Network Test');
@@ -230,7 +231,7 @@ test.describe('Offline/Online Sync E2E Tests', () => {
     expect(pageCount).toBe(3);
   });
   
-  test('should maintain data integrity during offline edits', async ({ page, context }) => {
+  test('should maintain data integrity during offline edits', async ({ page, context: _context }) => {
     // Create complex questionnaire structure
     await page.click('[data-testid="create-new"]');
     await page.fill('[data-testid="questionnaire-name"]', 'Data Integrity Test');
@@ -291,7 +292,7 @@ test.describe('Offline/Online Sync E2E Tests', () => {
     expect(questionTexts[1]).toContain('Updated text');
   });
   
-  test('should show appropriate UI feedback during sync states', async ({ page, context }) => {
+  test('should show appropriate UI feedback during sync states', async ({ page, context: _context }) => {
     // Create questionnaire
     await page.click('[data-testid="create-new"]');
     await page.fill('[data-testid="questionnaire-name"]', 'UI Feedback Test');

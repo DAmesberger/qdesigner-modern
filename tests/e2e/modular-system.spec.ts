@@ -5,6 +5,7 @@ import { createTestUser, loginTestUser, cleanupTestData } from './helpers/auth';
 async function waitForModuleLoad(page: Page, moduleType: string) {
   await page.waitForFunction(
     (type) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing window global in browser context
       const registry = (window as any).moduleRegistry;
       return registry && registry.has(type);
     },

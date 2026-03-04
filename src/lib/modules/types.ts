@@ -35,6 +35,7 @@ export interface ModuleMetadata {
   capabilities: ModuleCapabilities;
   components: ModuleComponents;
   defaultConfig?: DynamicValue;
+  options?: Record<string, DynamicValue>;
   answerType?: AnswerType; // Only for questions
   questionRuntime?: {
     contract: 'v1';

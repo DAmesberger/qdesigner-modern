@@ -43,6 +43,7 @@ export function isCustomResponse(responseType: ResponseType): responseType is Ex
 
 // Helper to safely access response type properties
 export function getResponseTypeProperties(responseType: ResponseType) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing discriminated union properties dynamically
   const rt = responseType as any;
   switch (responseType.type) {
     case 'scale':

@@ -30,7 +30,7 @@ export class CanvasStimulus extends BaseStimulus {
     this.ctx = this.canvas.getContext('2d')!;
   }
   
-  public async preload(resourceManager: ResourceManager): Promise<void> {
+  public async preload(_resourceManager: ResourceManager): Promise<void> {
     // Canvas stimulus doesn't need preloading unless the render function does
     this.ready = true;
   }

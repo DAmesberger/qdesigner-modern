@@ -43,6 +43,7 @@ describe('BlockRandomizer', () => {
       type: 'randomized',
       questions: ['a1', 'a2', 'a3'],
       randomization: { type: 'all' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
     } as any;
 
     const blockB = {
@@ -51,6 +52,7 @@ describe('BlockRandomizer', () => {
       type: 'randomized',
       questions: ['b1', 'b2', 'b3'],
       randomization: { type: 'all' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
     } as any;
 
     const firstA = randomizer.randomizeBlock(blockA);

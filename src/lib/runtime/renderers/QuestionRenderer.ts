@@ -12,6 +12,7 @@ export interface RendererConfig {
   size?: { width: number; height: number };
   opacity?: number;
   rotation?: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- CSS style values are heterogeneous
   style?: Record<string, any>;
 }
 

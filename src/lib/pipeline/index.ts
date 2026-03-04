@@ -22,9 +22,8 @@ import { ExportLayer } from './ExportLayer';
 import { BatchProcessor } from './BatchProcessor';
 import { QueueManager } from './QueueManager';
 
-import type { 
-  PipelineConfig, 
-  StreamingConfig, 
+import type {
+  PipelineConfig,
   ValidationRule,
   TransformationStage,
   ExportRequest,
@@ -317,7 +316,7 @@ export class PipelineManager {
       console.log('Queue item completed:', data.item.id);
     });
 
-    this.queue.on('queue.full', (data: DynamicValue) => {
+    this.queue.on('queue.full', (_data: DynamicValue) => {
       console.warn('Queue is full, applying backpressure');
       // Could pause streaming or other sources
     });
@@ -340,7 +339,7 @@ export class PipelineManager {
     this.batch.registerProcessor({
       name: 'export',
       supports: (item: DynamicValue) => item && item.sessions && item.format,
-      process: async (items: ExportRequest[], context) => {
+      process: async (items: ExportRequest[], _context) => {
         const results = [];
         for (const request of items) {
           const result = await this.export.exportData(request);
@@ -356,7 +355,7 @@ export class PipelineManager {
     this.batch.registerProcessor({
       name: 'validate',
       supports: (item: DynamicValue) => item && item.responses,
-      process: async (items: DynamicValue[], context) => {
+      process: async (items: DynamicValue[], _context) => {
         const results = [];
         for (const item of items) {
           // Process validation for each item
@@ -372,7 +371,7 @@ export class PipelineManager {
     this.batch.registerProcessor({
       name: 'transform',
       supports: (item: DynamicValue) => item && item.session,
-      process: async (items: DynamicValue[], context) => {
+      process: async (items: DynamicValue[], _context) => {
         const results = [];
         for (const item of items) {
           const result = await this.transformation.transformSession(

@@ -6,7 +6,7 @@ export interface SessionConfig {
 	questionnaireId: string;
 	participantId?: string;
 	resumeSessionId?: string;
-	metadata?: Record<string, any>;
+	metadata?: Record<string, unknown>;
 }
 
 export interface SessionState {
@@ -80,7 +80,7 @@ export class SessionManagementService {
 	 */
 	private static async resumeSession(
 		sessionId: string,
-		questionnaireId: string
+		_questionnaireId: string
 	): Promise<Session | null> {
 		try {
 			const data = await api.sessions.get(sessionId);
@@ -98,6 +98,7 @@ export class SessionManagementService {
 			await api.sessions.update(sessionId, {
 				last_activity_at: new Date().toISOString(),
 				status: session.status === 'not_started' ? 'in_progress' : session.status
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
 			} as any);
 
 			// Update local storage
@@ -118,17 +119,20 @@ export class SessionManagementService {
 			status: 'in_progress',
 			started_at: new Date().toISOString(),
 			last_activity_at: new Date().toISOString()
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
 		} as any);
 	}
 
 	/**
 	 * Pause a session
 	 */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session state snapshot
 	static async pauseSession(sessionId: string, currentState?: any): Promise<void> {
 		await api.sessions.update(sessionId, {
 			status: 'paused',
 			last_activity_at: new Date().toISOString(),
 			state_snapshot: currentState || {}
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
 		} as any);
 	}
 
@@ -139,6 +143,7 @@ export class SessionManagementService {
 		await api.sessions.update(sessionId, {
 			status: 'completed',
 			completed_at: new Date().toISOString()
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
 		} as any);
 
 		// Clear local storage
@@ -155,6 +160,7 @@ export class SessionManagementService {
 			metadata: {
 				abandon_reason: reason || 'user_exit'
 			}
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
 		} as any);
 
 		// Clear local storage
@@ -176,7 +182,7 @@ export class SessionManagementService {
 	/**
 	 * Get device information
 	 */
-	private static getDeviceInfo(): Record<string, any> {
+	private static getDeviceInfo(): Record<string, unknown> {
 		if (!browser) return {};
 
 		return {
@@ -205,7 +211,7 @@ export class SessionManagementService {
 	/**
 	 * Get browser information
 	 */
-	private static getBrowserInfo(): Record<string, any> {
+	private static getBrowserInfo(): Record<string, unknown> {
 		if (!browser) return {};
 
 		const ua = navigator.userAgent;
@@ -267,6 +273,7 @@ export class SessionManagementService {
 		}
 	}
 
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- JSON parse result
 	private static getLocalSession(): any {
 		if (!browser) return null;
 

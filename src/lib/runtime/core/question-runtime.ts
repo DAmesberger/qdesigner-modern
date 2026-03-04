@@ -11,7 +11,9 @@ export interface QuestionRuntimeCapabilities {
 }
 
 export interface QuestionRuntimeContext {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
   question: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
   questionnaire?: any;
   canvas: HTMLCanvasElement;
   renderer: WebGLRenderer;
@@ -22,10 +24,12 @@ export interface QuestionRuntimeContext {
 }
 
 export interface QuestionRuntimeResult {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- response value can be any user input type
   value: any;
   reactionTimeMs?: number | null;
   isCorrect?: boolean | null;
   timedOut?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- extensible runtime metadata
   metadata?: Record<string, any>;
 }
 

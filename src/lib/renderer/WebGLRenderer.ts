@@ -57,6 +57,7 @@ export class WebGLRenderer {
   private useTextureLocation!: WebGLUniformLocation;
 
   private frameCallbacks: Set<FrameCallback> = new Set();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL API requires untyped access
   private ext: any;
   private gpuTime = 0;
   private backgroundColor: RGBAColor;
@@ -463,6 +464,7 @@ export class WebGLRenderer {
   private isWebGLTexture(
     value: WebGLTexture | TextureSource
   ): value is WebGLTexture {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL API requires untyped access
     const textureCtor = (globalThis as any).WebGLTexture;
     return Boolean(textureCtor && value instanceof textureCtor);
   }

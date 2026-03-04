@@ -670,9 +670,11 @@ function buildDocs(fn: FunctionDef): string {
  * Create completion items for the QDesigner scripting API.
  * Includes all 47+ formula functions grouped by category, context variables, and common snippets.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Monaco completion items have complex dynamic shape
 export function createCompletionItems(monaco: typeof import('monaco-editor')): any[] {
   const { CompletionItemKind, CompletionItemInsertTextRule } = monaco.languages;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Monaco completion items have complex dynamic shape
   const items: any[] = [];
 
   // --- Context variables ---
@@ -813,9 +815,11 @@ export function createCompletionItems(monaco: typeof import('monaco-editor')): a
 export function registerFormulaProviders(
   monaco: typeof import('monaco-editor'),
   languageId: string = 'javascript',
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- scripting context accepts arbitrary values
   initialVariables: Record<string, any> = {},
 ) {
   // Mutable variable state that the providers close over
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- scripting context accepts arbitrary values
   let currentVariables: Record<string, any> = { ...initialVariables };
 
   const baseItems = createCompletionItems(monaco);
@@ -823,6 +827,7 @@ export function registerFormulaProviders(
   // --- Completion Provider ---
   const completionDisposable = monaco.languages.registerCompletionItemProvider(languageId, {
     triggerCharacters: ['.', '(', ','],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Monaco editor API types
     provideCompletionItems: (_model: any, _position: any) => {
       const suggestions = [...baseItems];
 
@@ -845,6 +850,7 @@ export function registerFormulaProviders(
   // --- Signature Help Provider ---
   const signatureDisposable = monaco.languages.registerSignatureHelpProvider(languageId, {
     signatureHelpTriggerCharacters: ['(', ','],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Monaco editor API types
     provideSignatureHelp: (model: any, position: any) => {
       const textUntilPosition = model.getValueInRange({
         startLineNumber: position.lineNumber,
@@ -908,6 +914,7 @@ export function registerFormulaProviders(
 
   return {
     /** Update the set of dynamic variables shown in autocomplete. */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- scripting context accepts arbitrary values
     setVariables(variables: Record<string, any>) {
       currentVariables = { ...variables };
     },

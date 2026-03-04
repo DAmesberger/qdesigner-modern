@@ -45,7 +45,8 @@ export interface DashboardActivity {
 }
 
 export interface DashboardData {
-  user: any; // Use proper user type from auth
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- user type from auth varies
+  user: any;
   questionnaires: DashboardQuestionnaire[];
   recentActivity: DashboardActivity[];
   stats: DashboardStats;

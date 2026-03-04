@@ -24,11 +24,14 @@ import type {
   DomainAutoJoinCheck,
   VerificationResult,
   CrossProjectAnalyticsData,
+  TimeSeriesBucket,
+  FilterResponse,
   ApiError,
 } from '$lib/types/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response with snake_case/camelCase fields
 function mapStatsSummary(raw: any): SessionStatsSummary {
   const stats = raw || {};
   return {
@@ -48,6 +51,7 @@ function mapStatsSummary(raw: any): SessionStatsSummary {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response with snake_case/camelCase fields
 function mapAggregateData(raw: any): SessionAggregateData {
   return {
     questionnaireId: String(raw.questionnaire_id ?? raw.questionnaireId ?? ''),
@@ -58,6 +62,7 @@ function mapAggregateData(raw: any): SessionAggregateData {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response with snake_case/camelCase fields
 function mapCompareData(raw: any): SessionCompareData {
   const left = raw.left || {};
   const right = raw.right || {};
@@ -83,7 +88,9 @@ function mapCompareData(raw: any): SessionCompareData {
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response with snake_case/camelCase fields
 function mapCrossProjectAnalytics(raw: any): CrossProjectAnalyticsData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response item
   const questionnaires = (raw.questionnaires || []).map((q: any) => ({
     questionnaireId: String(q.questionnaire_id ?? q.questionnaireId ?? ''),
     name: String(q.name ?? ''),
@@ -108,6 +115,7 @@ function mapCrossProjectAnalytics(raw: any): CrossProjectAnalyticsData {
   };
 
   const crossComparisons = raw.cross_comparisons
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response items
     ? (raw.cross_comparisons as any[]).map((c: any) => ({
         questionnaireA: String(c.questionnaire_a ?? c.questionnaireA ?? ''),
         questionnaireB: String(c.questionnaire_b ?? c.questionnaireB ?? ''),
@@ -255,6 +263,7 @@ class ApiClient {
       if (params.metrics?.length) query.set('metrics', params.metrics.join(','));
       if (params.source) query.set('source', params.source);
       if (params.key) query.set('key', params.key);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response mapped to typed object
       const raw = await this.get<any>(`/api/organizations/${orgId}/analytics?${query.toString()}`);
       return mapCrossProjectAnalytics(raw);
     },
@@ -402,6 +411,7 @@ class ApiClient {
       query.set('key', params.key);
       if (params.participantId) query.set('participant_id', params.participantId);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response mapped to typed object
       const raw = await this.get<any>(`/api/sessions/aggregate?${query.toString()}`);
       return mapAggregateData(raw);
     },
@@ -419,8 +429,29 @@ class ApiClient {
       query.set('left_participant_id', params.leftParticipantId);
       query.set('right_participant_id', params.rightParticipantId);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response mapped to typed object
       const raw = await this.get<any>(`/api/sessions/compare?${query.toString()}`);
       return mapCompareData(raw);
+    },
+    timeseries: async (params: {
+      questionnaireId: string;
+      interval?: 'hour' | 'day' | 'week';
+    }): Promise<TimeSeriesBucket[]> => {
+      const query = new URLSearchParams();
+      query.set('questionnaire_id', params.questionnaireId);
+      if (params.interval) query.set('interval', params.interval);
+      return this.get<TimeSeriesBucket[]>(`/api/sessions/timeseries?${query.toString()}`);
+    },
+    filter: (body: {
+      questionnaire_id: string;
+      groups: { logic: string; rules: { field: string; operator: string; value: unknown; value2?: unknown }[] }[];
+      logic?: string;
+      source?: string;
+      key?: string;
+      limit?: number;
+      offset?: number;
+    }): Promise<FilterResponse> => {
+      return this.post<FilterResponse>('/api/sessions/filter', body);
     },
     uploadMedia: (
       sessionId: string,
@@ -501,8 +532,10 @@ class ApiClient {
 
   // === Users ===
   users = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- user profile shape varies by backend
     getProfile: () => this.get<any>('/api/users/me'),
     updateProfile: (data: { full_name?: string; avatar_url?: string; timezone?: string; locale?: string }) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- user profile shape varies by backend
       this.patch<any>('/api/users/me', data),
   };
 

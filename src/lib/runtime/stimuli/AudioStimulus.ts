@@ -32,6 +32,7 @@ export class AudioStimulus extends BaseStimulus {
     this.config = { ...this.config, ...config };
     
     // Get audio buffer from resource manager
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL context extended with resourceManager at runtime
     const resourceManager = (gl as any).resourceManager as ResourceManager;
     if (resourceManager) {
       this.audioBuffer = resourceManager.getAudioBuffer(this.audioConfig.audioUrl) || null;
@@ -47,6 +48,7 @@ export class AudioStimulus extends BaseStimulus {
   protected renderStimulus(gl: WebGL2RenderingContext, context: RenderContext): void {
     // Start audio playback on first render
     if (!this.source && this.audioBuffer) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL context extended with resourceManager at runtime
       const resourceManager = (gl as any).resourceManager as ResourceManager;
       const audioContext = resourceManager.getAudioContext();
       
@@ -73,11 +75,11 @@ export class AudioStimulus extends BaseStimulus {
     }
   }
   
-  public cleanup(gl: WebGL2RenderingContext): void {
+  public cleanup(_gl: WebGL2RenderingContext): void {
     if (this.source) {
       try {
         this.source.stop();
-      } catch (e) {
+      } catch (_e) {
         // Already stopped
       }
       this.source = null;

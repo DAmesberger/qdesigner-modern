@@ -2,28 +2,12 @@
   import { onMount } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
   import PropertiesPanel from '$lib/components/designer/PropertiesPanel.svelte';
-  import CommentThreadView from '$lib/collaboration/components/CommentThread.svelte';
-  import type { CommentThread as CommentThreadData, CollaborationUser } from '$lib/collaboration/types';
   import { Pin, PinOff, X, MessageSquare } from 'lucide-svelte';
 
   let isMobile = $state(false);
   let activeTab = $state<'properties' | 'comments'>('properties');
   const hasSelection = $derived(Boolean(designerStore.selectedItem));
   const isVisible = $derived(hasSelection || designerStore.rightPanelPinned);
-
-  // Placeholder collaboration user for comment thread interactions
-  const currentCollabUser: CollaborationUser = {
-    id: designerStore.userId || 'local-user',
-    name: 'You',
-    email: '',
-    role: 'editor',
-    color: '#3B82F6',
-    status: 'online',
-    lastSeen: new Date(),
-  };
-
-  // Local comment threads (stored in memory; will be synced via collaboration WS later)
-  let commentThreads = $state<CommentThreadData[]>([]);
 
   const panelLabel = $derived.by(() => {
     if (!designerStore.selectedItemType) return 'Properties';
@@ -139,20 +123,11 @@
       {/if}
     {:else}
       <div class="min-h-0 flex-1 overflow-y-auto p-3 space-y-3" data-testid="right-sidebar-comments">
-        {#if commentThreads.length > 0}
-          {#each commentThreads as thread (thread.id)}
-            <CommentThreadView
-              {thread}
-              currentUser={currentCollabUser}
-            />
-          {/each}
-        {:else}
-          <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
-            <MessageSquare class="h-8 w-8 text-muted-foreground/40 mb-2" />
-            <p class="text-sm text-muted-foreground">No comments yet</p>
-            <p class="text-xs text-muted-foreground/60 mt-1">Comments from collaborators will appear here</p>
-          </div>
-        {/if}
+        <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <MessageSquare class="h-8 w-8 text-muted-foreground/40 mb-2" />
+          <p class="text-sm text-muted-foreground">No comments yet</p>
+          <p class="text-xs text-muted-foreground/60 mt-1">Comments from collaborators will appear here</p>
+        </div>
       </div>
     {/if}
   </aside>

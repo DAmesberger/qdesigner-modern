@@ -86,7 +86,7 @@
         validationMessage = 'Please enter a valid URL';
       }
     } else if (question.config.inputType === 'tel' && val) {
-      const telRegex = /^[\d\s\-\+\(\)]+$/;
+      const telRegex = /^[\d\s\-+()]+$/;
       if (!telRegex.test(val)) {
         validationMessage = 'Please enter a valid phone number';
       }

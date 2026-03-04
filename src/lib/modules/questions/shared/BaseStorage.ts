@@ -1,19 +1,21 @@
 // Base storage implementation for questions
 
-import type { ModuleStorage, ResponseData } from '$lib/modules/types';
+import type { ModuleStorage } from '$lib/modules/types';
 import type { QuestionResponse } from './types';
 
 export abstract class BaseQuestionStorage implements ModuleStorage {
   protected prefix = 'qd_response_';
   protected sessionId: string;
-  
+
   constructor() {
     this.sessionId = this.getOrCreateSessionId();
   }
-  
+
   // Abstract method that each question type must implement
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- subclasses return string or AnswerType depending on module
   abstract getAnswerType(): any;
-  
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
   async save(id: string, value: any): Promise<void> {
     const key = this.getKey(id);
     const data: QuestionResponse = {
@@ -40,6 +42,7 @@ export abstract class BaseQuestionStorage implements ModuleStorage {
     }
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
   async load(id: string): Promise<any> {
     const key = this.getKey(id);
     
@@ -65,7 +68,9 @@ export abstract class BaseQuestionStorage implements ModuleStorage {
     }
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
   async getAll(): Promise<Record<string, any>> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
     const responses: Record<string, any> = {};
     
     try {

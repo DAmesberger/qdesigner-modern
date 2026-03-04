@@ -35,6 +35,7 @@ export class VideoStimulus extends BaseStimulus {
     this.config = { ...this.config, ...config };
     
     // Get video from resource manager
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL context extended with resourceManager at runtime
     const resourceManager = (gl as any).resourceManager as ResourceManager;
     if (resourceManager) {
       this.video = resourceManager.getVideo(this.videoConfig.videoUrl) || null;

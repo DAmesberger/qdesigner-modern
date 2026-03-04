@@ -4,7 +4,7 @@ import { auth } from '$lib/services/auth';
 import { api } from '$lib/services/api';
 import { browser } from '$app/environment';
 
-export const load: LayoutLoad = async ({ url, route, depends }) => {
+export const load: LayoutLoad = async ({ url, depends }) => {
   // This ensures the load function re-runs when invalidateAll() is called
   depends('app:organization');
 

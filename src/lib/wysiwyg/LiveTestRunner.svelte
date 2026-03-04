@@ -95,7 +95,7 @@
     const question = questionnaire.questions.find((q) => q.id === questionId);
     if (question?.settings?.variableMapping) {
       const varName = question.settings.variableMapping;
-      if (variableEngine && variableValues.hasOwnProperty(varName)) {
+      if (variableEngine && Object.hasOwn(variableValues, varName)) {
         variableValues[varName] = value;
         variableEngine.setValue(varName, value);
       }

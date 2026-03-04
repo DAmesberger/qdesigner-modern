@@ -18,7 +18,9 @@ export const metadata: ModuleMetadata = {
     supportsVariables: true
   },
   components: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Svelte component props are untyped at this boundary
     runtime: () => import('./Ranking.svelte') as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Svelte component props are untyped at this boundary
     designer: () => import('./RankingDesigner.svelte') as any
   },
   defaultConfig: {

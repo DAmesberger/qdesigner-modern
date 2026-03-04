@@ -2,7 +2,7 @@ import { FullConfig } from '@playwright/test';
 
 const BACKEND_URL = process.env.VITE_API_URL || 'http://localhost:3000';
 
-async function globalSetup(config: FullConfig) {
+async function globalSetup(_config: FullConfig) {
   console.log('Running global setup...');
 
   // 1. Wait for backend to be ready

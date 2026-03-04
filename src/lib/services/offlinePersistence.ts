@@ -138,6 +138,7 @@ export class OfflinePersistenceService {
   /**
    * List questionnaires from offline storage
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- returns mixed online/offline questionnaire shapes
   static async listQuestionnaires(userId: string, projectId: string): Promise<any[]> {
     try {
       // If online, try to get fresh list
@@ -322,7 +323,7 @@ export class OfflinePersistenceService {
     localVersion: number;
     serverVersion?: number;
   }>> {
-    const conflicts: Array<any> = [];
+    const conflicts: Array<{ questionnaireId: string; localVersion: number; serverVersion?: number }> = [];
     const localQuestionnaires = await db.listQuestionnaires(userId);
     
     for (const local of localQuestionnaires) {

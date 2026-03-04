@@ -32,6 +32,7 @@ export interface FrameSample {
 
 export interface RenderStimulus {
   type: 'color' | 'image' | 'text' | 'shape' | 'custom';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stimulus data varies by type (color, image, text, shape, custom)
   data: any;
   duration?: number;
   transition?: 'none' | 'fade' | 'slide';

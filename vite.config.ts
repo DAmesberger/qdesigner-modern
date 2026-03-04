@@ -52,6 +52,13 @@ export default defineConfig({
       port: 5173,
       host: 'localhost'
     },
+    headers: {
+      // Cross-origin isolation enables full-precision performance.now() (~5us)
+      // without it, browsers reduce precision to ~100us as a Spectre mitigation.
+      // Critical for fillout routes where reaction time measurement occurs.
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:4000',

@@ -25,7 +25,9 @@ const { isOnlineStore } = vi.hoisted(() => {
 // Mock the offline service (where isOnline is actually imported from)
 vi.mock('$lib/services/offline', () => ({
   isOnline: isOnlineStore,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock store subscribe callback
   isOffline: { subscribe: (fn: any) => isOnlineStore.subscribe((v: boolean) => fn(!v)) },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock store subscribe callback
   offline: { subscribe: (fn: any) => { fn({ isOnline: true, isServiceWorkerReady: false, hasUpdate: false, syncPending: false }); return () => {}; } }
 }));
 

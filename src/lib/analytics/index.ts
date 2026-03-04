@@ -5,17 +5,31 @@
  */
 
 import { StatisticalEngine } from './StatisticalEngine';
-import { RealtimeAnalytics } from './RealtimeAnalytics';
 import { DataVisualization } from './DataVisualization';
 import { ExportService } from './ExportService';
+import { ScoreInterpreter } from './ScoreInterpreter';
+import { MissingDataHandler } from './MissingDataHandler';
+import { PowerAnalysis } from './PowerAnalysis';
+import { RealtimeAnalyticsClient } from './RealtimeAnalyticsClient';
+import { ScoringPipeline } from './ScoringPipeline';
 
 // Re-export Core Classes
-export { StatisticalEngine, RealtimeAnalytics, DataVisualization, ExportService };
+export { StatisticalEngine, DataVisualization, ExportService, ScoreInterpreter, MissingDataHandler, PowerAnalysis, RealtimeAnalyticsClient, ScoringPipeline };
 
 // Svelte Components
 export { default as AnalyticsDashboard } from './components/AnalyticsDashboard.svelte';
-export { default as ResponseViewer } from './components/ResponseViewer.svelte';
 export { default as StatisticsCard } from './components/StatisticsCard.svelte';
+export { default as DashboardBuilder } from './components/DashboardBuilder.svelte';
+export { default as WidgetPalette } from './components/WidgetPalette.svelte';
+export { default as WidgetContainer } from './components/WidgetContainer.svelte';
+export { default as DescriptiveStatsWidget } from './components/DescriptiveStatsWidget.svelte';
+export { default as HistogramWidget } from './components/HistogramWidget.svelte';
+export { default as TimeSeriesWidget } from './components/TimeSeriesWidget.svelte';
+export { default as CompletionFunnelWidget } from './components/CompletionFunnelWidget.svelte';
+export { default as ReliabilityWidget } from './components/ReliabilityWidget.svelte';
+export { default as IRTWidget } from './components/IRTWidget.svelte';
+export { default as FilterBuilder } from './components/FilterBuilder.svelte';
+export { default as CohortComparison } from './components/CohortComparison.svelte';
 
 // Import types for local usage and re-export
 import type {
@@ -185,16 +199,10 @@ export function initializeAnalytics(config?: {
   const realtimeConfig = { ...DEFAULT_REALTIME_CONFIG, ...config?.realtime };
   const dashboardConfig = { ...DEFAULT_DASHBOARD_CONFIG, ...config?.dashboard };
   
-  // Only initialize realtime if endpoint is provided
-  const realtimeInstance = (config?.realtime && 'endpoint' in config.realtime && config.realtime.endpoint)
-    ? RealtimeAnalytics.getInstance(realtimeConfig as RealtimeConfig)
-    : null;
-
   return {
     statistical: StatisticalEngine.getInstance(),
     visualization: DataVisualization.getInstance(),
     export: ExportService.getInstance(),
-    realtime: realtimeInstance,
     config: {
       realtime: realtimeConfig,
       dashboard: dashboardConfig
@@ -244,6 +252,7 @@ export async function generateAnalyticsReport(
     .map(r => r.reactionTime as number)
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic analytics report structure
   const report: any = {
     metadata: {
       generatedAt: new Date().toISOString(),
@@ -293,6 +302,7 @@ export async function generateAnalyticsReport(
 /**
  * Validate analytics data structure
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- validates unknown data structure
 export function validateAnalyticsData(data: any[]): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
   
@@ -301,6 +311,7 @@ export function validateAnalyticsData(data: any[]): { valid: boolean; errors: st
     return { valid: false, errors };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- validating unknown data structure
   data.forEach((session: any, index: number) => {
     if (!session.sessionId || typeof session.sessionId !== 'string') {
       errors.push(`Session ${index}: Missing or invalid sessionId`);
@@ -317,6 +328,7 @@ export function validateAnalyticsData(data: any[]): { valid: boolean; errors: st
     if (!Array.isArray(session.responses)) {
       errors.push(`Session ${index}: Responses must be an array`);
     } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- validating unknown data structure
       session.responses.forEach((response: any, responseIndex: number) => {
         if (!response.questionId || typeof response.questionId !== 'string') {
           errors.push(`Session ${index}, Response ${responseIndex}: Missing or invalid questionId`);
@@ -351,7 +363,7 @@ export function calculatePerformanceMetrics(data: AnalyticsData[]): PerformanceM
       .map(r => r.responseTime as number)
   );
 
-  const reactionTimes = data.flatMap(session => 
+  const _reactionTimes = data.flatMap(session =>
     session.responses
       .filter(r => r.reactionTime !== undefined && r.reactionTime !== null)
       .map(r => r.reactionTime as number)
@@ -524,3 +536,74 @@ export class AnalyticsErrorHandler {
 
 // Export singleton error handler instance
 export const analyticsErrorHandler = AnalyticsErrorHandler.getInstance();
+
+// Re-export ScoreInterpreter types
+export type {
+  ScoreInterpretation as AnalyticsScoreInterpretation,
+  NormativeComparison,
+  ConfidenceInterval,
+  FeedbackConfig,
+  ScoreRange,
+  NormData,
+  SubscaleScore,
+  SubscaleConfig,
+} from './ScoreInterpreter';
+
+export { normalCDF } from './ScoreInterpreter';
+
+// Re-export MissingDataHandler types
+export type {
+  ImputationMethod,
+  MissingDataReport,
+  VariableMissingInfo,
+  CaseMissingInfo,
+  MissingPattern,
+  MultipleImputationResult,
+} from './MissingDataHandler';
+
+// Re-export PowerAnalysis types
+export type {
+  TestType,
+  PowerParams,
+  TTestPowerParams,
+  AnovaPowerParams,
+  ChiSquarePowerParams,
+  SampleSizeResult,
+  ObservedPowerResult,
+} from './PowerAnalysis';
+
+// Re-export RealtimeAnalyticsClient types
+export type {
+  AnalyticsMetrics,
+  AnalyticsEvent,
+} from './RealtimeAnalyticsClient';
+
+// Re-export ScoringPipeline types
+export type {
+  ScoreDefinition,
+  ScoreResult,
+  PipelineResult,
+} from './ScoringPipeline';
+
+// Re-export Dashboard Builder types and utilities
+export {
+  WIDGET_PALETTE,
+  createDefaultLayout,
+  createWidget,
+} from './types/dashboard-builder';
+
+export type {
+  WidgetType,
+  WidgetPosition,
+  DashboardWidget,
+  WidgetConfig,
+  DashboardLayout,
+  WidgetPaletteItem,
+} from './types/dashboard-builder';
+
+// Re-export FilterBuilder types
+export type {
+  FilterRule,
+  FilterGroup,
+  FilterQuery,
+} from './components/FilterBuilder.svelte';

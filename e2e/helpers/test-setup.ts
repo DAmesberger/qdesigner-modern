@@ -1,6 +1,5 @@
 import { Page } from '@playwright/test';
 import { TEST_CONFIG } from './test-config';
-import { createTestClient, TestApiClient } from './api-client';
 import { loginUser } from './auth';
 
 export interface ExtendedTestUser {
@@ -115,7 +114,9 @@ export { loginUser };
 export async function waitForRealtimeUpdate(page: Page, eventType: string, timeout = 5000) {
   await page.waitForFunction(
     (expectedEvent) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing global test property
       const events = (window as any).__realtimeEvents || [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic event shape
       return events.some((e: any) => e.type === expectedEvent);
     },
     eventType,

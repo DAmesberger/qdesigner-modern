@@ -179,7 +179,6 @@
       } else {
         selectedIds.add(asset.id);
       }
-      selectedIds = selectedIds; // Trigger reactivity
     } else {
       // Select mode
       if (allowMultiple) {
@@ -189,7 +188,6 @@
         } else {
           selectedMedia.push(asset);
         }
-        selectedMedia = selectedMedia; // Trigger reactivity
       } else {
         selectedMedia = [asset];
       }
@@ -216,7 +214,6 @@
     }
 
     selectedIds.clear();
-    selectedIds = selectedIds;
     loading = false;
   }
 

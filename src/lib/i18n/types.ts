@@ -101,6 +101,7 @@ export interface I18nStore {
   currentLanguage: string;
   isRTL: boolean;
   isInitialized: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- i18n translation values have dynamic shape
   translations: Record<string, any>;
   missingKeys: MissingTranslation[];
   validationErrors: TranslationValidationError[];
@@ -108,6 +109,7 @@ export interface I18nStore {
 
 export interface TranslationHook {
   t: TFunction;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- i18n instance type is complex
   i18n: any;
   ready: boolean;
   changeLanguage: (lng: string) => Promise<void>;

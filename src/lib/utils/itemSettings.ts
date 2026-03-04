@@ -5,6 +5,7 @@ import type { Question, Page, Variable, FlowControl, Block } from '$lib/shared/t
 type DesignerItem = Question | Page | Variable | FlowControl | Block;
 
 export interface ItemSettings {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- settings are heterogeneous per item type
   [key: string]: any;
 }
 

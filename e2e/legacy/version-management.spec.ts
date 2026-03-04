@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { createTestUser, loginUser } from './helpers/test-setup';
 
 test.describe('Version Management E2E Tests', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
   let testUser: any;
   
   test.beforeAll(async () => {

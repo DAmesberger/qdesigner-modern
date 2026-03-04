@@ -9,6 +9,7 @@ import type { ReactionTrialConfig } from '$lib/runtime/reaction';
 interface WebGLQuestionConfig {
   stimulus?: {
     type?: 'shape' | 'image' | 'video' | 'custom';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL stimulus content varies by type
     content?: any;
     fixation?: {
       show?: boolean;
@@ -100,6 +101,7 @@ export class WebGLRuntime implements IQuestionRuntime {
     this.engine = null;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
   private toTrialConfig(question: any): ReactionTrialConfig {
     const config = (question.config || question.display || {}) as WebGLQuestionConfig;
 

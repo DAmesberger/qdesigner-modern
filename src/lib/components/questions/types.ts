@@ -1,14 +1,13 @@
 // Question Component Architecture Types
 
-import type { 
-  Question, 
-  QuestionType, 
-  ResponseType, 
-  ResponseOption, 
+import type {
+  Question,
+  QuestionType,
+  ResponseOption,
   ValidationRule,
   TimingConfig,
   NavigationConfig,
-  ConditionalLogic 
+  ConditionalLogic
 } from '$lib/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- extensible question modules pass dynamic payloads

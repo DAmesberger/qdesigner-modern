@@ -54,6 +54,7 @@ describe('WebGLRenderer', () => {
     };
 
     // Mock getContext to return our mock WebGL2 context
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
     vi.spyOn(canvas, 'getContext').mockReturnValue(mockContext as any);
   });
 

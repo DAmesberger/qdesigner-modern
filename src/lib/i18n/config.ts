@@ -346,7 +346,6 @@ export const formatters = {
     
     // Check for modern ListFormat support
     if ('ListFormat' in Intl) {
-      // @ts-ignore - ListFormat might not be in all TypeScript versions
       return new Intl.ListFormat(locale, {
         style: options?.style || 'long',
         type: options?.type || 'conjunction'

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MediaValidator } from './MediaValidator';
 import type { Questionnaire, Question } from '$lib/shared';
-import type { StimulusConfig } from '$lib/runtime/stimuli/Stimulus';
+
 
 // Mock fetch
 global.fetch = vi.fn();

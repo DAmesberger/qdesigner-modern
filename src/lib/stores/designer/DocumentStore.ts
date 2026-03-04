@@ -541,7 +541,7 @@ export class DocumentStore {
       if (!Array.isArray(page.blocks) || page.blocks.length === 0) {
         warnings.push({
           field: `pages[${pageIndex}].blocks`,
-          message: `Page \"${page.name || page.id}\" has no blocks.`,
+          message: `Page "${page.name || page.id}" has no blocks.`,
           severity: 'warning',
         });
         return;
@@ -551,7 +551,7 @@ export class DocumentStore {
         if (!Array.isArray(block.questions) || block.questions.length === 0) {
           warnings.push({
             field: `pages[${pageIndex}].blocks[${blockIndex}].questions`,
-            message: `Block \"${block.name || block.id}\" has no questions.`,
+            message: `Block "${block.name || block.id}" has no questions.`,
             severity: 'warning',
           });
           return;
@@ -561,7 +561,7 @@ export class DocumentStore {
           if (!questionIds.has(id)) {
             errors.push({
               field: `pages[${pageIndex}].blocks[${blockIndex}].questions`,
-              message: `Question ID \"${id}\" is referenced but missing from questionnaire.questions.`,
+              message: `Question ID "${id}" is referenced but missing from questionnaire.questions.`,
               severity: 'error',
             });
           }
@@ -573,7 +573,7 @@ export class DocumentStore {
     for (const name of duplicateVariables) {
       errors.push({
         field: 'questionnaire.variables',
-        message: `Variable name \"${name}\" is duplicated.`,
+        message: `Variable name "${name}" is duplicated.`,
         severity: 'error',
       });
     }

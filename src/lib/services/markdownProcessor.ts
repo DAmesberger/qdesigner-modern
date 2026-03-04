@@ -16,6 +16,7 @@ export interface MarkdownProcessorOptions {
   mediaUrls?: Record<string, string>;
   format?: 'text' | 'markdown' | 'html';
   processVariables?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- template variables can be any interpolated value
   variables?: Record<string, any>;
 }
 

@@ -171,8 +171,8 @@ export class CompositeRenderer extends BaseRenderer {
     this.compositeConfig.children.forEach((child, index) => {
       if (!child.isReady()) return;
       
-      const col = index % cols;
-      const row = Math.floor(index / cols);
+      const _col = index % cols;
+      const _row = Math.floor(index / cols);
       
       // Create context for grid cell
       const cellContext: RenderContext = {

@@ -263,7 +263,7 @@ function buildBarChart(interpretations: ScoreInterpretation[]): string {
 // Print-to-PDF via Hidden Iframe
 // ---------------------------------------------------------------------------
 
-async function printHTMLAsPDF(html: string, title: string): Promise<void> {
+async function printHTMLAsPDF(html: string, _title: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     try {
       const iframe = document.createElement('iframe');

@@ -36,6 +36,15 @@ export default [
     rules: {
       'no-undef': 'off',
       ...ts.configs.recommended.rules,
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
     },
   },
   {
@@ -103,6 +112,14 @@ export default [
     },
     rules: {
       ...svelte.configs.recommended.rules,
+      // Disable base no-unused-vars for .svelte files — the TS parser already
+      // reports unused vars via @typescript-eslint/no-unused-vars, and the base
+      // rule produces false positives on Svelte reactive declarations.
+      'no-unused-vars': 'off',
+      // Disable no-undef for .svelte files — TypeScript already catches
+      // undefined variables, and the base rule produces false positives on
+      // DOM types (e.g. MediaTrackConstraints) in Svelte TS blocks.
+      'no-undef': 'off',
     },
   },
   {

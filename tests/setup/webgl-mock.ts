@@ -48,11 +48,14 @@ const mockWebGLContext = {
 
 // Mock getContext
 const getContext = HTMLCanvasElement.prototype.getContext;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock getContext override for WebGL testing
 HTMLCanvasElement.prototype.getContext = function(contextId: string, options?: any) {
   if (contextId === 'webgl' || contextId === 'experimental-webgl') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock WebGL context
     return mockWebGLContext as any;
   }
   return getContext.call(this, contextId, options);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- overriding DOM method signature
 } as any;
 
 // Global requestAnimationFrame mock if not present

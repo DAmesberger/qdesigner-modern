@@ -3,12 +3,11 @@
 
 import { writable, derived, readable } from 'svelte/store';
 import { browser } from '$app/environment';
-import type { 
-  Language, 
-  I18nStore, 
-  MissingTranslation, 
+import type {
+  I18nStore,
+  MissingTranslation,
   TranslationValidationError,
-  TranslationEntry 
+  TranslationEntry
 } from './types';
 // Import from languages.ts (not config.ts) to avoid circular dependency:
 // stores.ts ← config.ts ← stores.ts
@@ -48,6 +47,7 @@ function createI18nStore() {
       update(state => ({ ...state, isInitialized: initialized }));
     },
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- i18n translation values have dynamic shape
     setTranslations: (translations: Record<string, any>) => {
       update(state => ({ ...state, translations }));
     },

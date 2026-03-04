@@ -22,6 +22,7 @@ export class QuestionnaireAccessService {
 	 */
 	static async validateAccess(code: string): Promise<AccessValidation> {
 		try {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
 			const questionnaire = await api.get<any>(`/api/questionnaires/by-code/${code.toUpperCase()}`);
 
 			if (!questionnaire) {

@@ -9,11 +9,8 @@ import type {
   ExportConfig,
   ExportFormat,
   ExportResult,
-  DataTransformation,
-  AnalyticsData,
-  StatisticalSummary
+  AnalyticsData
 } from './types';
-import type { ResponseData } from '$lib/types/response';
 
 export class ExportService {
   private static instance: ExportService;
@@ -319,6 +316,7 @@ ${csvContent}
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic analytics export data
   private generateSPSSSyntax(data: any[]): string {
     if (data.length === 0) return '';
 
@@ -377,7 +375,8 @@ SAVE OUTFILE='analytics_data.sav'.`;
     };
   }
 
-  private generateRScript(data: any[], config: ExportConfig): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic analytics export data
+  private generateRScript(data: any[], _config: ExportConfig): string {
     if (data.length === 0) return '# No data to export';
 
     const headers = Object.keys(data[0]);
@@ -413,6 +412,7 @@ print("- analytics_data.RData")
 print("- analytics_data.csv")`;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic analytics export data
   private generateRDataFrame(data: any[], headers: string[]): string {
     const columns = headers.map(header => {
       const values = data.map(row => {
@@ -458,7 +458,8 @@ ${columns.join(',\n')}
     };
   }
 
-  private generatePythonScript(data: any[], config: ExportConfig): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic analytics export data
+  private generatePythonScript(data: any[], _config: ExportConfig): string {
     if (data.length === 0) return '# No data to export';
 
     const headers = Object.keys(data[0]);
@@ -570,6 +571,7 @@ plt.show()`;
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic analytics export data
   private generateStataScript(data: any[]): string {
     if (data.length === 0) return '* No data to export';
 
@@ -638,10 +640,11 @@ display "Data export complete. File saved: analytics_data.dta"`;
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic analytics export data
   private generateSASScript(data: any[]): string {
     if (data.length === 0) return '/* No data to export */';
 
-    const headers = Object.keys(data[0]);
+    const _headers = Object.keys(data[0]);
     
     return `/* QDesigner Modern Analytics Export */
 /* Generated on ${new Date().toISOString()} */
@@ -684,14 +687,16 @@ run;`;
 
   private async transformData(
     data: AnalyticsData[],
-    config: ExportConfig
+    _config: ExportConfig
   ): Promise<AnalyticsData[]> {
     // Apply any data transformations specified in config
     // This is a placeholder for future transformation logic
     return data;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic analytics export data
   private flattenAnalyticsData(data: AnalyticsData[], config: ExportConfig): any[] {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic analytics export data
     const flattened: any[] = [];
 
     data.forEach(session => {
@@ -731,6 +736,7 @@ run;`;
     return flattened;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic statistics result shape
   private calculateDataStatistics(data: AnalyticsData[]): any {
     const responseTimes = data.flatMap(session => 
       session.responses

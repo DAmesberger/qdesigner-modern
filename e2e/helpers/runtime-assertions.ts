@@ -18,6 +18,7 @@ export interface RuntimeDebugState {
 export async function getRuntimeState(page: Page): Promise<RuntimeDebugState | null> {
   try {
     return await page.evaluate(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing global debug property
       () => ((window as any).__QDESIGNER_RUNTIME_DEBUG__ ?? null) as RuntimeDebugState | null
     );
   } catch (error) {

@@ -82,12 +82,13 @@ function createOfflineStore() {
     
     // Trigger sync
     if (registration && 'sync' in registration) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Background Sync API not fully typed
       (registration as any).sync.register('sync-questionnaire-changes')
         .then(() => {
           console.log('[Offline] Sync registered');
           update(state => ({ ...state, syncPending: true }));
         })
-        .catch((error: any) => {
+        .catch((error: unknown) => {
           console.error('[Offline] Sync registration failed:', error as Error);
         });
     }

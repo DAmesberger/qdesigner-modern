@@ -14,7 +14,7 @@ test.describe('Questionnaire Timing Precision', () => {
     await expect(page.locator('canvas')).toBeVisible();
     
     // Capture performance marks
-    const timingData = await page.evaluate(() => {
+    const _timingData = await page.evaluate(() => {
       // Mark when we're about to press space
       performance.mark('before-keypress');
       return performance.now();
@@ -87,6 +87,7 @@ test.describe('Questionnaire Timing Precision', () => {
     // Create a test with video
     await page.evaluate(() => {
       // Inject a video question for testing
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test flag on window global
       (window as any).testVideoTiming = true;
     });
     
@@ -127,6 +128,7 @@ test.describe('Questionnaire Timing Precision', () => {
     
     // Inject test question
     await page.evaluate((html) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test content on window global
       (window as any).testHTMLContent = html;
     }, testHTML);
     
@@ -186,6 +188,7 @@ test.describe('Questionnaire Timing Precision', () => {
     
     // Get session data
     const sessionData = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test data on window global
       return (window as any).lastSessionData;
     });
     
@@ -216,6 +219,7 @@ test.describe('Visual Regression Tests', () => {
     
     // Inject HTML question
     await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test content on window global
       (window as any).testHTMLContent = `
         <div style="padding: 40px; text-align: center;">
           <h1 style="color: #3B82F6;">Test Question</h1>

@@ -18,6 +18,7 @@ export interface Response {
   questionId: string;
   pageId?: string;
   timestamp: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- response values vary by question type
   value: any;
   reactionTime?: number; // ms from stimulus onset
   stimulusOnsetTime?: number;
@@ -43,6 +44,7 @@ export interface Position {
 
 export interface VariableState {
   variableId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- scripting context accepts arbitrary values
   value: any;
   timestamp: number;
   source?: string; // What set this value
@@ -55,7 +57,7 @@ export interface SessionMetadata {
   webGLSupported?: boolean;
   timezone?: string;
   locale?: string;
-  custom?: Record<string, any>;
+  custom?: Record<string, unknown>;
 }
 
 export interface ResponseMetadata {
@@ -127,6 +129,7 @@ export interface VariableMetadata {
 }
 
 export interface ValueLabel {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- value labels can be any type
   value: any;
   label: string;
 }

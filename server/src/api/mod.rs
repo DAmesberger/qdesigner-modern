@@ -5,9 +5,12 @@ use axum::{
 };
 
 use crate::middleware::rate_limit::rate_limit_middleware;
+use crate::middleware::rls_context::set_rls_context;
 use crate::state::AppState;
 
+pub mod access;
 pub mod auth;
+pub mod comments;
 pub mod dev;
 pub mod health;
 pub mod media;
@@ -41,7 +44,8 @@ pub fn router(state: AppState) -> Router {
         ));
 
     let user_routes =
-        Router::new().route("/me", get(users::get_profile).patch(users::update_profile));
+        Router::new().route("/me", get(users::get_profile).patch(users::update_profile))
+        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let org_routes = Router::new()
         .route(
@@ -95,7 +99,8 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/analytics",
             get(sessions::cross_project_analytics),
-        );
+        )
+        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let project_routes = Router::new()
         .route(
@@ -137,7 +142,8 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/members/{uid}",
             patch(projects::update_project_member).delete(projects::remove_project_member),
-        );
+        )
+        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let invitation_routes = Router::new()
         .route("/pending", get(organizations::list_pending_invitations))
@@ -156,6 +162,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/condition-counts",
             get(sessions::condition_counts),
+        )
+        .route(
+            "/{id}/comments",
+            get(comments::list_comments).post(comments::create_comment),
+        )
+        .route(
+            "/{id}/comments/{cid}",
+            patch(comments::update_comment).delete(comments::delete_comment),
         );
 
     let session_routes = Router::new()
@@ -166,6 +180,8 @@ pub fn router(state: AppState) -> Router {
         .route("/aggregate", get(sessions::aggregate_sessions))
         .route("/compare", get(sessions::compare_sessions))
         .route("/dashboard", get(sessions::dashboard_summary))
+        .route("/timeseries", get(sessions::timeseries))
+        .route("/filter", post(sessions::filter_sessions))
         .route(
             "/{id}",
             get(sessions::get_session).patch(sessions::update_session),
@@ -174,11 +190,13 @@ pub fn router(state: AppState) -> Router {
         .route("/{id}/events", get(sessions::get_events).post(sessions::submit_events))
         .route("/{id}/sync", post(sessions::sync_session))
         .route("/{id}/variables", get(sessions::get_variables).post(sessions::upsert_variable))
-        .route("/{id}/media", post(media::upload_session_media));
+        .route("/{id}/media", post(media::upload_session_media))
+        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let media_routes = Router::new()
         .route("/", get(media::list_media).post(media::upload_media))
-        .route("/{id}", get(media::get_media).delete(media::delete_media));
+        .route("/{id}", get(media::get_media).delete(media::delete_media))
+        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let ws_route = Router::new().route("/ws", get(crate::websocket::handler::ws_upgrade));
 

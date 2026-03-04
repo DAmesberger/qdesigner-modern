@@ -1,6 +1,6 @@
 // Instruction-specific types
 
-import type { InstructionConfig, ModuleCapabilities } from '$lib/modules/types';
+import type { InstructionConfig } from '$lib/modules/types';
 
 // Extended instruction configuration
 export interface InstructionModuleConfig extends InstructionConfig {

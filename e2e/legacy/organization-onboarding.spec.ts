@@ -203,7 +203,7 @@ test.describe('Organization Onboarding Journey', () => {
     await expect(page.locator('[data-testid="toast"]')).toContainText('Usage alerts configured');
   });
   
-  test('multi-tenant isolation between organizations', async ({ page, context }) => {
+  test('multi-tenant isolation between organizations', async ({ page, context: _context }) => {
     // Create two separate organizations
     const org1Owner = await createTestUser({
       email: `org1-${Date.now()}@example.com`,

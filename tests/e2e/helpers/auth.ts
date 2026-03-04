@@ -11,8 +11,8 @@ export interface TestUser {
  */
 export async function createTestUser(): Promise<TestUser> {
   const timestamp = Date.now();
-  const email = `test-${timestamp}@example.com`;
-  const password = 'testpass123456';
+  const _email = `test-${timestamp}@example.com`;
+  const _password = 'testpass123456';
   
   // For E2E tests, we'll use the demo user that should already exist
   return {

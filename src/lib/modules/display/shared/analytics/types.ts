@@ -1,6 +1,6 @@
 // Analytics module types
 
-import type { BaseModuleConfig, ModuleCategory } from '$lib/modules/types';
+import type { BaseModuleConfig } from '$lib/modules/types';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- analytics modules receive dynamic variable payloads
 type DynamicValue = any;

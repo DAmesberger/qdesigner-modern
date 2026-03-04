@@ -301,12 +301,6 @@ export interface CarryForwardConfig {
   targetField: CarryForwardTargetField;
 }
 
-export interface Position {
-  x: number;
-  y: number;
-  z?: number;
-}
-
 // ============================================================================
 // Display Configuration Types
 // ============================================================================

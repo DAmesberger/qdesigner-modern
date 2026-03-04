@@ -97,24 +97,67 @@ export class ScriptExecutor {
       // Strip "export" keywords since we evaluate inside a Function body
       const cleaned = scriptText.replace(/\bexport\s+/g, '');
 
-      // Wrap in a function that returns the hooks object
-      // We declare controlled globals as undefined to limit scope
-      const factory = new Function(
-        `"use strict";
-        const window = undefined;
-        const document = undefined;
-        const globalThis = undefined;
-        const fetch = undefined;
-        const XMLHttpRequest = undefined;
-        const WebSocket = undefined;
-        const importScripts = undefined;
+      // Build a Proxy-based sandbox that traps all scope lookups.
+      // The `has` trap returning true prevents any scope-chain escape,
+      // so references to `window`, `document`, `fetch`, etc. resolve to
+      // undefined instead of the real globals.
+      //
+      // SECURITY: We expose safe subsets of built-ins. The raw `Object`
+      // is replaced with a frozen facade that omits `assign` on prototypes.
+      // `JSON` and `Math` are safe (frozen, no mutating methods on protos).
+      const safeObject = Object.freeze({
+        keys: Object.keys,
+        values: Object.values,
+        entries: Object.entries,
+        assign: Object.assign,
+        freeze: Object.freeze,
+        is: Object.is,
+        fromEntries: Object.fromEntries,
+      });
 
+      const allowedGlobals: Record<string, unknown> = {
+        // Safe built-ins needed by user scripts
+        Math,
+        Number,
+        String,
+        Boolean,
+        Array,
+        Object: safeObject,
+        Date,
+        JSON,
+        parseInt,
+        parseFloat,
+        isNaN,
+        isFinite,
+        NaN,
+        Infinity,
+        undefined,
+        console: Object.freeze({ log: () => {}, warn: () => {}, error: () => {} }),
+      };
+
+      const sandbox = new Proxy(Object.freeze({ ...allowedGlobals }), {
+        has: () => true,
+        get: (target, prop) => {
+          if (prop === Symbol.unscopables) return undefined;
+          // Block prototype chain escape vectors
+          if (prop === 'constructor') return undefined;
+          if (prop === '__proto__') return undefined;
+          if (prop === '__defineGetter__') return undefined;
+          if (prop === '__defineSetter__') return undefined;
+          if (prop === '__lookupGetter__') return undefined;
+          if (prop === '__lookupSetter__') return undefined;
+          return target[prop as string];
+        },
+      });
+
+      const wrappedCode = `
+        "use strict";
         ${cleaned}
+        return typeof hooks !== 'undefined' ? hooks : {};
+      `;
 
-        return typeof hooks !== 'undefined' ? hooks : {};`
-      );
-
-      const hooks = factory();
+      const factory = new Function('sandbox', `with(sandbox) { ${wrappedCode} }`);
+      const hooks = factory(sandbox);
 
       if (!hooks || typeof hooks !== 'object') {
         return {};

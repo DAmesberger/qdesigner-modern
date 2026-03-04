@@ -9,10 +9,7 @@ import type {
   Transformer,
   TransformationResult,
   TransformationContext,
-  ComputedVariable,
-  AggregationConfig,
-  AggregationFunction,
-  FilterConfig
+  ComputedVariable
 } from './types';
 import type { QuestionnaireSession, Response, QuestionnaireMetadata } from '$lib/shared/types/response';
 import { VariableEngine } from '$lib/scripting-engine';
@@ -318,7 +315,7 @@ export class TransformationPipeline {
    */
   private async computeVariables(
     session: QuestionnaireSession,
-    context: TransformationContext
+    _context: TransformationContext
   ): Promise<TransformationResult> {
     const enhanced = { ...session };
     const computed: Record<string, DynamicValue> = {};
@@ -401,7 +398,7 @@ export class TransformationPipeline {
    */
   private async filterResponses(
     session: QuestionnaireSession,
-    context: TransformationContext
+    _context: TransformationContext
   ): Promise<TransformationResult> {
     const filtered = { ...session };
     let originalCount = session.responses.length;
@@ -440,7 +437,7 @@ export class TransformationPipeline {
    */
   private async cleanData(
     session: QuestionnaireSession,
-    context: TransformationContext
+    _context: TransformationContext
   ): Promise<TransformationResult> {
     const cleaned = { ...session };
     const warnings: string[] = [];

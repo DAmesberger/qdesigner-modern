@@ -1,4 +1,20 @@
-import type { FrameSample, FrameStats, RGBAColor } from '$lib/shared';
+/**
+ * ReactionEngine — Frame-exact reaction time measurement.
+ *
+ * Provides sub-millisecond precision through:
+ * - Stimulus onset: RAF callbacks (visual), requestVideoFrameCallback (video),
+ *   AudioContext.currentTime (audio)
+ * - Response capture: event.timeStamp (DOMHighResTimeStamp)
+ * - Fallback: performance.now() when browser APIs unavailable
+ *
+ * Requires COOP/COEP headers for full timer precision (~5μs vs ~100μs).
+ * See src/hooks.server.ts for header configuration on fillout routes.
+ *
+ * For standard survey questions (response times in seconds), the general
+ * QuestionnaireRuntime path with performance.now() is sufficient.
+ */
+
+import type { FrameSample, RGBAColor } from '$lib/shared';
 import { WebGLRenderer } from '$lib/renderer';
 import type { Renderable } from '$lib/renderer';
 import type { ResourceManager } from '../resources/ResourceManager';
@@ -9,15 +25,18 @@ import type {
   ReactionTrialResult,
   ScheduledPhase,
   ReactionPhaseMark,
-  ReactionResponseMode,
   ReactionStimulusConfig,
+  TimingMethod,
 } from './types';
+import type { TimingGatekeeper } from '../timing/TimingGatekeeper';
 
 interface ReactionEngineOptions {
   canvas: HTMLCanvasElement;
   renderer?: WebGLRenderer;
   hooks?: ReactionEngineHooks;
   eventTarget?: Document | HTMLElement;
+  /** Optional gatekeeper for device qualification before first trial. */
+  gatekeeper?: TimingGatekeeper;
 }
 
 interface ResponseWaitResult {
@@ -39,16 +58,24 @@ export class ReactionEngine {
   private responsePromise: Promise<ReactionResponseCapture | null> | null = null;
   private responseEnabled = false;
   private stimulusOnsetTime: number | null = null;
+  private stimulusTimingMethod: TimingMethod = 'performance.now';
   private pendingStimulusOnsetMark = false;
+
+  private readonly gatekeeper?: TimingGatekeeper;
+  private gatekeeperRan = false;
 
   private readonly imageCache = new Map<string, HTMLImageElement>();
   private readonly videoCache = new Map<string, HTMLVideoElement>();
   private readonly audioCache = new Map<string, HTMLAudioElement>();
+  private readonly audioBufferCache = new Map<string, AudioBuffer>();
+  private audioContext: AudioContext | null = null;
 
   constructor(options: ReactionEngineOptions) {
     this.canvas = options.canvas;
     this.eventTarget = options.eventTarget || document;
     this.hooks = options.hooks;
+
+    this.gatekeeper = options.gatekeeper;
 
     if (options.renderer) {
       this.renderer = options.renderer;
@@ -87,12 +114,13 @@ export class ReactionEngine {
       }
     }
 
-    // ResourceManager stores AudioBuffer objects, but ReactionEngine uses
-    // HTMLAudioElement. Create HTMLAudioElements from the same URLs so the
-    // browser can serve them from the HTTP cache without a network round-trip.
-    // We cannot convert an AudioBuffer back to an HTMLAudioElement directly,
-    // but the underlying URL was already fetched and should be in the browser
-    // disk/memory cache after ResourceManager.preloadAll().
+    // ResourceManager stores AudioBuffer objects — seed our audioBufferCache
+    // so the AudioContext path can reuse them without re-fetching/decoding.
+    for (const [key, buffer] of rm.getAudioBufferCache()) {
+      if (!this.audioBufferCache.has(key)) {
+        this.audioBufferCache.set(key, buffer);
+      }
+    }
   }
 
   /**
@@ -151,9 +179,16 @@ export class ReactionEngine {
     this.renderer.setBackgroundColor(config.backgroundColor || [0, 0, 0, 1]);
     this.renderer.clearRenderables();
 
+    // Run device qualification before the first trial if a gatekeeper is provided.
+    if (this.gatekeeper && !this.gatekeeperRan) {
+      await this.gatekeeper.qualify();
+      this.gatekeeperRan = true;
+    }
+
     this.responseEnabled = false;
     this.pendingStimulusOnsetMark = false;
     this.stimulusOnsetTime = null;
+    this.stimulusTimingMethod = 'performance.now';
 
     const startedAt = performance.now();
     const frameLog: FrameSample[] = [];
@@ -200,6 +235,7 @@ export class ReactionEngine {
         trialId: config.id,
         startedAt,
         stimulusOnsetTime: this.stimulusOnsetTime,
+        stimulusTimingMethod: this.stimulusTimingMethod,
         response,
         isCorrect,
         timeout,
@@ -219,6 +255,11 @@ export class ReactionEngine {
     if (this.ownsRenderer) {
       this.renderer.destroy();
     }
+    if (this.audioContext) {
+      void this.audioContext.close().catch(() => {});
+      this.audioContext = null;
+    }
+    this.audioBufferCache.clear();
   }
 
   private runFixation(
@@ -351,11 +392,13 @@ export class ReactionEngine {
         const key = event.key.toLowerCase();
         if (allowedKeys.size > 0 && !allowedKeys.has(key)) return;
 
+        const { time, method } = this.getEventTime(event);
         this.resolveResponse({
           source: 'keyboard',
           value: key,
-          timestamp: performance.now(),
-          reactionTimeMs: this.computeReactionTime(performance.now()),
+          timestamp: time,
+          reactionTimeMs: this.computeReactionTime(time),
+          timingMethod: method,
         });
       };
 
@@ -373,11 +416,13 @@ export class ReactionEngine {
         const x = (event.clientX - rect.left) / rect.width;
         const y = (event.clientY - rect.top) / rect.height;
 
+        const { time, method } = this.getEventTime(event);
         this.resolveResponse({
           source: 'mouse',
           value: { x, y },
-          timestamp: performance.now(),
-          reactionTimeMs: this.computeReactionTime(performance.now()),
+          timestamp: time,
+          reactionTimeMs: this.computeReactionTime(time),
+          timingMethod: method,
         });
       };
 
@@ -396,11 +441,13 @@ export class ReactionEngine {
         const x = (touch.clientX - rect.left) / rect.width;
         const y = (touch.clientY - rect.top) / rect.height;
 
+        const { time, method } = this.getEventTime(event);
         this.resolveResponse({
           source: 'touch',
           value: { x, y },
-          timestamp: performance.now(),
-          reactionTimeMs: this.computeReactionTime(performance.now()),
+          timestamp: time,
+          reactionTimeMs: this.computeReactionTime(time),
+          timingMethod: method,
         });
       };
 
@@ -500,11 +547,24 @@ export class ReactionEngine {
     return Math.max(0, timestamp - this.stimulusOnsetTime);
   }
 
-  private setStimulusOnset(timestamp: number): void {
+  private setStimulusOnset(timestamp: number, method: TimingMethod = 'performance.now'): void {
     if (this.stimulusOnsetTime != null) return;
     this.stimulusOnsetTime = timestamp;
+    this.stimulusTimingMethod = method;
     this.pendingStimulusOnsetMark = false;
     this.renderer.markStimulusOnset();
+  }
+
+  /**
+   * Extract high-resolution timestamp from an input event.
+   * Uses event.timeStamp (DOMHighResTimeStamp) when available and valid,
+   * falling back to performance.now().
+   */
+  private getEventTime(event: Event): { time: number; method: TimingMethod } {
+    if (event.timeStamp > 0) {
+      return { time: event.timeStamp, method: 'event.timeStamp' };
+    }
+    return { time: performance.now(), method: 'performance.now' };
   }
 
   private createFixationRenderable(
@@ -631,6 +691,17 @@ export class ReactionEngine {
       const video = await this.loadVideo(stimulus.src, signal);
       if (!video) return null;
 
+      // Use requestVideoFrameCallback for precise onset timing when available.
+      // This gives us the compositor's presentationTime which is more accurate
+      // than RAF timestamps for video frames (~1 frame vs ~1-2 frames).
+      if ('requestVideoFrameCallback' in video) {
+        (video as HTMLVideoElement).requestVideoFrameCallback((_now, metadata) => {
+          this.setStimulusOnset(metadata.presentationTime, 'rvfc');
+        });
+      }
+      // If rVFC is unavailable, the existing RAF-based onset detection
+      // (pendingStimulusOnsetMark) handles it in subscribeFrameLogging.
+
       if (stimulus.autoplay !== false) {
         void video.play().catch(() => {
           // Ignore autoplay restrictions.
@@ -664,10 +735,21 @@ export class ReactionEngine {
     }
 
     if (stimulus.kind === 'audio') {
+      const volume = Math.max(0, Math.min(1, stimulus.volume ?? 1));
+
+      // Try AudioContext path for precise onset timing. AudioContext.currentTime
+      // is driven by the audio hardware clock and gives sub-millisecond precision
+      // for when audio actually reaches the DAC.
+      if (stimulus.autoplay !== false) {
+        const played = await this.playAudioViaContext(stimulus.src, volume, signal);
+        if (played) return null;
+      }
+
+      // Fallback to HTMLAudioElement when AudioContext is unavailable or fails.
       const audio = await this.loadAudio(stimulus.src, signal);
       if (!audio) return null;
 
-      audio.volume = Math.max(0, Math.min(1, stimulus.volume ?? 1));
+      audio.volume = volume;
       if (stimulus.autoplay !== false) {
         void audio.play().catch(() => {
           // Ignore autoplay restrictions.
@@ -870,6 +952,108 @@ export class ReactionEngine {
         signal.addEventListener('abort', abort, { once: true });
       }
     });
+  }
+
+  /**
+   * Get or create a shared AudioContext. Lazily initialized because
+   * AudioContext creation may require user gesture on some browsers.
+   */
+  private getOrCreateAudioContext(): AudioContext | null {
+    if (this.audioContext) return this.audioContext;
+    try {
+      const Ctor = globalThis.AudioContext ||
+        (globalThis as Record<string, unknown>).webkitAudioContext as typeof AudioContext | undefined;
+      if (!Ctor) return null;
+      this.audioContext = new Ctor();
+      return this.audioContext;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Play audio through the Web Audio API for precise onset timing.
+   *
+   * AudioContext.currentTime is driven by the audio hardware clock and
+   * provides sub-millisecond accuracy for when audio reaches the DAC.
+   * We convert this to the performance.now() domain so reaction times
+   * remain comparable across timing methods.
+   *
+   * Returns true if playback was successfully initiated via AudioContext.
+   */
+  private async playAudioViaContext(
+    src: string,
+    volume: number,
+    signal?: AbortSignal
+  ): Promise<boolean> {
+    const ctx = this.getOrCreateAudioContext();
+    if (!ctx) return false;
+
+    // Resume context if suspended (requires user gesture on first call).
+    if (ctx.state === 'suspended') {
+      try {
+        await ctx.resume();
+      } catch {
+        return false;
+      }
+    }
+
+    try {
+      const buffer = await this.decodeAudioBuffer(ctx, src, signal);
+      if (!buffer) return false;
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+
+      const gain = ctx.createGain();
+      gain.gain.value = volume;
+      source.connect(gain);
+      gain.connect(ctx.destination);
+
+      // Record the precise mapping between AudioContext and performance.now()
+      // clocks right before starting playback, to minimize clock-drift error.
+      const perfNowAtSchedule = performance.now();
+      const ctxTimeAtSchedule = ctx.currentTime;
+
+      // Schedule immediate playback.
+      source.start(0);
+
+      // Convert the AudioContext start time to performance.now() domain.
+      // The source starts at ctxTimeAtSchedule (or very close to it since
+      // we passed 0 for "now"). The onset in perf time is:
+      //   perfNowAtSchedule + (actualStartCtxTime - ctxTimeAtSchedule) * 1000
+      // Since we start at ctx.currentTime, the delta is ~0.
+      const onsetPerfTime = perfNowAtSchedule +
+        (ctx.currentTime - ctxTimeAtSchedule) * 1000;
+
+      this.setStimulusOnset(onsetPerfTime, 'audioContext');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Fetch and decode audio data into an AudioBuffer, with caching.
+   */
+  private async decodeAudioBuffer(
+    ctx: AudioContext,
+    src: string,
+    signal?: AbortSignal
+  ): Promise<AudioBuffer | null> {
+    if (this.audioBufferCache.has(src)) {
+      return this.audioBufferCache.get(src)!;
+    }
+
+    try {
+      const response = await fetch(src, { signal });
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      this.audioBufferCache.set(src, audioBuffer);
+      return audioBuffer;
+    } catch {
+      return null;
+    }
   }
 
   private async loadAudio(src: string, signal?: AbortSignal): Promise<HTMLAudioElement | null> {

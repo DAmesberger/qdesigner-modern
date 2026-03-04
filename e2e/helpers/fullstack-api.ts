@@ -41,6 +41,7 @@ async function requestJson(
   path: string,
   body?: unknown,
   token?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- third-party API response
 ): Promise<any> {
   const headers: Record<string, string> = {};
   if (token) {
@@ -169,6 +170,7 @@ export async function listProjectQuestionnaires(
   requestContext: APIRequestContext,
   projectId: string,
   accessToken: string
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- third-party API response
 ): Promise<any[]> {
   return requestJson(requestContext, 'GET', `/projects/${projectId}/questionnaires`, undefined, accessToken);
 }
@@ -177,6 +179,7 @@ export async function getSessionById(
   requestContext: APIRequestContext,
   sessionId: string,
   accessToken: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- third-party API response
 ): Promise<any> {
   return requestJson(requestContext, 'GET', `/sessions/${sessionId}`, undefined, accessToken);
 }

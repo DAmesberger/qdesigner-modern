@@ -24,7 +24,7 @@ export class QuestionFactory {
       
       // Convert ModuleItem to Question format for backward compatibility
       return this.moduleItemToQuestion(moduleItem);
-    } catch (error) {
+    } catch (_error) {
       // If module not found in registry, throw a helpful error
       throw new Error(`Unknown question type: ${type}. Make sure the module is registered.`);
     }
@@ -35,6 +35,7 @@ export class QuestionFactory {
    */
   private static moduleItemToQuestion(item: ModuleItem): Question {
     // Base question properties
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- building Question object dynamically from module item
     const question: any = {
       id: item.id,
       type: item.type,
@@ -80,7 +81,7 @@ export class QuestionFactory {
     }
     
     // Copy any additional configuration
-    const { response, display, navigation, media, ...otherConfig } = item.config || {};
+    const { response: _response, display: _display, navigation: _navigation, media: _media, ...otherConfig } = item.config || {};
     
     // Store remaining config under config property
     if (Object.keys(otherConfig).length > 0) {
@@ -135,6 +136,7 @@ export class QuestionFactory {
       category: this.getModuleCategory(question),
       order: question.order || 0,
       config: {},
+      /* eslint-disable @typescript-eslint/no-explicit-any -- Question union type lacks index signature for these optional properties */
       text: (question as any).text,
       instruction: (question as any).instruction,
       conditions: (question as any).conditions,
@@ -142,6 +144,7 @@ export class QuestionFactory {
       validation: (question as any).validation,
       layout: (question as any).layout,
       timing: (question as any).timing
+      /* eslint-enable @typescript-eslint/no-explicit-any */
     };
     
     // Extract response configuration

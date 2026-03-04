@@ -40,7 +40,7 @@ test.describe('Collaboration and Multi-Tenant Scenarios', () => {
     const assistantPage = await context3.newPage();
     
     // All users login and navigate to same questionnaire
-    const questionnaireId = 'collab-test-' + Date.now();
+    const _questionnaireId = 'collab-test-' + Date.now();
     
     // PI creates questionnaire
     await piPage.goto('/login');

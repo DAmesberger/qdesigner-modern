@@ -3,16 +3,13 @@
  * High-performance batch processing with progress tracking, error recovery, and parallel processing
  */
 
-import type { 
-  BatchJob, 
-  BatchConfig, 
-  BatchStatus, 
-  BatchProgress, 
-  BatchResult, 
-  BatchError, 
-  BatchProcessor as IBatchProcessor, 
-  BatchContext,
-  PipelineEvent
+import type {
+  BatchJob,
+  BatchConfig,
+  BatchStatus,
+  BatchError,
+  BatchProcessor as IBatchProcessor,
+  BatchContext
 } from './types';
 import { QueueManager } from './QueueManager';
 
@@ -23,7 +20,7 @@ export class BatchProcessor {
   private jobs = new Map<string, BatchJob>();
   private processors = new Map<string, IBatchProcessor<DynamicValue, DynamicValue>>();
   private queueManager: QueueManager;
-  private eventHandlers = new Map<string, Function[]>();
+  private eventHandlers = new Map<string, ((...args: unknown[]) => void)[]>();
   private defaultConfig: BatchConfig;
 
   constructor(config?: Partial<BatchConfig>) {
@@ -193,9 +190,9 @@ export class BatchProcessor {
    */
   public clearCompletedJobs(): number {
     const completedJobs = Array.from(this.jobs.entries())
-      .filter(([_, job]) => job.status === 'completed' || job.status === 'failed');
-    
-    completedJobs.forEach(([jobId, _]) => {
+      .filter(([_id, job]) => job.status === 'completed' || job.status === 'failed');
+
+    completedJobs.forEach(([jobId, _job]) => {
       this.jobs.delete(jobId);
     });
 
@@ -485,14 +482,14 @@ export class BatchProcessor {
   /**
    * Event handling
    */
-  public on(event: string, handler: Function): void {
+  public on(event: string, handler: (...args: unknown[]) => void): void {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, []);
     }
     this.eventHandlers.get(event)!.push(handler);
   }
 
-  public off(event: string, handler: Function): void {
+  public off(event: string, handler: (...args: unknown[]) => void): void {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       const index = handlers.indexOf(handler);
@@ -561,7 +558,7 @@ export class BatchProcessor {
   public getProcessorStats(): Record<string, DynamicValue> {
     const stats: Record<string, DynamicValue> = {};
     
-    for (const [name, processor] of this.processors) {
+    for (const [name, _processor] of this.processors) {
       const jobs = Array.from(this.jobs.values())
         .filter(job => job.metadata?.processorName === name);
       

@@ -257,6 +257,7 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
     this.engine = null;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
   private getConfig(question: any): NormalizedReactionConfig {
     const config = (question.config || question.display || {}) as ReactionTimeQuestionConfig;
     const validKeys = config.response?.validKeys || ['f', 'j'];

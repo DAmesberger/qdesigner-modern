@@ -13,7 +13,7 @@ export class MatrixStorage extends BaseQuestionStorage {
     return 'matrix';
   }
 
-  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+  async getResponses(_questionId: string): Promise<QuestionResponse[]> {
     return this.getAllForSession();
   }
   

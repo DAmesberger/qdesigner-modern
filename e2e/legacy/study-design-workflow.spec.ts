@@ -2,8 +2,11 @@ import { test, expect } from '@playwright/test';
 import { createTestUser, setupTestOrganization } from '../helpers/test-setup';
 
 test.describe('Study Design Workflow - Research Designer Journey', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
   let designer: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
   let organization: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
   let project: any;
   
   test.beforeAll(async () => {

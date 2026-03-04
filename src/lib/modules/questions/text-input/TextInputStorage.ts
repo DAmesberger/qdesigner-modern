@@ -10,17 +10,18 @@ export class TextInputStorage extends BaseQuestionStorage {
     return 'text-input';
   }
 
-  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+  async getResponses(_questionId: string): Promise<QuestionResponse[]> {
     return this.getAllForSession();
   }
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
   parseValue(value: any): string {
     if (typeof value === 'string') return value;
     if (value == null) return '';
     return String(value);
   }
   
-  formatValue(value: string): any {
+  formatValue(value: string): string {
     return value || '';
   }
   

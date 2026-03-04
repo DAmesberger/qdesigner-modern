@@ -1,7 +1,6 @@
 import type { PageLoad } from './$types';
 import { api } from '$lib/services/api';
 import { error } from '@sveltejs/kit';
-import { browser } from '$app/environment';
 
 export const ssr = false;
 

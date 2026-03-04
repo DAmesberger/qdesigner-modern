@@ -37,7 +37,7 @@ export class HTMLRenderer extends BaseRenderer {
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
   }
   
-  public async preload(resourceManager: ResourceManager): Promise<void> {
+  public async preload(_resourceManager: ResourceManager): Promise<void> {
     // Pre-render HTML to ensure it's ready
     await this.renderHTML();
     this.ready = true;
@@ -134,7 +134,7 @@ export class HTMLRenderer extends BaseRenderer {
     this.drawTexture(gl, this.texture, context);
   }
   
-  private drawTexture(gl: WebGL2RenderingContext, texture: WebGLTexture, context: RenderContext): void {
+  private drawTexture(_gl: WebGL2RenderingContext, _texture: WebGLTexture, _context: RenderContext): void {
     // In a real implementation, this would use the WebGL shader program
     // to draw the texture at the specified position with proper scaling
     // For now, this is a placeholder showing the concept

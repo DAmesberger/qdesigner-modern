@@ -1,9 +1,7 @@
 import type { Question } from '$lib/shared';
-import type { IStimulus } from '../stimuli/Stimulus';
 import type { VariableEngine } from '$lib/scripting-engine';
 import type { WebGLRenderer } from '$lib/renderer';
 import type { ResourceManager } from '../resources/ResourceManager';
-import type { ModuleCategory } from '$lib/modules/types';
 import { moduleRegistry } from '$lib/modules/registry';
 import { interpolateVariables } from '$lib/services/variableInterpolation';
 import { TextRenderer } from '../renderers/TextRenderer';
@@ -12,7 +10,7 @@ import { VideoRenderer } from '../renderers/VideoRenderer';
 import { AudioRenderer } from '../renderers/AudioRenderer';
 import { HTMLRenderer } from '../renderers/HTMLRenderer';
 import { CompositeRenderer } from '../renderers/CompositeRenderer';
-import type { IQuestionRenderer, RendererConfig } from '../renderers/QuestionRenderer';
+import type { IQuestionRenderer } from '../renderers/QuestionRenderer';
 import {
   normalizeStatisticalFeedbackConfig,
   resolveStatisticalFeedbackSeries,
@@ -566,12 +564,12 @@ export class QuestionPresenter {
             : 'linear-gradient(90deg, #2563eb 0%, #0ea5e9 100%)';
 
         return `
-          <div style=\"display:grid;grid-template-columns:minmax(160px,1fr) 1fr auto;gap:12px;align-items:center;margin:8px 0;\">
-            <span style=\"color:#334155;font-size:14px;\">${label}</span>
-            <span style=\"display:block;height:10px;border-radius:999px;background:#e2e8f0;overflow:hidden;\">
-              <span style=\"display:block;height:100%;width:${width}%;background:${barColor};\"></span>
+          <div style="display:grid;grid-template-columns:minmax(160px,1fr) 1fr auto;gap:12px;align-items:center;margin:8px 0;">
+            <span style="color:#334155;font-size:14px;">${label}</span>
+            <span style="display:block;height:10px;border-radius:999px;background:#e2e8f0;overflow:hidden;">
+              <span style="display:block;height:100%;width:${width}%;background:${barColor};"></span>
             </span>
-            <span style=\"font-family:ui-monospace,Menlo,monospace;color:#0f172a;font-size:14px;\">${displayValue}</span>
+            <span style="font-family:ui-monospace,Menlo,monospace;color:#0f172a;font-size:14px;">${displayValue}</span>
           </div>
         `;
       })
@@ -582,9 +580,9 @@ export class QuestionPresenter {
         const displayValue =
           typeof value === 'number' && Number.isFinite(value) ? value.toFixed(3) : 'N/A';
         return `
-          <div style=\"background:#eef2ff;border-radius:8px;padding:8px 10px;\">
-            <div style=\"font-size:12px;color:#475569;\">${this.escapeHtml(key)}</div>
-            <div style=\"font-size:14px;font-weight:700;color:#0f172a;\">${displayValue}</div>
+          <div style="background:#eef2ff;border-radius:8px;padding:8px 10px;">
+            <div style="font-size:12px;color:#475569;">${this.escapeHtml(key)}</div>
+            <div style="font-size:14px;font-weight:700;color:#0f172a;">${displayValue}</div>
           </div>
         `;
       })
@@ -596,19 +594,19 @@ export class QuestionPresenter {
     const safeError = errorMessage ? this.escapeHtml(errorMessage) : '';
 
     return `
-      <div style=\"display:grid;gap:12px;padding:20px;border-radius:16px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border:1px solid #dbe3ed;color:#0f172a;\">
+      <div style="display:grid;gap:12px;padding:20px;border-radius:16px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border:1px solid #dbe3ed;color:#0f172a;">
         <div>
-          <div style=\"font-size:20px;font-weight:700;\">${safeTitle}</div>
-          ${safeSubtitle ? `<div style=\"margin-top:4px;color:#475569;font-size:14px;\">${safeSubtitle}</div>` : ''}
-          <div style=\"margin-top:4px;color:#64748b;font-size:12px;font-family:ui-monospace,Menlo,monospace;\">${safeMeta}</div>
+          <div style="font-size:20px;font-weight:700;">${safeTitle}</div>
+          ${safeSubtitle ? `<div style="margin-top:4px;color:#475569;font-size:14px;">${safeSubtitle}</div>` : ''}
+          <div style="margin-top:4px;color:#64748b;font-size:12px;font-family:ui-monospace,Menlo,monospace;">${safeMeta}</div>
         </div>
         ${
           safeError
-            ? `<div style=\"padding:10px 12px;border-radius:10px;background:#fee2e2;color:#991b1b;font-size:13px;\">${safeError}</div>`
+            ? `<div style="padding:10px 12px;border-radius:10px;background:#fee2e2;color:#991b1b;font-size:13px;">${safeError}</div>`
             : ''
         }
-        ${rows || '<div style=\"color:#64748b;font-size:14px;\">No statistical data available.</div>'}
-        ${config.showSummary && summary ? `<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;\">${summary}</div>` : ''}
+        ${rows || '<div style="color:#64748b;font-size:14px;">No statistical data available.</div>'}
+        ${config.showSummary && summary ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">${summary}</div>` : ''}
       </div>
     `;
   }
@@ -618,7 +616,7 @@ export class QuestionPresenter {
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/\"/g, '&quot;')
+      .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
 

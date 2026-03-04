@@ -150,7 +150,7 @@ export class CompositeStimulus extends BaseStimulus {
     this.renderCompositeTexture(gl, context);
   }
   
-  private renderCompositeTexture(gl: WebGL2RenderingContext, context: RenderContext): void {
+  private renderCompositeTexture(_gl: WebGL2RenderingContext, _context: RenderContext): void {
     // This would render the framebuffer texture to the screen
     // Implementation similar to ImageStimulus but using the composite texture
     // For brevity, not implementing the full shader setup here

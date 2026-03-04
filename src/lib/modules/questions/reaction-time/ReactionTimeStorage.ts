@@ -8,6 +8,7 @@ interface ReactionResponse {
   key: string | null;
   reactionTime: number | null;
   isCorrect: boolean | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic timing metadata
   timing?: any;
   trialNumber: number;
   isPractice: boolean;
@@ -26,7 +27,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     return 'reaction-time';
   }
 
-  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+  async getResponses(_questionId: string): Promise<QuestionResponse[]> {
     return this.getAllForSession();
   }
 
@@ -339,6 +340,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
   /**
    * Parse stored value
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
   protected parseValue(value: any): ReactionTimeValue {
     if (!value) return { responses: [] };
     if (typeof value === 'string') {
@@ -351,6 +353,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     return value;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic aggregation value type
   formatAggregation(type: string, value: any): string {
     switch (type) {
       case 'rtStats':
@@ -371,7 +374,7 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
   /**
    * Get all available aggregations for reaction time questions
    */
-  async getAllAggregations(questionId: string): Promise<Record<string, any>> {
+  async getAllAggregations(questionId: string): Promise<Record<string, unknown>> {
     const [rtStats, accuracy, timeouts, learning, keyDist, outliers] = await Promise.all([
       this.getReactionTimeStats(questionId),
       this.getAccuracyStats(questionId),

@@ -1,11 +1,9 @@
 import { ResponsePersistenceService } from '../services/ResponsePersistenceService';
 import { SessionManagementService } from '../services/SessionManagementService';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
-import { WebGLRenderer } from '$lib/renderer';
 import { VariableEngine } from '$lib/scripting-engine';
 import { RuntimeEventBus } from './RuntimeEventBus';
 import type { Questionnaire, Question, Response, Page, QuestionnaireSession } from '$lib/shared';
-import { nanoid } from 'nanoid';
 
 export interface FilloutRuntimeConfig {
 	canvas: HTMLCanvasElement;
@@ -98,7 +96,7 @@ export class FilloutRuntime {
 	 * when new responses are pushed, eliminating the need for polling.
 	 */
 	private setupResponseProxy(): void {
-		const session = // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private session for proxy wiring
+		const session =  
 		(this.runtime as unknown as Record<string, unknown>).session as QuestionnaireSession | null;
 		if (!session) return;
 
@@ -298,7 +296,7 @@ export class FilloutRuntime {
 	}
 
 	getSession(): QuestionnaireSession | null {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private session for proxy wiring
+		 
 		return (this.runtime as unknown as Record<string, unknown>).session as QuestionnaireSession | null;
 	}
 

@@ -33,8 +33,7 @@
 
   const isPublished = $derived.by(() => {
     const q = designerStore.questionnaire;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- status is set by backend but not in frontend type
-    const status = (q as any).status as string | undefined;
+    const status = (q as any).status as string | undefined; // status is set by backend but not in frontend type
     const metaStatus = q.metadata?.status as string | undefined;
     return status === 'published' || metaStatus === 'published';
   });

@@ -4,7 +4,7 @@ import { browser } from '$app/environment';
 import { auth } from '$lib/services/auth';
 import { api } from '$lib/services/api';
 
-export const load: PageLoad = async ({ url }) => {
+export const load: PageLoad = async () => {
   // Check if already logged in
   if (browser) {
     const session = await auth.getSession();

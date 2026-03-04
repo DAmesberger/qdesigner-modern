@@ -101,6 +101,7 @@ function createToastStore() {
       options: {
         loading: string;
         success: string | ((data: T) => string);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- error callback receives unknown rejection value
         error: string | ((error: any) => string);
       }
     ): Promise<T> => {

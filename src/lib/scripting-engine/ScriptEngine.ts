@@ -1,4 +1,9 @@
-// ScriptEngine - JavaScript execution in Web Worker with sandboxing
+// ScriptEngine - JavaScript execution via shared ScriptWorker with
+// AST-first evaluation for formula expressions, Worker fallback for
+// general scripts.
+
+import { ScriptWorker, type WorkerResponse } from '$lib/runtime/core/ScriptWorker';
+import { FormulaParser, ASTEvaluator, type ASTEvaluatorOptions } from '@qdesigner/scripting-engine';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- scripting context intentionally accepts arbitrary JSON-like values
 type DynamicValue = any;
@@ -38,213 +43,181 @@ export interface ScriptResult {
   executionTime?: number;
 }
 
+/** Singleton shared worker used by all ScriptEngine instances. */
+let sharedWorker: ScriptWorker | null = null;
+
+function getSharedWorker(): ScriptWorker {
+  if (!sharedWorker) {
+    sharedWorker = new ScriptWorker(5_000);
+  }
+  return sharedWorker;
+}
+
 export class ScriptEngine {
-  private worker: Worker | null = null;
-  private scriptCache = new Map<string, Function>();
   private executionTimeout = 5000; // 5 seconds default
+  private parser: FormulaParser;
 
   constructor() {
-    this.initializeWorker();
+    this.parser = new FormulaParser();
   }
 
-  private initializeWorker(): void {
-    if (typeof Worker !== 'undefined') {
-      // Create worker from inline blob to avoid separate file
-      const workerCode = `
-        // Script execution worker
-        self.onmessage = function(e) {
-          const { id, script, context, timeout } = e.data;
-          
-          // Set up timeout
-          const timeoutId = setTimeout(() => {
-            self.postMessage({
-              id,
-              success: false,
-              error: 'Script execution timeout'
-            });
-          }, timeout);
+  /**
+   * Execute a script. Attempts AST-first evaluation for simple formula
+   * expressions (no side effects, no `new Function`). Falls back to the
+   * shared ScriptWorker for general JavaScript.
+   */
+  public async execute(script: string, context: ScriptContext): Promise<ScriptResult> {
+    const logs: string[] = [];
 
-          try {
-            // Create sandbox function
-            const sandboxedFunction = new Function(
-              'variables', 'answers', 'current', 'utils',
-              \`
-              "use strict";
-              // Prevent access to global scope
-              const window = undefined;
-              const document = undefined;
-              const global = undefined;
-              const self = undefined;
-              const postMessage = undefined;
-              const importScripts = undefined;
-              const fetch = undefined;
-              const XMLHttpRequest = undefined;
-              const WebSocket = undefined;
-              
-              // User script
-              \${script}
-              \`
-            );
+    // ── AST-first path ─────────────────────────────────────────────
+    // If the script looks like a pure formula expression (e.g.
+    // `return SUM(q1, q2) / 2`), parse it as an AST and evaluate
+    // without any code generation.
+    const astResult = this.tryASTEvaluation(script, context, logs);
+    if (astResult !== undefined) {
+      return astResult;
+    }
 
-            const startTime = performance.now();
-            const result = sandboxedFunction(
-              context.variables,
-              context.answers,
-              context.current,
-              context.utils
-            );
-            const executionTime = performance.now() - startTime;
+    // ── Worker path ────────────────────────────────────────────────
+    const workerContext: Record<string, DynamicValue> = {
+      variables: context.variables,
+      answers: context.answers,
+      current: context.current,
+      // Note: utility functions can't be serialised to a worker,
+      // so the worker inline code provides its own safe implementations.
+    };
 
-            clearTimeout(timeoutId);
-            
-            self.postMessage({
-              id,
-              success: true,
-              value: result,
-              executionTime,
-              logs: context.utils._logs || []
-            });
-          } catch (error) {
-            clearTimeout(timeoutId);
-            self.postMessage({
-              id,
-              success: false,
-              error: (error as Error).message || 'Unknown error'
-            });
-          }
-        };
-      `;
+    const worker = getSharedWorker();
 
-      const blob = new Blob([workerCode], { type: 'application/javascript' });
-      this.worker = new Worker(URL.createObjectURL(blob));
+    // Wrap script with utility function definitions so they're available
+    const wrappedScript = this.wrapWithUtils(script);
+
+    const response: WorkerResponse = await worker.execute(
+      wrappedScript,
+      workerContext,
+      this.executionTimeout
+    );
+
+    return {
+      success: response.success,
+      value: response.value,
+      error: response.error,
+      logs: [...logs, ...(response.logs ?? [])],
+      executionTime: response.executionTime,
+    };
+  }
+
+  /**
+   * Try evaluating the script as a pure formula expression via the AST
+   * evaluator. Returns undefined if the script is too complex for AST eval.
+   */
+  private tryASTEvaluation(
+    script: string,
+    context: ScriptContext,
+    logs: string[]
+  ): ScriptResult | undefined {
+    // Only attempt AST eval for simple expression-like scripts.
+    // Strip leading `return ` and trailing `;` for formula parsing.
+    let expr = script.trim();
+    if (expr.startsWith('return ')) {
+      expr = expr.slice(7).trim();
+    }
+    if (expr.endsWith(';')) {
+      expr = expr.slice(0, -1).trim();
+    }
+
+    // Reject if it looks like multi-statement code
+    if (
+      expr.includes('\n') ||
+      expr.includes(';') ||
+      expr.includes('{') ||
+      expr.includes('var ') ||
+      expr.includes('let ') ||
+      expr.includes('const ') ||
+      expr.includes('function ')
+    ) {
+      return undefined;
+    }
+
+    try {
+      const ast = this.parser.parse(expr);
+      const startTime = performance.now();
+
+      // Build variable map from context
+      const variables = new Map<string, DynamicValue>();
+      if (context.variables) {
+        for (const [k, v] of Object.entries(context.variables)) {
+          variables.set(k, v);
+        }
+      }
+      if (context.answers) {
+        for (const [k, v] of Object.entries(context.answers)) {
+          variables.set(k, v);
+        }
+      }
+
+      const opts: ASTEvaluatorOptions = {
+        variables,
+        context: { variables },
+      };
+      const evaluator = new ASTEvaluator(opts);
+      const value = evaluator.evaluate(ast);
+      const executionTime = performance.now() - startTime;
+
+      return { success: true, value, executionTime, logs };
+    } catch {
+      // AST parse/eval failed — fall through to worker path
+      return undefined;
     }
   }
 
   /**
-   * Execute a script in the sandboxed environment
+   * Wrap script with inline utility function definitions so they're
+   * available inside the worker sandbox.
    */
-  public async execute(script: string, context: ScriptContext): Promise<ScriptResult> {
-    // Add logging capability to utils
-    const logs: string[] = [];
-    const enhancedContext = {
-      ...context,
-      utils: {
-        ...this.createUtils(),
-        log: (...args: DynamicValue[]) => {
-          logs.push(args.map(arg => String(arg)).join(' '));
-        },
-        _logs: logs
-      }
-    };
-
-    if (this.worker) {
-      // Execute in worker for better isolation
-      return this.executeInWorker(script, enhancedContext);
-    } else {
-      // Fallback to main thread execution
-      return this.executeInMainThread(script, enhancedContext);
-    }
-  }
-
-  private executeInWorker(script: string, context: ScriptContext): Promise<ScriptResult> {
-    return new Promise((resolve) => {
-      const id = Math.random().toString(36).substr(2, 9);
-      
-      const handleMessage = (e: MessageEvent) => {
-        if (e.data.id === id) {
-          this.worker!.removeEventListener('message', handleMessage);
-          resolve(e.data);
-        }
-      };
-
-      this.worker!.addEventListener('message', handleMessage);
-      this.worker!.postMessage({
-        id,
-        script,
-        context,
-        timeout: this.executionTimeout
-      });
-
-      // Fallback timeout
-      setTimeout(() => {
-        this.worker!.removeEventListener('message', handleMessage);
-        resolve({
-          success: false,
-          error: 'Script execution timeout'
-        });
-      }, this.executionTimeout + 1000);
-    });
-  }
-
-  private executeInMainThread(script: string, context: ScriptContext): Promise<ScriptResult> {
-    return new Promise((resolve) => {
-      try {
-        const startTime = performance.now();
-        
-        // Create sandboxed function
-        const sandboxedFunction = new Function(
-          'variables', 'answers', 'current', 'utils',
-          `
-          "use strict";
-          // User script
-          ${script}
-          `
-        );
-
-        const result = sandboxedFunction(
-          context.variables,
-          context.answers,
-          context.current,
-          context.utils
-        );
-
-        const executionTime = performance.now() - startTime;
-
-        resolve({
-          success: true,
-          value: result,
-          executionTime,
-          logs: (context.utils as DynamicValue)._logs || []
-        });
-      } catch (error: DynamicValue) {
-        resolve({
-          success: false,
-          error: error.message || 'Unknown error'
-        });
-      }
-    });
+  private wrapWithUtils(script: string): string {
+    return `
+var utils = {
+  sum: function(v) { var s=0; for(var i=0;i<v.length;i++) s+=v[i]; return s; },
+  mean: function(v) { if(!v.length) return 0; var s=0; for(var i=0;i<v.length;i++) s+=v[i]; return s/v.length; },
+  min: function(v) { return Math.min.apply(null,v); },
+  max: function(v) { return Math.max.apply(null,v); },
+  count: function(v) { return v.length; },
+  range: function(a,b) { var r=[]; for(var i=a;i<=b;i++) r.push(i); return r; },
+  random: function(a,b) { a=a||0; b=b||1; return Math.random()*(b-a)+a; },
+  now: function() { return Date.now(); },
+  log: function() { console.log.apply(console, arguments); }
+};
+${script}`;
   }
 
   /**
    * Validate a script without executing it
    */
   public validate(script: string): { valid: boolean; error?: string } {
+    // First try AST parse
+    let expr = script.trim();
+    if (expr.startsWith('return ')) expr = expr.slice(7).trim();
+    if (expr.endsWith(';')) expr = expr.slice(0, -1).trim();
+
+    if (!expr.includes('{') && !expr.includes(';') && !expr.includes('\n')) {
+      try {
+        this.parser.parse(expr);
+        return { valid: true };
+      } catch {
+        // Fall through to Function-based validation
+      }
+    }
+
     try {
-      new Function(script);
+      const sandbox = new Proxy(Object.freeze({}), { has: () => true });
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- syntax validation only
+      sandbox;
+      new Function('sandbox', `with(sandbox) { "use strict"; ${script} }`);
       return { valid: true };
     } catch (error: DynamicValue) {
-      return { 
-        valid: false, 
-        error: error.message 
-      };
+      return { valid: false, error: error.message };
     }
-  }
-
-  /**
-   * Create utility functions available in scripts
-   */
-  private createUtils(): ScriptUtils {
-    return {
-      sum: (values: number[]) => values.reduce((a, b) => a + b, 0),
-      mean: (values: number[]) => values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0,
-      min: (values: number[]) => Math.min(...values),
-      max: (values: number[]) => Math.max(...values),
-      count: (values: DynamicValue[]) => values.length,
-      range: (start: number, end: number) => Array.from({ length: end - start + 1 }, (_, i) => start + i),
-      random: (min = 0, max = 1) => Math.random() * (max - min) + min,
-      now: () => Date.now(),
-      log: () => {} // Placeholder, replaced in execute
-    };
   }
 
   /**
@@ -255,10 +228,10 @@ export class ScriptEngine {
 // Available in all scripts:
 
 // Variables object containing all questionnaire variables
-declare const variables: Record<string, DynamicValue>;
+declare const variables: Record<string, any>;
 
 // Answers object containing all questionnaire answers
-declare const answers: Record<string, DynamicValue>;
+declare const answers: Record<string, any>;
 
 // Current context information
 declare const current: {
@@ -273,11 +246,11 @@ declare const utils: {
   mean(values: number[]): number;
   min(values: number[]): number;
   max(values: number[]): number;
-  count(values: DynamicValue[]): number;
+  count(values: any[]): number;
   range(start: number, end: number): number[];
   random(min?: number, max?: number): number;
   now(): number;
-  log(...args: DynamicValue[]): void;
+  log(...args: any[]): void;
 };
 
 // Common patterns:
@@ -291,10 +264,17 @@ declare const utils: {
    * Clean up resources
    */
   public destroy(): void {
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
+    // Don't destroy the shared worker here — it's shared across instances.
+    // Call ScriptEngine.destroySharedWorker() at app teardown.
+  }
+
+  /**
+   * Terminate the shared worker. Call this at application shutdown.
+   */
+  public static destroySharedWorker(): void {
+    if (sharedWorker) {
+      sharedWorker.destroy();
+      sharedWorker = null;
     }
-    this.scriptCache.clear();
   }
 }

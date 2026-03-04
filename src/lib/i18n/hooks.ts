@@ -2,7 +2,6 @@
 // Svelte hooks for i18n integration
 
 import { derived } from 'svelte/store';
-import { browser } from '$app/environment';
 import i18n from './config';
 import type { TFunction } from 'i18next';
 import type { TranslationHook } from './types';
@@ -22,7 +21,7 @@ type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
 // Create a derived store for translations that updates when language changes
 export const t = derived<[typeof currentLanguage, typeof isInitialized], TranslateFn>(
   [currentLanguage, isInitialized],
-  ([$currentLanguage, $isInitialized]): TranslateFn => {
+  ([_$currentLanguage, $isInitialized]): TranslateFn => {
     if (!$isInitialized) {
       return (key: string) => key;
     }
@@ -41,6 +40,7 @@ export const t = derived<[typeof currentLanguage, typeof isInitialized], Transla
 // Hook for using translations in Svelte components
 export function useTranslation(namespace?: string): TranslationHook {
   // Create namespaced translation function
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- i18n interpolation options have dynamic shape
   const tFunc = ((key: string, options?: any) => {
     const fullKey = namespace ? `${namespace}:${key}` : key;
     try {
@@ -71,6 +71,7 @@ export function useTranslation(namespace?: string): TranslationHook {
 // Hook for language switching functionality
 export function useLanguageSwitcher() {
   let currentLang = '';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- i18n language config has dynamic shape
   let supportedLangs: any[] = [];
   
   currentLanguage.subscribe(lang => { currentLang = lang; });
@@ -121,11 +122,11 @@ export function useFormatters() {
   const formatNumber = (value: number, options?: Intl.NumberFormatOptions) => {
     try {
       return new Intl.NumberFormat(currentLang, options).format(value);
-    } catch (error) {
+    } catch (_error) {
       return new Intl.NumberFormat('en', options).format(value);
     }
   };
-  
+
   const formatCurrency = (value: number, currency: string = 'USD', options?: Intl.NumberFormatOptions) => {
     try {
       return new Intl.NumberFormat(currentLang, {
@@ -133,7 +134,7 @@ export function useFormatters() {
         currency,
         ...options
       }).format(value);
-    } catch (error) {
+    } catch (_error) {
       return new Intl.NumberFormat('en', {
         style: 'currency',
         currency: 'USD',
@@ -141,16 +142,16 @@ export function useFormatters() {
       }).format(value);
     }
   };
-  
+
   const formatDate = (date: Date | string | number, options?: Intl.DateTimeFormatOptions) => {
     const dateObj = date instanceof Date ? date : new Date(date);
     try {
       return new Intl.DateTimeFormat(currentLang, options).format(dateObj);
-    } catch (error) {
+    } catch (_error) {
       return new Intl.DateTimeFormat('en', options).format(dateObj);
     }
   };
-  
+
   const formatTime = (date: Date | string | number, options?: Intl.DateTimeFormatOptions) => {
     const dateObj = date instanceof Date ? date : new Date(date);
     const defaultOptions: Intl.DateTimeFormatOptions = {
@@ -158,24 +159,24 @@ export function useFormatters() {
       minute: '2-digit',
       ...options
     };
-    
+
     try {
       return new Intl.DateTimeFormat(currentLang, defaultOptions).format(dateObj);
-    } catch (error) {
+    } catch (_error) {
       return new Intl.DateTimeFormat('en', defaultOptions).format(dateObj);
     }
   };
-  
+
   const formatRelativeTime = (date: Date | string | number, options?: { numeric?: 'always' | 'auto'; style?: 'long' | 'short' | 'narrow' }) => {
     const dateObj = date instanceof Date ? date : new Date(date);
     const { numeric = 'auto', style = 'long' } = options || {};
-    
+
     try {
       const rtf = new Intl.RelativeTimeFormat(currentLang, { numeric, style });
-      
+
       const diff = dateObj.getTime() - Date.now();
       const absDiff = Math.abs(diff);
-      
+
       if (absDiff < 60000) {
         return rtf.format(Math.round(diff / 1000), 'second');
       } else if (absDiff < 3600000) {
@@ -189,7 +190,7 @@ export function useFormatters() {
       } else {
         return rtf.format(Math.round(diff / 31536000000), 'year');
       }
-    } catch (error) {
+    } catch (_error) {
       // Fallback for browsers without RelativeTimeFormat
       const diff = dateObj.getTime() - Date.now();
       const absDiff = Math.abs(diff);
@@ -218,7 +219,7 @@ export function useFormatters() {
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals
       }).format(value / 100);
-    } catch (error) {
+    } catch (_error) {
       return new Intl.NumberFormat('en', {
         style: 'percent',
         minimumFractionDigits: decimals,
@@ -236,7 +237,6 @@ export function useFormatters() {
     // Check for modern ListFormat support
     if ('ListFormat' in Intl) {
       try {
-        // @ts-ignore - ListFormat might not be in all TypeScript versions
         return new Intl.ListFormat(currentLang, { style, type }).format(items);
       } catch {
         // Fall through to manual formatting
@@ -324,8 +324,8 @@ export function useDirectionality() {
 // Hook for managing translation loading states
 export function useTranslationLoader() {
   const loadNamespace = async (namespace: string, language?: string): Promise<void> => {
-    const lang = language || i18n.language;
-    
+    const _lang = language || i18n.language;
+
     translationLoadingState.update(state => ({
       ...state,
       isLoading: true,
@@ -415,6 +415,7 @@ export function useTranslationDebug() {
   };
   
   const logMissingTranslations = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- i18n missing key entries have dynamic shape
     let missing: any[] = [];
     i18nStore.subscribe(state => { missing = state.missingKeys; })();
     console.group('Missing Translations');

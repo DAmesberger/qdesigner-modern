@@ -8,6 +8,7 @@ interface FileData {
   name: string;
   size: number;
   type: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- file data can be any format
   data: any;
   metadata?: {
     lastModified: number;
@@ -20,13 +21,14 @@ export class FileUploadStorage extends BaseQuestionStorage {
     return 'file-upload';
   }
 
-  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+  async getResponses(_questionId: string): Promise<QuestionResponse[]> {
     return this.getAllForSession();
   }
 
   /**
    * Parse stored value
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
   protected parseValue(value: any): FileData | FileData[] {
     if (!value) return [];
     if (typeof value === 'string') {
@@ -238,6 +240,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
   /**
    * Format aggregation results for display
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic aggregation value type
   formatAggregation(type: string, value: any): string {
     switch (type) {
       case 'totalSize':
@@ -259,7 +262,7 @@ export class FileUploadStorage extends BaseQuestionStorage {
   /**
    * Get all available aggregations for file upload questions
    */
-  async getAllAggregations(questionId: string): Promise<Record<string, any>> {
+  async getAllAggregations(questionId: string): Promise<Record<string, unknown>> {
     const [totalSize, avgSize, fileTypes, extensions, extremes] = await Promise.all([
       this.getTotalFileSize(questionId),
       this.getAverageFileSize(questionId),

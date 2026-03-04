@@ -2,8 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
   import { autoSave } from '$lib/services/autoSave.svelte';
-  import { initializeCollaboration } from '$lib/collaboration';
-  import type { CollaborationUser } from '$lib/collaboration';
+  import { ws } from '$lib/services/ws';
+  import { PresenceService, type PresenceUser } from '$lib/services/presence';
   import type { PageData } from './$types';
 
   import DesignerHeader from './components/DesignerHeader.svelte';
@@ -25,46 +25,31 @@
   let scriptEditorQuestion = $state<any>(null);
   let scriptEditorCleanup: (() => void) | null = null;
 
-  // Collaboration state
-  let collaborationUsers = $state<CollaborationUser[]>([]);
-  const collaboration = initializeCollaboration();
+  // Presence state
+  let presence: PresenceService | null = null;
+  let presenceUsers = $state<PresenceUser[]>([]);
 
-  function connectCollaboration() {
+  function connectPresence() {
     const questionnaireId = designerStore.questionnaire?.id;
     if (!questionnaireId) return;
 
-    collaboration.client.connect().then(() => {
-      const userId = designerStore.userId || 'anonymous';
-      const user: CollaborationUser = {
-        id: userId,
-        name: (data as any)?.user?.fullName || (data as any)?.user?.email || 'Anonymous',
-        email: (data as any)?.user?.email || '',
-        role: 'editor',
-        color: '#3B82F6',
-        status: 'online',
-        lastSeen: new Date(),
-      };
-      collaboration.client.joinSession(questionnaireId, user).catch(() => {
-        // WebSocket backend may not yet implement join_session acks
-      });
-    }).catch(() => {
-      // Collaboration is optional; silently ignore connection failures
-    });
+    const userId = designerStore.userId || 'anonymous';
+    const displayName =
+      (data as any)?.user?.fullName || (data as any)?.user?.email || 'Anonymous';
+    const channel = `designer:${questionnaireId}`;
 
-    collaboration.client.on('presence:updated', (detail) => {
-      // Update collaborator list when presence changes
-      const session = collaboration.client.getCurrentSession();
-      if (session) {
-        collaborationUsers = session.participants.filter(
-          (p) => p.id !== designerStore.userId
-        );
-      }
+    presence = new PresenceService(channel, userId, displayName);
+    presence.start();
+
+    // Reactively derive other users from presence state
+    $effect(() => {
+      presenceUsers = presence?.otherUsers ?? [];
     });
   }
 
-  function disconnectCollaboration() {
-    collaboration.client.leaveSession().catch(() => {});
-    collaboration.client.disconnect();
+  function disconnectPresence() {
+    presence?.stop();
+    presence = null;
   }
 
   function openScriptEditor(question: any) {
@@ -227,8 +212,7 @@
 
   onMount(() => {
     void initializeDesigner().then(() => {
-      // Connect collaboration after designer is initialized (questionnaire ID is available)
-      connectCollaboration();
+      connectPresence();
     });
 
     const handleOpenScriptEditor = (e: Event) => {
@@ -241,7 +225,7 @@
 
   onDestroy(() => {
     autoSave.stop();
-    disconnectCollaboration();
+    disconnectPresence();
     scriptEditorCleanup?.();
   });
 </script>
@@ -252,7 +236,7 @@
   <DesignerHeader
     questionnaireName={designerStore.questionnaire.name}
     projectName={(data as any)?.projectName || (data as any)?.project?.name || ''}
-    {collaborationUsers}
+    {presenceUsers}
   />
 
   <div class="flex-1 flex overflow-hidden relative" data-testid="designer-main-layout">

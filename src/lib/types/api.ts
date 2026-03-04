@@ -374,3 +374,27 @@ export interface CrossProjectAnalyticsData {
 	aggregate: AggregateOverview;
 	crossComparisons: CrossComparison[] | null;
 }
+
+// Time-series analytics
+export interface TimeSeriesBucket {
+	timestamp: string;
+	sessions_started: number;
+	sessions_completed: number;
+	avg_completion_ms: number | null;
+}
+
+// Filter endpoint types
+export interface FilteredSession {
+	id: string;
+	participant_id: string | null;
+	status: string;
+	started_at: string | null;
+	completed_at: string | null;
+	metadata: Record<string, unknown>;
+}
+
+export interface FilterResponse {
+	sessions: FilteredSession[];
+	total: number;
+	stats: SessionStatsSummary | null;
+}

@@ -12,9 +12,11 @@ export interface ModuleItem {
   type: string;
   category: ModuleCategory;
   order: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- module config varies by type
   config: any;
   conditions?: Array<{ formula: string; action: string }>;
   variables?: Array<{ id: string; name: string; source: string }>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- validation value varies by rule type
   validation?: Array<{ type: string; value: any; message?: string }>;
   layout?: {
     position?: { x: number; y: number };
@@ -29,7 +31,8 @@ export interface ModuleItem {
     postDelay?: number;
     maxDuration?: number;
   };
-  [key: string]: any; // For module-specific properties
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- module-specific dynamic properties
+  [key: string]: any;
 }
 
 /**
@@ -97,6 +100,7 @@ export class ModuleFactory {
   /**
    * Apply question-specific defaults
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- module metadata has dynamic capability shape
   private static applyQuestionDefaults(module: ModuleItem, metadata: any): ModuleItem {
     // Questions typically need response configuration
     // Ensure response config exists
@@ -137,6 +141,7 @@ export class ModuleFactory {
   /**
    * Apply instruction-specific defaults
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- module metadata has dynamic config shape
   private static applyInstructionDefaults(module: ModuleItem, metadata: any): ModuleItem {
     // Instructions should use the new display structure
     if (!module.config) {
@@ -168,7 +173,8 @@ export class ModuleFactory {
   /**
    * Apply display-specific defaults
    */
-  private static applyDisplayDefaults(module: ModuleItem, metadata: any): ModuleItem {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- module metadata has dynamic config shape
+  private static applyDisplayDefaults(module: ModuleItem, _metadata: any): ModuleItem {
     // Display modules need data source configuration
     if (!module.dataSource) {
       module.dataSource = {
@@ -235,6 +241,7 @@ export class ModuleFactory {
   /**
    * Recursively update nested IDs in configuration
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- recursive traversal of dynamic config tree
   private static updateNestedIds(obj: any): void {
     if (Array.isArray(obj)) {
       obj.forEach(item => {
@@ -258,7 +265,7 @@ export class ModuleFactory {
   static getAvailableTypes(category?: ModuleCategory): Array<{ type: string; name: string; description: string }> {
     const allModules = Object.entries(moduleRegistry.export());
     const modules = category 
-      ? allModules.filter(([_, metadata]) => metadata.category === category)
+      ? allModules.filter(([_type, metadata]) => metadata.category === category)
       : allModules;
     
     return modules.map(([type, metadata]) => ({

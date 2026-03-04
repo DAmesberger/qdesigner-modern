@@ -7,10 +7,12 @@ use serde_json::Value;
 use std::collections::HashSet;
 use uuid::Uuid;
 
+use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::middleware::auth::OptionalUser;
 use crate::state::AppState;
+use crate::websocket::manager::WsMessage;
 
 // ── Models ───────────────────────────────────────────────────────────
 
@@ -64,11 +66,15 @@ pub struct ResponseRecord {
 
 #[derive(Debug, Deserialize)]
 pub struct SubmitResponseRequest {
+    #[serde(alias = "questionId")]
     pub question_id: String,
     pub value: serde_json::Value,
     /// Microsecond-precision reaction time (BIGINT).
+    #[serde(alias = "reactionTimeUs")]
     pub reaction_time_us: Option<i64>,
+    #[serde(alias = "presentedAt")]
     pub presented_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(alias = "answeredAt")]
     pub answered_at: Option<chrono::DateTime<chrono::Utc>>,
     pub metadata: Option<serde_json::Value>,
 }
@@ -362,6 +368,17 @@ pub async fn create_session(
     .fetch_one(&state.pool)
     .await?;
 
+    // Broadcast session.created via WebSocket
+    state.websocket_state.broadcast(WsMessage {
+        channel: format!("questionnaire:{}", session.questionnaire_id),
+        event: "session.created".to_string(),
+        payload: serde_json::json!({
+            "session_id": session.id,
+            "questionnaire_id": session.questionnaire_id,
+            "status": session.status,
+        }),
+    });
+
     Ok((axum::http::StatusCode::CREATED, Json(session)))
 }
 
@@ -377,7 +394,7 @@ pub async fn list_sessions(
     })?;
 
     // Verify the user has access to this questionnaire's project org
-    verify_questionnaire_access(&state, user.user_id, questionnaire_id).await?;
+    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
 
     let normalized_status = query
         .status
@@ -432,7 +449,7 @@ pub async fn aggregate_sessions(
     user: AuthenticatedUser,
     Query(query): Query<SessionAggregateQuery>,
 ) -> Result<Json<SessionAggregateResponse>, ApiError> {
-    verify_questionnaire_access(&state, user.user_id, query.questionnaire_id).await?;
+    access::verify_questionnaire_access(&state.pool, user.user_id, query.questionnaire_id).await?;
     let source = parse_aggregate_source(query.source.as_deref())?;
     let key = query.key.trim();
 
@@ -473,7 +490,7 @@ pub async fn compare_sessions(
     user: AuthenticatedUser,
     Query(query): Query<SessionCompareQuery>,
 ) -> Result<Json<SessionCompareResponse>, ApiError> {
-    verify_questionnaire_access(&state, user.user_id, query.questionnaire_id).await?;
+    access::verify_questionnaire_access(&state.pool, user.user_id, query.questionnaire_id).await?;
     let source = parse_aggregate_source(query.source.as_deref())?;
     let key = query.key.trim();
     let left_participant_id = query.left_participant_id.trim();
@@ -927,7 +944,7 @@ pub async fn get_session(
     .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
 
     // Verify the user has access to this session's questionnaire
-    verify_questionnaire_access(&state, user.user_id, session.questionnaire_id).await?;
+    access::verify_questionnaire_access(&state.pool, user.user_id, session.questionnaire_id).await?;
 
     Ok(Json(session))
 }
@@ -1081,6 +1098,22 @@ pub async fn update_session(
         .await?
         .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
 
+    // Broadcast session update via WebSocket
+    let ws_event = if session.status == "completed" {
+        "session.completed"
+    } else {
+        "session.updated"
+    };
+    state.websocket_state.broadcast(WsMessage {
+        channel: format!("questionnaire:{}", session.questionnaire_id),
+        event: ws_event.to_string(),
+        payload: serde_json::json!({
+            "session_id": session.id,
+            "questionnaire_id": session.questionnaire_id,
+            "status": session.status,
+        }),
+    });
+
     Ok(Json(session))
 }
 
@@ -1104,6 +1137,8 @@ pub async fn submit_response(
         return Err(ApiError::BadRequest("No responses provided".into()));
     }
 
+    let response_count = responses.len();
+
     for response in responses.iter() {
         insert_response(&state, session_id, response).await?;
     }
@@ -1114,9 +1149,40 @@ pub async fn submit_response(
         .execute(&state.pool)
         .await?;
 
+    // Broadcast response.submitted via WebSocket
+    let questionnaire_id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT questionnaire_id FROM sessions WHERE id = $1",
+    )
+    .bind(session_id)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    if let Some(qid) = questionnaire_id {
+        state.websocket_state.broadcast(WsMessage {
+            channel: format!("questionnaire:{qid}"),
+            event: "response.submitted".to_string(),
+            payload: serde_json::json!({
+                "session_id": session_id,
+                "questionnaire_id": qid,
+                "count": response_count,
+            }),
+        });
+        // Also broadcast on analytics channel for real-time dashboards
+        state.websocket_state.broadcast(WsMessage {
+            channel: format!("analytics:{qid}"),
+            event: "response.submitted".to_string(),
+            payload: serde_json::json!({
+                "session_id": session_id,
+                "questionnaire_id": qid,
+                "count": response_count,
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+            }),
+        });
+    }
+
     Ok((
         axum::http::StatusCode::CREATED,
-        Json(serde_json::json!({ "count": responses.len() })),
+        Json(serde_json::json!({ "count": response_count })),
     ))
 }
 
@@ -1494,36 +1560,6 @@ fn pearson_correlation(x: &[f64], y: &[f64]) -> Option<f64> {
     Some(cov / denom)
 }
 
-/// Verify the authenticated user has access to a questionnaire through its project's org.
-async fn verify_questionnaire_access(
-    state: &AppState,
-    user_id: Uuid,
-    questionnaire_id: Uuid,
-) -> Result<(), ApiError> {
-    let has_access = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM questionnaire_definitions qd
-            JOIN projects p ON p.id = qd.project_id
-            JOIN organization_members om ON om.organization_id = p.organization_id
-            WHERE qd.id = $1 AND om.user_id = $2 AND om.status = 'active'
-              AND qd.deleted_at IS NULL AND p.deleted_at IS NULL
-        )
-        "#,
-    )
-    .bind(questionnaire_id)
-    .bind(user_id)
-    .fetch_one(&state.pool)
-    .await?;
-
-    if !has_access {
-        return Err(ApiError::Forbidden(
-            "No access to this questionnaire".into(),
-        ));
-    }
-    Ok(())
-}
-
 /// Verify the authenticated user has access to a session's questionnaire.
 async fn ensure_session_access(
     state: &AppState,
@@ -1538,7 +1574,7 @@ async fn ensure_session_access(
     .await?
     .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
 
-    verify_questionnaire_access(state, user_id, questionnaire_id).await
+    access::verify_questionnaire_access(&state.pool, user_id, questionnaire_id).await
 }
 
 /// For participant-facing endpoints (submit response, events, variables, update session):
@@ -1575,7 +1611,7 @@ async fn ensure_session_participant_or_member(
 
     // For unpublished questionnaires, require authenticated org member
     match user {
-        Some(u) => verify_questionnaire_access(state, u.user_id, questionnaire_id).await,
+        Some(u) => access::verify_questionnaire_access(&state.pool, u.user_id, questionnaire_id).await,
         None => Err(ApiError::Forbidden(
             "Authentication required for unpublished questionnaires".into(),
         )),
@@ -1615,7 +1651,7 @@ pub async fn condition_counts(
     Path(questionnaire_id): Path<Uuid>,
 ) -> Result<Json<Vec<ConditionCount>>, ApiError> {
     // Verify access via the questionnaire's project
-    verify_questionnaire_access(&state, user.user_id, questionnaire_id).await?;
+    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
 
     let counts = sqlx::query_as::<_, ConditionCount>(
         r#"
@@ -1646,27 +1682,38 @@ pub struct SyncPayload {
 
 #[derive(Debug, Deserialize)]
 pub struct SyncResponseItem {
+    #[serde(alias = "clientId")]
     pub client_id: Uuid,
+    #[serde(alias = "questionId")]
     pub question_id: String,
     pub value: serde_json::Value,
+    #[serde(alias = "reactionTimeUs")]
     pub reaction_time_us: Option<i64>,
+    #[serde(alias = "presentedAt")]
     pub presented_at: Option<String>,
+    #[serde(alias = "answeredAt")]
     pub answered_at: Option<String>,
     pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SyncEventItem {
+    #[serde(alias = "clientId")]
     pub client_id: Uuid,
+    #[serde(alias = "eventType")]
     pub event_type: String,
+    #[serde(alias = "questionId")]
     pub question_id: Option<String>,
+    #[serde(alias = "timestampUs")]
     pub timestamp_us: i64,
     pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SyncVariableItem {
+    #[serde(alias = "variableName")]
     pub variable_name: String,
+    #[serde(alias = "variableValue")]
     pub variable_value: Option<serde_json::Value>,
 }
 
@@ -1680,20 +1727,12 @@ pub struct SyncResult {
 /// POST /api/sessions/{id}/sync
 pub async fn sync_session(
     State(state): State<AppState>,
+    OptionalUser(user): OptionalUser,
     Path(session_id): Path<Uuid>,
     Json(body): Json<SyncPayload>,
 ) -> Result<Json<SyncResult>, ApiError> {
-    // Verify session exists
-    let session_exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)",
-    )
-    .bind(session_id)
-    .fetch_one(&state.pool)
-    .await?;
-
-    if !session_exists {
-        return Err(ApiError::NotFound("Session not found".into()));
-    }
+    // Verify session exists and user is authorized
+    ensure_session_participant_or_member(&state, user.as_ref(), session_id).await?;
 
     let mut responses_synced = 0i32;
     let mut events_synced = 0i32;
@@ -1776,11 +1815,431 @@ pub async fn sync_session(
             .await?;
     }
 
+    // Broadcast analytics event if new responses were synced
+    if responses_synced > 0 {
+        let questionnaire_id = sqlx::query_scalar::<_, Uuid>(
+            "SELECT questionnaire_id FROM sessions WHERE id = $1",
+        )
+        .bind(session_id)
+        .fetch_optional(&state.pool)
+        .await?;
+
+        if let Some(qid) = questionnaire_id {
+            state.websocket_state.broadcast(WsMessage {
+                channel: format!("analytics:{qid}"),
+                event: "response.synced".to_string(),
+                payload: serde_json::json!({
+                    "session_id": session_id,
+                    "questionnaire_id": qid,
+                    "responses_synced": responses_synced,
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                }),
+            });
+        }
+    }
+
     Ok(Json(SyncResult {
         responses_synced,
         events_synced,
         variables_synced,
     }))
+}
+
+// ── Filter Endpoint ──────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct FilterRule {
+    pub field: String,
+    pub operator: String,
+    pub value: serde_json::Value,
+    /// Second value for 'between' operator
+    pub value2: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FilterGroup {
+    pub logic: String,
+    pub rules: Vec<FilterRule>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FilterRequest {
+    pub questionnaire_id: Uuid,
+    pub groups: Vec<FilterGroup>,
+    pub logic: Option<String>,
+    /// Which data source to aggregate: "variable" (default) or "response"
+    pub source: Option<String>,
+    /// Variable name or question id to aggregate
+    pub key: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FilteredSessionRow {
+    pub id: Uuid,
+    pub participant_id: Option<String>,
+    pub status: String,
+    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub metadata: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FilterResponse {
+    pub sessions: Vec<FilteredSessionRow>,
+    pub total: i64,
+    pub stats: Option<NumericStatsSummary>,
+}
+
+/// POST /api/sessions/filter
+///
+/// Accepts a structured filter query and returns matching sessions
+/// with optional aggregated statistics on a key field.
+pub async fn filter_sessions(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Json(body): Json<FilterRequest>,
+) -> Result<Json<FilterResponse>, ApiError> {
+    access::verify_questionnaire_access(&state.pool, user.user_id, body.questionnaire_id).await?;
+
+    let top_logic = body.logic.as_deref().unwrap_or("AND");
+    if top_logic != "AND" && top_logic != "OR" {
+        return Err(ApiError::BadRequest(format!(
+            "Invalid top-level logic '{top_logic}'. Expected 'AND' or 'OR'"
+        )));
+    }
+
+    // Build dynamic WHERE clauses from the filter groups
+    let mut params: Vec<String> = Vec::new(); // collect string params for bind
+    let mut param_idx = 2u32; // $1 is questionnaire_id
+    let mut group_clauses: Vec<String> = Vec::new();
+
+    for group in &body.groups {
+        let group_logic = match group.logic.as_str() {
+            "AND" | "OR" => group.logic.as_str(),
+            other => {
+                return Err(ApiError::BadRequest(format!(
+                    "Invalid group logic '{other}'. Expected 'AND' or 'OR'"
+                )));
+            }
+        };
+
+        let mut rule_clauses: Vec<String> = Vec::new();
+
+        for rule in &group.rules {
+            let field_expr = match rule.field.as_str() {
+                "status" => "s.status".to_string(),
+                "participant_id" => "s.participant_id".to_string(),
+                "started_at" => "s.started_at".to_string(),
+                "completed_at" => "s.completed_at".to_string(),
+                "reaction_time_us" => "r.reaction_time_us".to_string(),
+                // Support metadata JSON field access with metadata.xxx
+                f if f.starts_with("metadata.") => {
+                    let json_key = &f["metadata.".len()..];
+                    format!("s.metadata->>'{}'", json_key.replace('\'', "''"))
+                }
+                // Support variable names with variable.xxx
+                f if f.starts_with("variable.") => {
+                    let var_name = &f["variable.".len()..];
+                    format!(
+                        "(SELECT sv.variable_value::text FROM session_variables sv WHERE sv.session_id = s.id AND sv.variable_name = '{}')",
+                        var_name.replace('\'', "''")
+                    )
+                }
+                other => {
+                    return Err(ApiError::BadRequest(format!(
+                        "Unsupported filter field: '{other}'. Supported: status, participant_id, started_at, completed_at, reaction_time_us, metadata.*, variable.*"
+                    )));
+                }
+            };
+
+            let value_str = match &rule.value {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::Bool(b) => b.to_string(),
+                other => other.to_string(),
+            };
+
+            let clause = match rule.operator.as_str() {
+                "eq" => {
+                    params.push(value_str);
+                    let c = format!("{field_expr} = ${param_idx}");
+                    param_idx += 1;
+                    c
+                }
+                "neq" => {
+                    params.push(value_str);
+                    let c = format!("{field_expr} != ${param_idx}");
+                    param_idx += 1;
+                    c
+                }
+                "gt" => {
+                    params.push(value_str);
+                    let c = format!("{field_expr} > ${param_idx}");
+                    param_idx += 1;
+                    c
+                }
+                "lt" => {
+                    params.push(value_str);
+                    let c = format!("{field_expr} < ${param_idx}");
+                    param_idx += 1;
+                    c
+                }
+                "gte" => {
+                    params.push(value_str);
+                    let c = format!("{field_expr} >= ${param_idx}");
+                    param_idx += 1;
+                    c
+                }
+                "lte" => {
+                    params.push(value_str);
+                    let c = format!("{field_expr} <= ${param_idx}");
+                    param_idx += 1;
+                    c
+                }
+                "between" => {
+                    let value2_str = match &rule.value2 {
+                        Some(serde_json::Value::String(s)) => s.clone(),
+                        Some(serde_json::Value::Number(n)) => n.to_string(),
+                        Some(other) => other.to_string(),
+                        None => {
+                            return Err(ApiError::BadRequest(
+                                "'between' operator requires value2".into(),
+                            ));
+                        }
+                    };
+                    params.push(value_str);
+                    params.push(value2_str);
+                    let c = format!(
+                        "{field_expr} BETWEEN ${} AND ${}",
+                        param_idx,
+                        param_idx + 1
+                    );
+                    param_idx += 2;
+                    c
+                }
+                "in" => {
+                    // Expect comma-separated values in the value string
+                    let in_values: Vec<&str> = value_str.split(',').map(|v| v.trim()).collect();
+                    if in_values.is_empty() {
+                        return Err(ApiError::BadRequest(
+                            "'in' operator requires at least one value".into(),
+                        ));
+                    }
+                    let placeholders: Vec<String> = in_values
+                        .iter()
+                        .map(|v| {
+                            params.push(v.to_string());
+                            let p = format!("${param_idx}");
+                            param_idx += 1;
+                            p
+                        })
+                        .collect();
+                    format!("{field_expr} IN ({})", placeholders.join(", "))
+                }
+                other => {
+                    return Err(ApiError::BadRequest(format!(
+                        "Unsupported operator: '{other}'"
+                    )));
+                }
+            };
+
+            rule_clauses.push(clause);
+        }
+
+        if !rule_clauses.is_empty() {
+            group_clauses.push(format!("({})", rule_clauses.join(&format!(" {group_logic} "))));
+        }
+    }
+
+    let filter_where = if group_clauses.is_empty() {
+        String::new()
+    } else {
+        format!(" AND ({})", group_clauses.join(&format!(" {top_logic} ")))
+    };
+
+    // Need LEFT JOIN on responses if reaction_time_us field is used
+    let needs_response_join = body.groups.iter().any(|g| {
+        g.rules.iter().any(|r| r.field == "reaction_time_us")
+    });
+
+    let response_join = if needs_response_join {
+        "LEFT JOIN responses r ON r.session_id = s.id"
+    } else {
+        ""
+    };
+
+    let limit = body.limit.unwrap_or(100).clamp(1, 1000);
+    let offset = body.offset.unwrap_or(0).max(0);
+
+    // Count total matching sessions
+    let count_sql = format!(
+        "SELECT COUNT(DISTINCT s.id)::bigint FROM sessions s {response_join} WHERE s.questionnaire_id = $1{filter_where}"
+    );
+
+    let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql).bind(body.questionnaire_id);
+    for p in &params {
+        count_query = count_query.bind(p);
+    }
+    let total = count_query.fetch_one(&state.pool).await?;
+
+    // Fetch matching sessions
+    let select_sql = format!(
+        r#"
+        SELECT DISTINCT ON (s.id) s.id, s.participant_id, s.status, s.started_at, s.completed_at, s.metadata
+        FROM sessions s {response_join}
+        WHERE s.questionnaire_id = $1{filter_where}
+        ORDER BY s.id, s.created_at DESC
+        LIMIT {limit} OFFSET {offset}
+        "#
+    );
+
+    let mut select_query =
+        sqlx::query_as::<_, (Uuid, Option<String>, String, Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>, serde_json::Value)>(&select_sql)
+            .bind(body.questionnaire_id);
+    for p in &params {
+        select_query = select_query.bind(p);
+    }
+    let rows = select_query.fetch_all(&state.pool).await?;
+
+    let sessions: Vec<FilteredSessionRow> = rows
+        .into_iter()
+        .map(|(id, participant_id, status, started_at, completed_at, metadata)| {
+            FilteredSessionRow {
+                id,
+                participant_id,
+                status,
+                started_at,
+                completed_at,
+                metadata,
+            }
+        })
+        .collect();
+
+    // Optionally compute aggregate stats on a key
+    let stats = if let Some(ref key) = body.key {
+        if !key.is_empty() {
+            let source = parse_aggregate_source(body.source.as_deref())?;
+            let session_ids: Vec<Uuid> = sessions.iter().map(|s| s.id).collect();
+
+            if !session_ids.is_empty() {
+                let values = match source {
+                    AggregateSource::Variable => {
+                        sqlx::query_scalar::<_, serde_json::Value>(
+                            r#"
+                            SELECT sv.variable_value
+                            FROM session_variables sv
+                            WHERE sv.session_id = ANY($1) AND sv.variable_name = $2
+                            "#,
+                        )
+                        .bind(&session_ids)
+                        .bind(key)
+                        .fetch_all(&state.pool)
+                        .await?
+                    }
+                    AggregateSource::Response => {
+                        sqlx::query_scalar::<_, serde_json::Value>(
+                            r#"
+                            SELECT r.value
+                            FROM responses r
+                            WHERE r.session_id = ANY($1) AND r.question_id = $2
+                            "#,
+                        )
+                        .bind(&session_ids)
+                        .bind(key)
+                        .fetch_all(&state.pool)
+                        .await?
+                    }
+                };
+
+                let numeric: Vec<f64> = values
+                    .iter()
+                    .filter_map(|v| json_value_to_f64(v))
+                    .collect();
+
+                if numeric.is_empty() {
+                    None
+                } else {
+                    Some(compute_numeric_stats(&numeric))
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    Ok(Json(FilterResponse {
+        sessions,
+        total,
+        stats,
+    }))
+}
+
+// ── Time-Series ─────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct TimeSeriesQuery {
+    pub questionnaire_id: Uuid,
+    pub interval: Option<String>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct TimeSeriesBucket {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub sessions_started: i64,
+    pub sessions_completed: i64,
+    pub avg_completion_ms: Option<f64>,
+}
+
+/// GET /api/sessions/timeseries
+pub async fn timeseries(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Query(query): Query<TimeSeriesQuery>,
+) -> Result<Json<Vec<TimeSeriesBucket>>, ApiError> {
+    access::verify_questionnaire_access(&state.pool, user.user_id, query.questionnaire_id).await?;
+
+    let interval = match query.interval.as_deref().unwrap_or("day") {
+        "hour" => "hour",
+        "day" => "day",
+        "week" => "week",
+        other => {
+            return Err(ApiError::BadRequest(format!(
+                "Invalid interval '{other}'. Expected 'hour', 'day', or 'week'"
+            )));
+        }
+    };
+
+    let sql = format!(
+        r#"
+        SELECT
+            date_trunc('{interval}', s.started_at) AS timestamp,
+            COUNT(*)::bigint AS sessions_started,
+            COUNT(CASE WHEN s.status = 'completed' THEN 1 END)::bigint AS sessions_completed,
+            AVG(
+                CASE WHEN s.completed_at IS NOT NULL AND s.started_at IS NOT NULL
+                     THEN EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) * 1000.0
+                END
+            ) AS avg_completion_ms
+        FROM sessions s
+        WHERE s.questionnaire_id = $1
+          AND s.started_at IS NOT NULL
+        GROUP BY date_trunc('{interval}', s.started_at)
+        ORDER BY timestamp ASC
+        "#
+    );
+
+    let buckets = sqlx::query_as::<_, TimeSeriesBucket>(&sql)
+        .bind(query.questionnaire_id)
+        .fetch_all(&state.pool)
+        .await?;
+
+    Ok(Json(buckets))
 }
 
 #[cfg(test)]

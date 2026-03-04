@@ -2,8 +2,8 @@
  * Monaco Editor configuration for worker loading
  */
 
-// @ts-ignore
-self.MonacoEnvironment = {
+// MonacoEnvironment is a global set by Monaco Editor on self
+(self as unknown as Record<string, unknown>).MonacoEnvironment = {
   getWorkerUrl: function (moduleId: string, label: string) {
     if (label === 'json') {
       return '/monaco/vs/language/json/json.worker.js';

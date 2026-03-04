@@ -3,24 +3,25 @@
  * Advanced queue management with priorities, retry logic, and backpressure handling
  */
 
-import type { 
-  QueueItem, 
-  QueueConfig, 
-  QueueStatus, 
-  QueueMetrics, 
-  QueueAttempt,
-  PipelineEvent
+import type {
+  QueueItem,
+  QueueConfig,
+  QueueStatus,
+  QueueMetrics,
+  QueueAttempt
 } from './types';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic queue accepts arbitrary item types
 export class QueueManager<T = any> {
   private config: Required<QueueConfig>;
   private queues: Map<number, QueueItem<T>[]> = new Map();
   private processing = new Set<string>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic result shape
   private completed = new Map<string, { success: boolean; result?: any; error?: string }>();
   private metrics: QueueMetrics;
   private workers = new Set<Promise<void>>();
   private isRunning = false;
-  private eventHandlers = new Map<string, Function[]>();
+  private eventHandlers = new Map<string, ((...args: unknown[]) => void)[]>();
   
   // Timing tracking
   private processingTimes: number[] = [];
@@ -257,7 +258,7 @@ export class QueueManager<T = any> {
   /**
    * Register event handler
    */
-  public on(event: string, handler: Function): void {
+  public on(event: string, handler: (...args: unknown[]) => void): void {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, []);
     }
@@ -267,7 +268,7 @@ export class QueueManager<T = any> {
   /**
    * Unregister event handler
    */
-  public off(event: string, handler: Function): void {
+  public off(event: string, handler: (...args: unknown[]) => void): void {
     const handlers = this.eventHandlers.get(event);
     if (handlers) {
       const index = handlers.indexOf(handler);
@@ -381,11 +382,11 @@ export class QueueManager<T = any> {
       
       this.emitEvent('item.completed', { item, result, workerId });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       attempt.success = false;
       attempt.duration = Date.now() - startTime;
-      attempt.error = error.message;
-      
+      attempt.error = error instanceof Error ? error.message : String(error);
+
       this.processing.delete(item.id);
       
       // Retry logic
@@ -399,14 +400,14 @@ export class QueueManager<T = any> {
         queue.push(item);
         queue.sort((a, b) => a.scheduled - b.scheduled);
         
-        this.emitEvent('item.retry', { item, error: error.message, retryDelay, workerId });
-        
+        this.emitEvent('item.retry', { item, error: attempt.error, retryDelay, workerId });
+
       } else {
         // Max retries exceeded
-        this.completed.set(item.id, { success: false, error: error.message });
+        this.completed.set(item.id, { success: false, error: attempt.error });
         this.metrics.totalFailed++;
         
-        this.emitEvent('item.failed', { item, error: error.message, workerId });
+        this.emitEvent('item.failed', { item, error: attempt.error, workerId });
       }
     }
   }
@@ -439,31 +440,33 @@ export class QueueManager<T = any> {
       
       this.emitEvent('batch.completed', { items, results, duration });
       
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       // Handle batch failure
       items.forEach(item => {
         this.processing.delete(item.id);
-        
+
         if (item.retries < item.maxRetries) {
           item.retries++;
           const retryDelay = this.config.retryDelay * Math.pow(this.config.backoffMultiplier, item.retries - 1);
           item.scheduled = Date.now() + retryDelay;
-          
+
           const queue = this.queues.get(item.priority)!;
           queue.push(item);
         } else {
-          this.completed.set(item.id, { success: false, error: error.message });
+          this.completed.set(item.id, { success: false, error: errorMessage });
           this.metrics.totalFailed++;
         }
       });
       
-      this.emitEvent('batch.failed', { items, error: error.message });
+      this.emitEvent('batch.failed', { items, error: error instanceof Error ? error.message : String(error) });
     }
   }
 
   /**
    * Default item processor (override this for custom processing)
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic processor result
   private async defaultProcessor(data: T): Promise<any> {
     // This is a placeholder - in real usage, you'd inject the actual processor
     await this.sleep(Math.random() * 100); // Simulate processing time
@@ -514,13 +517,14 @@ export class QueueManager<T = any> {
   /**
    * Emit event to registered handlers
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic event data shape
   private emitEvent(eventType: string, data: any): void {
     const handlers = this.eventHandlers.get(eventType);
     if (handlers) {
       handlers.forEach(handler => {
         try {
           handler(data);
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error(`Event handler error for ${eventType}:`, error);
         }
       });

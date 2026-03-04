@@ -7,6 +7,7 @@ export type {
   ReactionStimulusConfig,
   ReactionFixationConfig,
   ScheduledPhase,
+  TimingMethod,
 } from './types';
 
 // Preset re-exports

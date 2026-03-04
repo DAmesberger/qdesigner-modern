@@ -37,6 +37,7 @@ export class ImageRenderer extends BaseRenderer {
     this.config = { ...this.config, ...config };
     
     // Get image from resource manager
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL context extended with resourceManager at runtime
     const resourceManager = (gl as any).resourceManager as ResourceManager;
     if (resourceManager) {
       this.image = resourceManager.getImage(this.imageConfig.id) || null;
@@ -82,7 +83,7 @@ export class ImageRenderer extends BaseRenderer {
     }
     
     // Calculate rendering dimensions based on fit mode
-    const { width, height } = this.calculateDimensions(context);
+    const { width: _width, height: _height } = this.calculateDimensions(context);
     
     // Render texture with calculated dimensions
     // (Actual WebGL rendering with shaders would happen here)

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::api::access::{verify_project_access, verify_project_write_access};
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -146,7 +147,7 @@ pub async fn list_questionnaires(
     Query(q): Query<QuestionnaireListQuery>,
 ) -> Result<Json<Vec<Questionnaire>>, ApiError> {
     // Verify access to the project
-    verify_project_access(&state, user.user_id, project_id).await?;
+    verify_project_access(&state.pool, user.user_id, project_id).await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -202,7 +203,7 @@ pub async fn create_questionnaire(
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
     // Verify write access
-    verify_project_write_access(&state, user.user_id, project_id).await?;
+    verify_project_write_access(&state.pool, user.user_id, project_id).await?;
 
     let content = body.content.unwrap_or_else(|| serde_json::json!({}));
     let settings = body.settings.unwrap_or_else(|| serde_json::json!({}));
@@ -235,7 +236,7 @@ pub async fn get_questionnaire(
     user: AuthenticatedUser,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<Questionnaire>, ApiError> {
-    verify_project_access(&state, user.user_id, path.id).await?;
+    verify_project_access(&state.pool, user.user_id, path.id).await?;
 
     let q = sqlx::query_as::<_, Questionnaire>(
         r#"
@@ -265,7 +266,7 @@ pub async fn update_questionnaire(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    verify_project_write_access(&state, user.user_id, path.id).await?;
+    verify_project_write_access(&state.pool, user.user_id, path.id).await?;
 
     // Snapshot current state into questionnaire_versions before updating
     snapshot_questionnaire_version(&state, path.qid, user.user_id).await?;
@@ -365,7 +366,7 @@ pub async fn publish_questionnaire(
     user: AuthenticatedUser,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<Questionnaire>, ApiError> {
-    verify_project_write_access(&state, user.user_id, path.id).await?;
+    verify_project_write_access(&state.pool, user.user_id, path.id).await?;
 
     snapshot_questionnaire_version(&state, path.qid, user.user_id).await?;
 
@@ -400,7 +401,7 @@ pub async fn bump_version(
     Path(path): Path<ProjectQuestionnairePath>,
     Json(body): Json<BumpVersionRequest>,
 ) -> Result<Json<Questionnaire>, ApiError> {
-    verify_project_write_access(&state, user.user_id, path.id).await?;
+    verify_project_write_access(&state.pool, user.user_id, path.id).await?;
 
     // Snapshot current version first
     snapshot_questionnaire_version(&state, path.qid, user.user_id).await?;
@@ -480,7 +481,7 @@ pub async fn delete_questionnaire(
     user: AuthenticatedUser,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    verify_project_write_access(&state, user.user_id, path.id).await?;
+    verify_project_write_access(&state.pool, user.user_id, path.id).await?;
 
     let result = sqlx::query(
         "UPDATE questionnaire_definitions SET deleted_at = NOW() WHERE id = $1 AND project_id = $2",
@@ -504,6 +505,10 @@ pub async fn delete_questionnaire(
 #[derive(Debug, Deserialize)]
 pub struct ExportQuery {
     pub format: Option<String>,
+    /// Comma-separated list: variables, events, metadata
+    pub include: Option<String>,
+    /// Use SPSS-compatible 8-char column names
+    pub spss: Option<bool>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -520,6 +525,29 @@ struct ExportRow {
     answered_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct ExportVariableRow {
+    session_id: Uuid,
+    variable_name: String,
+    variable_value: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct ExportEventRow {
+    session_id: Uuid,
+    event_type: String,
+    question_id: Option<String>,
+    timestamp_us: i64,
+    metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct ExportSessionMetadata {
+    session_id: Uuid,
+    metadata: serde_json::Value,
+    browser_info: Option<serde_json::Value>,
+}
+
 /// GET /api/projects/:id/questionnaires/:qid/export
 pub async fn export_responses(
     State(state): State<AppState>,
@@ -527,7 +555,7 @@ pub async fn export_responses(
     Path(path): Path<ProjectQuestionnairePath>,
     Query(query): Query<ExportQuery>,
 ) -> Result<Response, ApiError> {
-    verify_project_access(&state, user.user_id, path.id).await?;
+    verify_project_access(&state.pool, user.user_id, path.id).await?;
 
     // Verify questionnaire exists
     let exists = sqlx::query_scalar::<_, bool>(
@@ -541,6 +569,21 @@ pub async fn export_responses(
     if !exists {
         return Err(ApiError::NotFound("Questionnaire not found".into()));
     }
+
+    // Parse include flags
+    let include_set: std::collections::HashSet<String> = query
+        .include
+        .as_deref()
+        .unwrap_or("")
+        .split(',')
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let include_variables = include_set.contains("variables");
+    let include_events = include_set.contains("events");
+    let include_metadata = include_set.contains("metadata");
+    let spss_names = query.spss.unwrap_or(false);
 
     let rows = sqlx::query_as::<_, ExportRow>(
         r#"
@@ -565,12 +608,80 @@ pub async fn export_responses(
     .fetch_all(&state.pool)
     .await?;
 
+    // Optionally fetch variables
+    let variables = if include_variables {
+        sqlx::query_as::<_, ExportVariableRow>(
+            r#"
+            SELECT sv.session_id, sv.variable_name, sv.variable_value
+            FROM session_variables sv
+            JOIN sessions s ON s.id = sv.session_id
+            WHERE s.questionnaire_id = $1
+            ORDER BY sv.session_id, sv.variable_name
+            "#,
+        )
+        .bind(path.qid)
+        .fetch_all(&state.pool)
+        .await?
+    } else {
+        vec![]
+    };
+
+    // Optionally fetch events
+    let events = if include_events {
+        sqlx::query_as::<_, ExportEventRow>(
+            r#"
+            SELECT ie.session_id, ie.event_type, ie.question_id, ie.timestamp_us, ie.metadata
+            FROM interaction_events ie
+            JOIN sessions s ON s.id = ie.session_id
+            WHERE s.questionnaire_id = $1
+            ORDER BY ie.session_id, ie.timestamp_us
+            "#,
+        )
+        .bind(path.qid)
+        .fetch_all(&state.pool)
+        .await?
+    } else {
+        vec![]
+    };
+
+    // Optionally fetch session metadata
+    let session_metadata = if include_metadata {
+        sqlx::query_as::<_, ExportSessionMetadata>(
+            r#"
+            SELECT s.id AS session_id, s.metadata, s.browser_info
+            FROM sessions s
+            WHERE s.questionnaire_id = $1
+            ORDER BY s.created_at ASC
+            "#,
+        )
+        .bind(path.qid)
+        .fetch_all(&state.pool)
+        .await?
+    } else {
+        vec![]
+    };
+
     let format = query.format.as_deref().unwrap_or("json");
 
     match format {
         "csv" => {
-            let mut csv_out = String::from(
-                "session_id,participant_id,session_status,started_at,completed_at,question_id,value,reaction_time_us,presented_at,answered_at\n",
+            // Column names: standard or SPSS-compatible 8-char
+            let (c_sid, c_pid, c_stat, c_start, c_end, c_qid, c_val, c_rt, c_pres, c_ans) =
+                if spss_names {
+                    (
+                        "sess_id", "part_id", "s_status", "s_start", "s_end",
+                        "q_id", "q_resp", "q_rt_us", "q_pres", "q_ans",
+                    )
+                } else {
+                    (
+                        "session_id", "participant_id", "session_status", "started_at",
+                        "completed_at", "question_id", "value", "reaction_time_us",
+                        "presented_at", "answered_at",
+                    )
+                };
+
+            let mut csv_out = format!(
+                "{c_sid},{c_pid},{c_stat},{c_start},{c_end},{c_qid},{c_val},{c_rt},{c_pres},{c_ans}\n"
             );
 
             for row in &rows {
@@ -578,7 +689,6 @@ pub async fn export_responses(
                     serde_json::Value::String(s) => s.clone(),
                     other => other.to_string(),
                 };
-                // Escape CSV fields that may contain commas or quotes
                 let escaped_value = csv_escape(&value_str);
 
                 csv_out.push_str(&format!(
@@ -586,23 +696,13 @@ pub async fn export_responses(
                     row.session_id,
                     row.participant_id.as_deref().unwrap_or(""),
                     row.session_status,
-                    row.started_at
-                        .map(|t| t.to_rfc3339())
-                        .unwrap_or_default(),
-                    row.completed_at
-                        .map(|t| t.to_rfc3339())
-                        .unwrap_or_default(),
+                    row.started_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+                    row.completed_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
                     row.question_id,
                     escaped_value,
-                    row.reaction_time_us
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    row.presented_at
-                        .map(|t| t.to_rfc3339())
-                        .unwrap_or_default(),
-                    row.answered_at
-                        .map(|t| t.to_rfc3339())
-                        .unwrap_or_default(),
+                    row.reaction_time_us.map(|v| v.to_string()).unwrap_or_default(),
+                    row.presented_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+                    row.answered_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
                 ));
             }
 
@@ -622,8 +722,25 @@ pub async fn export_responses(
                 .into_response())
         }
         _ => {
-            // JSON format
-            Ok(Json(serde_json::json!(rows)).into_response())
+            // JSON format with optional extra data
+            let mut result = serde_json::json!({ "responses": rows });
+
+            if include_variables {
+                result["variables"] = serde_json::json!(variables);
+            }
+            if include_events {
+                result["events"] = serde_json::json!(events);
+            }
+            if include_metadata {
+                result["session_metadata"] = serde_json::json!(session_metadata);
+            }
+
+            // If no extras included, return flat array for backward compat
+            if !include_variables && !include_events && !include_metadata {
+                return Ok(Json(serde_json::json!(rows)).into_response());
+            }
+
+            Ok(Json(result).into_response())
         }
     }
 }
@@ -675,7 +792,7 @@ pub async fn list_versions(
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
-    verify_project_access(&state, user.user_id, project_id).await?;
+    verify_project_access(&state.pool, user.user_id, project_id).await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -722,62 +839,4 @@ async fn snapshot_questionnaire_version(
     Ok(())
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
-async fn verify_project_access(
-    state: &AppState,
-    user_id: Uuid,
-    project_id: Uuid,
-) -> Result<(), ApiError> {
-    let has_access = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM projects p
-            JOIN organization_members om ON om.organization_id = p.organization_id
-            WHERE p.id = $1 AND om.user_id = $2 AND om.status = 'active'
-              AND p.deleted_at IS NULL
-        )
-        "#,
-    )
-    .bind(project_id)
-    .bind(user_id)
-    .fetch_one(&state.pool)
-    .await?;
-
-    if !has_access {
-        return Err(ApiError::Forbidden("No access to this project".into()));
-    }
-    Ok(())
-}
-
-async fn verify_project_write_access(
-    state: &AppState,
-    user_id: Uuid,
-    project_id: Uuid,
-) -> Result<(), ApiError> {
-    // Check project member with editor+ role, or org admin+
-    let has_write = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM project_members
-            WHERE project_id = $1 AND user_id = $2 AND role IN ('owner', 'admin', 'editor')
-        ) OR EXISTS(
-            SELECT 1 FROM projects p
-            JOIN organization_members om ON om.organization_id = p.organization_id
-            WHERE p.id = $1 AND om.user_id = $2 AND om.status = 'active'
-              AND om.role IN ('owner', 'admin')
-        )
-        "#,
-    )
-    .bind(project_id)
-    .bind(user_id)
-    .fetch_one(&state.pool)
-    .await?;
-
-    if !has_write {
-        return Err(ApiError::Forbidden(
-            "No write access to this project".into(),
-        ));
-    }
-    Ok(())
-}
+// Access helpers are in crate::api::access

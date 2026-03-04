@@ -3,13 +3,12 @@
  * Converts old question format to new typed format
  */
 
-import type { Question as ImportedQuestionType, QuestionType as OldQuestionTypeStr } from '../types/questionnaire';
-type OldQuestion = any; 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy question format with unknown shape
+type OldQuestion = any;
 type OldQuestionType = string;
-import type { 
-  Question as NewQuestion, 
+import type {
+  Question as NewQuestion,
   QuestionType as NewQuestionType,
-  ChoiceOption,
   TextDisplayQuestion,
   SingleChoiceQuestion,
   MultipleChoiceQuestion,
@@ -190,7 +189,7 @@ function migrateTextDisplay(
   }
   
   // Check if content contains markdown
-  if (old.content && /[*_#\[\]()]/.test(old.content)) {
+  if (old.content && /[*_#[\]()]/.test(old.content)) {
     newQ.display.format = 'markdown';
     warnings.push('Markdown formatting detected - please verify it displays correctly');
   }
@@ -200,6 +199,7 @@ function migrateTextDisplay(
     newQ.display.styling = {
       fontSize: old.style.fontSize,
       fontWeight: old.style.fontWeight,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy style value cast
       textAlign: old.style.textAlign as any,
       color: old.style.color
     };
@@ -214,7 +214,7 @@ function migrateTextDisplay(
 function migrateTextInput(
   old: OldQuestion,
   newQ: TextInputQuestion,
-  warnings: string[]
+  _warnings: string[]
 ): TextInputQuestion {
   newQ.display = {
     prompt: old.text || 'Please enter your response:',
@@ -262,6 +262,7 @@ function migrateSingleChoice(
   
   // Migrate options
   if (old.responseOptions?.options) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy option format
     newQ.display.options = old.responseOptions.options.map((opt: any) => ({
       id: opt.id || nanoid(12),
       label: opt.label || opt.text || 'Option',
@@ -294,6 +295,7 @@ function migrateMultipleChoice(
   warnings: string[]
 ): MultipleChoiceQuestion {
   // Start with single choice migration
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reuses single-choice migration for shared display structure
   const singleChoice = migrateSingleChoice(old, newQ as any, warnings);
   
   // Convert to multiple choice
@@ -321,7 +323,7 @@ function migrateMultipleChoice(
 function migrateScale(
   old: OldQuestion,
   newQ: ScaleQuestion,
-  warnings: string[]
+  _warnings: string[]
 ): ScaleQuestion {
   const scaleConfig = old.responseOptions?.scale || {};
   
@@ -363,10 +365,12 @@ function migrateMatrix(
   newQ.display = {
     prompt: old.text || 'Please rate each item:',
     instruction: old.instruction,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy matrix row format
     rows: matrixConfig.rows?.map((row: any) => ({
       id: row.id || nanoid(12),
       label: row.label || row
     })) || [],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy matrix column format
     columns: matrixConfig.columns?.map((col: any) => ({
       id: col.id || nanoid(12),
       label: col.label || col,

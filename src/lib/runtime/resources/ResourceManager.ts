@@ -308,7 +308,7 @@ export class ResourceManager {
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
       this.audioCache.set(resource.id, audioBuffer);
-    } catch (error) {
+    } catch (_error) {
       throw new Error(`Failed to load audio: ${resource.url}`);
     }
   }

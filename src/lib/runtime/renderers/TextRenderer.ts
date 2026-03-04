@@ -34,7 +34,7 @@ export class TextRenderer extends BaseRenderer {
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
   }
   
-  public async preload(resourceManager: ResourceManager): Promise<void> {
+  public async preload(_resourceManager: ResourceManager): Promise<void> {
     // Pre-render text
     this.renderText();
     this.ready = true;
@@ -130,7 +130,7 @@ export class TextRenderer extends BaseRenderer {
     }
   }
   
-  protected renderContent(gl: WebGL2RenderingContext, context: RenderContext): void {
+  protected renderContent(gl: WebGL2RenderingContext, _context: RenderContext): void {
     if (!this.texture) return;
     
     // Upload texture on first render

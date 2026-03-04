@@ -20,6 +20,7 @@ export const load: PageLoad = async ({ params, parent, url }) => {
   let questionnaire = null;
   const questionnaireId = params.questionnaireId;
   const isOnline = offlineData.isOnline();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- project data may have snake_case or camelCase org ID
   const resolveProjectOrganizationId = (input: any): string | null =>
     parentData.organizationId || input?.organizationId || input?.organization_id || null;
 
@@ -59,6 +60,7 @@ export const load: PageLoad = async ({ params, parent, url }) => {
 
         if (networkQuestionnaire) {
           // Ensure we have a definition field with the correct structure
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API may return definition or content field
           const definition = (networkQuestionnaire as any).definition || networkQuestionnaire.content || {
             pages: [],
             questions: [],

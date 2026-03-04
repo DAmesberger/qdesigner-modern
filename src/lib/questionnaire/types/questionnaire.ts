@@ -19,12 +19,13 @@ export interface Variable {
   name: string;
   type: VariableType;
   scope: 'global' | 'local' | 'temporary';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- scripting context accepts arbitrary values
   defaultValue?: any;
   formula?: string; // Mathematical expression
   dependencies?: string[]; // Other variable IDs this depends on
   validation?: ValidationRule[];
   description?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export type VariableType = 
@@ -40,6 +41,7 @@ export type VariableType =
 
 export interface ValidationRule {
   type: 'required' | 'min' | 'max' | 'pattern' | 'custom';
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- validation values vary by rule type
   value?: any;
   message?: string;
   condition?: string; // Formula that must evaluate to true
@@ -87,7 +89,7 @@ export interface StimulusContent {
   components?: Stimulus[]; // For composite stimuli
   position?: Position;
   size?: Size;
-  style?: Record<string, any>;
+  style?: Record<string, unknown>;
 }
 
 export interface TextContent {
@@ -123,6 +125,7 @@ export interface ResponseConfig {
 
 export interface ResponseOption {
   id: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- response option values vary by question type
   value: any;
   label?: string;
   hotkey?: string;

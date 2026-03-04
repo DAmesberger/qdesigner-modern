@@ -5,16 +5,15 @@
   import DistributionPanel from './DistributionPanel.svelte';
   import ExperimentalDesignPanel from '$lib/components/designer/ExperimentalDesignPanel.svelte';
   import DataQualityPanel from '$lib/components/designer/DataQualityPanel.svelte';
-  import PresenceIndicator from '$lib/collaboration/components/PresenceIndicator.svelte';
-  import type { CollaborationUser } from '$lib/collaboration';
+  import type { PresenceUser } from '$lib/services/presence';
 
   interface Props {
     questionnaireName: string;
     projectName?: string;
-    collaborationUsers?: CollaborationUser[];
+    presenceUsers?: PresenceUser[];
   }
 
-  let { questionnaireName, projectName = '', collaborationUsers = [] }: Props = $props();
+  let { questionnaireName, projectName = '', presenceUsers = [] }: Props = $props();
 
   let isEditingTitle = $state(false);
   let titleValue = $state('Untitled Questionnaire');
@@ -167,10 +166,23 @@
     </div>
   </div>
 
-  <!-- Collaboration presence indicator -->
-  {#if collaborationUsers.length > 0}
-    <div class="hidden sm:block">
-      <PresenceIndicator users={collaborationUsers} maxVisible={3} size="sm" />
+  <!-- Presence indicator -->
+  {#if presenceUsers.length > 0}
+    <div class="hidden sm:flex items-center -space-x-1.5">
+      {#each presenceUsers.slice(0, 3) as user (user.userId)}
+        <div
+          class="w-6 h-6 rounded-full border-2 border-background flex items-center justify-center text-[10px] font-bold text-white"
+          style="background-color: {user.color}"
+          title={user.displayName}
+        >
+          {user.displayName.charAt(0).toUpperCase()}
+        </div>
+      {/each}
+      {#if presenceUsers.length > 3}
+        <div class="w-6 h-6 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground">
+          +{presenceUsers.length - 3}
+        </div>
+      {/if}
     </div>
   {/if}
 

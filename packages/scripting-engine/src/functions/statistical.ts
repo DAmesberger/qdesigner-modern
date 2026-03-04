@@ -56,7 +56,7 @@ export const statisticalFunctions: FormulaFunction[] = [
     returns: 'any|array',
     implementation: (...args: DynamicValue[]) => {
       const values = Array.isArray(args[0]) ? args[0] : args;
-      const frequency = new Map<any, number>();
+      const frequency = new Map<DynamicValue, number>();
       
       values.forEach((val: DynamicValue) => {
         frequency.set(val, (frequency.get(val) || 0) + 1);
@@ -64,8 +64,8 @@ export const statisticalFunctions: FormulaFunction[] = [
       
       const maxFreq = Math.max(...frequency.values());
       const modes = Array.from(frequency.entries())
-        .filter(([_, freq]) => freq === maxFreq)
-        .map(([val, _]) => val);
+        .filter(([_val, freq]) => freq === maxFreq)
+        .map(([val, _freq]) => val);
       
       return modes.length === 1 ? modes[0] : modes;
     },
@@ -211,7 +211,7 @@ export const statisticalFunctions: FormulaFunction[] = [
       { name: 'tails', type: 'number', description: 'Number of tails (1 or 2)', optional: true, default: 2 }
     ],
     returns: 'object',
-    implementation: (group1: DynamicValue[], group2: DynamicValue[], tails: number = 2) => {
+    implementation: (group1: DynamicValue[], group2: DynamicValue[], _tails: number = 2) => {
       const g1 = group1.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
       const g2 = group2.filter((v: DynamicValue) => typeof v === 'number' && !isNaN(v));
       

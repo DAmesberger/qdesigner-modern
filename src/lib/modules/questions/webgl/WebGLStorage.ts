@@ -18,7 +18,7 @@ export class WebGLStorage extends BaseQuestionStorage {
     return 'webgl';
   }
 
-  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+  async getResponses(_questionId: string): Promise<QuestionResponse[]> {
     return this.getAllForSession();
   }
 
@@ -271,6 +271,7 @@ export class WebGLStorage extends BaseQuestionStorage {
   /**
    * Parse stored value
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
   protected parseValue(value: any): WebGLValue {
     if (!value) return { response: null, reactionTime: 0, stimulusOnset: 0, responseTime: 0 };
     if (typeof value === 'string') {
@@ -283,6 +284,7 @@ export class WebGLStorage extends BaseQuestionStorage {
     return value;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic aggregation value type
   formatAggregation(type: string, value: any): string {
     switch (type) {
       case 'rtStats':
@@ -303,7 +305,7 @@ export class WebGLStorage extends BaseQuestionStorage {
   /**
    * Get all available aggregations for WebGL questions
    */
-  async getAllAggregations(questionId: string): Promise<Record<string, any>> {
+  async getAllAggregations(questionId: string): Promise<Record<string, unknown>> {
     const [rtStats, frameRate, accuracy, timeouts, distribution, precision] = await Promise.all([
       this.getReactionTimeStats(questionId),
       this.getFrameRateStats(questionId),

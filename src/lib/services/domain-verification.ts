@@ -1,5 +1,5 @@
 import { api } from '$lib/services/api';
-import type { DomainConfig as ApiDomainConfig, DomainAutoJoinCheck as ApiDomainAutoJoinCheck } from '$lib/types/api';
+import type { DomainConfig as ApiDomainConfig } from '$lib/types/api';
 
 export interface DomainConfig {
   id: string;

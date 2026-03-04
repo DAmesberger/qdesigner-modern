@@ -10,6 +10,7 @@ test.describe('Module Loading', () => {
     
     // Check if module registry is available in window
     const hasModuleRegistry = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing window global in browser context
       return typeof (window as any).moduleRegistry !== 'undefined';
     });
     
@@ -22,6 +23,7 @@ test.describe('Module Loading', () => {
     
     // Check for specific question modules
     const registeredModules = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing window global in browser context
       const registry = (window as any).moduleRegistry;
       if (!registry) return [];
       

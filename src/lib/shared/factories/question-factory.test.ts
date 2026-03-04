@@ -3,10 +3,9 @@ import { QuestionFactory } from './question-factory';
 import { QuestionTypes } from '../types/questionnaire';
 import { QuestionValidator } from '../validators/question-validators';
 import { registerModule } from '$lib/modules/registry';
-import type { 
-  Question,
+import type {
   TextDisplayQuestion,
-  SingleChoiceQuestion, 
+  SingleChoiceQuestion,
   ScaleQuestion,
   MatrixQuestion,
   TextInputQuestion,
@@ -83,6 +82,7 @@ beforeAll(() => {
       description: 'Mock Media Display',
       icon: '🖼️',
       capabilities: { supportsScripting: false, supportsConditionals: false, supportsVariables: false },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock Svelte components for test
       components: { runtime: () => Promise.resolve({ default: {} as any }), designer: () => Promise.resolve({ default: {} as any }) },
       defaultConfig: { media: [] }
   });
@@ -95,10 +95,11 @@ beforeAll(() => {
       description: 'Mock Media Response',
       icon: '📹',
       capabilities: { supportsScripting: false, supportsConditionals: false, supportsVariables: false },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock Svelte components for test
       components: { runtime: () => Promise.resolve({ default: {} as any }), designer: () => Promise.resolve({ default: {} as any }) },
-      defaultConfig: { 
+      defaultConfig: {
         display: { prompt: 'Upload media:', accept: [], maxSize: 50 * 1024 * 1024 },
-        response: { storage: 'url' } 
+        response: { storage: 'url' }
       }
   });
 
@@ -110,6 +111,7 @@ beforeAll(() => {
       description: 'Mock Rating',
       icon: '⭐',
       capabilities: { supportsScripting: false, supportsConditionals: false, supportsVariables: false },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock Svelte components for test
       components: { runtime: () => Promise.resolve({ default: {} as any }), designer: () => Promise.resolve({ default: {} as any }) },
       defaultConfig: { display: { levels: 5, style: 'stars', prompt: 'Rate this:' } }
   });
@@ -187,6 +189,7 @@ describe('QuestionFactory', () => {
     
     it('should throw error for unknown question type', () => {
       expect(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- testing invalid type
         QuestionFactory.create('unknown-type' as any);
       }).toThrow('Unknown question type: unknown-type');
     });

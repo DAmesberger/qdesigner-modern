@@ -184,20 +184,26 @@ export function createModuleRegistration(metadata: ModuleMetadata): void {
     registerModule(metadata);
   } else {
     // SSR environment - defer registration
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SSR global registration store
     if (!(globalThis as any).__moduleRegistrations) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SSR global registration store
       (globalThis as any).__moduleRegistrations = [];
     }
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SSR global registration store
     (globalThis as any).__moduleRegistrations.push(metadata);
   }
 }
 
 // Initialize deferred registrations (call this on client-side mount)
 export function initializeDeferredRegistrations(): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SSR global registration store
   if ((globalThis as any).__moduleRegistrations) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SSR global registration store
     (globalThis as any).__moduleRegistrations.forEach((metadata: ModuleMetadata) => {
       registerModule(metadata);
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SSR global registration store
     delete (globalThis as any).__moduleRegistrations;
   }
 }

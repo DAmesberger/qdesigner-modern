@@ -5,7 +5,7 @@ import { browser } from '$app/environment';
 export const ssr = false;
 export const prerender = false;
 
-export const load: LayoutLoad = async ({ params, url }) => {
+export const load: LayoutLoad = async () => {
 	// Add fillout class to body for styling
 	if (browser) {
 		document.body.classList.add('fillout');

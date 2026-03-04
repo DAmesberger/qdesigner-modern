@@ -10,7 +10,18 @@ Traditional web-based questionnaires face timing precision issues:
 
 ## The Solution: WebGL-Based Rendering
 
-QDesigner achieves microsecond-precision timing by rendering ALL questionnaire content through WebGL:
+QDesigner provides two tiers of timing precision:
+
+- **Frame-exact** (sub-millisecond): For reaction time paradigms (Stroop, IAT, Flanker)
+  via the `ReactionEngine`, which uses RAF callbacks for stimulus onset and
+  `event.timeStamp` for response capture. See `src/lib/runtime/reaction/ReactionEngine.ts`.
+- **High-resolution** (~5 μs with COOP/COEP, ~100 μs without): For standard survey
+  questions via `QuestionnaireRuntime`, which uses `performance.now()` for onset/response
+  timestamps. See `src/lib/runtime/core/QuestionnaireRuntime.ts`.
+
+The WebGL rendering path below applies to the ReactionEngine tier.
+When a questionnaire designer enables reaction-time measurement, stimuli are rendered
+through WebGL to achieve frame-locked onset timing:
 
 ### 1. HTML Content to WebGL
 
@@ -113,10 +124,11 @@ const question = {
 
 ## Key Advantages
 
-1. **No Distinction**: Users create questionnaires normally - the system handles precise timing automatically
-2. **Full Flexibility**: Any HTML/CSS content works, including forms, animations, SVGs
-3. **Guaranteed Timing**: WebGL's frame-locked rendering ensures consistent timing
+1. **Two-tier design**: Standard questions use `performance.now()` (sufficient for second-scale responses); reaction time paradigms use WebGL frame-locked rendering for sub-millisecond precision
+2. **Full Flexibility**: Any HTML/CSS content works for standard questions; reaction time trials use WebGL stimuli
+3. **Frame-locked timing**: WebGL's RAF-based rendering ensures consistent stimulus onset in the ReactionEngine path
 4. **Performance**: 60-120+ FPS maintained even with complex content
 5. **Preloading**: Everything ready before presentation = zero delays
+6. **COOP/COEP**: Fillout routes serve cross-origin isolation headers for full timer resolution (~5 μs vs ~100 μs)
 
-This approach makes QDesigner a questionnaire platform that *happens* to have research-grade timing precision, rather than a reaction time tool trying to do questionnaires.
+This approach makes QDesigner a questionnaire platform that also provides research-grade timing precision when needed, without imposing the complexity of WebGL rendering on standard survey questions.

@@ -8,13 +8,14 @@ export class DateTimeStorage extends BaseQuestionStorage {
     return 'date-time';
   }
 
-  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+  async getResponses(_questionId: string): Promise<QuestionResponse[]> {
     return this.getAllForSession();
   }
 
   /**
    * Parse stored value
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
   protected parseValue(value: any): string | number {
     if (value === null || value === undefined) return '';
     return value;
@@ -204,6 +205,7 @@ export class DateTimeStorage extends BaseQuestionStorage {
   /**
    * Format aggregation results for display
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic aggregation value type
   formatAggregation(type: string, value: any): string {
     switch (type) {
       case 'earliest':
@@ -226,7 +228,7 @@ export class DateTimeStorage extends BaseQuestionStorage {
   /**
    * Get all available aggregations for date/time questions
    */
-  async getAllAggregations(questionId: string): Promise<Record<string, any>> {
+  async getAllAggregations(questionId: string): Promise<Record<string, unknown>> {
     const [earliest, latest, range, daySpan, avgTime, weekdayWeekend] = await Promise.all([
       this.getEarliestDate(questionId),
       this.getLatestDate(questionId),

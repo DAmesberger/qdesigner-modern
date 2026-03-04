@@ -283,7 +283,7 @@ async function fetchWithOfflineQueue(request) {
   try {
     const response = await fetch(request.clone());
     return response;
-  } catch (error) {
+  } catch (_error) {
     // Network failed — queue the request for later sync
     console.log('[SW] Network failed for', request.method, request.url, '— queuing for offline sync');
 

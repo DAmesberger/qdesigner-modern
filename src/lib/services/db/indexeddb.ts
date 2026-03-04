@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Questionnaire, Question, Page, Variable } from '$lib/shared';
+import type { Questionnaire } from '$lib/shared';
 
 export interface SyncQueueItem {
   id?: string;
@@ -7,6 +7,7 @@ export interface SyncQueueItem {
   operation: 'create' | 'update' | 'delete';
   table: string;
   recordId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- sync queue stores heterogeneous data shapes
   data: any;
   userId: string;
   organizationId: string;  // Added per business decision

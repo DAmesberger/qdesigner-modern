@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
   import type { PageData } from './$types';
   import { goto } from '$app/navigation';
   import { formatDistanceToNow } from '$lib/shared/utils/date';
@@ -8,8 +9,11 @@
     QuestionnaireStats,
     QuestionnaireListItem,
   } from '$lib/types/dashboard';
+  import type { TimeSeriesBucket } from '$lib/types/api';
   import { appPaths } from '$lib/routing/paths';
   import { t } from '$lib/i18n/hooks';
+  import { ws, type WsEvent } from '$lib/services/ws';
+  import { api } from '$lib/services/api';
 
   interface Props {
     data: PageData;
@@ -18,9 +22,111 @@
   let { data }: Props = $props();
 
   let user = $derived(data.user);
-  let questionnaires = $derived(data.questionnaires);
+  let questionnaires = $state<DashboardQuestionnaire[]>([]);
   let recentActivity = $derived(data.recentActivity);
-  let stats = $derived(data.stats);
+  let stats = $state({ totalQuestionnaires: 0, totalResponses: 0, activeQuestionnaires: 0, avgCompletionRate: 0 });
+
+  // Time-series sparkline data per questionnaire
+  let sparklineData = $state<Record<string, number[]>>({});
+
+  // Initialize from data
+  $effect(() => {
+    questionnaires = [...data.questionnaires];
+    stats = { ...data.stats };
+  });
+
+  // Build SVG sparkline path from data points
+  function sparklinePath(values: number[], width: number, height: number): string {
+    if (values.length < 2) return '';
+    const max = Math.max(...values, 1);
+    const step = width / (values.length - 1);
+    return values
+      .map((v, i) => {
+        const x = i * step;
+        const y = height - (v / max) * height;
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+  }
+
+  // Fetch time-series data for all questionnaires
+  async function loadSparklines() {
+    const results: Record<string, number[]> = {};
+    for (const q of questionnaires) {
+      try {
+        const buckets = await api.sessions.timeseries({
+          questionnaireId: q.questionnaire_id,
+          interval: 'day',
+        });
+        // Take last 7 buckets for sparkline
+        const last7 = buckets.slice(-7);
+        results[q.questionnaire_id] = last7.map((b) => b.sessions_started);
+      } catch {
+        results[q.questionnaire_id] = [];
+      }
+    }
+    sparklineData = results;
+  }
+
+  // Realtime WebSocket subscriptions
+  let wsUnsubscribes: (() => void)[] = [];
+
+  function subscribeRealtime() {
+    // Subscribe to all questionnaire channels for live updates
+    for (const q of questionnaires) {
+      const channel = `questionnaire:${q.questionnaire_id}`;
+      const unsub = ws.subscribe(channel, (msg: WsEvent) => {
+        if (msg.event === 'response.submitted') {
+          const payload = msg.payload as { questionnaire_id?: string; count?: number };
+          const count = payload.count ?? 1;
+          questionnaires = questionnaires.map((item) =>
+            item.questionnaire_id === payload.questionnaire_id
+              ? { ...item, total_responses: item.total_responses + count }
+              : item
+          );
+          stats = { ...stats, totalResponses: stats.totalResponses + count };
+        }
+        if (msg.event === 'session.created') {
+          // Increment latest sparkline bucket for this questionnaire
+          const payload = msg.payload as { questionnaire_id?: string };
+          const qid = payload.questionnaire_id;
+          if (qid && sparklineData[qid]) {
+            const prev = sparklineData[qid] as number[];
+            const arr = [...prev];
+            const last = arr.length - 1;
+            if (last >= 0) {
+              arr[last] = (arr[last] ?? 0) + 1;
+            } else {
+              arr.push(1);
+            }
+            sparklineData = { ...sparklineData, [qid]: arr };
+          }
+        }
+        if (msg.event === 'session.completed') {
+          const payload = msg.payload as { questionnaire_id?: string };
+          questionnaires = questionnaires.map((item) =>
+            item.questionnaire_id === payload.questionnaire_id
+              ? { ...item, completed_responses: (item.completed_responses ?? 0) + 1 }
+              : item
+          );
+        }
+      });
+      wsUnsubscribes.push(unsub);
+    }
+  }
+
+  onMount(() => {
+    // Defer subscription until questionnaires are loaded
+    if (questionnaires.length > 0) {
+      subscribeRealtime();
+      loadSparklines();
+    }
+  });
+
+  onDestroy(() => {
+    for (const unsub of wsUnsubscribes) unsub();
+    wsUnsubscribes = [];
+  });
 
   function getStatusColor(status: string) {
     switch (status) {
@@ -290,6 +396,33 @@
                   </p>
                 </div>
               </div>
+
+              <!-- Sparkline: sessions over the last 7 days -->
+              {#if sparklineData[questionnaire.questionnaire_id]?.length}
+                {@const values = sparklineData[questionnaire.questionnaire_id] ?? []}
+                <div class="mt-4 flex items-center gap-3">
+                  <span class="text-xs text-[hsl(var(--muted-foreground))] shrink-0">7d trend</span>
+                  <svg viewBox="0 0 120 28" class="w-full h-7" preserveAspectRatio="none">
+                    <path
+                      d={sparklinePath(values, 120, 28)}
+                      fill="none"
+                      stroke="url(#sparkGrad)"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                    <defs>
+                      <linearGradient id="sparkGrad" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stop-color="#6366f1" />
+                        <stop offset="100%" stop-color="#a855f7" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <span class="text-xs font-medium text-[hsl(var(--foreground))] shrink-0">
+                    {values.reduce((a: number, b: number) => a + b, 0)} sessions
+                  </span>
+                </div>
+              {/if}
 
               <div
                 class="mt-4 flex items-center justify-between text-xs text-[hsl(var(--muted-foreground))]"

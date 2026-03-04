@@ -70,6 +70,7 @@ export class MediaValidator {
    * Validate stimulus media
    */
   private async validateStimulus(stimulus: Stimulus, questionId: string): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stimulus content varies by type
     const content = stimulus.content as any;
     
     if (typeof content === 'string') return;

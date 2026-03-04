@@ -17,8 +17,10 @@ const mockQuestion = (script?: string) =>
     order: 0,
     required: false,
     settings: script ? { script } : {},
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
   }) as any;
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- mock/test fixtures throughout */
 describe('ScriptExecutor', () => {
   // ── parseHooks ──
 

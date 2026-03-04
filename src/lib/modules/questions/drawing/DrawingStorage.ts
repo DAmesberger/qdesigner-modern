@@ -35,7 +35,7 @@ export class DrawingStorage extends BaseQuestionStorage {
     return 'drawing';
   }
 
-  async getResponses(questionId: string): Promise<QuestionResponse[]> {
+  async getResponses(_questionId: string): Promise<QuestionResponse[]> {
     return this.getAllForSession();
   }
 
@@ -224,6 +224,7 @@ export class DrawingStorage extends BaseQuestionStorage {
   /**
    * Parse stored value
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- indexing dynamic response data
   protected parseValue(value: any): DrawingValue {
     if (!value) return { 
       imageData: '', 
@@ -243,6 +244,7 @@ export class DrawingStorage extends BaseQuestionStorage {
   /**
    * Format aggregation results for display
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic aggregation value type
   formatAggregation(type: string, value: any): string {
     switch (type) {
       case 'strokeStats':
@@ -270,7 +272,7 @@ export class DrawingStorage extends BaseQuestionStorage {
   /**
    * Get all available aggregations for drawing questions
    */
-  async getAllAggregations(questionId: string): Promise<Record<string, any>> {
+  async getAllAggregations(questionId: string): Promise<Record<string, unknown>> {
     const [strokeStats, colorUsage, toolUsage, timeStats, pressureStats, emptyDrawings] = await Promise.all([
       this.getStrokeStats(questionId),
       this.getColorUsage(questionId),

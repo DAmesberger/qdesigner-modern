@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::rbac::models::OrgRole;
@@ -372,25 +373,7 @@ pub async fn list_project_members(
     user: AuthenticatedUser,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Vec<ProjectMember>>, ApiError> {
-    // Verify the user has access to this project (org membership or project membership)
-    let org_id =
-        sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1 AND deleted_at IS NULL")
-            .bind(project_id)
-            .fetch_optional(&state.pool)
-            .await?
-            .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
-
-    let is_org_member = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active')",
-    )
-    .bind(org_id)
-    .bind(user.user_id)
-    .fetch_one(&state.pool)
-    .await?;
-
-    if !is_org_member {
-        return Err(ApiError::Forbidden("Not a member of this organization".into()));
-    }
+    access::verify_project_access(&state.pool, user.user_id, project_id).await?;
 
     let members = sqlx::query_as::<_, ProjectMember>(
         r#"
@@ -459,6 +442,14 @@ pub async fn add_project_member(
     .fetch_optional(&state.pool)
     .await?
     .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
+
+    // Verify the target user is an active member of the project's parent org.
+    let org_id = access::get_project_org_id(&state.pool, project_id).await?;
+    access::verify_org_membership(&state.pool, target_user, org_id).await.map_err(|_| {
+        ApiError::BadRequest(
+            "User must be an active member of the organization before being added to a project".into(),
+        )
+    })?;
 
     sqlx::query(
         r#"
