@@ -649,9 +649,39 @@ Einen Fragebogen aktualisieren. Setzen von `status` auf `published` lost die Ver
 
 ### POST /api/projects/{id}/questionnaires/{qid}/publish
 
-Einen Fragebogen veroffentlichen.
+Einen Fragebogen veroeffentlichen. Erstellt einen Versions-Snapshot, setzt den Status auf `published` und zeichnet `published_at` auf.
 
 **Auth**: Erforderlich (Projekt-Editor+ oder Org-Admin+)
+
+**Antwort** `200 OK`: Veroeffentlichtes Fragebogenobjekt (enthaelt `version_major`, `version_minor`, `version_patch`).
+
+---
+
+### POST /api/projects/{id}/questionnaires/{qid}/bump-version
+
+Die semantische Version des Fragebogens erhoehen.
+
+**Auth**: Erforderlich (Projekt-Editor+ oder Org-Admin+)
+
+**Anfrage**:
+```json
+{
+  "bump_type": "minor"
+}
+```
+
+| Feld | Typ | Erforderlich | Werte |
+|---|---|---|---|
+| bump_type | string | Ja | `major`, `minor`, `patch` |
+
+Erhoehungsregeln:
+- **major**: Erhoeht Major, setzt Minor und Patch auf 0 (z.B. `1.2.3` -> `2.0.0`)
+- **minor**: Erhoeht Minor, setzt Patch auf 0 (z.B. `1.2.3` -> `1.3.0`)
+- **patch**: Erhoeht Patch (z.B. `1.2.3` -> `1.2.4`)
+
+Erstellt vor der Erhoehung einen Versions-Snapshot.
+
+**Antwort** `200 OK`: Aktualisiertes Fragebogenobjekt mit neuen Versionsfeldern.
 
 ---
 
@@ -677,9 +707,34 @@ Antwortdaten eines Fragebogens exportieren.
 
 ### POST /api/sessions
 
-Eine neue Teilnehmersitzung erstellen. Erlaubt anonymen Zugang fur veroffentlichte Fragebogen.
+Eine neue Teilnehmersitzung erstellen. Erlaubt anonymen Zugang fuer veroeffentlichte Frageboegen.
 
-**Auth**: Optional (erforderlich wenn Fragebogen nicht veroffentlicht)
+**Auth**: Optional (erforderlich wenn Fragebogen nicht veroeffentlicht)
+
+**Anfrage**:
+```json
+{
+  "questionnaire_id": "q-uuid",
+  "participant_id": "P001",
+  "version_major": 1,
+  "version_minor": 2,
+  "version_patch": 0,
+  "browser_info": { "userAgent": "Mozilla/5.0...", "screenWidth": 1920 },
+  "metadata": { "source": "email_campaign" }
+}
+```
+
+| Feld | Typ | Erforderlich | Beschreibung |
+|---|---|---|---|
+| questionnaire_id | UUID | Ja | Muss existieren |
+| participant_id | string | Nein | Automatisch auf Benutzer-ID gesetzt wenn authentifiziert |
+| version_major | integer | Nein | Major-Version des Fragebogens (automatisch ermittelt wenn ausgelassen) |
+| version_minor | integer | Nein | Minor-Version des Fragebogens (automatisch ermittelt wenn ausgelassen) |
+| version_patch | integer | Nein | Patch-Version des Fragebogens (automatisch ermittelt wenn ausgelassen) |
+| browser_info | object | Nein | Client-Umgebungs-Metadaten |
+| metadata | object | Nein | Zusaetzlicher Kontext |
+
+**Antwort** `201 Created`: Sitzungsobjekt (enthaelt `questionnaire_version_major`, `questionnaire_version_minor`, `questionnaire_version_patch`).
 
 ---
 
@@ -776,6 +831,62 @@ Berechnete Variablen einer Sitzung abrufen.
 ### POST /api/sessions/{id}/variables
 
 Eine Sitzungsvariable erstellen oder aktualisieren (Upsert).
+
+---
+
+### POST /api/sessions/{id}/sync
+
+Offline-Sitzungsdaten gesammelt synchronisieren. Akzeptiert Antworten, Ereignisse und Variablen in einer einzelnen Anfrage. Verwendet `client_id` zur Deduplizierung -- doppelte Datensaetze werden stillschweigend ignoriert.
+
+**Auth**: Keine (Sitzungseigentuemer impliziert)
+
+**Anfrage**:
+```json
+{
+  "responses": [
+    {
+      "client_id": "550e8400-e29b-41d4-a716-446655440001",
+      "question_id": "q1",
+      "value": 4,
+      "reaction_time_us": 1234567,
+      "presented_at": "2025-03-01T09:01:00Z",
+      "answered_at": "2025-03-01T09:01:01Z"
+    }
+  ],
+  "events": [
+    {
+      "client_id": "550e8400-e29b-41d4-a716-446655440002",
+      "event_type": "click",
+      "question_id": "q1",
+      "timestamp_us": 1709312400000000,
+      "metadata": { "target": "option-3" }
+    }
+  ],
+  "variables": [
+    {
+      "name": "total_score",
+      "value": 85
+    }
+  ]
+}
+```
+
+| Feld | Typ | Erforderlich | Beschreibung |
+|---|---|---|---|
+| responses | array | Nein | Antwortdatensaetze mit `client_id` zur Deduplizierung |
+| events | array | Nein | Interaktionsereignisse mit `client_id` zur Deduplizierung |
+| variables | array | Nein | Variablen-Upserts (nach Name geschluesselt) |
+
+Jede Antwort und jedes Ereignis **muss** eine `client_id` (UUID) enthalten. Der Server verwendet `INSERT ... ON CONFLICT (client_id) DO NOTHING` um Duplikate durch wiederholte Synchronisierungen zu verhindern. Variablen verwenden Upsert-Semantik auf `(session_id, variable_name)`.
+
+**Antwort** `200 OK`:
+```json
+{
+  "responses_synced": 5,
+  "events_synced": 12,
+  "variables_synced": 3
+}
+```
 
 ---
 

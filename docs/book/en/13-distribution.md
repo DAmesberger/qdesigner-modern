@@ -110,6 +110,7 @@ The runtime creates a new session via `POST /api/sessions` with the following da
 
 - **questionnaire_id**: The UUID of the questionnaire.
 - **participant_id**: An optional identifier. If the participant is authenticated, their user ID is used. Otherwise, a random participant ID may be generated, or the field is left empty for fully anonymous participation.
+- **version_major**, **version_minor**, **version_patch**: The questionnaire's semver at the time of session creation. If not provided, the server looks up the current version from the questionnaire definition.
 - **browser_info**: Automatically captured metadata including user agent, screen resolution, and touch capability.
 - **metadata**: Additional context such as recruitment source, condition assignment, and consent records.
 
@@ -243,6 +244,98 @@ All data is scoped to organizations and projects via the multi-tenant architectu
 
 ---
 
+## 13.7 Offline Fillout Support
+
+QDesigner Modern supports fully offline questionnaire fillout. Participants can complete questionnaires without an internet connection, and responses automatically sync to the server when connectivity returns.
+
+### Architecture Overview
+
+The offline fillout system uses a layered approach:
+
+1. **IndexedDB (Dexie)**: Stores questionnaire definitions, sessions, responses, interaction events, and variables locally in the browser.
+2. **Cache API**: Stores media assets (images, audio, video) referenced by questionnaires for offline playback.
+3. **Service Worker**: Intercepts network requests and serves cached content when offline.
+4. **Sync Engine**: Watches connectivity status and automatically uploads pending data when the network returns.
+
+### Pre-Syncing Questionnaires
+
+Before going offline, questionnaires can be pre-synced for offline availability:
+
+1. The `FilloutOfflineSyncService` downloads the questionnaire definition via the API.
+2. The definition is stored in the `filloutQuestionnaires` IndexedDB table.
+3. All media URLs referenced in the questionnaire (images, audio, video) are extracted and cached in the `fillout-media-v1` Cache API store.
+4. The Service Worker serves these cached assets when the device is offline.
+
+The fillout route (`/q/{code}`) automatically caches questionnaires to IndexedDB on first online access, so returning participants can continue offline without explicit pre-sync.
+
+### Client-Side Session Creation
+
+When offline, sessions are created entirely client-side:
+
+- Session IDs are generated using `crypto.randomUUID()` -- no server round-trip required.
+- The session record is stored in the `filloutSessions` IndexedDB table with the questionnaire's version information.
+- Device metadata (browser, screen size, timezone) is captured locally.
+
+### Response Persistence
+
+Every response, interaction event, and variable update is immediately written to IndexedDB:
+
+- **Responses** are stored in the `filloutResponses` table with a `clientId` (UUID) for server-side deduplication.
+- **Events** are stored in the `filloutEvents` table, also with a `clientId`.
+- **Variables** are stored in the `filloutVariables` table with a composite key of `[sessionId, variableName]`.
+
+Each record has a `synced` flag that starts as `false` and is set to `true` after successful upload.
+
+### Automatic Sync
+
+The `FilloutSyncEngine` manages synchronization:
+
+1. **Detection**: Listens for the browser `online` event and the `navigator.onLine` property.
+2. **Trigger**: When connectivity returns, the engine queries IndexedDB for all records where `synced = false`.
+3. **Upload**: For each unsynced session, sends a bulk payload to `POST /api/sessions/{id}/sync` containing all pending responses, events, and variables.
+4. **Deduplication**: The server uses `INSERT ... ON CONFLICT (client_id) DO NOTHING` on responses and events, ensuring that retries or duplicate syncs never create duplicate records.
+5. **Completion**: On success, marks all uploaded records as `synced = true` in IndexedDB.
+6. **Retry**: On failure, uses exponential backoff (starting at 1 second, maximum 60 seconds) before retrying.
+
+### Offline UI Indicators
+
+The fillout page displays connectivity and sync status to participants:
+
+| Status | Indicator | Description |
+|---|---|---|
+| **Offline** | Amber badge with cloud-off icon | Device has no internet connection. Responses are saved locally. |
+| **Syncing** | Blue badge with spinning icon | Sync in progress -- uploading saved responses to the server. |
+| **Synced** | Green badge with checkmark | All responses successfully uploaded to the server. |
+| **Sync Error** | Red badge with alert icon | Sync failed. Will retry automatically. |
+
+After each response is saved locally, a brief "Saved locally" confirmation appears, reassuring participants that their data is preserved regardless of connectivity.
+
+### Data Flow Summary
+
+```
+Participant answers question
+        |
+        v
+  Save to IndexedDB (immediate, never fails)
+        |
+        v
+  Online? ----Yes----> POST /api/sessions/{id}/sync
+        |                      |
+        No                     v
+        |              Mark synced = true
+        v
+  Queue for later sync
+        |
+  [Network returns]
+        |
+        v
+  FilloutSyncEngine triggers sync
+```
+
+---
+
 ## Summary
 
 QDesigner Modern's distribution system provides a complete workflow from publishing through data collection and monitoring. Short codes make questionnaires easy to share via links, QR codes, or embedded iframes. The session management system captures responses with microsecond precision, while the monitoring dashboard and aggregate statistics endpoints give researchers real-time visibility into their data collection progress.
+
+The offline fillout capability ensures that data collection continues uninterrupted even without internet connectivity. Questionnaires and media are cached locally, sessions are created client-side, and responses automatically sync with deduplication when the network returns.

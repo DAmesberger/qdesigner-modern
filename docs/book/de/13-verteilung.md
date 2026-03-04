@@ -110,6 +110,7 @@ Die Laufzeitumgebung erstellt eine neue Sitzung ueber `POST /api/sessions` mit f
 
 - **questionnaire_id**: Die UUID des Fragebogens.
 - **participant_id**: Ein optionaler Bezeichner. Wenn der Teilnehmer authentifiziert ist, wird seine Benutzer-ID verwendet. Andernfalls kann eine zufaellige Teilnehmer-ID generiert werden, oder das Feld bleibt fuer vollstaendig anonyme Teilnahme leer.
+- **version_major**, **version_minor**, **version_patch**: Die Semver des Fragebogens zum Zeitpunkt der Sitzungserstellung. Wenn nicht angegeben, ermittelt der Server die aktuelle Version aus der Fragebogendefinition.
 - **browser_info**: Automatisch erfasste Metadaten einschliesslich User Agent, Bildschirmaufloesung und Touch-Faehigkeit.
 - **metadata**: Zusaetzlicher Kontext wie Rekrutierungsquelle, Bedingungszuweisung und Einwilligungsdatensaetze.
 
@@ -243,6 +244,98 @@ Alle Daten sind uber die Multi-Tenant-Architektur auf Organisationen und Projekt
 
 ---
 
+## 13.7 Offline-Ausfuell-Unterstuetzung
+
+QDesigner Modern unterstuetzt das vollstaendig offline Ausfuellen von Frageboegen. Teilnehmer koennen Frageboegen ohne Internetverbindung ausfuellen, und Antworten werden automatisch mit dem Server synchronisiert, wenn die Konnektivitaet zurueckkehrt.
+
+### Architektur-Ueberblick
+
+Das Offline-Ausfuellsystem verwendet einen mehrschichtigen Ansatz:
+
+1. **IndexedDB (Dexie)**: Speichert Fragebogendefinitionen, Sitzungen, Antworten, Interaktionsereignisse und Variablen lokal im Browser.
+2. **Cache API**: Speichert Medien-Assets (Bilder, Audio, Video), die von Frageboegen referenziert werden, fuer die Offline-Wiedergabe.
+3. **Service Worker**: Faengt Netzwerkanfragen ab und liefert zwischengespeicherte Inhalte, wenn offline.
+4. **Sync-Engine**: Ueberwacht den Konnektivitaetsstatus und laedt ausstehende Daten automatisch hoch, wenn das Netzwerk zurueckkehrt.
+
+### Vorab-Synchronisierung von Frageboegen
+
+Vor dem Offline-Gehen koennen Frageboegen fuer die Offline-Verfuegbarkeit vorab synchronisiert werden:
+
+1. Der `FilloutOfflineSyncService` laedt die Fragebogendefinition ueber die API herunter.
+2. Die Definition wird in der `filloutQuestionnaires` IndexedDB-Tabelle gespeichert.
+3. Alle in der Fragebogendefinition referenzierten Medien-URLs (Bilder, Audio, Video) werden extrahiert und im `fillout-media-v1` Cache-API-Speicher zwischengespeichert.
+4. Der Service Worker liefert diese zwischengespeicherten Assets, wenn das Geraet offline ist.
+
+Die Ausfuell-Route (`/q/{code}`) speichert Frageboegen beim ersten Online-Zugriff automatisch in IndexedDB, sodass zurueckkehrende Teilnehmer ohne explizite Vorab-Synchronisierung offline fortfahren koennen.
+
+### Clientseitige Sitzungserstellung
+
+Im Offline-Modus werden Sitzungen vollstaendig clientseitig erstellt:
+
+- Sitzungs-IDs werden mittels `crypto.randomUUID()` generiert -- kein Server-Roundtrip erforderlich.
+- Der Sitzungsdatensatz wird in der `filloutSessions` IndexedDB-Tabelle mit den Versionsinformationen des Fragebogens gespeichert.
+- Geraetemetadaten (Browser, Bildschirmgroesse, Zeitzone) werden lokal erfasst.
+
+### Antwort-Persistenz
+
+Jede Antwort, jedes Interaktionsereignis und jede Variablenaktualisierung wird sofort in IndexedDB geschrieben:
+
+- **Antworten** werden in der `filloutResponses`-Tabelle mit einer `clientId` (UUID) fuer serverseitige Deduplizierung gespeichert.
+- **Ereignisse** werden in der `filloutEvents`-Tabelle, ebenfalls mit einer `clientId`, gespeichert.
+- **Variablen** werden in der `filloutVariables`-Tabelle mit einem zusammengesetzten Schluessel aus `[sessionId, variableName]` gespeichert.
+
+Jeder Datensatz hat ein `synced`-Flag, das mit `false` beginnt und nach erfolgreichem Upload auf `true` gesetzt wird.
+
+### Automatische Synchronisierung
+
+Die `FilloutSyncEngine` verwaltet die Synchronisierung:
+
+1. **Erkennung**: Lauscht auf das Browser-`online`-Ereignis und die `navigator.onLine`-Eigenschaft.
+2. **Ausloesung**: Wenn die Konnektivitaet zurueckkehrt, fragt die Engine IndexedDB nach allen Datensaetzen ab, bei denen `synced = false` ist.
+3. **Upload**: Fuer jede nicht synchronisierte Sitzung wird ein Gesamtpaket an `POST /api/sessions/{id}/sync` gesendet, das alle ausstehenden Antworten, Ereignisse und Variablen enthaelt.
+4. **Deduplizierung**: Der Server verwendet `INSERT ... ON CONFLICT (client_id) DO NOTHING` bei Antworten und Ereignissen, sodass Wiederholungen oder doppelte Synchronisierungen niemals doppelte Datensaetze erzeugen.
+5. **Abschluss**: Bei Erfolg werden alle hochgeladenen Datensaetze in IndexedDB als `synced = true` markiert.
+6. **Wiederholung**: Bei Fehlschlag wird ein exponentielles Backoff (beginnend bei 1 Sekunde, Maximum 60 Sekunden) vor dem erneuten Versuch verwendet.
+
+### Offline-UI-Indikatoren
+
+Die Ausfuell-Seite zeigt den Konnektivitaets- und Synchronisierungsstatus fuer Teilnehmer an:
+
+| Status | Indikator | Beschreibung |
+|---|---|---|
+| **Offline** | Bernsteinfarbenes Badge mit Cloud-Off-Icon | Geraet hat keine Internetverbindung. Antworten werden lokal gespeichert. |
+| **Synchronisierung** | Blaues Badge mit drehendem Icon | Synchronisierung laeuft -- gespeicherte Antworten werden zum Server hochgeladen. |
+| **Synchronisiert** | Gruenes Badge mit Haekchen | Alle Antworten erfolgreich zum Server hochgeladen. |
+| **Sync-Fehler** | Rotes Badge mit Warnsymbol | Synchronisierung fehlgeschlagen. Automatischer Wiederholungsversuch. |
+
+Nach dem lokalen Speichern jeder Antwort erscheint eine kurze "Lokal gespeichert"-Bestaetigung, die den Teilnehmern versichert, dass ihre Daten unabhaengig von der Konnektivitaet erhalten bleiben.
+
+### Datenfluss-Uebersicht
+
+```
+Teilnehmer beantwortet Frage
+        |
+        v
+  In IndexedDB speichern (sofort, schlaegt nie fehl)
+        |
+        v
+  Online? ----Ja----> POST /api/sessions/{id}/sync
+        |                      |
+        Nein                   v
+        |              synced = true markieren
+        v
+  Fuer spaetere Synchronisierung einreihen
+        |
+  [Netzwerk kehrt zurueck]
+        |
+        v
+  FilloutSyncEngine loest Synchronisierung aus
+```
+
+---
+
 ## Zusammenfassung
 
-Das Verteilungssystem von QDesigner Modern bietet einen vollstandigen Arbeitsablauf von der Veroffentlichung uber die Datenerhebung bis zum Monitoring. Kurzcodes machen Fragebogen einfach teilbar uber Links, QR-Codes oder eingebettete iframes. Das Sitzungsmanagementsystem erfasst Antworten mit Mikrosekunden-Prazision, wahrend das Monitoring-Dashboard und die Endpunkte fur aggregierte Statistiken Forschern Echtzeit-Einblick in den Fortschritt ihrer Datenerhebung geben.
+Das Verteilungssystem von QDesigner Modern bietet einen vollstaendigen Arbeitsablauf von der Veroeffentlichung ueber die Datenerhebung bis zum Monitoring. Kurzcodes machen Frageboegen einfach teilbar ueber Links, QR-Codes oder eingebettete iframes. Das Sitzungsmanagementsystem erfasst Antworten mit Mikrosekunden-Praezision, waehrend das Monitoring-Dashboard und die Endpunkte fuer aggregierte Statistiken Forschern Echtzeit-Einblick in den Fortschritt ihrer Datenerhebung geben.
+
+Die Offline-Ausfuell-Faehigkeit stellt sicher, dass die Datenerhebung auch ohne Internetverbindung ununterbrochen fortgesetzt wird. Frageboegen und Medien werden lokal zwischengespeichert, Sitzungen werden clientseitig erstellt, und Antworten werden mit Deduplizierung automatisch synchronisiert, wenn das Netzwerk zurueckkehrt.

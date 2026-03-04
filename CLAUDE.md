@@ -4,213 +4,249 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-QDesigner Modern is a high-performance questionnaire platform for psychological and behavioral research, featuring microsecond-accurate reaction time measurements and WebGL 2.0 rendering for 120+ FPS support combined with standard questionnaire features. It is built using Svelte 5, SvelteKit, and TypeScript, with a focus on performance, extensibility, and user experience with the goal of having FAANG level UI/UX.
-
-## Test Credentials
-
-For local development, use these credentials to log in (use playwright MCP to create the user after bootstrapping):
-
-- **Email**: `demo@example.com`
-- **Password**: `demo123456`
-
-### Auto-Login Test Mode
-
-For faster development, you can enable test mode to automatically log in as the demo user:
-
-1. **Enable test mode** (in browser console):
-
-   ```javascript
-   window.testMode.enable();
-   ```
-
-2. **Or set directly in localStorage**:
-
-   ```javascript
-   localStorage.setItem('qdesigner-test-mode', 'true');
-   ```
-
-3. **Disable test mode**:
-   ```javascript
-   window.testMode.disable();
-   ```
-
-When enabled, navigating to any protected route (e.g., `/dashboard`, `/designer`) will automatically log you in as `demo@example.com`. This only works in development mode.
+QDesigner Modern is a high-performance questionnaire platform for psychological and behavioral research. It features microsecond-accurate reaction time measurements, WebGL 2.0 rendering at 120+ FPS, fully offline-capable questionnaire fillout, and semantic versioning for questionnaire definitions. Built with Svelte 5, SvelteKit, TypeScript strict, and a Rust/Axum backend.
 
 ## Essential Commands
 
 ```bash
-# Install dependencies (use pnpm, not npm)
+# Install dependencies (always use pnpm, never npm)
 pnpm install
 
 # Start infrastructure (PostgreSQL 18, Redis 7, MinIO, MailPit)
 docker compose up -d
 
-# Start the Rust backend (auto-runs migrations)
+# Start the Rust backend (auto-runs migrations, port 4000)
 cd server && cargo run
 
-# Start the frontend dev server
+# Start the frontend dev server (port 5173, proxies /api to :4000)
 pnpm dev
 
 # Testing
-pnpm test                    # Run all tests
-pnpm test:coverage          # With coverage
-cd packages/scripting-engine && pnpm test  # Run tests in specific package
+pnpm test                    # Unit tests (Vitest, 257 tests)
+pnpm test:coverage           # With coverage
+pnpm check                   # svelte-check + tsc
+cd server && cargo check     # Rust type check
+cd server && cargo test      # Rust tests
 
 # Linting and formatting
-pnpm lint                   # Check linting
-pnpm lint:fix              # Auto-fix linting issues
-pnpm format                # Format with Prettier
-
-# Type checking
-pnpm check                 # Run svelte-check
+pnpm lint                    # Check linting
+pnpm lint:fix                # Auto-fix
+pnpm format                  # Prettier
 
 # Building
-pnpm build                 # Build frontend
+pnpm build                   # Build frontend
+cd server && cargo build     # Build backend
 
-# Rust backend
-cd server && cargo check    # Type check
-cd server && cargo test     # Run tests
-cd server && cargo build    # Build
+# E2E tests
+pnpm install:browsers        # Install Playwright browsers first
+pnpm test:e2e                # Run E2E tests
 
-# E2E tests (requires browsers)
-pnpm install:browsers      # Install Playwright browsers first
-pnpm test:e2e             # Run E2E tests
+# Database access
+pnpm db:psql                 # Connect to PostgreSQL
 ```
 
-## Architecture Overview
+## Architecture
 
 ### Stack
 
 - **Frontend**: Svelte 5 (runes) + SvelteKit + TypeScript strict + Tailwind CSS 4.1
 - **Backend**: Rust/Axum REST API (`server/`)
 - **Database**: PostgreSQL 18 via Docker
-- **Cache**: Redis 7 (optional, for rate limiting)
-- **Storage**: MinIO (S3-compatible, for file uploads)
-- **Email**: MailPit (dev SMTP, web UI at http://localhost:18026)
-- **Auth**: JWT with Argon2id password hashing
+- **Cache**: Redis 7 (rate limiting)
+- **Storage**: MinIO (S3-compatible, file uploads)
+- **Email**: MailPit (dev SMTP + web UI)
+- **Auth**: JWT access/refresh tokens with Argon2id password hashing
+- **Offline**: Dexie/IndexedDB + Service Worker + Cache API
+
+### Ports
+
+| Service           | Port  |
+|-------------------|-------|
+| Frontend (Vite)   | 5173  |
+| Backend (Axum)    | 4000  |
+| PostgreSQL        | 15434 |
+| Redis             | 16381 |
+| MinIO API         | 19003 |
+| MinIO Console     | 19001 |
+| MailPit SMTP      | 11026 |
+| MailPit Web UI    | 18026 |
+
+The frontend uses relative URLs (`/api/*`); Vite proxies these to `http://localhost:4000`. `VITE_API_URL` in `.env.development` is intentionally empty.
 
 ### Project Structure
 
-- **`src/`**: SvelteKit frontend (Svelte 5 + TypeScript)
-  - `src/routes/(auth)/`: Auth pages (login, signup, onboarding)
-  - `src/routes/(app)/`: App pages (dashboard, projects, designer)
-  - `src/lib/services/`: API client, auth, persistence services
-  - `src/lib/stores/`: Svelte stores (designer, etc.)
-  - `src/lib/shared/`: Shared types and utilities
-- **`server/`**: Rust/Axum backend
-  - `server/src/api/`: Route handlers (auth, organizations, projects, questionnaires, etc.)
-  - `server/src/auth/`: JWT, password hashing, session management
-  - `server/src/middleware/`: CORS, rate limiting, auth middleware
-  - `server/src/db/`: Database connection and migrations
-  - `server/db/migrations/`: SQL migration files
-- **`packages/scripting-engine/`**: Variable system with formula evaluation
-
-### Ports (development)
-
-- Frontend: **5173** (SvelteKit dev server)
-- Backend: **3000** (Rust/Axum)
-- PostgreSQL: **15434** (mapped from container 5432)
-- Redis: **16381** (mapped from container 6379)
-- MinIO API: **19003** / Console: **19004**
-- MailPit SMTP: **11026** / Web UI: **18026**
-
-### Key Design Patterns
-
-1. **State Management**: Svelte 5 runes (`$state`, `$derived`, `$effect`)
-2. **Variable System**: Custom formula engine supporting mathematical expressions, conditionals (IF), and array operations
-3. **Rendering**: Custom WebGL 2.0 renderer for high-performance display at 120+ FPS
-4. **Drag & Drop**: Uses @dnd-kit for questionnaire designer interface
-5. **Code Editing**: Monaco Editor integration for formula editing
-6. **Questionnaire Persistence**: JSONB content stored in `questionnaire_definitions` table
+```
+src/
+├── routes/
+│   ├── (auth)/          Login, signup, onboarding, password reset
+│   ├── (app)/           Dashboard, projects, designer, admin, settings
+│   ├── (fillout)/       Questionnaire fillout (client-side only, offline-capable)
+│   └── (public)/        Public pages
+├── lib/
+│   ├── components/      Reusable UI (designer/, questions/, common/, ui/)
+│   ├── fillout/         Fillout runtime, services, components
+│   │   ├── runtime/     FilloutRuntime, RuntimeEventBus
+│   │   ├── services/    Session, response persistence, offline sync engine
+│   │   └── components/  WelcomeScreen, ConsentScreen, CompletionScreen
+│   ├── runtime/         Core questionnaire runtime
+│   │   ├── core/        QuestionnaireRuntime, BlockRandomizer, ScriptExecutor
+│   │   ├── reaction/    Reaction time engine + presets (Stroop, IAT, Flanker, etc.)
+│   │   ├── experimental/ ExperimentalDesign, Counterbalancing
+│   │   └── validation/  MediaValidator, response validation
+│   ├── renderer/        WebGL 2.0 rendering engine
+│   ├── services/        API client, auth, persistence, offline, IndexedDB
+│   │   └── db/          Dexie IndexedDB schema (designer + fillout tables)
+│   ├── stores/          Svelte stores (designer.svelte.ts, toast.ts, theme.ts)
+│   ├── shared/          Types, factories, utilities
+│   ├── i18n/            Internationalization
+│   ├── analytics/       Statistical engine, export service
+│   └── scripting-engine/ → packages/scripting-engine (symlink)
+server/
+├── src/api/             Route handlers (auth, organizations, projects, questionnaires, sessions, media, templates)
+├── src/auth/            JWT, password hashing, session management
+├── src/middleware/       CORS, rate limiting, auth middleware
+├── db/migrations/       SQL migrations (001-016, applied automatically)
+└── migrations/          sqlx embed migrations (00001-00008)
+packages/
+└── scripting-engine/    Formula evaluation engine (@qdesigner/scripting-engine)
+```
 
 ### Database Schema
 
-- Multi-tenant architecture with organizations
-- User roles: owner, admin, editor, viewer
-- Key tables: users, organizations, organization_members, projects, project_members, questionnaire_definitions, responses
-- High-precision timing columns using BIGINT for microsecond accuracy
-- Email verification via 6-digit codes (email_verification_codes table)
+Multi-tenant architecture with 16 migrations covering:
+
+- **Auth**: users, refresh_tokens, revoked_tokens, email_verifications, password_resets
+- **Orgs**: organizations, organization_members, organization_invitations, organization_domains
+- **Projects**: projects, project_members
+- **Questionnaires**: questionnaire_definitions (JSONB content, semver versioning), questionnaire_versions
+- **Sessions**: sessions (with questionnaire version tracking), responses (client_id for dedup), interaction_events (client_id for dedup), session_variables
+- **Media**: media_assets, session_media
+
+Key details:
+- Semver versioning: `version_major`, `version_minor`, `version_patch` on questionnaire_definitions, questionnaire_versions, and sessions
+- Microsecond precision: `reaction_time_us` (BIGINT) on responses, `timestamp_us` on interaction_events
+- Offline dedup: `client_id UUID UNIQUE` on responses and interaction_events
+- Soft deletes via `deleted_at` column
+
+### API Endpoints
+
+```
+/api/auth/*                  Authentication (login, register, refresh, verify-email, password-reset)
+/api/users/me                User profile
+/api/organizations/*         Org CRUD, members, invitations, domains, templates, analytics
+/api/projects/*              Project CRUD, members, questionnaires
+/api/questionnaires/
+  /by-code/{code}            Public fillout lookup (returns semver fields)
+  /{id}/versions             Version history
+  /{id}/condition-counts     Between-subjects condition counts
+/api/projects/{id}/questionnaires/{qid}/
+  /publish                   Publish questionnaire
+  /bump-version              Bump semver (major/minor/patch)
+  /export                    Export responses (JSON/CSV)
+/api/sessions/*              Session CRUD, responses, events, variables, media
+  /{id}/sync                 Bulk offline sync with client_id dedup
+  /aggregate                 Statistical aggregation
+  /compare                   Participant comparison
+  /dashboard                 Org dashboard summary
+```
+
+### Offline Architecture
+
+The fillout route (`/[code]`) runs entirely client-side (`ssr = false`):
+
+1. **Online-first load**: Fetches questionnaire from API, caches to IndexedDB
+2. **Offline fallback**: Loads cached questionnaire from IndexedDB
+3. **Session creation**: `crypto.randomUUID()` — no server needed
+4. **Response persistence**: IndexedDB with `clientId` per record for dedup
+5. **Sync engine**: Watches `online`/`offline` events, syncs via `POST /api/sessions/{id}/sync`
+6. **Dedup**: Backend uses `INSERT ... ON CONFLICT (client_id) DO NOTHING`
+7. **Media caching**: Cache API (`fillout-media-v1`) for questionnaire media assets
+
+IndexedDB tables (Dexie v2):
+- Designer: `questionnaires`, `syncQueue`, `resources`, `drafts`
+- Fillout: `filloutQuestionnaires`, `filloutSessions`, `filloutResponses`, `filloutEvents`, `filloutVariables`
+
+### Version Management
+
+Questionnaires use semantic versioning (`major.minor.patch`):
+
+| Change | Bump | Example |
+|--------|------|---------|
+| Add/remove/reorder questions, change response keys | Major | 1.0.0 → 2.0.0 |
+| Edit question text/labels, add options, reorder pages | Minor | 1.0.0 → 1.1.0 |
+| Fix typos, adjust styling, update descriptions | Patch | 1.0.0 → 1.0.1 |
+
+Sessions record which version they were filled out against. Same major version = comparable data.
 
 ### Variable Engine
 
-The variable system (`packages/scripting-engine`) supports:
+The scripting engine (`packages/scripting-engine`) supports 47+ formula functions:
 
-- Mathematical operations: `+`, `-`, `*`, `/`, `^`, `sqrt()`
+- Math: `+`, `-`, `*`, `/`, `^`, `sqrt()`, `abs()`, `round()`, `ceil()`, `floor()`
 - Conditionals: `IF(condition, trueValue, falseValue)`
-- Array functions: `SUM()`, `AVG()`, `COUNT()`, `MIN()`, `MAX()`
-- String operations: `CONCAT()`, `LENGTH()`
-- Time functions: `NOW()`, `TIME_SINCE()`
+- Arrays: `SUM()`, `AVG()`, `COUNT()`, `MIN()`, `MAX()`, `FOREACH()`, `RANGE()`
+- Strings: `CONCAT()`, `LENGTH()`, `UPPER()`, `LOWER()`, `TRIM()`
+- Time: `NOW()`, `TIME_SINCE()`
 - Random: `RANDOM()`, `RANDINT(min, max)`
+- Variable interpolation: `{{variableName}}` in text fields
 
-### Testing Strategy
+## Test Credentials
 
-- Unit tests with Vitest for logic and utilities
-- Component tests with @testing-library/svelte
-- E2E tests with Playwright for user workflows
-- Test files use `.test.ts` or `.spec.ts` suffix
+For local development (create via Playwright MCP after bootstrapping):
 
-### Development Workflow
+- **Email**: `demo@example.com`
+- **Password**: `demo123456`
 
-1. The project uses pnpm workspaces - always use `pnpm` instead of `npm`
-2. Start infrastructure: `docker compose up -d`
-3. Start backend: `cd server && cargo run` (reads `.env.development` from parent dir)
-4. Start frontend: `pnpm dev`
-5. Frontend runs on port 5173, backend on port 3000
-6. Hot module replacement is enabled for rapid development
-7. TypeScript strict mode is enabled - ensure proper typing
+### Auto-Login Test Mode
 
-### Important Technical Details
+```javascript
+// Enable (browser console, dev mode only)
+window.testMode.enable();
+// Or: localStorage.setItem('qdesigner-test-mode', 'true');
 
-- Svelte 5 with runes syntax (`$state`, `$derived`, `$effect`)
-- Tailwind CSS 4.1 for styling (uses new syntax)
-- Microsecond timing precision requires performance.now() API
-- Database migrations in `server/db/migrations/` (applied automatically on backend start via sqlx)
-- SSR only for public pages, the questionnaire designer and fillout parts of the app need full offline support
-- Frontend API base URL configured via `VITE_API_URL` in `.env.development`
+// Disable
+window.testMode.disable();
+```
 
-### Common Tasks
+## Common Tasks
 
-**Adding a new question type:**
+### Adding a new question type
 
-1. Define interface in `src/lib/shared/types/questions.ts`
+1. Define interface in `src/lib/shared/types/questionnaire.ts`
 2. Add renderer component in `src/lib/components/questions/`
-3. Update question factory in designer
-4. Add runtime handler in `src/lib/shared/runtime/`
+3. Register in question factory (`src/lib/shared/factories/`)
+4. Add runtime handler in `src/lib/runtime/`
 
-**Working with variables:**
+### Database changes
 
-1. Variable definitions in `src/lib/shared/types/variables.ts`
-2. Formula evaluation in `packages/scripting-engine/src/evaluator.ts`
-3. Variable UI in `src/lib/components/variables/`
+1. Create migration in `server/db/migrations/` (e.g., `017_my_change.sql`)
+2. Create corresponding file in `server/migrations/` (e.g., `00009_my_change.sql`)
+3. Restart the backend — migrations apply automatically
+4. Update Rust structs in `server/src/api/` if needed
 
-**Database changes:**
+### Adding a new API endpoint
 
-1. Create migration SQL file in `server/db/migrations/` (numbered, e.g., `012_my_change.sql`)
-2. Also add to `server/migrations/` for sqlx embed (numbered, e.g., `00003_my_change.sql`)
-3. Restart the Rust backend - migrations apply automatically
-4. Update Rust models in `server/src/api/` if needed
-
-**Adding a new API endpoint:**
-
-1. Add handler function in `server/src/api/`
-2. Add route in `server/src/api/mod.rs`
-3. Add request/response types as needed
+1. Add handler in `server/src/api/`
+2. Register route in `server/src/api/mod.rs`
+3. Add request/response types
 4. Run `cargo check` to verify
+5. Add frontend API method in `src/lib/services/api.ts`
 
-**Logging in:**
+### Working with the fillout offline layer
 
-- User: demo@example.com
-- Password: demo123456
+- Questionnaire caching: `FilloutOfflineSyncService` (IndexedDB + Cache API for media)
+- Session management: `OfflineSessionService` (client-side UUID sessions)
+- Response persistence: `OfflineResponsePersistence` (IndexedDB with clientId dedup)
+- Sync engine: `FilloutSyncEngine` (auto-sync on reconnect, exponential backoff)
+- Service worker: `static/sw.js` (fillout media cache, offline queue)
 
 ## Code Guidance
 
-- Do not use tests scripts, simplifications or workarounds, ask when in doubt
+- Do not use test scripts, simplifications, or workarounds — ask when in doubt
 - Never use simpler approaches without asking
-- For development, start infrastructure with `docker compose up -d`, then `cd server && cargo run` for the backend, and `pnpm dev` for the frontend
-- When using Playwright MCP, prefer using html, only use screenshots if interpreting html is not possible.
-- Users should not be created via script, only using the playwright MCP to test the actual user flow
-- Never fix things quick and dirty. We always want to fix the underlying issue, in a way that it also works when the app is bootstrapped.
-
-## Navigation Guidance
-
-- Never guess URLs, navigate from the landing page
+- Never fix things quick and dirty — fix the underlying issue so it works when the app is bootstrapped
+- For development: `docker compose up -d`, then `cd server && cargo run`, then `pnpm dev`
+- When using Playwright MCP, prefer using HTML; only use screenshots if interpreting HTML is not possible
+- Users should not be created via script — only via the Playwright MCP to test the actual user flow
+- Never guess URLs — navigate from the landing page
+- Always include semver fields (`versionMajor`, `versionMinor`, `versionPatch`) when creating `Questionnaire` objects

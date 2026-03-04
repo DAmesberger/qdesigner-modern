@@ -267,3 +267,58 @@ Der Designer verfolgt alle Aenderungen ueber ein "Dirty"-Flag. Die Speicheranzei
 Bei einem Speicherfehler wird die Anzeige rot und ein Tooltip zeigt die Fehlermeldung an.
 
 Der Fragebogeninhalt wird als JSONB in der `questionnaire_definitions`-Tabelle in PostgreSQL gespeichert, sodass die gesamte Struktur -- Fragen, Variablen, Ablaufsteuerungen, Stile und Einstellungen -- atomar persistiert wird.
+
+## 5.11 Versionsverwaltung
+
+QDesigner verwendet **Semantische Versionierung** (Semver) zur Nachverfolgung von Fragebogenaenderungen. Jeder Fragebogen hat eine Versionsnummer im Format `v{Major}.{Minor}.{Patch}` (z.B. `v1.2.3`).
+
+### Versionsanzeige
+
+Die aktuelle Version wird in der Designer-Kopfzeile neben der Speicheranzeige dargestellt. Ein Klick auf das Versions-Badge oeffnet das Versionsverwaltungs-Panel.
+
+### Versions-Erhoehungen
+
+Die Versionsverwaltung bietet drei Erhoehungsaktionen mit unterschiedlicher Semantik:
+
+| Aenderungstyp | Erhoehung | Beispiel | Verwendung |
+|---|---|---|---|
+| **Major** | Erhoeht Major, setzt Minor und Patch auf 0 | `v1.2.3` -> `v2.0.0` | Strukturelle Aenderungen, die die Datenvergleichbarkeit beeinflussen |
+| **Minor** | Erhoeht Minor, setzt Patch auf 0 | `v1.2.3` -> `v1.3.0` | Inhaltsaenderungen ohne Auswirkung auf die Antwortstruktur |
+| **Patch** | Erhoeht Patch | `v1.2.3` -> `v1.2.4` | Kosmetische Korrekturen ohne Datenauswirkung |
+
+#### Erhoehungsregeln
+
+| Aenderung | Empfohlene Erhoehung |
+|---|---|
+| Fragen hinzufuegen, entfernen oder umordnen | Major |
+| Antwort-Schluessel umbenennen | Major |
+| Fragetexte oder Beschriftungen aendern | Minor |
+| Antwortoptionen zu einer Auswahlfrage hinzufuegen | Minor |
+| Seitenreihenfolge aendern | Minor |
+| Tippfehler beheben, Styling anpassen, Beschreibungen aktualisieren | Patch |
+
+Eine **Major-Versions-Erhoehung** wird mit einer Warnung hervorgehoben, da sie signalisiert, dass unter der neuen Major-Version erhobene Antwortdaten nicht direkt mit Daten aus frueheren Major-Versionen vergleichbar sind.
+
+### Versionshistorie
+
+Die Versionsverwaltung zeigt eine chronologische Liste aller veroeffentlichten Versionen mit Versionsnummer, Veroeffentlichungszeitstempel und Veroeffentlicher. Jede Veroeffentlichung erstellt einen Snapshot in der `questionnaire_versions`-Tabelle, der den exakten Inhalt zu diesem Zeitpunkt bewahrt.
+
+### Versionsverfolgung in Sitzungen
+
+Wenn ein Teilnehmer eine Ausfuell-Sitzung startet, zeichnet die Sitzung die aktuelle `version_major`, `version_minor` und `version_patch` des Fragebogens auf. Dies ermoeglicht Forschern:
+
+- Antwortdaten nach Version zu filtern
+- Ergebnisse ueber Versionen hinweg zu vergleichen
+- Zu identifizieren, welche Version ein Teilnehmer ausgefuellt hat
+- Sicherzustellen, dass nur Sitzungen innerhalb derselben Major-Version in aggregierten Statistiken verglichen werden
+
+### Veroeffentlichung und Versionen
+
+Das Veroeffentlichen eines Fragebogens:
+
+1. Erstellt einen Versions-Snapshot (friert Inhalt, Variablen, Ablaufsteuerungen ein)
+2. Zeichnet die aktuelle Semver im Snapshot auf
+3. Setzt den Fragebogenstatus auf `published`
+4. Macht ihn ueber die Kurzcode-URL zugaenglich
+
+Das Erhoehen einer Version fuehrt **nicht** automatisch zur Veroeffentlichung. Forscher koennen die Version erhoehen, weiterarbeiten und veroeffentlichen, wenn sie bereit sind.

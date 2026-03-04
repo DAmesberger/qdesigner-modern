@@ -937,11 +937,39 @@ Update a questionnaire. Setting `status` to `published` triggers publication.
 
 ### POST /api/projects/{id}/questionnaires/{qid}/publish
 
-Publish a questionnaire. Sets status to `published` and records `published_at`.
+Publish a questionnaire. Creates a version snapshot, sets status to `published`, and records `published_at`.
 
 **Auth**: Required (project editor+ or org admin+)
 
-**Response** `200 OK`: Published questionnaire object.
+**Response** `200 OK`: Published questionnaire object (includes `version_major`, `version_minor`, `version_patch`).
+
+---
+
+### POST /api/projects/{id}/questionnaires/{qid}/bump-version
+
+Bump the questionnaire's semantic version.
+
+**Auth**: Required (project editor+ or org admin+)
+
+**Request Body**:
+```json
+{
+  "bump_type": "minor"
+}
+```
+
+| Field | Type | Required | Values |
+|---|---|---|---|
+| bump_type | string | Yes | `major`, `minor`, `patch` |
+
+Version bump rules:
+- **major**: Increments major, resets minor and patch to 0 (e.g., `1.2.3` -> `2.0.0`)
+- **minor**: Increments minor, resets patch to 0 (e.g., `1.2.3` -> `1.3.0`)
+- **patch**: Increments patch (e.g., `1.2.3` -> `1.2.4`)
+
+Creates a version snapshot before incrementing.
+
+**Response** `200 OK`: Updated questionnaire object with new version fields.
 
 ---
 
@@ -1005,6 +1033,9 @@ Create a new participant session. Allows anonymous access for published question
 {
   "questionnaire_id": "q-uuid",
   "participant_id": "P001",
+  "version_major": 1,
+  "version_minor": 2,
+  "version_patch": 0,
   "browser_info": {
     "userAgent": "Mozilla/5.0...",
     "screenWidth": 1920,
@@ -1018,10 +1049,15 @@ Create a new participant session. Allows anonymous access for published question
 |---|---|---|---|
 | questionnaire_id | UUID | Yes | Must exist |
 | participant_id | string | No | Auto-set to user ID if authenticated |
+| version_major | integer | No | Questionnaire major version (auto-detected if omitted) |
+| version_minor | integer | No | Questionnaire minor version (auto-detected if omitted) |
+| version_patch | integer | No | Questionnaire patch version (auto-detected if omitted) |
 | browser_info | object | No | Client environment metadata |
 | metadata | object | No | Additional context |
 
-**Response** `201 Created`: Session object.
+If version fields are omitted, the server looks up the current version from the questionnaire definition.
+
+**Response** `201 Created`: Session object (includes `questionnaire_version_major`, `questionnaire_version_minor`, `questionnaire_version_patch`).
 
 ---
 
@@ -1362,6 +1398,62 @@ Create or update a session variable (upsert).
 **Response** `201 Created`:
 ```json
 { "success": true }
+```
+
+---
+
+### POST /api/sessions/{id}/sync
+
+Bulk sync offline session data. Accepts responses, events, and variables in a single request. Uses `client_id` for deduplication -- duplicate records are silently ignored.
+
+**Auth**: None (session owner implied)
+
+**Request Body**:
+```json
+{
+  "responses": [
+    {
+      "client_id": "550e8400-e29b-41d4-a716-446655440001",
+      "question_id": "q1",
+      "value": 4,
+      "reaction_time_us": 1234567,
+      "presented_at": "2025-03-01T09:01:00Z",
+      "answered_at": "2025-03-01T09:01:01Z"
+    }
+  ],
+  "events": [
+    {
+      "client_id": "550e8400-e29b-41d4-a716-446655440002",
+      "event_type": "click",
+      "question_id": "q1",
+      "timestamp_us": 1709312400000000,
+      "metadata": { "target": "option-3" }
+    }
+  ],
+  "variables": [
+    {
+      "name": "total_score",
+      "value": 85
+    }
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| responses | array | No | Response records with `client_id` for dedup |
+| events | array | No | Interaction events with `client_id` for dedup |
+| variables | array | No | Variable upserts (keyed by name) |
+
+Each response and event **must** include a `client_id` (UUID). The server uses `INSERT ... ON CONFLICT (client_id) DO NOTHING` to prevent duplicates from retried syncs. Variables use upsert semantics on `(session_id, variable_name)`.
+
+**Response** `200 OK`:
+```json
+{
+  "responses_synced": 5,
+  "events_synced": 12,
+  "variables_synced": 3
+}
 ```
 
 ---

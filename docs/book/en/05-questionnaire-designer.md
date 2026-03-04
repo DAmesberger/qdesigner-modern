@@ -329,3 +329,58 @@ The designer tracks all changes through a "dirty" flag. The save indicator in th
 If a save fails, the indicator turns red and a tooltip shows the error message. The designer will retry on the next save trigger.
 
 The questionnaire content is persisted as JSONB in the `questionnaire_definitions` table in PostgreSQL, ensuring that the entire structure -- questions, variables, flow controls, styling, and settings -- is stored atomically.
+
+## 5.11 Version Management
+
+QDesigner uses **semantic versioning** (semver) to track questionnaire changes. Every questionnaire has a version number in the format `v{major}.{minor}.{patch}` (e.g., `v1.2.3`).
+
+### Version Display
+
+The current version is displayed in the designer header toolbar next to the save indicator. Clicking the version badge opens the Version Manager panel.
+
+### Version Bumps
+
+The Version Manager provides three bump actions, each with different semantics:
+
+| Change Type | Bump | Example | When to Use |
+|---|---|---|---|
+| **Major** | Increments major, resets minor and patch to 0 | `v1.2.3` -> `v2.0.0` | Structural changes that affect data comparability |
+| **Minor** | Increments minor, resets patch to 0 | `v1.2.3` -> `v1.3.0` | Content changes that don't affect response structure |
+| **Patch** | Increments patch | `v1.2.3` -> `v1.2.4` | Cosmetic fixes with no impact on data |
+
+#### Bump Rules
+
+| Change | Recommended Bump |
+|---|---|
+| Add, remove, or reorder questions | Major |
+| Change response key names | Major |
+| Edit question text or labels | Minor |
+| Add answer options to a choice question | Minor |
+| Change page ordering | Minor |
+| Fix typos, adjust styling, update descriptions | Patch |
+
+A **major version bump** is highlighted with a warning, since it signals that response data collected under the new major version is not directly comparable to data from previous major versions.
+
+### Version History
+
+The Version Manager displays a chronological list of all published versions, showing the version number, publication timestamp, and who published it. Each publication creates a snapshot in the `questionnaire_versions` table, preserving the exact content at that point in time.
+
+### Version Tracking in Sessions
+
+When a participant starts a fillout session, the session records the questionnaire's current `version_major`, `version_minor`, and `version_patch`. This allows researchers to:
+
+- Filter response data by version
+- Compare results across versions
+- Identify which version a participant completed
+- Ensure that only sessions within the same major version are compared in aggregate statistics
+
+### Publishing and Versions
+
+Publishing a questionnaire:
+
+1. Creates a version snapshot (freezes content, variables, flow controls)
+2. Records the current semver in the snapshot
+3. Sets the questionnaire status to `published`
+4. Makes it accessible via the short code URL
+
+Bumping a version does **not** automatically publish. Researchers can bump the version, continue editing, and publish when ready.
