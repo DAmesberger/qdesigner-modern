@@ -1,9 +1,10 @@
 // QDesigner Modern Service Worker
 // Version: 2.0.0
 
-const CACHE_NAME = 'qdesigner-v2';
+const CACHE_NAME = 'qdesigner-v3';
 const RUNTIME_CACHE = 'qdesigner-runtime';
 const BUNDLE_CACHE = 'qdesigner-bundles';
+const FILLOUT_MEDIA_CACHE = 'fillout-media-v1';
 const PROGRESS_CHANNEL = new BroadcastChannel('sw-progress');
 
 const DB_NAME = 'qdesigner-offline';
@@ -218,7 +219,8 @@ self.addEventListener('activate', (event) => {
             .filter((name) =>
               name !== CACHE_NAME &&
               name !== RUNTIME_CACHE &&
-              name !== BUNDLE_CACHE
+              name !== BUNDLE_CACHE &&
+              name !== FILLOUT_MEDIA_CACHE
             )
             .map((name) => {
               console.log('[SW] Deleting old cache:', name);
@@ -265,9 +267,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Apply appropriate caching strategy
+  // Check fillout media cache first for media requests
   if (matchesPattern(request.url, CACHE_STRATEGIES.cacheFirst)) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(cacheFirstWithFilloutMedia(request));
   } else if (matchesPattern(request.url, CACHE_STRATEGIES.networkFirst)) {
     event.respondWith(networkFirst(request));
   } else {
@@ -324,6 +326,21 @@ async function fetchWithOfflineQueue(request) {
 }
 
 // ---------- Cache strategies ----------
+
+async function cacheFirstWithFilloutMedia(request) {
+  // Also check fillout media cache
+  try {
+    const filloutCache = await caches.open(FILLOUT_MEDIA_CACHE);
+    const filloutCached = await filloutCache.match(request);
+    if (filloutCached) {
+      return filloutCached;
+    }
+  } catch {
+    // Fillout cache not available
+  }
+
+  return cacheFirst(request);
+}
 
 async function cacheFirst(request) {
   // Check bundle cache first for static assets

@@ -76,6 +76,9 @@ export class DocumentStore {
       organizationId: options.organizationId,
       projectId: options.projectId,
       version: options.version || '1.0.0',
+      versionMajor: 1,
+      versionMinor: 0,
+      versionPatch: 0,
       created: now,
       modified: now,
       variables: [],
@@ -132,6 +135,9 @@ export class DocumentStore {
       input?.organizationId || input?.organization_id || source?.organizationId || normalized.organizationId;
     normalized.projectId = input?.projectId || input?.project_id || source?.projectId || normalized.projectId;
     normalized.version = source?.version || normalized.version;
+    normalized.versionMajor = source?.versionMajor ?? input?.version_major ?? normalized.versionMajor;
+    normalized.versionMinor = source?.versionMinor ?? input?.version_minor ?? normalized.versionMinor;
+    normalized.versionPatch = source?.versionPatch ?? input?.version_patch ?? normalized.versionPatch;
     normalized.created = asDate(source?.created || input?.created || input?.created_at || normalized.created);
     normalized.modified = asDate(source?.modified || input?.modified || input?.updated_at || normalized.modified);
     normalized.settings = {

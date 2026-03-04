@@ -45,22 +45,100 @@ export interface DraftData {
   autoSave: boolean;
 }
 
+// ── Fillout offline tables ─────────────────────────────────────────
+
+export interface FilloutQuestionnaire {
+  id: string;
+  accessCode: string;
+  versionMajor: number;
+  versionMinor: number;
+  versionPatch: number;
+  data: Record<string, unknown>; // raw questionnaire JSON from API
+  syncedAt: number;
+}
+
+export interface FilloutSession {
+  id: string; // client-generated UUID
+  questionnaireId: string;
+  status: 'active' | 'completed' | 'abandoned';
+  versionMajor: number;
+  versionMinor: number;
+  versionPatch: number;
+  participantId?: string;
+  metadata?: Record<string, unknown>;
+  browserInfo?: Record<string, unknown>;
+  createdAt: number;
+  completedAt?: number;
+  synced: 0 | 1;
+}
+
+export interface FilloutResponse {
+  id?: number; // auto-increment
+  sessionId: string;
+  clientId: string; // UUID for server dedup
+  questionId: string;
+  value: unknown;
+  reactionTimeUs?: number;
+  presentedAt?: string;
+  answeredAt?: string;
+  metadata?: Record<string, unknown>;
+  synced: 0 | 1;
+}
+
+export interface FilloutEvent {
+  id?: number; // auto-increment
+  sessionId: string;
+  clientId: string; // UUID for server dedup
+  eventType: string;
+  questionId?: string;
+  timestampUs: number;
+  metadata?: Record<string, unknown>;
+  synced: 0 | 1;
+}
+
+export interface FilloutVariable {
+  sessionId: string;
+  name: string;
+  value: unknown;
+  synced: 0 | 1;
+}
+
 class QDesignerDatabase extends Dexie {
-  // Tables
+  // Designer tables
   questionnaires!: Table<OfflineQuestionnaire>;
   syncQueue!: Table<SyncQueueItem>;
   resources!: Table<CachedResource>;
   drafts!: Table<DraftData>;
 
+  // Fillout offline tables
+  filloutQuestionnaires!: Table<FilloutQuestionnaire>;
+  filloutSessions!: Table<FilloutSession>;
+  filloutResponses!: Table<FilloutResponse>;
+  filloutEvents!: Table<FilloutEvent>;
+  filloutVariables!: Table<FilloutVariable>;
+
   constructor() {
     super('QDesignerOfflineDB');
-    
-    // Define schema
+
+    // v1: designer tables
     this.version(1).stores({
       questionnaires: 'id, userId, syncStatus, lastModified',
       syncQueue: '++id, userId, status, timestamp, [userId+status]',
       resources: 'id, url, lastAccessed, expiresAt',
       drafts: 'id, userId, questionnaireId, timestamp, [userId+questionnaireId]'
+    });
+
+    // v2: fillout offline tables
+    this.version(2).stores({
+      questionnaires: 'id, userId, syncStatus, lastModified',
+      syncQueue: '++id, userId, status, timestamp, [userId+status]',
+      resources: 'id, url, lastAccessed, expiresAt',
+      drafts: 'id, userId, questionnaireId, timestamp, [userId+questionnaireId]',
+      filloutQuestionnaires: 'id, accessCode, syncedAt',
+      filloutSessions: 'id, questionnaireId, status, createdAt, synced, [questionnaireId+status]',
+      filloutResponses: '++id, sessionId, clientId, synced, [sessionId+synced]',
+      filloutEvents: '++id, sessionId, clientId, synced, [sessionId+synced]',
+      filloutVariables: '[sessionId+name], sessionId, synced'
     });
   }
 

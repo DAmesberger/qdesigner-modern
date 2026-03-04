@@ -323,6 +323,11 @@ class ApiClient {
       this.get<ConditionGroupCounts>(
         `/api/questionnaires/${questionnaireId}/condition-counts`
       ),
+    bumpVersion: (projectId: string, id: string, bumpType: 'major' | 'minor' | 'patch') =>
+      this.post<QuestionnaireDefinition>(
+        `/api/projects/${projectId}/questionnaires/${id}/bump-version`,
+        { bump_type: bumpType }
+      ),
   };
 
   // === Sessions ===

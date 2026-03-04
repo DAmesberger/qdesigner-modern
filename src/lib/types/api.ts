@@ -74,6 +74,9 @@ export interface QuestionnaireDefinition {
 	name: string;
 	description: string | null;
 	version: number;
+	version_major?: number;
+	version_minor?: number;
+	version_patch?: number;
 	content: Record<string, unknown>;
 	status: 'draft' | 'published' | 'archived';
 	settings: Record<string, unknown>;

@@ -17,6 +17,9 @@ describe('MediaValidator', () => {
   const createTestQuestionnaire = (questions: Question[]): Questionnaire => ({
     id: 'test',
     version: '1.0.0',
+    versionMajor: 1,
+    versionMinor: 0,
+    versionPatch: 0,
     name: 'Test Questionnaire',
     description: '',
     pages: [{

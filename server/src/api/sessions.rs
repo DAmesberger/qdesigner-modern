@@ -26,6 +26,9 @@ pub struct Session {
     pub metadata: serde_json::Value,
     pub browser_info: Option<serde_json::Value>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub questionnaire_version_major: Option<i32>,
+    pub questionnaire_version_minor: Option<i32>,
+    pub questionnaire_version_patch: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +37,9 @@ pub struct CreateSessionRequest {
     pub participant_id: Option<String>,
     pub browser_info: Option<serde_json::Value>,
     pub metadata: Option<serde_json::Value>,
+    pub version_major: Option<i32>,
+    pub version_minor: Option<i32>,
+    pub version_patch: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +59,7 @@ pub struct ResponseRecord {
     pub answered_at: Option<chrono::DateTime<chrono::Utc>>,
     pub metadata: serde_json::Value,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub client_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,6 +91,7 @@ pub struct InteractionEventRecord {
     pub timestamp_us: i64,
     pub metadata: Option<serde_json::Value>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub client_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -316,19 +324,41 @@ pub async fn create_session(
         .participant_id
         .or_else(|| user.as_ref().map(|u| u.user_id.to_string()));
 
+    // Look up current questionnaire version if not provided in request
+    let (ver_major, ver_minor, ver_patch) = if body.version_major.is_some() {
+        (body.version_major, body.version_minor, body.version_patch)
+    } else {
+        let ver = sqlx::query_as::<_, (i32, i32, i32)>(
+            "SELECT version_major, version_minor, version_patch FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(body.questionnaire_id)
+        .fetch_optional(&state.pool)
+        .await?;
+
+        match ver {
+            Some((major, minor, patch)) => (Some(major), Some(minor), Some(patch)),
+            None => (None, None, None),
+        }
+    };
+
     let session = sqlx::query_as::<_, Session>(
         r#"
         INSERT INTO sessions (questionnaire_id, participant_id, status, started_at,
-                              browser_info, metadata)
-        VALUES ($1, $2, 'active', NOW(), $3, $4)
+                              browser_info, metadata,
+                              questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch)
+        VALUES ($1, $2, 'active', NOW(), $3, $4, $5, $6, $7)
         RETURNING id, questionnaire_id, participant_id, status, started_at,
-                  completed_at, last_activity_at, metadata, browser_info, created_at
+                  completed_at, last_activity_at, metadata, browser_info, created_at,
+                  questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch
         "#,
     )
     .bind(body.questionnaire_id)
     .bind(&participant_id)
     .bind(&body.browser_info)
     .bind(body.metadata.unwrap_or_else(|| serde_json::json!({})))
+    .bind(ver_major)
+    .bind(ver_minor)
+    .bind(ver_patch)
     .fetch_one(&state.pool)
     .await?;
 
@@ -372,7 +402,8 @@ pub async fn list_sessions(
     let sql = format!(
         r#"
         SELECT id, questionnaire_id, participant_id, status, started_at,
-               completed_at, last_activity_at, metadata, browser_info, created_at
+               completed_at, last_activity_at, metadata, browser_info, created_at,
+               questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch
         FROM sessions
         WHERE {}
         ORDER BY created_at DESC LIMIT {} OFFSET {}
@@ -885,7 +916,8 @@ pub async fn get_session(
     let session = sqlx::query_as::<_, Session>(
         r#"
         SELECT id, questionnaire_id, participant_id, status, started_at,
-               completed_at, last_activity_at, metadata, browser_info, created_at
+               completed_at, last_activity_at, metadata, browser_info, created_at,
+               questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch
         FROM sessions WHERE id = $1
         "#,
     )
@@ -916,7 +948,7 @@ pub async fn get_responses(
         sqlx::query_as::<_, ResponseRecord>(
             r#"
             SELECT id, session_id, question_id, value, reaction_time_us,
-                   presented_at, answered_at, metadata, created_at
+                   presented_at, answered_at, metadata, created_at, client_id
             FROM responses
             WHERE session_id = $1 AND question_id = $2
             ORDER BY created_at ASC
@@ -933,7 +965,7 @@ pub async fn get_responses(
         sqlx::query_as::<_, ResponseRecord>(
             r#"
             SELECT id, session_id, question_id, value, reaction_time_us,
-                   presented_at, answered_at, metadata, created_at
+                   presented_at, answered_at, metadata, created_at, client_id
             FROM responses
             WHERE session_id = $1
             ORDER BY created_at ASC
@@ -960,7 +992,7 @@ pub async fn get_events(
 
     let events = sqlx::query_as::<_, InteractionEventRecord>(
         r#"
-        SELECT id, session_id, event_type, question_id, timestamp_us, metadata, created_at
+        SELECT id, session_id, event_type, question_id, timestamp_us, metadata, created_at, client_id
         FROM interaction_events
         WHERE session_id = $1
         ORDER BY timestamp_us ASC
@@ -1030,7 +1062,8 @@ pub async fn update_session(
         r#"UPDATE sessions SET {}
         WHERE id = $1
         RETURNING id, questionnaire_id, participant_id, status, started_at,
-                  completed_at, last_activity_at, metadata, browser_info, created_at"#,
+                  completed_at, last_activity_at, metadata, browser_info, created_at,
+                  questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch"#,
         parts.join(", ")
     );
 
@@ -1416,7 +1449,7 @@ async fn insert_response(
                                presented_at, answered_at, metadata)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id, session_id, question_id, value, reaction_time_us,
-                  presented_at, answered_at, metadata, created_at
+                  presented_at, answered_at, metadata, created_at, client_id
         "#,
     )
     .bind(session_id)
@@ -1599,6 +1632,155 @@ pub async fn condition_counts(
     .await?;
 
     Ok(Json(counts))
+}
+
+// ── Sync Endpoint ────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct SyncPayload {
+    pub responses: Vec<SyncResponseItem>,
+    pub events: Vec<SyncEventItem>,
+    pub variables: Vec<SyncVariableItem>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SyncResponseItem {
+    pub client_id: Uuid,
+    pub question_id: String,
+    pub value: serde_json::Value,
+    pub reaction_time_us: Option<i64>,
+    pub presented_at: Option<String>,
+    pub answered_at: Option<String>,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SyncEventItem {
+    pub client_id: Uuid,
+    pub event_type: String,
+    pub question_id: Option<String>,
+    pub timestamp_us: i64,
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SyncVariableItem {
+    pub variable_name: String,
+    pub variable_value: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SyncResult {
+    pub responses_synced: i32,
+    pub events_synced: i32,
+    pub variables_synced: i32,
+}
+
+/// POST /api/sessions/{id}/sync
+pub async fn sync_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<Uuid>,
+    Json(body): Json<SyncPayload>,
+) -> Result<Json<SyncResult>, ApiError> {
+    // Verify session exists
+    let session_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)",
+    )
+    .bind(session_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    if !session_exists {
+        return Err(ApiError::NotFound("Session not found".into()));
+    }
+
+    let mut responses_synced = 0i32;
+    let mut events_synced = 0i32;
+    let mut variables_synced = 0i32;
+
+    // Sync responses with dedup
+    for resp in &body.responses {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO responses (session_id, question_id, value, reaction_time_us, presented_at, answered_at, metadata, client_id)
+            VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, COALESCE($7, '{}'::jsonb), $8)
+            ON CONFLICT (client_id) DO NOTHING
+            "#,
+        )
+        .bind(session_id)
+        .bind(&resp.question_id)
+        .bind(&resp.value)
+        .bind(resp.reaction_time_us)
+        .bind(&resp.presented_at)
+        .bind(&resp.answered_at)
+        .bind(&resp.metadata)
+        .bind(resp.client_id)
+        .execute(&state.pool)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            responses_synced += 1;
+        }
+    }
+
+    // Sync events with dedup
+    for evt in &body.events {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO interaction_events (session_id, event_type, question_id, timestamp_us, metadata, client_id)
+            VALUES ($1, $2, $3, $4, COALESCE($5, '{}'::jsonb), $6)
+            ON CONFLICT (client_id) DO NOTHING
+            "#,
+        )
+        .bind(session_id)
+        .bind(&evt.event_type)
+        .bind(&evt.question_id)
+        .bind(evt.timestamp_us)
+        .bind(&evt.metadata)
+        .bind(evt.client_id)
+        .execute(&state.pool)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            events_synced += 1;
+        }
+    }
+
+    // Sync variables (upsert)
+    for var in &body.variables {
+        sqlx::query(
+            r#"
+            INSERT INTO session_variables (session_id, variable_name, variable_value)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (session_id, variable_name) DO UPDATE
+            SET variable_value = EXCLUDED.variable_value, updated_at = NOW()
+            "#,
+        )
+        .bind(session_id)
+        .bind(&var.variable_name)
+        .bind(&var.variable_value)
+        .execute(&state.pool)
+        .await?;
+
+        variables_synced += 1;
+    }
+
+    // Update session status if provided
+    if let Some(ref status) = body.status {
+        let normalized = normalize_session_status(status)?;
+        sqlx::query("UPDATE sessions SET status = $2, last_activity_at = NOW() WHERE id = $1")
+            .bind(session_id)
+            .bind(&normalized)
+            .execute(&state.pool)
+            .await?;
+    }
+
+    Ok(Json(SyncResult {
+        responses_synced,
+        events_synced,
+        variables_synced,
+    }))
 }
 
 #[cfg(test)]

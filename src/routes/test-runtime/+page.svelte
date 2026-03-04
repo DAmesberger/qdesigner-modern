@@ -160,6 +160,9 @@
     const questionnaire: Questionnaire = {
       id: `test-rt-${selectedScenario}`,
       version: '1.0.0',
+      versionMajor: 1,
+      versionMinor: 0,
+      versionPatch: 0,
       name: `Runtime Scenario (${selectedScenario})`,
       created: now,
       modified: now,

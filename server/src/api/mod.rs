@@ -123,6 +123,10 @@ pub fn router(state: AppState) -> Router {
             post(questionnaires::publish_questionnaire),
         )
         .route(
+            "/{id}/questionnaires/{qid}/bump-version",
+            post(questionnaires::bump_version),
+        )
+        .route(
             "/{id}/questionnaires/{qid}/export",
             get(questionnaires::export_responses),
         )
@@ -168,6 +172,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/{id}/responses", get(sessions::get_responses).post(sessions::submit_response))
         .route("/{id}/events", get(sessions::get_events).post(sessions::submit_events))
+        .route("/{id}/sync", post(sessions::sync_session))
         .route("/{id}/variables", get(sessions::get_variables).post(sessions::upsert_variable))
         .route("/{id}/media", post(media::upload_session_media));
 

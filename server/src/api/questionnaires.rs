@@ -27,6 +27,9 @@ pub struct Questionnaire {
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
     pub published_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub version_major: i32,
+    pub version_minor: i32,
+    pub version_patch: i32,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -40,6 +43,9 @@ pub struct QuestionnaireByCode {
     pub project: serde_json::Value,
     pub variables: serde_json::Value,
     pub global_scripts: serde_json::Value,
+    pub version_major: i32,
+    pub version_minor: i32,
+    pub version_patch: i32,
 }
 
 #[derive(Debug, Deserialize, Validate)]
@@ -113,7 +119,8 @@ pub async fn get_questionnaire_by_code(
                 q.content->'global_scripts',
                 q.content->'globalScripts',
                 '{}'::jsonb
-            ) AS global_scripts
+            ) AS global_scripts,
+            q.version_major, q.version_minor, q.version_patch
         FROM questionnaire_definitions q
         JOIN projects p ON p.id = q.project_id
         WHERE UPPER(SUBSTRING(REPLACE(q.id::text, '-', ''), 1, 8)) = $1
@@ -148,7 +155,8 @@ pub async fn list_questionnaires(
         sqlx::query_as::<_, Questionnaire>(
             r#"
             SELECT id, project_id, name, description, version, content, status,
-                   settings, created_by, created_at, updated_at, published_at
+                   settings, created_by, created_at, updated_at, published_at,
+                   version_major, version_minor, version_patch
             FROM questionnaire_definitions
             WHERE project_id = $1 AND status = $2 AND deleted_at IS NULL
             ORDER BY updated_at DESC
@@ -165,7 +173,8 @@ pub async fn list_questionnaires(
         sqlx::query_as::<_, Questionnaire>(
             r#"
             SELECT id, project_id, name, description, version, content, status,
-                   settings, created_by, created_at, updated_at, published_at
+                   settings, created_by, created_at, updated_at, published_at,
+                   version_major, version_minor, version_patch
             FROM questionnaire_definitions
             WHERE project_id = $1 AND deleted_at IS NULL
             ORDER BY updated_at DESC
@@ -204,7 +213,8 @@ pub async fn create_questionnaire(
             (project_id, name, description, content, settings, created_by)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, project_id, name, description, version, content, status,
-                  settings, created_by, created_at, updated_at, published_at
+                  settings, created_by, created_at, updated_at, published_at,
+                  version_major, version_minor, version_patch
         "#,
     )
     .bind(project_id)
@@ -230,7 +240,8 @@ pub async fn get_questionnaire(
     let q = sqlx::query_as::<_, Questionnaire>(
         r#"
         SELECT id, project_id, name, description, version, content, status,
-               settings, created_by, created_at, updated_at, published_at
+               settings, created_by, created_at, updated_at, published_at,
+               version_major, version_minor, version_patch
         FROM questionnaire_definitions
         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
         "#,
@@ -268,7 +279,8 @@ pub async fn update_questionnaire(
                 version = version + 1
             WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
             RETURNING id, project_id, name, description, version, content, status,
-                      settings, created_by, created_at, updated_at, published_at
+                      settings, created_by, created_at, updated_at, published_at,
+                      version_major, version_minor, version_patch
             "#,
         )
         .bind(path.qid)
@@ -314,7 +326,8 @@ pub async fn update_questionnaire(
         r#"UPDATE questionnaire_definitions SET {}
         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
         RETURNING id, project_id, name, description, version, content, status,
-                  settings, created_by, created_at, updated_at, published_at"#,
+                  settings, created_by, created_at, updated_at, published_at,
+                  version_major, version_minor, version_patch"#,
         parts.join(", ")
     );
 
@@ -354,13 +367,16 @@ pub async fn publish_questionnaire(
 ) -> Result<Json<Questionnaire>, ApiError> {
     verify_project_write_access(&state, user.user_id, path.id).await?;
 
+    snapshot_questionnaire_version(&state, path.qid, user.user_id).await?;
+
     let questionnaire = sqlx::query_as::<_, Questionnaire>(
         r#"
         UPDATE questionnaire_definitions
         SET status = 'published', published_at = NOW(), updated_at = NOW()
         WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
         RETURNING id, project_id, name, description, version, content, status,
-                  settings, created_by, created_at, updated_at, published_at
+                  settings, created_by, created_at, updated_at, published_at,
+                  version_major, version_minor, version_patch
         "#,
     )
     .bind(path.qid)
@@ -370,6 +386,92 @@ pub async fn publish_questionnaire(
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
     Ok(Json(questionnaire))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BumpVersionRequest {
+    pub bump_type: String, // "major", "minor", "patch"
+}
+
+/// POST /api/projects/:id/questionnaires/:qid/bump-version
+pub async fn bump_version(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    Path(path): Path<ProjectQuestionnairePath>,
+    Json(body): Json<BumpVersionRequest>,
+) -> Result<Json<Questionnaire>, ApiError> {
+    verify_project_write_access(&state, user.user_id, path.id).await?;
+
+    // Snapshot current version first
+    snapshot_questionnaire_version(&state, path.qid, user.user_id).await?;
+
+    let q = match body.bump_type.as_str() {
+        "major" => {
+            sqlx::query_as::<_, Questionnaire>(
+                r#"
+                UPDATE questionnaire_definitions
+                SET version_major = version_major + 1,
+                    version_minor = 0,
+                    version_patch = 0,
+                    version = version + 1,
+                    updated_at = NOW()
+                WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
+                RETURNING id, project_id, name, description, version, content, status,
+                          settings, created_by, created_at, updated_at, published_at,
+                          version_major, version_minor, version_patch
+                "#,
+            )
+            .bind(path.qid)
+            .bind(path.id)
+            .fetch_optional(&state.pool)
+            .await?
+        }
+        "minor" => {
+            sqlx::query_as::<_, Questionnaire>(
+                r#"
+                UPDATE questionnaire_definitions
+                SET version_minor = version_minor + 1,
+                    version_patch = 0,
+                    version = version + 1,
+                    updated_at = NOW()
+                WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
+                RETURNING id, project_id, name, description, version, content, status,
+                          settings, created_by, created_at, updated_at, published_at,
+                          version_major, version_minor, version_patch
+                "#,
+            )
+            .bind(path.qid)
+            .bind(path.id)
+            .fetch_optional(&state.pool)
+            .await?
+        }
+        "patch" => {
+            sqlx::query_as::<_, Questionnaire>(
+                r#"
+                UPDATE questionnaire_definitions
+                SET version_patch = version_patch + 1,
+                    version = version + 1,
+                    updated_at = NOW()
+                WHERE id = $1 AND project_id = $2 AND deleted_at IS NULL
+                RETURNING id, project_id, name, description, version, content, status,
+                          settings, created_by, created_at, updated_at, published_at,
+                          version_major, version_minor, version_patch
+                "#,
+            )
+            .bind(path.qid)
+            .bind(path.id)
+            .fetch_optional(&state.pool)
+            .await?
+        }
+        _ => {
+            return Err(ApiError::BadRequest(
+                "bump_type must be 'major', 'minor', or 'patch'".into(),
+            ))
+        }
+    };
+
+    q.map(Json)
+        .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))
 }
 
 /// DELETE /api/projects/:id/questionnaires/:qid  (soft delete)
@@ -546,6 +648,9 @@ pub struct QuestionnaireVersion {
     pub description: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub created_by: Option<Uuid>,
+    pub version_major: i32,
+    pub version_minor: i32,
+    pub version_patch: i32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -578,7 +683,8 @@ pub async fn list_versions(
     let versions = sqlx::query_as::<_, QuestionnaireVersion>(
         r#"
         SELECT id, questionnaire_id, version, content, title, description,
-               created_at, created_by
+               created_at, created_by,
+               version_major, version_minor, version_patch
         FROM questionnaire_versions
         WHERE questionnaire_id = $1
         ORDER BY version DESC
@@ -602,8 +708,8 @@ async fn snapshot_questionnaire_version(
 ) -> Result<(), ApiError> {
     sqlx::query(
         r#"
-        INSERT INTO questionnaire_versions (questionnaire_id, version, content, title, description, created_by)
-        SELECT id, version, content, name, description, $2
+        INSERT INTO questionnaire_versions (questionnaire_id, version, content, title, description, created_by, version_major, version_minor, version_patch)
+        SELECT id, version, content, name, description, $2, version_major, version_minor, version_patch
         FROM questionnaire_definitions
         WHERE id = $1 AND deleted_at IS NULL
         "#,

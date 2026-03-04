@@ -15,6 +15,9 @@ export interface Questionnaire {
   description?: string;
   code?: string;
   version: string;
+  versionMajor: number;
+  versionMinor: number;
+  versionPatch: number;
   created: Date;
   modified: Date;
   variables: Variable[];
@@ -23,6 +26,10 @@ export interface Questionnaire {
   flow: FlowControl[];
   settings: QuestionnaireSettings;
   metadata?: Record<string, unknown>;
+}
+
+export function formatSemver(q: Pick<Questionnaire, 'versionMajor' | 'versionMinor' | 'versionPatch'>): string {
+  return `${q.versionMajor}.${q.versionMinor}.${q.versionPatch}`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic data surfaces are required for extensible questionnaire schemas
