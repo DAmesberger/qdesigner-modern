@@ -18,10 +18,10 @@
   let visible = $state(true);
 
   const variantClasses = {
-    info: 'bg-blue-50 text-blue-800',
-    success: 'bg-green-50 text-green-800',
-    warning: 'bg-yellow-50 text-yellow-800',
-    error: 'bg-red-50 text-red-800',
+    info: 'bg-info/10 text-info',
+    success: 'bg-success/10 text-success',
+    warning: 'bg-warning/10 text-warning',
+    error: 'bg-destructive/10 text-destructive',
   };
 
   const iconPaths = {
@@ -33,13 +33,6 @@
     error:
       'M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z',
   };
-
-  const iconColors = {
-    info: 'text-blue-400',
-    success: 'text-green-400',
-    warning: 'text-yellow-400',
-    error: 'text-red-400',
-  };
 </script>
 
 {#if visible}
@@ -47,7 +40,7 @@
     <div class="flex">
       <div class="shrink-0">
         <svg
-          class="h-5 w-5 {iconColors[variant]}"
+          class="h-5 w-5"
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
@@ -77,16 +70,7 @@
             <button
               type="button"
               onclick={() => (visible = false)}
-              class="inline-flex rounded-md p-1.5 focus:outline-hidden focus:ring-2 focus:ring-offset-2 {variant ===
-              'info'
-                ? 'bg-blue-50 text-blue-500 hover:bg-blue-100 focus:ring-blue-600 focus:ring-offset-blue-50'
-                : ''} {variant === 'success'
-                ? 'bg-green-50 text-green-500 hover:bg-green-100 focus:ring-green-600 focus:ring-offset-green-50'
-                : ''} {variant === 'warning'
-                ? 'bg-yellow-50 text-yellow-500 hover:bg-yellow-100 focus:ring-yellow-600 focus:ring-offset-yellow-50'
-                : ''} {variant === 'error'
-                ? 'bg-red-50 text-red-500 hover:bg-red-100 focus:ring-red-600 focus:ring-offset-red-50'
-                : ''}"
+              class="inline-flex rounded-md p-1.5 hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <span class="sr-only">Dismiss</span>
               <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">

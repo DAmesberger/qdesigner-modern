@@ -595,24 +595,24 @@
     <div class="flex items-center justify-between mb-2">
       <h2 class="text-2xl font-bold">Translation Manager</h2>
       {#if showStatistics && stats}
-        <div class="flex items-center gap-4 text-sm text-gray-600">
+        <div class="flex items-center gap-4 text-sm text-muted-foreground">
           <span>Completion: {stats.overallCompletion.toFixed(1)}%</span>
           <span>Modified: {stats.modifiedCount}</span>
         </div>
       {/if}
     </div>
-    <p class="text-gray-600">Manage translations for all supported languages</p>
+    <p class="text-muted-foreground">Manage translations for all supported languages</p>
   </div>
 
   <!-- Toolbar -->
-  <div class="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+  <div class="bg-card border border-border rounded-lg p-4 mb-6">
     <!-- Search and filters row -->
     <div class="flex flex-wrap gap-4 items-center mb-4">
       <!-- Search -->
       <div class="flex-1 min-w-64">
         <div class="relative">
           <svg
-            class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400"
+            class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -628,7 +628,7 @@
             type="text"
             bind:value={searchQuery}
             placeholder="Search translations..."
-            class="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            class="w-full pl-10 pr-3 py-2 border border-border rounded-md focus:ring-primary focus:border-primary"
           />
         </div>
       </div>
@@ -636,7 +636,7 @@
       <!-- Namespace filter -->
       <select
         bind:value={selectedNamespace}
-        class="px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+        class="px-3 py-2 border border-border rounded-md focus:ring-primary focus:border-primary"
       >
         <option value="all">All Namespaces</option>
         {#each availableNamespaces as namespace}
@@ -647,7 +647,7 @@
       <!-- Language filter -->
       <select
         bind:value={selectedLanguage}
-        class="px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+        class="px-3 py-2 border border-border rounded-md focus:ring-primary focus:border-primary"
       >
         <option value="all">All Languages</option>
         {#each availableLanguages as lang}
@@ -658,7 +658,7 @@
       <!-- Sort -->
       <select
         bind:value={sortBy}
-        class="px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+        class="px-3 py-2 border border-border rounded-md focus:ring-primary focus:border-primary"
       >
         <option value="key">Sort by Key</option>
         <option value="namespace">Sort by Namespace</option>
@@ -668,7 +668,7 @@
 
       <button
         onclick={() => (sortOrder = sortOrder === 'asc' ? 'desc' : 'asc')}
-        class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 focus:ring-blue-500 focus:border-blue-500"
+        class="px-3 py-2 border border-border rounded-md hover:bg-accent focus:ring-primary focus:border-primary"
         title={`Sort ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}
       >
         <svg
@@ -693,7 +693,7 @@
         <input
           type="checkbox"
           bind:checked={showMissingOnly}
-          class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          class="rounded border-border text-primary focus:ring-primary"
         />
         <span class="ml-2 text-sm">Missing only ({missingCount})</span>
       </label>
@@ -702,7 +702,7 @@
         <input
           type="checkbox"
           bind:checked={showModifiedOnly}
-          class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          class="rounded border-border text-primary focus:ring-primary"
         />
         <span class="ml-2 text-sm">Modified only ({modifiedCount})</span>
       </label>
@@ -712,7 +712,7 @@
           <input
             type="checkbox"
             bind:checked={showValidationErrors}
-            class="rounded border-gray-300 text-red-600 focus:ring-red-500"
+            class="rounded border-border text-destructive focus:ring-destructive"
           />
           <span class="ml-2 text-sm">Validation errors ({validationErrorCount})</span>
         </label>
@@ -723,7 +723,7 @@
           <input
             type="checkbox"
             bind:checked={inContextMode}
-            class="rounded border-gray-300 text-green-600 focus:ring-green-500"
+            class="rounded border-border text-success focus:ring-success"
           />
           <span class="ml-2 text-sm">In-context editing</span>
         </label>
@@ -735,12 +735,12 @@
       <!-- Selection actions -->
       <div class="flex items-center gap-2">
         {#if selectedEntries.size > 0}
-          <span class="text-sm text-gray-600">{selectedEntries.size} selected</span>
-          <button onclick={clearSelection} class="text-sm text-gray-500 hover:text-gray-700">
+          <span class="text-sm text-muted-foreground">{selectedEntries.size} selected</span>
+          <button onclick={clearSelection} class="text-sm text-muted-foreground hover:text-foreground">
             Clear
           </button>
         {:else}
-          <button onclick={selectAllFiltered} class="text-sm text-gray-500 hover:text-gray-700">
+          <button onclick={selectAllFiltered} class="text-sm text-muted-foreground hover:text-foreground">
             Select all ({filteredEntries.length})
           </button>
         {/if}
@@ -751,7 +751,7 @@
         {#if allowImportExport}
           <button
             onclick={() => exportTranslations()}
-            class="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+            class="flex items-center gap-2 px-3 py-2 text-sm bg-muted text-foreground rounded-md hover:bg-accent"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -765,7 +765,7 @@
           </button>
 
           <label
-            class="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 cursor-pointer"
+            class="flex items-center gap-2 px-3 py-2 text-sm bg-muted text-foreground rounded-md hover:bg-accent cursor-pointer"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -784,7 +784,7 @@
           <button
             onclick={saveAllChanges}
             disabled={modifiedCount === 0 || isSaving}
-            class="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="flex items-center gap-2 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {#if isSaving}
               <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -806,12 +806,12 @@
 
     <!-- Status indicators -->
     <div class="flex items-center gap-4 mt-4 text-sm border-t pt-4">
-      <span class="text-gray-600">
+      <span class="text-muted-foreground">
         Showing {filteredEntries.length} of {entries.length} entries
       </span>
 
       {#if missingCount > 0}
-        <span class="text-orange-600 flex items-center gap-1">
+        <span class="text-warning flex items-center gap-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -825,7 +825,7 @@
       {/if}
 
       {#if validationErrorCount > 0}
-        <span class="text-red-600 flex items-center gap-1">
+        <span class="text-destructive flex items-center gap-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -839,9 +839,9 @@
       {/if}
 
       {#if saveStatus === 'saving'}
-        <span class="text-gray-600">Saving...</span>
+        <span class="text-muted-foreground">Saving...</span>
       {:else if saveStatus === 'success'}
-        <span class="text-green-600 flex items-center gap-1">
+        <span class="text-success flex items-center gap-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -853,7 +853,7 @@
           Saved successfully
         </span>
       {:else if saveStatus === 'error'}
-        <span class="text-red-600 flex items-center gap-1">
+        <span class="text-destructive flex items-center gap-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -869,18 +869,18 @@
   </div>
 
   <!-- Translation table -->
-  <div class="bg-white border border-gray-200 rounded-lg overflow-hidden">
+  <div class="bg-card border border-border rounded-lg overflow-hidden">
     {#if isLoading}
-      <div class="p-8 text-center text-gray-500">
+      <div class="p-8 text-center text-muted-foreground">
         <div
-          class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"
+          class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"
         ></div>
         Loading translations...
       </div>
     {:else if filteredEntries.length === 0}
-      <div class="p-8 text-center text-gray-500">
+      <div class="p-8 text-center text-muted-foreground">
         <svg
-          class="w-12 h-12 mx-auto mb-4 text-gray-300"
+          class="w-12 h-12 mx-auto mb-4 text-muted-foreground/50"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -897,7 +897,7 @@
     {:else}
       <div class="overflow-x-auto">
         <table class="w-full">
-          <thead class="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+          <thead class="bg-muted border-b border-border sticky top-0 z-10">
             <tr>
               <th class="px-4 py-3 text-left">
                 <input
@@ -912,17 +912,17 @@
                       clearSelection();
                     }
                   }}
-                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  class="rounded border-border text-primary focus:ring-primary"
                 />
               </th>
               <th
-                class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
               >
                 Key
               </th>
               {#each availableLanguages as lang}
                 <th
-                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
                 >
                   <div class="flex items-center gap-2">
                     {#if lang.flag}
@@ -933,19 +933,16 @@
                 </th>
               {/each}
               <th
-                class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                class="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider"
               >
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200">
+          <tbody class="divide-y divide-border">
             {#each filteredEntries as entry (entry.key)}
               <tr
-                class="hover:bg-gray-50"
-                class:bg-blue-50={entry.modified}
-                class:bg-red-50={showValidation &&
-                  validateTranslationKeys(entry.translations, entry.namespace).length > 0}
+                class="hover:bg-accent {entry.modified ? 'bg-info/10' : ''} {showValidation && validateTranslationKeys(entry.translations, entry.namespace).length > 0 ? 'bg-destructive/10' : ''}"
               >
                 <!-- Checkbox -->
                 <td class="px-4 py-3">
@@ -953,17 +950,17 @@
                     type="checkbox"
                     checked={selectedEntries.has(entry.key)}
                     onchange={() => toggleEntrySelection(entry.key)}
-                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    class="rounded border-border text-primary focus:ring-primary"
                   />
                 </td>
 
                 <!-- Key -->
-                <td class="px-4 py-3 text-sm font-mono text-gray-900 max-w-xs">
+                <td class="px-4 py-3 text-sm font-mono text-foreground max-w-xs">
                   <div class="truncate" title={entry.key}>
                     {entry.key}
                   </div>
                   {#if entry.missing.length > 0}
-                    <div class="text-xs text-orange-600 mt-1">
+                    <div class="text-xs text-warning mt-1">
                       Missing: {entry.missing.join(', ')}
                     </div>
                   {/if}
@@ -978,13 +975,13 @@
                           type="text"
                           bind:value={editingValue}
                           data-editing={editingKey}
-                          class="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                          class="flex-1 px-2 py-1 text-sm border border-border rounded focus:ring-primary focus:border-primary"
                           onkeydown={(e) => handleEditKeydown(e, entry.key, lang.code)}
                           onblur={() => saveEdit(entry.key, lang.code)}
                         />
                         <button
                           onclick={() => saveEdit(entry.key, lang.code)}
-                          class="text-green-600 hover:text-green-700"
+                          class="text-success hover:text-success/80"
                           title="Save"
                         >
                           <svg
@@ -1003,7 +1000,7 @@
                         </button>
                         <button
                           onclick={cancelEdit}
-                          class="text-red-600 hover:text-red-700"
+                          class="text-destructive hover:text-destructive/80"
                           title="Cancel"
                         >
                           <svg
@@ -1025,7 +1022,7 @@
                       <div class="flex items-center justify-between group">
                         <div
                           class="flex-1 truncate"
-                          class:text-gray-400={!entry.translations[lang.code]}
+                          class:text-muted-foreground={!entry.translations[lang.code]}
                         >
                           {entry.translations[lang.code] || 'Missing'}
                         </div>
@@ -1036,7 +1033,7 @@
                             {#if allowInlineEdit}
                               <button
                                 onclick={() => startEdit(entry.key, lang.code)}
-                                class="text-gray-400 hover:text-gray-600"
+                                class="text-muted-foreground hover:text-foreground"
                                 title="Edit"
                               >
                                 <svg
@@ -1058,7 +1055,7 @@
                             {#if !entry.translations[lang.code] && entry.translations.en}
                               <button
                                 onclick={() => copyTranslation(entry.key, 'en', lang.code)}
-                                class="text-gray-400 hover:text-gray-600"
+                                class="text-muted-foreground hover:text-foreground"
                                 title="Copy from English"
                               >
                                 <svg
@@ -1078,7 +1075,7 @@
 
                               <button
                                 onclick={() => autoTranslate(entry.key, lang.code)}
-                                class="text-gray-400 hover:text-gray-600"
+                                class="text-muted-foreground hover:text-foreground"
                                 title="Auto-translate"
                               >
                                 <svg
@@ -1108,7 +1105,7 @@
                   <div class="flex items-center justify-end gap-2">
                     {#if entry.modified}
                       <span
-                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                        class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-info/10 text-info"
                       >
                         Modified
                       </span>
@@ -1127,7 +1124,7 @@
                           }
                         }}
                         title="Copy to missing languages"
-                        class="text-gray-400 hover:text-gray-600"
+                        class="text-muted-foreground hover:text-foreground"
                       >
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path

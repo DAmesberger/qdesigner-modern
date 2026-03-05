@@ -66,15 +66,15 @@
 <Container>
   <div class="py-8">
     <!-- Filter tabs -->
-    <div class="mb-6 border-b border-gray-200">
+    <div class="mb-6 border-b border-border">
       <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-        <button class="border-b-2 border-indigo-500 px-1 py-4 text-sm font-medium text-indigo-600">
+        <button class="border-b-2 border-primary px-1 py-4 text-sm font-medium text-primary">
           All questionnaires
         </button>
-        <button class="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
+        <button class="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-muted-foreground hover:border-border hover:text-foreground">
           In progress
         </button>
-        <button class="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
+        <button class="border-b-2 border-transparent px-1 py-4 text-sm font-medium text-muted-foreground hover:border-border hover:text-foreground">
           Completed
         </button>
       </nav>
@@ -90,21 +90,21 @@
                 {questionnaire.category}
               </Badge>
               {#if questionnaire.status === 'completed'}
-                <svg class="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
+                <svg class="h-5 w-5 text-success" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
                 </svg>
               {/if}
             </div>
             
-            <h3 class="mt-4 text-lg font-semibold text-gray-900">
+            <h3 class="mt-4 text-lg font-semibold text-foreground">
               {questionnaire.title}
             </h3>
             
-            <p class="mt-2 text-sm text-gray-600 line-clamp-2">
+            <p class="mt-2 text-sm text-muted-foreground line-clamp-2">
               {questionnaire.description}
             </p>
             
-            <div class="mt-4 flex items-center text-sm text-gray-500">
+            <div class="mt-4 flex items-center text-sm text-muted-foreground">
               <svg class="mr-1.5 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
               </svg>
@@ -116,11 +116,11 @@
             {#if questionnaire.status === 'in_progress' && questionnaire.progress}
               <div class="mt-4">
                 <div class="flex items-center justify-between text-sm">
-                  <span class="text-gray-600">Progress</span>
-                  <span class="font-medium text-gray-900">{questionnaire.progress}%</span>
+                  <span class="text-muted-foreground">Progress</span>
+                  <span class="font-medium text-foreground">{questionnaire.progress}%</span>
                 </div>
-                <div class="mt-1 w-full bg-gray-200 rounded-full h-2">
-                  <div class="bg-indigo-600 h-2 rounded-full" style="width: {questionnaire.progress}%"></div>
+                <div class="mt-1 w-full bg-muted rounded-full h-2">
+                  <div class="bg-primary h-2 rounded-full" style="width: {questionnaire.progress}%"></div>
                 </div>
               </div>
             {/if}

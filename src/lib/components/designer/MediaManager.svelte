@@ -543,7 +543,7 @@
             <!-- Selection indicator -->
             {#if selectedMedia.some((m) => m.id === asset.id) || selectedIds.has(asset.id)}
               <div
-                class="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0"
+                class="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0"
               >
                 <svg
                   class="w-4 h-4 text-primary-foreground"

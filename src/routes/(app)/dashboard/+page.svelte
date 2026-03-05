@@ -145,26 +145,26 @@
   function getStatusColor(status: string) {
     switch (status) {
       case 'published':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-success/10 text-success border-success/20';
       case 'draft':
-        return 'bg-amber-100 text-amber-800 border-amber-200';
+        return 'bg-warning/10 text-warning border-warning/20';
       case 'archived':
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-muted text-muted-foreground border-border';
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-muted text-muted-foreground border-border';
     }
   }
 
   function getActivityStatusColor(status: string) {
     switch (status) {
       case 'completed':
-        return 'text-green-600';
+        return 'text-success';
       case 'in_progress':
-        return 'text-blue-600';
+        return 'text-info';
       case 'abandoned':
-        return 'text-red-600';
+        return 'text-destructive';
       default:
-        return 'text-gray-600';
+        return 'text-muted-foreground';
     }
   }
 
@@ -232,7 +232,7 @@
           {stats.totalQuestionnaires}
         </p>
       </div>
-      <div class="p-3 bg-indigo-500/10 rounded-full text-indigo-600">
+      <div class="p-3 bg-primary/10 rounded-full text-primary">
         <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
@@ -336,7 +336,7 @@
       {#if questionnaires.length === 0}
         <div class="glass-card p-12 text-center">
           <div
-            class="mx-auto h-16 w-16 text-gray-400 bg-gray-50 rounded-full flex items-center justify-center mb-4"
+            class="mx-auto h-16 w-16 text-muted-foreground bg-muted rounded-full flex items-center justify-center mb-4"
           >
             <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -347,8 +347,8 @@
               />
             </svg>
           </div>
-          <h3 class="mt-2 text-lg font-medium text-gray-900">No questionnaires yet</h3>
-          <p class="mt-1 text-gray-500">
+          <h3 class="mt-2 text-lg font-medium text-foreground">No questionnaires yet</h3>
+          <p class="mt-1 text-muted-foreground">
             Get started by creating a new questionnaire to gather insights.
           </p>
         </div>
@@ -367,7 +367,7 @@
               <div class="flex items-start justify-between">
                 <div class="flex-1">
                   <h3
-                    class="text-lg font-semibold text-[hsl(var(--foreground))] group-hover:text-indigo-600 transition-colors"
+                    class="text-lg font-semibold text-[hsl(var(--foreground))] group-hover:text-primary transition-colors"
                   >
                     {questionnaire.name}
                   </h3>
@@ -454,7 +454,7 @@
                 </span>
                 {#if questionnaire.response_rate_7d > 0}
                   <span
-                    class="text-green-600 flex items-center font-medium bg-green-50 px-2 py-0.5 rounded-full"
+                    class="text-success flex items-center font-medium bg-success/10 px-2 py-0.5 rounded-full"
                   >
                     <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
@@ -486,7 +486,7 @@
                 <div class="flex items-start space-x-3">
                   <div class="flex-shrink-0">
                     <div
-                      class={`h-8 w-8 rounded-full flex items-center justify-center ${activity.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}
+                      class={`h-8 w-8 rounded-full flex items-center justify-center ${activity.status === 'completed' ? 'bg-success/10 text-success' : 'bg-info/10 text-info'}`}
                     >
                       {#if activity.status === 'completed'}
                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -522,7 +522,7 @@
                       {formatDistanceToNow(new Date(activity.started_at))}
                     </p>
                     {#if activity.response_time_ms}
-                      <p class="text-xs font-medium text-indigo-600 mt-0.5">
+                      <p class="text-xs font-medium text-primary mt-0.5">
                         {formatTime(activity.response_time_ms)}
                       </p>
                     {/if}
@@ -534,7 +534,7 @@
           <div
             class="bg-[hsl(var(--background))]/30 px-4 py-3 text-center border-t border-[var(--glass-border)]"
           >
-            <button class="text-sm font-medium text-indigo-600 hover:text-indigo-500"
+            <button class="text-sm font-medium text-primary hover:text-primary/80"
               >View All Activity</button
             >
           </div>

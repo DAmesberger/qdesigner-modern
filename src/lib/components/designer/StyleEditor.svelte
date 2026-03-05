@@ -80,7 +80,7 @@
 
       <div class="color-grid">
         <div class="color-item">
-          <span class="text-xs text-gray-500">Primary</span>
+          <span class="text-xs text-muted-foreground">Primary</span>
           <button
             type="button"
             class="color-swatch"
@@ -98,7 +98,7 @@
         </div>
 
         <div class="color-item">
-          <span class="text-xs text-gray-500">Background</span>
+          <span class="text-xs text-muted-foreground">Background</span>
           <button
             type="button"
             class="color-swatch"
@@ -116,7 +116,7 @@
         </div>
 
         <div class="color-item">
-          <span class="text-xs text-gray-500">Text</span>
+          <span class="text-xs text-muted-foreground">Text</span>
           <button
             type="button"
             class="color-swatch"
@@ -134,7 +134,7 @@
         </div>
 
         <div class="color-item">
-          <span class="text-xs text-gray-500">Border</span>
+          <span class="text-xs text-muted-foreground">Border</span>
           <button
             type="button"
             class="color-swatch"
@@ -226,7 +226,7 @@
       <h3>Page Layout</h3>
 
       <div class="control-group">
-        <span class="text-xs text-gray-500 mb-1 block">Background</span>
+        <span class="text-xs text-muted-foreground mb-1 block">Background</span>
         <button
           type="button"
           class="color-swatch"
@@ -282,7 +282,7 @@
       <h3>Question Container</h3>
 
       <div class="control-group">
-        <span class="text-xs text-gray-500 mb-1 block">Background</span>
+        <span class="text-xs text-muted-foreground mb-1 block">Background</span>
         <button
           type="button"
           class="color-swatch"
@@ -392,7 +392,7 @@
       </div>
 
       <div class="control-group">
-        <span class="text-xs text-gray-500 mb-1 block">Text Color</span>
+        <span class="text-xs text-muted-foreground mb-1 block">Text Color</span>
         <button
           type="button"
           class="color-swatch"
@@ -434,7 +434,7 @@
     display: flex;
     gap: 0.5rem;
     margin-bottom: 1.5rem;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--color-border);
   }
 
   .tab {
@@ -444,17 +444,17 @@
     border-bottom: 2px solid transparent;
     cursor: pointer;
     font-weight: 500;
-    color: #6b7280;
+    color: var(--color-muted-foreground);
     transition: all 150ms;
   }
 
   .tab:hover {
-    color: #374151;
+    color: var(--color-foreground);
   }
 
   .tab.active {
-    color: #3b82f6;
-    border-bottom-color: #3b82f6;
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
   }
 
   .section {
@@ -466,7 +466,7 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #6b7280;
+    color: var(--color-muted-foreground);
     margin-bottom: 1rem;
   }
 
@@ -478,7 +478,7 @@
     display: block;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: var(--color-foreground);
     margin-bottom: 0.25rem;
   }
 
@@ -490,7 +490,7 @@
   .control-group select {
     width: 100%;
     padding: 0.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border);
     border-radius: 0.375rem;
     font-size: 0.875rem;
   }
@@ -511,7 +511,7 @@
     width: 100%;
     height: 2rem;
     border-radius: 0.375rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border);
     cursor: pointer;
     transition: transform 150ms;
   }
@@ -523,7 +523,7 @@
   textarea {
     width: 100%;
     padding: 0.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border);
     border-radius: 0.375rem;
     font-family: monospace;
     font-size: 0.75rem;

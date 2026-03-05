@@ -162,7 +162,7 @@
                 min="1"
                 max="180"
                 bind:value={defaultTimeLimit}
-                class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                class="w-full rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               />
               <p class="text-sm text-muted-foreground mt-1">
                 Maximum time allowed per questionnaire session. Participants will be warned when time is running low.
@@ -178,7 +178,7 @@
                 id="default-randomization"
                 type="checkbox"
                 bind:checked={defaultRandomization}
-                class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
               />
               <label for="default-randomization" class="text-sm text-foreground">
                 Enable randomization by default for new questionnaires
@@ -207,7 +207,7 @@
                 id="email-notifications"
                 type="checkbox"
                 bind:checked={emailNotifications}
-                class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
               />
               <label for="email-notifications" class="text-sm text-foreground">
                 Enable email notifications for new responses
@@ -218,7 +218,7 @@
                 <select
                   id="digest-frequency"
                   bind:value={digestFrequency}
-                  class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  class="w-full rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   <option value="daily">Daily digest</option>
                   <option value="weekly">Weekly digest</option>

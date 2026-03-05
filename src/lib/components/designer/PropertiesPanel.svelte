@@ -517,11 +517,11 @@
               </div>
             {:else}
               <div class="border-t pt-4">
-                <div class="bg-yellow-500/10 p-3 rounded-md">
-                  <p class="text-sm text-yellow-600 dark:text-yellow-400">
+                <div class="bg-warning/10 p-3 rounded-md">
+                  <p class="text-sm text-warning">
                     Properties for {questionItem.type} are handled in the module designer.
                   </p>
-                  <p class="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                  <p class="text-xs text-warning mt-1">
                     Make sure the module is properly registered.
                   </p>
                 </div>
@@ -1038,7 +1038,7 @@
       {#if templateSaveSuccess}
         <div class="text-center py-8">
           <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-emerald-500/10 flex items-center justify-center">
-            <svg class="w-6 h-6 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-6 h-6 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
             </svg>
           </div>

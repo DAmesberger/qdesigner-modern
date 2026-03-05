@@ -1,17 +1,36 @@
 <script lang="ts">
-  export let columns: Array<{
+  import type { Snippet } from 'svelte';
+
+  interface Column {
     key: string;
     label: string;
     sortable?: boolean;
     width?: string;
-  }> = [];
-  export let data: Array<Record<string, any>> = [];
-  export let sortKey = '';
-  export let sortDirection: 'asc' | 'desc' = 'asc';
-  
+  }
+
+  interface Props {
+    columns?: Column[];
+    data?: Array<Record<string, any>>;
+    sortKey?: string;
+    sortDirection?: 'asc' | 'desc';
+    cell?: Snippet<[{ column: Column; row: Record<string, any>; value: any }]>;
+    actions?: Snippet<[{ row: Record<string, any> }]>;
+    empty?: Snippet;
+  }
+
+  let {
+    columns = [],
+    data = [],
+    sortKey = $bindable(''),
+    sortDirection = $bindable('asc'),
+    cell,
+    actions,
+    empty,
+  }: Props = $props();
+
   function handleSort(key: string) {
     if (!columns.find(col => col.key === key)?.sortable) return;
-    
+
     if (sortKey === key) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
@@ -19,35 +38,35 @@
       sortDirection = 'asc';
     }
   }
-  
-  $: sortedData = [...data].sort((a, b) => {
+
+  let sortedData = $derived([...data].sort((a, b) => {
     if (!sortKey) return 0;
-    
+
     const aVal = a[sortKey];
     const bVal = b[sortKey];
-    
+
     if (aVal === bVal) return 0;
-    
+
     const result = aVal < bVal ? -1 : 1;
     return sortDirection === 'asc' ? result : -result;
-  });
+  }));
 </script>
 
 <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-  <table class="min-w-full divide-y divide-gray-300">
-    <thead class="bg-gray-50">
+  <table class="min-w-full divide-y divide-border">
+    <thead class="bg-muted">
       <tr>
         {#each columns as column}
           <th
             scope="col"
-            class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900 {column.sortable ? 'cursor-pointer select-none' : ''}"
+            class="px-3 py-3.5 text-left text-sm font-semibold text-foreground {column.sortable ? 'cursor-pointer select-none' : ''}"
             style={column.width ? `width: ${column.width}` : ''}
-            on:click={() => handleSort(column.key)}
+            onclick={() => handleSort(column.key)}
           >
             <div class="flex items-center space-x-1">
               <span>{column.label}</span>
               {#if column.sortable}
-                <svg class="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                <svg class="h-4 w-4 text-muted-foreground" viewBox="0 0 20 20" fill="currentColor">
                   {#if sortKey === column.key}
                     {#if sortDirection === 'asc'}
                       <path fill-rule="evenodd" d="M14.77 12.79a.75.75 0 01-1.06-.02L10 8.832 6.29 12.77a.75.75 0 11-1.08-1.04l4.25-4.5a.75.75 0 011.08 0l4.25 4.5a.75.75 0 01-.02 1.06z" clip-rule="evenodd" />
@@ -67,26 +86,32 @@
         </th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-gray-200 bg-white">
+    <tbody class="divide-y divide-border bg-card">
       {#each sortedData as row, i}
         <tr>
           {#each columns as column}
-            <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-              <slot name="cell" {column} {row} value={row[column.key]}>
+            <td class="whitespace-nowrap px-3 py-4 text-sm text-muted-foreground">
+              {#if cell}
+                {@render cell({ column, row, value: row[column.key] })}
+              {:else}
                 {row[column.key]}
-              </slot>
+              {/if}
             </td>
           {/each}
           <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
-            <slot name="actions" {row} />
+            {#if actions}
+              {@render actions({ row })}
+            {/if}
           </td>
         </tr>
       {:else}
         <tr>
-          <td colspan={columns.length + 1} class="px-3 py-8 text-center text-sm text-gray-500">
-            <slot name="empty">
+          <td colspan={columns.length + 1} class="px-3 py-8 text-center text-sm text-muted-foreground">
+            {#if empty}
+              {@render empty()}
+            {:else}
               No data available
-            </slot>
+            {/if}
           </td>
         </tr>
       {/each}

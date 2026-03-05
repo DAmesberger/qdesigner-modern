@@ -135,7 +135,7 @@
     <button
       bind:this={buttonRef}
       type="button"
-      class="flex items-center gap-2 font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors {sizeClasses[
+      class="flex items-center gap-2 font-medium text-foreground bg-card border border-border rounded-md hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors {sizeClasses[
         size
       ]}"
       class:opacity-50={isChanging}
@@ -172,7 +172,7 @@
 
     {#if isOpen}
       <div
-        class="absolute z-50 mt-2 w-56 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none {positionClasses[
+        class="absolute z-50 mt-2 w-56 bg-popover rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none {positionClasses[
           position
         ]}"
         role="listbox"
@@ -183,11 +183,11 @@
           {#each supportedLanguages as language (language.code)}
             <button
               type="button"
-              class="flex items-center justify-between w-full px-4 py-2 text-sm hover:bg-gray-100 transition-colors focus:bg-gray-100 focus:outline-none"
-              class:bg-gray-50={language.code === currentLang}
-              class:text-gray-900={language.code === currentLang}
+              class="flex items-center justify-between w-full px-4 py-2 text-sm hover:bg-accent transition-colors focus:bg-accent focus:outline-none"
+              class:bg-muted={language.code === currentLang}
+              class:text-foreground={language.code === currentLang}
               class:font-medium={language.code === currentLang}
-              class:text-gray-700={language.code !== currentLang}
+              class:text-muted-foreground={language.code !== currentLang}
               onclick={() => handleLanguageChange(language.code)}
               role="option"
               aria-selected={language.code === currentLang}
@@ -205,14 +205,14 @@
                     {showNativeNames ? language.nativeName : language.name}
                   </span>
                   {#if showNativeNames && language.name !== language.nativeName}
-                    <span class="text-xs text-gray-500">{language.name}</span>
+                    <span class="text-xs text-muted-foreground">{language.name}</span>
                   {/if}
                 </div>
               </div>
 
               {#if language.code === currentLang}
                 <svg
-                  class="w-4 h-4 text-blue-600"
+                  class="w-4 h-4 text-primary"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                   aria-hidden="true"
@@ -232,9 +232,9 @@
 
     {#if isChanging}
       <div
-        class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 rounded-md"
+        class="absolute inset-0 flex items-center justify-center bg-background bg-opacity-75 rounded-md"
       >
-        <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+        <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
       </div>
     {/if}
   </div>
@@ -242,16 +242,16 @@
   <!-- Tabs variant -->
 {:else if variant === 'tabs'}
   <div class="language-switcher {className}" role="tablist" aria-label="Language selector">
-    <div class="flex bg-gray-100 rounded-lg p-1">
+    <div class="flex bg-muted rounded-lg p-1">
       {#each supportedLanguages as language (language.code)}
         <button
           type="button"
-          class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-          class:bg-white={language.code === currentLang}
-          class:text-gray-900={language.code === currentLang}
+          class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+          class:bg-card={language.code === currentLang}
+          class:text-foreground={language.code === currentLang}
           class:shadow-sm={language.code === currentLang}
-          class:text-gray-600={language.code !== currentLang}
-          class:hover:text-gray-900={language.code !== currentLang}
+          class:text-muted-foreground={language.code !== currentLang}
+          class:hover:text-foreground={language.code !== currentLang}
           disabled={isChanging}
           onclick={() => handleLanguageChange(language.code)}
           role="tab"
@@ -279,16 +279,16 @@
       {#each supportedLanguages as language (language.code)}
         <button
           type="button"
-          class="flex items-center gap-2 font-medium border rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 {sizeClasses[
+          class="flex items-center gap-2 font-medium border rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary {sizeClasses[
             size
           ]}"
-          class:bg-blue-600={language.code === currentLang}
-          class:text-white={language.code === currentLang}
-          class:border-blue-600={language.code === currentLang}
-          class:bg-white={language.code !== currentLang}
-          class:text-gray-700={language.code !== currentLang}
-          class:border-gray-300={language.code !== currentLang}
-          class:hover:bg-gray-50={language.code !== currentLang}
+          class:bg-primary={language.code === currentLang}
+          class:text-primary-foreground={language.code === currentLang}
+          class:border-primary={language.code === currentLang}
+          class:bg-card={language.code !== currentLang}
+          class:text-foreground={language.code !== currentLang}
+          class:border-border={language.code !== currentLang}
+          class:hover:bg-accent={language.code !== currentLang}
           disabled={isChanging}
           onclick={() => handleLanguageChange(language.code)}
           aria-pressed={language.code === currentLang}

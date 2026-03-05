@@ -156,7 +156,7 @@
 <div class="relative">
   <button
     onclick={toggleVersionMenu}
-    class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+    class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-accent"
   >
     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path
@@ -176,21 +176,21 @@
   {#if showVersionMenu}
     <div
       transition:fly={{ y: -10, duration: 200 }}
-      class="absolute top-full mt-2 right-0 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50"
+      class="absolute top-full mt-2 right-0 w-96 bg-card rounded-lg shadow-lg border border-border z-50"
     >
       <!-- Bump Actions -->
-      <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Bump Version</h3>
+      <div class="p-4 border-b border-border">
+        <h3 class="text-sm font-semibold text-foreground mb-3">Bump Version</h3>
         <div class="flex gap-2">
           {#each (['major', 'minor', 'patch'] as const) as type}
             <button
               onclick={() => openBumpModal(type)}
               class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border transition-colors
                 {type === 'major'
-                  ? 'text-red-700 dark:text-red-300 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/30'
+                  ? 'text-destructive border-destructive/30 hover:bg-destructive/10'
                   : type === 'minor'
-                    ? 'text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-900/30'
-                    : 'text-green-700 dark:text-green-300 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-900/30'}"
+                    ? 'text-warning border-warning/30 hover:bg-warning/10'
+                    : 'text-success border-success/30 hover:bg-success/10'}"
             >
               <div class="font-semibold capitalize">{type}</div>
               <div class="text-[10px] opacity-75 mt-0.5">{previewVersion(type)}</div>
@@ -200,10 +200,10 @@
       </div>
 
       <!-- Publish -->
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <div class="px-4 py-3 border-b border-border">
         <button
           onclick={publishVersion}
-          class="w-full px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          class="w-full px-3 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 transition-colors"
         >
           Publish v{versionDisplay}
         </button>
@@ -211,7 +211,7 @@
 
       <!-- Version History -->
       <div class="max-h-64 overflow-y-auto">
-        <div class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+        <div class="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           History
         </div>
         {#if isLoadingVersions}
@@ -224,7 +224,7 @@
             {/each}
           </div>
         {:else if versions.length === 0}
-          <div class="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
+          <div class="p-4 text-center text-sm text-muted-foreground">
             No version history yet
           </div>
         {:else}
@@ -232,22 +232,22 @@
             {#each versions as version}
               <button
                 onclick={() => loadVersion(version.id)}
-                class="w-full px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors"
+                class="w-full px-4 py-2.5 hover:bg-accent text-left transition-colors"
               >
                 <div class="flex items-center gap-2">
-                  <span class="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">
+                  <span class="text-sm font-mono font-medium text-foreground">
                     v{version.version_major}.{version.version_minor}.{version.version_patch}
                   </span>
-                  <span class="text-xs text-gray-400">
+                  <span class="text-xs text-muted-foreground">
                     (rev {version.version})
                   </span>
                 </div>
                 {#if version.title}
-                  <p class="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate">
+                  <p class="text-xs text-muted-foreground mt-0.5 truncate">
                     {version.title}
                   </p>
                 {/if}
-                <p class="text-xs text-gray-400 mt-0.5">
+                <p class="text-xs text-muted-foreground mt-0.5">
                   {formatDate(version.created_at)}
                 </p>
               </button>
@@ -266,30 +266,30 @@
     transition:fade={{ duration: 200 }}
   >
     <div
-      class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6"
+      class="bg-card rounded-lg shadow-xl w-full max-w-md p-6"
       transition:fly={{ y: 20, duration: 300 }}
     >
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+      <h3 class="text-lg font-semibold text-foreground mb-2">
         Bump {pendingBumpType} version
       </h3>
 
       <div class="flex items-center gap-3 mb-4">
-        <span class="text-sm font-mono text-gray-500">v{versionDisplay}</span>
-        <svg class="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <span class="text-sm font-mono text-muted-foreground">v{versionDisplay}</span>
+        <svg class="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
         </svg>
-        <span class="text-sm font-mono font-semibold text-gray-900 dark:text-gray-100">
+        <span class="text-sm font-mono font-semibold text-foreground">
           v{previewVersion(pendingBumpType)}
         </span>
       </div>
 
-      <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+      <p class="text-sm text-muted-foreground mb-4">
         {bumpDescriptions[pendingBumpType]}
       </p>
 
       {#if pendingBumpType === 'major'}
-        <div class="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-          <p class="text-xs text-amber-800 dark:text-amber-200">
+        <div class="mb-4 p-3 bg-warning/10 border border-warning/30 rounded-lg">
+          <p class="text-xs text-warning">
             Major version bumps indicate breaking changes. Sessions using different major versions are not directly comparable.
           </p>
         </div>
@@ -299,14 +299,14 @@
         <button
           onclick={() => { showBumpModal = false; pendingBumpType = null; }}
           disabled={isBumping}
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50"
+          class="px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-accent disabled:opacity-50"
         >
           Cancel
         </button>
         <button
           onclick={confirmBump}
           disabled={isBumping}
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          class="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {#if isBumping}
             <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">

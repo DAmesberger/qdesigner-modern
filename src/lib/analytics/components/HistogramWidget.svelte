@@ -143,5 +143,5 @@
     <canvas bind:this={canvasEl}></canvas>
   </div>
 {:else}
-  <div class="text-sm text-gray-400 dark:text-gray-500">No data available</div>
+  <div class="text-sm text-muted-foreground">No data available</div>
 {/if}

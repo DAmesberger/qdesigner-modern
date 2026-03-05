@@ -60,9 +60,9 @@ export const semanticColors = {
   // Status colors
   status: {
     error: 'text-destructive',
-    warning: 'text-yellow-600 dark:text-yellow-500',
-    success: 'text-green-600 dark:text-green-500',
-    info: 'text-blue-600 dark:text-blue-500',
+    warning: 'text-warning',
+    success: 'text-success',
+    info: 'text-info',
   }
 } as const;
 

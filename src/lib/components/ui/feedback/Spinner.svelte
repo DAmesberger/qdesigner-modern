@@ -1,17 +1,24 @@
 <script lang="ts">
-  export let size: 'sm' | 'md' | 'lg' = 'md';
-  export let color: 'primary' | 'white' | 'gray' = 'primary';
-  
+  interface Props {
+    size?: 'sm' | 'md' | 'lg';
+    color?: 'primary' | 'white' | 'muted';
+  }
+
+  let {
+    size = 'md',
+    color = 'primary',
+  }: Props = $props();
+
   const sizeClasses = {
     sm: 'h-4 w-4',
     md: 'h-8 w-8',
-    lg: 'h-12 w-12'
+    lg: 'h-12 w-12',
   };
-  
+
   const colorClasses = {
-    primary: 'text-indigo-600',
+    primary: 'text-primary',
     white: 'text-white',
-    gray: 'text-gray-400'
+    muted: 'text-muted-foreground',
   };
 </script>
 

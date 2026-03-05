@@ -36,7 +36,7 @@
         {data.page.questions.length} question{data.page.questions.length !== 1 ? 's' : ''}
       </span>
     {:else}
-      <span class="{theme.typography.caption} text-gray-500"> Empty page </span>
+      <span class="{theme.typography.caption} text-muted-foreground"> Empty page </span>
     {/if}
   </div>
 

@@ -34,7 +34,7 @@
     <span class="question-icon">{getQuestionIcon(data.question.type)}</span>
     <div class="question-info">
       <span class="question-label">{data.label}</span>
-      <span class="{theme.typography.caption} text-gray-500">
+      <span class="{theme.typography.caption} text-muted-foreground">
         {data.question.type.replace('-', ' ')}
       </span>
     </div>

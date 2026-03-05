@@ -54,16 +54,16 @@
         stroke-linejoin="round"
       />
     </svg>
-    <div class="flex justify-between mt-1 text-xs text-gray-400 dark:text-gray-500">
+    <div class="flex justify-between mt-1 text-xs text-muted-foreground">
       <span>{formatTime(chart.minX)}</span>
-      <span class="text-gray-500 dark:text-gray-400">{label}</span>
+      <span class="text-muted-foreground">{label}</span>
       <span>{formatTime(chart.maxX)}</span>
     </div>
   </div>
 {:else if data.length === 1}
-  <div class="text-sm text-gray-500 dark:text-gray-400">
+  <div class="text-sm text-muted-foreground">
     Single data point: {data[0]?.value}
   </div>
 {:else}
-  <div class="text-sm text-gray-400 dark:text-gray-500">No data available</div>
+  <div class="text-sm text-muted-foreground">No data available</div>
 {/if}

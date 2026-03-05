@@ -1,21 +1,37 @@
 <script lang="ts">
-  export let value = '';
-  export let options: Array<{ value: string; label: string }> = [];
-  export let placeholder = 'Select an option';
-  export let disabled = false;
-  export let error = false;
-  export let id: string | undefined = undefined;
-  export let name: string | undefined = undefined;
-  
-  $: selectClasses = `
-    block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm 
+  interface Props {
+    value?: string;
+    options?: Array<{ value: string; label: string }>;
+    placeholder?: string;
+    disabled?: boolean;
+    error?: boolean;
+    id?: string;
+    name?: string;
+    onchange?: (event: Event & { currentTarget: HTMLSelectElement }) => void;
+    onblur?: (event: FocusEvent & { currentTarget: HTMLSelectElement }) => void;
+  }
+
+  let {
+    value = $bindable(''),
+    options = [],
+    placeholder = 'Select an option',
+    disabled = false,
+    error = false,
+    id = undefined,
+    name = undefined,
+    onchange,
+    onblur,
+  }: Props = $props();
+
+  let selectClasses = $derived(`
+    block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm
     ring-1 ring-inset focus:ring-2 focus:ring-inset sm:text-sm sm:leading-6
-    ${error 
-      ? 'ring-destructive focus:ring-destructive' 
+    ${error
+      ? 'ring-destructive focus:ring-destructive'
       : 'ring-border focus:ring-primary'
     }
     ${disabled ? 'bg-muted text-muted-foreground opacity-50' : ''}
-  `;
+  `);
 </script>
 
 <div class="relative">
@@ -25,8 +41,8 @@
     {disabled}
     bind:value
     class={selectClasses}
-    on:change
-    on:blur
+    {onchange}
+    {onblur}
   >
     {#if placeholder}
       <option value="" disabled selected={!value}>

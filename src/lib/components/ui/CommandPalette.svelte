@@ -195,11 +195,11 @@
     class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl z-50"
     transition:fly={{ y: -20, duration: 200 }}
   >
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl overflow-hidden">
+    <div class="bg-popover rounded-lg shadow-2xl overflow-hidden">
       <!-- Search Input -->
-      <div class="border-b border-gray-200 dark:border-gray-700">
+      <div class="border-b border-border">
         <div class="flex items-center px-4">
-          <svg class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -213,10 +213,10 @@
             onkeydown={handleKeydown}
             type="text"
             placeholder="Type a command or search..."
-            class="flex-1 px-3 py-4 bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-500 focus:outline-none"
+            class="flex-1 px-3 py-4 bg-transparent text-foreground placeholder-muted-foreground focus:outline-none"
           />
           <kbd
-            class="hidden sm:inline-block px-2 py-1 text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 rounded"
+            class="hidden sm:inline-block px-2 py-1 text-xs text-muted-foreground bg-muted rounded"
           >
             ESC
           </kbd>
@@ -226,7 +226,7 @@
       <!-- Commands List -->
       <div class="max-h-96 overflow-y-auto">
         {#if filteredCommands.length === 0}
-          <div class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+          <div class="px-4 py-8 text-center text-muted-foreground">
             No commands found for "{searchQuery}"
           </div>
         {:else}
@@ -234,7 +234,7 @@
             {#each Object.entries(groupedCommands) as [category, categoryCommands], categoryIndex}
               <div>
                 <div
-                  class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                  class="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider"
                 >
                   {category}
                 </div>
@@ -244,14 +244,12 @@
                     data-command-index={globalIndex}
                     onclick={() => executeCommand(command)}
                     onmouseenter={() => (selectedIndex = globalIndex)}
-                    class="w-full px-4 py-2 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                    class:bg-gray-100={selectedIndex === globalIndex}
-                    class:dark:bg-gray-700={selectedIndex === globalIndex}
+                    class="w-full px-4 py-2 flex items-center justify-between hover:bg-accent transition-colors {selectedIndex === globalIndex ? 'bg-accent' : ''}"
                   >
                     <div class="flex items-center gap-3">
                       {#if command.icon}
                         <svg
-                          class="w-5 h-5 text-gray-400"
+                          class="w-5 h-5 text-muted-foreground"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -265,11 +263,11 @@
                         </svg>
                       {/if}
                       <div class="text-left">
-                        <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        <div class="text-sm font-medium text-foreground">
                           {command.title}
                         </div>
                         {#if command.description}
-                          <div class="text-xs text-gray-500 dark:text-gray-400">
+                          <div class="text-xs text-muted-foreground">
                             {command.description}
                           </div>
                         {/if}
@@ -277,7 +275,7 @@
                     </div>
                     {#if command.shortcut}
                       <kbd
-                        class="hidden sm:inline-block px-2 py-1 text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 rounded"
+                        class="hidden sm:inline-block px-2 py-1 text-xs text-muted-foreground bg-muted rounded"
                       >
                         {command.shortcut}
                       </kbd>
@@ -292,19 +290,19 @@
 
       <!-- Footer -->
       <div
-        class="border-t border-gray-200 dark:border-gray-700 px-4 py-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400"
+        class="border-t border-border px-4 py-2 flex items-center justify-between text-xs text-muted-foreground"
       >
         <div class="flex items-center gap-4">
           <span class="flex items-center gap-1">
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">↑↓</kbd>
+            <kbd class="px-1.5 py-0.5 bg-muted rounded">↑↓</kbd>
             Navigate
           </span>
           <span class="flex items-center gap-1">
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">↵</kbd>
+            <kbd class="px-1.5 py-0.5 bg-muted rounded">↵</kbd>
             Select
           </span>
           <span class="flex items-center gap-1">
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">ESC</kbd>
+            <kbd class="px-1.5 py-0.5 bg-muted rounded">ESC</kbd>
             Close
           </span>
         </div>

@@ -212,7 +212,7 @@
       <div class="text-xs text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1">Total Sessions</div>
       <div class="text-2xl font-bold text-[hsl(var(--foreground))]">{totalSessions}</div>
       {#if liveTotal > 0}
-        <div class="text-xs text-green-500 mt-1">+{liveTotal} live</div>
+        <div class="text-xs text-success mt-1">+{liveTotal} live</div>
       {/if}
     </div>
 
@@ -297,7 +297,7 @@
             Started
           </div>
           <div class="flex items-center gap-1">
-            <div class="w-3 h-0.5 bg-green-500 border-dashed"></div>
+            <div class="w-3 h-0.5 bg-success border-dashed"></div>
             Completed
           </div>
           <div class="ml-auto">
@@ -327,9 +327,9 @@
       <p class="text-[hsl(var(--muted-foreground))] text-sm">No session data available</p>
     {:else}
       {@const stages = [
-        { label: 'Started', count: totalSessions, color: 'bg-blue-500' },
-        { label: 'Completed', count: totalCompleted, color: 'bg-green-500' },
-        { label: 'Abandoned', count: totalSessions - totalCompleted, color: 'bg-amber-500' },
+        { label: 'Started', count: totalSessions, color: 'bg-info' },
+        { label: 'Completed', count: totalCompleted, color: 'bg-success' },
+        { label: 'Abandoned', count: totalSessions - totalCompleted, color: 'bg-warning' },
       ]}
       <div class="space-y-3">
         {#each stages as stage}

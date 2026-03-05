@@ -84,15 +84,15 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<div class="h-screen flex flex-col bg-gray-100">
+<div class="h-screen flex flex-col bg-muted">
   <!-- Save/Load Toolbar -->
   <SaveLoadToolbar />
 
   <!-- Main Toolbar -->
-  <div class="bg-white border-b border-gray-200 px-4 py-3">
+  <div class="bg-card border-b border-border px-4 py-3">
     <div class="flex items-center justify-between">
       <div class="flex items-center space-x-4">
-        <h1 class="text-xl font-semibold text-gray-900">
+        <h1 class="text-xl font-semibold text-foreground">
           {questionnaireName || 'Untitled Questionnaire'}
         </h1>
 
@@ -100,7 +100,7 @@
           <button
             onclick={() => designerStore.undo()}
             disabled={!designerStore.canUndo}
-            class="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="p-2 rounded hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
             title="Undo (Ctrl+Z)"
             aria-label="Undo"
           >
@@ -117,7 +117,7 @@
           <button
             onclick={() => designerStore.redo()}
             disabled={!designerStore.canRedo}
-            class="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="p-2 rounded hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
             title="Redo (Ctrl+Shift+Z)"
             aria-label="Redo"
           >
@@ -136,28 +136,28 @@
       <div class="flex items-center space-x-3">
         <button
           onclick={handleImport}
-          class="px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+          class="px-3 py-1.5 text-muted-foreground hover:bg-accent rounded-md transition-colors"
         >
           Import
         </button>
 
         <button
           onclick={handleExport}
-          class="px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+          class="px-3 py-1.5 text-muted-foreground hover:bg-accent rounded-md transition-colors"
         >
           Export
         </button>
 
         <button
           onclick={handleSave}
-          class="px-4 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          class="px-4 py-1.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
         >
           Save
         </button>
 
         <button
           onclick={() => designerStore.togglePreview()}
-          class="px-4 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+          class="px-4 py-1.5 bg-success text-white rounded-md hover:bg-success/90 transition-colors"
         >
           {showPreview ? 'Edit' : 'Preview'}
         </button>
@@ -168,30 +168,30 @@
   <!-- Main Content -->
   <div class="flex-1 flex overflow-hidden">
     <!-- Left Sidebar -->
-    <div class="w-80 bg-gray-50 border-r border-gray-200 flex flex-col">
+    <div class="w-80 bg-muted border-r border-border flex flex-col">
       <!-- Tabs -->
-      <div class="flex border-b border-gray-200 bg-white">
+      <div class="flex border-b border-border bg-card">
         <button
           onclick={() => (activeTab = 'questions')}
           class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'questions'
-            ? 'text-blue-600 border-b-2 border-blue-600'
-            : 'text-gray-600 hover:text-gray-900'}"
+            ? 'text-primary border-b-2 border-primary'
+            : 'text-muted-foreground hover:text-foreground'}"
         >
           Questions
         </button>
         <button
           onclick={() => (activeTab = 'variables')}
           class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'variables'
-            ? 'text-blue-600 border-b-2 border-blue-600'
-            : 'text-gray-600 hover:text-gray-900'}"
+            ? 'text-primary border-b-2 border-primary'
+            : 'text-muted-foreground hover:text-foreground'}"
         >
           Variables
         </button>
         <button
           onclick={() => (activeTab = 'flow')}
           class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'flow'
-            ? 'text-blue-600 border-b-2 border-blue-600'
-            : 'text-gray-600 hover:text-gray-900'}"
+            ? 'text-primary border-b-2 border-primary'
+            : 'text-muted-foreground hover:text-foreground'}"
         >
           Flow
         </button>
@@ -204,25 +204,25 @@
         {:else if activeTab === 'variables'}
           <VariableManager />
         {:else if activeTab === 'flow'}
-          <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <h3 class="text-lg font-semibold mb-4 text-gray-800">Page Flow</h3>
+          <div class="bg-card rounded-lg shadow-sm border border-border p-4">
+            <h3 class="text-lg font-semibold mb-4 text-foreground">Page Flow</h3>
 
             <!-- Pages List -->
             <div class="space-y-2 mb-4">
               {#each pages as page, index}
                 <button
                   onclick={() => designerStore.setCurrentPage(page.id)}
-                  class="w-full text-left p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 mb-2 block transition-colors"
+                  class="w-full text-left p-3 bg-muted rounded-lg cursor-pointer hover:bg-accent mb-2 block transition-colors"
                 >
                   <div class="flex items-center justify-between">
                     <div>
                       <h4 class="font-medium">{page.name || `Page ${index + 1}`}</h4>
-                      <p class="text-xs text-gray-600">
+                      <p class="text-xs text-muted-foreground">
                         {(page.questions ?? []).length} questions
                       </p>
                     </div>
                     <svg
-                      class="w-4 h-4 text-gray-400"
+                      class="w-4 h-4 text-muted-foreground"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -241,14 +241,14 @@
 
             <button
               onclick={handleAddPage}
-              class="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg
-                     hover:border-gray-400 text-gray-600 hover:text-gray-800 transition-colors"
+              class="w-full px-3 py-2 border-2 border-dashed border-border rounded-lg
+                     hover:border-muted-foreground text-muted-foreground hover:text-foreground transition-colors"
             >
               + Add Page
             </button>
 
-            <div class="mt-6 p-3 bg-yellow-50 rounded-lg">
-              <p class="text-sm text-yellow-800">
+            <div class="mt-6 p-3 bg-warning/10 rounded-lg">
+              <p class="text-sm text-warning">
                 <strong>Tip:</strong> Use variables in conditions to create dynamic page flow
               </p>
             </div>
@@ -261,20 +261,20 @@
     <PageCanvas />
 
     <!-- Right Sidebar (Properties) -->
-    <div class="w-80 bg-gray-50 border-l border-gray-200">
+    <div class="w-80 bg-muted border-l border-border">
       <PropertiesPanel />
     </div>
   </div>
 
   <!-- Status Bar -->
-  <div class="bg-white border-t border-gray-200 px-4 py-2">
-    <div class="flex items-center justify-between text-sm text-gray-600">
+  <div class="bg-card border-t border-border px-4 py-2">
+    <div class="flex items-center justify-between text-sm text-muted-foreground">
       <div class="flex items-center space-x-4">
         <span>{pages.length} page{pages.length !== 1 ? 's' : ''}</span>
         <span>•</span>
         <span>{pages.reduce((sum, p) => sum + (p.questions ?? []).length, 0)} questions</span>
         <span>•</span>
-        <button onclick={() => designerStore.validate()} class="text-blue-600 hover:text-blue-800">
+        <button onclick={() => designerStore.validate()} class="text-primary hover:text-primary/80">
           Validate
         </button>
       </div>

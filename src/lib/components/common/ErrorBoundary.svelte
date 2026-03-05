@@ -1,12 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import type { Snippet } from 'svelte';
   import Button from './Button.svelte';
 
-  export let error: Error | null = null;
-  export let reset: (() => void) | null = null;
+  interface Props {
+    error?: Error | null;
+    reset?: (() => void) | null;
+    children?: Snippet;
+  }
 
-  let showDetails = false;
+  let {
+    error = $bindable(null),
+    reset = null,
+    children,
+  }: Props = $props();
+
+  let showDetails = $state(false);
 
   // Capture errors
   onMount(() => {
@@ -42,16 +51,15 @@
   function reportError() {
     // In production, this would send to an error tracking service
     console.error('Error reported:', error);
-    // Could integrate with Sentry, LogRocket, etc.
   }
 </script>
 
 {#if error}
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen flex items-center justify-center bg-muted py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-md w-full space-y-8">
       <div class="text-center">
-        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-          <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-destructive/10">
+          <svg class="h-6 w-6 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -61,20 +69,20 @@
           </svg>
         </div>
 
-        <h2 class="mt-6 text-3xl font-extrabold text-gray-900">Oops! Something went wrong</h2>
+        <h2 class="mt-6 text-3xl font-extrabold text-foreground">Oops! Something went wrong</h2>
 
-        <p class="mt-2 text-sm text-gray-600">
+        <p class="mt-2 text-sm text-muted-foreground">
           We're sorry for the inconvenience. The error has been logged and we'll look into it.
         </p>
       </div>
 
       <div class="mt-8 space-y-6">
         {#if error.message}
-          <div class="rounded-md bg-red-50 p-4">
+          <div class="rounded-md bg-destructive/10 p-4">
             <div class="flex">
               <div class="ml-3">
-                <h3 class="text-sm font-medium text-red-800">Error details</h3>
-                <div class="mt-2 text-sm text-red-700">
+                <h3 class="text-sm font-medium text-destructive">Error details</h3>
+                <div class="mt-2 text-sm text-destructive/80">
                   <p>{error.message}</p>
                 </div>
               </div>
@@ -93,21 +101,21 @@
         <div class="text-center">
           <button
             onclick={() => (showDetails = !showDetails)}
-            class="text-sm text-gray-500 hover:text-gray-700"
+            class="text-sm text-muted-foreground hover:text-foreground"
           >
             {showDetails ? 'Hide' : 'Show'} technical details
           </button>
         </div>
 
         {#if showDetails && error}
-          <div class="rounded-md bg-gray-100 p-4">
-            <pre class="text-xs text-gray-700 overflow-x-auto whitespace-pre-wrap">
+          <div class="rounded-md bg-muted p-4">
+            <pre class="text-xs text-muted-foreground overflow-x-auto whitespace-pre-wrap">
 {error.stack || error.toString()}
             </pre>
           </div>
 
           <div class="text-center">
-            <button onclick={reportError} class="text-sm text-blue-600 hover:text-blue-500">
+            <button onclick={reportError} class="text-sm text-primary hover:text-primary/80">
               Report this error
             </button>
           </div>
@@ -115,6 +123,6 @@
       </div>
     </div>
   </div>
-{:else}
-  <slot />
+{:else if children}
+  {@render children()}
 {/if}

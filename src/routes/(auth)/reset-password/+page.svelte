@@ -34,11 +34,11 @@
     const labels = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Very Strong'];
     const colors = [
       '',
-      'text-red-500',
-      'text-orange-500',
-      'text-yellow-500',
-      'text-green-500',
-      'text-green-600',
+      'text-destructive',
+      'text-warning',
+      'text-warning',
+      'text-success',
+      'text-success',
     ];
 
     return {
@@ -143,11 +143,11 @@
                 {#each Array(5) as _, i}
                   <div
                     class="h-1 flex-1 rounded-full transition-colors"
-                    class:bg-gray-200={i >= passwordStrength.score}
-                    class:bg-red-500={i < passwordStrength.score && passwordStrength.score <= 2}
-                    class:bg-yellow-500={i < passwordStrength.score &&
+                    class:bg-muted={i >= passwordStrength.score}
+                    class:bg-destructive={i < passwordStrength.score && passwordStrength.score <= 2}
+                    class:bg-warning={i < passwordStrength.score &&
                       passwordStrength.score === 3}
-                    class:bg-green-500={i < passwordStrength.score && passwordStrength.score >= 4}
+                    class:bg-success={i < passwordStrength.score && passwordStrength.score >= 4}
                   ></div>
                 {/each}
               </div>
@@ -170,7 +170,7 @@
             minLength={8}
           />
           {#if confirmPassword && !passwordsMatch}
-            <p class="mt-1 text-sm text-red-500">Passwords do not match</p>
+            <p class="mt-1 text-sm text-destructive">Passwords do not match</p>
           {/if}
         </FormGroup>
 

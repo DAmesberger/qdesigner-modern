@@ -171,7 +171,7 @@
             <div class="flex items-start gap-2">
               <div class="mt-0.5 flex-shrink-0">
                 {#if completed}
-                  <CheckCircle class="h-4 w-4 text-green-500" />
+                  <CheckCircle class="h-4 w-4 text-success" />
                 {:else}
                   <Play class="h-4 w-4 text-muted-foreground" />
                 {/if}
@@ -180,7 +180,7 @@
                 <div class="flex items-center gap-1.5">
                   <h3 class="text-sm font-medium text-foreground">{tour.name}</h3>
                   {#if completed}
-                    <span class="rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-600">
+                    <span class="rounded-full bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success">
                       Completed
                     </span>
                   {/if}

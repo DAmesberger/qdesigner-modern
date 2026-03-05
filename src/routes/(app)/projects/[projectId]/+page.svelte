@@ -75,8 +75,8 @@
 
   function getStatusBadge(status: string) {
     const classes: Record<string, string> = {
-      draft: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-      published: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+      draft: 'bg-warning/10 text-warning',
+      published: 'bg-success/10 text-success',
       archived: 'bg-muted text-muted-foreground',
     };
     return classes[status] || classes['draft'];

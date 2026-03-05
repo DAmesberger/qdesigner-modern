@@ -59,7 +59,7 @@
 <div
   role="button"
   tabindex="0"
-  class="flex-1 bg-gray-50 overflow-auto"
+  class="flex-1 bg-muted overflow-auto"
   onclick={handleCanvasClick}
   onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handleCanvasClick()}
 >
@@ -72,20 +72,20 @@
           tabindex="0"
           onclick={handlePageClick}
           onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && handlePageClick(e)}
-          class="mb-6 p-4 bg-white rounded-lg shadow-sm border-2 cursor-pointer
-                 {selectedItemId === page.id ? 'border-blue-500' : 'border-gray-200'}"
+          class="mb-6 p-4 bg-card rounded-lg shadow-sm border-2 cursor-pointer
+                 {selectedItemId === page.id ? 'border-primary' : 'border-border'}"
         >
           <div class="flex items-center justify-between">
             <div>
-              <h2 class="text-xl font-semibold text-gray-900">{page.name || 'Untitled Page'}</h2>
-              <p class="text-sm text-gray-600 mt-1">
+              <h2 class="text-xl font-semibold text-foreground">{page.name || 'Untitled Page'}</h2>
+              <p class="text-sm text-muted-foreground mt-1">
                 Page ID: {page.id} • {questions.length} question{questions.length !== 1 ? 's' : ''}
               </p>
             </div>
 
             <div class="flex items-center space-x-2">
               {#if page.conditions && page.conditions.length > 0}
-                <span class="px-2 py-1 bg-yellow-100 rounded-md text-yellow-700 text-xs">
+                <span class="px-2 py-1 bg-warning/10 rounded-md text-warning text-xs">
                   Conditional
                 </span>
               {/if}
@@ -93,7 +93,7 @@
               <div class="hidden sm:flex items-center gap-2">
                 <button
                   type="button"
-                  class="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                  class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
                   onclick={(e) => {
                     e.stopPropagation();
                     quickAddQuestion('multiple-choice');
@@ -104,7 +104,7 @@
                 </button>
                 <button
                   type="button"
-                  class="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                  class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
                   onclick={(e) => {
                     e.stopPropagation();
                     quickAddQuestion('text-input');
@@ -115,7 +115,7 @@
                 </button>
                 <button
                   type="button"
-                  class="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-100"
+                  class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
                   onclick={(e) => {
                     e.stopPropagation();
                     quickAddQuestion('reaction-time');
@@ -131,12 +131,12 @@
                   e.stopPropagation();
                   /* open page settings */
                 }}
-                class="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                class="p-2 hover:bg-accent rounded-lg transition-colors"
                 title="Page Settings"
                 aria-label="Page Settings"
               >
                 <svg
-                  class="w-5 h-5 text-gray-600"
+                  class="w-5 h-5 text-muted-foreground"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -191,10 +191,10 @@
                 console.error('Failed to handle drop:', error as Error);
               }
             }}
-            class="mt-4 p-8 border-2 border-dashed border-gray-300 rounded-lg
-                   hover:border-gray-400 transition-colors text-center"
+            class="mt-4 p-8 border-2 border-dashed border-border rounded-lg
+                   hover:border-muted-foreground transition-colors text-center"
           >
-            <p class="text-sm text-gray-500">Drop a question here to add it to the end</p>
+            <p class="text-sm text-muted-foreground">Drop a question here to add it to the end</p>
           </div>
         {:else}
           <!-- Empty state -->
@@ -206,12 +206,12 @@
             ondrop={handleDrop}
             class="h-96 flex items-center justify-center border-2 border-dashed rounded-lg
                    transition-colors {isDragOver
-              ? 'border-blue-500 bg-blue-50'
-              : 'border-gray-300'}"
+              ? 'border-primary bg-primary/10'
+              : 'border-border'}"
           >
             <div class="text-center">
               <svg
-                class="mx-auto h-12 w-12 text-gray-400"
+                class="mx-auto h-12 w-12 text-muted-foreground"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 48 48"
@@ -223,8 +223,8 @@
                   d="M8 14v20c0 4.418 7.163 8 16 8 1.381 0 2.721-.087 4-.252M8 14c0 4.418 7.163 8 16 8s16-3.582 16-8M8 14c0-4.418 7.163-8 16-8s16 3.582 16 8m0 0v14m0-4c0 4.418-7.163 8-16 8S8 28.418 8 24"
                 />
               </svg>
-              <h3 class="mt-2 text-sm font-medium text-gray-900">No questions</h3>
-              <p class="mt-1 text-sm text-gray-500">Drag a question type here to get started</p>
+              <h3 class="mt-2 text-sm font-medium text-foreground">No questions</h3>
+              <p class="mt-1 text-sm text-muted-foreground">Drag a question type here to get started</p>
             </div>
           </div>
         {/if}
@@ -233,7 +233,7 @@
       <div class="h-full flex items-center justify-center">
         <div class="text-center">
           <svg
-            class="mx-auto h-12 w-12 text-gray-400"
+            class="mx-auto h-12 w-12 text-muted-foreground"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 48 48"
@@ -245,8 +245,8 @@
               d="M9 12h6m-6 8h6m-6 8h6m3-24h22a2 2 0 012 2v20a2 2 0 01-2 2H18a2 2 0 01-2-2V6a2 2 0 012-2z"
             />
           </svg>
-          <h3 class="mt-2 text-sm font-medium text-gray-900">No page selected</h3>
-          <p class="mt-1 text-sm text-gray-500">Create or select a page to start designing</p>
+          <h3 class="mt-2 text-sm font-medium text-foreground">No page selected</h3>
+          <p class="mt-1 text-sm text-muted-foreground">Create or select a page to start designing</p>
         </div>
       </div>
     {/if}

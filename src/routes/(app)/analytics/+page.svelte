@@ -135,13 +135,13 @@
   function getStatusColor(status: string) {
     switch (status) {
       case 'published':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-success/10 text-success border-success/20';
       case 'draft':
-        return 'bg-amber-100 text-amber-800 border-amber-200';
+        return 'bg-warning/10 text-warning border-warning/20';
       case 'archived':
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-muted text-muted-foreground border-border';
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-muted text-muted-foreground border-border';
     }
   }
 

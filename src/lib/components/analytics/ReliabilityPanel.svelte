@@ -146,11 +146,11 @@
   }
 
   function reliabilityLevel(v: number): string {
-    if (isNaN(v)) return 'text-gray-400';
-    if (v >= 0.9) return 'text-green-600 dark:text-green-400';
-    if (v >= 0.8) return 'text-blue-600 dark:text-blue-400';
-    if (v >= 0.7) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
+    if (isNaN(v)) return 'text-muted-foreground';
+    if (v >= 0.9) return 'text-success';
+    if (v >= 0.8) return 'text-info';
+    if (v >= 0.7) return 'text-warning';
+    return 'text-destructive';
   }
 
   function reliabilityLabel(v: number): string {
@@ -164,26 +164,26 @@
   }
 </script>
 
-<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Reliability Analysis</h3>
+<div class="bg-card rounded-lg border border-border p-6">
+  <h3 class="text-lg font-semibold text-foreground mb-4">Reliability Analysis</h3>
 
   <!-- Summary metrics -->
   <div class="grid grid-cols-2 gap-4 mb-6 {dichotomous ? 'sm:grid-cols-3' : ''}">
-    <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-      <div class="text-sm text-gray-500 dark:text-gray-400">Cronbach's Alpha</div>
+    <div class="bg-muted rounded-lg p-4">
+      <div class="text-sm text-muted-foreground">Cronbach's Alpha</div>
       <div class="text-2xl font-bold {reliabilityLevel(alpha)}">{fmt(alpha)}</div>
       <div class="text-xs {reliabilityLevel(alpha)}">{reliabilityLabel(alpha)}</div>
     </div>
-    <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-      <div class="text-sm text-gray-500 dark:text-gray-400">Split-Half</div>
+    <div class="bg-muted rounded-lg p-4">
+      <div class="text-sm text-muted-foreground">Split-Half</div>
       <div class="text-2xl font-bold {reliabilityLevel(splitHalfR)}">{fmt(splitHalfR)}</div>
-      <div class="text-xs text-gray-400">Spearman-Brown corrected</div>
+      <div class="text-xs text-muted-foreground">Spearman-Brown corrected</div>
     </div>
     {#if dichotomous && kr20Value !== null}
-      <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
-        <div class="text-sm text-gray-500 dark:text-gray-400">KR-20</div>
+      <div class="bg-muted rounded-lg p-4">
+        <div class="text-sm text-muted-foreground">KR-20</div>
         <div class="text-2xl font-bold {reliabilityLevel(kr20Value)}">{fmt(kr20Value)}</div>
-        <div class="text-xs text-gray-400">Dichotomous items</div>
+        <div class="text-xs text-muted-foreground">Dichotomous items</div>
       </div>
     {/if}
   </div>
@@ -192,20 +192,20 @@
   <div class="overflow-x-auto">
     <table class="min-w-full text-sm">
       <thead>
-        <tr class="border-b border-gray-200 dark:border-gray-600">
-          <th class="text-left py-2 pr-4 font-medium text-gray-500 dark:text-gray-400">Item</th>
-          <th class="text-right py-2 px-4 font-medium text-gray-500 dark:text-gray-400">Item-Total r</th>
-          <th class="text-right py-2 pl-4 font-medium text-gray-500 dark:text-gray-400">Alpha if Deleted</th>
+        <tr class="border-b border-border">
+          <th class="text-left py-2 pr-4 font-medium text-muted-foreground">Item</th>
+          <th class="text-right py-2 px-4 font-medium text-muted-foreground">Item-Total r</th>
+          <th class="text-right py-2 pl-4 font-medium text-muted-foreground">Alpha if Deleted</th>
         </tr>
       </thead>
       <tbody>
         {#each itemStats as stat}
-          <tr class="border-b border-gray-100 dark:border-gray-700/50">
-            <td class="py-2 pr-4 text-gray-900 dark:text-white">{stat.name}</td>
-            <td class="py-2 px-4 text-right font-mono {stat.itemTotal < 0.3 ? 'text-red-500' : 'text-gray-700 dark:text-gray-300'}">
+          <tr class="border-b border-border">
+            <td class="py-2 pr-4 text-foreground">{stat.name}</td>
+            <td class="py-2 px-4 text-right font-mono {stat.itemTotal < 0.3 ? 'text-destructive' : 'text-foreground'}">
               {fmt(stat.itemTotal)}
             </td>
-            <td class="py-2 pl-4 text-right font-mono {stat.alphaIfDeleted > alpha ? 'text-red-500 font-semibold' : 'text-gray-700 dark:text-gray-300'}">
+            <td class="py-2 pl-4 text-right font-mono {stat.alphaIfDeleted > alpha ? 'text-destructive font-semibold' : 'text-foreground'}">
               {fmt(stat.alphaIfDeleted)}
             </td>
           </tr>
@@ -214,7 +214,7 @@
     </table>
   </div>
 
-  <p class="mt-3 text-xs text-gray-400">
+  <p class="mt-3 text-xs text-muted-foreground">
     N = {items.length} participants, k = {nItems} items.
     Items with item-total r &lt; .30 or alpha-if-deleted &gt; overall alpha are flagged.
   </p>

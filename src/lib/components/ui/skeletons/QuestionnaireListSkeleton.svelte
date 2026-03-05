@@ -6,7 +6,7 @@
 
 <div class="space-y-4">
   {#each Array(count) as _, i}
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+    <div class="bg-card rounded-lg shadow-sm border border-border p-6">
       <div class="flex items-start justify-between">
         <div class="flex-1">
           <!-- Title -->

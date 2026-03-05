@@ -123,22 +123,22 @@
       <button
         type="button"
         class="mx-auto block px-3 py-1 text-xs font-medium rounded-full
-          bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300
-          hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          bg-muted text-muted-foreground
+          hover:bg-accent transition-colors"
         onclick={toggleTopLogic}
       >
         {query.logic}
       </button>
     {/if}
 
-    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+    <div class="border border-border rounded-lg p-3 space-y-2">
       {#each group.rules as rule, ri (rule.id)}
         {#if ri > 0}
           <button
             type="button"
             class="mx-auto block px-2 py-0.5 text-xs font-medium rounded-full
-              bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400
-              hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+              bg-primary/10 text-primary
+              hover:bg-primary/20 transition-colors"
             onclick={() => toggleGroupLogic(group.id)}
           >
             {group.logic}
@@ -148,8 +148,8 @@
         <div class="flex items-center gap-2">
           <!-- Field -->
           <select
-            class="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1.5
-              bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            class="flex-1 text-sm border border-border rounded-md px-2 py-1.5
+              bg-background text-foreground"
             value={rule.field}
             onchange={(e) => updateRule(group.id, rule.id, { field: (e.target as HTMLSelectElement).value })}
           >
@@ -160,8 +160,8 @@
 
           <!-- Operator -->
           <select
-            class="w-24 text-sm border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1.5
-              bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            class="w-24 text-sm border border-border rounded-md px-2 py-1.5
+              bg-background text-foreground"
             value={rule.operator}
             onchange={(e) => updateRule(group.id, rule.id, { operator: (e.target as HTMLSelectElement).value as FilterOperator })}
           >
@@ -173,8 +173,8 @@
           <!-- Value -->
           <input
             type="text"
-            class="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1.5
-              bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            class="flex-1 text-sm border border-border rounded-md px-2 py-1.5
+              bg-background text-foreground"
             value={rule.value}
             placeholder="Value"
             oninput={(e) => updateRule(group.id, rule.id, { value: (e.target as HTMLInputElement).value })}
@@ -183,8 +183,8 @@
           {#if rule.operator === 'between'}
             <input
               type="text"
-              class="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1.5
-                bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              class="flex-1 text-sm border border-border rounded-md px-2 py-1.5
+                bg-background text-foreground"
               value={rule.value2 ?? ''}
               placeholder="Value 2"
               oninput={(e) => updateRule(group.id, rule.id, { value2: (e.target as HTMLInputElement).value })}
@@ -194,7 +194,7 @@
           <!-- Remove rule -->
           <button
             type="button"
-            class="p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            class="p-1 text-muted-foreground hover:text-destructive transition-colors"
             onclick={() => removeRule(group.id, rule.id)}
             title="Remove rule"
           >
@@ -208,15 +208,15 @@
       <div class="flex items-center gap-2 pt-1">
         <button
           type="button"
-          class="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          class="text-xs text-primary hover:underline"
           onclick={() => addRule(group.id)}
         >
           + Add rule
         </button>
-        <span class="text-gray-300 dark:text-gray-600">|</span>
+        <span class="text-muted-foreground">|</span>
         <button
           type="button"
-          class="text-xs text-red-500 dark:text-red-400 hover:underline"
+          class="text-xs text-destructive hover:underline"
           onclick={() => removeGroup(group.id)}
         >
           Remove group
@@ -227,7 +227,7 @@
 
   <button
     type="button"
-    class="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+    class="text-sm text-primary hover:underline"
     onclick={addGroup}
   >
     + Add filter group

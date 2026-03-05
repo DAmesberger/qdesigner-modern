@@ -120,26 +120,26 @@
 <div class="space-y-4">
   <!-- Comparison Header -->
   {#if effectSize !== null || pValue !== null}
-    <div class="flex items-center justify-center gap-4 py-2 px-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+    <div class="flex items-center justify-center gap-4 py-2 px-4 bg-muted rounded-lg">
       {#if effectSize !== null}
         <div class="text-center">
-          <div class="text-sm font-medium text-gray-900 dark:text-white">
+          <div class="text-sm font-medium text-foreground">
             d = {effectSize.toFixed(3)}
           </div>
-          <div class="text-xs text-gray-500 dark:text-gray-400">
+          <div class="text-xs text-muted-foreground">
             {effectSizeLabel(effectSize)} effect
           </div>
         </div>
       {/if}
       {#if pValue !== null}
         <div class="text-center">
-          <div class="text-sm font-medium text-gray-900 dark:text-white">
+          <div class="text-sm font-medium text-foreground">
             p = {pValue < 0.001 ? '< .001' : pValue.toFixed(3)}
-            <span class="text-xs {pValue < 0.05 ? 'text-green-600 dark:text-green-400' : 'text-gray-500'}">
+            <span class="text-xs {pValue < 0.05 ? 'text-success' : 'text-muted-foreground'}">
               {significanceLabel(pValue)}
             </span>
           </div>
-          <div class="text-xs text-gray-500 dark:text-gray-400">
+          <div class="text-xs text-muted-foreground">
             {pValue < 0.05 ? 'Significant' : 'Not significant'}
           </div>
         </div>
@@ -156,22 +156,22 @@
 
   <!-- Side-by-side panels -->
   <div class="grid grid-cols-2 gap-4">
-    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+    <div class="border border-border rounded-lg p-4">
       <div class="flex items-center justify-between mb-3">
-        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
+        <h4 class="text-sm font-semibold text-foreground">
           {cohortA.label}
         </h4>
-        <span class="text-xs text-gray-500 dark:text-gray-400">n = {cohortA.n}</span>
+        <span class="text-xs text-muted-foreground">n = {cohortA.n}</span>
       </div>
       <DescriptiveStatsWidget stats={cohortA.stats} label="" />
     </div>
 
-    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+    <div class="border border-border rounded-lg p-4">
       <div class="flex items-center justify-between mb-3">
-        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
+        <h4 class="text-sm font-semibold text-foreground">
           {cohortB.label}
         </h4>
-        <span class="text-xs text-gray-500 dark:text-gray-400">n = {cohortB.n}</span>
+        <span class="text-xs text-muted-foreground">n = {cohortB.n}</span>
       </div>
       <DescriptiveStatsWidget stats={cohortB.stats} label="" />
     </div>

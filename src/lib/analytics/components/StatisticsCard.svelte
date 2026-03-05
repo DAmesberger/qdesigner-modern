@@ -51,46 +51,46 @@
   function getColorClasses(colorName: string) {
     const colorMap: Record<string, { bg: string; text: string; icon: string; trend: string }> = {
       blue: {
-        bg: 'bg-blue-50 dark:bg-blue-900/20',
-        text: 'text-blue-600 dark:text-blue-400',
-        icon: 'text-blue-500 dark:text-blue-400',
-        trend: 'text-blue-600 dark:text-blue-400',
+        bg: 'bg-info/10',
+        text: 'text-info',
+        icon: 'text-info',
+        trend: 'text-info',
       },
       green: {
-        bg: 'bg-green-50 dark:bg-green-900/20',
-        text: 'text-green-600 dark:text-green-400',
-        icon: 'text-green-500 dark:text-green-400',
-        trend: 'text-green-600 dark:text-green-400',
+        bg: 'bg-success/10',
+        text: 'text-success',
+        icon: 'text-success',
+        trend: 'text-success',
       },
       yellow: {
-        bg: 'bg-yellow-50 dark:bg-yellow-900/20',
-        text: 'text-yellow-600 dark:text-yellow-400',
-        icon: 'text-yellow-500 dark:text-yellow-400',
-        trend: 'text-yellow-600 dark:text-yellow-400',
+        bg: 'bg-warning/10',
+        text: 'text-warning',
+        icon: 'text-warning',
+        trend: 'text-warning',
       },
       red: {
-        bg: 'bg-red-50 dark:bg-red-900/20',
-        text: 'text-red-600 dark:text-red-400',
-        icon: 'text-red-500 dark:text-red-400',
-        trend: 'text-red-600 dark:text-red-400',
+        bg: 'bg-destructive/10',
+        text: 'text-destructive',
+        icon: 'text-destructive',
+        trend: 'text-destructive',
       },
       purple: {
-        bg: 'bg-purple-50 dark:bg-purple-900/20',
-        text: 'text-purple-600 dark:text-purple-400',
-        icon: 'text-purple-500 dark:text-purple-400',
-        trend: 'text-purple-600 dark:text-purple-400',
+        bg: 'bg-primary/10',
+        text: 'text-primary',
+        icon: 'text-primary',
+        trend: 'text-primary',
       },
       indigo: {
-        bg: 'bg-indigo-50 dark:bg-indigo-900/20',
-        text: 'text-indigo-600 dark:text-indigo-400',
-        icon: 'text-indigo-500 dark:text-indigo-400',
-        trend: 'text-indigo-600 dark:text-indigo-400',
+        bg: 'bg-primary/10',
+        text: 'text-primary',
+        icon: 'text-primary',
+        trend: 'text-primary',
       },
       gray: {
-        bg: 'bg-gray-50 dark:bg-gray-900/20',
-        text: 'text-gray-600 dark:text-gray-400',
-        icon: 'text-gray-500 dark:text-gray-400',
-        trend: 'text-gray-600 dark:text-gray-400',
+        bg: 'bg-muted',
+        text: 'text-muted-foreground',
+        icon: 'text-muted-foreground',
+        trend: 'text-muted-foreground',
       },
     };
 
@@ -113,13 +113,13 @@
   function getTrendColor(direction: 'up' | 'down' | 'neutral'): string {
     switch (direction) {
       case 'up':
-        return 'text-green-600 dark:text-green-400';
+        return 'text-success';
       case 'down':
-        return 'text-red-600 dark:text-red-400';
+        return 'text-destructive';
       case 'neutral':
-        return 'text-gray-600 dark:text-gray-400';
+        return 'text-muted-foreground';
       default:
-        return 'text-gray-600 dark:text-gray-400';
+        return 'text-muted-foreground';
     }
   }
 
@@ -143,8 +143,8 @@
 
 <button
   type="button"
-  class="w-full text-left bg-white dark:bg-gray-800 overflow-hidden shadow rounded-lg border border-gray-200 dark:border-gray-700 transition-all duration-200 {onClick
-    ? 'cursor-pointer hover:shadow-lg hover:border-gray-300 dark:hover:border-gray-600'
+  class="w-full text-left bg-card overflow-hidden shadow rounded-lg border border-border transition-all duration-200 {onClick
+    ? 'cursor-pointer hover:shadow-lg hover:border-border'
     : 'cursor-default'}"
   onclick={() => onClick?.()}
   disabled={!onClick}
@@ -170,11 +170,11 @@
 
       <div class="ml-5 w-0 flex-1">
         <dl>
-          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
+          <dt class="text-sm font-medium text-muted-foreground truncate">
             {title}
           </dt>
           <dd class="flex items-baseline">
-            <div class="text-2xl font-semibold text-gray-900 dark:text-white">
+            <div class="text-2xl font-semibold text-foreground">
               {loading ? '...' : formatValue(value)}
             </div>
 
@@ -201,7 +201,7 @@
                 </span>
                 {Math.abs(trend.value)}%
                 {#if trend.period}
-                  <span class="ml-1 text-xs text-gray-500 dark:text-gray-400 font-normal">
+                  <span class="ml-1 text-xs text-muted-foreground font-normal">
                     vs {trend.period}
                   </span>
                 {/if}
@@ -210,7 +210,7 @@
           </dd>
 
           {#if subtitle && !loading}
-            <dd class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            <dd class="mt-1 text-sm text-muted-foreground">
               {subtitle}
             </dd>
           {/if}
@@ -221,14 +221,14 @@
 
   {#if onClick}
     <!-- Click indicator -->
-    <div class="bg-gray-50 dark:bg-gray-700/50 px-5 py-3">
+    <div class="bg-muted px-5 py-3">
       <div class="text-sm">
         <span
-          class="text-gray-600 dark:text-gray-400 font-medium hover:text-gray-900 dark:hover:text-white transition-colors"
+          class="text-muted-foreground font-medium hover:text-foreground transition-colors"
         >
           View details
         </span>
-        <span class="ml-2 text-gray-400 dark:text-gray-500">→</span>
+        <span class="ml-2 text-muted-foreground">→</span>
       </div>
     </div>
   {/if}

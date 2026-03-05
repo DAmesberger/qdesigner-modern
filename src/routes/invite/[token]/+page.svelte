@@ -131,9 +131,9 @@
       <Card>
         <div class="text-center py-8">
           <div
-            class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 mb-4"
+            class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 mb-4"
           >
-            <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="h-6 w-6 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"

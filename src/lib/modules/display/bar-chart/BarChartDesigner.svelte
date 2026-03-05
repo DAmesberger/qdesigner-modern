@@ -261,7 +261,7 @@
           <h4 class="section-title">Data Source</h4>
 
           <div class="form-group">
-            <span class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+            <span class="block text-sm font-medium text-foreground mb-2"
               >Variables to Display</span
             >
             <div class="variable-list">
@@ -591,7 +591,7 @@
           </div>
 
           <div class="form-group">
-            <span class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+            <span class="block text-sm font-medium text-foreground mb-2"
               >Custom Colors</span
             >
             <div class="custom-colors">

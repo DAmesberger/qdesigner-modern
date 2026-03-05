@@ -439,9 +439,9 @@
 
   :global(.flow-control-editor .svelte-flow__edge-label) {
     font-size: 0.75rem;
-    background: white;
+    background: var(--color-card);
     padding: 2px 6px;
     border-radius: 4px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border);
   }
 </style>

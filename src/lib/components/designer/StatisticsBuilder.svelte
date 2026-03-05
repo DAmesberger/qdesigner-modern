@@ -520,7 +520,7 @@
 <div class="statistics-builder">
   <!-- Header -->
   <div class="builder-header">
-    <h3 class="text-lg font-semibold text-gray-900">Statistical Visualization</h3>
+    <h3 class="text-lg font-semibold text-foreground">Statistical Visualization</h3>
     <button onclick={() => (showConfiguration = !showConfiguration)} class="config-button">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -676,7 +676,7 @@
       <canvas bind:this={chartCanvas}></canvas>
     {:else}
       <div class="empty-state">
-        <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-12 h-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -684,7 +684,7 @@
             d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
           />
         </svg>
-        <p class="text-gray-500 mt-2">Select variables to visualize</p>
+        <p class="text-muted-foreground mt-2">Select variables to visualize</p>
       </div>
     {/if}
   </div>
@@ -710,9 +710,9 @@
 
 <style>
   .statistics-builder {
-    background: white;
+    background: var(--color-card);
     border-radius: 0.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border);
     overflow: hidden;
   }
 
@@ -721,7 +721,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 1rem;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--color-border);
   }
 
   .config-button {
@@ -729,23 +729,23 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
+    background: var(--color-muted);
+    border: 1px solid var(--color-border);
     border-radius: 0.375rem;
-    color: #374151;
+    color: var(--color-foreground);
     font-size: 0.875rem;
     transition: all 150ms;
   }
 
   .config-button:hover {
-    background: #e5e7eb;
-    border-color: #d1d5db;
+    background: var(--color-accent);
+    border-color: var(--color-border);
   }
 
   .config-panel {
     padding: 1rem;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
+    background: var(--color-muted);
+    border-bottom: 1px solid var(--color-border);
   }
 
   .config-section {
@@ -760,7 +760,7 @@
     display: block;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: var(--color-foreground);
     margin-bottom: 0.5rem;
   }
 
@@ -777,23 +777,23 @@
     align-items: center;
     gap: 0.25rem;
     padding: 0.75rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 0.375rem;
-    color: #6b7280;
+    color: var(--color-muted-foreground);
     font-size: 0.75rem;
     transition: all 150ms;
   }
 
   .chart-type-button:hover {
-    background: #f9fafb;
-    border-color: #d1d5db;
+    background: var(--color-accent);
+    border-color: var(--color-border);
   }
 
   .chart-type-button.active {
-    background: #3b82f6;
-    border-color: #3b82f6;
-    color: white;
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-primary-foreground);
   }
 
   .variable-list {
@@ -809,22 +809,22 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     border-radius: 0.375rem;
     cursor: pointer;
     transition: all 150ms;
   }
 
   .variable-item:hover {
-    background: #f9fafb;
+    background: var(--color-accent);
   }
 
   .variable-type {
     margin-left: auto;
     font-size: 0.75rem;
-    color: #9ca3af;
-    background: #f3f4f6;
+    color: var(--color-muted-foreground);
+    background: var(--color-muted);
     padding: 0.125rem 0.5rem;
     border-radius: 0.25rem;
   }
@@ -844,7 +844,7 @@
   .config-input {
     width: 100%;
     padding: 0.5rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--color-border);
     border-radius: 0.375rem;
     font-size: 0.875rem;
   }
@@ -873,8 +873,8 @@
     justify-content: center;
     gap: 2rem;
     padding: 1rem;
-    background: #f9fafb;
-    border-top: 1px solid #e5e7eb;
+    background: var(--color-muted);
+    border-top: 1px solid var(--color-border);
   }
 
   .stat-item {
@@ -885,12 +885,12 @@
 
   .stat-label {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: var(--color-muted-foreground);
   }
 
   .stat-value {
     font-size: 1.25rem;
     font-weight: 600;
-    color: #111827;
+    color: var(--color-foreground);
   }
 </style>

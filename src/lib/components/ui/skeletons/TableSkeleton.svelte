@@ -7,9 +7,9 @@
 </script>
 
 <div class="overflow-hidden">
-  <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+  <table class="min-w-full divide-y divide-border">
     {#if showHeader}
-      <thead class="bg-gray-50 dark:bg-gray-800">
+      <thead class="bg-muted">
         <tr>
           {#each Array(columns) as _, i}
             <th class="px-6 py-3 text-left">
@@ -24,7 +24,7 @@
       </thead>
     {/if}
     
-    <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+    <tbody class="bg-card divide-y divide-border">
       {#each Array(rows) as _}
         <tr>
           {#each Array(columns) as _, i}

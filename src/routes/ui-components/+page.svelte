@@ -152,19 +152,19 @@
           <div class="flex items-center gap-6">
             <div class="text-center">
               <Spinner size="sm" />
-              <p class="mt-2 text-sm text-gray-500">Small</p>
+              <p class="mt-2 text-sm text-muted-foreground">Small</p>
             </div>
             <div class="text-center">
               <Spinner size="md" />
-              <p class="mt-2 text-sm text-gray-500">Medium</p>
+              <p class="mt-2 text-sm text-muted-foreground">Medium</p>
             </div>
             <div class="text-center">
               <Spinner size="lg" />
-              <p class="mt-2 text-sm text-gray-500">Large</p>
+              <p class="mt-2 text-sm text-muted-foreground">Large</p>
             </div>
-            <div class="text-center bg-gray-800 p-4 rounded">
+            <div class="text-center bg-foreground p-4 rounded">
               <Spinner color="white" />
-              <p class="mt-2 text-sm text-gray-300">White</p>
+              <p class="mt-2 text-sm text-background">White</p>
             </div>
           </div>
         </div>
@@ -179,7 +179,7 @@
           <Button onclick={() => (modalOpen = true)}>Open Modal</Button>
 
           <Modal bind:open={modalOpen} title="Example Modal" size="md">
-            <p class="text-gray-600">
+            <p class="text-muted-foreground">
               This is an example modal dialog. You can put any content here.
             </p>
             {#snippet footer()}

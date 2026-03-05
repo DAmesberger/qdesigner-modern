@@ -104,7 +104,7 @@
             <label class="checkbox-label">
               <Checkbox
                 bind:checked={checkboxStates[checkbox.id]}
-                on:change={() => (showError = false)}
+                onchange={() => (showError = false)}
               />
               <span class="checkbox-text">
                 {checkbox.label}

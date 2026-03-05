@@ -85,7 +85,7 @@
   <h1 class="text-2xl font-bold mb-4">Media Upload Test Page</h1>
 
   {#if userInfo}
-    <div class="mb-4 p-4 bg-gray-100 rounded">
+    <div class="mb-4 p-4 bg-muted rounded">
       <h2 class="font-semibold mb-2">User Info:</h2>
       <p>User ID: {userInfo.publicId}</p>
       <p>Organization ID: {userInfo.organizationId}</p>
@@ -113,7 +113,7 @@
 
   <div class="mt-8">
     <h2 class="text-xl font-semibold mb-2">Debug Logs:</h2>
-    <div class="bg-black text-green-400 p-4 rounded font-mono text-sm max-h-96 overflow-y-auto">
+    <div class="bg-black text-success p-4 rounded font-mono text-sm max-h-96 overflow-y-auto">
       {#each logs as log}
         <div>{log}</div>
       {/each}

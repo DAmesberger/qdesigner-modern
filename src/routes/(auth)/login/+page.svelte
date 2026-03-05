@@ -177,16 +177,18 @@
       </FormGroup>
 
       <div>
-        <FormGroup label={$t('auth.login.password')} id="password">
-          <div slot="label" class="flex items-center justify-between w-full">
-            <span>{$t('auth.login.password')}</span>
-            <a
-              href="/forgot-password"
-              class="text-sm font-semibold text-primary hover:text-primary/80"
-            >
-              {$t('auth.login.forgot')}
-            </a>
-          </div>
+        <FormGroup id="password">
+          {#snippet labelSnippet()}
+            <div class="flex items-center justify-between w-full">
+              <span>{$t('auth.login.password')}</span>
+              <a
+                href="/forgot-password"
+                class="text-sm font-semibold text-primary hover:text-primary/80"
+              >
+                {$t('auth.login.forgot')}
+              </a>
+            </div>
+          {/snippet}
           <Input
             id="password"
             name="password"

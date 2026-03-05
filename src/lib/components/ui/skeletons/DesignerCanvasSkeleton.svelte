@@ -2,17 +2,17 @@
   import Skeleton from '../Skeleton.svelte';
 </script>
 
-<div class="h-full bg-gray-50 dark:bg-gray-900 p-8">
+<div class="h-full bg-muted p-8">
   <!-- Page header skeleton -->
   <div class="max-w-4xl mx-auto mb-8">
     <Skeleton width="200px" height={32} className="mb-4" />
-    <Skeleton width="100%" height={1} className="bg-gray-300 dark:bg-gray-700" />
+    <Skeleton width="100%" height={1} className="bg-muted" />
   </div>
 
   <!-- Question blocks skeleton -->
   <div class="max-w-4xl mx-auto space-y-6">
     <!-- Block 1 -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+    <div class="bg-card rounded-lg shadow-sm border border-border p-6">
       <Skeleton width="150px" height={20} className="mb-4" />
       
       <!-- Question -->
@@ -32,7 +32,7 @@
     </div>
 
     <!-- Block 2 -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+    <div class="bg-card rounded-lg shadow-sm border border-border p-6">
       <Skeleton width="180px" height={20} className="mb-4" />
       
       <!-- Question -->
@@ -54,7 +54,7 @@
     </div>
 
     <!-- Block 3 -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+    <div class="bg-card rounded-lg shadow-sm border border-border p-6">
       <Skeleton width="120px" height={20} className="mb-4" />
       
       <!-- Text input -->

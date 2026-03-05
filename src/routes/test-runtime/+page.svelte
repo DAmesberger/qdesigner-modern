@@ -582,14 +582,14 @@
         </p>
 
         {#if errorMessage}
-          <p class="mb-4 text-sm text-red-300" data-testid="test-runtime-error">{errorMessage}</p>
+          <p class="mb-4 text-sm text-destructive" data-testid="test-runtime-error">{errorMessage}</p>
         {/if}
 
         {#if loading}
           <div class="mb-4">
-            <div class="w-72 h-2 bg-gray-700 rounded mx-auto">
+            <div class="w-72 h-2 bg-muted rounded mx-auto">
               <div
-                class="h-full bg-blue-500 rounded transition-all"
+                class="h-full bg-primary rounded transition-all"
                 style="width: {progress}%"
               ></div>
             </div>
@@ -599,7 +599,7 @@
           <button
             onclick={startTest}
             disabled={!modulesReady}
-            class="px-8 py-4 bg-blue-600 hover:bg-blue-700 rounded-lg text-xl font-semibold transition-colors"
+            class="px-8 py-4 bg-primary hover:bg-primary/90 rounded-lg text-xl font-semibold transition-colors"
             class:opacity-50={!modulesReady}
             class:cursor-not-allowed={!modulesReady}
             data-testid="test-runtime-start-button"
@@ -608,12 +608,12 @@
           </button>
 
           {#if !modulesReady}
-            <p class="mt-4 text-amber-300" data-testid="test-runtime-module-loading">
+            <p class="mt-4 text-warning" data-testid="test-runtime-module-loading">
               Preparing runtime modules...
             </p>
           {/if}
 
-          <p class="mt-4 text-gray-400">
+          <p class="mt-4 text-muted-foreground">
             Use the <code>?scenario=...</code> query parameter for focused runtime behavior tests.
           </p>
         {/if}

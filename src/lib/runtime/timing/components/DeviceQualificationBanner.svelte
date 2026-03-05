@@ -12,24 +12,24 @@
   const gradeConfig: Record<QualificationGrade, { label: string; bg: string; border: string; text: string; icon: string }> = {
     green: {
       label: 'Excellent',
-      bg: 'bg-green-50 dark:bg-green-950/30',
-      border: 'border-green-200 dark:border-green-800',
-      text: 'text-green-800 dark:text-green-200',
-      icon: 'text-green-500',
+      bg: 'bg-success/10',
+      border: 'border-success/30',
+      text: 'text-success',
+      icon: 'text-success',
     },
     yellow: {
       label: 'Acceptable',
-      bg: 'bg-yellow-50 dark:bg-yellow-950/30',
-      border: 'border-yellow-200 dark:border-yellow-800',
-      text: 'text-yellow-800 dark:text-yellow-200',
-      icon: 'text-yellow-500',
+      bg: 'bg-warning/10',
+      border: 'border-warning/30',
+      text: 'text-warning',
+      icon: 'text-warning',
     },
     red: {
       label: 'Poor',
-      bg: 'bg-red-50 dark:bg-red-950/30',
-      border: 'border-red-200 dark:border-red-800',
-      text: 'text-red-800 dark:text-red-200',
-      icon: 'text-red-500',
+      bg: 'bg-destructive/10',
+      border: 'border-destructive/30',
+      text: 'text-destructive',
+      icon: 'text-destructive',
     },
   };
 

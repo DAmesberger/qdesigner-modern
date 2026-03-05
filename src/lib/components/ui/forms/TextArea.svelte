@@ -1,23 +1,45 @@
 <script lang="ts">
-  export let value = '';
-  export let placeholder = '';
-  export let disabled = false;
-  export let readonly = false;
-  export let required = false;
-  export let error = false;
-  export let rows = 4;
-  export let id: string | undefined = undefined;
-  export let name: string | undefined = undefined;
-  
-  $: textareaClasses = `
-    block w-full rounded-md border-0 py-1.5 text-foreground bg-background shadow-sm 
+  interface Props {
+    value?: string;
+    placeholder?: string;
+    disabled?: boolean;
+    readonly?: boolean;
+    required?: boolean;
+    error?: boolean;
+    rows?: number;
+    id?: string;
+    name?: string;
+    oninput?: (event: Event & { currentTarget: HTMLTextAreaElement }) => void;
+    onchange?: (event: Event & { currentTarget: HTMLTextAreaElement }) => void;
+    onfocus?: (event: FocusEvent & { currentTarget: HTMLTextAreaElement }) => void;
+    onblur?: (event: FocusEvent & { currentTarget: HTMLTextAreaElement }) => void;
+  }
+
+  let {
+    value = $bindable(''),
+    placeholder = '',
+    disabled = false,
+    readonly = false,
+    required = false,
+    error = false,
+    rows = 4,
+    id = undefined,
+    name = undefined,
+    oninput,
+    onchange,
+    onfocus,
+    onblur,
+  }: Props = $props();
+
+  let textareaClasses = $derived(`
+    block w-full rounded-md border-0 py-1.5 text-foreground bg-background shadow-sm
     ring-1 ring-inset focus:ring-2 focus:ring-inset sm:text-sm sm:leading-6
-    ${error 
-      ? 'ring-destructive placeholder:text-destructive focus:ring-destructive' 
+    ${error
+      ? 'ring-destructive placeholder:text-destructive focus:ring-destructive'
       : 'ring-border placeholder:text-muted-foreground focus:ring-primary'
     }
     ${disabled ? 'bg-muted text-muted-foreground opacity-50' : ''}
-  `;
+  `);
 </script>
 
 <textarea
@@ -30,8 +52,8 @@
   {required}
   bind:value
   class={textareaClasses}
-  on:input
-  on:change
-  on:focus
-  on:blur
+  {oninput}
+  {onchange}
+  {onfocus}
+  {onblur}
 ></textarea>

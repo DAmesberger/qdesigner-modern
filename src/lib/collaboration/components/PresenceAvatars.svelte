@@ -45,7 +45,7 @@
         title="{user.displayName}{itemLabel(user) ? ' - ' + itemLabel(user) : ''}"
       >
         <div
-          class="flex items-center justify-center rounded-full text-white text-xs font-semibold ring-2 ring-white dark:ring-gray-900"
+          class="flex items-center justify-center rounded-full text-white text-xs font-semibold ring-2 ring-background"
           style="
             width: 28px;
             height: 28px;
@@ -57,7 +57,7 @@
         <!-- Active indicator -->
         {#if user.selectedItemId}
           <span
-            class="absolute -bottom-0.5 -right-0.5 block h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-gray-900"
+            class="absolute -bottom-0.5 -right-0.5 block h-2.5 w-2.5 rounded-full ring-2 ring-background"
             style="background-color: {user.color};"
           ></span>
         {/if}
@@ -66,11 +66,11 @@
           class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50"
         >
           <div
-            class="bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-md px-2 py-1 whitespace-nowrap shadow-lg"
+            class="bg-popover text-popover-foreground text-xs rounded-md px-2 py-1 whitespace-nowrap shadow-lg"
           >
             <div class="font-medium">{user.displayName}</div>
             {#if user.selectedItemId}
-              <div class="text-gray-300 text-[10px]">{itemLabel(user)}</div>
+              <div class="text-muted-foreground text-[10px]">{itemLabel(user)}</div>
             {/if}
           </div>
         </div>
@@ -78,7 +78,7 @@
     {/each}
     {#if overflowCount > 0}
       <div
-        class="flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-semibold ring-2 ring-white dark:ring-gray-900"
+        class="flex items-center justify-center rounded-full bg-muted text-muted-foreground text-xs font-semibold ring-2 ring-background"
         style="width: 28px; height: 28px;"
         title="{overflowCount} more collaborator{overflowCount > 1 ? 's' : ''}"
       >

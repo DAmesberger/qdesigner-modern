@@ -19,10 +19,10 @@
   }
 
   function discriminationColor(a: number): string {
-    if (a >= 1.5) return 'text-green-600 dark:text-green-400';
-    if (a >= 0.8) return 'text-blue-600 dark:text-blue-400';
-    if (a >= 0.4) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
+    if (a >= 1.5) return 'text-success';
+    if (a >= 0.8) return 'text-info';
+    if (a >= 0.4) return 'text-warning';
+    return 'text-destructive';
   }
 </script>
 
@@ -30,7 +30,7 @@
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
       <thead>
-        <tr class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider border-b border-gray-200 dark:border-gray-700">
+        <tr class="text-xs text-muted-foreground uppercase tracking-wider border-b border-border">
           <th class="text-left py-2 pr-2">Item</th>
           <th class="text-right py-2 px-2">b</th>
           <th class="text-right py-2 px-2">a</th>
@@ -42,20 +42,20 @@
       </thead>
       <tbody>
         {#each items as item}
-          <tr class="border-b border-gray-100 dark:border-gray-700/50">
-            <td class="py-1.5 pr-2 text-gray-900 dark:text-white truncate max-w-[120px]">{item.name}</td>
-            <td class="py-1.5 px-2 text-right font-mono text-gray-700 dark:text-gray-300">
+          <tr class="border-b border-border">
+            <td class="py-1.5 pr-2 text-foreground truncate max-w-[120px]">{item.name}</td>
+            <td class="py-1.5 px-2 text-right font-mono text-foreground">
               {item.difficulty.toFixed(2)}
             </td>
             <td class="py-1.5 px-2 text-right font-mono {discriminationColor(item.discrimination)}">
               {item.discrimination.toFixed(2)}
             </td>
             {#if items.some(i => i.guessing !== undefined)}
-              <td class="py-1.5 pl-2 text-right font-mono text-gray-700 dark:text-gray-300">
+              <td class="py-1.5 pl-2 text-right font-mono text-foreground">
                 {item.guessing?.toFixed(2) ?? '--'}
               </td>
             {/if}
-            <td class="py-1.5 pl-2 text-right text-xs text-gray-500 dark:text-gray-400">
+            <td class="py-1.5 pl-2 text-right text-xs text-muted-foreground">
               {difficultyLabel(item.difficulty)}
             </td>
           </tr>
@@ -64,5 +64,5 @@
     </table>
   </div>
 {:else}
-  <div class="text-sm text-gray-400 dark:text-gray-500">No IRT data available</div>
+  <div class="text-sm text-muted-foreground">No IRT data available</div>
 {/if}

@@ -254,11 +254,11 @@
 
 	function getStatusBadge(status: string): string {
 		const classes: Record<string, string> = {
-			completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-			active: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-			abandoned: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+			completed: 'bg-success/10 text-success',
+			active: 'bg-info/10 text-info',
+			abandoned: 'bg-destructive/10 text-destructive',
 		};
-		return classes[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+		return classes[status] || 'bg-muted text-muted-foreground';
 	}
 
 	function getDistributionEntries(distribution: Map<string, number>) {
@@ -283,9 +283,9 @@
 	] as const;
 </script>
 
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+<div class="min-h-screen bg-background">
 	<!-- Header -->
-	<div class="bg-white dark:bg-gray-800 shadow">
+	<div class="bg-card shadow">
 		<div class="px-4 sm:px-6 lg:px-8">
 			<div class="py-6">
 				<!-- Breadcrumb -->
@@ -294,13 +294,13 @@
 						<li>
 							<a
 								href={appPaths.projects()}
-								class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+								class="text-muted-foreground hover:text-foreground"
 								>Projects</a
 							>
 						</li>
 						<li class="flex items-center">
 							<svg
-								class="flex-shrink-0 h-5 w-5 text-gray-400"
+								class="flex-shrink-0 h-5 w-5 text-muted-foreground"
 								viewBox="0 0 20 20"
 								fill="currentColor"
 							>
@@ -312,13 +312,13 @@
 							</svg>
 							<a
 								href={appPaths.project(data.project.id)}
-								class="ml-4 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+								class="ml-4 text-muted-foreground hover:text-foreground"
 								>{data.project.name}</a
 							>
 						</li>
 						<li class="flex items-center">
 							<svg
-								class="flex-shrink-0 h-5 w-5 text-gray-400"
+								class="flex-shrink-0 h-5 w-5 text-muted-foreground"
 								viewBox="0 0 20 20"
 								fill="currentColor"
 							>
@@ -328,7 +328,7 @@
 									clip-rule="evenodd"
 								/>
 							</svg>
-							<span class="ml-4 text-gray-700 dark:text-gray-200 font-medium"
+							<span class="ml-4 text-foreground font-medium"
 								>Analytics</span
 							>
 						</li>
@@ -341,18 +341,18 @@
 						<div class="flex items-center gap-3">
 							<a
 								href={appPaths.project(data.project.id)}
-								class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+								class="text-muted-foreground hover:text-foreground"
 								aria-label="Back to project"
 							>
 								<ArrowLeft class="h-5 w-5" />
 							</a>
 							<div>
 								<h1
-									class="text-2xl font-bold leading-7 text-gray-900 dark:text-white sm:text-3xl sm:truncate"
+									class="text-2xl font-bold leading-7 text-foreground sm:text-3xl sm:truncate"
 								>
 									Analytics
 								</h1>
-								<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+								<p class="mt-1 text-sm text-muted-foreground">
 									{data.project.name} &mdash; Response data and statistics
 								</p>
 							</div>
@@ -364,7 +364,7 @@
 						{#if data.questionnaires.length > 0}
 							<select
 								bind:value={selectedQuestionnaireId}
-								class="block rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 py-2 pl-3 pr-10 text-sm text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+								class="block rounded-md border border-border bg-card py-2 pl-3 pr-10 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
 							>
 								{#each data.questionnaires as q (q.id)}
 									<option value={q.id}>{q.name}</option>
@@ -376,10 +376,10 @@
 								<button
 									onclick={() => { exportMenuOpen = !exportMenuOpen; }}
 									disabled={exportLoading !== null || sessions.length === 0}
-									class="inline-flex items-center gap-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+									class="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
 								>
 									{#if exportLoading}
-										<div class="animate-spin h-4 w-4 border-2 border-gray-400 border-t-transparent rounded-full"></div>
+										<div class="animate-spin h-4 w-4 border-2 border-muted-foreground border-t-transparent rounded-full"></div>
 										Exporting...
 									{:else}
 										<Download class="h-4 w-4" />
@@ -396,9 +396,9 @@
 										aria-label="Close menu"
 									></button>
 
-									<div class="absolute right-0 z-50 mt-2 w-64 rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black/5 dark:ring-white/10">
+									<div class="absolute right-0 z-50 mt-2 w-64 rounded-md bg-card shadow-lg ring-1 ring-black/5">
 										<div class="py-1">
-											<div class="px-3 py-1.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+											<div class="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
 												Data Formats
 											</div>
 											{#each EXPORT_FORMATS.filter(f => f.group === 'data') as fmt (fmt.id)}
@@ -410,30 +410,30 @@
 															handleAdvancedExport(fmt.id);
 														}
 													}}
-													class="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between"
+													class="w-full text-left px-3 py-2 hover:bg-accent flex items-center justify-between"
 												>
 													<div>
-														<span class="text-sm font-medium text-gray-900 dark:text-white">{fmt.label}</span>
-														<p class="text-xs text-gray-500 dark:text-gray-400">{fmt.description}</p>
+														<span class="text-sm font-medium text-foreground">{fmt.label}</span>
+														<p class="text-xs text-muted-foreground">{fmt.description}</p>
 													</div>
 												</button>
 											{/each}
 
-											<div class="my-1 border-t border-gray-200 dark:border-gray-700"></div>
+											<div class="my-1 border-t border-border"></div>
 
-											<div class="px-3 py-1.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+											<div class="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
 												Statistical Software
 											</div>
 											{#each EXPORT_FORMATS.filter(f => f.group === 'stats') as fmt (fmt.id)}
 												<button
 													onclick={() => handleAdvancedExport(fmt.id)}
-													class="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between"
+													class="w-full text-left px-3 py-2 hover:bg-accent flex items-center justify-between"
 												>
 													<div>
-														<span class="text-sm font-medium text-gray-900 dark:text-white">{fmt.label}</span>
-														<p class="text-xs text-gray-500 dark:text-gray-400">{fmt.description}</p>
+														<span class="text-sm font-medium text-foreground">{fmt.label}</span>
+														<p class="text-xs text-muted-foreground">{fmt.description}</p>
 													</div>
-													<span class="text-xs text-gray-400 dark:text-gray-500">.zip</span>
+													<span class="text-xs text-muted-foreground">.zip</span>
 												</button>
 											{/each}
 										</div>
@@ -452,17 +452,17 @@
 		{#if data.questionnaires.length === 0}
 			<!-- No questionnaires state -->
 			<div class="text-center py-16">
-				<BarChart3 class="mx-auto h-12 w-12 text-gray-400" />
-				<h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+				<BarChart3 class="mx-auto h-12 w-12 text-muted-foreground" />
+				<h3 class="mt-4 text-lg font-medium text-foreground">
 					No questionnaires yet
 				</h3>
-				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+				<p class="mt-2 text-sm text-muted-foreground">
 					Create a questionnaire and collect responses to see analytics here.
 				</p>
 				<div class="mt-6">
 					<a
 						href={appPaths.project(data.project.id)}
-						class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+						class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring"
 					>
 						Go to Project
 					</a>
@@ -471,18 +471,18 @@
 		{:else if loading}
 			<!-- Loading state -->
 			<div class="flex items-center justify-center py-16">
-				<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-				<span class="ml-3 text-gray-600 dark:text-gray-400">Loading analytics data...</span>
+				<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+				<span class="ml-3 text-muted-foreground">Loading analytics data...</span>
 			</div>
 		{:else if error}
 			<!-- Error state -->
 			<div
-				class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4"
+				class="bg-destructive/10 border border-destructive/30 rounded-lg p-4"
 			>
 				<div class="flex">
 					<div class="flex-shrink-0">
 						<svg
-							class="h-5 w-5 text-red-400"
+							class="h-5 w-5 text-destructive"
 							viewBox="0 0 20 20"
 							fill="currentColor"
 						>
@@ -494,17 +494,17 @@
 						</svg>
 					</div>
 					<div class="ml-3">
-						<h3 class="text-sm font-medium text-red-800 dark:text-red-200">
+						<h3 class="text-sm font-medium text-destructive">
 							Error Loading Data
 						</h3>
-						<div class="mt-2 text-sm text-red-700 dark:text-red-300">{error}</div>
+						<div class="mt-2 text-sm text-destructive">{error}</div>
 						<div class="mt-4">
 							<button
 								onclick={() => {
 									error = null;
 									if (selectedQuestionnaireId) loadSessions(selectedQuestionnaireId);
 								}}
-								class="bg-red-100 dark:bg-red-800 px-3 py-2 rounded-md text-sm font-medium text-red-800 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-700"
+								class="bg-destructive/10 px-3 py-2 rounded-md text-sm font-medium text-destructive hover:bg-destructive/20"
 							>
 								Try Again
 							</button>
@@ -514,16 +514,16 @@
 			</div>
 		{:else}
 			<!-- Tab Switcher -->
-			<div class="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
+			<div class="flex gap-1 mb-6 bg-muted rounded-lg p-1 w-fit">
 				<button
 					onclick={() => { analyticsTab = 'overview'; }}
-					class="px-4 py-2 text-sm font-medium rounded-md transition-colors {analyticsTab === 'overview' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}"
+					class="px-4 py-2 text-sm font-medium rounded-md transition-colors {analyticsTab === 'overview' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
 				>
 					Overview
 				</button>
 				<button
 					onclick={() => { analyticsTab = 'per-question'; }}
-					class="px-4 py-2 text-sm font-medium rounded-md transition-colors {analyticsTab === 'per-question' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}"
+					class="px-4 py-2 text-sm font-medium rounded-md transition-colors {analyticsTab === 'per-question' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
 				>
 					Per Question
 				</button>
@@ -532,22 +532,22 @@
 			{#if analyticsTab === 'per-question'}
 				<!-- Per-Question Analytics -->
 				{#if questionAnalytics.length === 0}
-					<div class="text-center py-12 bg-white dark:bg-gray-800 shadow rounded-lg">
-						<PieChart class="mx-auto h-10 w-10 text-gray-400" />
-						<h4 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No response data</h4>
-						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+					<div class="text-center py-12 bg-card shadow rounded-lg">
+						<PieChart class="mx-auto h-10 w-10 text-muted-foreground" />
+						<h4 class="mt-2 text-sm font-medium text-foreground">No response data</h4>
+						<p class="mt-1 text-sm text-muted-foreground">
 							Response data will appear once participants complete the questionnaire.
 						</p>
 					</div>
 				{:else}
 					<div class="space-y-6">
 						{#each questionAnalytics as qa (qa.questionId)}
-							<div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-								<div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-									<h3 class="text-sm font-semibold text-gray-900 dark:text-white font-mono">
+							<div class="bg-card shadow rounded-lg overflow-hidden">
+								<div class="px-6 py-4 border-b border-border flex items-center justify-between">
+									<h3 class="text-sm font-semibold text-foreground font-mono">
 										{qa.questionId}
 									</h3>
-									<span class="text-xs text-gray-500 dark:text-gray-400">
+									<span class="text-xs text-muted-foreground">
 										{qa.responseCount} responses
 									</span>
 								</div>
@@ -555,52 +555,52 @@
 								<div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
 									<!-- Distribution Chart -->
 									<div>
-										<h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Response Distribution</h4>
+										<h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Response Distribution</h4>
 										<div class="space-y-2">
 											{#each getDistributionEntries(qa.distribution) as { label, count, pct }}
 												<div class="flex items-center gap-3">
-													<span class="text-xs text-gray-700 dark:text-gray-300 w-24 truncate flex-shrink-0" title={label}>{label}</span>
-													<div class="flex-1 h-5 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden">
+													<span class="text-xs text-foreground w-24 truncate flex-shrink-0" title={label}>{label}</span>
+													<div class="flex-1 h-5 bg-muted rounded overflow-hidden">
 														<div
-															class="h-full bg-blue-500 dark:bg-blue-400 rounded transition-all"
+															class="h-full bg-primary rounded transition-all"
 															style="width: {pct}%"
 														></div>
 													</div>
-													<span class="text-xs text-gray-500 dark:text-gray-400 w-8 text-right flex-shrink-0">{count}</span>
+													<span class="text-xs text-muted-foreground w-8 text-right flex-shrink-0">{count}</span>
 												</div>
 											{/each}
 										</div>
 										{#if qa.distribution.size > 10}
-											<p class="text-xs text-gray-400 mt-2">Showing top 10 of {qa.distribution.size} values</p>
+											<p class="text-xs text-muted-foreground mt-2">Showing top 10 of {qa.distribution.size} values</p>
 										{/if}
 									</div>
 
 									<!-- Reaction Time Stats -->
 									<div>
-										<h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Reaction Time</h4>
+										<h4 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Reaction Time</h4>
 										{#if qa.rtStats}
 											<div class="grid grid-cols-3 gap-4">
-												<div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
-													<div class="text-lg font-semibold text-gray-900 dark:text-white">
+												<div class="bg-muted rounded-lg p-3 text-center">
+													<div class="text-lg font-semibold text-foreground">
 														{Math.round(qa.rtStats.mean)}
 													</div>
-													<div class="text-xs text-gray-500 dark:text-gray-400">Mean (ms)</div>
+													<div class="text-xs text-muted-foreground">Mean (ms)</div>
 												</div>
-												<div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
-													<div class="text-lg font-semibold text-gray-900 dark:text-white">
+												<div class="bg-muted rounded-lg p-3 text-center">
+													<div class="text-lg font-semibold text-foreground">
 														{Math.round(qa.rtStats.median)}
 													</div>
-													<div class="text-xs text-gray-500 dark:text-gray-400">Median (ms)</div>
+													<div class="text-xs text-muted-foreground">Median (ms)</div>
 												</div>
-												<div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-center">
-													<div class="text-lg font-semibold text-gray-900 dark:text-white">
+												<div class="bg-muted rounded-lg p-3 text-center">
+													<div class="text-lg font-semibold text-foreground">
 														{Math.round(qa.rtStats.sd)}
 													</div>
-													<div class="text-xs text-gray-500 dark:text-gray-400">SD (ms)</div>
+													<div class="text-xs text-muted-foreground">SD (ms)</div>
 												</div>
 											</div>
 										{:else}
-											<div class="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500 py-4">
+											<div class="flex items-center gap-2 text-sm text-muted-foreground py-4">
 												<Timer class="h-4 w-4" />
 												<span>No reaction time data for this question</span>
 											</div>
@@ -612,19 +612,19 @@
 					</div>
 
 					<!-- Completion rates per page -->
-					<div class="mt-6 bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-						<div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-							<h3 class="text-sm font-semibold text-gray-900 dark:text-white">Completion Summary</h3>
+					<div class="mt-6 bg-card shadow rounded-lg overflow-hidden">
+						<div class="px-6 py-4 border-b border-border">
+							<h3 class="text-sm font-semibold text-foreground">Completion Summary</h3>
 						</div>
 						<div class="p-6">
 							<div class="flex items-center gap-4">
-								<div class="flex-1 h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+								<div class="flex-1 h-4 bg-muted rounded-full overflow-hidden">
 									<div
-										class="h-full bg-green-500 dark:bg-green-400 rounded-full transition-all"
+										class="h-full bg-success rounded-full transition-all"
 										style="width: {completionRate}%"
 									></div>
 								</div>
-								<span class="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+								<span class="text-sm font-medium text-foreground whitespace-nowrap">
 									{completedSessions.length} / {sessions.length} completed ({completionRate}%)
 								</span>
 							</div>
@@ -675,77 +675,77 @@
 			</div>
 
 			<!-- Sessions Table -->
-			<div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+			<div class="bg-card shadow rounded-lg overflow-hidden">
 				<div
-					class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between"
+					class="px-6 py-4 border-b border-border flex items-center justify-between"
 				>
-					<h3 class="text-lg font-medium text-gray-900 dark:text-white">
+					<h3 class="text-lg font-medium text-foreground">
 						Sessions
 					</h3>
-					<span class="text-sm text-gray-500 dark:text-gray-400">
+					<span class="text-sm text-muted-foreground">
 						{sessions.length} total
 					</span>
 				</div>
 
 				{#if sessions.length === 0}
 					<div class="text-center py-12">
-						<MessageSquare class="mx-auto h-10 w-10 text-gray-400" />
-						<h4 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">
+						<MessageSquare class="mx-auto h-10 w-10 text-muted-foreground" />
+						<h4 class="mt-2 text-sm font-medium text-foreground">
 							No sessions yet
 						</h4>
-						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+						<p class="mt-1 text-sm text-muted-foreground">
 							Sessions will appear here once participants start the questionnaire.
 						</p>
 					</div>
 				{:else}
 					<div class="overflow-x-auto">
-						<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-							<thead class="bg-gray-50 dark:bg-gray-900/50">
+						<table class="min-w-full divide-y divide-border">
+							<thead class="bg-muted">
 								<tr>
 									<th
 										scope="col"
-										class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+										class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
 									>
 										Session ID
 									</th>
 									<th
 										scope="col"
-										class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+										class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
 									>
 										Participant
 									</th>
 									<th
 										scope="col"
-										class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+										class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
 									>
 										Status
 									</th>
 									<th
 										scope="col"
-										class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+										class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
 									>
 										Started
 									</th>
 									<th
 										scope="col"
-										class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+										class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
 									>
 										Completed
 									</th>
 								</tr>
 							</thead>
 							<tbody
-								class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
+								class="bg-card divide-y divide-border"
 							>
 								{#each sessions as session (session.id)}
-									<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+									<tr class="hover:bg-accent">
 										<td
-											class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900 dark:text-white"
+											class="px-6 py-4 whitespace-nowrap text-sm font-mono text-foreground"
 										>
 											{session.id.slice(0, 8)}...
 										</td>
 										<td
-											class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400"
+											class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
 										>
 											{session.participantId || 'Anonymous'}
 										</td>
@@ -759,12 +759,12 @@
 											</span>
 										</td>
 										<td
-											class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400"
+											class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
 										>
 											{formatDate(session.startedAt)}
 										</td>
 										<td
-											class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400"
+											class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"
 										>
 											{formatDate(session.completedAt)}
 										</td>

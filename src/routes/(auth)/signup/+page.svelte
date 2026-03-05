@@ -183,11 +183,11 @@
     const labels = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Very Strong'];
     const colors = [
       '',
-      'text-red-500',
-      'text-orange-500',
-      'text-yellow-500',
-      'text-green-500',
-      'text-green-600',
+      'text-destructive',
+      'text-warning',
+      'text-warning',
+      'text-success',
+      'text-success',
     ];
 
     return {
@@ -275,11 +275,11 @@
                   {#each Array(5) as _, i}
                     <div
                       class="h-1 flex-1 rounded-full transition-colors"
-                      class:bg-gray-200={i >= passwordStrength.score}
-                      class:bg-red-500={i < passwordStrength.score && passwordStrength.score <= 2}
-                      class:bg-yellow-500={i < passwordStrength.score &&
+                      class:bg-muted={i >= passwordStrength.score}
+                      class:bg-destructive={i < passwordStrength.score && passwordStrength.score <= 2}
+                      class:bg-warning={i < passwordStrength.score &&
                         passwordStrength.score === 3}
-                      class:bg-green-500={i < passwordStrength.score && passwordStrength.score >= 4}
+                      class:bg-success={i < passwordStrength.score && passwordStrength.score >= 4}
                     ></div>
                   {/each}
                 </div>
@@ -295,7 +295,7 @@
               id="agree-terms"
               type="checkbox"
               bind:checked={agreeToTerms}
-              class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
             />
             <label for="agree-terms" class="ml-2 block text-sm text-muted-foreground">
               I agree to the

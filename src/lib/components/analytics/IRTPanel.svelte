@@ -100,30 +100,30 @@
   const yTicksICC = [0, 0.25, 0.5, 0.75, 1.0];
 </script>
 
-<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 space-y-6">
-  <h3 class="text-lg font-semibold text-gray-900 dark:text-white">IRT Analysis</h3>
+<div class="bg-card rounded-lg border border-border p-6 space-y-6">
+  <h3 class="text-lg font-semibold text-foreground">IRT Analysis</h3>
 
   <!-- Item parameter table -->
   <div class="overflow-x-auto">
     <table class="min-w-full text-sm">
       <thead>
-        <tr class="border-b border-gray-200 dark:border-gray-600">
-          <th class="text-left py-2 pr-4 font-medium text-gray-500 dark:text-gray-400">Item</th>
-          <th class="text-right py-2 px-4 font-medium text-gray-500 dark:text-gray-400">a (Discrimination)</th>
-          <th class="text-right py-2 px-4 font-medium text-gray-500 dark:text-gray-400">b (Difficulty)</th>
-          <th class="text-right py-2 pl-4 font-medium text-gray-500 dark:text-gray-400">c (Guessing)</th>
+        <tr class="border-b border-border">
+          <th class="text-left py-2 pr-4 font-medium text-muted-foreground">Item</th>
+          <th class="text-right py-2 px-4 font-medium text-muted-foreground">a (Discrimination)</th>
+          <th class="text-right py-2 px-4 font-medium text-muted-foreground">b (Difficulty)</th>
+          <th class="text-right py-2 pl-4 font-medium text-muted-foreground">c (Guessing)</th>
         </tr>
       </thead>
       <tbody>
         {#each items as item, idx}
-          <tr class="border-b border-gray-100 dark:border-gray-700/50">
+          <tr class="border-b border-border">
             <td class="py-2 pr-4 flex items-center gap-2">
               <span class="inline-block w-3 h-3 rounded-full" style="background-color: {itemColor(idx)}"></span>
-              <span class="text-gray-900 dark:text-white">{item.id}</span>
+              <span class="text-foreground">{item.id}</span>
             </td>
-            <td class="py-2 px-4 text-right font-mono text-gray-700 dark:text-gray-300">{item.a.toFixed(2)}</td>
-            <td class="py-2 px-4 text-right font-mono text-gray-700 dark:text-gray-300">{item.b.toFixed(2)}</td>
-            <td class="py-2 pl-4 text-right font-mono text-gray-700 dark:text-gray-300">{(item.c ?? 0).toFixed(2)}</td>
+            <td class="py-2 px-4 text-right font-mono text-foreground">{item.a.toFixed(2)}</td>
+            <td class="py-2 px-4 text-right font-mono text-foreground">{item.b.toFixed(2)}</td>
+            <td class="py-2 pl-4 text-right font-mono text-foreground">{(item.c ?? 0).toFixed(2)}</td>
           </tr>
         {/each}
       </tbody>
@@ -132,8 +132,8 @@
 
   <!-- ICC Plot -->
   <div>
-    <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Item Characteristic Curves (ICC)</h4>
-    <svg viewBox="0 0 {svgWidth} {svgHeight}" class="w-full max-w-2xl bg-gray-50 dark:bg-gray-900/50 rounded">
+    <h4 class="text-sm font-medium text-foreground mb-2">Item Characteristic Curves (ICC)</h4>
+    <svg viewBox="0 0 {svgWidth} {svgHeight}" class="w-full max-w-2xl bg-muted rounded">
       <!-- Grid lines -->
       {#each yTicksICC as tick}
         <line
@@ -142,14 +142,14 @@
           x2={svgWidth - padding.right}
           y2={probToY(tick)}
           stroke="currentColor"
-          class="text-gray-200 dark:text-gray-700"
+          class="text-border"
           stroke-width="0.5"
         />
         <text
           x={padding.left - 8}
           y={probToY(tick) + 4}
           text-anchor="end"
-          class="text-gray-500 dark:text-gray-400"
+          class="text-muted-foreground"
           font-size="10"
           fill="currentColor"
         >{tick.toFixed(2)}</text>
@@ -162,14 +162,14 @@
           x2={thetaToX(tick)}
           y2={svgHeight - padding.bottom}
           stroke="currentColor"
-          class="text-gray-200 dark:text-gray-700"
+          class="text-border"
           stroke-width="0.5"
         />
         <text
           x={thetaToX(tick)}
           y={svgHeight - padding.bottom + 16}
           text-anchor="middle"
-          class="text-gray-500 dark:text-gray-400"
+          class="text-muted-foreground"
           font-size="10"
           fill="currentColor"
         >{tick}</text>
@@ -190,7 +190,7 @@
         x={svgWidth / 2}
         y={svgHeight - 4}
         text-anchor="middle"
-        class="text-gray-600 dark:text-gray-400"
+        class="text-muted-foreground"
         font-size="12"
         fill="currentColor"
       >Theta (Ability)</text>
@@ -199,7 +199,7 @@
         y={svgHeight / 2}
         text-anchor="middle"
         transform="rotate(-90, 12, {svgHeight / 2})"
-        class="text-gray-600 dark:text-gray-400"
+        class="text-muted-foreground"
         font-size="12"
         fill="currentColor"
       >P(Correct)</text>
@@ -208,8 +208,8 @@
 
   <!-- Test Information Function -->
   <div>
-    <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Test Information Function</h4>
-    <svg viewBox="0 0 {svgWidth} {svgHeight}" class="w-full max-w-2xl bg-gray-50 dark:bg-gray-900/50 rounded">
+    <h4 class="text-sm font-medium text-foreground mb-2">Test Information Function</h4>
+    <svg viewBox="0 0 {svgWidth} {svgHeight}" class="w-full max-w-2xl bg-muted rounded">
       <!-- X-axis grid -->
       {#each xTicks as tick}
         <line
@@ -218,14 +218,14 @@
           x2={thetaToX(tick)}
           y2={svgHeight - padding.bottom}
           stroke="currentColor"
-          class="text-gray-200 dark:text-gray-700"
+          class="text-border"
           stroke-width="0.5"
         />
         <text
           x={thetaToX(tick)}
           y={svgHeight - padding.bottom + 16}
           text-anchor="middle"
-          class="text-gray-500 dark:text-gray-400"
+          class="text-muted-foreground"
           font-size="10"
           fill="currentColor"
         >{tick}</text>
@@ -246,7 +246,7 @@
         x={svgWidth / 2}
         y={svgHeight - 4}
         text-anchor="middle"
-        class="text-gray-600 dark:text-gray-400"
+        class="text-muted-foreground"
         font-size="12"
         fill="currentColor"
       >Theta (Ability)</text>
@@ -255,7 +255,7 @@
         y={svgHeight / 2}
         text-anchor="middle"
         transform="rotate(-90, 12, {svgHeight / 2})"
-        class="text-gray-600 dark:text-gray-400"
+        class="text-muted-foreground"
         font-size="12"
         fill="currentColor"
       >Information</text>

@@ -69,12 +69,12 @@
   }
 </script>
 
-<div class="flex items-center gap-4 px-4 py-2 bg-white border-b">
+<div class="flex items-center gap-4 px-4 py-2 bg-card border-b border-border">
   <!-- Save Button -->
   <button
     onclick={handleSave}
     disabled={designerStore.isSaving}
-    class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+    class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
   >
     {#if designerStore.isSaving}
       <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -104,7 +104,7 @@
   <button
     onclick={handleLoad}
     disabled={designerStore.isLoading}
-    class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+    class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
   >
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path
@@ -118,7 +118,7 @@
   </button>
 
   <!-- Last Saved Info -->
-  <div class="flex-1 text-sm text-gray-500">
+  <div class="flex-1 text-sm text-muted-foreground">
     {#if designerStore.lastSaved}
       Last saved: {formatDate(designerStore.lastSaved ? new Date(designerStore.lastSaved) : null)}
     {:else}
@@ -128,7 +128,7 @@
 
   <!-- Error Message -->
   {#if designerStore.saveError}
-    <div class="text-sm text-red-600">
+    <div class="text-sm text-destructive">
       {designerStore.saveError}
     </div>
   {/if}
@@ -137,7 +137,7 @@
 <!-- Load Dialog -->
 {#if showLoadDialog}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-    <div class="bg-white rounded-lg shadow-xl w-96 max-h-[600px] flex flex-col">
+    <div class="bg-card rounded-lg shadow-xl w-96 max-h-[600px] flex flex-col border border-border">
       <div class="px-6 py-4 border-b">
         <h3 class="text-lg font-semibold">Load Questionnaire</h3>
       </div>
@@ -154,13 +154,13 @@
             {/each}
           </div>
         {:else if listError}
-          <div class="text-red-600 text-center py-4">{listError}</div>
+          <div class="text-destructive text-center py-4">{listError}</div>
         {:else if questionnaires.length === 0}
-          <div class="text-gray-500 text-center py-8">No questionnaires found</div>
+          <div class="text-muted-foreground text-center py-8">No questionnaires found</div>
         {:else}
           <div class="space-y-2">
             {#each questionnaires as q}
-              <label class="flex items-start p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+              <label class="flex items-start p-3 border rounded-lg cursor-pointer hover:bg-accent">
                 <input
                   type="radio"
                   name="questionnaire"
@@ -171,9 +171,9 @@
                 <div class="flex-1">
                   <div class="font-medium">{q.name}</div>
                   {#if q.description}
-                    <div class="text-sm text-gray-600">{q.description}</div>
+                    <div class="text-sm text-muted-foreground">{q.description}</div>
                   {/if}
-                  <div class="text-xs text-gray-500 mt-1">
+                  <div class="text-xs text-muted-foreground mt-1">
                     Version {q.version} • Updated {formatDate(new Date(q.updated_at))}
                   </div>
                 </div>
@@ -189,14 +189,14 @@
             showLoadDialog = false;
             selectedQuestionnaireId = '';
           }}
-          class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          class="px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-accent"
         >
           Cancel
         </button>
         <button
           onclick={loadSelectedQuestionnaire}
           disabled={!selectedQuestionnaireId || designerStore.isLoading}
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {designerStore.isLoading ? 'Loading...' : 'Load'}
         </button>

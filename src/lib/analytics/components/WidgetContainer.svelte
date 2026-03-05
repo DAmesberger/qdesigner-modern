@@ -35,8 +35,8 @@
 </script>
 
 <div
-  class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col
-    {editing ? 'ring-2 ring-blue-300 dark:ring-blue-700' : ''}
+  class="bg-card rounded-lg border border-border shadow-sm overflow-hidden flex flex-col
+    {editing ? 'ring-2 ring-ring' : ''}
     {dragging ? 'opacity-50' : ''}"
   style="grid-column: span {widget.position.colSpan}; grid-row: span {widget.position.rowSpan};"
   draggable={editing ? 'true' : 'false'}
@@ -46,8 +46,8 @@
   aria-label={widget.title}
 >
   <!-- Header -->
-  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-    <h3 class="text-sm font-medium text-gray-900 dark:text-white truncate">
+  <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+    <h3 class="text-sm font-medium text-foreground truncate">
       {widget.title}
     </h3>
 
@@ -55,7 +55,7 @@
       <div class="flex items-center gap-1">
         <button
           type="button"
-          class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          class="p-1 text-muted-foreground hover:text-foreground"
           onclick={handleResizeSmaller}
           title="Shrink"
         >
@@ -65,7 +65,7 @@
         </button>
         <button
           type="button"
-          class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          class="p-1 text-muted-foreground hover:text-foreground"
           onclick={handleResizeLarger}
           title="Expand"
         >
@@ -75,7 +75,7 @@
         </button>
         <button
           type="button"
-          class="p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400"
+          class="p-1 text-muted-foreground hover:text-destructive"
           onclick={handleRemove}
           title="Remove widget"
         >
@@ -92,7 +92,7 @@
     {#if children}
       {@render children()}
     {:else}
-      <div class="flex items-center justify-center h-full text-gray-400 dark:text-gray-500 text-sm">
+      <div class="flex items-center justify-center h-full text-muted-foreground text-sm">
         No data
       </div>
     {/if}

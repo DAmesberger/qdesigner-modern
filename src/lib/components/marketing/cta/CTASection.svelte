@@ -72,19 +72,19 @@
 			<!-- Trust Indicators -->
 			<div class="mt-8 flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
 				<div class="flex items-center gap-2">
-					<svg class="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<svg class="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 					</svg>
 					14-day free trial
 				</div>
 				<div class="flex items-center gap-2">
-					<svg class="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<svg class="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 					</svg>
 					No credit card required
 				</div>
 				<div class="flex items-center gap-2">
-					<svg class="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<svg class="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
 					</svg>
 					Cancel anytime

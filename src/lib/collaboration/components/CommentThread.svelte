@@ -137,17 +137,17 @@
 
 <div class="flex flex-col h-full max-h-96 w-72">
   <!-- Header -->
-  <div class="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+  <div class="flex items-center justify-between px-3 py-2 border-b border-border">
+    <h3 class="text-sm font-semibold text-foreground">
       Comments
       {#if comments.length > 0}
-        <span class="text-gray-400 font-normal">({comments.length})</span>
+        <span class="text-muted-foreground font-normal">({comments.length})</span>
       {/if}
     </h3>
     {#if onClose}
       <button
         onclick={onClose}
-        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        class="text-muted-foreground hover:text-foreground"
         aria-label="Close comments"
       >
         x
@@ -158,36 +158,36 @@
   <!-- Comments list -->
   <div class="flex-1 overflow-y-auto px-3 py-2 space-y-3">
     {#if loading && comments.length === 0}
-      <p class="text-sm text-gray-400">Loading...</p>
+      <p class="text-sm text-muted-foreground">Loading...</p>
     {:else if error}
-      <p class="text-sm text-red-500">{error}</p>
+      <p class="text-sm text-destructive">{error}</p>
     {:else if rootComments.length === 0}
-      <p class="text-sm text-gray-400 italic">No comments yet</p>
+      <p class="text-sm text-muted-foreground italic">No comments yet</p>
     {:else}
       {#each rootComments as comment (comment.id)}
         <div class="group" class:opacity-50={comment.resolved}>
-          <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+          <div class="text-xs text-muted-foreground mb-0.5">
             {comment.author_id.slice(0, 8)} &middot; {formatDate(comment.created_at)}
           </div>
-          <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+          <div class="text-sm text-foreground whitespace-pre-wrap">
             {comment.body}
           </div>
           <div class="flex items-center gap-2 mt-1 text-xs">
             <button
               onclick={() => (replyingTo = replyingTo === comment.id ? null : comment.id)}
-              class="text-blue-500 hover:text-blue-700"
+              class="text-primary hover:text-primary/80"
             >
               Reply
             </button>
             <button
               onclick={() => resolveComment(comment.id, !comment.resolved)}
-              class="text-gray-400 hover:text-gray-600"
+              class="text-muted-foreground hover:text-foreground"
             >
               {comment.resolved ? 'Reopen' : 'Resolve'}
             </button>
             <button
               onclick={() => deleteComment(comment.id)}
-              class="text-red-400 hover:text-red-600 hidden group-hover:inline"
+              class="text-destructive/70 hover:text-destructive hidden group-hover:inline"
             >
               Delete
             </button>
@@ -195,11 +195,11 @@
 
           <!-- Replies -->
           {#each getReplies(comment.id) as reply (reply.id)}
-            <div class="ml-4 mt-2 pl-2 border-l-2 border-gray-200 dark:border-gray-700">
-              <div class="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+            <div class="ml-4 mt-2 pl-2 border-l-2 border-border">
+              <div class="text-xs text-muted-foreground mb-0.5">
                 {reply.author_id.slice(0, 8)} &middot; {formatDate(reply.created_at)}
               </div>
-              <div class="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
+              <div class="text-sm text-foreground whitespace-pre-wrap">
                 {reply.body}
               </div>
             </div>
@@ -212,12 +212,12 @@
                 type="text"
                 bind:value={replyBody}
                 placeholder="Reply..."
-                class="flex-1 text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+                class="flex-1 text-xs px-2 py-1 border border-border rounded bg-background text-foreground"
                 onkeydown={(e) => { if (e.key === 'Enter') handleReply(comment.id); }}
               />
               <button
                 onclick={() => handleReply(comment.id)}
-                class="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                class="text-xs px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90"
               >
                 Send
               </button>
@@ -229,19 +229,19 @@
   </div>
 
   <!-- New comment input -->
-  <div class="border-t border-gray-200 dark:border-gray-700 px-3 py-2">
+  <div class="border-t border-border px-3 py-2">
     <div class="flex gap-1">
       <input
         type="text"
         bind:value={newBody}
         placeholder="Add a comment..."
-        class="flex-1 text-sm px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+        class="flex-1 text-sm px-2 py-1.5 border border-border rounded bg-background text-foreground"
         onkeydown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
       />
       <button
         onclick={handleSubmit}
         disabled={!newBody.trim()}
-        class="text-sm px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="text-sm px-3 py-1.5 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         Post
       </button>

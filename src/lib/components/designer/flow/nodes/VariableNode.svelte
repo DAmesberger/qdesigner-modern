@@ -31,7 +31,7 @@
     <span class="variable-icon">{getVariableIcon(data.variable.type)}</span>
     <div class="variable-info">
       <span class="variable-name">{data.label}</span>
-      <span class="{theme.typography.caption} text-gray-500">
+      <span class="{theme.typography.caption} text-muted-foreground">
         {data.variable.type}
       </span>
     </div>

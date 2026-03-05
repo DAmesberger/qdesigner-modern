@@ -1,57 +1,26 @@
 <script lang="ts">
-  import { fade, fly } from 'svelte/transition';
+  import { fly } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { toasts, toast, type Toast } from '$lib/stores/toast';
+  import CheckCircle2 from 'lucide-svelte/icons/check-circle-2';
+  import XCircle from 'lucide-svelte/icons/x-circle';
+  import AlertTriangle from 'lucide-svelte/icons/alert-triangle';
+  import Info from 'lucide-svelte/icons/info';
+  import X from 'lucide-svelte/icons/x';
 
-  function getIcon(type: Toast['type']) {
-    switch (type) {
-      case 'success':
-        return `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>`;
-      case 'error':
-        return `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>`;
-      case 'warning':
-        return `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>`;
-      case 'info':
-        return `<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>`;
-    }
-  }
+  const icons = {
+    success: CheckCircle2,
+    error: XCircle,
+    warning: AlertTriangle,
+    info: Info,
+  };
 
-  function getStyles(type: Toast['type']) {
-    const base =
-      'pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg shadow-lg ring-1 ring-black ring-opacity-5';
-
-    switch (type) {
-      case 'success':
-        return `${base} bg-white dark:bg-gray-800`;
-      case 'error':
-        return `${base} bg-white dark:bg-gray-800`;
-      case 'warning':
-        return `${base} bg-white dark:bg-gray-800`;
-      case 'info':
-        return `${base} bg-white dark:bg-gray-800`;
-    }
-  }
-
-  function getIconStyles(type: Toast['type']) {
-    switch (type) {
-      case 'success':
-        return 'text-green-500';
-      case 'error':
-        return 'text-red-500';
-      case 'warning':
-        return 'text-yellow-500';
-      case 'info':
-        return 'text-blue-500';
-    }
-  }
+  const iconStyles: Record<Toast['type'], string> = {
+    success: 'text-success',
+    error: 'text-destructive',
+    warning: 'text-warning',
+    info: 'text-info',
+  };
 </script>
 
 <!-- Toast Container -->
@@ -65,21 +34,21 @@
       <div
         animate:flip={{ duration: 200 }}
         transition:fly={{ y: 20, duration: 300 }}
-        class={getStyles(item.type)}
+        class="pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg bg-card shadow-lg ring-1 ring-black ring-opacity-5"
       >
         <div class="p-4">
           <div class="flex items-start">
             <div class="flex-shrink-0">
-              <span class={getIconStyles(item.type)}>
-                {@html getIcon(item.type)}
+              <span class={iconStyles[item.type]}>
+                <svelte:component this={icons[item.type]} class="w-5 h-5" />
               </span>
             </div>
             <div class="ml-3 flex-1">
-              <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+              <p class="text-sm font-medium text-foreground">
                 {item.title}
               </p>
               {#if item.message}
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                <p class="mt-1 text-sm text-muted-foreground">
                   {item.message}
                 </p>
               {/if}
@@ -88,7 +57,7 @@
                   <button
                     type="button"
                     onclick={item.action.onClick}
-                    class="text-sm font-medium text-primary-600 hover:text-primary-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                    class="text-sm font-medium text-primary hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     {item.action.label}
                   </button>
@@ -100,16 +69,10 @@
                 <button
                   type="button"
                   onclick={() => toast.remove(item.id)}
-                  class="inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 rounded-md"
+                  class="inline-flex text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
                 >
                   <span class="sr-only">Close</span>
-                  <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path
-                      fill-rule="evenodd"
-                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                      clip-rule="evenodd"
-                    />
-                  </svg>
+                  <X class="h-5 w-5" />
                 </button>
               </div>
             {/if}

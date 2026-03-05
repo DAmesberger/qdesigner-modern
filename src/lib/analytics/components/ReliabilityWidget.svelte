@@ -8,10 +8,10 @@
   let { analysis }: Props = $props();
 
   function alphaColor(alpha: number): string {
-    if (alpha >= 0.9) return 'text-green-600 dark:text-green-400';
-    if (alpha >= 0.8) return 'text-blue-600 dark:text-blue-400';
-    if (alpha >= 0.7) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
+    if (alpha >= 0.9) return 'text-success';
+    if (alpha >= 0.8) return 'text-info';
+    if (alpha >= 0.7) return 'text-warning';
+    return 'text-destructive';
   }
 
   function alphaLabel(alpha: number): string {
@@ -30,21 +30,21 @@
       <div class="text-3xl font-bold {alphaColor(analysis.cronbachAlpha)}">
         {analysis.cronbachAlpha.toFixed(3)}
       </div>
-      <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+      <div class="text-xs text-muted-foreground mt-1">
         Cronbach's Alpha - {alphaLabel(analysis.cronbachAlpha)}
       </div>
     </div>
 
     <div class="grid grid-cols-2 gap-x-6 gap-y-1">
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Mean r</span>
-        <span class="font-medium text-gray-900 dark:text-white">
+        <span class="text-muted-foreground">Mean r</span>
+        <span class="font-medium text-foreground">
           {analysis.meanInterItemCorrelation.toFixed(3)}
         </span>
       </div>
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Split-half</span>
-        <span class="font-medium text-gray-900 dark:text-white">
+        <span class="text-muted-foreground">Split-half</span>
+        <span class="font-medium text-foreground">
           {analysis.splitHalfReliability.toFixed(3)}
         </span>
       </div>
@@ -52,14 +52,14 @@
 
     {#if Object.keys(analysis.itemTotalCorrelations).length > 0}
       <div>
-        <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+        <div class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
           Item-Total Correlations
         </div>
         <div class="space-y-0.5">
           {#each Object.entries(analysis.itemTotalCorrelations) as [item, corr]}
             <div class="flex justify-between text-xs">
-              <span class="text-gray-600 dark:text-gray-400">{item}</span>
-              <span class="font-mono {corr < 0.3 ? 'text-red-500' : 'text-gray-900 dark:text-white'}">
+              <span class="text-muted-foreground">{item}</span>
+              <span class="font-mono {corr < 0.3 ? 'text-destructive' : 'text-foreground'}">
                 {corr.toFixed(3)}
               </span>
             </div>
@@ -69,5 +69,5 @@
     {/if}
   </div>
 {:else}
-  <div class="text-sm text-gray-400 dark:text-gray-500">No reliability data available</div>
+  <div class="text-sm text-muted-foreground">No reliability data available</div>
 {/if}

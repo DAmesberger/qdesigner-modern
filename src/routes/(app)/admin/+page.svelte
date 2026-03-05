@@ -78,11 +78,11 @@
   function statusColor(status: string): string {
     switch (status) {
       case 'completed':
-        return 'text-green-500';
+        return 'text-success';
       case 'in_progress':
-        return 'text-blue-500';
+        return 'text-info';
       case 'abandoned':
-        return 'text-red-500';
+        return 'text-destructive';
       default:
         return 'text-muted-foreground';
     }
@@ -286,7 +286,7 @@
                 <td class="py-3 text-sm font-medium text-foreground">{q.name}</td>
                 <td class="py-3">
                   <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                    {q.status === 'published' ? 'bg-green-500/10 text-green-500' : q.status === 'draft' ? 'bg-yellow-500/10 text-yellow-500' : 'bg-muted text-muted-foreground'}">
+                    {q.status === 'published' ? 'bg-success/10 text-success' : q.status === 'draft' ? 'bg-warning/10 text-warning' : 'bg-muted text-muted-foreground'}">
                     {q.status}
                   </span>
                 </td>

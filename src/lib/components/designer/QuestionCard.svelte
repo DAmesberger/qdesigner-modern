@@ -158,7 +158,7 @@
 >
   <!-- Drop indicator -->
   {#if isDragOver && dropPosition === 'before'}
-    <div class="absolute -top-1 left-0 right-0 h-1 bg-blue-500 rounded-full"></div>
+    <div class="absolute -top-1 left-0 right-0 h-1 bg-primary rounded-full"></div>
   {/if}
 
   <div
@@ -168,8 +168,8 @@
     onkeydown={(e) => e.key === 'Enter' && handleClick(e as any)}
     role="button"
     tabindex="0"
-    class="bg-white rounded-lg shadow-sm border-2 p-4 cursor-pointer transition-all
-           hover:shadow-md {isSelected ? 'border-blue-500 shadow-md' : 'border-gray-200'}"
+    class="bg-card rounded-lg shadow-sm border-2 p-4 cursor-pointer transition-all
+           hover:shadow-md {isSelected ? 'border-primary shadow-md' : 'border-border'}"
   >
     <div class="flex items-start justify-between">
       <div class="flex items-start space-x-3 flex-1">
@@ -179,12 +179,12 @@
 
         <div class="flex-1">
           <div class="flex items-center space-x-2 mb-1">
-            <span class="text-xs font-medium text-gray-500">#{index + 1}</span>
-            <span class="text-xs text-gray-400">•</span>
-            <span class="text-xs font-medium text-gray-600">{question.id}</span>
+            <span class="text-xs font-medium text-muted-foreground">#{index + 1}</span>
+            <span class="text-xs text-muted-foreground">•</span>
+            <span class="text-xs font-medium text-muted-foreground">{question.id}</span>
           </div>
 
-          <h4 class="font-medium text-gray-900">
+          <h4 class="font-medium text-foreground">
             {#if 'display' in question && typeof question.display === 'object' && question.display && 'prompt' in question.display}
               {question.display.prompt || 'No content'}
             {:else if 'display' in question && typeof question.display === 'object' && question.display && 'content' in question.display}
@@ -197,7 +197,7 @@
           {#if 'display' in question && typeof question.display === 'object' && question.display && 'stimulus' in question.display}
             {@const stimulus = (question.display as any).stimulus}
             {#if stimulus}
-              <div class="mt-1 flex items-center space-x-2 text-xs text-gray-600">
+              <div class="mt-1 flex items-center space-x-2 text-xs text-muted-foreground">
                 <span class="font-medium">Stimulus:</span>
                 <span class="capitalize">{stimulus.type || 'Standard'}</span>
                 {#if stimulus.duration}
@@ -212,7 +212,7 @@
               <!-- Tentative access to response type if available in config, else inferred -->
               <!-- Many response configs don't store 'type', it's on question level. -->
               <!-- We can just display question type label -->
-              <span class="px-2 py-1 bg-gray-100 rounded-md text-gray-700">
+              <span class="px-2 py-1 bg-muted rounded-md text-muted-foreground">
                 {getResponseTypeLabel(question.type)}
               </span>
             {/if}
@@ -223,11 +223,11 @@
             {/if}
 
             {#if question.conditions}
-              <span class="px-2 py-1 bg-yellow-100 rounded-md text-yellow-700"> Conditional </span>
+              <span class="px-2 py-1 bg-warning/10 rounded-md text-warning"> Conditional </span>
             {/if}
 
             {#if question.timing}
-              <span class="px-2 py-1 bg-green-100 rounded-md text-green-700"> Timed </span>
+              <span class="px-2 py-1 bg-success/10 rounded-md text-success"> Timed </span>
             {/if}
           </div>
         </div>
@@ -236,27 +236,27 @@
       <div class="flex items-center space-x-1 opacity-80 group-hover:opacity-100 transition-opacity">
         <button
           onclick={(e) => moveQuestion(e, 'up')}
-          class="p-1 hover:bg-gray-100 rounded"
+          class="p-1 hover:bg-accent rounded"
           title="Move up"
           aria-label="Move question up"
           type="button"
           disabled={index === 0}
           data-testid={`question-move-up-${question.id}`}
         >
-          <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
           </svg>
         </button>
 
         <button
           onclick={(e) => moveQuestion(e, 'down')}
-          class="p-1 hover:bg-gray-100 rounded"
+          class="p-1 hover:bg-accent rounded"
           title="Move down"
           aria-label="Move question down"
           type="button"
           data-testid={`question-move-down-${question.id}`}
         >
-          <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
           </svg>
         </button>
@@ -267,12 +267,12 @@
             // Edit logic handled by selection
             designerStore.selectItem(question.id, 'question');
           }}
-          class="p-1 hover:bg-gray-100 rounded"
+          class="p-1 hover:bg-accent rounded"
           title="Edit"
           aria-label="Edit question"
           type="button"
         >
-          <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -284,13 +284,13 @@
 
         <button
           onclick={handleDuplicate}
-          class="p-1 hover:bg-gray-100 rounded"
+          class="p-1 hover:bg-accent rounded"
           title="Duplicate"
           aria-label="Duplicate question"
           type="button"
           data-testid={`question-duplicate-${question.id}`}
         >
-          <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -302,12 +302,12 @@
 
         <button
           onclick={handleDelete}
-          class="p-1 hover:bg-red-100 rounded"
+          class="p-1 hover:bg-destructive/10 rounded"
           title="Delete"
           aria-label="Delete question"
           type="button"
         >
-          <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -322,6 +322,6 @@
 
   <!-- Drop indicator -->
   {#if isDragOver && dropPosition === 'after'}
-    <div class="absolute -bottom-1 left-0 right-0 h-1 bg-blue-500 rounded-full"></div>
+    <div class="absolute -bottom-1 left-0 right-0 h-1 bg-primary rounded-full"></div>
   {/if}
 </div>

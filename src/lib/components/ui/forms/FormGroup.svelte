@@ -1,35 +1,53 @@
 <script lang="ts">
-  export let label: string = '';
-  export let error: string = '';
-  export let hint: string = '';
-  export let required = false;
-  export let id: string | undefined = undefined;
+  import type { Snippet } from 'svelte';
+
+  interface Props {
+    label?: string;
+    error?: string;
+    hint?: string;
+    required?: boolean;
+    id?: string;
+    labelSnippet?: Snippet;
+    children?: Snippet;
+  }
+
+  let {
+    label = '',
+    error = '',
+    hint = '',
+    required = false,
+    id = undefined,
+    labelSnippet,
+    children,
+  }: Props = $props();
 </script>
 
 <div class="space-y-1">
-  {#if $$slots.label}
-    <label for={id} class="block text-sm font-medium leading-6 text-gray-900">
-      <slot name="label" />
+  {#if labelSnippet}
+    <label for={id} class="block text-sm font-medium leading-6 text-foreground">
+      {@render labelSnippet()}
     </label>
   {:else if label}
-    <label for={id} class="block text-sm font-medium leading-6 text-gray-900">
+    <label for={id} class="block text-sm font-medium leading-6 text-foreground">
       {label}
       {#if required}
-        <span class="text-red-500 ml-1">*</span>
+        <span class="text-destructive ml-1">*</span>
       {/if}
     </label>
   {/if}
-  
+
   <div>
-    <slot />
+    {#if children}
+      {@render children()}
+    {/if}
   </div>
-  
+
   {#if error}
-    <p class="text-sm text-red-600" id="{id}-error">
+    <p class="text-sm text-destructive" id="{id}-error">
       {error}
     </p>
   {:else if hint}
-    <p class="text-sm text-gray-500" id="{id}-hint">
+    <p class="text-sm text-muted-foreground" id="{id}-hint">
       {hint}
     </p>
   {/if}

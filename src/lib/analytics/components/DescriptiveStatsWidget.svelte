@@ -16,56 +16,56 @@
 {#if stats}
   <div class="space-y-3 text-sm">
     {#if label}
-      <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{label}</div>
+      <div class="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</div>
     {/if}
     <div class="grid grid-cols-2 gap-x-6 gap-y-2">
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">N</span>
-        <span class="font-medium text-gray-900 dark:text-white">{stats.count}</span>
+        <span class="text-muted-foreground">N</span>
+        <span class="font-medium text-foreground">{stats.count}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Mean</span>
-        <span class="font-medium text-gray-900 dark:text-white">{fmt(stats.mean)}</span>
+        <span class="text-muted-foreground">Mean</span>
+        <span class="font-medium text-foreground">{fmt(stats.mean)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Median</span>
-        <span class="font-medium text-gray-900 dark:text-white">{fmt(stats.median)}</span>
+        <span class="text-muted-foreground">Median</span>
+        <span class="font-medium text-foreground">{fmt(stats.median)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">SD</span>
-        <span class="font-medium text-gray-900 dark:text-white">{fmt(stats.standardDeviation)}</span>
+        <span class="text-muted-foreground">SD</span>
+        <span class="font-medium text-foreground">{fmt(stats.standardDeviation)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Min</span>
-        <span class="font-medium text-gray-900 dark:text-white">{fmt(stats.min)}</span>
+        <span class="text-muted-foreground">Min</span>
+        <span class="font-medium text-foreground">{fmt(stats.min)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Max</span>
-        <span class="font-medium text-gray-900 dark:text-white">{fmt(stats.max)}</span>
+        <span class="text-muted-foreground">Max</span>
+        <span class="font-medium text-foreground">{fmt(stats.max)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Q1</span>
-        <span class="font-medium text-gray-900 dark:text-white">{fmt(stats.quartiles.q1)}</span>
+        <span class="text-muted-foreground">Q1</span>
+        <span class="font-medium text-foreground">{fmt(stats.quartiles.q1)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Q3</span>
-        <span class="font-medium text-gray-900 dark:text-white">{fmt(stats.quartiles.q3)}</span>
+        <span class="text-muted-foreground">Q3</span>
+        <span class="font-medium text-foreground">{fmt(stats.quartiles.q3)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Skewness</span>
-        <span class="font-medium text-gray-900 dark:text-white">{fmt(stats.skewness)}</span>
+        <span class="text-muted-foreground">Skewness</span>
+        <span class="font-medium text-foreground">{fmt(stats.skewness)}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-gray-500 dark:text-gray-400">Kurtosis</span>
-        <span class="font-medium text-gray-900 dark:text-white">{fmt(stats.kurtosis)}</span>
+        <span class="text-muted-foreground">Kurtosis</span>
+        <span class="font-medium text-foreground">{fmt(stats.kurtosis)}</span>
       </div>
     </div>
     {#if stats.outliers.length > 0}
-      <div class="text-xs text-amber-600 dark:text-amber-400">
+      <div class="text-xs text-warning">
         {stats.outliers.length} outlier{stats.outliers.length > 1 ? 's' : ''} detected
       </div>
     {/if}
   </div>
 {:else}
-  <div class="text-sm text-gray-400 dark:text-gray-500">No data available</div>
+  <div class="text-sm text-muted-foreground">No data available</div>
 {/if}

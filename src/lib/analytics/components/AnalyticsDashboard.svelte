@@ -322,12 +322,12 @@
 </script>
 
 <!-- Dashboard Header -->
-<div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+<div class="bg-card border-b border-border">
   <div class="px-6 py-4">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Analytics Dashboard</h1>
-        <p class="text-sm text-gray-500 dark:text-gray-400">
+        <h1 class="text-2xl font-bold text-foreground">Analytics Dashboard</h1>
+        <p class="text-sm text-muted-foreground">
           Questionnaire: {questionnaireId}
         </p>
       </div>
@@ -337,8 +337,8 @@
         <button
           onclick={() => (autoRefresh = !autoRefresh)}
           class="flex items-center px-3 py-2 text-sm font-medium rounded-lg {autoRefresh
-            ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
-            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}"
+            ? 'bg-primary/10 text-primary'
+            : 'bg-muted text-foreground'}"
         >
           Auto-refresh {autoRefresh ? 'On' : 'Off'}
         </button>
@@ -346,7 +346,7 @@
         <!-- Export button -->
         <button
           onclick={() => (showExportDialog = true)}
-          class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring"
         >
           Export Data
         </button>
@@ -354,7 +354,7 @@
         <!-- Filter button -->
         <button
           onclick={() => (showFilterPanel = !showFilterPanel)}
-          class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+          class="px-4 py-2 border border-border text-foreground text-sm font-medium rounded-lg hover:bg-accent"
         >
           Filters ({activeFilters.length})
         </button>
@@ -366,17 +366,17 @@
 {#if loading}
   <!-- Loading state -->
   <div class="flex items-center justify-center py-12">
-    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-    <span class="ml-3 text-gray-600 dark:text-gray-400">Loading analytics data...</span>
+    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    <span class="ml-3 text-muted-foreground">Loading analytics data...</span>
   </div>
 {:else if error}
   <!-- Error state -->
   <div
-    class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 m-6"
+    class="bg-destructive/10 border border-destructive/20 rounded-lg p-4 m-6"
   >
     <div class="flex">
       <div class="flex-shrink-0">
-        <svg class="h-5 w-5 text-red-400 dark:text-red-300" viewBox="0 0 20 20" fill="currentColor">
+        <svg class="h-5 w-5 text-destructive" viewBox="0 0 20 20" fill="currentColor">
           <path
             fill-rule="evenodd"
             d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
@@ -385,15 +385,15 @@
         </svg>
       </div>
       <div class="ml-3">
-        <h3 class="text-sm font-medium text-red-800 dark:text-red-200">Error Loading Data</h3>
-        <div class="mt-2 text-sm text-red-700 dark:text-red-300">{error}</div>
+        <h3 class="text-sm font-medium text-destructive">Error Loading Data</h3>
+        <div class="mt-2 text-sm text-destructive">{error}</div>
         <div class="mt-4">
           <button
             onclick={() => {
               error = null;
               loadData();
             }}
-            class="bg-red-100 dark:bg-red-800 px-3 py-2 rounded-md text-sm font-medium text-red-800 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-700"
+            class="bg-destructive/10 px-3 py-2 rounded-md text-sm font-medium text-destructive hover:bg-destructive/20"
           >
             Try Again
           </button>
@@ -444,8 +444,8 @@
     <!-- Charts Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
       <!-- Response Time Histogram -->
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">
+      <div class="bg-card rounded-lg shadow p-6">
+        <h3 class="text-lg font-medium text-foreground mb-4">
           Response Time Distribution
         </h3>
         <div class="h-64">
@@ -454,24 +454,24 @@
       </div>
 
       <!-- Time Series Chart -->
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Response Timeline</h3>
+      <div class="bg-card rounded-lg shadow p-6">
+        <h3 class="text-lg font-medium text-foreground mb-4">Response Timeline</h3>
         <div class="h-64">
           <canvas bind:this={timeSeriesChartCanvas} class="w-full h-full"></canvas>
         </div>
       </div>
 
       <!-- Performance Metrics -->
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Performance Metrics</h3>
+      <div class="bg-card rounded-lg shadow p-6">
+        <h3 class="text-lg font-medium text-foreground mb-4">Performance Metrics</h3>
         <div class="h-64">
           <canvas bind:this={performanceChartCanvas} class="w-full h-full"></canvas>
         </div>
       </div>
 
       <!-- Correlation Analysis -->
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">
+      <div class="bg-card rounded-lg shadow p-6">
+        <h3 class="text-lg font-medium text-foreground mb-4">
           Response vs Reaction Time
         </h3>
         <div class="h-64">
@@ -495,7 +495,7 @@
       class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
     >
       <div
-        class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+        class="fixed inset-0 bg-black/50 transition-opacity"
         onclick={handleBackdropClick}
         onkeydown={handleBackdropKeydown}
         role="button"
@@ -504,10 +504,10 @@
       ></div>
 
       <div
-        class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        class="inline-block align-bottom bg-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
       >
-        <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
+        <div class="bg-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 class="text-lg leading-6 font-medium text-foreground mb-4">
             Export Analytics Data
           </h3>
 
@@ -515,7 +515,7 @@
             {#each exportService.getSupportedFormats() as format}
               <button
                 onclick={() => handleExport(format)}
-                class="flex items-center justify-center px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="flex items-center justify-center px-4 py-3 border border-border rounded-lg text-sm font-medium text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 {format.toUpperCase()}
               </button>
@@ -523,10 +523,10 @@
           </div>
         </div>
 
-        <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+        <div class="bg-muted px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
           <button
             onclick={() => (showExportDialog = false)}
-            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+            class="mt-3 w-full inline-flex justify-center rounded-md border border-border shadow-sm px-4 py-2 bg-card text-base font-medium text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
           >
             Cancel
           </button>

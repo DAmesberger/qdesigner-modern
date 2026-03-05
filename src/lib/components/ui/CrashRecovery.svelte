@@ -103,11 +103,11 @@
     class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50"
     transition:fade={{ duration: 200 }}
   >
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
+    <div class="bg-card rounded-lg shadow-xl w-full max-w-md p-6">
       <div class="flex items-start mb-4">
         <div class="flex-shrink-0">
           <svg
-            class="w-6 h-6 text-yellow-500"
+            class="w-6 h-6 text-warning"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -121,8 +121,8 @@
           </svg>
         </div>
         <div class="ml-3">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Unsaved Work Found</h3>
-          <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+          <h3 class="text-lg font-semibold text-foreground">Unsaved Work Found</h3>
+          <p class="mt-1 text-sm text-muted-foreground">
             We found an auto-saved draft that may contain unsaved changes. Would you like to recover
             it?
           </p>
@@ -133,7 +133,7 @@
         <div class="space-y-2 mb-6">
           {#each availableDrafts as draft}
             <label
-              class="flex items-start p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+              class="flex items-start p-3 border border-border rounded-lg cursor-pointer hover:bg-accent"
             >
               <input
                 type="radio"
@@ -143,11 +143,11 @@
                 class="mt-1 mr-3"
               />
               <div class="flex-1">
-                <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <div class="text-sm font-medium text-foreground">
                   Auto-saved {formatTimestamp(draft.timestamp)}
                 </div>
                 {#if draft.autoSave}
-                  <div class="text-xs text-gray-500 dark:text-gray-400">Automatic save</div>
+                  <div class="text-xs text-muted-foreground">Automatic save</div>
                 {/if}
               </div>
             </label>
@@ -159,14 +159,14 @@
         <button
           onclick={dismissRecovery}
           disabled={isLoading}
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-4 py-2 text-sm font-medium text-muted-foreground bg-card border border-border rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Discard Draft
         </button>
         <button
           onclick={recoverDraft}
           disabled={!selectedDraftId || isLoading}
-          class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          class="px-4 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {#if isLoading}
             <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">

@@ -233,12 +233,12 @@
           <div class="absolute top-3 left-0 right-0 h-2 rounded-full bg-muted"></div>
           <!-- CI range -->
           <div
-            class="absolute top-3 h-2 rounded-full bg-blue-200"
+            class="absolute top-3 h-2 rounded-full bg-primary/20"
             style="left: {((confidenceInterval.lower - displayMin) / displaySpan) * 100}%; width: {(ciRange / displaySpan) * 100}%;"
           ></div>
           <!-- Score marker -->
           <div
-            class="absolute top-1 w-3 h-6 rounded bg-blue-600"
+            class="absolute top-1 w-3 h-6 rounded bg-primary"
             style="left: calc({((overallScore - displayMin) / displaySpan) * 100}% - 6px);"
             role="img"
             aria-label="Your score: {overallScore}"

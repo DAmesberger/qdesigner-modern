@@ -244,7 +244,7 @@
   .app-loader {
     position: fixed;
     inset: 0;
-    background: #f3f4f6;
+    background: hsl(var(--background));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -253,7 +253,7 @@
   }
 
   .app-loader.error {
-    background: #fef2f2;
+    background: hsl(var(--destructive) / 0.05);
   }
 
   .loader-content {
@@ -265,7 +265,7 @@
   .logo {
     font-size: 3rem;
     font-weight: 700;
-    color: #4f46e5;
+    color: hsl(var(--primary));
     margin: 0 0 3rem;
     letter-spacing: -0.025em;
   }
@@ -277,7 +277,7 @@
 
   .progress-bar {
     height: 12px;
-    background: #e5e7eb;
+    background: hsl(var(--muted));
     border-radius: 9999px;
     overflow: hidden;
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
@@ -285,7 +285,7 @@
 
   .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #4f46e5 0%, #7c3aed 100%);
+    background: linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.8) 100%);
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
@@ -314,7 +314,7 @@
     top: -1.75rem;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #4f46e5;
+    color: hsl(var(--primary));
   }
 
   .status {
@@ -324,19 +324,19 @@
 
   .status-message {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     margin: 0 0 0.25rem;
   }
 
   .resource-count {
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground) / 0.7);
     margin: 0;
     font-variant-numeric: tabular-nums;
   }
 
   .error-message {
-    color: #dc2626;
+    color: hsl(var(--destructive));
     font-weight: 500;
     margin: 0 0 1rem;
   }
@@ -354,17 +354,17 @@
     align-items: center;
     gap: 0.75rem;
     font-size: 0.875rem;
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground) / 0.7);
     transition: color 0.2s;
   }
 
   .stage.loading {
-    color: #4f46e5;
+    color: hsl(var(--primary));
     font-weight: 500;
   }
 
   .stage.complete {
-    color: #10b981;
+    color: hsl(var(--success));
   }
 
   .stage-icon {
@@ -378,15 +378,15 @@
   .dot {
     width: 8px;
     height: 8px;
-    background: #d1d5db;
+    background: hsl(var(--muted-foreground) / 0.3);
     border-radius: 50%;
   }
 
   .spinner {
     width: 16px;
     height: 16px;
-    border: 2px solid #e5e7eb;
-    border-top-color: #4f46e5;
+    border: 2px solid hsl(var(--muted));
+    border-top-color: hsl(var(--primary));
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
   }
@@ -399,8 +399,8 @@
 
   .retry-button {
     padding: 0.625rem 1.5rem;
-    background: #4f46e5;
-    color: white;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
     border: none;
     border-radius: 0.5rem;
     font-size: 0.875rem;
@@ -410,56 +410,12 @@
   }
 
   .retry-button:hover {
-    background: #4338ca;
+    background: hsl(var(--primary) / 0.9);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    box-shadow: 0 4px 12px hsl(var(--primary) / 0.3);
   }
 
   .retry-button:active {
     transform: translateY(0);
-  }
-
-  /* Dark mode */
-  @media (prefers-color-scheme: dark) {
-    .app-loader {
-      background: #111827;
-    }
-
-    .app-loader.error {
-      background: #1f1315;
-    }
-
-    .progress-bar {
-      background: #374151;
-    }
-
-    .status-message {
-      color: #9ca3af;
-    }
-
-    .resource-count {
-      color: #6b7280;
-    }
-
-    .stage {
-      color: #6b7280;
-    }
-
-    .stage.loading {
-      color: #818cf8;
-    }
-
-    .stage.complete {
-      color: #34d399;
-    }
-
-    .dot {
-      background: #4b5563;
-    }
-
-    .spinner {
-      border-color: #374151;
-      border-top-color: #818cf8;
-    }
   }
 </style>
