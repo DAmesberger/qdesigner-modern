@@ -83,6 +83,99 @@ function parseNumeric(value: unknown): number | null {
   return null;
 }
 
+function resolveVariableValue(path: string, variables: Record<string, unknown>): unknown {
+  const trimmed = path.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (Object.hasOwn(variables, trimmed)) {
+    return variables[trimmed];
+  }
+
+  if (!trimmed.includes('.')) {
+    return variables[trimmed];
+  }
+
+  const [root, ...segments] = trimmed.split('.');
+  if (!root) return undefined;
+
+  let cursor: unknown = variables[root];
+  for (const segment of segments) {
+    if (!segment) continue;
+    if (!cursor || typeof cursor !== 'object') {
+      return undefined;
+    }
+
+    const record = cursor as Record<string, unknown>;
+    if (!Object.hasOwn(record, segment)) {
+      return undefined;
+    }
+    cursor = record[segment];
+  }
+
+  return cursor;
+}
+
+function metricValueFromObject(metric: AnalyticsMetric, value: Record<string, unknown>): number | null {
+  switch (metric) {
+    case 'count':
+      return parseNumeric(value.count ?? value.sampleCount ?? value.n);
+    case 'mean':
+      return parseNumeric(value.mean ?? value.meanRT);
+    case 'median':
+      return parseNumeric(value.median);
+    case 'std_dev':
+      return parseNumeric(value.stdDev ?? value.std_dev);
+    case 'p90':
+      return parseNumeric(value.p90);
+    case 'p95':
+      return parseNumeric(value.p95);
+    case 'p99':
+      return parseNumeric(value.p99);
+    case 'z_score':
+      return parseNumeric(value.zScore ?? value.z_score);
+    default:
+      return null;
+  }
+}
+
+function buildCurrentSessionPoints(
+  variableName: string,
+  rawValue: unknown,
+  metric: AnalyticsMetric
+): Array<{ label: string; value: number | null }> {
+  if (!rawValue || typeof rawValue !== 'object') {
+    return [{ label: variableName || 'Current', value: parseNumeric(rawValue) }];
+  }
+
+  if (Array.isArray(rawValue)) {
+    return rawValue.map((entry, index) => ({
+      label: `${variableName || 'Current'}-${index + 1}`,
+      value: parseNumeric(entry),
+    }));
+  }
+
+  const record = rawValue as Record<string, unknown>;
+  const directValue = metricValueFromObject(metric, record);
+  if (directValue !== null) {
+    return [{ label: variableName || 'Current', value: directValue }];
+  }
+
+  const grouped = Object.entries(record).map(([label, value]) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return { label, value: metricValueFromObject(metric, value as Record<string, unknown>) };
+    }
+    return { label, value: parseNumeric(value) };
+  });
+
+  if (grouped.some((point) => point.value !== null)) {
+    return grouped;
+  }
+
+  return [{ label: variableName || 'Current', value: null }];
+}
+
 function resolveParticipantId(raw: string, variables: Record<string, unknown>): string {
   const trimmed = raw.trim();
   if (!trimmed) {
@@ -152,15 +245,17 @@ export async function resolveStatisticalFeedbackSeries(
 ): Promise<ChartSeriesContract> {
   if (config.sourceMode === 'current-session') {
     const variableName = config.dataSource.currentVariable || config.dataSource.key;
-    const rawValue = variables[variableName];
-    const value = parseNumeric(rawValue);
+    const rawValue = resolveVariableValue(variableName, variables);
+    const points = buildCurrentSessionPoints(variableName, rawValue, config.metric);
+    const currentValue = points.length === 1 ? points[0]?.value ?? null : null;
 
     return {
       mode: 'current-session',
       metric: config.metric,
-      points: [{ label: variableName || 'Current', value }],
+      points,
       summary: {
-        currentValue: value,
+        currentValue,
+        pointCount: points.length,
       },
     };
   }

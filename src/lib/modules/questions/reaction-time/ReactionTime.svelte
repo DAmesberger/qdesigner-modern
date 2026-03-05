@@ -1,37 +1,16 @@
 <script lang="ts">
   import BaseQuestion from '../shared/BaseQuestion.svelte';
   import type { QuestionProps } from '$lib/modules/types';
-  import { ReactionEngine, createNBackTrials } from '$lib/runtime/reaction';
+  import { ReactionEngine } from '$lib/runtime/reaction';
   import type {
-    ReactionStimulusConfig,
-    ReactionTrialConfig,
     ReactionTrialResult,
   } from '$lib/runtime/reaction';
-
-  type ReactionTaskType = 'standard' | 'n-back' | 'custom';
+  import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
+  import { compileReactionPlan } from './model/reaction-compiler';
+  import type { PlannedReactionTrial } from './model/reaction-plan-types';
+  import type { ReactionTaskType } from './model/reaction-schema';
 
   interface ReactionTimeConfig {
-    task?: {
-      type?: ReactionTaskType;
-      nBack?: {
-        n?: number;
-        sequenceLength?: number;
-        targetRate?: number;
-        stimulusSet?: Array<string | ReactionStimulusConfig>;
-        targetKey?: string;
-        nonTargetKey?: string;
-        fixationMs?: number;
-        responseTimeoutMs?: number;
-      };
-      customTrials?: Array<
-        Partial<ReactionTrialConfig> & {
-          isPractice?: boolean;
-          isTarget?: boolean;
-          expectedResponse?: string;
-          stimulus?: ReactionStimulusConfig | string;
-        }
-      >;
-    };
     stimulus: {
       type: 'text' | 'shape' | 'image';
       content: string;
@@ -54,21 +33,25 @@
     prompt?: string;
   }
 
-  interface PlannedTrial {
-    trial: ReactionTrialConfig;
-    isPractice: boolean;
-    taskType: ReactionTaskType;
-  }
+  type PlannedTrial = PlannedReactionTrial;
 
   interface TrialRecord {
+    trialId: string;
     trialNumber: number;
     isPractice: boolean;
     taskType: ReactionTaskType;
+    blockId: string;
+    condition: string | null;
+    trialTemplateId: string | null;
+    expectedResponse: string | null;
+    isTarget: boolean | null;
     key: string | null;
     reactionTime: number | null;
     isCorrect: boolean | null;
     timeout: boolean;
     stimulusOnsetTime: number | null;
+    responseTimingMethod: string | null;
+    stimulusTimingMethod: string | null;
     frameStats: {
       fps: number;
       droppedFrames: number;
@@ -100,9 +83,6 @@
   const config = $derived((question.config || {}) as ReactionTimeConfig);
   const validKeys = $derived(config.response?.validKeys || ['f', 'j']);
   const showFeedback = $derived(config.feedback !== false);
-  const usePractice = $derived(Boolean(config.practice));
-  const practiceTrials = $derived(config.practiceTrials || 3);
-  const testTrials = $derived(config.testTrials || 10);
 
   let canvas: HTMLCanvasElement | undefined = $state(undefined);
   let engine: ReactionEngine | null = $state(null);
@@ -171,7 +151,7 @@
       data: {
         totalTrials,
         targetFPS: config.targetFPS || 120,
-        taskType: config.task?.type || 'standard',
+        taskType: trialPlan[0]?.metadata.taskType || 'standard',
       },
     });
 
@@ -197,10 +177,12 @@
         timestamp: Date.now(),
         data: {
           trialNumber: index + 1,
-          isPractice: planned.isPractice,
-          taskType: planned.taskType,
+          isPractice: planned.metadata.isPractice,
+          taskType: planned.metadata.taskType,
           reactionTime: trialRecord.reactionTime,
           timeout: trialRecord.timeout,
+          blockId: planned.metadata.blockId,
+          condition: planned.metadata.condition,
         },
       });
 
@@ -233,221 +215,11 @@
   }
 
   function buildTrialPlan(): PlannedTrial[] {
-    const taskType: ReactionTaskType = config.task?.type || 'standard';
-
-    if (taskType === 'n-back') {
-      return buildNBackPlan();
-    }
-
-    if (taskType === 'custom') {
-      const custom = buildCustomPlan();
-      if (custom.length > 0) {
-        return custom;
-      }
-    }
-
-    return buildStandardPlan();
-  }
-
-  function buildStandardPlan(): PlannedTrial[] {
-    const plan: PlannedTrial[] = [];
-    const practiceCount = usePractice ? practiceTrials : 0;
-    const total = practiceCount + testTrials;
-
-    for (let index = 0; index < total; index++) {
-      const isPractice = index < practiceCount;
-      plan.push({
-        trial: buildStandardTrialConfig(index + 1, isPractice),
-        isPractice,
-        taskType: 'standard',
-      });
-    }
-
-    return plan;
-  }
-
-  function buildNBackPlan(): PlannedTrial[] {
-    const nBack = config.task?.nBack;
-    const n = Math.max(1, nBack?.n || 2);
-    const sequenceLength = Math.max(3, nBack?.sequenceLength || testTrials || 20);
-    const targetRate = Math.min(1, Math.max(0, nBack?.targetRate ?? 0.3));
-    const stimulusSet = toNBackStimuli(nBack?.stimulusSet || ['A', 'B', 'C', 'D']);
-    const targetKey = nBack?.targetKey || validKeys[0] || 'j';
-    const nonTargetKey = nBack?.nonTargetKey || validKeys[1] || validKeys[0] || 'f';
-    const fixationMs = nBack?.fixationMs || 400;
-    const responseTimeoutMs = nBack?.responseTimeoutMs || 1200;
-
-    const practiceCount = usePractice ? practiceTrials : 0;
-    const practiceLength = Math.max(n + 2, practiceCount);
-
-    const practicePlan =
-      practiceCount > 0
-        ? createNBackTrials({
-            n,
-            sequenceLength: practiceLength,
-            targetRate,
-            stimulusSet,
-            validKeys,
-            targetKey,
-            nonTargetKey,
-            fixationMs,
-            responseTimeoutMs,
-            targetFPS: config.targetFPS || 120,
-            seed: `${question.id}:nback:practice`,
-          }).slice(0, practiceCount)
-        : [];
-
-    const mainPlan = createNBackTrials({
-      n,
-      sequenceLength,
-      targetRate,
-      stimulusSet,
-      validKeys,
-      targetKey,
-      nonTargetKey,
-      fixationMs,
-      responseTimeoutMs,
-      targetFPS: config.targetFPS || 120,
-      seed: `${question.id}:nback:test`,
+    const normalized = normalizeReactionQuestionConfig(question);
+    return compileReactionPlan(normalized, {
+      question,
+      questionnaire: undefined,
     });
-
-    return [
-      ...practicePlan.map((trial) => ({ trial, isPractice: true, taskType: 'n-back' as const })),
-      ...mainPlan.map((trial) => ({ trial, isPractice: false, taskType: 'n-back' as const })),
-    ];
-  }
-
-  function buildCustomPlan(): PlannedTrial[] {
-    const customTrials = config.task?.customTrials || [];
-    const plan: PlannedTrial[] = [];
-
-    customTrials.forEach((candidate, index) => {
-      const trial = normalizeCustomTrial(candidate, index + 1);
-      if (!trial) return;
-
-      plan.push({
-        trial,
-        isPractice: Boolean(candidate.isPractice),
-        taskType: 'custom',
-      });
-    });
-
-    return plan;
-  }
-
-  function buildStandardTrialConfig(trialNumber: number, isPractice: boolean): ReactionTrialConfig {
-    const stimulusType = config.stimulus?.type || 'shape';
-    const stimulusContent = config.stimulus?.content || 'circle';
-
-    const stimulus =
-      stimulusType === 'text'
-        ? {
-            kind: 'text' as const,
-            text: stimulusContent,
-            fontPx: 72,
-          }
-        : stimulusType === 'image'
-          ? {
-              kind: 'image' as const,
-              src: stimulusContent,
-              widthPx: 360,
-              heightPx: 360,
-            }
-          : {
-              kind: 'shape' as const,
-              shape:
-                stimulusContent === 'square'
-                  ? ('square' as const)
-                  : stimulusContent === 'triangle'
-                    ? ('triangle' as const)
-                    : ('circle' as const),
-              radiusPx: 84,
-            };
-
-    return {
-      id: `${question.id}-trial-${trialNumber}`,
-      responseMode: 'keyboard',
-      validKeys,
-      correctResponse: config.correctKey,
-      requireCorrect: config.response?.requireCorrect,
-      fixation: {
-        enabled: true,
-        type: config.stimulus?.fixation?.type || 'cross',
-        durationMs: config.stimulus?.fixation?.duration || 500,
-      },
-      stimulus,
-      responseTimeoutMs: config.response?.timeout || 2000,
-      targetFPS: config.targetFPS || 120,
-      interTrialIntervalMs: isPractice ? 250 : 400,
-    };
-  }
-
-  function normalizeCustomTrial(
-    trial: Partial<ReactionTrialConfig> & {
-      stimulus?: ReactionStimulusConfig | string;
-    },
-    trialNumber: number
-  ): ReactionTrialConfig | null {
-    const stimulus = normalizeStimulusCandidate(trial.stimulus);
-    if (!stimulus) return null;
-
-    return {
-      id: trial.id || `${question.id}-custom-${trialNumber}`,
-      responseMode: trial.responseMode || 'keyboard',
-      validKeys: trial.validKeys || validKeys,
-      correctResponse: trial.correctResponse,
-      requireCorrect: trial.requireCorrect ?? config.response?.requireCorrect,
-      fixation: {
-        enabled: trial.fixation?.enabled ?? true,
-        type: trial.fixation?.type || config.stimulus?.fixation?.type || 'cross',
-        durationMs: trial.fixation?.durationMs ?? (config.stimulus?.fixation?.duration || 500),
-      },
-      preStimulusDelayMs: trial.preStimulusDelayMs,
-      stimulus,
-      stimulusDurationMs: trial.stimulusDurationMs,
-      responseTimeoutMs: trial.responseTimeoutMs ?? (config.response?.timeout || 2000),
-      interTrialIntervalMs: trial.interTrialIntervalMs ?? 300,
-      targetFPS: trial.targetFPS ?? (config.targetFPS || 120),
-      vsync: trial.vsync,
-      backgroundColor: trial.backgroundColor,
-      allowResponseDuringPreStimulus: trial.allowResponseDuringPreStimulus,
-    };
-  }
-
-  function normalizeStimulusCandidate(
-    stimulus?: ReactionStimulusConfig | string
-  ): ReactionStimulusConfig | null {
-    if (!stimulus) return null;
-    if (typeof stimulus === 'string') {
-      return {
-        kind: 'text',
-        text: stimulus,
-      };
-    }
-    if (!stimulus.kind) return null;
-    return stimulus;
-  }
-
-  function toNBackStimuli(stimulusSet: Array<string | ReactionStimulusConfig>): ReactionStimulusConfig[] {
-    const mapped = stimulusSet.map((stimulus) => {
-      if (typeof stimulus === 'string') {
-        return {
-          kind: 'text' as const,
-          text: stimulus,
-          fontPx: 72,
-        };
-      }
-      return stimulus;
-    });
-
-    return mapped.length
-      ? mapped
-      : [
-          { kind: 'text', text: 'A', fontPx: 72 },
-          { kind: 'text', text: 'B', fontPx: 72 },
-          { kind: 'text', text: 'C', fontPx: 72 },
-          { kind: 'text', text: 'D', fontPx: 72 },
-        ];
   }
 
   function mapResultToRecord(
@@ -459,14 +231,22 @@
       result.response && typeof result.response.value === 'string' ? result.response.value : null;
 
     return {
+      trialId: planned.trial.id,
       trialNumber,
-      isPractice: planned.isPractice,
-      taskType: planned.taskType,
+      isPractice: planned.metadata.isPractice,
+      taskType: planned.metadata.taskType,
+      blockId: planned.metadata.blockId,
+      condition: planned.metadata.condition || null,
+      trialTemplateId: planned.metadata.trialTemplateId || null,
+      expectedResponse: planned.metadata.expectedResponse || null,
+      isTarget: planned.metadata.isTarget ?? null,
       key,
       reactionTime: result.response?.reactionTimeMs ?? null,
       isCorrect: result.isCorrect,
       timeout: result.timeout,
       stimulusOnsetTime: result.stimulusOnsetTime,
+      responseTimingMethod: result.response?.timingMethod || null,
+      stimulusTimingMethod: result.stimulusTimingMethod || null,
       frameStats: {
         fps: result.stats.fps,
         droppedFrames: result.stats.droppedFrames,

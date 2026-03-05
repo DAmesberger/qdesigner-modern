@@ -80,6 +80,7 @@ export interface ScheduledPhase {
 
 export interface ReactionTrialConfig {
   id: string;
+  metadata?: Record<string, unknown>;
   responseMode?: ReactionResponseMode;
   validKeys?: string[];
   correctResponse?: string;

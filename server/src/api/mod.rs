@@ -164,6 +164,10 @@ pub fn router(state: AppState) -> Router {
             get(sessions::condition_counts),
         )
         .route(
+            "/{id}/quota-status",
+            get(sessions::quota_status),
+        )
+        .route(
             "/{id}/comments",
             get(comments::list_comments).post(comments::create_comment),
         )
@@ -177,6 +181,7 @@ pub fn router(state: AppState) -> Router {
             "/",
             get(sessions::list_sessions).post(sessions::create_session),
         )
+        .route("/check-duplicate", post(sessions::check_duplicate))
         .route("/aggregate", get(sessions::aggregate_sessions))
         .route("/compare", get(sessions::compare_sessions))
         .route("/dashboard", get(sessions::dashboard_summary))

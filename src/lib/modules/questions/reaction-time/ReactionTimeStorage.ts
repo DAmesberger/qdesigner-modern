@@ -3,6 +3,7 @@
 import { BaseQuestionStorage } from '../shared/BaseStorage';
 import { StatisticalEngine } from '$lib/analytics/StatisticalEngine';
 import type { QuestionResponse } from '../shared/types';
+import { computeDerivedReactionMetrics } from './model/reaction-scoring';
 
 interface ReactionResponse {
   key: string | null;
@@ -12,6 +13,11 @@ interface ReactionResponse {
   timing?: any;
   trialNumber: number;
   isPractice: boolean;
+  blockId?: string;
+  condition?: string | null;
+  trialTemplateId?: string | null;
+  responseTimingMethod?: string | null;
+  stimulusTimingMethod?: string | null;
   timeout?: boolean;
 }
 
@@ -284,6 +290,102 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
   }
   
   /**
+   * Get aggregated reaction statistics grouped by trial condition.
+   */
+  async getConditionStats(questionId: string): Promise<Record<string, {
+    count: number;
+    meanRT: number;
+    accuracy: number;
+    timeoutRate: number;
+  }>> {
+    const responses = await this.getResponses(questionId);
+    const byCondition: Record<string, { rt: number[]; correct: number; total: number; timeouts: number }> = {};
+
+    responses.forEach((response: QuestionResponse) => {
+      const value: ReactionTimeValue = this.parseValue(response.value);
+      value.responses?.forEach((trial) => {
+        if (trial.isPractice) return;
+        const condition = trial.condition || 'unlabeled';
+        if (!byCondition[condition]) {
+          byCondition[condition] = { rt: [], correct: 0, total: 0, timeouts: 0 };
+        }
+
+        const bucket = byCondition[condition]!;
+        bucket.total++;
+        if (trial.timeout) bucket.timeouts++;
+        if (trial.isCorrect) bucket.correct++;
+        if (typeof trial.reactionTime === 'number' && trial.reactionTime > 0 && !trial.timeout) {
+          bucket.rt.push(trial.reactionTime);
+        }
+      });
+    });
+
+    const stats: Record<string, { count: number; meanRT: number; accuracy: number; timeoutRate: number }> = {};
+    Object.entries(byCondition).forEach(([condition, bucket]) => {
+      const meanRT =
+        bucket.rt.length > 0
+          ? bucket.rt.reduce((sum, value) => sum + value, 0) / bucket.rt.length
+          : 0;
+      stats[condition] = {
+        count: bucket.total,
+        meanRT,
+        accuracy: bucket.total > 0 ? bucket.correct / bucket.total : 0,
+        timeoutRate: bucket.total > 0 ? bucket.timeouts / bucket.total : 0,
+      };
+    });
+
+    return stats;
+  }
+
+  /**
+   * Get aggregated reaction statistics grouped by block ID.
+   */
+  async getBlockStats(questionId: string): Promise<Record<string, {
+    count: number;
+    meanRT: number;
+    accuracy: number;
+    timeoutRate: number;
+  }>> {
+    const responses = await this.getResponses(questionId);
+    const byBlock: Record<string, { rt: number[]; correct: number; total: number; timeouts: number }> = {};
+
+    responses.forEach((response: QuestionResponse) => {
+      const value: ReactionTimeValue = this.parseValue(response.value);
+      value.responses?.forEach((trial) => {
+        if (trial.isPractice) return;
+        const blockId = trial.blockId || 'default';
+        if (!byBlock[blockId]) {
+          byBlock[blockId] = { rt: [], correct: 0, total: 0, timeouts: 0 };
+        }
+
+        const bucket = byBlock[blockId]!;
+        bucket.total++;
+        if (trial.timeout) bucket.timeouts++;
+        if (trial.isCorrect) bucket.correct++;
+        if (typeof trial.reactionTime === 'number' && trial.reactionTime > 0 && !trial.timeout) {
+          bucket.rt.push(trial.reactionTime);
+        }
+      });
+    });
+
+    const stats: Record<string, { count: number; meanRT: number; accuracy: number; timeoutRate: number }> = {};
+    Object.entries(byBlock).forEach(([blockId, bucket]) => {
+      const meanRT =
+        bucket.rt.length > 0
+          ? bucket.rt.reduce((sum, value) => sum + value, 0) / bucket.rt.length
+          : 0;
+      stats[blockId] = {
+        count: bucket.total,
+        meanRT,
+        accuracy: bucket.total > 0 ? bucket.correct / bucket.total : 0,
+        timeoutRate: bucket.total > 0 ? bucket.timeouts / bucket.total : 0,
+      };
+    });
+
+    return stats;
+  }
+
+  /**
    * Get outlier responses (using IQR method)
    */
   async getOutliers(questionId: string): Promise<{
@@ -375,14 +477,23 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
    * Get all available aggregations for reaction time questions
    */
   async getAllAggregations(questionId: string): Promise<Record<string, unknown>> {
-    const [rtStats, accuracy, timeouts, learning, keyDist, outliers] = await Promise.all([
+    const [rtStats, accuracy, timeouts, learning, keyDist, outliers, byCondition, byBlock, responses] = await Promise.all([
       this.getReactionTimeStats(questionId),
       this.getAccuracyStats(questionId),
       this.getTimeoutStats(questionId),
       this.getLearningEffects(questionId),
       this.getKeyDistribution(questionId),
-      this.getOutliers(questionId)
+      this.getOutliers(questionId),
+      this.getConditionStats(questionId),
+      this.getBlockStats(questionId),
+      this.getResponses(questionId),
     ]);
+
+    const flattenedTrials = responses.flatMap((response) => {
+      const value = this.parseValue(response.value);
+      return Array.isArray(value.responses) ? value.responses : [];
+    });
+    const derived = computeDerivedReactionMetrics(flattenedTrials);
     
     return {
       rtStats,
@@ -390,7 +501,10 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
       timeouts,
       learning,
       keyDistribution: keyDist,
-      outliers
+      outliers,
+      byCondition,
+      byBlock,
+      derived,
     };
   }
 }

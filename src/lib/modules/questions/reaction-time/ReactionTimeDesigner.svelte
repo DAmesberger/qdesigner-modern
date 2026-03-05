@@ -3,7 +3,11 @@
   import type { ReactionTrialConfig } from '$lib/runtime/reaction';
   import type { MediaAsset } from '$lib/shared/types/media';
   import MediaManagerModal from '$lib/components/designer/MediaManagerModal.svelte';
+  import BlockEditor from './designer/BlockEditor.svelte';
   import { mediaService } from '$lib/services/mediaService';
+  import { createLegacyStarterPayload } from './model/starter-templates';
+  import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
+  import type { ReactionLegacyQuestionConfig, ReactionStudyConfig } from './model/reaction-schema';
 
   type ReactionTaskType = 'standard' | 'n-back' | 'stroop' | 'flanker' | 'iat' | 'dot-probe' | 'custom';
   type StimulusType = 'text' | 'shape' | 'image' | 'video' | 'audio';
@@ -19,6 +23,7 @@
   }
 
   interface ReactionTimeConfig {
+    study?: ReactionStudyConfig;
     task: {
       type: ReactionTaskType;
       nBack: {
@@ -135,8 +140,7 @@
   let newDotProbeNeutral = $state('');
   let selectedKeyPreset = $state('');
   let selectedTimingPreset = $state('');
-  let customTrialsDraft = $state('[]');
-  let customTrialsError = $state<string | null>(null);
+  let lastObservedTaskType = $state<ReactionTaskType | null>(null);
 
   // Media picker state
   let showMediaPicker = $state(false);
@@ -331,12 +335,34 @@
     if (!question.config.practiceTrials) question.config.practiceTrials = 3;
     if (!question.config.testTrials) question.config.testTrials = 10;
     if (!question.config.targetFPS) question.config.targetFPS = 120;
+    ensureStudyBlocks();
   });
 
   $effect(() => {
-    const serialized = JSON.stringify(question.config.task?.customTrials || [], null, 2);
-    if (serialized !== customTrialsDraft) {
-      customTrialsDraft = serialized;
+    if ((question.config.study?.blocks || []).length > 0) {
+      return;
+    }
+
+    // Keep canonical study config in sync with the designer's legacy task fields.
+    const canonical = normalizeReactionQuestionConfig({ config: question.config });
+    const currentSerialized = JSON.stringify(question.config.study ?? null);
+    const nextSerialized = JSON.stringify(canonical);
+    if (currentSerialized !== nextSerialized) {
+      question.config.study = canonical;
+    }
+  });
+
+  $effect(() => {
+    const currentTaskType = question.config.task?.type || 'standard';
+
+    if (lastObservedTaskType === null) {
+      lastObservedTaskType = currentTaskType;
+      return;
+    }
+
+    if (currentTaskType !== lastObservedTaskType) {
+      applyTaskStarter();
+      lastObservedTaskType = currentTaskType;
     }
   });
 
@@ -454,16 +480,30 @@
     );
   }
 
-  function applyCustomTrialsJson() {
-    try {
-      const parsed = JSON.parse(customTrialsDraft);
-      if (!Array.isArray(parsed)) {
-        throw new Error('Custom trials JSON must be an array of trial objects');
-      }
-      question.config.task!.customTrials = parsed as Array<Partial<ReactionTrialConfig>>;
-      customTrialsError = null;
-    } catch (error) {
-      customTrialsError = error instanceof Error ? error.message : 'Invalid JSON';
+  function applyTaskStarter() {
+    const taskType = question.config.task?.type || 'standard';
+    const starter = createLegacyStarterPayload(taskType);
+    if (starter.task) {
+      question.config.task = starter.task as ReactionTimeConfig['task'];
+    }
+    question.config.study = starter.study as ReactionStudyConfig;
+  }
+
+  function ensureStudyBlocks() {
+    if (question.config.study && Array.isArray(question.config.study.blocks) && question.config.study.blocks.length > 0) {
+      return;
+    }
+
+    const taskType = question.config.task?.type || 'standard';
+    const starter = createLegacyStarterPayload(
+      taskType,
+      question.config as unknown as Partial<ReactionLegacyQuestionConfig>
+    );
+    if (starter.task) {
+      question.config.task = starter.task as ReactionTimeConfig['task'];
+    }
+    if (starter.study) {
+      question.config.study = starter.study as ReactionStudyConfig;
     }
   }
 </script>
@@ -484,6 +524,9 @@
         <option value="dot-probe">Dot-Probe</option>
         <option value="custom">Custom Trial Plan</option>
       </select>
+      <button class="btn btn-secondary" type="button" style="margin-top: 0.5rem;" onclick={applyTaskStarter}>
+        Reset Selected Task To Starter
+      </button>
     </div>
 
     {#if question.config.task.type === 'n-back'}
@@ -1147,22 +1190,14 @@
       </div>
     {/if}
 
-    {#if question.config.task.type === 'custom'}
+    {#if question.config.study}
       <div class="subsection">
-        <h5 class="subsection-title">Custom Trial JSON</h5>
+        <h5 class="subsection-title">Visual Trial Blocks</h5>
         <p class="help-text">
-          Define an array of trial objects compatible with ReactionTrialConfig. Use this for fully
-          programmable tasks.
+          Build fully programmable reaction tasks with visual blocks and trial templates. No JSON is
+          required.
         </p>
-        <textarea
-          class="input"
-          rows="12"
-          bind:value={customTrialsDraft}
-          onblur={applyCustomTrialsJson}
-        ></textarea>
-        {#if customTrialsError}
-          <p class="error-text">{customTrialsError}</p>
-        {/if}
+        <BlockEditor bind:blocks={question.config.study.blocks} />
       </div>
     {/if}
   </div>
@@ -1554,7 +1589,16 @@
             {:else if question.config.task.type === 'dot-probe'}
               {question.config.task.dotProbe.trialCount} dot-probe ({Math.round(question.config.task.dotProbe.congruentRatio * 100)}% congruent)
             {:else if question.config.task.type === 'custom'}
-              {(question.config.task.customTrials || []).length} custom trials
+              {(question.config.study?.blocks || []).reduce(
+                (blockTotal, block) =>
+                  blockTotal +
+                  Math.max(1, block.repetitions || 1) *
+                    (block.trials || []).reduce(
+                      (trialTotal, trial) => trialTotal + Math.max(1, trial.repeat || 1),
+                      0
+                    ),
+                0
+              )} visual trials
             {:else}
               {question.config.practice ? `${question.config.practiceTrials} practice + ` : ''}
               {question.config.testTrials} test
@@ -1692,12 +1736,6 @@
     margin-top: 0.25rem;
     font-size: 0.75rem;
     color: #6b7280;
-  }
-
-  .error-text {
-    margin-top: 0.5rem;
-    color: #dc2626;
-    font-size: 0.75rem;
   }
 
   /* Key management */

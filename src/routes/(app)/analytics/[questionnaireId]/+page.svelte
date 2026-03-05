@@ -170,6 +170,8 @@
   <div class="flex items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
     <a
       href="/analytics"
+      aria-label="Back to analytics overview"
+      title="Back to analytics overview"
       class="p-2 rounded-lg hover:bg-[hsl(var(--background))]/80 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
     >
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

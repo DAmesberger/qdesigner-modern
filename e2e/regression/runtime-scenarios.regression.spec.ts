@@ -143,4 +143,42 @@ test.describe('@regression focused runtime scenarios', () => {
 
     await assertNoRuntimeErrors(page);
   });
+
+  test('mixed questionnaire flow runs visual reaction blocks with block/condition metadata', async ({ page }) => {
+    const fixture = getRuntimeScenarioFixture('mixed-reaction');
+
+    await startRuntimeFixture(page, fixture);
+    const state = await waitForCompletion(page);
+
+    for (const requiredId of fixture.expectedPresented?.include || []) {
+      expect(state.presentedQuestionIds).toContain(requiredId);
+    }
+
+    if (!fixture.expectedResponse || !fixture.expectedReaction) {
+      throw new Error('Missing mixed-reaction expectation configuration');
+    }
+
+    const introResponse = state.responses.find(
+      (entry) => entry.questionId === fixture.expectedResponse?.questionId
+    );
+    expect(introResponse?.value).toBe(fixture.expectedResponse.value);
+
+    const reactionResponse = state.responses.find(
+      (entry) => entry.questionId === fixture.expectedReaction?.questionId
+    );
+    expect(reactionResponse).toBeTruthy();
+
+    const payload = reactionResponse?.value as {
+      responses?: Array<{ taskType?: string; blockId?: string; condition?: string | null }>;
+    };
+    expect(payload?.responses?.length).toBeGreaterThanOrEqual(fixture.expectedReaction.minTrials);
+    expect(
+      (payload?.responses || []).every((trial) => trial.taskType === fixture.expectedReaction?.taskType)
+    ).toBe(true);
+    expect((payload?.responses || []).every((trial) => Boolean(trial.blockId))).toBe(true);
+    expect((payload?.responses || []).some((trial) => trial.condition === 'congruent')).toBe(true);
+    expect((payload?.responses || []).some((trial) => trial.condition === 'incongruent')).toBe(true);
+
+    await assertNoRuntimeErrors(page);
+  });
 });

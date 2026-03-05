@@ -49,6 +49,58 @@ describe('statistical feedback engine', () => {
     expect(series.points[0]).toEqual({ label: 'score', value: 88 });
   });
 
+  it('resolves nested current-session variable paths', async () => {
+    const series = await resolveStatisticalFeedbackSeries(
+      {
+        ...defaultStatisticalFeedbackConfig,
+        sourceMode: 'current-session',
+        metric: 'mean',
+        dataSource: {
+          ...defaultStatisticalFeedbackConfig.dataSource,
+          currentVariable: 'q_rt_value.derived.congruencyEffectMs',
+          key: 'q_rt_value.derived.congruencyEffectMs',
+        },
+      },
+      {
+        q_rt_value: {
+          derived: {
+            congruencyEffectMs: 42.5,
+          },
+        },
+      }
+    );
+
+    expect(series.points[0]).toEqual({ label: 'q_rt_value.derived.congruencyEffectMs', value: 42.5 });
+  });
+
+  it('resolves grouped current-session objects into chart points', async () => {
+    const series = await resolveStatisticalFeedbackSeries(
+      {
+        ...defaultStatisticalFeedbackConfig,
+        sourceMode: 'current-session',
+        metric: 'mean',
+        dataSource: {
+          ...defaultStatisticalFeedbackConfig.dataSource,
+          currentVariable: 'q_rt_value.byCondition',
+          key: 'q_rt_value.byCondition',
+        },
+      },
+      {
+        q_rt_value: {
+          byCondition: {
+            congruent: { meanRT: 310, count: 12 },
+            incongruent: { meanRT: 355, count: 12 },
+          },
+        },
+      }
+    );
+
+    expect(series.points).toEqual([
+      { label: 'congruent', value: 310 },
+      { label: 'incongruent', value: 355 },
+    ]);
+  });
+
   it('uses analytics API for cohort mode', async () => {
     const aggregateSpy = vi.spyOn(sessionAnalyticsService, 'aggregate').mockResolvedValueOnce({
       questionnaireId: 'q1',

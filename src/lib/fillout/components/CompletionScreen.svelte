@@ -2,6 +2,7 @@
   import Button from '$lib/components/common/Button.svelte';
   import Card from '$lib/components/common/Card.svelte';
   import type { QuestionnaireSession } from '$lib/shared';
+  import type { DistributionSettings } from '$lib/shared/types/questionnaire';
   import type { ScoreInterpreterConfig } from '$lib/runtime/feedback/ScoreInterpreter';
   import { generateReport, type ReportConfig } from '$lib/runtime/feedback/ReportGenerator';
 
@@ -16,6 +17,10 @@
     variables?: Record<string, unknown>;
     /** Report title override */
     reportTitle?: string;
+    /** Distribution settings for redirect/panel behavior */
+    distributionSettings?: DistributionSettings;
+    /** URL params captured at fillout start, used for redirect variable substitution */
+    urlParams?: Record<string, string>;
     onClose?: () => void;
     onDownload?: () => void;
   }
@@ -28,11 +33,14 @@
     scoreConfigs = [],
     variables = {},
     reportTitle,
+    distributionSettings,
+    urlParams = {},
     onClose,
     onDownload,
   }: Props = $props();
 
   let generatingReport = $state(false);
+  let redirectCountdown = $state(5);
 
   // Calculate statistics
   const duration = $derived(() => {
@@ -44,8 +52,80 @@
   });
 
   const completionCode = $derived(() => {
+    if (distributionSettings?.panelIntegration?.completionCode) {
+      return distributionSettings.panelIntegration.completionCode;
+    }
     // Generate a completion code from session ID
     return session?.id.slice(-8).toUpperCase() || 'COMPLETE';
+  });
+
+  // Build redirect URL with variable substitution
+  const redirectUrl = $derived(() => {
+    const panel = distributionSettings?.panelIntegration;
+    let url = distributionSettings?.completionRedirectUrl || panel?.completionUrl || '';
+    if (!url) return null;
+
+    // Substitute {{variableName}} with actual values from urlParams and variables
+    url = url.replace(/\{\{(\w+)\}\}/g, (_match, varName: string) => {
+      if (varName in urlParams) return encodeURIComponent(urlParams[varName] ?? '');
+      if (varName in variables) return encodeURIComponent(String(variables[varName] ?? ''));
+      if (varName === 'COMPLETION_CODE') return encodeURIComponent(completionCode());
+      if (varName === 'SESSION_ID') return encodeURIComponent(session?.id ?? '');
+      if (varName === 'PARTICIPANT_ID') return encodeURIComponent(session?.participantId ?? '');
+      return '';
+    });
+
+    // Append specified params
+    if (distributionSettings?.completionRedirectParams?.length) {
+      const separator = url.includes('?') ? '&' : '?';
+      const params = distributionSettings.completionRedirectParams
+        .map((p) => {
+          const val = urlParams[p] ?? (variables[p] != null ? String(variables[p]) : '');
+          return `${encodeURIComponent(p)}=${encodeURIComponent(val)}`;
+        })
+        .join('&');
+      url = `${url}${separator}${params}`;
+    }
+
+    return url;
+  });
+
+  // Panel-specific redirect URLs
+  const panelRedirectUrl = $derived(() => {
+    const panel = distributionSettings?.panelIntegration;
+    if (!panel) return null;
+
+    switch (panel.provider) {
+      case 'prolific':
+        return `https://app.prolific.com/submissions/complete?cc=${encodeURIComponent(completionCode())}`;
+      case 'sona': {
+        const base = panel.completionUrl;
+        if (!base) return null;
+        const sep = base.includes('?') ? '&' : '?';
+        return `${base}${sep}survey_code=${encodeURIComponent(completionCode())}`;
+      }
+      default:
+        return null;
+    }
+  });
+
+  const effectiveRedirectUrl = $derived(() => redirectUrl() || panelRedirectUrl());
+
+  // Auto-redirect countdown
+  $effect(() => {
+    const target = effectiveRedirectUrl();
+    if (!target) return;
+
+    redirectCountdown = 5;
+    const interval = setInterval(() => {
+      redirectCountdown--;
+      if (redirectCountdown <= 0) {
+        clearInterval(interval);
+        window.location.href = target;
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
   });
 
   function handleClose() {
@@ -132,6 +212,46 @@
         </div>
         <p class="code-note">Please save this code for your records.</p>
       </div>
+
+      <!-- Panel integration / redirect info -->
+      {#if effectiveRedirectUrl()}
+        <div class="redirect-info" data-testid="fillout-redirect-info">
+          {#if distributionSettings?.panelIntegration}
+            <p class="redirect-text">
+              Redirecting to {distributionSettings.panelIntegration.provider === 'prolific'
+                ? 'Prolific'
+                : distributionSettings.panelIntegration.provider === 'mturk'
+                  ? 'MTurk'
+                  : distributionSettings.panelIntegration.provider === 'sona'
+                    ? 'SONA'
+                    : distributionSettings.panelIntegration.provider === 'cloudresearch'
+                      ? 'CloudResearch'
+                      : 'completion page'} in {redirectCountdown} seconds...
+            </p>
+          {:else}
+            <p class="redirect-text">
+              Redirecting in {redirectCountdown} seconds...
+            </p>
+          {/if}
+          <a href={effectiveRedirectUrl()} class="redirect-link">Click here if not redirected automatically</a>
+        </div>
+      {/if}
+
+      <!-- MTurk submit form -->
+      {#if distributionSettings?.panelIntegration?.provider === 'mturk' && distributionSettings.panelIntegration.mturkHitId}
+        <div class="mturk-form" data-testid="fillout-mturk-form">
+          <form
+            method="POST"
+            action="https://www.mturk.com/mturk/externalSubmit"
+          >
+            <input type="hidden" name="assignmentId" value={urlParams['assignmentId'] ?? ''} />
+            <input type="hidden" name="completionCode" value={completionCode()} />
+            <Button variant="default" size="lg" type="submit">
+              Submit HIT
+            </Button>
+          </form>
+        </div>
+      {/if}
 
       <div class="actions">
         {#if showDownload && onDownload}
@@ -300,6 +420,31 @@
     gap: 1rem;
     justify-content: center;
     margin-bottom: 1.5rem;
+  }
+
+  .redirect-info {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: var(--muted);
+    border-radius: 0.5rem;
+    text-align: center;
+  }
+
+  .redirect-text {
+    font-size: 0.875rem;
+    color: var(--foreground);
+    margin-bottom: 0.5rem;
+  }
+
+  .redirect-link {
+    font-size: 0.75rem;
+    color: var(--primary);
+    text-decoration: underline;
+  }
+
+  .mturk-form {
+    margin-bottom: 1.5rem;
+    text-align: center;
   }
 
   .footer-note {

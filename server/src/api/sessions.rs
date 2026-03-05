@@ -305,6 +305,20 @@ enum AggregateSource {
     Response,
 }
 
+// ── Fraud prevention ────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct CheckDuplicateRequest {
+    pub questionnaire_id: Uuid,
+    pub fingerprint: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CheckDuplicateResponse {
+    pub is_duplicate: bool,
+    pub previous_completions: i64,
+}
+
 // ── Handlers ─────────────────────────────────────────────────────────
 
 /// POST /api/sessions — create a new session (can be anonymous).
@@ -380,6 +394,30 @@ pub async fn create_session(
     });
 
     Ok((axum::http::StatusCode::CREATED, Json(session)))
+}
+
+/// POST /api/sessions/check-duplicate — check if a fingerprint already completed this questionnaire.
+pub async fn check_duplicate(
+    State(state): State<AppState>,
+    Json(body): Json<CheckDuplicateRequest>,
+) -> Result<Json<CheckDuplicateResponse>, ApiError> {
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*) FROM sessions
+        WHERE questionnaire_id = $1
+          AND metadata->>'fingerprint' = $2
+          AND status = 'completed'
+        "#,
+    )
+    .bind(body.questionnaire_id)
+    .bind(&body.fingerprint)
+    .fetch_one(&state.pool)
+    .await?;
+
+    Ok(Json(CheckDuplicateResponse {
+        is_duplicate: count > 0,
+        previous_completions: count,
+    }))
 }
 
 /// GET /api/sessions
@@ -1668,6 +1706,93 @@ pub async fn condition_counts(
     .await?;
 
     Ok(Json(counts))
+}
+
+// ── Quota Status Endpoint ────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct QuotaStatusItem {
+    pub quota_id: String,
+    pub name: String,
+    pub target: i64,
+    pub current: i64,
+    pub is_full: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct QuotaStatusResponse {
+    pub quotas: Vec<QuotaStatusItem>,
+    pub total_completed: i64,
+}
+
+/// GET /api/questionnaires/{id}/quota-status
+///
+/// Returns the current completion counts for quota management.
+/// The client evaluates quota conditions against these counts.
+pub async fn quota_status(
+    State(state): State<AppState>,
+    Path(questionnaire_id): Path<Uuid>,
+) -> Result<Json<QuotaStatusResponse>, ApiError> {
+    // Load questionnaire settings to get quota definitions
+    let settings_row = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT COALESCE(content->'settings', '{}'::jsonb) FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(questionnaire_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+
+    // Count completed sessions
+    let total_completed = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*)::bigint FROM sessions WHERE questionnaire_id = $1 AND status = 'completed'",
+    )
+    .bind(questionnaire_id)
+    .fetch_one(&state.pool)
+    .await?;
+
+    // Extract quota groups from settings
+    let quota_groups = settings_row
+        .get("quotas")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut quotas = Vec::new();
+
+    for group in &quota_groups {
+        let group_quotas = group
+            .get("quotas")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        for q in &group_quotas {
+            let quota_id = q.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let name = q.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let target = q.get("target").and_then(|v| v.as_i64()).unwrap_or(0);
+            let enabled = q.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+
+            if !enabled || quota_id.is_empty() {
+                continue;
+            }
+
+            // For now, return total_completed as the current count.
+            // The client evaluates quota conditions against respondent values
+            // and uses these totals to determine if quotas are met.
+            quotas.push(QuotaStatusItem {
+                quota_id,
+                name,
+                target,
+                current: total_completed,
+                is_full: total_completed >= target,
+            });
+        }
+    }
+
+    Ok(Json(QuotaStatusResponse {
+        quotas,
+        total_completed,
+    }))
 }
 
 // ── Sync Endpoint ────────────────────────────────────────────────

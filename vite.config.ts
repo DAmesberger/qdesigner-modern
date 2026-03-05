@@ -48,9 +48,26 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     host: true,
+    fs: {
+      allow: [
+        resolve(process.cwd(), 'src'),
+        resolve(process.cwd(), 'src/lib'),
+        resolve(process.cwd(), 'src/routes'),
+        resolve(process.cwd(), '.svelte-kit'),
+        resolve(process.cwd(), 'node_modules'),
+        resolve(process.cwd(), 'packages'),
+      ],
+    },
     hmr: {
       port: 5173,
       host: 'localhost'
+    },
+    watch: {
+      ignored: [
+        '**/test-results/**',
+        '**/playwright-report/**',
+        '**/.playwright-artifacts-*/**',
+      ],
     },
     headers: {
       // Cross-origin isolation enables full-precision performance.now() (~5us)

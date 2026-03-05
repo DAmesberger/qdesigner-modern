@@ -27,9 +27,11 @@
     renderWidget,
   }: Props = $props();
 
-  let layout = $state<DashboardLayout>(
-    initialLayout ?? createDefaultLayout(questionnaireId)
-  );
+  let layout = $state<DashboardLayout>(createDefaultLayout(''));
+
+  $effect(() => {
+    layout = initialLayout ?? createDefaultLayout(questionnaireId);
+  });
 
   let showPalette = $state(false);
 

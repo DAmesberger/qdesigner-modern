@@ -20,6 +20,7 @@ import type {
 import { QuestionTypes } from '../types/questionnaire';
 import { QuestionFactory } from '../factories/question-factory';
 import { nanoid } from 'nanoid';
+import { normalizeReactionQuestionConfig } from '$lib/modules/questions/reaction-time/model/reaction-normalize';
 
 /**
  * Migration result with details about the process
@@ -146,7 +147,11 @@ export function migrateQuestion(oldQuestion: OldQuestion): MigrationResult {
       case QuestionTypes.WEBGL:
         newQuestion = migrateWebGL(oldQuestion, newQuestion as WebGLQuestion, warnings);
         break;
-        
+
+      case QuestionTypes.REACTION_TIME:
+        newQuestion = migrateReactionTime(oldQuestion, newQuestion, warnings);
+        break;
+
       default:
         warnings.push(`Question type ${oldQuestion.type} migrated with default settings`);
     }
@@ -395,6 +400,45 @@ function migrateMatrix(
   };
   
   return newQ;
+}
+
+/**
+ * Migrate reaction-time questions to canonical visual study schema.
+ */
+function migrateReactionTime(
+  old: OldQuestion,
+  newQ: NewQuestion,
+  warnings: string[]
+): NewQuestion {
+  try {
+    const normalized = normalizeReactionQuestionConfig(old);
+    const canonicalConfig = {
+      study: normalized,
+      task: normalized.task,
+      stimulus: normalized.stimulus,
+      response: normalized.response,
+      correctKey: normalized.correctKey,
+      feedback: normalized.feedback,
+      practice: normalized.practice,
+      practiceTrials: normalized.practiceTrials,
+      testTrials: normalized.testTrials,
+      targetFPS: normalized.targetFPS,
+      prompt: old.text || old.prompt || 'Reaction Time Task',
+    };
+
+    const migrated = newQ as NewQuestion & {
+      text?: string;
+      config?: Record<string, unknown>;
+    };
+    migrated.text = old.text || migrated.text;
+    migrated.config = canonicalConfig;
+    return migrated;
+  } catch (error) {
+    warnings.push(
+      `Reaction migration fallback: ${error instanceof Error ? error.message : 'unknown error'}`
+    );
+    return newQ;
+  }
 }
 
 /**

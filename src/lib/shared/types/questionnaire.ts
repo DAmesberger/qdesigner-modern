@@ -102,6 +102,37 @@ export interface ExperimentalDesignConfig {
   seed?: number;
 }
 
+// ============================================================================
+// Distribution Types
+// ============================================================================
+
+export interface DistributionSettings {
+  anonymousAccess: boolean;
+  urlParameters?: UrlParameterConfig[];
+  completionRedirectUrl?: string;
+  completionRedirectParams?: string[];
+  completionMessage?: string;
+  panelIntegration?: PanelIntegrationConfig;
+  maxResponses?: number;
+  allowMultipleResponses?: boolean;
+  passwordProtection?: string;
+}
+
+export interface UrlParameterConfig {
+  paramName: string;
+  variableName: string;
+  required?: boolean;
+}
+
+export interface PanelIntegrationConfig {
+  provider: 'prolific' | 'mturk' | 'sona' | 'cloudresearch' | 'custom';
+  completionCode?: string;
+  completionUrl?: string;
+  prolificStudyId?: string;
+  mturkHitId?: string;
+  sonaStudyId?: string;
+}
+
 export interface DataQualitySettings {
   /** Minimum time in ms a respondent should spend on a page (default: 2000) */
   minPageTimeMs?: number;
@@ -111,6 +142,48 @@ export interface DataQualitySettings {
   flatlineThreshold?: number;
   /** Number of attention check failures before flagging (default: 1) */
   attentionFailureThreshold?: number;
+}
+
+export interface FraudPreventionSettings {
+  preventDuplicates: boolean;
+  duplicateDetectionMethod: 'fingerprint' | 'cookie' | 'ip' | 'combined';
+  enableHoneypot: boolean;
+  enableBehaviorAnalysis: boolean;
+  allowedCountries?: string[];
+  blockedCountries?: string[];
+  enableSpeederDetection: boolean;
+  speederThresholdMultiplier?: number;
+  enableFlatlineDetection: boolean;
+  flatlineThreshold?: number;
+  fraudAction: 'flag' | 'terminate' | 'redirect';
+  fraudRedirectUrl?: string;
+  fraudMessage?: string;
+}
+
+// ============================================================================
+// Quota Management Types
+// ============================================================================
+
+export interface QuotaDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  target: number;
+  current?: number;
+  condition: string;
+  overQuotaAction: 'terminate' | 'redirect' | 'skip-to-end' | 'continue';
+  overQuotaRedirectUrl?: string;
+  overQuotaMessage?: string;
+  enabled: boolean;
+}
+
+export interface QuotaGroup {
+  id: string;
+  name: string;
+  description?: string;
+  quotas: QuotaDefinition[];
+  logic: 'independent' | 'cross';
+  variables: string[];
 }
 
 export interface QuestionnaireSettings {
@@ -124,8 +197,11 @@ export interface QuestionnaireSettings {
   requireConsent?: boolean;
   requireAuthentication?: boolean;
   allowAnonymous?: boolean;
+  distribution?: DistributionSettings;
   experimentalDesign?: ExperimentalDesignConfig;
   dataQuality?: DataQualitySettings;
+  fraudPrevention?: FraudPreventionSettings;
+  quotas?: QuotaGroup[];
   metadata?: Record<string, DynamicValue>;
 }
 
@@ -421,6 +497,59 @@ export interface MatrixDisplayConfig extends BaseDisplayConfig {
   required?: 'all' | 'any' | string[];
 }
 
+export type ReactionTaskType =
+  | 'standard'
+  | 'n-back'
+  | 'stroop'
+  | 'flanker'
+  | 'iat'
+  | 'dot-probe'
+  | 'custom';
+
+export interface ReactionStudyConfig {
+  schemaVersion: number;
+  blocks?: Array<{
+    id: string;
+    name: string;
+    kind: 'practice' | 'test' | 'custom';
+    randomizeOrder?: boolean;
+    repetitions?: number;
+    trials: Array<Record<string, DynamicValue>>;
+  }>;
+  task: {
+    type: ReactionTaskType;
+    [key: string]: DynamicValue;
+  };
+  stimulus?: {
+    type?: 'text' | 'shape' | 'image' | 'video' | 'audio';
+    content?: string;
+    mediaRef?: {
+      mediaId: string;
+      mediaUrl?: string;
+      filename?: string;
+      mimeType?: string;
+      width?: number;
+      height?: number;
+      durationSeconds?: number;
+    };
+    fixation?: {
+      type?: 'cross' | 'dot';
+      duration?: number;
+    };
+  };
+  response?: {
+    validKeys?: string[];
+    timeout?: number;
+    requireCorrect?: boolean;
+  };
+  correctKey?: string;
+  feedback?: boolean;
+  practice?: boolean;
+  practiceTrials?: number;
+  testTrials?: number;
+  targetFPS?: number;
+}
+
 export interface ReactionTimeDisplayConfig extends BaseDisplayConfig {
   prompt: string;
   instruction?: string;
@@ -432,6 +561,7 @@ export interface ReactionTimeDisplayConfig extends BaseDisplayConfig {
   showFeedback?: boolean;
   practice?: boolean;
   practiceTrials?: number;
+  study?: ReactionStudyConfig;
 }
 
 export interface DateTimeDisplayConfig extends BaseDisplayConfig {

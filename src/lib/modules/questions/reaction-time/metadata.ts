@@ -2,6 +2,9 @@
 
 import type { ModuleMetadata } from '$lib/modules/types';
 import { AnswerTypes } from '../shared/answerTypes';
+import { createLegacyStarterPayload } from './model/starter-templates';
+
+const standardStarter = createLegacyStarterPayload('standard');
 
 export const metadata: ModuleMetadata = {
   type: 'reaction-time',
@@ -31,39 +34,8 @@ export const metadata: ModuleMetadata = {
     },
   },
   defaultConfig: {
-    task: {
-      type: 'standard',
-      nBack: {
-        n: 2,
-        sequenceLength: 20,
-        targetRate: 0.3,
-        stimulusSet: ['A', 'B', 'C', 'D'],
-        targetKey: 'j',
-        nonTargetKey: 'f',
-        fixationMs: 400,
-        responseTimeoutMs: 1200,
-      },
-      customTrials: [],
-    },
+    ...standardStarter,
     prompt: 'Reaction Time Task',
-    stimulus: {
-      type: 'shape',
-      content: 'circle',
-      fixation: {
-        type: 'cross',
-        duration: 500,
-      },
-    },
-    feedback: true,
-    practice: false,
-    practiceTrials: 3,
-    testTrials: 10,
-    targetFPS: 120,
-    response: {
-      validKeys: ['f', 'j'],
-      timeout: 2000,
-      requireCorrect: false,
-    },
   },
   answerType: AnswerTypes.REACTION_TIME,
 };

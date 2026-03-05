@@ -13,9 +13,16 @@
     onQueryChange,
   }: Props = $props();
 
-  let query = $state<FilterQuery>(initialQuery ?? {
+  let query = $state<FilterQuery>({
     groups: [createGroup()],
     logic: 'AND',
+  });
+
+  $effect(() => {
+    query = initialQuery ?? {
+      groups: [createGroup()],
+      logic: 'AND',
+    };
   });
 
   const OPERATORS: { value: FilterOperator; label: string }[] = [

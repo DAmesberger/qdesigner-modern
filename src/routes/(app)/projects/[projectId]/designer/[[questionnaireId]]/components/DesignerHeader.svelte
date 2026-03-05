@@ -1,10 +1,11 @@
 <script lang="ts">
   import { appPaths } from '$lib/routing/paths';
   import { designerStore } from '$lib/stores/designer.svelte';
-  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck } from 'lucide-svelte';
+  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target } from 'lucide-svelte';
   import DistributionPanel from './DistributionPanel.svelte';
   import ExperimentalDesignPanel from '$lib/components/designer/ExperimentalDesignPanel.svelte';
   import DataQualityPanel from '$lib/components/designer/DataQualityPanel.svelte';
+  import QuotaPanel from '$lib/components/designer/QuotaPanel.svelte';
   import type { PresenceUser } from '$lib/services/presence';
 
   interface Props {
@@ -21,6 +22,7 @@
   let showDistribution = $state(false);
   let showExperimentalDesign = $state(false);
   let showDataQuality = $state(false);
+  let showQuotas = $state(false);
 
   $effect(() => {
     titleValue = questionnaireName || 'Untitled Questionnaire';
@@ -231,6 +233,18 @@
     Quality
   </button>
 
+  <!-- Quotas button -->
+  <button
+    type="button"
+    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
+    onclick={() => (showQuotas = true)}
+    data-testid="designer-quotas-button"
+    title="Quota Management"
+  >
+    <Target class="h-3.5 w-3.5" />
+    Quotas
+  </button>
+
   <!-- Share button -->
   <button
     type="button"
@@ -278,3 +292,5 @@
 <ExperimentalDesignPanel bind:open={showExperimentalDesign} />
 
 <DataQualityPanel bind:open={showDataQuality} />
+
+<QuotaPanel bind:open={showQuotas} />

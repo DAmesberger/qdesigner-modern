@@ -3,6 +3,7 @@ import {
   createChartFeedbackQuestion,
   createNBackReactionQuestion,
   createSingleChoiceQuestion,
+  createVisualBlockReactionQuestion,
   pageWithQuestions,
   pageWithRandomizedBlock,
   QuestionnaireBuilder,
@@ -15,7 +16,8 @@ export type RuntimeScenarioName =
   | 'programmability'
   | 'answer-options'
   | 'chart-feedback'
-  | 'n-back';
+  | 'n-back'
+  | 'mixed-reaction';
 
 export interface RuntimeScenarioFixture {
   name: RuntimeScenarioName;
@@ -286,6 +288,107 @@ function buildNBackFixture(): RuntimeScenarioFixture {
   };
 }
 
+function buildMixedReactionFixture(): RuntimeScenarioFixture {
+  const builder = new QuestionnaireBuilder('Mixed Reaction Fixture', {
+    id: 'fixture-mixed-reaction',
+    randomizationSeed: 'seed-mixed-reaction',
+  });
+
+  const reactionQuestion = createVisualBlockReactionQuestion({
+    id: 'q_reaction_visual',
+    text: 'Visual block reaction test in mixed flow',
+    blocks: [
+      {
+        id: 'mixed-test',
+        name: 'Mixed Test',
+        kind: 'test',
+        trials: [
+          {
+            id: 'trial-1',
+            condition: 'congruent',
+            stimulus: 'LEFT',
+            validKeys: ['f', 'j'],
+            correctResponse: 'f',
+            responseTimeoutMs: 140,
+            fixationMs: 40,
+            repeat: 1,
+          },
+          {
+            id: 'trial-2',
+            condition: 'incongruent',
+            stimulus: 'RIGHT',
+            validKeys: ['f', 'j'],
+            correctResponse: 'j',
+            responseTimeoutMs: 140,
+            fixationMs: 40,
+            repeat: 1,
+          },
+          {
+            id: 'trial-3',
+            condition: 'congruent',
+            stimulus: 'LEFT',
+            validKeys: ['f', 'j'],
+            correctResponse: 'f',
+            responseTimeoutMs: 140,
+            fixationMs: 40,
+            repeat: 1,
+          },
+        ],
+      },
+    ],
+  });
+
+  const reactionConfig = reactionQuestion.config as {
+    study?: { practice?: boolean; practiceTrials?: number; testTrials?: number };
+    practice?: boolean;
+    practiceTrials?: number;
+    testTrials?: number;
+  };
+  if (reactionConfig.study) {
+    reactionConfig.study.practice = false;
+    reactionConfig.study.practiceTrials = 0;
+    reactionConfig.study.testTrials = 3;
+  }
+  reactionConfig.practice = false;
+  reactionConfig.practiceTrials = 0;
+  reactionConfig.testTrials = 3;
+
+  builder
+    .addPage(pageWithQuestions('p1', ['q_intro', 'q_reaction_visual', 'q_mixed_done']))
+    .addQuestion(
+      createSingleChoiceQuestion({
+        id: 'q_intro',
+        text: 'Press L to continue into reaction block.',
+        options: [
+          { value: 'left', label: 'Left', key: 'l' },
+          { value: 'right', label: 'Right', key: 'r' },
+        ],
+      })
+    )
+    .addQuestion(reactionQuestion)
+    .addQuestion(createAutoAdvanceQuestion('q_mixed_done', 'Mixed flow complete.'));
+
+  return {
+    name: 'mixed-reaction',
+    questionnaire: builder.build(),
+    waitForQuestionId: 'q_intro',
+    keySequence: ['l'],
+    expectedPresented: {
+      include: ['q_intro', 'q_reaction_visual', 'q_mixed_done'],
+    },
+    expectedResponse: {
+      questionId: 'q_intro',
+      value: 'left',
+      valid: true,
+    },
+    expectedReaction: {
+      questionId: 'q_reaction_visual',
+      taskType: 'custom',
+      minTrials: 3,
+    },
+  };
+}
+
 export const runtimeScenarioFixtures: Record<RuntimeScenarioName, RuntimeScenarioFixture> = {
   'control-flow': buildControlFlowFixture(),
   randomization: buildRandomizationFixture(),
@@ -293,6 +396,7 @@ export const runtimeScenarioFixtures: Record<RuntimeScenarioName, RuntimeScenari
   'answer-options': buildAnswerOptionsFixture(),
   'chart-feedback': buildChartFeedbackFixture(),
   'n-back': buildNBackFixture(),
+  'mixed-reaction': buildMixedReactionFixture(),
 };
 
 export function getRuntimeScenarioFixture(name: RuntimeScenarioName): RuntimeScenarioFixture {

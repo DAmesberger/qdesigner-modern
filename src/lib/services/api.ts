@@ -337,6 +337,11 @@ class ApiClient {
         `/api/projects/${projectId}/questionnaires/${id}/bump-version`,
         { bump_type: bumpType }
       ),
+    quotaStatus: (questionnaireId: string) =>
+      this.get<{
+        quotas: Array<{ quota_id: string; name: string; target: number; current: number; is_full: boolean }>;
+        total_completed: number;
+      }>(`/api/questionnaires/${questionnaireId}/quota-status`),
   };
 
   // === Sessions ===

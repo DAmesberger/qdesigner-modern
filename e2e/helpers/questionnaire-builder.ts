@@ -247,6 +247,142 @@ export function createNBackReactionQuestion(params: {
   };
 }
 
+export function createVisualBlockReactionQuestion(params: {
+  id: string;
+  text: string;
+  blocks?: Array<{
+    id: string;
+    name: string;
+    kind: 'practice' | 'test' | 'custom';
+    trials: Array<{
+      id: string;
+      condition?: string;
+      stimulus: string;
+      validKeys?: string[];
+      correctResponse?: string;
+      responseTimeoutMs?: number;
+      fixationMs?: number;
+      repeat?: number;
+    }>;
+  }>;
+}): RuntimeQuestion {
+  const defaultBlocks = params.blocks || [
+    {
+      id: 'practice-block',
+      name: 'Practice',
+      kind: 'practice' as const,
+      trials: [
+        {
+          id: 'practice-1',
+          condition: 'congruent',
+          stimulus: 'LEFT',
+          validKeys: ['f', 'j'],
+          correctResponse: 'f',
+          responseTimeoutMs: 1200,
+          fixationMs: 200,
+          repeat: 1,
+        },
+      ],
+    },
+    {
+      id: 'test-block',
+      name: 'Test',
+      kind: 'test' as const,
+      trials: [
+        {
+          id: 'test-1',
+          condition: 'congruent',
+          stimulus: 'LEFT',
+          validKeys: ['f', 'j'],
+          correctResponse: 'f',
+          responseTimeoutMs: 1200,
+          fixationMs: 200,
+          repeat: 2,
+        },
+        {
+          id: 'test-2',
+          condition: 'incongruent',
+          stimulus: 'RIGHT',
+          validKeys: ['f', 'j'],
+          correctResponse: 'j',
+          responseTimeoutMs: 1200,
+          fixationMs: 200,
+          repeat: 2,
+        },
+      ],
+    },
+  ];
+
+  return {
+    id: params.id,
+    type: 'reaction-time',
+    required: true,
+    text: params.text,
+    config: {
+      task: {
+        type: 'custom',
+        customTrials: [],
+      },
+      study: {
+        schemaVersion: 1,
+        task: {
+          type: 'custom',
+        },
+        blocks: defaultBlocks.map((block) => ({
+          id: block.id,
+          name: block.name,
+          kind: block.kind,
+          randomizeOrder: false,
+          repetitions: 1,
+          trials: block.trials.map((trial) => ({
+            id: trial.id,
+            condition: trial.condition || '',
+            repeat: trial.repeat ?? 1,
+            stimulus: {
+              kind: 'text',
+              text: trial.stimulus,
+              fontPx: 64,
+            },
+            validKeys: trial.validKeys || ['f', 'j'],
+            correctResponse: trial.correctResponse || '',
+            requireCorrect: true,
+            responseTimeoutMs: trial.responseTimeoutMs ?? 1200,
+            fixationMs: trial.fixationMs ?? 200,
+          })),
+        })),
+        stimulus: {
+          type: 'text',
+          content: '',
+          fixation: {
+            type: 'cross',
+            duration: 200,
+          },
+        },
+        response: {
+          validKeys: ['f', 'j'],
+          timeout: 1200,
+          requireCorrect: true,
+        },
+        correctKey: '',
+        feedback: true,
+        practice: true,
+        practiceTrials: 1,
+        testTrials: 4,
+        targetFPS: 120,
+      },
+      response: {
+        validKeys: ['f', 'j'],
+        timeout: 1200,
+        requireCorrect: true,
+      },
+      targetFPS: 120,
+      practice: true,
+      practiceTrials: 1,
+      testTrials: 4,
+    },
+  };
+}
+
 export function pageWithQuestions(id: string, questions: string[]): RuntimePage {
   return {
     id,

@@ -28,6 +28,16 @@ Question modules can provide `ModuleMetadata.questionRuntime` with contract `v1`
 
 `QuestionnaireRuntime` resolves this runtime contract automatically and falls back to presenter/collector mode for legacy modules.
 
+## Visual Study Blocks (Designer-First)
+
+Reaction tasks can be authored as canonical `study.blocks` with:
+
+- block-level structure (`practice`, `test`, `custom`)
+- trial templates (stimulus, timing, response mapping, condition labels)
+- optional custom phase timelines per trial (`schedulePhase`)
+
+When `study.blocks` are present, the runtime compiles and executes those blocks directly, so task logic is no longer tied to hardcoded paradigm branches.
+
 ## n-back Preset
 
 `createNBackTrials` builds configurable `n-back` trial sequences:

@@ -14,6 +14,8 @@
   import { QuestionnaireAccessService } from '$lib/fillout/services/QuestionnaireAccessService';
   import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
   import { FilloutSyncEngine } from '$lib/fillout/services/FilloutSyncEngine';
+  import { QuotaService } from '$lib/fillout/services/QuotaService';
+  import { FraudDetectionService } from '$lib/fillout/services/FraudDetectionService';
   import { api } from '$lib/services/api';
 
   interface Props {
@@ -31,10 +33,14 @@
   let loadingMessage = $state('Loading questionnaire...');
   let loadingProgress = $state(0);
   let error = $state<string | null>(null);
-  let currentScreen = $state<'welcome' | 'consent' | 'runtime' | 'complete'>('welcome');
+  let currentScreen = $state<'welcome' | 'consent' | 'runtime' | 'complete' | 'over-quota'>('welcome');
+  let overQuotaMessage = $state<string>('');
   let session = $state<any>(null);
   let completedSession = $state<any>(null);
   let conditionGroupCounts = $state<number[] | undefined>(undefined);
+
+  // Fraud prevention state
+  let fraudFingerprint = $state<string | undefined>(undefined);
 
   // Offline state
   let isOffline = $state(!navigator.onLine);
@@ -106,6 +112,40 @@
     try {
       loading = true;
 
+      // Fraud prevention checks before session creation
+      const fpSettings = data.questionnaire.definition.settings?.fraudPrevention;
+      if (fpSettings && navigator.onLine) {
+        const fraudResult = await FraudDetectionService.checkAll(
+          data.questionnaire.id,
+          fpSettings
+        );
+        fraudFingerprint = fraudResult.fingerprint;
+
+        // Server-side duplicate check via fingerprint
+        if (fpSettings.preventDuplicates && fraudResult.fingerprint) {
+          const dupCheck = await FraudDetectionService.checkDuplicateViaAPI(
+            data.questionnaire.id,
+            fraudResult.fingerprint
+          );
+          if (dupCheck.isDuplicate) {
+            fraudResult.flags.push('duplicate_fingerprint');
+            fraudResult.passed = false;
+          }
+        }
+
+        if (!fraudResult.passed) {
+          if (fpSettings.fraudAction === 'terminate') {
+            error = fpSettings.fraudMessage || 'This survey is not available for your submission.';
+            loading = false;
+            return;
+          } else if (fpSettings.fraudAction === 'redirect' && fpSettings.fraudRedirectUrl) {
+            window.location.href = fpSettings.fraudRedirectUrl;
+            return;
+          }
+          // 'flag' action: continue but store the flags in session metadata later
+        }
+      }
+
       if (navigator.onLine) {
         // Online: use the existing API flow
         const { session: newSession } = await QuestionnaireAccessService.createOrResumeSession(
@@ -134,14 +174,49 @@
 
       sessionStorage.setItem('qd_api_session_id', session.id);
 
-      // Store consent data
-      if (consentData && navigator.onLine) {
+      // Store consent data, URL params, and fingerprint as session metadata
+      if (navigator.onLine) {
+        const metadata: Record<string, unknown> = {};
+        if (consentData) {
+          metadata.consent = { ...consentData, timestamp: new Date().toISOString() };
+        }
+        if (data.urlParams && Object.keys(data.urlParams).length > 0) {
+          metadata.urlParams = data.urlParams;
+        }
+        if (fraudFingerprint) {
+          metadata.fingerprint = fraudFingerprint;
+        }
+        if (Object.keys(metadata).length > 0) {
+          try {
+            await api.sessions.update(session.id, { metadata } as any);
+          } catch (err) {
+            console.error('Failed to store session metadata:', err);
+          }
+        }
+      }
+
+      // Check quotas before starting runtime (online only)
+      const quotaGroups = data.questionnaire.definition?.settings?.quotas;
+      if (navigator.onLine && quotaGroups && quotaGroups.length > 0) {
         try {
-          await api.sessions.update(session.id, {
-            metadata: { consent: { ...consentData, timestamp: new Date().toISOString() } },
-          } as any);
-        } catch (err) {
-          console.error('Failed to store consent data:', err);
+          const urlParams = new Map(Object.entries(data.urlParams ?? {}));
+          const quotaResult = await QuotaService.checkQuotas(
+            data.questionnaire.id,
+            quotaGroups,
+            urlParams
+          );
+          if (!quotaResult.allowed) {
+            if (quotaResult.action === 'redirect' && quotaResult.redirectUrl) {
+              window.location.href = quotaResult.redirectUrl;
+              return;
+            }
+            overQuotaMessage = quotaResult.message || 'This study has reached its target number of participants.';
+            currentScreen = 'over-quota';
+            loading = false;
+            return;
+          }
+        } catch {
+          // Non-critical: allow participation if quota check fails
         }
       }
 
@@ -196,6 +271,9 @@
           completedSession = completed;
           currentScreen = 'complete';
           savedLocally = true;
+
+          // Mark completed for fraud prevention duplicate detection
+          FraudDetectionService.markCompleted(data.questionnaire.id);
 
           // Mark offline session complete
           await OfflineSessionService.completeSession(session.id).catch(() => {});
@@ -320,10 +398,21 @@
     <div class="html-overlay" data-testid="fillout-runtime-overlay">
       <!-- Dynamic HTML content rendered here -->
     </div>
+  {:else if currentScreen === 'over-quota'}
+    <div class="loading-container" data-testid="fillout-over-quota">
+      <EmptyState
+        title="Study Full"
+        description={overQuotaMessage}
+        buttonText="Go back"
+        onAction={() => goto('/')}
+      />
+    </div>
   {:else if currentScreen === 'complete'}
     <CompletionScreen
       session={completedSession}
-      customMessage={data.questionnaire.definition.completionMessage}
+      customMessage={data.questionnaire.definition.settings?.distribution?.completionMessage || data.questionnaire.definition.completionMessage}
+      distributionSettings={data.questionnaire.definition.settings?.distribution}
+      urlParams={data.urlParams}
       showStatistics={true}
       onClose={() => goto('/')}
     />

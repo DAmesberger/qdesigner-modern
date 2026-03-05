@@ -96,6 +96,28 @@ export interface PipelineResult {
   }>;
 }
 
+export interface ReactionConditionSummary {
+  count: number;
+  meanRT: number;
+  accuracy: number;
+  timeoutRate: number;
+}
+
+export interface ReactionDerivedSummary {
+  congruencyEffectMs?: number | null;
+  dotProbeBiasMs?: number | null;
+  iatDScore?: number | null;
+}
+
+export interface ReactionScoringInput {
+  averageRT?: number | null;
+  accuracy?: number | null;
+  timeouts?: number;
+  byCondition?: Record<string, ReactionConditionSummary>;
+  byBlock?: Record<string, ReactionConditionSummary>;
+  derived?: ReactionDerivedSummary;
+}
+
 // ── Pipeline ───────────────────────────────────────────────────────
 
 export class ScoringPipeline {
@@ -138,6 +160,24 @@ export class ScoringPipeline {
       this.computeScore(def, responses)
     );
     return { scores };
+  }
+
+  /**
+   * Execute scoring with reaction-metric helpers merged into scope.
+   * This enables formulas like:
+   * - `reaction_congruency_effect_ms`
+   * - `condition_congruent_mean_rt`
+   * - `block_test_accuracy`
+   */
+  executeWithReactionScope(
+    responses: Record<string, number>,
+    reaction: ReactionScoringInput
+  ): PipelineResult {
+    const reactionScope = ScoringPipeline.buildReactionScope(reaction);
+    return this.execute({
+      ...responses,
+      ...reactionScope,
+    });
   }
 
   /**
@@ -185,6 +225,42 @@ export class ScoringPipeline {
 
   // ── Internal ─────────────────────────────────────────────────────
 
+  static buildReactionScope(reaction: ReactionScoringInput): Record<string, number> {
+    const scope: Record<string, number> = {};
+
+    if (typeof reaction.averageRT === 'number') {
+      scope.reaction_average_rt = reaction.averageRT;
+    }
+    if (typeof reaction.accuracy === 'number') {
+      scope.reaction_accuracy = reaction.accuracy;
+    }
+    if (typeof reaction.timeouts === 'number') {
+      scope.reaction_timeouts = reaction.timeouts;
+    }
+
+    if (reaction.derived) {
+      if (typeof reaction.derived.congruencyEffectMs === 'number') {
+        scope.reaction_congruency_effect_ms = reaction.derived.congruencyEffectMs;
+      }
+      if (typeof reaction.derived.dotProbeBiasMs === 'number') {
+        scope.reaction_dot_probe_bias_ms = reaction.derived.dotProbeBiasMs;
+      }
+      if (typeof reaction.derived.iatDScore === 'number') {
+        scope.reaction_iat_d_score = reaction.derived.iatDScore;
+      }
+    }
+
+    Object.entries(reaction.byCondition || {}).forEach(([condition, summary]) => {
+      addDimensionSummary(scope, 'condition', condition, summary);
+    });
+
+    Object.entries(reaction.byBlock || {}).forEach(([blockId, summary]) => {
+      addDimensionSummary(scope, 'block', blockId, summary);
+    });
+
+    return scope;
+  }
+
   private computeScore(
     def: ScoreDefinition,
     scope: Record<string, number>
@@ -231,4 +307,22 @@ export class ScoringPipeline {
 
     return result;
   }
+}
+
+function addDimensionSummary(
+  scope: Record<string, number>,
+  prefix: 'condition' | 'block',
+  label: string,
+  summary: ReactionConditionSummary
+): void {
+  const safeLabel = normalizeScopeLabel(label);
+  scope[`${prefix}_${safeLabel}_count`] = summary.count;
+  scope[`${prefix}_${safeLabel}_mean_rt`] = summary.meanRT;
+  scope[`${prefix}_${safeLabel}_accuracy`] = summary.accuracy;
+  scope[`${prefix}_${safeLabel}_timeout_rate`] = summary.timeoutRate;
+}
+
+function normalizeScopeLabel(label: string): string {
+  const normalized = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return normalized || 'default';
 }

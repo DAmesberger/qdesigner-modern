@@ -125,14 +125,27 @@ export const AnswerTypes = {
   REACTION_TIME: {
     type: 'reaction_time',
     dataType: 'object',
-    aggregations: ['mean_rt', 'median_rt', 'min_rt', 'max_rt', 'accuracy', 'outliers'],
+    aggregations: [
+      'mean_rt',
+      'median_rt',
+      'min_rt',
+      'max_rt',
+      'accuracy',
+      'outliers',
+      'by_condition',
+      'by_block',
+      'derived_metrics',
+    ],
     transformations: ['remove_outliers', 'log_transform', 'z_score'],
     schema: {
-      reactionTime: 'number',
-      correct: 'boolean',
-      stimulus: 'string',
-      response: 'string',
-      timestamp: 'number'
+      responses: 'Array<TrialResponse>',
+      averageRT: 'number | null',
+      accuracy: 'number | null',
+      timeouts: 'number',
+      byCondition: 'Record<string, {count: number, meanRT: number, accuracy: number, timeoutRate: number}>',
+      byBlock: 'Record<string, {count: number, meanRT: number, accuracy: number, timeoutRate: number}>',
+      derived: '{congruencyEffectMs?: number | null, dotProbeBiasMs?: number | null, iatDScore?: number | null}',
+      trialMetadata: '{blockId?: string, condition?: string, taskType?: string}'
     }
   } as AnswerType,
   

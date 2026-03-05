@@ -14,7 +14,8 @@
     | 'programmability'
     | 'answer-options'
     | 'chart-feedback'
-    | 'n-back';
+    | 'n-back'
+    | 'mixed-reaction';
 
   interface RuntimeDebugState {
     scenario: ScenarioName;
@@ -47,6 +48,7 @@
     'answer-options',
     'chart-feedback',
     'n-back',
+    'mixed-reaction',
   ];
 
   let canvas: HTMLCanvasElement;
@@ -434,6 +436,8 @@
     const questionnaire = fixtureQuestionnaire ?? buildScenarioQuestionnaire(scenario);
     resetDebugState(scenario);
     updateDebugState((state) => {
+      // Preserve module readiness across per-run state resets for E2E harness synchronization.
+      state.modulesReady = modulesReady;
       state.startedAt = Date.now();
     });
 
@@ -474,19 +478,41 @@
   }
 
   onMount(() => {
-    if (!canvas) {
-      return () => {};
-    }
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-
-    resize();
-    window.addEventListener('resize', resize);
+    let removeResizeListener: (() => void) | null = null;
 
     const init = async () => {
+      if (!canvas) {
+        await tick();
+      }
+
+      if (!canvas) {
+        const fallbackCanvas = document.querySelector(
+          '[data-testid="test-runtime-canvas"]'
+        ) as HTMLCanvasElement | null;
+        if (fallbackCanvas) {
+          canvas = fallbackCanvas;
+        }
+      }
+
+      if (!canvas) {
+        errorMessage = 'Runtime canvas is not ready yet.';
+        updateDebugState((state) => {
+          state.errors.push('Runtime canvas is not ready yet.');
+        });
+        return;
+      }
+
+      const resize = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      };
+
+      resize();
+      window.addEventListener('resize', resize);
+      removeResizeListener = () => {
+        window.removeEventListener('resize', resize);
+      };
+
       const params = new URLSearchParams(window.location.search);
       const requestedScenario = params.get('scenario');
       const fixturePayload = params.get('fixture');
@@ -537,7 +563,7 @@
     void init();
 
     return () => {
-      window.removeEventListener('resize', resize);
+      removeResizeListener?.();
       runtime?.stop();
     };
   });

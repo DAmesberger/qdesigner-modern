@@ -61,6 +61,12 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		throw error(403, 'This questionnaire has ended');
 	}
 
+	// Extract all URL search params for distribution/variable mapping
+	const urlParams: Record<string, string> = {};
+	for (const [key, value] of url.searchParams.entries()) {
+		urlParams[key] = value;
+	}
+
 	// Check for existing participant session via URL params
 	const participantId = url.searchParams.get('pid');
 	const sessionId = url.searchParams.get('sid');
@@ -106,6 +112,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		existingSession,
 		code,
 		participantId,
+		urlParams,
 		preview: url.searchParams.get('preview') === 'true',
 		isOffline: !navigator.onLine,
 	};
