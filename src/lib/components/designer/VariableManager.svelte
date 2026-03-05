@@ -4,6 +4,7 @@
   import FormulaEditor from './FormulaEditor.svelte';
   import { onMount } from 'svelte';
   import { Hash, Type, ToggleLeft, Calendar, Clock, List, Box, Zap, Target, HelpCircle, Pencil, Trash2, Network, Plus } from 'lucide-svelte';
+  import HelpTip from '$lib/help/components/HelpTip.svelte';
 
   let showAddVariable = $state(false);
   let editingVariable = $state<Variable | null>(null);
@@ -310,7 +311,7 @@
 <div class="bg-card rounded-[var(--radius)] shadow-[var(--shadow-sm)] border border-border">
   <div class="p-4 border-b border-border">
     <div class="flex items-center justify-between">
-      <h3 class="text-sm font-semibold text-foreground">Variables</h3>
+      <h3 class="text-sm font-semibold text-foreground flex items-center gap-1">Variables <HelpTip helpKey="variables.overview" /></h3>
       <div class="flex items-center space-x-2">
         <button
           onclick={() => (showDependencyGraph = !showDependencyGraph)}
@@ -489,7 +490,7 @@
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1" for="var-type">Type</label>
+          <label class="text-sm font-medium text-foreground mb-1 flex items-center gap-1" for="var-type">Type <HelpTip helpKey="variables.types.number" /></label>
           <select
             id="var-type"
             value={editingVariable ? editingVariable.type : newVariable.type}
@@ -534,8 +535,8 @@
 
         <div>
           <div class="flex items-center justify-between mb-1">
-            <label class="block text-sm font-medium text-foreground" for="var-formula"
-              >Formula (optional)</label
+            <label class="text-sm font-medium text-foreground flex items-center gap-1" for="var-formula"
+              >Formula (optional) <HelpTip helpKey="variables.formula.description" /></label
             >
             <button
               type="button"

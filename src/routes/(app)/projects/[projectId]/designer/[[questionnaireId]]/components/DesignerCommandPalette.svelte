@@ -1,5 +1,6 @@
 <script lang="ts">
   import { designerStore } from '$lib/stores/designer.svelte';
+  import { tourEngine } from '$lib/help/tours/TourEngine.svelte';
   import { Search } from 'lucide-svelte';
 
   interface Props {
@@ -187,6 +188,41 @@
       run: () => {
         (window as any).__designerTestRunner?.show();
       },
+    },
+    // Help
+    {
+      id: 'help-getting-started',
+      title: 'Getting Started Tour',
+      section: 'Help',
+      run: async () => {
+        const mod = await import('$lib/help/tours/definitions/designerIntro');
+        const tour = mod.designerIntroTour;
+        if (tour) tourEngine.start(tour);
+      },
+    },
+    {
+      id: 'help-variables-tour',
+      title: 'Variables Tutorial',
+      section: 'Help',
+      run: async () => {
+        const mod = await import('$lib/help/tours/definitions/variablesTour');
+        const tour = mod.variablesTour;
+        if (tour) tourEngine.start(tour);
+      },
+    },
+    {
+      id: 'help-formula-reference',
+      title: 'Formula Reference',
+      shortcut: '?',
+      section: 'Help',
+      run: () => designerStore.setPanel('help'),
+    },
+    {
+      id: 'help-keyboard-shortcuts',
+      title: 'Keyboard Shortcuts',
+      shortcut: 'Ctrl+/',
+      section: 'Help',
+      run: () => designerStore.setPanel('help'),
     },
   ]);
 

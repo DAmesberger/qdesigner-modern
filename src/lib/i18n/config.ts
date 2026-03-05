@@ -40,7 +40,8 @@ export const namespaces = [
   'designer',
   'fillout',
   'admin',
-  'onboarding'
+  'onboarding',
+  'help'
 ];
 
 // Enhanced language detection options

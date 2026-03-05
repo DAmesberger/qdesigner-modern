@@ -14,6 +14,7 @@
     DEFAULT_RANGE_COLORS,
     validateScoreInterpreterConfig,
   } from '$lib/runtime/feedback/ScoreInterpreter';
+  import HelpTip from '$lib/help/components/HelpTip.svelte';
 
   interface Props {
     analytics?: any;
@@ -233,7 +234,7 @@
 
     <div class="grid-two">
       <div class="row">
-        <label for="stats-source-mode">Source Mode</label>
+        <label for="stats-source-mode" class="flex items-center gap-1">Source Mode <HelpTip helpKey="statisticalFeedback.sourceModes" /></label>
         <select
           id="stats-source-mode"
           class="input"
@@ -270,7 +271,7 @@
       </div>
 
       <div class="row">
-        <label for="stats-chart-type">Chart Type</label>
+        <label for="stats-chart-type" class="flex items-center gap-1">Chart Type <HelpTip helpKey="statisticalFeedback.charts" /></label>
         <select
           id="stats-chart-type"
           class="input"
@@ -284,6 +285,12 @@
         >
           <option value="bar">Bar</option>
           <option value="line">Line</option>
+          <option value="radar">Radar / Spider</option>
+          <option value="scatter">Scatter</option>
+          <option value="histogram">Histogram</option>
+          <option value="box">Box Plot</option>
+          <option value="bell-curve">Bell Curve (Normal Distribution)</option>
+          <option value="gauge">Gauge / Arc</option>
         </select>
       </div>
 

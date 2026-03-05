@@ -2,6 +2,9 @@
   import { onMount, onDestroy } from 'svelte';
   import type { editor } from 'monaco-editor';
   import { registerFormulaProviders, qdesignerTheme, qdesignerDarkTheme } from '$lib/core/scripting/MonacoConfig';
+  import { BookOpen } from 'lucide-svelte';
+
+  let showFormulaRef = $state(false);
 
   interface Props {
     value?: string;
@@ -166,6 +169,17 @@
 </script>
 
 <div class="formula-editor" style="height: {height}">
+  <div class="absolute top-1 right-1 z-10">
+    <button
+      type="button"
+      class="flex items-center gap-1 px-2 py-1 text-xs rounded bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+      onclick={() => (showFormulaRef = !showFormulaRef)}
+      title="Formula Reference"
+    >
+      <BookOpen class="w-3 h-3" />
+      Reference
+    </button>
+  </div>
   {#if isLoading}
     <div class="loading-container">
       <div class="loading-spinner"></div>
@@ -174,6 +188,12 @@
   {/if}
   <div bind:this={container} class="monaco-container" class:loading={isLoading}></div>
 </div>
+
+{#if showFormulaRef}
+  {#await import('$lib/help/components/FormulaReferenceSheet.svelte') then { default: FormulaReferenceSheet }}
+    <FormulaReferenceSheet onclose={() => (showFormulaRef = false)} />
+  {/await}
+{/if}
 
 <style>
   .formula-editor {

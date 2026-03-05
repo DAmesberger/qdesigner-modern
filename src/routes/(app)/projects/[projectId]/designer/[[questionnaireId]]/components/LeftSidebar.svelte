@@ -7,6 +7,7 @@
   import BlockManager from '$lib/components/designer/BlockManager.svelte';
   import VariableManager from '$lib/components/designer/VariableManager.svelte';
   import FlowControlManager from '$lib/components/designer/FlowControlManager.svelte';
+  import HelpPanel from '$lib/help/components/HelpPanel.svelte';
   import { Layers, Plus, Library, Variable, GitBranch, Eye, LayoutGrid, HelpCircle, X } from 'lucide-svelte';
 
   const railItems: { id: Exclude<DesignerPanel, null | 'help'>; label: string; position: 'top' }[] = [
@@ -18,7 +19,7 @@
   ];
 
   let isMobile = $state(false);
-  const flyoutOpen = $derived(designerStore.activePanel !== null && designerStore.activePanel !== 'help');
+  const flyoutOpen = $derived(designerStore.activePanel !== null);
 
   const flyoutTitle = $derived.by(() => {
     switch (designerStore.activePanel) {
@@ -27,6 +28,7 @@
       case 'templates': return 'Template Library';
       case 'variables': return 'Variables';
       case 'flow': return 'Flow Control';
+      case 'help': return 'Help & Learning';
       default: return '';
     }
   });
@@ -71,8 +73,8 @@
     );
   }
 
-  function showKeyboardHelp() {
-    designerStore.toggleCommandPalette(true);
+  function showHelp() {
+    handleRailClick('help');
   }
 </script>
 
@@ -147,8 +149,8 @@
       <button
         type="button"
         class="w-9 h-9 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-150"
-        onclick={showKeyboardHelp}
-        title="Keyboard shortcuts (Ctrl+K)"
+        onclick={showHelp}
+        title="Help & Learning"
         aria-label="Help"
         data-testid="rail-help"
       >
@@ -195,6 +197,8 @@
           <VariableManager />
         {:else if designerStore.activePanel === 'flow'}
           <FlowControlManager />
+        {:else if designerStore.activePanel === 'help'}
+          <HelpPanel />
         {/if}
       </div>
     </aside>
@@ -247,6 +251,8 @@
           <VariableManager />
         {:else if designerStore.activePanel === 'flow'}
           <FlowControlManager />
+        {:else if designerStore.activePanel === 'help'}
+          <HelpPanel />
         {:else}
           <div class="p-4 text-sm text-muted-foreground">Select a tool from the tabs above.</div>
         {/if}

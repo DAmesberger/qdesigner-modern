@@ -16,6 +16,9 @@
   import StructuralCanvas from './StructuralCanvas.svelte';
   import DesignerCommandPalette from './components/DesignerCommandPalette.svelte';
   import ScriptEditorOverlay from '$lib/components/designer/ScriptEditorOverlay.svelte';
+  import TourOverlay from '$lib/help/components/TourOverlay.svelte';
+  import { tourEngine } from '$lib/help/tours/TourEngine.svelte';
+  import { helpStore } from '$lib/help/stores/helpStore.svelte';
 
   interface Props {
     data: PageData;
@@ -211,6 +214,12 @@
       }
     }
 
+    if (event.key === '?' && !isInput && !isMeta) {
+      event.preventDefault();
+      designerStore.setPanel('help');
+      return;
+    }
+
     if (event.key === 'Escape') {
       if (designerStore.previewMode) {
         designerStore.togglePreview(false);
@@ -233,9 +242,20 @@
     }
   }
 
+  async function maybeStartDesignerTour() {
+    if (helpStore.hasTourCompleted('designer-intro')) return;
+    try {
+      const mod = await import('$lib/help/tours/definitions/designerIntro');
+      const tour = mod.designerIntroTour;
+      if (tour) tourEngine.start(tour);
+    } catch { /* tour definition not available yet */ }
+  }
+
   onMount(() => {
     void initializeDesigner().then(() => {
       connectPresence();
+      // Auto-trigger designer intro tour on first visit (slight delay for DOM)
+      setTimeout(maybeStartDesignerTour, 800);
     });
 
     const handleOpenScriptEditor = (e: Event) => {
@@ -289,6 +309,7 @@
   isOpen={designerStore.showCommandPalette}
   onclose={() => designerStore.toggleCommandPalette(false)}
 />
+<TourOverlay />
 {#if scriptEditorOpen && scriptEditorQuestion}
   <ScriptEditorOverlay
     question={scriptEditorQuestion}

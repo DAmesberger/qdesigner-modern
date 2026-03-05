@@ -14,6 +14,9 @@
   import { t } from '$lib/i18n/hooks';
   import { ws, type WsEvent } from '$lib/services/ws';
   import { api } from '$lib/services/api';
+  import TourOverlay from '$lib/help/components/TourOverlay.svelte';
+  import { tourEngine } from '$lib/help/tours/TourEngine.svelte';
+  import { helpStore } from '$lib/help/stores/helpStore.svelte';
 
   interface Props {
     data: PageData;
@@ -115,12 +118,23 @@
     }
   }
 
+  async function maybeStartWelcomeTour() {
+    if (helpStore.hasTourCompleted('dashboard-welcome')) return;
+    try {
+      const mod = await import('$lib/help/tours/definitions/dashboardWelcome');
+      const tour = mod.dashboardWelcomeTour;
+      if (tour) tourEngine.start(tour);
+    } catch { /* tour definition not available yet */ }
+  }
+
   onMount(() => {
     // Defer subscription until questionnaires are loaded
     if (questionnaires.length > 0) {
       subscribeRealtime();
       loadSparklines();
     }
+    // Auto-trigger welcome tour on first visit
+    setTimeout(maybeStartWelcomeTour, 600);
   });
 
   onDestroy(() => {
@@ -533,3 +547,4 @@
     </div>
   </div>
 </div>
+<TourOverlay />

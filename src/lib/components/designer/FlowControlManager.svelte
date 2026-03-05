@@ -4,6 +4,7 @@
   import { nanoid } from 'nanoid';
   import FlowControlEditor from './flow/FlowControlEditor.svelte';
   import { CornerDownRight, GitBranch, Repeat, Square, HelpCircle, Pencil, Trash2, Plus, Map, X } from 'lucide-svelte';
+  import HelpTip from '$lib/help/components/HelpTip.svelte';
 
   // Use derived state instead of local state + subscribe
   let flowControls = $derived(designerStore.questionnaire.flow || []);
@@ -136,7 +137,7 @@
 
 <div class="bg-card rounded-[var(--radius)] shadow-[var(--shadow-sm)] border border-border text-card-foreground p-4">
   <div class="flex items-center justify-between mb-4">
-    <h3 class="text-sm font-semibold text-foreground">Flow Control</h3>
+    <h3 class="text-sm font-semibold text-foreground flex items-center gap-1">Flow Control <HelpTip helpKey="flowControl.overview" /></h3>
     <div class="flex gap-2">
       <button
         onclick={() => (showFlowEditor = true)}
@@ -288,9 +289,9 @@
           <div>
             <label
               for="flow-type"
-              class="text-sm font-medium text-foreground mb-2 block"
+              class="text-sm font-medium text-foreground mb-2 flex items-center gap-1"
             >
-              Type
+              Type <HelpTip helpKey="flowControl.branch" />
             </label>
             <select
               id="flow-type"
@@ -310,9 +311,9 @@
           <div>
             <label
               for="flow-condition"
-              class="text-sm font-medium text-foreground mb-2 block"
+              class="text-sm font-medium text-foreground mb-2 flex items-center gap-1"
             >
-              Condition
+              Condition <HelpTip helpKey="flowControl.conditions" />
             </label>
             <input
               id="flow-condition"
