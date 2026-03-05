@@ -4,6 +4,8 @@
   import { autoSave } from '$lib/services/autoSave.svelte';
   import { ws } from '$lib/services/ws';
   import { PresenceService, type PresenceUser } from '$lib/services/presence';
+  import { CollaborativeDesigner } from '$lib/collaboration/CollaborativeDesigner';
+  import { auth } from '$lib/services/auth';
   import type { PageData } from './$types';
 
   import DesignerHeader from './components/DesignerHeader.svelte';
@@ -24,6 +26,10 @@
   let scriptEditorOpen = $state(false);
   let scriptEditorQuestion = $state<any>(null);
   let scriptEditorCleanup: (() => void) | null = null;
+
+  // Collaborative editing
+  let collab: CollaborativeDesigner | null = null;
+  let collabCleanup: (() => void) | null = null;
 
   // Presence state
   let presence: PresenceService | null = null;
@@ -103,6 +109,23 @@
     }
 
     autoSave.start();
+
+    // Wire up collaborative editing if online with a valid questionnaire
+    const questionnaireId = designerStore.questionnaire?.id;
+    const token = auth.getAccessToken();
+    if (questionnaireId && token) {
+      collab = new CollaborativeDesigner();
+      collab.init(designerStore.questionnaire, {
+        questionnaireId,
+        token,
+      });
+      // Register collab with the store so mutations flow through Yjs
+      designerStore.setCollab(collab);
+      // Sync Yjs changes (local + remote) back into the designer store
+      collabCleanup = collab.onChange((updated) => {
+        designerStore.applyRemoteUpdate(updated);
+      });
+    }
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -226,6 +249,10 @@
   onDestroy(() => {
     autoSave.stop();
     disconnectPresence();
+    designerStore.setCollab(null);
+    collabCleanup?.();
+    collab?.destroy();
+    collab = null;
     scriptEditorCleanup?.();
   });
 </script>
@@ -250,7 +277,7 @@
       {/if}
     </main>
 
-    <RightSidebar />
+    <RightSidebar questionnaireId={designerStore.questionnaire?.id ?? ''} />
   </div>
 </div>
 

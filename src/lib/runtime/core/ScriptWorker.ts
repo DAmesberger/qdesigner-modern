@@ -41,15 +41,65 @@ export interface WorkerResponse {
 const WORKER_SOURCE = `
 "use strict";
 
+// Static pattern check for prototype-chain escapes
+var BANNED_PATTERN = /\\.(constructor|__proto__|__defineGetter__|__defineSetter__|__lookupGetter__|__lookupSetter__)\\b/;
+
+// Safe facades — built from Object.create(null), no .constructor chain
+var safeNumber = Object.freeze(Object.assign(Object.create(null), {
+  isFinite: Number.isFinite,
+  isInteger: Number.isInteger,
+  isNaN: Number.isNaN,
+  isSafeInteger: Number.isSafeInteger,
+  parseFloat: Number.parseFloat,
+  parseInt: Number.parseInt,
+  MAX_SAFE_INTEGER: Number.MAX_SAFE_INTEGER,
+  MIN_SAFE_INTEGER: Number.MIN_SAFE_INTEGER,
+  EPSILON: Number.EPSILON
+}));
+
+var safeString = Object.freeze(Object.assign(Object.create(null), {
+  fromCharCode: String.fromCharCode,
+  fromCodePoint: String.fromCodePoint
+}));
+
+var safeBoolean = Object.freeze(Object.create(null));
+
+var safeArray = Object.freeze(Object.assign(Object.create(null), {
+  isArray: Array.isArray,
+  from: Array.from,
+  of: Array.of
+}));
+
+var safeObject = Object.freeze(Object.assign(Object.create(null), {
+  keys: Object.keys,
+  values: Object.values,
+  entries: Object.entries,
+  assign: Object.assign,
+  freeze: Object.freeze,
+  is: Object.is,
+  fromEntries: Object.fromEntries,
+  create: Object.create
+}));
+
+var safeDate = Object.freeze(Object.assign(Object.create(null), {
+  now: Date.now,
+  parse: Date.parse,
+  UTC: Date.UTC
+}));
+
+var safeRegExp = Object.freeze(Object.create(null));
+var safeMap = Object.freeze(Object.create(null));
+var safeSet = Object.freeze(Object.create(null));
+
 // Allowed built-ins — frozen snapshot so user code cannot mutate them.
-const SAFE_GLOBALS = Object.freeze({
+var SAFE_GLOBALS = Object.freeze({
   Math: Math,
-  Number: Number,
-  String: String,
-  Boolean: Boolean,
-  Array: Array,
-  Object: Object,
-  Date: Date,
+  Number: safeNumber,
+  String: safeString,
+  Boolean: safeBoolean,
+  Array: safeArray,
+  Object: safeObject,
+  Date: safeDate,
   JSON: JSON,
   parseInt: parseInt,
   parseFloat: parseFloat,
@@ -58,10 +108,9 @@ const SAFE_GLOBALS = Object.freeze({
   NaN: NaN,
   Infinity: Infinity,
   undefined: undefined,
-  RegExp: RegExp,
-  Map: Map,
-  Set: Set,
-  // No console — we capture logs via the context
+  RegExp: safeRegExp,
+  Map: safeMap,
+  Set: safeSet
 });
 
 self.onmessage = function(e) {
@@ -70,6 +119,12 @@ self.onmessage = function(e) {
   var script = msg.script;
   var context = msg.context || {};
   var timeout = msg.timeout || 5000;
+
+  // Static rejection
+  if (BANNED_PATTERN.test(script)) {
+    self.postMessage({ id: id, success: false, error: "Script rejected: banned property access pattern", logs: [] });
+    return;
+  }
 
   // Soft internal timeout
   var timedOut = false;
@@ -105,6 +160,11 @@ self.onmessage = function(e) {
         if (prop === Symbol.unscopables) return undefined;
         if (prop === "constructor") return undefined;
         if (prop === "__proto__") return undefined;
+        if (prop === "prototype") return undefined;
+        if (prop === "__defineGetter__") return undefined;
+        if (prop === "__defineSetter__") return undefined;
+        if (prop === "__lookupGetter__") return undefined;
+        if (prop === "__lookupSetter__") return undefined;
         return target[prop];
       }
     });

@@ -7,6 +7,7 @@ import {
 } from './designer/UiStore';
 import { DesignerPersistenceService } from './designer/PersistenceService';
 import { VariableEngine } from '$lib/scripting-engine';
+import type { CollaborativeDesigner } from '$lib/collaboration/CollaborativeDesigner';
 
 export type SelectedItem = Question | Page | Block | Variable;
 export type SelectedItemType = 'question' | 'page' | 'block' | 'variable' | null;
@@ -65,15 +66,21 @@ class DesignerStore {
   // Variable engine
   variableEngine: VariableEngine | null = null;
 
+  // Collaborative editing
+  private collab: CollaborativeDesigner | null = null;
+  private isApplyingRemote = false;
+
   constructor() {
     this.syncUiState(this.uiStore.getState());
   }
 
   get canUndo() {
+    if (this.collab) return this.collab.canUndo;
     return this.historyIndex > 0;
   }
 
   get canRedo() {
+    if (this.collab) return this.collab.canRedo;
     return this.historyIndex >= 0 && this.historyIndex < this.history.length - 1;
   }
 
@@ -175,6 +182,29 @@ class DesignerStore {
     this.currentBlockId = blockId;
   }
 
+  /** Attach a CollaborativeDesigner instance for live collab. */
+  setCollab(collab: CollaborativeDesigner | null) {
+    this.collab = collab;
+  }
+
+  /** Apply a remote questionnaire update from Yjs without pushing to local history. */
+  applyRemoteUpdate(questionnaire: Questionnaire) {
+    this.isApplyingRemote = true;
+    try {
+      const normalized = this.documentStore.normalizeQuestionnaire(questionnaire);
+      this.questionnaire = normalized;
+
+      // Re-resolve selectedItem if present (the object reference changed)
+      if (this.selectedItem && this.selectedItemKind) {
+        this.selectItem(this.selectedItem.id, this.selectedItemKind);
+      }
+
+      this.isDirty = true;
+    } finally {
+      this.isApplyingRemote = false;
+    }
+  }
+
   setViewMode(mode: DesignerViewMode) {
     this.syncUiState(this.uiStore.setViewMode(mode));
   }
@@ -271,11 +301,24 @@ class DesignerStore {
   }
 
   updateQuestionnaire(updates: Partial<Questionnaire>) {
+    if (this.collab) {
+      this.collab.updateMeta(updates as Record<string, unknown>);
+      return;
+    }
     const next = this.documentStore.updateQuestionnaire(this.questionnaire, updates);
     this.commit(next, { markDirty: true });
   }
 
   addPage() {
+    if (this.collab) {
+      const pageId = this.collab.addPage();
+      // Yjs update fires synchronously → applyRemoteUpdate already ran
+      const page = this.questionnaire.pages.find((p) => p.id === pageId);
+      this.currentPageId = pageId;
+      this.currentBlockId = page?.blocks?.[0]?.id || null;
+      this.selectItem(pageId, 'page');
+      return;
+    }
     const { questionnaire, pageId } = this.documentStore.addPage(this.questionnaire);
     const blockId = questionnaire.pages.find((page) => page.id === pageId)?.blocks?.[0]?.id || null;
     this.commit(questionnaire, {
@@ -288,11 +331,22 @@ class DesignerStore {
   }
 
   updatePage(id: string, updates: Partial<Page>) {
+    if (this.collab) {
+      this.collab.updatePage(id, updates);
+      return;
+    }
     const next = this.documentStore.updatePage(this.questionnaire, id, updates);
     this.commit(next, { markDirty: true });
   }
 
   addBlock(pageId: string, type: Block['type']) {
+    if (this.collab) {
+      const blockId = this.collab.addBlock(pageId, type);
+      this.currentPageId = pageId;
+      this.currentBlockId = blockId || null;
+      if (blockId) this.selectItem(blockId, 'block');
+      return;
+    }
     const { questionnaire, blockId } = this.documentStore.addBlock(
       this.questionnaire,
       pageId,
@@ -308,11 +362,27 @@ class DesignerStore {
   }
 
   updateBlock(blockId: string, updates: Partial<Block>) {
+    if (this.collab) {
+      this.collab.updateBlock(blockId, updates);
+      return;
+    }
     const next = this.documentStore.updateBlock(this.questionnaire, blockId, updates);
     this.commit(next, { markDirty: true });
   }
 
   deleteBlock(blockId: string) {
+    if (this.collab) {
+      this.collab.deleteBlock(blockId);
+      // Yjs update fires synchronously → applyRemoteUpdate already ran
+      const currentPage =
+        this.questionnaire.pages.find((p) => p.id === this.currentPageId) ||
+        this.questionnaire.pages[0] || null;
+      this.currentPageId = currentPage?.id || null;
+      this.currentBlockId = currentPage?.blocks?.[0]?.id || null;
+      this.selectedItem = null;
+      this.selectedItemKind = null;
+      return;
+    }
     const next = this.documentStore.deleteBlock(this.questionnaire, blockId);
     const currentPage =
       next.pages.find((page) => page.id === this.currentPageId) || next.pages[0] || null;
@@ -326,11 +396,19 @@ class DesignerStore {
   }
 
   updateBlockQuestions(blockId: string, questionIds: string[]) {
+    if (this.collab) {
+      this.collab.updateBlockQuestions(blockId, questionIds);
+      return;
+    }
     const next = this.documentStore.updateBlockQuestions(this.questionnaire, blockId, questionIds);
     this.commit(next, { markDirty: true });
   }
 
   reorderQuestionsInBlock(blockId: string, fromIndex: number, toIndex: number) {
+    if (this.collab) {
+      this.collab.reorderQuestionsInBlock(blockId, fromIndex, toIndex);
+      return;
+    }
     const next = this.documentStore.reorderQuestionsInBlock(
       this.questionnaire,
       blockId,
@@ -342,6 +420,16 @@ class DesignerStore {
 
   addQuestion(containerId: string, type: string) {
     const inserted = this.documentStore.addQuestion(this.questionnaire, containerId, type);
+    if (this.collab) {
+      const question = inserted.questionnaire.questions.find((q) => q.id === inserted.questionId);
+      if (question) {
+        this.collab.addQuestion(inserted.blockId, question);
+      }
+      this.currentPageId = inserted.pageId;
+      this.currentBlockId = inserted.blockId;
+      this.selectItem(inserted.questionId, 'question');
+      return;
+    }
     this.commit(inserted.questionnaire, {
       currentPageId: inserted.pageId,
       currentBlockId: inserted.blockId,
@@ -365,6 +453,10 @@ class DesignerStore {
   }
 
   updateQuestion(questionId: string, updates: Partial<Question>) {
+    if (this.collab) {
+      this.collab.updateQuestion(questionId, updates);
+      return;
+    }
     const next = this.documentStore.updateQuestion(this.questionnaire, questionId, updates);
     this.commit(next, {
       selectedItemId: questionId,
@@ -377,6 +469,17 @@ class DesignerStore {
     const duplicated = this.documentStore.duplicateQuestion(this.questionnaire, questionId);
     if (!duplicated) return;
 
+    if (this.collab) {
+      const question = duplicated.questionnaire.questions.find((q) => q.id === duplicated.questionId);
+      if (question) {
+        this.collab.addQuestion(duplicated.blockId, question);
+      }
+      this.currentPageId = duplicated.pageId;
+      this.currentBlockId = duplicated.blockId;
+      this.selectItem(duplicated.questionId, 'question');
+      return;
+    }
+
     this.commit(duplicated.questionnaire, {
       currentPageId: duplicated.pageId,
       currentBlockId: duplicated.blockId,
@@ -387,6 +490,12 @@ class DesignerStore {
   }
 
   deleteQuestion(questionId: string) {
+    if (this.collab) {
+      this.collab.deleteQuestion(questionId);
+      this.selectedItem = null;
+      this.selectedItemKind = null;
+      return;
+    }
     const next = this.documentStore.deleteQuestion(this.questionnaire, questionId);
     this.commit(next, {
       selectedItemId: null,
@@ -395,6 +504,11 @@ class DesignerStore {
   }
 
   addVariable(variable: Variable) {
+    if (this.collab) {
+      this.collab.addVariable(variable);
+      this.selectItem(variable.id, 'variable');
+      return;
+    }
     const next = this.documentStore.addVariable(this.questionnaire, variable);
     this.commit(next, {
       selectedItemId: variable.id,
@@ -404,6 +518,10 @@ class DesignerStore {
   }
 
   updateVariable(id: string, updates: Partial<Variable>) {
+    if (this.collab) {
+      this.collab.updateVariable(id, updates);
+      return;
+    }
     const next = this.documentStore.updateVariable(this.questionnaire, id, updates);
     this.commit(next, {
       selectedItemId: id,
@@ -413,6 +531,14 @@ class DesignerStore {
   }
 
   deleteVariable(id: string) {
+    if (this.collab) {
+      this.collab.deleteVariable(id);
+      if (this.selectedItem?.id === id) {
+        this.selectedItem = null;
+        this.selectedItemKind = null;
+      }
+      return;
+    }
     const next = this.documentStore.deleteVariable(this.questionnaire, id);
     this.commit(next, {
       selectedItemId: this.selectedItem?.id === id ? null : this.selectedItem?.id,
@@ -421,6 +547,10 @@ class DesignerStore {
   }
 
   addFlowControl(flow: FlowControl) {
+    if (this.collab) {
+      this.collab.addFlowControl(flow);
+      return;
+    }
     const next = this.documentStore.addFlowControl(this.questionnaire, flow);
     this.commit(next, { markDirty: true });
   }
@@ -612,20 +742,37 @@ class DesignerStore {
       let lastQuestionId: string | null = null;
       for (const q of parsed.questions) {
         const inserted = this.documentStore.addQuestion(this.questionnaire, block.id, q.type);
-        this.questionnaire = this.documentStore.normalizeQuestionnaire(inserted.questionnaire);
+        const { id: _ignored, ...pastedData } = q;
 
-        // Apply pasted data onto the newly created question (keeping the new ID)
-        const { id: _ignored, ...updates } = q;
-        this.questionnaire = this.documentStore.updateQuestion(this.questionnaire, inserted.questionId, updates);
+        if (this.collab) {
+          // Merge pasted data onto the DocumentStore-generated question, then send to Yjs
+          const baseQuestion = inserted.questionnaire.questions.find(
+            (qq) => qq.id === inserted.questionId
+          );
+          if (baseQuestion) {
+            this.collab.addQuestion(block.id, { ...baseQuestion, ...pastedData });
+          }
+        } else {
+          this.questionnaire = this.documentStore.normalizeQuestionnaire(inserted.questionnaire);
+          this.questionnaire = this.documentStore.updateQuestion(
+            this.questionnaire,
+            inserted.questionId,
+            pastedData
+          );
+        }
         lastQuestionId = inserted.questionId;
       }
 
       if (lastQuestionId) {
-        this.commit(this.questionnaire, {
-          selectedItemId: lastQuestionId,
-          selectedItemType: 'question',
-          markDirty: true,
-        });
+        if (this.collab) {
+          this.selectItem(lastQuestionId, 'question');
+        } else {
+          this.commit(this.questionnaire, {
+            selectedItemId: lastQuestionId,
+            selectedItemType: 'question',
+            markDirty: true,
+          });
+        }
       }
     } catch {
       // Invalid clipboard content or API unavailable
@@ -647,6 +794,11 @@ class DesignerStore {
   undo() {
     if (!this.canUndo) return;
 
+    if (this.collab) {
+      this.collab.undo();
+      return;
+    }
+
     this.historyIndex -= 1;
     const snapshot = this.history[this.historyIndex];
     if (!snapshot) return;
@@ -657,6 +809,11 @@ class DesignerStore {
 
   redo() {
     if (!this.canRedo) return;
+
+    if (this.collab) {
+      this.collab.redo();
+      return;
+    }
 
     this.historyIndex += 1;
     const snapshot = this.history[this.historyIndex];
@@ -686,7 +843,7 @@ class DesignerStore {
       }
     }
 
-    if (options.pushHistory !== false) {
+    if (options.pushHistory !== false && !this.collab) {
       this.pushHistory(this.questionnaire);
     }
 

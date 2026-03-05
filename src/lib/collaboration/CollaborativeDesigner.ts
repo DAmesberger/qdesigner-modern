@@ -11,7 +11,7 @@
 
 import * as Y from 'yjs';
 import { questionnaireToYDoc, yDocToQuestionnaire } from './YjsSchema';
-import { YjsProvider, type YjsProviderOptions } from './YjsProvider';
+import { YjsProvider } from './YjsProvider';
 import * as YjsOps from './YjsOperations';
 import type {
   Block,
@@ -194,6 +194,10 @@ export class CollaborativeDesigner {
     YjsOps.deleteQuestion(this.doc, questionId);
   }
 
+  updateBlockQuestions(blockId: string, questionIds: string[]): void {
+    YjsOps.updateBlockQuestions(this.doc, blockId, questionIds);
+  }
+
   reorderQuestionsInBlock(blockId: string, fromIndex: number, toIndex: number): void {
     YjsOps.reorderQuestionsInBlock(this.doc, blockId, fromIndex, toIndex);
   }
@@ -220,7 +224,7 @@ export class CollaborativeDesigner {
 
   private startObserving(): void {
     this.stopObserving();
-    const handler = (_update: Uint8Array, origin: unknown) => {
+    const handler = (_update: Uint8Array, _origin: unknown) => {
       // Avoid re-entrancy
       if (this.isApplyingRemote) return;
       this.notifyChange();

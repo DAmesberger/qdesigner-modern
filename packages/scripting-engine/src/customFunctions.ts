@@ -12,16 +12,64 @@ export interface CustomFunctionDefinition {
   isAsync?: boolean;
 }
 
+/**
+ * Static pattern check: reject function bodies that attempt prototype-chain escapes.
+ */
+const BANNED_PROPERTY_ACCESS =
+  /\.(constructor|__proto__|__defineGetter__|__defineSetter__|__lookupGetter__|__lookupSetter__)\b/;
+
+// Safe facades — built from Object.create(null), no .constructor chain to escape through
+const safeObject = Object.freeze(Object.assign(Object.create(null), {
+  keys: Object.keys,
+  values: Object.values,
+  entries: Object.entries,
+  assign: Object.assign,
+  freeze: Object.freeze,
+  is: Object.is,
+  fromEntries: Object.fromEntries,
+  create: Object.create,
+}));
+
+const safeNumber = Object.freeze(Object.assign(Object.create(null), {
+  isFinite: Number.isFinite,
+  isInteger: Number.isInteger,
+  isNaN: Number.isNaN,
+  isSafeInteger: Number.isSafeInteger,
+  parseFloat: Number.parseFloat,
+  parseInt: Number.parseInt,
+  MAX_SAFE_INTEGER: Number.MAX_SAFE_INTEGER,
+  MIN_SAFE_INTEGER: Number.MIN_SAFE_INTEGER,
+  EPSILON: Number.EPSILON,
+}));
+
+const safeString = Object.freeze(Object.assign(Object.create(null), {
+  fromCharCode: String.fromCharCode,
+  fromCodePoint: String.fromCodePoint,
+}));
+
+const safeBoolean = Object.freeze(Object.create(null));
+
+const safeArray = Object.freeze(Object.assign(Object.create(null), {
+  isArray: Array.isArray,
+  from: Array.from,
+  of: Array.of,
+}));
+
+const safeDate = Object.freeze(Object.assign(Object.create(null), {
+  now: Date.now,
+  parse: Date.parse,
+  UTC: Date.UTC,
+}));
+
 // Allowed globals inside the Proxy-based sandbox for custom functions
 const SANDBOX_GLOBALS: Record<string, DynamicValue> = {
-  // Safe built-ins
   Math,
-  Number,
-  String,
-  Boolean,
-  Array,
-  Object,
-  Date,
+  Number: safeNumber,
+  String: safeString,
+  Boolean: safeBoolean,
+  Array: safeArray,
+  Object: safeObject,
+  Date: safeDate,
   JSON,
   parseInt,
   parseFloat,
@@ -30,8 +78,7 @@ const SANDBOX_GLOBALS: Record<string, DynamicValue> = {
   NaN,
   Infinity,
   undefined,
-  // Type checks
-  typeof: undefined, // keyword, not a value — included for completeness
+  typeof: undefined,
 };
 
 /**
@@ -45,6 +92,11 @@ function createSandboxedFunction(
   params: string[],
   body: string
 ): (...args: DynamicValue[]) => DynamicValue {
+  // Static rejection: refuse bodies that use prototype-chain escapes
+  if (BANNED_PROPERTY_ACCESS.test(body)) {
+    throw new Error('Function body rejected: banned property access pattern detected');
+  }
+
   // Build the inner function source
   const paramList = params.join(', ');
   const wrappedBody = `
@@ -66,6 +118,12 @@ function createSandboxedFunction(
         get: (target, prop) => {
           if (prop === Symbol.unscopables) return undefined;
           if (prop === 'constructor') return undefined;
+          if (prop === '__proto__') return undefined;
+          if (prop === 'prototype') return undefined;
+          if (prop === '__defineGetter__') return undefined;
+          if (prop === '__defineSetter__') return undefined;
+          if (prop === '__lookupGetter__') return undefined;
+          if (prop === '__lookupSetter__') return undefined;
           return target[prop as string];
         },
       }

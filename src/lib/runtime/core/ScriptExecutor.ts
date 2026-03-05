@@ -5,6 +5,27 @@ import type { VariableEngine } from '$lib/scripting-engine';
 type DynamicValue = any;
 
 /**
+ * Static pattern check: reject scripts that attempt prototype-chain escapes
+ * before they ever reach `new Function()`.
+ */
+const BANNED_PROPERTY_ACCESS =
+  /\.(constructor|__proto__|__defineGetter__|__defineSetter__|__lookupGetter__|__lookupSetter__)\b/;
+
+/**
+ * Deep-freeze an object graph so user scripts cannot mutate context values.
+ */
+function deepFreeze<T>(obj: T): T {
+  if (obj === null || obj === undefined || typeof obj !== 'object') return obj;
+  Object.freeze(obj);
+  for (const value of Object.values(obj as Record<string, unknown>)) {
+    if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+      deepFreeze(value);
+    }
+  }
+  return obj;
+}
+
+/**
  * Hook names supported by the script system.
  */
 export type HookName =
@@ -97,15 +118,22 @@ export class ScriptExecutor {
       // Strip "export" keywords since we evaluate inside a Function body
       const cleaned = scriptText.replace(/\bexport\s+/g, '');
 
+      // Static rejection: refuse scripts that use prototype-chain escapes
+      if (BANNED_PROPERTY_ACCESS.test(cleaned)) {
+        console.warn('[ScriptExecutor] Script rejected: banned property access pattern detected');
+        return {};
+      }
+
       // Build a Proxy-based sandbox that traps all scope lookups.
       // The `has` trap returning true prevents any scope-chain escape,
       // so references to `window`, `document`, `fetch`, etc. resolve to
       // undefined instead of the real globals.
       //
-      // SECURITY: We expose safe subsets of built-ins. The raw `Object`
-      // is replaced with a frozen facade that omits `assign` on prototypes.
-      // `JSON` and `Math` are safe (frozen, no mutating methods on protos).
-      const safeObject = Object.freeze({
+      // SECURITY: Constructor-bearing built-ins (Number, String, Boolean,
+      // Array, Date) are replaced with safe facades built from
+      // Object.create(null) — no .constructor chain to escape through.
+      // Math and JSON are safe (frozen, no dangerous constructor chain).
+      const safeObject = Object.freeze(Object.assign(Object.create(null), {
         keys: Object.keys,
         values: Object.values,
         entries: Object.entries,
@@ -113,17 +141,53 @@ export class ScriptExecutor {
         freeze: Object.freeze,
         is: Object.is,
         fromEntries: Object.fromEntries,
-      });
+        create: Object.create,
+      }));
+
+      const safeNumber = Object.freeze(Object.assign(Object.create(null), {
+        isFinite: Number.isFinite,
+        isInteger: Number.isInteger,
+        isNaN: Number.isNaN,
+        isSafeInteger: Number.isSafeInteger,
+        parseFloat: Number.parseFloat,
+        parseInt: Number.parseInt,
+        MAX_SAFE_INTEGER: Number.MAX_SAFE_INTEGER,
+        MIN_SAFE_INTEGER: Number.MIN_SAFE_INTEGER,
+        EPSILON: Number.EPSILON,
+        MAX_VALUE: Number.MAX_VALUE,
+        MIN_VALUE: Number.MIN_VALUE,
+        POSITIVE_INFINITY: Number.POSITIVE_INFINITY,
+        NEGATIVE_INFINITY: Number.NEGATIVE_INFINITY,
+        NaN: Number.NaN,
+      }));
+
+      const safeString = Object.freeze(Object.assign(Object.create(null), {
+        fromCharCode: String.fromCharCode,
+        fromCodePoint: String.fromCodePoint,
+      }));
+
+      const safeBoolean = Object.freeze(Object.create(null));
+
+      const safeArray = Object.freeze(Object.assign(Object.create(null), {
+        isArray: Array.isArray,
+        from: Array.from,
+        of: Array.of,
+      }));
+
+      const safeDate = Object.freeze(Object.assign(Object.create(null), {
+        now: Date.now,
+        parse: Date.parse,
+        UTC: Date.UTC,
+      }));
 
       const allowedGlobals: Record<string, unknown> = {
-        // Safe built-ins needed by user scripts
         Math,
-        Number,
-        String,
-        Boolean,
-        Array,
+        Number: safeNumber,
+        String: safeString,
+        Boolean: safeBoolean,
+        Array: safeArray,
         Object: safeObject,
-        Date,
+        Date: safeDate,
         JSON,
         parseInt,
         parseFloat,
@@ -142,6 +206,7 @@ export class ScriptExecutor {
           // Block prototype chain escape vectors
           if (prop === 'constructor') return undefined;
           if (prop === '__proto__') return undefined;
+          if (prop === 'prototype') return undefined;
           if (prop === '__defineGetter__') return undefined;
           if (prop === '__defineSetter__') return undefined;
           if (prop === '__lookupGetter__') return undefined;
@@ -221,10 +286,15 @@ export class ScriptExecutor {
     variableEngine: VariableEngine,
     responseMap: Record<string, DynamicValue>
   ): HookContext {
+    // Clone and deep-freeze data to prevent mutation by user scripts
+    const frozenQuestion = deepFreeze(JSON.parse(JSON.stringify(question)));
+    const frozenVariables = deepFreeze(JSON.parse(JSON.stringify(variableEngine.getAllVariables())));
+    const frozenResponses = deepFreeze(JSON.parse(JSON.stringify(responseMap)));
+
     return {
-      question,
-      variables: variableEngine.getAllVariables(),
-      responses: responseMap,
+      question: frozenQuestion,
+      variables: frozenVariables,
+      responses: frozenResponses,
       setVariable: (name: string, value: DynamicValue) => {
         try {
           variableEngine.setVariable(name, value, 'script');
@@ -386,12 +456,16 @@ export class ScriptExecutor {
     variableEngine: VariableEngine,
     responseMap: Record<string, DynamicValue>
   ): PageHookContext {
+    // Clone and deep-freeze data to prevent mutation by user scripts
+    const frozenVariables = deepFreeze(JSON.parse(JSON.stringify(variableEngine.getAllVariables())));
+    const frozenResponses = deepFreeze(JSON.parse(JSON.stringify(responseMap)));
+
     return {
       pageId,
       pageName,
       pageIndex,
-      variables: variableEngine.getAllVariables(),
-      responses: responseMap,
+      variables: frozenVariables,
+      responses: frozenResponses,
       setVariable: (name: string, value: DynamicValue) => {
         try {
           variableEngine.setVariable(name, value, 'script');

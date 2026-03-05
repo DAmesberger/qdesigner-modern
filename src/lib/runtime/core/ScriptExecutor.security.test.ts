@@ -268,6 +268,64 @@ describe('ScriptExecutor — Security', () => {
     expect(engine.setVariable).toHaveBeenCalledWith('hasEval', false, 'script');
   });
 
+  // ── Static pattern rejection ───────────────────────────────────
+
+  it('blocks prototype-chain escape via .constructor.constructor', () => {
+    const executor = new ScriptExecutor();
+    // Script attempts to use the ({}).constructor.constructor escape
+    const script = `
+      const hooks = {
+        onMount: (ctx) => {
+          const fn = ({}).constructor.constructor('return 1')();
+          ctx.setVariable('escaped', fn);
+        }
+      };
+    `;
+    const engine = createMockVariableEngine();
+    const question = mockQuestion(script);
+    executor.executeOnMount(question, engine as any, {});
+
+    // Static check rejects the script before execution — no hooks parsed
+    expect(engine.setVariable).not.toHaveBeenCalled();
+  });
+
+  it('prevents context mutation (frozen context objects)', () => {
+    const executor = new ScriptExecutor();
+    const script = `
+      const hooks = {
+        onMount: (ctx) => {
+          const originalSettings = ctx.question.settings;
+          ctx.question.settings = { mutated: true };
+          // In sloppy mode (with-block), assignment silently fails on frozen object
+          ctx.setVariable('mutated', ctx.question.settings !== originalSettings);
+        }
+      };
+    `;
+    const engine = createMockVariableEngine();
+    const question = mockQuestion(script);
+    executor.executeOnMount(question, engine as any, {});
+
+    // Frozen object property assignment silently fails — value is unchanged
+    expect(engine.setVariable).toHaveBeenCalledWith('mutated', false, 'script');
+  });
+
+  it('blocks .prototype property access on sandbox scope', () => {
+    const executor = new ScriptExecutor();
+    const script = `
+      const hooks = {
+        onMount: (ctx) => {
+          // 'prototype' as a bare scope name is trapped by the Proxy
+          ctx.setVariable('hasPrototype', typeof prototype !== 'undefined');
+        }
+      };
+    `;
+    const engine = createMockVariableEngine();
+    const question = mockQuestion(script);
+    executor.executeOnMount(question, engine as any, {});
+
+    expect(engine.setVariable).toHaveBeenCalledWith('hasPrototype', false, 'script');
+  });
+
   // ── Context isolation between executions ─────────────────────────
 
   it('scripts cannot leak state between different question executions', () => {

@@ -280,6 +280,28 @@ export function deleteQuestion(doc: Y.Doc, questionId: string): void {
   });
 }
 
+export function updateBlockQuestions(
+  doc: Y.Doc,
+  blockId: string,
+  questionIds: string[],
+): void {
+  const yBlock = findBlock(doc, blockId);
+  if (!yBlock) return;
+
+  doc.transact(() => {
+    const qIds = yBlock.get('questions') as Y.Array<string> | undefined;
+    if (qIds) {
+      qIds.delete(0, qIds.length);
+      qIds.insert(0, questionIds);
+    } else {
+      const newIds = new Y.Array<string>();
+      newIds.insert(0, questionIds);
+      yBlock.set('questions', newIds);
+    }
+    touchMeta(doc);
+  });
+}
+
 export function reorderQuestionsInBlock(
   doc: Y.Doc,
   blockId: string,

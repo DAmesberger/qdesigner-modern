@@ -2,10 +2,27 @@
   import { onMount } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
   import PropertiesPanel from '$lib/components/designer/PropertiesPanel.svelte';
+  import CommentThread from '$lib/collaboration/components/CommentThread.svelte';
   import { Pin, PinOff, X, MessageSquare } from 'lucide-svelte';
+
+  interface Props {
+    questionnaireId?: string;
+  }
+
+  let { questionnaireId = '' }: Props = $props();
 
   let isMobile = $state(false);
   let activeTab = $state<'properties' | 'comments'>('properties');
+
+  const commentAnchorType = $derived.by(() => {
+    const kind = designerStore.selectedItemKind;
+    if (kind === 'question') return 'question' as const;
+    if (kind === 'page') return 'page' as const;
+    if (kind === 'block') return 'block' as const;
+    if (kind === 'variable') return 'variable' as const;
+    return 'general' as const;
+  });
+  const commentAnchorId = $derived(designerStore.selectedItem?.id ?? undefined);
   const hasSelection = $derived(Boolean(designerStore.selectedItem));
   const isVisible = $derived(hasSelection || designerStore.rightPanelPinned);
 
@@ -122,12 +139,19 @@
         </div>
       {/if}
     {:else}
-      <div class="min-h-0 flex-1 overflow-y-auto p-3 space-y-3" data-testid="right-sidebar-comments">
-        <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <MessageSquare class="h-8 w-8 text-muted-foreground/40 mb-2" />
-          <p class="text-sm text-muted-foreground">No comments yet</p>
-          <p class="text-xs text-muted-foreground/60 mt-1">Comments from collaborators will appear here</p>
-        </div>
+      <div class="min-h-0 flex-1 overflow-y-auto" data-testid="right-sidebar-comments">
+        {#if questionnaireId}
+          <CommentThread
+            {questionnaireId}
+            anchorType={commentAnchorType}
+            anchorId={commentAnchorId}
+          />
+        {:else}
+          <div class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <MessageSquare class="h-8 w-8 text-muted-foreground/40 mb-2" />
+            <p class="text-sm text-muted-foreground">Save to enable comments</p>
+          </div>
+        {/if}
       </div>
     {/if}
   </aside>
