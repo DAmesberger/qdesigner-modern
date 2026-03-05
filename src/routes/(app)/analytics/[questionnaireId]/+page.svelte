@@ -126,7 +126,6 @@
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic export row structure
   function rowsToCsv(rows: any[]): string {
     if (rows.length === 0) return '';
     const headers = Object.keys(rows[0]);

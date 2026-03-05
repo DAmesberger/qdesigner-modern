@@ -260,7 +260,7 @@ fn parse_channel_resource(channel: &str) -> Option<Uuid> {
         return None;
     }
     match parts[0] {
-        "designer" | "questionnaire" => parts[1].parse::<Uuid>().ok(),
+        "designer" | "questionnaire" | "analytics" => parts[1].parse::<Uuid>().ok(),
         _ => None,
     }
 }

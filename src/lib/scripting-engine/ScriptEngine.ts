@@ -3,7 +3,8 @@
 // general scripts.
 
 import { ScriptWorker, type WorkerResponse } from '$lib/runtime/core/ScriptWorker';
-import { FormulaParser, ASTEvaluator, type ASTEvaluatorOptions } from '@qdesigner/scripting-engine';
+import { FormulaParser } from '../../../packages/scripting-engine/src/parser';
+import { ASTEvaluator, type ASTEvaluatorOptions } from '../../../packages/scripting-engine/src/ast-evaluator';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- scripting context intentionally accepts arbitrary JSON-like values
 type DynamicValue = any;

@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::state::AppState;
@@ -58,6 +59,8 @@ pub async fn create_comment(
     user: AuthenticatedUser,
     Json(body): Json<CreateCommentRequest>,
 ) -> Result<Json<CommentResponse>, ApiError> {
+    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
+
     let comment = sqlx::query_as::<_, CommentResponse>(
         r#"
         INSERT INTO questionnaire_comments
@@ -83,9 +86,11 @@ pub async fn create_comment(
 pub async fn list_comments(
     State(state): State<AppState>,
     Path(questionnaire_id): Path<Uuid>,
-    _user: AuthenticatedUser,
+    user: AuthenticatedUser,
     Query(query): Query<ListCommentsQuery>,
 ) -> Result<Json<Vec<CommentResponse>>, ApiError> {
+    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
+
     let comments = sqlx::query_as::<_, CommentResponse>(
         r#"
         SELECT id, questionnaire_id, parent_id, author_id, anchor_type, anchor_id,
@@ -115,6 +120,8 @@ pub async fn update_comment(
     user: AuthenticatedUser,
     Json(body): Json<UpdateCommentRequest>,
 ) -> Result<Json<CommentResponse>, ApiError> {
+    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
+
     let resolved_by: Option<Uuid> = if body.resolved == Some(true) {
         Some(user.user_id)
     } else {
@@ -169,6 +176,8 @@ pub async fn delete_comment(
     Path((questionnaire_id, comment_id)): Path<(Uuid, Uuid)>,
     user: AuthenticatedUser,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
+
     let result = sqlx::query(
         r#"
         DELETE FROM questionnaire_comments

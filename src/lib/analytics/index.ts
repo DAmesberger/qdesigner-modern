@@ -606,4 +606,4 @@ export type {
   FilterRule,
   FilterGroup,
   FilterQuery,
-} from './components/FilterBuilder.svelte';
+} from './types/filter';

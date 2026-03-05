@@ -123,6 +123,6 @@ export default [
     },
   },
   {
-    ignores: ['dist/', 'build/', '.svelte-kit/', 'node_modules/'],
+    ignores: ['dist/', 'build/', '.svelte-kit/', 'node_modules/', 'server/'],
   },
 ];

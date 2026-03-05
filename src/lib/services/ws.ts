@@ -74,6 +74,13 @@ class WebSocketClient {
 		if (!this.token) return;
 		if (typeof window === 'undefined') return; // SSR guard
 
+		// Close any existing socket before opening a new one to prevent leaks
+		if (this.ws) {
+			this.ws.onclose = null; // Prevent triggering reconnect from this close
+			this.ws.close(1000, 'Reconnecting');
+			this.ws = null;
+		}
+
 		const wsUrl =
 			import.meta.env.VITE_WS_URL || `ws://${window.location.host}/api/ws`;
 		this.ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(this.token)}`);
