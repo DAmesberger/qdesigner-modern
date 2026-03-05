@@ -1,6 +1,18 @@
 <script lang="ts">
   import type { StatisticalSummary } from '../types';
   import DescriptiveStatsWidget from './DescriptiveStatsWidget.svelte';
+  import {
+    Chart,
+    CategoryScale,
+    LinearScale,
+    BarElement,
+    BarController,
+    Title,
+    Tooltip,
+    Legend,
+  } from 'chart.js';
+
+  Chart.register(CategoryScale, LinearScale, BarElement, BarController, Title, Tooltip, Legend);
 
   interface CohortData {
     label: string;
@@ -11,13 +23,14 @@
   interface Props {
     cohortA: CohortData;
     cohortB: CohortData;
-    /** Optional effect size (Cohen's d) between the two cohorts */
     effectSize?: number | null;
-    /** Optional p-value from a comparison test */
     pValue?: number | null;
   }
 
   let { cohortA, cohortB, effectSize = null, pValue = null }: Props = $props();
+
+  let canvasEl: HTMLCanvasElement | undefined = $state();
+  let chartInstance: Chart | undefined;
 
   function significanceLabel(p: number): string {
     if (p < 0.001) return '***';
@@ -33,6 +46,75 @@
     if (abs >= 0.2) return 'Small';
     return 'Negligible';
   }
+
+  $effect(() => {
+    if (!canvasEl || !cohortA.stats || !cohortB.stats) return;
+    chartInstance?.destroy();
+
+    const metrics = ['Mean', 'Median', 'Std Dev'];
+    const aVals = [cohortA.stats.mean, cohortA.stats.median, cohortA.stats.standardDeviation];
+    const bVals = [cohortB.stats.mean, cohortB.stats.median, cohortB.stats.standardDeviation];
+
+    chartInstance = new Chart(canvasEl, {
+      type: 'bar',
+      data: {
+        labels: metrics,
+        datasets: [
+          {
+            label: cohortA.label,
+            data: aVals,
+            backgroundColor: 'rgba(59, 130, 246, 0.7)',
+            borderColor: '#3B82F6',
+            borderWidth: 2,
+            borderRadius: 6,
+          },
+          {
+            label: cohortB.label,
+            data: bVals,
+            backgroundColor: 'rgba(139, 92, 246, 0.55)',
+            borderColor: '#8B5CF6',
+            borderWidth: 2,
+            borderRadius: 6,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 500 },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { color: '#334155', font: { size: 11, weight: 'bold' } },
+            border: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(148, 163, 184, 0.15)', drawTicks: false },
+            ticks: { color: '#94a3b8', font: { size: 11 }, padding: 8 },
+            border: { display: false },
+          },
+        },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { usePointStyle: true, pointStyle: 'rectRounded', padding: 16, font: { size: 11 } },
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            bodyFont: { size: 13 },
+            padding: { x: 12, y: 8 },
+            cornerRadius: 8,
+          },
+        },
+      } as any,
+    });
+
+    return () => {
+      chartInstance?.destroy();
+      chartInstance = undefined;
+    };
+  });
 </script>
 
 <div class="space-y-4">
@@ -62,6 +144,13 @@
           </div>
         </div>
       {/if}
+    </div>
+  {/if}
+
+  <!-- Chart visualization -->
+  {#if cohortA.stats && cohortB.stats}
+    <div class="h-[200px]">
+      <canvas bind:this={canvasEl}></canvas>
     </div>
   {/if}
 

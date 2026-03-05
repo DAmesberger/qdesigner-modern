@@ -27,6 +27,13 @@ export interface ChartSeriesContract {
   metric: AnalyticsMetric;
   points: ChartPoint[];
   summary?: Record<string, number | null>;
+  /** Distribution data for bell curve / histogram visualizations */
+  distribution?: {
+    mean: number;
+    stdDev: number;
+    n: number;
+    values?: number[];
+  };
 }
 
 function metricFromStats(stats: SessionStatsSummary, metric: AnalyticsMetric): number | null {
@@ -122,8 +129,18 @@ export const sessionAnalyticsService = {
       summary: {
         participantMean: participant.stats.mean,
         cohortMean: cohort.stats.mean,
+        cohortStdDev: cohort.stats.stdDev,
+        cohortN: cohort.stats.sampleCount,
         zScore,
       },
+      distribution:
+        cohort.stats.mean !== null && cohort.stats.stdDev !== null && cohort.stats.stdDev > 0
+          ? {
+              mean: cohort.stats.mean,
+              stdDev: cohort.stats.stdDev,
+              n: cohort.stats.sampleCount ?? 0,
+            }
+          : undefined,
     };
   },
 

@@ -27,7 +27,7 @@ export interface StatisticalFeedbackDataSourceConfig {
 export interface StatisticalFeedbackConfig {
   title: string;
   subtitle: string;
-  chartType: 'bar' | 'line' | 'radar' | 'scatter' | 'histogram' | 'box';
+  chartType: 'bar' | 'line' | 'radar' | 'scatter' | 'histogram' | 'box' | 'bell-curve' | 'gauge';
   sourceMode: StatisticalSourceMode;
   metric: AnalyticsMetric;
   showPercentile: boolean;

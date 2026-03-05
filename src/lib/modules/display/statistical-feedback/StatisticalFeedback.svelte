@@ -11,6 +11,10 @@
     type MultiScaleInterpretation,
   } from '$lib/runtime/feedback/ScoreInterpreter';
   import { generateReport, type ReportConfig } from '$lib/runtime/feedback/ReportGenerator';
+  import BellCurveChart from './charts/BellCurveChart.svelte';
+  import FeedbackChart from './charts/FeedbackChart.svelte';
+  import GaugeChart from './charts/GaugeChart.svelte';
+  import type { ColorRule } from './charts/chart-utils';
 
   interface Props {
     analytics?: any;
@@ -76,58 +80,94 @@
     };
   });
 
-  const maxMagnitude = $derived.by(() => {
-    const values = (series?.points || [])
-      .map((point) => point.value)
-      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-
-    if (values.length === 0) {
-      return 1;
-    }
-
-    const max = Math.max(...values.map((value) => Math.abs(value)));
-    return max > 0 ? max : 1;
+  // Derived values for chart rendering
+  const participantValue = $derived.by((): number | null => {
+    if (!series) return null;
+    const pt = series.points.find((p) => p.label === 'Participant' || p.label === 'Current');
+    return pt?.value ?? series.points[0]?.value ?? null;
   });
 
-  function formatValue(value: number | null): string {
-    if (value === null || value === undefined || !Number.isFinite(value)) {
-      return 'N/A';
+  const cohortMean = $derived(
+    series?.summary?.cohortMean ?? series?.distribution?.mean ?? null,
+  );
+
+  const cohortStdDev = $derived(
+    series?.summary?.cohortStdDev ?? series?.distribution?.stdDev ?? null,
+  );
+
+  const cohortN = $derived(
+    series?.summary?.cohortN ?? series?.distribution?.n ?? null,
+  );
+
+  // For gauge: find score range from interpretation
+  const gaugeRange = $derived.by((): { min: number; max: number; color: string | undefined } => {
+    if (scoreInterpretation && scoreInterpretation.interpretations.length > 0) {
+      const interp = scoreInterpretation.interpretations[0]!;
+      const allRanges = interp.config.ranges;
+      if (allRanges.length > 0) {
+        return {
+          min: Math.min(...allRanges.map((r) => r.min)),
+          max: Math.max(...allRanges.map((r) => r.max)),
+          color: interp.range?.color,
+        };
+      }
     }
+    return { min: 0, max: 100, color: undefined };
+  });
 
-    if (Math.abs(value) >= 1000) {
-      return value.toFixed(1);
+  // Derive color rules from the first score interpretation scale's ranges
+  // ScoreInterpretationRange is structurally compatible with ColorRule
+  const colorRules = $derived.by((): ColorRule[] => {
+    if (!config.scoreInterpretation || config.scoreInterpretation.length === 0) {
+      return [];
     }
+    // Use all ranges from the first scale as chart color rules
+    const firstScale = config.scoreInterpretation[0];
+    if (!firstScale || firstScale.ranges.length === 0) return [];
+    return firstScale.ranges.map((r) => ({
+      min: r.min,
+      max: r.max,
+      color: r.color,
+      label: r.label,
+    }));
+  });
 
-    if (Math.abs(value) >= 100) {
-      return value.toFixed(2);
-    }
-
-    return value.toFixed(3);
-  }
-
-  function barWidth(value: number | null): string {
-    if (value === null || value === undefined || !Number.isFinite(value)) {
-      return '0%';
-    }
-
-    const width = Math.min(100, (Math.abs(value) / maxMagnitude) * 100);
-    return `${width}%`;
-  }
-
-  function isNegative(value: number | null): boolean {
-    return typeof value === 'number' && Number.isFinite(value) && value < 0;
-  }
+  // Check if we should use Chart.js or the simple CSS bars
+  const useChartJs = $derived(
+    config.chartType !== undefined &&
+      ['bar', 'line', 'radar', 'scatter', 'histogram', 'box', 'bell-curve', 'gauge'].includes(
+        config.chartType,
+      ),
+  );
 
   const summaryEntries = $derived.by((): Array<{ label: string; value: number | null }> => {
     if (!series?.summary) {
       return [];
     }
 
-    return Object.entries(series.summary).map(([label, value]) => ({
-      label,
-      value: typeof value === 'number' && Number.isFinite(value) ? value : null,
-    }));
+    return Object.entries(series.summary)
+      .filter(([key]) => !['cohortStdDev', 'cohortN'].includes(key))
+      .map(([label, value]) => ({
+        label: formatSummaryLabel(label),
+        value: typeof value === 'number' && Number.isFinite(value) ? value : null,
+      }));
   });
+
+  function formatSummaryLabel(key: string): string {
+    return key
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, (s) => s.toUpperCase())
+      .trim();
+  }
+
+  function formatValue(value: number | null): string {
+    if (value === null || value === undefined || !Number.isFinite(value)) {
+      return 'N/A';
+    }
+    if (Math.abs(value) >= 1000) return value.toFixed(1);
+    if (Math.abs(value) >= 100) return value.toFixed(2);
+    return value.toFixed(3);
+  }
 
   async function handleDownloadReport(): Promise<void> {
     if (generatingReport) return;
@@ -152,9 +192,14 @@
   <header class="header">
     <h3>{config.title}</h3>
     {#if config.subtitle}
-      <p>{config.subtitle}</p>
+      <p class="subtitle">{config.subtitle}</p>
     {/if}
-    <p class="meta">Mode: {config.sourceMode} | Metric: {config.metric}</p>
+    <p class="meta">
+      {config.sourceMode.replace(/-/g, ' ')} &middot; {config.metric}
+      {#if cohortN !== null}
+        &middot; n = {cohortN}
+      {/if}
+    </p>
   </header>
 
   {#if validationErrors.length > 0 && mode !== 'runtime'}
@@ -173,35 +218,54 @@
     <div class="state" data-testid="stats-feedback-loading">Loading statistical data...</div>
   {/if}
 
-  {#if series}
-    <div class="chart" data-testid="stats-feedback-chart" data-chart-type={config.chartType}>
-      {#each series.points as point (point.label)}
-        <div class="row" data-testid={`stats-point-${point.label}`}>
-          <div class="label">{point.label}</div>
-          <div class="track">
-            <div
-              class="bar"
-              class:negative={isNegative(point.value)}
-              style={`width: ${barWidth(point.value)}`}
-            ></div>
-          </div>
-          <div class="value">{formatValue(point.value)}</div>
+  <!-- Chart Rendering -->
+  {#if series && useChartJs}
+    <div class="chart-area" data-testid="stats-feedback-chart" data-chart-type={config.chartType}>
+      {#if config.chartType === 'bell-curve'}
+        <BellCurveChart
+          participantValue={participantValue}
+          mean={cohortMean ?? 0}
+          stdDev={cohortStdDev ?? 1}
+          scoreName={config.title}
+          {colorRules}
+        />
+      {:else if config.chartType === 'gauge'}
+        <GaugeChart
+          value={participantValue}
+          min={gaugeRange.min}
+          max={gaugeRange.max}
+          label={config.title}
+          color={gaugeRange.color}
+          {colorRules}
+          cohortMean={cohortMean}
+          cohortStdDev={cohortStdDev}
+        />
+      {:else}
+        <FeedbackChart
+          {series}
+          chartType={config.chartType}
+          scoreName={config.title}
+          cohortMean={cohortMean}
+          cohortStdDev={cohortStdDev}
+          {colorRules}
+        />
+      {/if}
+    </div>
+  {/if}
+
+  <!-- Summary Stats -->
+  {#if series && config.showSummary && summaryEntries.length > 0}
+    <div class="summary" data-testid="stats-feedback-summary">
+      {#each summaryEntries as entry}
+        <div class="summary-item">
+          <span class="summary-label">{entry.label}</span>
+          <strong>{formatValue(entry.value)}</strong>
         </div>
       {/each}
     </div>
-
-    {#if config.showSummary && summaryEntries.length > 0}
-      <div class="summary" data-testid="stats-feedback-summary">
-        {#each summaryEntries as entry}
-          <div class="summary-item">
-            <span>{entry.label}</span>
-            <strong>{formatValue(entry.value)}</strong>
-          </div>
-        {/each}
-      </div>
-    {/if}
   {/if}
 
+  <!-- Score Interpretations -->
   {#if scoreInterpretation && scoreInterpretation.interpretations.length > 0}
     <div class="interpretations" data-testid="stats-feedback-interpretations">
       {#each scoreInterpretation.interpretations as interp}
@@ -229,6 +293,15 @@
                   title="{range.label}: {range.min}-{range.max}"
                 ></div>
               {/each}
+              <!-- Score marker on range bar -->
+              {#if Number.isFinite(interp.score)}
+                {@const totalMin = Math.min(...interp.config.ranges.map(r => r.min))}
+                {@const totalMax = Math.max(...interp.config.ranges.map(r => r.max))}
+                {@const markerPos = totalMax > totalMin ? ((interp.score - totalMin) / (totalMax - totalMin)) * 100 : 50}
+                <div class="range-marker" style="left: {Math.max(0, Math.min(100, markerPos))}%;">
+                  <div class="marker-arrow"></div>
+                </div>
+              {/if}
             </div>
           {/if}
         </div>
@@ -258,29 +331,32 @@
   .stats-feedback {
     display: grid;
     gap: 0.75rem;
-    padding: 1rem;
+    padding: 1.25rem;
     border-radius: 0.75rem;
     background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-    border: 1px solid #dbe3ed;
+    border: 1px solid #e2e8f0;
     color: #0f172a;
   }
 
   .header h3 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 1.05rem;
     font-weight: 700;
+    color: #0f172a;
   }
 
-  .header p {
-    margin: 0.1rem 0 0;
+  .header .subtitle {
+    margin: 0.15rem 0 0;
     color: #475569;
     font-size: 0.85rem;
   }
 
   .header .meta {
+    margin: 0.25rem 0 0;
     font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-    font-size: 0.75rem;
-    color: #64748b;
+    font-size: 0.72rem;
+    color: #94a3b8;
+    text-transform: capitalize;
   }
 
   .state {
@@ -301,46 +377,8 @@
     color: #991b1b;
   }
 
-  .chart {
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  .row {
-    display: grid;
-    grid-template-columns: minmax(90px, 1fr) minmax(120px, 3fr) auto;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .label,
-  .value {
-    font-size: 0.8rem;
-    color: #334155;
-  }
-
-  .value {
-    font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-    justify-self: end;
-  }
-
-  .track {
-    height: 0.6rem;
-    border-radius: 999px;
-    background: #e2e8f0;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .bar {
-    height: 100%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, #2563eb 0%, #0ea5e9 100%);
-    transition: width 0.2s ease;
-  }
-
-  .bar.negative {
-    background: linear-gradient(90deg, #ef4444 0%, #f97316 100%);
+  .chart-area {
+    min-height: 200px;
   }
 
   .summary {
@@ -352,16 +390,23 @@
   .summary-item {
     display: grid;
     gap: 0.1rem;
-    padding: 0.45rem 0.6rem;
-    border-radius: 0.45rem;
-    background: #eef2ff;
-    font-size: 0.75rem;
-    color: #334155;
+    padding: 0.5rem 0.65rem;
+    border-radius: 0.5rem;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+  }
+
+  .summary-label {
+    font-size: 0.7rem;
+    color: #64748b;
+    font-weight: 500;
+    text-transform: capitalize;
   }
 
   .summary-item strong {
-    font-size: 0.83rem;
+    font-size: 0.88rem;
     color: #0f172a;
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
   }
 
   .interpretations {
@@ -370,7 +415,7 @@
   }
 
   .interpretation-card {
-    padding: 0.6rem 0.75rem;
+    padding: 0.65rem 0.8rem;
     border-radius: 0.5rem;
     border: 1px solid #e2e8f0;
     background: #fff;
@@ -392,14 +437,14 @@
 
   .interp-score {
     font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-weight: 700;
     color: #0f172a;
   }
 
   .interp-badge {
     display: inline-block;
-    padding: 0.15rem 0.55rem;
+    padding: 0.15rem 0.6rem;
     border-radius: 999px;
     font-size: 0.72rem;
     font-weight: 600;
@@ -418,15 +463,40 @@
   }
 
   .interp-range-bar {
+    position: relative;
     display: flex;
-    height: 0.4rem;
+    height: 6px;
     border-radius: 999px;
-    overflow: hidden;
-    margin-top: 0.2rem;
+    overflow: visible;
+    margin-top: 0.35rem;
   }
 
   .interp-range-segment {
-    opacity: 0.7;
+    opacity: 0.75;
+    border-radius: 1px;
+  }
+
+  .interp-range-segment:first-child {
+    border-radius: 999px 0 0 999px;
+  }
+
+  .interp-range-segment:last-child {
+    border-radius: 0 999px 999px 0;
+  }
+
+  .range-marker {
+    position: absolute;
+    top: -5px;
+    transform: translateX(-50%);
+    z-index: 1;
+  }
+
+  .marker-arrow {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid #0f172a;
   }
 
   .report-download {
@@ -436,8 +506,8 @@
   }
 
   .download-button {
-    padding: 0.5rem 1rem;
-    border-radius: 0.45rem;
+    padding: 0.5rem 1.25rem;
+    border-radius: 0.5rem;
     border: 1px solid #2563eb;
     background: #2563eb;
     color: #fff;
