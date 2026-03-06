@@ -15,6 +15,7 @@
     validateScoreInterpreterConfig,
   } from '$lib/runtime/feedback/ScoreInterpreter';
   import HelpTip from '$lib/help/components/HelpTip.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface Props {
     analytics?: any;
@@ -235,10 +236,8 @@
     <div class="grid-two">
       <div class="row">
         <label for="stats-source-mode" class="flex items-center gap-1">Source Mode <HelpTip helpKey="statisticalFeedback.sourceModes" /></label>
-        <select
+        <Select
           id="stats-source-mode"
-          class="input"
-          data-testid="stats-source-mode"
           value={config.sourceMode}
           onchange={(event) =>
             updateSourceMode(
@@ -248,15 +247,13 @@
           {#each sourceModes as option}
             <option value={option.value}>{option.label}</option>
           {/each}
-        </select>
+        </Select>
       </div>
 
       <div class="row">
         <label for="stats-metric">Metric</label>
-        <select
+        <Select
           id="stats-metric"
-          class="input"
-          data-testid="stats-metric"
           value={config.metric}
           onchange={(event) =>
             updateConfig({
@@ -267,15 +264,13 @@
           {#each metricOptions as option}
             <option value={option.value}>{option.label}</option>
           {/each}
-        </select>
+        </Select>
       </div>
 
       <div class="row">
         <label for="stats-chart-type" class="flex items-center gap-1">Chart Type <HelpTip helpKey="statisticalFeedback.charts" /></label>
-        <select
+        <Select
           id="stats-chart-type"
-          class="input"
-          data-testid="stats-chart-type"
           value={config.chartType}
           onchange={(event) =>
             updateConfig({
@@ -291,7 +286,7 @@
           <option value="box">Box Plot</option>
           <option value="bell-curve">Bell Curve (Normal Distribution)</option>
           <option value="gauge">Gauge / Arc</option>
-        </select>
+        </Select>
       </div>
 
       <div class="row">
@@ -314,10 +309,8 @@
     {#if config.sourceMode === 'current-session'}
       <div class="row">
         <label for="stats-current-variable">Current Variable</label>
-        <select
+        <Select
           id="stats-current-variable"
-          class="input"
-          data-testid="stats-current-variable"
           value={config.dataSource.currentVariable}
           onchange={(event) =>
             updateConfig({
@@ -328,7 +321,7 @@
           {#each designerStore.questionnaire.variables as variable}
             <option value={variable.name}>{variable.name}</option>
           {/each}
-        </select>
+        </Select>
       </div>
     {:else}
       <div class="grid-two">
@@ -349,10 +342,8 @@
 
         <div class="row">
           <label for="stats-data-source-type">Data Source</label>
-          <select
+          <Select
             id="stats-data-source-type"
-            class="input"
-            data-testid="stats-data-source-type"
             value={config.dataSource.source}
             onchange={(event) =>
               updateConfig({
@@ -365,7 +356,7 @@
           >
             <option value="variable">Variable</option>
             <option value="response">Question Response</option>
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -469,9 +460,8 @@
           </div>
           <div class="row">
             <label for={`scale-variable-${scaleIdx}`}>Variable</label>
-            <select
+            <Select
               id={`scale-variable-${scaleIdx}`}
-              class="input"
               value={scale.variableId}
               onchange={(event) =>
                 updateScoreScale(scaleIdx, { variableId: (event.currentTarget as HTMLSelectElement).value })}
@@ -480,7 +470,7 @@
               {#each designerStore.questionnaire.variables as variable}
                 <option value={variable.name}>{variable.name}</option>
               {/each}
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -608,17 +598,17 @@
   .row label {
     font-size: 0.78rem;
     font-weight: 600;
-    color: #334155;
+    color: hsl(var(--foreground));
   }
 
   .input {
     width: 100%;
-    border: 1px solid #cbd5e1;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.45rem;
-    background: #fff;
+    background: hsl(var(--background));
     padding: 0.45rem 0.6rem;
     font-size: 0.82rem;
-    color: #0f172a;
+    color: hsl(var(--foreground));
   }
 
   .toggles {
@@ -632,14 +622,14 @@
     align-items: center;
     gap: 0.35rem;
     font-size: 0.78rem;
-    color: #334155;
+    color: hsl(var(--foreground));
   }
 
   .validation {
     border-radius: 0.5rem;
-    border: 1px solid #fca5a5;
-    background: #fee2e2;
-    color: #991b1b;
+    border: 1px solid hsl(var(--destructive) / 0.4);
+    background: hsl(var(--destructive) / 0.15);
+    color: hsl(var(--destructive));
     padding: 0.55rem 0.7rem;
     font-size: 0.78rem;
   }
@@ -649,9 +639,9 @@
   }
 
   .preview {
-    border: 1px solid #dbe3ed;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.6rem;
-    background: #f8fafc;
+    background: hsl(var(--muted));
     padding: 0.65rem;
     display: grid;
     gap: 0.5rem;
@@ -662,20 +652,20 @@
     justify-content: space-between;
     align-items: center;
     font-size: 0.78rem;
-    color: #334155;
+    color: hsl(var(--foreground));
   }
 
   .link {
     border: none;
     background: transparent;
-    color: #2563eb;
+    color: hsl(var(--primary));
     cursor: pointer;
     font-size: 0.75rem;
     padding: 0;
   }
 
   .link.danger {
-    color: #dc2626;
+    color: hsl(var(--destructive));
   }
 
   .section-header {
@@ -683,18 +673,18 @@
     justify-content: space-between;
     align-items: center;
     font-size: 0.82rem;
-    color: #0f172a;
+    color: hsl(var(--foreground));
     padding-top: 0.5rem;
-    border-top: 1px solid #e2e8f0;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .score-scale-card {
     display: grid;
     gap: 0.5rem;
     padding: 0.6rem;
-    border: 1px solid #dbe3ed;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
-    background: #f8fafc;
+    background: hsl(var(--muted));
   }
 
   .scale-header {
@@ -706,7 +696,7 @@
   .scale-title {
     font-size: 0.78rem;
     font-weight: 600;
-    color: #334155;
+    color: hsl(var(--foreground));
   }
 
   .ranges-header {
@@ -714,7 +704,7 @@
     justify-content: space-between;
     align-items: center;
     font-size: 0.75rem;
-    color: #475569;
+    color: hsl(var(--muted-foreground));
     font-weight: 600;
   }
 
@@ -731,7 +721,7 @@
 
   .range-sep {
     font-size: 0.75rem;
-    color: #94a3b8;
+    color: hsl(var(--muted-foreground));
   }
 
   .range-label-input {
@@ -743,7 +733,7 @@
     width: 28px;
     height: 28px;
     padding: 0;
-    border: 1px solid #cbd5e1;
+    border: 1px solid hsl(var(--border));
     border-radius: 4px;
     cursor: pointer;
     background: transparent;

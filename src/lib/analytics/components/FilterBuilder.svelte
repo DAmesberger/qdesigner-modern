@@ -1,5 +1,8 @@
 <script lang="ts">
   import type { FilterOperator, FilterRule, FilterGroup, FilterQuery } from '../types/filter';
+  import { X } from 'lucide-svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
+  import Input from '$lib/components/ui/forms/Input.svelte';
 
   interface Props {
     fields: { key: string; label: string; type: 'number' | 'text' | 'date' }[];
@@ -147,47 +150,45 @@
 
         <div class="flex items-center gap-2">
           <!-- Field -->
-          <select
-            class="flex-1 text-sm border border-border rounded-md px-2 py-1.5
-              bg-background text-foreground"
+          <Select
+            class="flex-1 text-sm"
             value={rule.field}
-            onchange={(e) => updateRule(group.id, rule.id, { field: (e.target as HTMLSelectElement).value })}
+            onchange={(e) => updateRule(group.id, rule.id, { field: e.currentTarget.value })}
+            placeholder=""
           >
             {#each fields as field}
               <option value={field.key}>{field.label}</option>
             {/each}
-          </select>
+          </Select>
 
           <!-- Operator -->
-          <select
-            class="w-24 text-sm border border-border rounded-md px-2 py-1.5
-              bg-background text-foreground"
+          <Select
+            class="w-24 text-sm"
             value={rule.operator}
-            onchange={(e) => updateRule(group.id, rule.id, { operator: (e.target as HTMLSelectElement).value as FilterOperator })}
+            onchange={(e) => updateRule(group.id, rule.id, { operator: e.currentTarget.value as FilterOperator })}
+            placeholder=""
           >
             {#each OPERATORS as op}
               <option value={op.value}>{op.label}</option>
             {/each}
-          </select>
+          </Select>
 
           <!-- Value -->
-          <input
+          <Input
             type="text"
-            class="flex-1 text-sm border border-border rounded-md px-2 py-1.5
-              bg-background text-foreground"
+            class="flex-1 text-sm"
             value={rule.value}
             placeholder="Value"
-            oninput={(e) => updateRule(group.id, rule.id, { value: (e.target as HTMLInputElement).value })}
+            oninput={(e) => updateRule(group.id, rule.id, { value: e.currentTarget.value })}
           />
 
           {#if rule.operator === 'between'}
-            <input
+            <Input
               type="text"
-              class="flex-1 text-sm border border-border rounded-md px-2 py-1.5
-                bg-background text-foreground"
+              class="flex-1 text-sm"
               value={rule.value2 ?? ''}
               placeholder="Value 2"
-              oninput={(e) => updateRule(group.id, rule.id, { value2: (e.target as HTMLInputElement).value })}
+              oninput={(e) => updateRule(group.id, rule.id, { value2: e.currentTarget.value })}
             />
           {/if}
 
@@ -198,9 +199,7 @@
             onclick={() => removeRule(group.id, rule.id)}
             title="Remove rule"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X size={16} />
           </button>
         </div>
       {/each}

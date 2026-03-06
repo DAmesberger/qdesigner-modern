@@ -243,32 +243,32 @@
   .text-input {
     width: 100%;
     padding: 0.75rem 1rem;
-    border: 2px solid #e5e7eb;
+    border: 2px solid hsl(var(--border));
     border-radius: 0.5rem;
     font-size: 1rem;
     font-family: inherit;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.2s;
   }
 
   .text-input:hover:not(:disabled) {
-    border-color: #d1d5db;
+    border-color: hsl(var(--border));
   }
 
   .text-input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .text-input:disabled {
-    background: #f9fafb;
-    color: #9ca3af;
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
     cursor: not-allowed;
   }
 
   .text-input::placeholder {
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground));
   }
 
   /* Number input specific */
@@ -300,14 +300,14 @@
     bottom: 0.5rem;
     right: 0.5rem;
     font-size: 0.75rem;
-    color: #6b7280;
-    background: white;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--background));
     padding: 0 0.25rem;
     pointer-events: none;
   }
 
   .char-counter.warning {
-    color: #f97316;
+    color: hsl(var(--warning));
     font-weight: 500;
   }
 
@@ -318,10 +318,10 @@
     left: 0;
     right: 0;
     margin-top: 0.25rem;
-    background: white;
-    border: 2px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 2px solid hsl(var(--border));
     border-radius: 0.5rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px hsl(var(--foreground) / 0.1);
     max-height: 200px;
     overflow-y: auto;
     z-index: 10;
@@ -341,12 +341,12 @@
 
   .suggestion-item:hover,
   .suggestion-item.selected {
-    background: #f3f4f6;
+    background: hsl(var(--muted));
   }
 
   .suggestion-item.selected {
-    background: #eff6ff;
-    color: #1e40af;
+    background: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
   }
 
   /* Type-specific styles */

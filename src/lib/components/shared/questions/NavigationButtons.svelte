@@ -85,36 +85,36 @@
     border: 1px solid transparent;
     transition: all 0.15s ease;
     cursor: pointer;
-    background-color: white;
-    color: #374151;
-    border-color: #d1d5db;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    border-color: hsl(var(--border));
   }
-  
+
   .nav-button:hover:not(:disabled) {
-    background-color: #f9fafb;
-    border-color: #9ca3af;
+    background-color: hsl(var(--muted));
+    border-color: hsl(var(--muted-foreground));
   }
-  
+
   .nav-button:focus {
     outline: 2px solid transparent;
     outline-offset: 2px;
-    box-shadow: 0 0 0 2px #3b82f6;
+    box-shadow: 0 0 0 2px hsl(var(--primary));
   }
-  
+
   .nav-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  
+
   .nav-button.primary {
-    background-color: #3b82f6;
-    color: white;
-    border-color: #3b82f6;
+    background-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: hsl(var(--primary));
   }
-  
+
   .nav-button.primary:hover:not(:disabled) {
-    background-color: #2563eb;
-    border-color: #2563eb;
+    background-color: hsl(var(--primary) / 0.9);
+    border-color: hsl(var(--primary) / 0.9);
   }
   
   .button-icon {

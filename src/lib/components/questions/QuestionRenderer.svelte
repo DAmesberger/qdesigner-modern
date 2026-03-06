@@ -224,14 +224,14 @@
     justify-content: center;
     gap: 0.75rem;
     padding: 2rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .spinner {
     width: 1.5rem;
     height: 1.5rem;
-    border: 2px solid #e5e7eb;
-    border-top-color: #3b82f6;
+    border: 2px solid hsl(var(--border));
+    border-top-color: hsl(var(--primary));
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -245,8 +245,8 @@
   .unknown-question-type {
     padding: 2rem;
     text-align: center;
-    background: #f9fafb;
-    border: 2px dashed #e5e7eb;
+    background: hsl(var(--muted));
+    border: 2px dashed hsl(var(--border));
     border-radius: 0.5rem;
   }
 
@@ -258,18 +258,18 @@
   .unknown-question-type h3 {
     font-size: 1.25rem;
     font-weight: 600;
-    color: #111827;
+    color: hsl(var(--foreground));
     margin-bottom: 0.5rem;
   }
 
   .unknown-question-type p {
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     margin: 0;
   }
 
   .help-text {
     margin-top: 0.5rem;
     font-size: 0.875rem;
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground));
   }
 </style>

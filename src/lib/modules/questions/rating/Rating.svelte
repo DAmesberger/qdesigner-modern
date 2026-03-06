@@ -301,7 +301,7 @@
   }
 
   .rating-container:focus {
-    outline: 2px solid #3b82f6;
+    outline: 2px solid hsl(var(--primary));
     outline-offset: 4px;
     border-radius: 0.375rem;
   }
@@ -332,32 +332,32 @@
 
   /* Star colors */
   .style-stars .rating-item {
-    color: #d1d5db;
+    color: hsl(var(--border));
   }
 
   .style-stars .rating-item.full,
   .style-stars .rating-item.half {
-    color: #fbbf24;
+    color: hsl(var(--warning, 45 93% 47%));
   }
 
   /* Heart colors */
   .style-hearts .rating-item {
-    color: #d1d5db;
+    color: hsl(var(--border));
   }
 
   .style-hearts .rating-item.full,
   .style-hearts .rating-item.half {
-    color: #ef4444;
+    color: hsl(var(--destructive));
   }
 
   /* Thumbs colors */
   .style-thumbs .rating-item {
-    color: #d1d5db;
+    color: hsl(var(--border));
   }
 
   .style-thumbs .rating-item.full,
   .style-thumbs .rating-item.half {
-    color: #3b82f6;
+    color: hsl(var(--primary));
   }
 
   /* Numeric style */
@@ -367,28 +367,28 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px solid #e5e7eb;
+    border: 2px solid hsl(var(--border));
     border-radius: 0.5rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
   .style-numeric .rating-item:hover:not(:disabled) {
     transform: none;
-    border-color: #3b82f6;
-    background: #eff6ff;
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.05);
   }
 
   .style-numeric .rating-item.full {
-    border-color: #3b82f6;
-    background: #3b82f6;
-    color: white;
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary));
+    color: hsl(var(--background));
   }
 
   .style-numeric .rating-item.half {
-    border-color: #3b82f6;
-    background: linear-gradient(90deg, #3b82f6 50%, white 50%);
-    color: #1e40af;
+    border-color: hsl(var(--primary));
+    background: linear-gradient(90deg, hsl(var(--primary)) 50%, hsl(var(--background)) 50%);
+    color: hsl(var(--primary));
   }
 
   .rating-number {
@@ -412,13 +412,13 @@
 
   .rating-value {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-weight: 500;
   }
 
   .rating-label {
     font-size: 0.875rem;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   /* Responsive */

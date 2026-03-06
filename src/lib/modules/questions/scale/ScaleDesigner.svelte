@@ -331,7 +331,7 @@
   }
 
   .form-section {
-    background: #f9fafb;
+    background: hsl(var(--muted));
     padding: 1rem;
     border-radius: 0.5rem;
   }
@@ -339,13 +339,13 @@
   h3 {
     font-size: 0.875rem;
     font-weight: 600;
-    color: #111827;
+    color: hsl(var(--foreground));
     margin-bottom: 0.75rem;
   }
 
   .help-text {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     margin-bottom: 0.75rem;
   }
 
@@ -371,20 +371,20 @@
   .field label {
     font-size: 0.75rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .field input {
     padding: 0.5rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
   }
 
   .field input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .radio-group {
@@ -416,8 +416,8 @@
   }
 
   .label-item {
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     padding: 0.75rem;
   }
@@ -431,8 +431,8 @@
 
   .remove-button {
     padding: 0.5rem 0.75rem;
-    background: #fee2e2;
-    color: #dc2626;
+    background: hsl(var(--destructive) / 0.15);
+    color: hsl(var(--destructive));
     border: none;
     border-radius: 0.375rem;
     cursor: pointer;
@@ -442,16 +442,16 @@
   }
 
   .remove-button:hover {
-    background: #fecaca;
+    background: hsl(var(--destructive) / 0.2);
   }
 
   .add-button {
     margin-top: 0.75rem;
     padding: 0.5rem 1rem;
-    border: 2px dashed #d1d5db;
+    border: 2px dashed hsl(var(--border));
     border-radius: 0.375rem;
     background: transparent;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
@@ -459,8 +459,8 @@
   }
 
   .add-button:hover {
-    border-color: #3b82f6;
-    color: #3b82f6;
-    background: #eff6ff;
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.1);
   }
 </style>

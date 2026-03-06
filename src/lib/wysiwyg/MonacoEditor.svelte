@@ -214,7 +214,7 @@
 
 <style>
   .monaco-editor-container {
-    border: 1px solid var(--color-border, #30363d);
+    border: 1px solid hsl(var(--border));
     border-radius: 6px;
     overflow: hidden;
   }

@@ -5,6 +5,7 @@
   import Button from '$lib/components/common/Button.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import EmptyState from '$lib/components/common/EmptyState.svelte';
+  import { CheckCircle, Clock } from 'lucide-svelte';
   
   // Mock data - replace with actual API calls
   const questionnaires = [
@@ -90,9 +91,7 @@
                 {questionnaire.category}
               </Badge>
               {#if questionnaire.status === 'completed'}
-                <svg class="h-5 w-5 text-success" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
-                </svg>
+                <CheckCircle size={20} class="text-success" />
               {/if}
             </div>
             
@@ -105,9 +104,7 @@
             </p>
             
             <div class="mt-4 flex items-center text-sm text-muted-foreground">
-              <svg class="mr-1.5 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
-              </svg>
+              <Clock size={16} class="mr-1.5" />
               ~{questionnaire.estimatedTime} minutes
               <span class="mx-2">•</span>
               {questionnaire.questionCount} questions
@@ -128,9 +125,7 @@
             <div class="mt-6">
               {#if questionnaire.status === 'completed'}
                 <Button variant="secondary" size="sm" disabled class="w-full">
-                  <svg class="-ml-0.5 mr-1.5 h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
-                  </svg>
+                  <CheckCircle size={16} class="-ml-0.5 mr-1.5" />
                   Completed
                 </Button>
               {:else if questionnaire.status === 'in_progress'}

@@ -3,8 +3,10 @@
   import type { FlowControl } from '$lib/shared/types/questionnaire';
   import { nanoid } from 'nanoid';
   import FlowControlEditor from './flow/FlowControlEditor.svelte';
-  import { CornerDownRight, GitBranch, Repeat, Square, HelpCircle, Pencil, Trash2, Plus, Map, X } from 'lucide-svelte';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import { CornerDownRight, GitBranch, Repeat, Square, HelpCircle, Pencil, Trash2, Plus, Map } from 'lucide-svelte';
   import HelpTip from '$lib/help/components/HelpTip.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   // Use derived state instead of local state + subscribe
   let flowControls = $derived(designerStore.questionnaire.flow || []);
@@ -261,30 +263,13 @@
 </div>
 
 <!-- Add/Edit Flow Modal -->
-{#if showAddFlow}
-  <div class="fixed inset-0 z-50 overflow-y-auto">
-    <div class="fixed inset-0 bg-black/50" aria-hidden="true"></div>
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onclick={() => {
-        showAddFlow = false;
-        editingFlow = null;
-        resetForm();
-      }}
-      data-testid="flow-add-modal-overlay"
-    >
-      <div
-        class="bg-card rounded-[var(--radius)] shadow-lg border border-border relative max-w-md w-full p-6"
-        onclick={(e) => e.stopPropagation()}
-        data-testid="flow-add-modal"
-      >
-        <h3 class="text-base font-semibold text-foreground mb-4">
-          {editingFlow ? 'Edit' : 'Add'} Flow Control
-        </h3>
-
-        <div class="space-y-4">
+<Dialog
+  bind:open={showAddFlow}
+  title="{editingFlow ? 'Edit' : 'Add'} Flow Control"
+  size="md"
+  onclose={() => { showAddFlow = false; editingFlow = null; resetForm(); }}
+>
+  <div class="space-y-4" data-testid="flow-add-modal">
           <!-- Flow Type -->
           <div>
             <label
@@ -293,18 +278,17 @@
             >
               Type <HelpTip helpKey="flowControl.branch" />
             </label>
-            <select
+            <Select
               id="flow-type"
               bind:value={newFlow.type}
-              class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
               disabled={editingFlow !== null}
-              data-testid="flow-type-select"
+              placeholder=""
             >
               <option value="skip">Skip - Jump to another question/page</option>
               <option value="branch">Branch - Conditional navigation</option>
               <option value="loop">Loop - Repeat section</option>
               <option value="terminate">Terminate - End questionnaire</option>
-            </select>
+            </Select>
           </div>
 
           <!-- Condition -->
@@ -337,17 +321,15 @@
               >
                 Target
               </label>
-              <select
+              <Select
                 id="flow-target"
                 bind:value={newFlow.target}
-                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
-                data-testid="flow-target-select"
+                placeholder="Select target..."
               >
-                <option value="">Select target...</option>
                 {#each availableTargets as target}
                   <option value={target.id}>{target.label}</option>
                 {/each}
-              </select>
+              </Select>
               {#if newFlow.target}
                 <p class="mt-1 text-xs text-muted-foreground">
                   Selected: {getTargetLabel(newFlow.target)}
@@ -376,76 +358,55 @@
               />
             </div>
           {/if}
-        </div>
-
-        <div class="flex justify-end gap-2 mt-6">
-          <button
-            onclick={() => {
-              showAddFlow = false;
-              editingFlow = null;
-              resetForm();
-            }}
-            class="border border-border text-foreground hover:bg-accent h-8 px-3 text-xs rounded-md"
-            data-testid="flow-cancel-button"
-          >
-            Cancel
-          </button>
-          <button
-            onclick={() => {
-              if (editingFlow) {
-                handleUpdateFlow(editingFlow.id, {
-                  type: newFlow.type,
-                  condition: newFlow.condition,
-                  target: newFlow.target || undefined,
-                  iterations: newFlow.iterations,
-                });
-                editingFlow = null;
-                showAddFlow = false;
-                resetForm();
-              } else {
-                handleAddFlow();
-              }
-            }}
-            disabled={!newFlow.condition ||
-              ((newFlow.type === 'skip' || newFlow.type === 'branch') && !newFlow.target) ||
-              (newFlow.type === 'loop' && (!newFlow.iterations || newFlow.iterations < 1))}
-            class="bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 text-xs rounded-md disabled:opacity-50"
-            data-testid="flow-save-button"
-          >
-            {editingFlow ? 'Update' : 'Add'} Flow
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
-{/if}
+
+  {#snippet footer()}
+    <button
+      onclick={() => {
+        showAddFlow = false;
+        editingFlow = null;
+        resetForm();
+      }}
+      class="border border-border text-foreground hover:bg-accent h-8 px-3 text-xs rounded-md"
+      data-testid="flow-cancel-button"
+    >
+      Cancel
+    </button>
+    <button
+      onclick={() => {
+        if (editingFlow) {
+          handleUpdateFlow(editingFlow.id, {
+            type: newFlow.type,
+            condition: newFlow.condition,
+            target: newFlow.target || undefined,
+            iterations: newFlow.iterations,
+          });
+          editingFlow = null;
+          showAddFlow = false;
+          resetForm();
+        } else {
+          handleAddFlow();
+        }
+      }}
+      disabled={!newFlow.condition ||
+        ((newFlow.type === 'skip' || newFlow.type === 'branch') && !newFlow.target) ||
+        (newFlow.type === 'loop' && (!newFlow.iterations || newFlow.iterations < 1))}
+      class="bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3 text-xs rounded-md disabled:opacity-50"
+      data-testid="flow-save-button"
+    >
+      {editingFlow ? 'Update' : 'Add'} Flow
+    </button>
+  {/snippet}
+</Dialog>
 
 <!-- Visual Flow Editor Modal -->
-{#if showFlowEditor}
-  <div class="fixed inset-0 bg-black/50" aria-hidden="true"></div>
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-    <div
-      class="fixed inset-4 bg-card rounded-[var(--radius)] shadow-lg border border-border flex flex-col pointer-events-auto"
-      onclick={(e) => e.stopPropagation()}
-    >
-      <div class="flex items-center justify-between p-4 border-b border-border">
-        <h3 class="text-lg font-semibold text-foreground">
-          Flow Control Visual Editor
-        </h3>
-        <button
-          onclick={() => (showFlowEditor = false)}
-          class="p-2 hover:bg-accent hover:text-accent-foreground rounded-md"
-          aria-label="Close editor"
-        >
-          <X class="w-5 h-5" />
-        </button>
-      </div>
-
-      <div class="flex-1 overflow-hidden">
-        <FlowControlEditor {flowControls} onUpdate={handleFlowUpdate} />
-      </div>
-    </div>
+<Dialog
+  bind:open={showFlowEditor}
+  title="Flow Control Visual Editor"
+  size="full"
+  onclose={() => { showFlowEditor = false; }}
+>
+  <div class="min-h-[60vh]">
+    <FlowControlEditor {flowControls} onUpdate={handleFlowUpdate} />
   </div>
-{/if}
+</Dialog>

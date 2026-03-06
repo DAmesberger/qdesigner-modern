@@ -3,6 +3,7 @@
   import PhaseTimelineEditor from './PhaseTimelineEditor.svelte';
   import type { ReactionStudyTrialTemplate } from '../model/reaction-schema';
   import type { ReactionStimulusConfig } from '$lib/runtime/reaction';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface Props {
     trial: ReactionStudyTrialTemplate;
@@ -125,7 +126,7 @@
 
     <div class="form-group">
       <span class="label-text">Kind</span>
-      <select class="select" value={stimulusKind} onchange={(e) => setStimulusKind((e.currentTarget as HTMLSelectElement).value as ReactionStimulusConfig['kind'])}>
+      <select class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6" value={stimulusKind()} onchange={(e) => setStimulusKind((e.currentTarget as HTMLSelectElement).value as ReactionStimulusConfig['kind'])}>
         <option value="text">Text</option>
         <option value="shape">Shape</option>
         <option value="image">Image</option>
@@ -154,12 +155,12 @@
       <div class="form-grid compact-grid">
         <div class="form-group">
           <span class="label-text">Shape</span>
-          <select class="select" bind:value={trial.stimulus.shape}>
+          <Select bind:value={trial.stimulus.shape}>
             <option value="circle">Circle</option>
             <option value="square">Square</option>
             <option value="rectangle">Rectangle</option>
             <option value="triangle">Triangle</option>
-          </select>
+          </Select>
         </div>
         <div class="form-group">
           <span class="label-text">Radius (px)</span>

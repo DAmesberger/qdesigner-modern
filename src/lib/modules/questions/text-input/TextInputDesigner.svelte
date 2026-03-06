@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
   import { X } from 'lucide-svelte';
+  import Button from '$lib/components/common/Button.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface TextInputConfig {
     inputType: 'text' | 'number' | 'email' | 'tel' | 'url' | 'password';
@@ -93,14 +95,14 @@
   <!-- Input Type Selection -->
   <div class="form-group">
     <label for="input-type">Input Type</label>
-    <select id="input-type" bind:value={question.config.inputType} class="select">
+    <Select id="input-type" bind:value={question.config.inputType}>
       <option value="text">Text</option>
       <option value="number">Number</option>
       <option value="email">Email</option>
       <option value="tel">Phone</option>
       <option value="url">URL</option>
       <option value="password">Password</option>
-    </select>
+    </Select>
   </div>
 
   <!-- Placeholder -->
@@ -236,9 +238,9 @@
         class="input"
         onkeydown={(e) => e.key === 'Enter' && addSuggestion()}
       />
-      <button class="btn btn-secondary" onclick={addSuggestion} disabled={!newSuggestion.trim()}>
+      <Button variant="secondary" size="sm" onclick={addSuggestion} disabled={!newSuggestion.trim()}>
         Add
-      </button>
+      </Button>
     </div>
 
     {#if question.config.suggestions?.length}
@@ -284,30 +286,27 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
-  .input,
-  .select {
+  .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
-  .input:hover,
-  .select:hover {
-    border-color: #d1d5db;
+  .input:hover {
+    border-color: hsl(var(--border));
   }
 
-  .input:focus,
-  .select:focus {
+  .input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .font-mono {
@@ -330,14 +329,14 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section-title {
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -345,7 +344,7 @@
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .suggestions-input {
@@ -356,30 +355,6 @@
 
   .suggestions-input .input {
     flex: 1;
-  }
-
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #e5e7eb;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .suggestions-list {
@@ -393,8 +368,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.5rem 0.75rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
   }
@@ -403,14 +378,14 @@
     padding: 0.25rem;
     border: none;
     background: none;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     cursor: pointer;
     border-radius: 0.25rem;
     transition: all 0.15s;
   }
 
   .remove-btn:hover {
-    background: #e5e7eb;
-    color: #374151;
+    background: hsl(var(--border));
+    color: hsl(var(--foreground));
   }
 </style>

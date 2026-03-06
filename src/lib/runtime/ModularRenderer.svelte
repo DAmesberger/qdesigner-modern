@@ -226,14 +226,14 @@
     justify-content: center;
     gap: 0.75rem;
     padding: 2rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .spinner {
     width: 1.5rem;
     height: 1.5rem;
-    border: 2px solid #e5e7eb;
-    border-top-color: #3b82f6;
+    border: 2px solid hsl(var(--border));
+    border-top-color: hsl(var(--primary));
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -247,8 +247,8 @@
   .error-state {
     padding: 2rem;
     text-align: center;
-    background: #fef2f2;
-    border: 2px dashed #f87171;
+    background: hsl(var(--destructive) / 0.1);
+    border: 2px dashed hsl(var(--destructive) / 0.5);
     border-radius: 0.5rem;
   }
 
@@ -260,19 +260,19 @@
   .error-state h3 {
     font-size: 1.25rem;
     font-weight: 600;
-    color: #991b1b;
+    color: hsl(var(--destructive));
     margin-bottom: 0.5rem;
   }
 
   .error-state p {
-    color: #dc2626;
+    color: hsl(var(--destructive));
     margin: 0;
   }
 
   .error-details {
     margin-top: 1rem;
     text-align: left;
-    background: white;
+    background: hsl(var(--background));
     padding: 1rem;
     border-radius: 0.375rem;
   }
@@ -293,10 +293,10 @@
     align-items: center;
     gap: 0.5rem;
     padding: 1rem;
-    background: #f3f4f6;
-    border: 1px dashed #9ca3af;
+    background: hsl(var(--muted));
+    border: 1px dashed hsl(var(--muted-foreground));
     border-radius: 0.375rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
   }
 

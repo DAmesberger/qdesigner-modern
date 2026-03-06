@@ -2,6 +2,7 @@
   import Dialog from './Dialog.svelte';
   import Button from '../../common/Button.svelte';
   import { fade } from 'svelte/transition';
+  import { CloudUpload, X } from 'lucide-svelte';
 
   interface Props {
     open?: boolean;
@@ -179,19 +180,7 @@
         class="sr-only"
       />
 
-      <svg
-        class="mx-auto h-12 w-12 text-muted-foreground"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-        />
-      </svg>
+      <CloudUpload size={48} class="mx-auto text-muted-foreground" />
 
       <p class="mt-4 text-sm font-medium text-foreground">
         {dragActive ? 'Drop files here' : 'Drop files here or click to browse'}
@@ -281,14 +270,7 @@
                   class="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                   aria-label="Remove file"
                 >
-                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
+                  <X size={16} />
                 </button>
               {/if}
             </div>

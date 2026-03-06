@@ -4,8 +4,10 @@
   import { toast } from '$lib/stores/toast';
   import { page } from '$app/stores';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import { api } from '$lib/services/api';
   import { formatSemver } from '$lib/shared/types/questionnaire';
+  import { ClipboardList, ChevronDown, ArrowRight } from 'lucide-svelte';
 
   let { questionnaireId } = $props<{ questionnaireId: string }>();
 
@@ -158,18 +160,9 @@
     onclick={toggleVersionMenu}
     class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-accent"
   >
-    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-      />
-    </svg>
+    <ClipboardList size={16} />
     v{versionDisplay}
-    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-    </svg>
+    <ChevronDown size={16} />
   </button>
 
   <!-- Version Dropdown Menu -->
@@ -260,24 +253,11 @@
 </div>
 
 <!-- Bump Confirmation Modal -->
-{#if showBumpModal && pendingBumpType}
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-    transition:fade={{ duration: 200 }}
-  >
-    <div
-      class="bg-card rounded-lg shadow-xl w-full max-w-md p-6"
-      transition:fly={{ y: 20, duration: 300 }}
-    >
-      <h3 class="text-lg font-semibold text-foreground mb-2">
-        Bump {pendingBumpType} version
-      </h3>
-
+<Dialog open={showBumpModal && !!pendingBumpType} title="Bump {pendingBumpType} version" size="sm" onclose={() => { showBumpModal = false; pendingBumpType = null; }}>
+  {#if pendingBumpType}
       <div class="flex items-center gap-3 mb-4">
         <span class="text-sm font-mono text-muted-foreground">v{versionDisplay}</span>
-        <svg class="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-        </svg>
+        <ArrowRight size={16} class="text-muted-foreground" />
         <span class="text-sm font-mono font-semibold text-foreground">
           v{previewVersion(pendingBumpType)}
         </span>
@@ -288,14 +268,16 @@
       </p>
 
       {#if pendingBumpType === 'major'}
-        <div class="mb-4 p-3 bg-warning/10 border border-warning/30 rounded-lg">
+        <div class="p-3 bg-warning/10 border border-warning/30 rounded-lg">
           <p class="text-xs text-warning">
             Major version bumps indicate breaking changes. Sessions using different major versions are not directly comparable.
           </p>
         </div>
       {/if}
+  {/if}
 
-      <div class="flex justify-end gap-3">
+  {#snippet footer()}
+    <div class="flex justify-end gap-3 w-full">
         <button
           onclick={() => { showBumpModal = false; pendingBumpType = null; }}
           disabled={isBumping}
@@ -314,9 +296,8 @@
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
           {/if}
-          Bump to v{previewVersion(pendingBumpType)}
+          {#if pendingBumpType}Bump to v{previewVersion(pendingBumpType)}{/if}
         </button>
-      </div>
     </div>
-  </div>
-{/if}
+  {/snippet}
+</Dialog>

@@ -432,13 +432,13 @@
   label {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .content-input {
     width: 100%;
     padding: 0.75rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
@@ -447,13 +447,13 @@
 
   .content-input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .options-section,
   .auto-advance-section {
-    background: #f9fafb;
+    background: hsl(var(--muted));
     padding: 1rem;
     border-radius: 0.5rem;
   }
@@ -461,7 +461,7 @@
   h3 {
     font-size: 0.875rem;
     font-weight: 600;
-    color: #111827;
+    color: hsl(var(--foreground));
     margin-bottom: 0.75rem;
   }
 
@@ -484,7 +484,7 @@
 
   .help-text {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     margin-top: 0.25rem;
     margin-left: 1.5rem;
   }
@@ -492,19 +492,19 @@
   .delay-input {
     width: 120px;
     padding: 0.5rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
   }
 
   .delay-input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .markdown-reference {
-    background: #f3f4f6;
+    background: hsl(var(--muted));
     padding: 1rem;
     border-radius: 0.5rem;
   }
@@ -523,7 +523,7 @@
 
   .reference-item code {
     font-size: 0.75rem;
-    background: #e5e7eb;
+    background: hsl(var(--border));
     padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
   }

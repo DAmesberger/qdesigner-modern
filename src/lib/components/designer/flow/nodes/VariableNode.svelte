@@ -2,6 +2,7 @@
   import { Handle, Position, type NodeProps, type Node } from '@xyflow/svelte';
   import type { Variable } from '$lib/shared/types/questionnaire';
   import theme from '$lib/theme';
+  import { Calculator } from 'lucide-svelte';
 
   interface VariableNodeData extends Record<string, unknown> {
     variable: Variable;
@@ -39,14 +40,7 @@
 
   {#if data.variable.formula}
     <div class="formula-indicator" title="Computed variable">
-      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-        />
-      </svg>
+      <Calculator size={12} />
     </div>
   {/if}
 
@@ -55,23 +49,23 @@
 
 <style>
   .variable-node {
-    background: white;
-    border: 2px solid #10b981;
+    background: hsl(var(--card));
+    border: 2px solid hsl(var(--success));
     border-radius: 8px;
     padding: 10px 14px;
     min-width: 140px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px hsl(var(--foreground) / 0.1);
     transition: all 0.2s;
     position: relative;
   }
 
   .variable-node.selected {
-    box-shadow: 0 0 0 2px #10b981;
+    box-shadow: 0 0 0 2px hsl(var(--success));
   }
 
   .variable-node:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px hsl(var(--foreground) / 0.15);
   }
 
   .node-content {
@@ -95,7 +89,7 @@
   .variable-name {
     font-size: 13px;
     font-weight: 600;
-    color: #065f46;
+    color: hsl(var(--success));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -105,22 +99,22 @@
     position: absolute;
     top: -6px;
     right: -6px;
-    background: #f59e0b;
-    color: white;
+    background: hsl(var(--warning));
+    color: hsl(var(--background));
     width: 20px;
     height: 20px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px solid white;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    border: 2px solid hsl(var(--card));
+    box-shadow: 0 1px 3px hsl(var(--foreground) / 0.2);
   }
 
   :global(.variable-node .svelte-flow__handle) {
     width: 8px;
     height: 8px;
-    background: #10b981;
-    border: 2px solid white;
+    background: hsl(var(--success));
+    border: 2px solid hsl(var(--card));
   }
 </style>

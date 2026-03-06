@@ -1,6 +1,7 @@
 <script lang="ts">
   import { designerStore } from '$lib/stores/designer.svelte';
   import type { Block, Question, ExperimentalCondition } from '$lib/shared';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import {
     ChevronRight, ChevronDown, Plus,
     FileText, Shuffle, GitFork, Repeat,
@@ -11,6 +12,7 @@
     Info, Image, BarChart3, CircleDot, Hash,
     Monitor, FilePlus2,
   } from 'lucide-svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   // Collapsible state - auto-expand current page/block
   let expandedPages = $state<Record<string, boolean>>({});
@@ -27,6 +29,7 @@
   let showAddBlock = $state(false);
   let addBlockPageId = $state<string | null>(null);
   let editingBlock = $state<Block | null>(null);
+  const showBlockDialog = $derived(showAddBlock || editingBlock !== null);
 
   const blockTypes = [
     { type: 'standard' as const, name: 'Standard Block', description: 'Questions appear in order' },
@@ -342,19 +345,13 @@
 </div>
 
 <!-- Add/Edit Block Modal -->
-{#if showAddBlock || editingBlock}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="bg-layer-modal rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto border border-border"
-      onclick={(e) => e.stopPropagation()}
-    >
-      <h3 class="text-lg font-semibold mb-4">
-        {editingBlock ? 'Edit Block' : 'Add Block'}
-      </h3>
-
-      <div class="space-y-4">
+<Dialog
+  open={showBlockDialog}
+  title={editingBlock ? 'Edit Block' : 'Add Block'}
+  size="md"
+  onclose={() => { showAddBlock = false; editingBlock = null; addBlockPageId = null; }}
+>
+  <div class="space-y-4">
         <div>
           <label for="block-name" class="block text-sm font-medium text-foreground mb-1">Name</label>
           <input
@@ -414,7 +411,7 @@
             <label for="block-condition" class="block text-sm font-medium text-foreground mb-1">
               Experimental Condition
             </label>
-            <select
+            <Select
               id="block-condition"
               value={editingBlock ? (editingBlock.condition || '') : newBlock.condition}
               onchange={(e) => {
@@ -425,13 +422,13 @@
                   newBlock.condition = value;
                 }
               }}
-              class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary text-sm"
+              placeholder=""
             >
               <option value="">None (always shown)</option>
               {#each experimentalConditions as cond}
                 <option value={cond.name}>{cond.name}</option>
               {/each}
-            </select>
+            </Select>
             <p class="text-xs text-muted-foreground mt-1">
               Assign this block to a condition. Only participants in the selected condition will see it.
             </p>
@@ -559,22 +556,20 @@
             </div>
           </div>
         {/if}
-      </div>
-
-      <div class="flex justify-end space-x-3 mt-6">
-        <button
-          onclick={() => { showAddBlock = false; editingBlock = null; addBlockPageId = null; }}
-          class="px-4 py-2 text-muted-foreground hover:text-foreground"
-        >
-          Cancel
-        </button>
-        <button
-          onclick={editingBlock ? handleUpdateBlock : handleAddBlock}
-          class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-        >
-          {editingBlock ? 'Update' : 'Add'} Block
-        </button>
-      </div>
-    </div>
   </div>
-{/if}
+
+  {#snippet footer()}
+    <button
+      onclick={() => { showAddBlock = false; editingBlock = null; addBlockPageId = null; }}
+      class="px-4 py-2 text-muted-foreground hover:text-foreground"
+    >
+      Cancel
+    </button>
+    <button
+      onclick={editingBlock ? handleUpdateBlock : handleAddBlock}
+      class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+    >
+      {editingBlock ? 'Update' : 'Add'} Block
+    </button>
+  {/snippet}
+</Dialog>

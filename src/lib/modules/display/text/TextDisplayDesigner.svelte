@@ -3,6 +3,8 @@
   import { marked } from 'marked';
   import DOMPurify from 'isomorphic-dompurify';
   import { Eye, Edit } from 'lucide-svelte';
+  import Button from '$lib/components/common/Button.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface TextDisplayConfig {
     content: string;
@@ -97,9 +99,9 @@
   <div class="form-group">
     <label for="content">Content</label>
     <div class="editor-toolbar">
-      <button
-        class="toolbar-btn"
-        class:active={previewMode}
+      <Button
+        variant={previewMode ? 'primary' : 'ghost'}
+        size="sm"
         onclick={() => (previewMode = !previewMode)}
       >
         {#if previewMode}
@@ -108,18 +110,19 @@
           <Eye size={16} />
         {/if}
         {previewMode ? 'Edit' : 'Preview'}
-      </button>
+      </Button>
 
       {#if question.config.markdown && !previewMode}
         <div class="toolbar-divider"></div>
         {#each markdownSnippets as snippet}
-          <button
-            class="toolbar-btn"
+          <Button
+            variant="ghost"
+            size="sm"
             onclick={() => insertSnippet(snippet.value)}
-            title={snippet.label}
+            aria-label={snippet.label}
           >
             {snippet.label}
-          </button>
+          </Button>
         {/each}
       {/if}
     </div>
@@ -171,7 +174,7 @@
     <div class="form-row">
       <div class="form-group">
         <label for="font-size">Font Size</label>
-        <select id="font-size" bind:value={question.config.styling!.fontSize} class="select">
+        <Select id="font-size" bind:value={question.config.styling!.fontSize}>
           <option value="0.75rem">Small (0.75rem)</option>
           <option value="0.875rem">Medium Small (0.875rem)</option>
           <option value="1rem">Normal (1rem)</option>
@@ -179,27 +182,27 @@
           <option value="1.25rem">Large (1.25rem)</option>
           <option value="1.5rem">Extra Large (1.5rem)</option>
           <option value="2rem">Huge (2rem)</option>
-        </select>
+        </Select>
       </div>
 
       <div class="form-group">
         <label for="text-align">Text Alignment</label>
-        <select id="text-align" bind:value={question.config.styling!.textAlign} class="select">
+        <Select id="text-align" bind:value={question.config.styling!.textAlign}>
           <option value="left">Left</option>
           <option value="center">Center</option>
           <option value="right">Right</option>
           <option value="justify">Justify</option>
-        </select>
+        </Select>
       </div>
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label for="font-weight">Font Weight</label>
-        <select id="font-weight" bind:value={question.config.styling!.fontWeight} class="select">
+        <Select id="font-weight" bind:value={question.config.styling!.fontWeight}>
           <option value="normal">Normal</option>
           <option value="bold">Bold</option>
-        </select>
+        </Select>
       </div>
 
       <div class="form-group">
@@ -222,12 +225,13 @@
           bind:value={question.config.styling!.backgroundColor}
           class="color-input"
         />
-        <button
-          class="btn btn-secondary small"
+        <Button
+          variant="secondary"
+          size="sm"
           onclick={() => (question.config.styling!.backgroundColor = '')}
         >
           Clear
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -337,18 +341,17 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .input,
-  .select,
   .textarea {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
@@ -358,17 +361,15 @@
   }
 
   .input:hover,
-  .select:hover,
   .textarea:hover {
-    border-color: #d1d5db;
+    border-color: hsl(var(--border));
   }
 
   .input:focus,
-  .select:focus,
   .textarea:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .checkbox-label {
@@ -390,45 +391,24 @@
     gap: 0.25rem;
     margin-bottom: 0.5rem;
     padding: 0.5rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem 0.375rem 0 0;
-  }
-
-  .toolbar-btn {
-    padding: 0.375rem 0.75rem;
-    border: none;
-    background: white;
-    color: #374151;
-    font-size: 0.75rem;
-    font-weight: 500;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .toolbar-btn:hover {
-    background: #e5e7eb;
-  }
-
-  .toolbar-btn.active {
-    background: #3b82f6;
-    color: white;
   }
 
   .toolbar-divider {
     width: 1px;
     height: 1.25rem;
-    background: #e5e7eb;
+    background: hsl(var(--border));
     margin: 0 0.5rem;
   }
 
   .preview-area {
     min-height: 15rem;
     padding: 1rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0 0 0.375rem 0.375rem;
-    background: white;
+    background: hsl(var(--background));
     overflow: auto;
   }
 
@@ -436,7 +416,7 @@
     width: 3rem;
     height: 2rem;
     padding: 0.125rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     cursor: pointer;
   }
@@ -450,14 +430,14 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section-title {
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -465,14 +445,14 @@
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .help-section {
     margin-top: 1.5rem;
     padding: 1rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
   }
 
@@ -480,14 +460,14 @@
     margin: 0 0 0.5rem 0;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .help-list {
     margin: 0;
     padding-left: 1.5rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .help-list li {
@@ -496,33 +476,10 @@
 
   .help-list code {
     padding: 0.125rem 0.25rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.125rem;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   }
 
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-secondary:hover {
-    background: #e5e7eb;
-  }
-
-  .btn.small {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
-  }
 </style>

@@ -361,7 +361,7 @@
     min-height: 420px;
     border-radius: 0.5rem;
     overflow: hidden;
-    background: #000;
+    background: hsl(var(--foreground));
   }
 
   .reaction-canvas {
@@ -379,8 +379,8 @@
     align-items: center;
     justify-content: center;
     text-align: center;
-    color: #fff;
-    background: rgba(0, 0, 0, 0.72);
+    color: hsl(var(--background));
+    background: hsl(var(--foreground) / 0.72);
     padding: 2rem;
   }
 
@@ -395,12 +395,12 @@
   }
 
   .keys {
-    color: #93c5fd;
+    color: hsl(var(--primary) / 0.7);
     font-family: monospace;
   }
 
   .start {
-    color: #4ade80;
+    color: hsl(var(--success, 160 84% 39%));
     font-weight: 600;
   }
 
@@ -412,9 +412,9 @@
   .restart {
     margin-top: 1rem;
     padding: 0.55rem 1rem;
-    border: 1px solid #4ade80;
+    border: 1px solid hsl(var(--success, 160 84% 39%));
     background: transparent;
-    color: #4ade80;
+    color: hsl(var(--success, 160 84% 39%));
     border-radius: 0.4rem;
     cursor: pointer;
   }

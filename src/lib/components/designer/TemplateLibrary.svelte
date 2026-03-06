@@ -18,21 +18,22 @@
     ChevronDown,
     Loader2,
   } from 'lucide-svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   // State
   let templates = $state<QuestionTemplate[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let searchQuery = $state('');
-  let selectedCategory = $state<string | null>(null);
-  let selectedType = $state<string | null>(null);
+  let selectedCategory = $state('');
+  let selectedType = $state('');
   let previewTemplate = $state<QuestionTemplate | null>(null);
   let showFilters = $state(false);
 
   const organizationId = $derived(designerStore.questionnaire.organizationId || designerStore.organizationId || '');
 
   const categories = [
-    { id: null, label: 'All' },
+    { id: '', label: 'All' },
     { id: 'demographics', label: 'Demographics' },
     { id: 'likert-scales', label: 'Likert Scales' },
     { id: 'attention-checks', label: 'Attention Checks' },
@@ -218,8 +219,8 @@
   }
 
   function clearFilters() {
-    selectedCategory = null;
-    selectedType = null;
+    selectedCategory = '';
+    selectedType = '';
     searchQuery = '';
   }
 
@@ -271,33 +272,31 @@
     <div class="mb-3 space-y-2 p-3 bg-muted/50 rounded-lg border border-border">
       <div>
         <label class="block text-xs font-medium text-muted-foreground mb-1" for="template-category-filter">Category</label>
-        <select
+        <Select
           id="template-category-filter"
           bind:value={selectedCategory}
           onchange={() => loadTemplates()}
-          class="w-full px-2 py-1.5 text-sm border border-border rounded-md bg-background text-foreground"
-          data-testid="template-category-filter"
+          placeholder=""
         >
           {#each categories as cat}
             <option value={cat.id}>{cat.label}</option>
           {/each}
-        </select>
+        </Select>
       </div>
 
       <div>
         <label class="block text-xs font-medium text-muted-foreground mb-1" for="template-type-filter">Question Type</label>
-        <select
+        <Select
           id="template-type-filter"
           bind:value={selectedType}
           onchange={() => loadTemplates()}
-          class="w-full px-2 py-1.5 text-sm border border-border rounded-md bg-background text-foreground"
-          data-testid="template-type-filter"
+          placeholder=""
         >
-          <option value={null}>All Types</option>
+          <option value="">All Types</option>
           {#each Object.entries(questionTypeLabels) as [value, label]}
             <option {value}>{label}</option>
           {/each}
-        </select>
+        </Select>
       </div>
 
       {#if selectedCategory || selectedType}

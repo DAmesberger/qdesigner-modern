@@ -15,6 +15,9 @@
     TranslationImportResult,
     TranslationExportOptions,
   } from '../types';
+  import { Search, ArrowUpDown, Download, Upload, Save, AlertTriangle, AlertCircle, Check, X, Pencil, Copy, Languages } from 'lucide-svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
+  import Input from '$lib/components/ui/forms/Input.svelte';
 
   interface Props extends TranslationManagerProps {
     readonly?: boolean;
@@ -241,7 +244,7 @@
       // Focus the input after DOM update
       await tick();
       const input = document.querySelector(
-        `input[data-editing="${editingKey}"]`
+        '.translation-manager td input[type="text"]'
       ) as HTMLInputElement;
       input?.focus();
     }
@@ -611,79 +614,46 @@
       <!-- Search -->
       <div class="flex-1 min-w-64">
         <div class="relative">
-          <svg
-            class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          <input
+          <Search size={16} class="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground z-10" />
+          <Input
             type="text"
             bind:value={searchQuery}
             placeholder="Search translations..."
-            class="w-full pl-10 pr-3 py-2 border border-border rounded-md focus:ring-primary focus:border-primary"
+            class="w-full pl-10"
           />
         </div>
       </div>
 
       <!-- Namespace filter -->
-      <select
-        bind:value={selectedNamespace}
-        class="px-3 py-2 border border-border rounded-md focus:ring-primary focus:border-primary"
-      >
+      <Select bind:value={selectedNamespace} placeholder="">
         <option value="all">All Namespaces</option>
         {#each availableNamespaces as namespace}
           <option value={namespace}>{namespace}</option>
         {/each}
-      </select>
+      </Select>
 
       <!-- Language filter -->
-      <select
-        bind:value={selectedLanguage}
-        class="px-3 py-2 border border-border rounded-md focus:ring-primary focus:border-primary"
-      >
+      <Select bind:value={selectedLanguage} placeholder="">
         <option value="all">All Languages</option>
         {#each availableLanguages as lang}
           <option value={lang.code}>{lang.name}</option>
         {/each}
-      </select>
+      </Select>
 
       <!-- Sort -->
-      <select
-        bind:value={sortBy}
-        class="px-3 py-2 border border-border rounded-md focus:ring-primary focus:border-primary"
-      >
+      <Select bind:value={sortBy} placeholder="">
         <option value="key">Sort by Key</option>
         <option value="namespace">Sort by Namespace</option>
         <option value="modified">Sort by Modified</option>
         <option value="missing">Sort by Missing</option>
-      </select>
+      </Select>
 
       <button
         onclick={() => (sortOrder = sortOrder === 'asc' ? 'desc' : 'asc')}
         class="px-3 py-2 border border-border rounded-md hover:bg-accent focus:ring-primary focus:border-primary"
         title={`Sort ${sortOrder === 'asc' ? 'descending' : 'ascending'}`}
       >
-        <svg
-          class="w-4 h-4 transform transition-transform {sortOrder === 'desc' ? 'rotate-180' : ''}"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-          />
-        </svg>
+        <ArrowUpDown size={16} class="transform transition-transform {sortOrder === 'desc' ? 'rotate-180' : ''}" />
       </button>
     </div>
 
@@ -753,28 +723,14 @@
             onclick={() => exportTranslations()}
             class="flex items-center gap-2 px-3 py-2 text-sm bg-muted text-foreground rounded-md hover:bg-accent"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-              />
-            </svg>
+            <Download size={16} />
             Export
           </button>
 
           <label
             class="flex items-center gap-2 px-3 py-2 text-sm bg-muted text-foreground rounded-md hover:bg-accent cursor-pointer"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
-              />
-            </svg>
+            <Upload size={16} />
             Import
             <input type="file" accept=".json" onchange={importTranslations} class="hidden" />
           </label>
@@ -789,14 +745,7 @@
             {#if isSaving}
               <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
             {:else}
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12"
-                />
-              </svg>
+              <Save size={16} />
             {/if}
             Save Changes {modifiedCount > 0 ? `(${modifiedCount})` : ''}
           </button>
@@ -812,28 +761,14 @@
 
       {#if missingCount > 0}
         <span class="text-warning flex items-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.664-.833-2.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"
-            />
-          </svg>
+          <AlertTriangle size={16} />
           {missingCount} missing translations
         </span>
       {/if}
 
       {#if validationErrorCount > 0}
         <span class="text-destructive flex items-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+          <AlertCircle size={16} />
           {validationErrorCount} validation errors
         </span>
       {/if}
@@ -842,26 +777,12 @@
         <span class="text-muted-foreground">Saving...</span>
       {:else if saveStatus === 'success'}
         <span class="text-success flex items-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
+          <Check size={16} />
           Saved successfully
         </span>
       {:else if saveStatus === 'error'}
         <span class="text-destructive flex items-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
+          <X size={16} />
           Save failed
         </span>
       {/if}
@@ -971,11 +892,10 @@
                   <td class="px-4 py-3 text-sm max-w-xs">
                     {#if editingKey === `${entry.key}:${lang.code}` && allowInlineEdit && !readonly}
                       <div class="flex items-center gap-2">
-                        <input
+                        <Input
                           type="text"
                           bind:value={editingValue}
-                          data-editing={editingKey}
-                          class="flex-1 px-2 py-1 text-sm border border-border rounded focus:ring-primary focus:border-primary"
+                          class="flex-1 text-sm"
                           onkeydown={(e) => handleEditKeydown(e, entry.key, lang.code)}
                           onblur={() => saveEdit(entry.key, lang.code)}
                         />
@@ -984,38 +904,14 @@
                           class="text-success hover:text-success/80"
                           title="Save"
                         >
-                          <svg
-                            class="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M5 13l4 4L19 7"
-                            />
-                          </svg>
+                          <Check size={16} />
                         </button>
                         <button
                           onclick={cancelEdit}
                           class="text-destructive hover:text-destructive/80"
                           title="Cancel"
                         >
-                          <svg
-                            class="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
+                          <X size={16} />
                         </button>
                       </div>
                     {:else}
@@ -1036,19 +932,7 @@
                                 class="text-muted-foreground hover:text-foreground"
                                 title="Edit"
                               >
-                                <svg
-                                  class="w-3 h-3"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                  />
-                                </svg>
+                                <Pencil size={12} />
                               </button>
                             {/if}
 
@@ -1058,19 +942,7 @@
                                 class="text-muted-foreground hover:text-foreground"
                                 title="Copy from English"
                               >
-                                <svg
-                                  class="w-3 h-3"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                  />
-                                </svg>
+                                <Copy size={12} />
                               </button>
 
                               <button
@@ -1078,19 +950,7 @@
                                 class="text-muted-foreground hover:text-foreground"
                                 title="Auto-translate"
                               >
-                                <svg
-                                  class="w-3 h-3"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
-                                  />
-                                </svg>
+                                <Languages size={12} />
                               </button>
                             {/if}
                           </div>
@@ -1126,14 +986,7 @@
                         title="Copy to missing languages"
                         class="text-muted-foreground hover:text-foreground"
                       >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                          />
-                        </svg>
+                        <Copy size={16} />
                       </button>
                     {/if}
                   </div>
@@ -1187,8 +1040,8 @@
 
   /* Indeterminate checkbox styling */
   input[type='checkbox']:indeterminate {
-    background-color: #3b82f6;
-    border-color: #3b82f6;
+    background-color: hsl(var(--primary));
+    border-color: hsl(var(--primary));
   }
 
   input[type='checkbox']:indeterminate::before {

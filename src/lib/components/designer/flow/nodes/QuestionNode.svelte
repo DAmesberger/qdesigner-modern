@@ -45,23 +45,23 @@
 
 <style>
   .question-node {
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: 6px;
     padding: 8px 12px;
     min-width: 140px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 1px 2px hsl(var(--foreground) / 0.05);
     transition: all 0.2s;
   }
 
   .question-node.selected {
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 1px #3b82f6;
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 1px hsl(var(--primary));
   }
 
   .question-node:hover {
-    border-color: #d1d5db;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-color: hsl(var(--border));
+    box-shadow: 0 2px 8px hsl(var(--foreground) / 0.1);
   }
 
   .node-content {
@@ -85,7 +85,7 @@
   .question-label {
     font-size: 13px;
     font-weight: 500;
-    color: #1f2937;
+    color: hsl(var(--foreground));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -94,8 +94,8 @@
   :global(.question-node .svelte-flow__handle) {
     width: 6px;
     height: 6px;
-    background: #9ca3af;
-    border: 2px solid white;
+    background: hsl(var(--muted-foreground));
+    border: 2px solid hsl(var(--card));
   }
 
   :global(.question-node .svelte-flow__handle-top) {

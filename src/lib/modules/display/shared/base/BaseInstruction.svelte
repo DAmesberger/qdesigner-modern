@@ -164,15 +164,15 @@
   }
 
   .instruction-block.mode-edit {
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 1rem;
-    background: #ffffff;
+    background: hsl(var(--background));
   }
 
   .instruction-block.mode-edit:hover {
-    border-color: #3b82f6;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 1px 3px hsl(var(--foreground) / 0.1);
   }
 
   .instruction-header {
@@ -181,7 +181,7 @@
     align-items: center;
     margin-bottom: 0.75rem;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid hsl(var(--muted));
   }
 
   .instruction-info {
@@ -194,15 +194,15 @@
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
-    color: #6b7280;
-    background: #f3f4f6;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--muted));
     padding: 0.125rem 0.5rem;
     border-radius: 0.25rem;
   }
 
   .instruction-order {
     font-size: 0.875rem;
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground));
   }
 
   .instruction-actions {
@@ -214,19 +214,19 @@
     padding: 0.25rem 0.5rem;
     font-size: 0.875rem;
     border: none;
-    background: #f3f4f6;
+    background: hsl(var(--muted));
     border-radius: 0.25rem;
     cursor: pointer;
     transition: all 0.15s ease;
   }
 
   .action-button:hover {
-    background: #e5e7eb;
+    background: hsl(var(--border));
   }
 
   .action-button.danger:hover {
-    background: #fee2e2;
-    color: #dc2626;
+    background: hsl(var(--destructive) / 0.15);
+    color: hsl(var(--destructive));
   }
 
   .instruction-content {
@@ -239,9 +239,9 @@
     gap: 0.25rem;
     margin-top: 0.5rem;
     padding-top: 0.5rem;
-    border-top: 1px solid #f3f4f6;
+    border-top: 1px solid hsl(var(--muted));
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .condition-icon {

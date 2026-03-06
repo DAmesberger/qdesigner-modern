@@ -83,14 +83,14 @@
     border: 1px solid;
     font-size: 11px;
     font-weight: 500;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px hsl(var(--foreground) / 0.1);
     cursor: pointer;
     transition: all 0.2s;
   }
 
   .edge-label:hover {
     transform: scale(1.05);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 6px hsl(var(--foreground) / 0.15);
   }
 
   .condition-text {

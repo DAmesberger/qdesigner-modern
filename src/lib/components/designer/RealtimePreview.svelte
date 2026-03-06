@@ -5,6 +5,8 @@
   import { VariableEngine } from '$lib/scripting-engine';
   import QuestionRenderer from '../questions/QuestionRenderer.svelte';
   import { writable } from 'svelte/store';
+  import Button from '$lib/components/common/Button.svelte';
+  import { Monitor, Tablet, Smartphone, RefreshCw, Info, AlertCircle, ClipboardList } from 'lucide-svelte';
 
   interface Props {
     autoUpdate?: boolean;
@@ -238,88 +240,60 @@
   <!-- Preview Controls -->
   <div class="preview-controls" data-testid="designer-realtime-preview-controls">
     <div class="control-group">
-      <button
-        class="control-btn"
-        class:active={deviceType === 'desktop'}
+      <Button
+        variant={deviceType === 'desktop' ? 'primary' : 'outline'}
+        size="sm"
         onclick={() => (deviceType = 'desktop')}
         title="Desktop view"
         aria-label="Desktop view"
         data-testid="preview-device-desktop"
       >
-        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            d="M2 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2h-5l1 2h2a1 1 0 110 2H6a1 1 0 110-2h2l1-2H4a2 2 0 01-2-2V4z"
-          />
-        </svg>
-      </button>
-      <button
-        class="control-btn"
-        class:active={deviceType === 'tablet'}
+        <Monitor size={16} />
+      </Button>
+      <Button
+        variant={deviceType === 'tablet' ? 'primary' : 'outline'}
+        size="sm"
         onclick={() => (deviceType = 'tablet')}
         title="Tablet view"
         aria-label="Tablet view"
         data-testid="preview-device-tablet"
       >
-        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm4 14a1 1 0 100-2 1 1 0 000 2z"
-          />
-        </svg>
-      </button>
-      <button
-        class="control-btn"
-        class:active={deviceType === 'mobile'}
+        <Tablet size={16} />
+      </Button>
+      <Button
+        variant={deviceType === 'mobile' ? 'primary' : 'outline'}
+        size="sm"
         onclick={() => (deviceType = 'mobile')}
         title="Mobile view"
         aria-label="Mobile view"
         data-testid="preview-device-mobile"
       >
-        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2z"
-          />
-        </svg>
-      </button>
+        <Smartphone size={16} />
+      </Button>
     </div>
 
     <div class="control-group">
-      <button
-        class="control-btn"
+      <Button
+        variant="outline"
+        size="sm"
         onclick={resetPreview}
         title="Reset preview"
         aria-label="Reset preview"
         data-testid="preview-reset"
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 20 20"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path
-            d="M4 10a6 6 0 0110.472-3.944m1.528 3.944a6 6 0 01-10.472 3.944M16 6v4h-4M4 10v4h4"
-          />
-        </svg>
-      </button>
+        <RefreshCw size={16} />
+      </Button>
 
-      <button
-        class="control-btn"
-        class:active={showDebugPanel}
+      <Button
+        variant={showDebugPanel ? 'primary' : 'outline'}
+        size="sm"
         onclick={() => (showDebugPanel = !showDebugPanel)}
         title="Toggle debug panel"
         aria-label="Toggle debug panel"
         data-testid="preview-toggle-debug"
       >
-        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            fill-rule="evenodd"
-            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-            clip-rule="evenodd"
-          />
-        </svg>
-      </button>
+        <Info size={16} />
+      </Button>
 
       <label class="auto-update-toggle">
         <input type="checkbox" bind:checked={autoUpdate} />
@@ -337,13 +311,7 @@
       </div>
     {:else if error}
       <div class="error-state">
-        <svg width="48" height="48" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            fill-rule="evenodd"
-            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-            clip-rule="evenodd"
-          />
-        </svg>
+        <AlertCircle size={48} />
         <p>Preview Error</p>
         <p class="error-message">{error}</p>
       </div>
@@ -393,28 +361,30 @@
               </div>
 
               <div class="navigation-controls">
-                <button
-                  class="nav-btn secondary"
+                <Button
+                  variant="outline"
+                  size="sm"
                   onclick={navigatePrevious}
                   disabled={currentPageIndex === 0}
                   data-testid="preview-previous-button"
                 >
                   Previous
-                </button>
+                </Button>
 
                 <div class="progress-info" data-testid="preview-progress">
                   Page {currentPageIndex + 1} of {previewQuestionnaire?.pages.length}
                 </div>
 
-                <button
-                  class="nav-btn primary"
+                <Button
+                  variant="primary"
+                  size="sm"
                   onclick={navigateNext}
                   disabled={!canNavigateNext() ||
                     currentPageIndex === (previewQuestionnaire?.pages.length || 1) - 1}
                   data-testid="preview-next-button"
                 >
                   Next
-                </button>
+                </Button>
               </div>
             {:else}
               <div class="empty-state">
@@ -426,14 +396,7 @@
       </div>
     {:else}
       <div class="empty-state">
-        <svg width="48" height="48" viewBox="0 0 20 20" fill="currentColor">
-          <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-          <path
-            fill-rule="evenodd"
-            d="M4 5a2 2 0 012-2 1 1 0 000 2H6a2 2 0 00-2 2v6a2 2 0 002 2h2a1 1 0 100 2H6a4 4 0 01-4-4V5z"
-            clip-rule="evenodd"
-          />
-        </svg>
+        <ClipboardList size={48} />
         <p>Start designing to see preview</p>
       </div>
     {/if}
@@ -496,7 +459,7 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #f9fafb;
+    background: hsl(var(--muted));
     position: relative;
   }
 
@@ -505,8 +468,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
-    background: white;
-    border-bottom: 1px solid #e5e7eb;
+    background: hsl(var(--background));
+    border-bottom: 1px solid hsl(var(--border));
   }
 
   .control-group {
@@ -515,33 +478,12 @@
     gap: 0.5rem;
   }
 
-  .control-btn {
-    padding: 0.5rem;
-    background: white;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    color: #6b7280;
-    transition: all 150ms;
-  }
-
-  .control-btn:hover {
-    background: #f9fafb;
-    border-color: #d1d5db;
-  }
-
-  .control-btn.active {
-    background: #3b82f6;
-    border-color: #3b82f6;
-    color: white;
-  }
-
   .auto-update-toggle {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     font-size: 0.875rem;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .auto-update-toggle input {
@@ -558,10 +500,10 @@
   }
 
   .device-container {
-    background: white;
+    background: hsl(var(--background));
     box-shadow:
-      0 20px 25px -5px rgba(0, 0, 0, 0.1),
-      0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      0 20px 25px -5px hsl(var(--foreground) / 0.1),
+      0 10px 10px -5px hsl(var(--foreground) / 0.04);
     position: relative;
     transform-origin: center center;
     transition: all 300ms ease-in-out;
@@ -589,7 +531,7 @@
   .page-header h2 {
     font-size: 1.5rem;
     font-weight: 600;
-    color: #111827;
+    color: hsl(var(--foreground));
     margin: 0;
   }
 
@@ -607,45 +549,12 @@
     justify-content: space-between;
     align-items: center;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
-  }
-
-  .nav-btn {
-    padding: 0.5rem 1rem;
-    border-radius: 0.375rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms;
-  }
-
-  .nav-btn.primary {
-    background: #3b82f6;
-    color: white;
-    border: none;
-  }
-
-  .nav-btn.primary:hover:not(:disabled) {
-    background: #2563eb;
-  }
-
-  .nav-btn.secondary {
-    background: white;
-    color: #374151;
-    border: 1px solid #d1d5db;
-  }
-
-  .nav-btn.secondary:hover:not(:disabled) {
-    background: #f9fafb;
-  }
-
-  .nav-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .progress-info {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   /* State displays */
@@ -657,11 +566,11 @@
     align-items: center;
     justify-content: center;
     padding: 3rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .error-state {
-    color: #dc2626;
+    color: hsl(var(--destructive));
   }
 
   .error-message {
@@ -672,8 +581,8 @@
   .spinner {
     width: 2rem;
     height: 2rem;
-    border: 2px solid #e5e7eb;
-    border-top-color: #3b82f6;
+    border: 2px solid hsl(var(--border));
+    border-top-color: hsl(var(--primary));
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
   }
@@ -687,10 +596,10 @@
   .empty-block {
     padding: 3rem;
     text-align: center;
-    color: #9ca3af;
-    background: #f9fafb;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--muted));
     border-radius: 0.5rem;
-    border: 1px dashed #e5e7eb;
+    border: 1px dashed hsl(var(--border));
   }
 
   /* Debug Panel */
@@ -700,18 +609,18 @@
     top: 0;
     bottom: 0;
     width: 320px;
-    background: white;
-    border-left: 1px solid #e5e7eb;
+    background: hsl(var(--background));
+    border-left: 1px solid hsl(var(--border));
     overflow-y: auto;
     padding: 1rem;
-    box-shadow: -4px 0 6px -1px rgba(0, 0, 0, 0.1);
+    box-shadow: -4px 0 6px -1px hsl(var(--foreground) / 0.1);
   }
 
   .debug-panel h3 {
     font-size: 1rem;
     font-weight: 600;
     margin-bottom: 1rem;
-    color: #111827;
+    color: hsl(var(--foreground));
   }
 
   .debug-panel section {
@@ -722,7 +631,7 @@
     font-size: 0.875rem;
     font-weight: 500;
     margin-bottom: 0.5rem;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .debug-list {
@@ -733,18 +642,18 @@
     display: flex;
     justify-content: space-between;
     padding: 0.375rem 0.5rem;
-    background: #f9fafb;
+    background: hsl(var(--muted));
     margin-bottom: 0.25rem;
     border-radius: 0.25rem;
   }
 
   .debug-key {
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-weight: 500;
   }
 
   .debug-value {
-    color: #111827;
+    color: hsl(var(--foreground));
     font-family: monospace;
     word-break: break-all;
   }

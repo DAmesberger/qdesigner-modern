@@ -1,6 +1,7 @@
 <script lang="ts">
   import TrialTemplateEditor from './TrialTemplateEditor.svelte';
   import type { ReactionStudyBlock, ReactionStudyTrialTemplate } from '../model/reaction-schema';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface Props {
     blocks: ReactionStudyBlock[];
@@ -92,11 +93,11 @@
             </div>
             <div class="form-group">
               <span class="label-text">Kind</span>
-              <select class="select" bind:value={block.kind}>
+              <Select bind:value={block.kind}>
                 <option value="practice">Practice</option>
                 <option value="test">Test</option>
                 <option value="custom">Custom</option>
-              </select>
+              </Select>
             </div>
             <div class="form-group">
               <span class="label-text">Block Repetitions</span>

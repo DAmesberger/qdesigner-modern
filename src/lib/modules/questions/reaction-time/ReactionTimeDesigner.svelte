@@ -8,6 +8,8 @@
   import { createLegacyStarterPayload } from './model/starter-templates';
   import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
   import type { ReactionLegacyQuestionConfig, ReactionStudyConfig } from './model/reaction-schema';
+  import Button from '$lib/components/common/Button.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   type ReactionTaskType = 'standard' | 'n-back' | 'stroop' | 'flanker' | 'iat' | 'dot-probe' | 'custom';
   type StimulusType = 'text' | 'shape' | 'image' | 'video' | 'audio';
@@ -515,7 +517,7 @@
 
     <div class="form-group">
       <label for="task-type">Task Type</label>
-      <select id="task-type" bind:value={question.config.task.type} class="select">
+      <Select id="task-type" bind:value={question.config.task.type}>
         <option value="standard">Standard Reaction Time</option>
         <option value="n-back">N-Back</option>
         <option value="stroop">Stroop</option>
@@ -523,10 +525,10 @@
         <option value="iat">Implicit Association Test (IAT)</option>
         <option value="dot-probe">Dot-Probe</option>
         <option value="custom">Custom Trial Plan</option>
-      </select>
-      <button class="btn btn-secondary" type="button" style="margin-top: 0.5rem;" onclick={applyTaskStarter}>
+      </Select>
+      <Button variant="secondary" size="sm" class="mt-2" onclick={applyTaskStarter}>
         Reset Selected Task To Starter
-      </button>
+      </Button>
     </div>
 
     {#if question.config.task.type === 'n-back'}
@@ -622,8 +624,8 @@
               class="input"
               onkeydown={(e) => e.key === 'Enter' && addNBackStimulus()}
             />
-            <button class="btn btn-secondary" onclick={addNBackStimulus} disabled={!newNBackStimulus}
-              >Add</button
+            <Button variant="secondary" size="sm" onclick={addNBackStimulus} disabled={!newNBackStimulus}
+              >Add</Button
             >
           </div>
           <div class="key-list">
@@ -717,7 +719,7 @@
               class="input"
               onkeydown={(e) => e.key === 'Enter' && addStroopColor()}
             />
-            <button class="btn btn-secondary" onclick={addStroopColor} disabled={!newStroopColor}>Add</button>
+            <Button variant="secondary" size="sm" onclick={addStroopColor} disabled={!newStroopColor}>Add</Button>
           </div>
           <div class="key-list">
             {#each question.config.task.stroop.colors || [] as color}
@@ -1028,12 +1030,12 @@
         <div class="form-group">
           <span class="label-text">Add Items</span>
           <div class="key-input">
-            <select bind:value={iatItemTarget} class="select select-small">
+            <Select bind:value={iatItemTarget} class="text-sm">
               <option value="cat1">{question.config.task.iat.category1Name}</option>
               <option value="cat2">{question.config.task.iat.category2Name}</option>
               <option value="attr1">{question.config.task.iat.attribute1Name}</option>
               <option value="attr2">{question.config.task.iat.attribute2Name}</option>
-            </select>
+            </Select>
             <input
               type="text"
               bind:value={newIatItem}
@@ -1041,7 +1043,7 @@
               class="input"
               onkeydown={(e) => e.key === 'Enter' && addIatItem()}
             />
-            <button class="btn btn-secondary" onclick={addIatItem} disabled={!newIatItem}>Add</button>
+            <Button variant="secondary" size="sm" onclick={addIatItem} disabled={!newIatItem}>Add</Button>
           </div>
         </div>
 
@@ -1172,11 +1174,12 @@
               placeholder="Neutral stimulus"
               class="input"
             />
-            <button
-              class="btn btn-secondary"
+            <Button
+              variant="secondary"
+              size="sm"
               onclick={addDotProbePair}
               disabled={!newDotProbeSalient || !newDotProbeNeutral}
-            >Add</button>
+            >Add</Button>
           </div>
           <div class="key-list" style="flex-direction: column;">
             {#each question.config.task.dotProbe.stimulusPairs as pair, idx}
@@ -1208,27 +1211,26 @@
 
     <div class="form-group">
       <label for="stimulus-type">Stimulus Type</label>
-      <select
+      <Select
         id="stimulus-type"
         bind:value={question.config.stimulus.type}
         onchange={handleStimulusTypeChange}
-        class="select"
       >
         <option value="text">Text</option>
         <option value="shape">Shape</option>
         <option value="image">Image</option>
         <option value="video">Video</option>
         <option value="audio">Audio</option>
-      </select>
+      </Select>
     </div>
 
     {#if question.config.stimulus.type === 'shape'}
       <div class="form-group">
         <label for="stimulus-content">Shape Type</label>
-        <select id="stimulus-content" bind:value={question.config.stimulus.content} class="select">
+        <Select id="stimulus-content" bind:value={question.config.stimulus.content}>
           <option value="circle">Circle</option>
           <option value="square">Square</option>
-        </select>
+        </Select>
       </div>
     {:else if question.config.stimulus.type === 'text'}
       <div class="form-group">
@@ -1295,15 +1297,16 @@
         {:else}
           <!-- No media selected - show select button and manual URL option -->
           <div class="media-select-area">
-            <button
-              class="btn btn-media-select"
+            <Button
+              variant="outline"
+              size="sm"
               onclick={() => (showMediaPicker = true)}
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <span>Select from Media Library</span>
-            </button>
+            </Button>
             <div class="media-url-divider">
               <span>or enter URL directly</span>
             </div>
@@ -1328,14 +1331,13 @@
       {#if question.config.stimulus.fixation}
         <div class="form-group">
           <label for="fixation-type">Fixation Type</label>
-          <select
+          <Select
             id="fixation-type"
             bind:value={question.config.stimulus.fixation.type}
-            class="select"
           >
             <option value="cross">Cross (+)</option>
             <option value="dot">Dot (•)</option>
-          </select>
+          </Select>
         </div>
 
         <div class="form-group">
@@ -1370,24 +1372,25 @@
           class="input"
           onkeydown={(e) => e.key === 'Enter' && addKey()}
         />
-        <button class="btn btn-secondary" onclick={addKey} disabled={!newKey}> Add Key </button>
+        <Button variant="secondary" size="sm" onclick={addKey} disabled={!newKey}> Add Key </Button>
       </div>
 
       <!-- Key presets -->
       <div class="preset-selector">
-        <select bind:value={selectedKeyPreset} class="select select-small">
+        <Select bind:value={selectedKeyPreset} class="text-sm">
           <option value="">Select preset...</option>
           {#each keyPresets as preset}
             <option value={preset.name}>{preset.name}</option>
           {/each}
-        </select>
-        <button
-          class="btn btn-secondary btn-small"
+        </Select>
+        <Button
+          variant="secondary"
+          size="xs"
           onclick={applyKeyPreset}
           disabled={!selectedKeyPreset}
         >
           Apply
-        </button>
+        </Button>
       </div>
 
       <!-- Key list -->
@@ -1433,12 +1436,12 @@
     {#if question.config.response.requireCorrect}
       <div class="form-group">
         <label for="correct-key">Correct Response Key</label>
-        <select id="correct-key" bind:value={question.config.correctKey} class="select">
+        <Select id="correct-key" bind:value={question.config.correctKey}>
           <option value="">Select correct key...</option>
           {#each question.config.response.validKeys as key}
             <option value={key}>{key === ' ' ? 'SPACE' : key.toUpperCase()}</option>
           {/each}
-        </select>
+        </Select>
       </div>
     {/if}
   </div>
@@ -1496,7 +1499,7 @@
 
     <div class="form-group">
       <label for="target-fps">Target FPS</label>
-      <select id="target-fps" bind:value={question.config.targetFPS} class="select">
+      <select id="target-fps" bind:value={question.config.targetFPS} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
         <option value={30}>30 FPS</option>
         <option value={60}>60 FPS</option>
         <option value={120}>120 FPS</option>
@@ -1509,21 +1512,22 @@
     <div class="form-group">
       <span class="label-text">Timing Presets</span>
       <div class="preset-selector">
-        <select bind:value={selectedTimingPreset} class="select">
+        <Select bind:value={selectedTimingPreset}>
           <option value="">Select preset...</option>
           {#each timingPresets as preset}
             <option value={preset.name}>
               {preset.name} (fixation: {preset.fixation}ms, timeout: {preset.timeout}ms)
             </option>
           {/each}
-        </select>
-        <button
-          class="btn btn-secondary"
+        </Select>
+        <Button
+          variant="secondary"
+          size="sm"
           onclick={applyTimingPreset}
           disabled={!selectedTimingPreset}
         >
           Apply
-        </button>
+        </Button>
       </div>
     </div>
   </div>
@@ -1649,35 +1653,27 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
-  .input,
-  .select {
+  .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
-  .select-small {
-    width: auto;
-    min-width: 150px;
+  .input:hover {
+    border-color: hsl(var(--border));
   }
 
-  .input:hover,
-  .select:hover {
-    border-color: #d1d5db;
-  }
-
-  .input:focus,
-  .select:focus {
+  .input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .checkbox-label {
@@ -1696,7 +1692,7 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section:first-child {
@@ -1709,7 +1705,7 @@
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -1729,13 +1725,13 @@
     margin: 0 0 0.5rem 0;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #4b5563;
+    color: hsl(var(--muted-foreground));
   }
 
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   /* Key management */
@@ -1767,8 +1763,8 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.375rem 0.75rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
   }
 
@@ -1776,20 +1772,20 @@
     font-family: monospace;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .remove-btn {
     padding: 0.125rem;
     border: none;
     background: none;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     cursor: pointer;
     line-height: 1;
   }
 
   .remove-btn:hover {
-    color: #dc2626;
+    color: hsl(var(--destructive));
   }
 
   .color-swatch {
@@ -1797,39 +1793,10 @@
     width: 0.875rem;
     height: 0.875rem;
     border-radius: 0.25rem;
-    border: 1px solid rgba(0, 0, 0, 0.15);
+    border: 1px solid hsl(var(--foreground) / 0.15);
     flex-shrink: 0;
   }
 
-  /* Buttons */
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-small {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.75rem;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #e5e7eb;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
 
   /* Media picker */
   .media-preview-card {
@@ -1837,8 +1804,8 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
   }
 
@@ -1848,7 +1815,7 @@
     flex-shrink: 0;
     border-radius: 0.375rem;
     overflow: hidden;
-    background: #e5e7eb;
+    background: hsl(var(--border));
   }
 
   .media-thumbnail-img {
@@ -1866,7 +1833,7 @@
   .media-icon {
     width: 2rem;
     height: 2rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .media-info {
@@ -1880,7 +1847,7 @@
   .media-filename {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1888,7 +1855,7 @@
 
   .media-meta {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .remove-media-btn {
@@ -1896,15 +1863,15 @@
     padding: 0.375rem;
     border: none;
     background: none;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     cursor: pointer;
     border-radius: 0.25rem;
     transition: all 0.15s;
   }
 
   .remove-media-btn:hover {
-    color: #dc2626;
-    background: #fef2f2;
+    color: hsl(var(--destructive));
+    background: hsl(var(--destructive) / 0.1);
   }
 
   .media-select-area {
@@ -1913,33 +1880,12 @@
     gap: 0.75rem;
   }
 
-  .btn-media-select {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    width: 100%;
-    padding: 0.75rem 1rem;
-    background: #f3f4f6;
-    border: 2px dashed #d1d5db;
-    border-radius: 0.5rem;
-    color: #374151;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-media-select:hover {
-    background: #e5e7eb;
-    border-color: #9ca3af;
-  }
 
   .media-url-divider {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground));
     font-size: 0.75rem;
   }
 
@@ -1948,13 +1894,13 @@
     content: '';
     flex: 1;
     height: 1px;
-    background: #e5e7eb;
+    background: hsl(var(--border));
   }
 
   /* Preview */
   .preview-box {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 1rem;
   }
@@ -1972,19 +1918,19 @@
   }
 
   .preview-label {
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .preview-value {
     font-weight: 500;
-    color: #111827;
+    color: hsl(var(--foreground));
     text-align: right;
   }
 
   /* Stimulus Preview */
   .stimulus-preview-box {
-    background: #111827;
-    border: 1px solid #374151;
+    background: hsl(var(--foreground));
+    border: 1px solid hsl(var(--foreground));
     border-radius: 0.5rem;
     padding: 1.25rem;
     overflow: hidden;
@@ -2000,14 +1946,14 @@
   .preview-fixation {
     font-size: 2rem;
     font-weight: 700;
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground));
     font-family: monospace;
     flex-shrink: 0;
   }
 
   .preview-arrow {
     font-size: 1.25rem;
-    color: #4b5563;
+    color: hsl(var(--muted-foreground));
     flex-shrink: 0;
   }
 
@@ -2018,7 +1964,7 @@
   }
 
   .preview-placeholder {
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-size: 0.8125rem;
     font-style: italic;
   }
@@ -2033,7 +1979,7 @@
   .stroop-label,
   .flanker-label {
     font-size: 0.6875rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
     width: 5.5rem;
@@ -2041,14 +1987,14 @@
   }
 
   .stroop-word {
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    text-shadow: 0 1px 3px hsl(var(--foreground) / 0.3);
   }
 
   .flanker-display {
     font-family: monospace;
     font-size: 1.75rem;
     font-weight: 700;
-    color: white;
+    color: hsl(var(--background));
     letter-spacing: 0.15em;
   }
 </style>

@@ -3,6 +3,8 @@
   import { onMount } from 'svelte';
   import { VariableEngine } from '$lib/scripting-engine';
   import QuestionVisualRenderer from './QuestionVisualRenderer.svelte';
+  import Button from '$lib/components/common/Button.svelte';
+  import { Monitor, Tablet, Smartphone, X } from 'lucide-svelte';
 
   interface Props {
     questionnaire: Questionnaire;
@@ -148,45 +150,30 @@
   <!-- Test Controls -->
   <div class="test-controls">
     <div class="device-selector">
-      <button
-        class="device-btn"
-        class:active={testMode === 'desktop'}
+      <Button
+        variant={testMode === 'desktop' ? 'primary' : 'outline'}
+        size="sm"
         onclick={() => (testMode = 'desktop')}
-        title="Desktop view"
         aria-label="Desktop view"
       >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            d="M2 4a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2h-5l1 2h2a1 1 0 110 2H6a1 1 0 110-2h2l1-2H4a2 2 0 01-2-2V4z"
-          />
-        </svg>
-      </button>
-      <button
-        class="device-btn"
-        class:active={testMode === 'tablet'}
+        <Monitor size={20} />
+      </Button>
+      <Button
+        variant={testMode === 'tablet' ? 'primary' : 'outline'}
+        size="sm"
         onclick={() => (testMode = 'tablet')}
-        title="Tablet view"
         aria-label="Tablet view"
       >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm4 14a1 1 0 100-2 1 1 0 000 2z"
-          />
-        </svg>
-      </button>
-      <button
-        class="device-btn"
-        class:active={testMode === 'mobile'}
+        <Tablet size={20} />
+      </Button>
+      <Button
+        variant={testMode === 'mobile' ? 'primary' : 'outline'}
+        size="sm"
         onclick={() => (testMode = 'mobile')}
-        title="Mobile view"
         aria-label="Mobile view"
       >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2z"
-          />
-        </svg>
-      </button>
+        <Smartphone size={20} />
+      </Button>
     </div>
 
     <div class="test-info">
@@ -195,20 +182,14 @@
       <span>Time: {formatTime(Date.now() - startTime)}</span>
     </div>
 
-    <button
-      class="close-btn"
+    <Button
+      variant="ghost"
+      size="sm"
       onclick={() => onclose?.()}
-      title="Close test"
       aria-label="Close test"
     >
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-        <path
-          fill-rule="evenodd"
-          d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-          clip-rule="evenodd"
-        />
-      </svg>
-    </button>
+      <X size={20} />
+    </Button>
   </div>
 
   <!-- Test Container -->
@@ -257,8 +238,9 @@
           style="margin-top: {theme.global
             .spacing[8]}; display: flex; justify-content: space-between"
         >
-          <button
-            class="nav-btn secondary"
+          <Button
+            variant="outline"
+            size="sm"
             onclick={navigatePrevious}
             disabled={currentPageIndex === 0}
             style={Object.entries(theme.components.button.secondary.base)
@@ -266,10 +248,11 @@
               .join('; ')}
           >
             Previous
-          </button>
+          </Button>
 
-          <button
-            class="nav-btn primary"
+          <Button
+            variant="primary"
+            size="sm"
             onclick={navigateNext}
             disabled={!canProceed() && currentQuestions.some((q) => q.required)}
             style={Object.entries(theme.components.button.primary.base)
@@ -277,7 +260,7 @@
               .join('; ')}
           >
             {currentPageIndex === questionnaire.pages.length - 1 ? 'Complete' : 'Next'}
-          </button>
+          </Button>
         </div>
       {/if}
     </div>
@@ -327,7 +310,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: #f9fafb;
+    background: hsl(var(--muted));
     z-index: 1000;
     display: flex;
     flex-direction: column;
@@ -338,8 +321,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 1rem;
-    background: white;
-    border-bottom: 1px solid #e5e7eb;
+    background: hsl(var(--card));
+    border-bottom: 1px solid hsl(var(--border));
   }
 
   .device-selector {
@@ -347,53 +330,18 @@
     gap: 0.5rem;
   }
 
-  .device-btn {
-    padding: 0.5rem;
-    background: none;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    color: #6b7280;
-    transition: all 150ms;
-  }
-
-  .device-btn:hover {
-    background: #f9fafb;
-  }
-
-  .device-btn.active {
-    background: #3b82f6;
-    color: white;
-    border-color: #3b82f6;
-  }
-
   .test-info {
     display: flex;
     gap: 1rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
-  }
-
-  .close-btn {
-    padding: 0.5rem;
-    background: none;
-    border: none;
-    color: #6b7280;
-    cursor: pointer;
-    border-radius: 0.375rem;
-    transition: all 150ms;
-  }
-
-  .close-btn:hover {
-    background: #f3f4f6;
-    color: #374151;
   }
 
   .test-container {
     flex: 1;
     margin: 0 auto;
-    background: white;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    background: hsl(var(--card));
+    box-shadow: 0 0 20px hsl(var(--foreground) / 0.1);
     overflow-y: auto;
     position: relative;
     transition: all 300ms ease-in-out;
@@ -421,25 +369,6 @@
     margin-bottom: 2rem;
   }
 
-  .nav-btn {
-    padding: 0.75rem 1.5rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms;
-  }
-
-  .nav-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .nav-btn.primary:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  }
-
   .completion-overlay {
     position: absolute;
     top: 0;
@@ -465,8 +394,8 @@
     top: 4rem;
     bottom: 0;
     width: 20rem;
-    background: white;
-    border-left: 1px solid #e5e7eb;
+    background: hsl(var(--card));
+    border-left: 1px solid hsl(var(--border));
     padding: 1rem;
     overflow-y: auto;
   }
@@ -475,7 +404,7 @@
     font-size: 0.875rem;
     font-weight: 600;
     margin-bottom: 0.5rem;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .variable-item,
@@ -488,21 +417,21 @@
 
   .var-name,
   .response-id {
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .var-value,
   .response-value {
-    color: #111827;
+    color: hsl(var(--foreground));
     font-family: monospace;
   }
 
   .debug-info {
     margin-top: 0.5rem;
     padding: 0.5rem;
-    background: #f3f4f6;
+    background: hsl(var(--muted));
     border-radius: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 </style>

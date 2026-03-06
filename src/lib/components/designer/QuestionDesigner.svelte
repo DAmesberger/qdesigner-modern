@@ -124,14 +124,14 @@
     justify-content: center;
     gap: 0.75rem;
     padding: 2rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .spinner {
     width: 1.5rem;
     height: 1.5rem;
-    border: 2px solid #e5e7eb;
-    border-top-color: #3b82f6;
+    border: 2px solid hsl(var(--border));
+    border-top-color: hsl(var(--primary));
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -144,8 +144,8 @@
 
   .unsupported-type {
     padding: 2rem;
-    background-color: #fef3c7;
-    border: 1px solid #fbbf24;
+    background-color: hsl(var(--warning) / 0.15);
+    border: 1px solid hsl(var(--warning));
     border-radius: 0.5rem;
     max-width: 48rem;
     margin: 0 auto;
@@ -153,20 +153,20 @@
 
   .unsupported-type h3 {
     margin: 0 0 0.5rem;
-    color: #92400e;
+    color: hsl(var(--warning));
     font-size: 1.25rem;
     font-weight: 600;
   }
 
   .unsupported-type p {
     margin: 0 0 0.5rem;
-    color: #78350f;
+    color: hsl(var(--warning));
   }
 
   .type-info {
     font-size: 0.875rem;
     font-family: monospace;
-    background-color: rgba(0, 0, 0, 0.05);
+    background-color: hsl(var(--foreground) / 0.05);
     padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
     display: inline-block;
@@ -175,8 +175,8 @@
   .basic-editor {
     margin-top: 2rem;
     padding: 1rem;
-    background-color: white;
-    border: 1px solid #e5e7eb;
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
   }
 
@@ -184,7 +184,7 @@
     margin: 0 0 1rem;
     font-size: 1rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .form-group {
@@ -202,7 +202,7 @@
     min-width: 120px;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #4b5563;
+    color: hsl(var(--muted-foreground));
   }
 
   .form-group input[type='text'],
@@ -210,7 +210,7 @@
     flex: 1;
     padding: 0.375rem 0.5rem;
     font-size: 0.875rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
   }
 
@@ -223,7 +223,7 @@
   .json-preview {
     margin-top: 1rem;
     padding: 1rem;
-    background-color: #1f2937;
+    background-color: hsl(var(--foreground));
     border-radius: 0.375rem;
     overflow-x: auto;
   }
@@ -232,14 +232,14 @@
     margin: 0 0 0.5rem;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #d1d5db;
+    color: hsl(var(--border));
   }
 
   .json-preview pre {
     margin: 0;
     font-size: 0.75rem;
     line-height: 1.5;
-    color: #e5e7eb;
+    color: hsl(var(--border));
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   }
 </style>

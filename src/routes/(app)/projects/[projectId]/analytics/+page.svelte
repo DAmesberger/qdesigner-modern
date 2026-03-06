@@ -14,14 +14,17 @@
 		ArrowLeft,
 		BarChart3,
 		ChevronDown,
+		ChevronRight,
 		Download,
 		FileJson,
 		FileSpreadsheet,
 		MessageSquare,
 		PieChart,
 		Timer,
+		XCircle,
 	} from 'lucide-svelte';
 	import { StatisticalEngine } from '$lib/analytics/StatisticalEngine';
+	import Select from '$lib/components/ui/forms/Select.svelte';
 
 	interface Props {
 		data: PageData;
@@ -299,17 +302,7 @@
 							>
 						</li>
 						<li class="flex items-center">
-							<svg
-								class="flex-shrink-0 h-5 w-5 text-muted-foreground"
-								viewBox="0 0 20 20"
-								fill="currentColor"
-							>
-								<path
-									fill-rule="evenodd"
-									d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-									clip-rule="evenodd"
-								/>
-							</svg>
+							<ChevronRight size={20} class="flex-shrink-0 text-muted-foreground" />
 							<a
 								href={appPaths.project(data.project.id)}
 								class="ml-4 text-muted-foreground hover:text-foreground"
@@ -317,17 +310,7 @@
 							>
 						</li>
 						<li class="flex items-center">
-							<svg
-								class="flex-shrink-0 h-5 w-5 text-muted-foreground"
-								viewBox="0 0 20 20"
-								fill="currentColor"
-							>
-								<path
-									fill-rule="evenodd"
-									d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-									clip-rule="evenodd"
-								/>
-							</svg>
+							<ChevronRight size={20} class="flex-shrink-0 text-muted-foreground" />
 							<span class="ml-4 text-foreground font-medium"
 								>Analytics</span
 							>
@@ -362,14 +345,14 @@
 					<!-- Questionnaire selector + Export -->
 					<div class="mt-4 flex items-center gap-3 md:mt-0 md:ml-4">
 						{#if data.questionnaires.length > 0}
-							<select
+							<Select
 								bind:value={selectedQuestionnaireId}
-								class="block rounded-md border border-border bg-card py-2 pl-3 pr-10 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+								placeholder=""
 							>
 								{#each data.questionnaires as q (q.id)}
 									<option value={q.id}>{q.name}</option>
 								{/each}
-							</select>
+							</Select>
 
 							<!-- Export dropdown -->
 							<div class="relative">
@@ -481,17 +464,7 @@
 			>
 				<div class="flex">
 					<div class="flex-shrink-0">
-						<svg
-							class="h-5 w-5 text-destructive"
-							viewBox="0 0 20 20"
-							fill="currentColor"
-						>
-							<path
-								fill-rule="evenodd"
-								d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-								clip-rule="evenodd"
-							/>
-						</svg>
+						<XCircle size={20} class="text-destructive" />
 					</div>
 					<div class="ml-3">
 						<h3 class="text-sm font-medium text-destructive">

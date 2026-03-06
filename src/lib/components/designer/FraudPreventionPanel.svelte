@@ -1,7 +1,8 @@
 <script lang="ts">
   import { designerStore } from '$lib/stores/designer.svelte';
   import type { FraudPreventionSettings } from '$lib/shared';
-  import { ShieldAlert, X } from 'lucide-svelte';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   let { open = $bindable(false) } = $props<{ open: boolean }>();
 
@@ -95,30 +96,8 @@
   const hintClass = 'text-xs text-muted-foreground mt-1';
 </script>
 
-{#if open}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="bg-layer-modal rounded-lg shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto border border-border"
-      onclick={(e) => e.stopPropagation()}
-    >
-      <!-- Header -->
-      <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-        <div class="flex items-center gap-2">
-          <ShieldAlert class="w-5 h-5 text-primary" />
-          <h3 class="text-lg font-semibold text-foreground">Fraud Prevention</h3>
-        </div>
-        <button
-          onclick={cancel}
-          class="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          aria-label="Close"
-        >
-          <X class="w-4 h-4" />
-        </button>
-      </div>
-
-      <div class="p-6 space-y-6">
+<Dialog bind:open={open} title="Fraud Prevention" size="md" onclose={cancel}>
+  <div class="space-y-6">
         <!-- Duplicate Prevention -->
         <div>
           <h4 class="text-sm font-medium text-foreground mb-3">Duplicate Prevention</h4>
@@ -136,17 +115,16 @@
             {#if localPreventDuplicates}
               <div>
                 <label for="fp-dup-method" class={labelClass}>Detection method</label>
-                <select
+                <Select
                   id="fp-dup-method"
                   bind:value={localDuplicateMethod}
-                  class={inputClass}
-                  data-testid="fp-dup-method"
+                  placeholder=""
                 >
                   <option value="fingerprint">Browser fingerprint</option>
                   <option value="cookie">Cookie / localStorage</option>
                   <option value="ip">IP address (server-side)</option>
                   <option value="combined">Combined (fingerprint + cookie)</option>
-                </select>
+                </Select>
                 <p class={hintClass}>
                   Fingerprint uses canvas, WebGL, and browser properties. Cookie uses localStorage. Combined is most reliable.
                 </p>
@@ -296,16 +274,15 @@
           <div class="space-y-3">
             <div>
               <label for="fp-action" class={labelClass}>Action</label>
-              <select
+              <Select
                 id="fp-action"
                 bind:value={localFraudAction}
-                class={inputClass}
-                data-testid="fp-action"
+                placeholder=""
               >
                 <option value="flag">Flag for review (allow completion)</option>
                 <option value="terminate">Terminate session</option>
                 <option value="redirect">Redirect to URL</option>
-              </select>
+              </Select>
             </div>
 
             {#if localFraudAction === 'redirect'}
@@ -337,24 +314,21 @@
             {/if}
           </div>
         </div>
-      </div>
-
-      <!-- Footer -->
-      <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
-        <button
-          onclick={cancel}
-          class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onclick={save}
-          class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-          data-testid="fp-save"
-        >
-          Save
-        </button>
-      </div>
-    </div>
   </div>
-{/if}
+
+  {#snippet footer()}
+    <button
+      onclick={cancel}
+      class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+    >
+      Cancel
+    </button>
+    <button
+      onclick={save}
+      class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+      data-testid="fp-save"
+    >
+      Save
+    </button>
+  {/snippet}
+</Dialog>

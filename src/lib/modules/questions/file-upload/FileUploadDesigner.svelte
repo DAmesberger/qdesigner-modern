@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import Button from '$lib/components/common/Button.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface FileUploadConfig {
     accept?: string[];
@@ -106,22 +108,22 @@
         class="input"
         onkeydown={(e) => e.key === 'Enter' && addAcceptType()}
       />
-      <button class="btn btn-secondary" onclick={addAcceptType} disabled={!newAcceptType}>
+      <Button variant="secondary" size="sm" onclick={addAcceptType} disabled={!newAcceptType}>
         Add
-      </button>
+      </Button>
     </div>
 
     <!-- Presets -->
     <div class="preset-selector">
-      <select bind:value={selectedPreset} class="select select-small">
+      <Select bind:value={selectedPreset} class="text-sm">
         <option value="">Add preset...</option>
         {#each fileTypePresets as preset}
           <option value={preset.label}>{preset.label}</option>
         {/each}
-      </select>
-      <button class="btn btn-secondary btn-small" onclick={applyPreset} disabled={!selectedPreset}>
+      </Select>
+      <Button variant="secondary" size="xs" onclick={applyPreset} disabled={!selectedPreset}>
         Apply
-      </button>
+      </Button>
     </div>
 
     {#if question.config.accept?.length}
@@ -146,7 +148,7 @@
   <!-- File Size -->
   <div class="form-group">
     <label for="max-size">Maximum File Size</label>
-    <select id="max-size" bind:value={question.config.maxSize} class="select">
+    <select id="max-size" bind:value={question.config.maxSize} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
       {#each fileSizePresets as preset}
         <option value={preset.value}>{preset.label}</option>
       {/each}
@@ -174,11 +176,11 @@
 
     <div class="form-group">
       <label for="storage">Storage Mode</label>
-      <select id="storage" bind:value={question.config.storage} class="select">
+      <Select id="storage" bind:value={question.config.storage}>
         <option value="reference">Reference (metadata only)</option>
         <option value="base64">Base64 (embed in response)</option>
         <option value="url">Object URL (temporary preview)</option>
-      </select>
+      </Select>
       <p class="help-text">
         {#if question.config.storage === 'reference'}
           Only file metadata is stored, actual file must be uploaded separately
@@ -279,35 +281,27 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
-  .input,
-  .select {
+  .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
-  .select-small {
-    width: auto;
-    min-width: 150px;
+  .input:hover {
+    border-color: hsl(var(--border));
   }
 
-  .input:hover,
-  .select:hover {
-    border-color: #d1d5db;
-  }
-
-  .input:focus,
-  .select:focus {
+  .input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .checkbox-label {
@@ -326,14 +320,14 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section-title {
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -341,7 +335,7 @@
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   /* Accept types */
@@ -373,8 +367,8 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.375rem 0.75rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
   }
@@ -383,48 +377,19 @@
     padding: 0.125rem;
     border: none;
     background: none;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     cursor: pointer;
     line-height: 1;
   }
 
   .remove-btn:hover {
-    color: #dc2626;
-  }
-
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-small {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.75rem;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #e5e7eb;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    color: hsl(var(--destructive));
   }
 
   /* Preview */
   .preview-box {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 1rem;
   }
@@ -448,12 +413,12 @@
   }
 
   .stat-label {
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .stat-value {
     font-weight: 500;
-    color: #111827;
+    color: hsl(var(--foreground));
     text-align: right;
   }
 </style>

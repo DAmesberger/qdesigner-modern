@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { Home, ChevronRight } from 'lucide-svelte';
 
   interface Props {
     title: string;
@@ -24,17 +25,13 @@
         <ol class="flex items-center space-x-2">
           <li>
             <a href="/" class="text-muted-foreground hover:text-foreground">
-              <svg class="h-5 w-5 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path fill-rule="evenodd" d="M9.293 2.293a1 1 0 011.414 0l7 7A1 1 0 0117 11h-1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-3a1 1 0 00-1-1H9a1 1 0 00-1 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-6H3a1 1 0 01-.707-1.707l7-7z" clip-rule="evenodd" />
-              </svg>
+              <Home size={20} class="shrink-0" aria-hidden="true" />
               <span class="sr-only">Home</span>
             </a>
           </li>
           {#each breadcrumbs as crumb, i}
             <li class="flex items-center">
-              <svg class="h-5 w-5 shrink-0 text-border" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M5.555 17.776l8-16 .894.448-8 16-.894-.448z" />
-              </svg>
+              <ChevronRight size={20} class="shrink-0 text-border" aria-hidden="true" />
               {#if crumb.href && i < breadcrumbs.length - 1}
                 <a href={crumb.href} class="ml-2 text-sm font-medium text-muted-foreground hover:text-foreground">
                   {crumb.name}

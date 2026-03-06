@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '../ui/feedback/Modal.svelte';
   import RealtimePreview from './RealtimePreview.svelte';
+  import { X } from 'lucide-svelte';
 
   interface Props {
     isOpen?: boolean;
@@ -24,14 +25,7 @@
         class="p-2 hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
         data-testid="designer-preview-close"
       >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M6 18L18 6M6 6l12 12"
-          />
-        </svg>
+        <X size={20} />
       </button>
     </div>
 

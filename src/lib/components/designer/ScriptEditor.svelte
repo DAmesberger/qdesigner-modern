@@ -2,6 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import * as monaco from 'monaco-editor';
   import type { Question } from '$lib/shared';
+  import Button from '$lib/components/common/Button.svelte';
+  import { AlignLeft, RotateCcw } from 'lucide-svelte';
 
   export let question: Question;
   export let onUpdate: (script: string) => void;
@@ -222,18 +224,18 @@ declare namespace QuestionAPI {
   <div class="editor-header">
     <h3>Question Script</h3>
     <div class="editor-actions">
-      <button
-        class="action-btn"
+      <Button
+        variant="ghost"
+        size="sm"
         onclick={() => editor?.trigger('', 'editor.action.formatDocument', null)}
         title="Format code"
         aria-label="Format code"
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
-          <path d="M2 4h12M2 8h12M2 12h12" stroke-width="2" stroke-linecap="round" />
-        </svg>
-      </button>
-      <button
-        class="action-btn"
+        <AlignLeft size={16} />
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
         onclick={() => {
           editor?.setValue(scriptTemplate);
           onUpdate(scriptTemplate);
@@ -241,15 +243,8 @@ declare namespace QuestionAPI {
         title="Reset to template"
         aria-label="Reset to template"
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
-          <path
-            d="M2 8a6 6 0 1 1 8.472 5.473L8 11M8 5v3l2 2"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </button>
+        <RotateCcw size={16} />
+      </Button>
     </div>
   </div>
 
@@ -289,21 +284,6 @@ declare namespace QuestionAPI {
   .editor-actions {
     display: flex;
     gap: 0.5rem;
-  }
-
-  .action-btn {
-    padding: 0.25rem;
-    background: none;
-    border: none;
-    color: #858585;
-    cursor: pointer;
-    border-radius: 0.25rem;
-    transition: all 150ms;
-  }
-
-  .action-btn:hover {
-    background: #3e3e42;
-    color: #cccccc;
   }
 
   .editor-container {

@@ -1,12 +1,18 @@
 <script lang="ts">
-  import { X, Search } from 'lucide-svelte';
-  import { browser } from '$app/environment';
+  import { Search } from 'lucide-svelte';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
 
   interface Props {
+    open?: boolean;
     onclose?: () => void;
   }
 
-  let { onclose }: Props = $props();
+  let { open = $bindable(true), onclose }: Props = $props();
+
+  function handleClose() {
+    open = false;
+    onclose?.();
+  }
 
   interface FormulaParam {
     name: string;
@@ -139,65 +145,13 @@
     return counts;
   });
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      onclose?.();
-    }
-  }
 
-  function handleBackdrop(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-      onclose?.();
-    }
-  }
-
-  $effect(() => {
-    if (!browser) return;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  });
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<div
-  class="fixed inset-0 z-50"
-  role="dialog"
-  aria-modal="true"
-  aria-label="Formula Reference"
-  data-testid="formula-reference-sheet"
->
-  <!-- Backdrop -->
-  <div
-    class="fixed inset-0 bg-black/[var(--backdrop-opacity,0.5)] backdrop-blur-sm"
-    onclick={handleBackdrop}
-    onkeydown={(e) => e.key === 'Enter' && handleBackdrop(e as unknown as MouseEvent)}
-    role="button"
-    tabindex="-1"
-    aria-label="Close"
-  ></div>
-
-  <!-- Sheet -->
-  <div class="fixed inset-y-0 right-0 z-10 flex w-full max-w-2xl flex-col border-l border-border bg-[hsl(var(--layer-surface))] shadow-xl animate-slide-in-right">
-    <!-- Header -->
-    <div class="flex items-center justify-between border-b border-border px-5 py-4">
-      <h2 class="text-base font-semibold text-foreground">Formula Reference</h2>
-      <button
-        type="button"
-        class="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        onclick={() => onclose?.()}
-        aria-label="Close"
-        data-testid="formula-reference-close"
-      >
-        <X class="h-4 w-4" />
-      </button>
-    </div>
-
+<Dialog bind:open={open} title="Formula Reference" size="xl" onclose={handleClose}>
+  <div data-testid="formula-reference-sheet">
     <!-- Search -->
-    <div class="border-b border-border px-5 py-3">
+    <div class="mb-3">
       <div class="relative">
         <Search class="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
@@ -211,7 +165,7 @@
     </div>
 
     <!-- Category filter -->
-    <div class="flex flex-wrap gap-1 border-b border-border px-5 py-2">
+    <div class="flex flex-wrap gap-1 mb-3">
       <button
         type="button"
         class="rounded-full px-2.5 py-1 text-xs font-medium transition-colors {activeCategory === 'all'
@@ -237,7 +191,7 @@
     </div>
 
     <!-- Function list -->
-    <div class="min-h-0 flex-1 overflow-auto px-5 py-3">
+    <div>
       {#if filteredEntries.length === 0}
         <p class="py-8 text-center text-sm text-muted-foreground">
           No functions match your search.
@@ -293,15 +247,4 @@
       </div>
     </div>
   </div>
-</div>
-
-<style>
-  @keyframes slide-in-right {
-    from { transform: translateX(100%); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-  }
-
-  .animate-slide-in-right {
-    animation: slide-in-right 200ms ease-out;
-  }
-</style>
+</Dialog>

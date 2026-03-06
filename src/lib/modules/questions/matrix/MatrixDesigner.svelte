@@ -2,6 +2,8 @@
   import type { Question } from '$lib/shared';
   import { nanoid } from 'nanoid';
   import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Edit, Trash } from 'lucide-svelte';
+  import Button from '$lib/components/common/Button.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface MatrixRow {
     id: string;
@@ -136,13 +138,13 @@
   <!-- Response Type -->
   <div class="form-group">
     <label for="response-type">Response Type</label>
-    <select id="response-type" bind:value={question.config.responseType} class="select">
+    <Select id="response-type" bind:value={question.config.responseType}>
       <option value="radio">Radio (Single choice per row)</option>
       <option value="checkbox">Checkbox (Multiple choice per row)</option>
       <option value="text">Text Input</option>
       <option value="dropdown">Dropdown</option>
       <option value="scale">Numeric Scale</option>
-    </select>
+    </Select>
   </div>
 
   <!-- Display Options -->
@@ -165,11 +167,11 @@
 
     <div class="form-group">
       <label for="mobile-layout">Mobile Layout</label>
-      <select id="mobile-layout" bind:value={question.config.mobileLayout} class="select">
+      <Select id="mobile-layout" bind:value={question.config.mobileLayout}>
         <option value="scroll">Horizontal Scroll</option>
         <option value="accordion">Accordion</option>
         <option value="cards">Cards</option>
-      </select>
+      </Select>
     </div>
   </div>
 
@@ -198,10 +200,10 @@
               <span>Required</span>
             </label>
             <div class="edit-actions">
-              <button class="btn btn-primary" onclick={() => updateRow(editingRow!)}> Save </button>
-              <button class="btn btn-secondary" onclick={() => (editingRow = null)}>
+              <Button variant="primary" size="sm" onclick={() => updateRow(editingRow!)}> Save </Button>
+              <Button variant="secondary" size="sm" onclick={() => (editingRow = null)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         {:else}
@@ -216,32 +218,35 @@
               {/if}
             </div>
             <div class="item-actions">
-              <button
-                class="action-btn"
+              <Button
+                variant="ghost"
+                size="sm"
                 onclick={() => moveRow(index, 'up')}
                 disabled={index === 0}
                 aria-label="Move up"
               >
                 <ChevronUp size={16} />
-              </button>
-              <button
-                class="action-btn"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onclick={() => moveRow(index, 'down')}
                 disabled={index === question.config.rows.length - 1}
                 aria-label="Move down"
               >
                 <ChevronDown size={16} />
-              </button>
-              <button
-                class="action-btn"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onclick={() => (editingRow = { ...row })}
                 aria-label="Edit"
               >
                 <Edit size={16} />
-              </button>
-              <button class="action-btn delete" onclick={() => deleteRow(row)} aria-label="Delete">
+              </Button>
+              <Button variant="ghost" size="sm" class="hover:text-destructive" onclick={() => deleteRow(row)} aria-label="Delete">
                 <Trash size={16} />
-              </button>
+              </Button>
             </div>
           </div>
         {/if}
@@ -256,9 +261,9 @@
         class="input"
         onkeydown={(e) => e.key === 'Enter' && addRow()}
       />
-      <button class="btn btn-secondary" onclick={addRow} disabled={!newRowLabel.trim()}>
+      <Button variant="secondary" size="sm" onclick={addRow} disabled={!newRowLabel.trim()}>
         Add Row
-      </button>
+      </Button>
     </div>
   </div>
 
@@ -291,12 +296,12 @@
               placeholder="Width (e.g., 100px, 20%)"
             />
             <div class="edit-actions">
-              <button class="btn btn-primary" onclick={() => updateColumn(editingColumn!)}>
+              <Button variant="primary" size="sm" onclick={() => updateColumn(editingColumn!)}>
                 Save
-              </button>
-              <button class="btn btn-secondary" onclick={() => (editingColumn = null)}>
+              </Button>
+              <Button variant="secondary" size="sm" onclick={() => (editingColumn = null)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         {:else}
@@ -309,36 +314,41 @@
               {/if}
             </div>
             <div class="item-actions">
-              <button
-                class="action-btn"
+              <Button
+                variant="ghost"
+                size="sm"
                 onclick={() => moveColumn(index, 'left')}
                 disabled={index === 0}
                 aria-label="Move left"
               >
                 <ChevronLeft size={16} />
-              </button>
-              <button
-                class="action-btn"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onclick={() => moveColumn(index, 'right')}
                 disabled={index === question.config.columns.length - 1}
                 aria-label="Move right"
               >
                 <ChevronRight size={16} />
-              </button>
-              <button
-                class="action-btn"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onclick={() => (editingColumn = { ...column })}
                 aria-label="Edit"
               >
                 <Edit size={16} />
-              </button>
-              <button
-                class="action-btn delete"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="hover:text-destructive"
                 onclick={() => deleteColumn(column)}
                 aria-label="Delete"
               >
                 <Trash size={16} />
-              </button>
+              </Button>
             </div>
           </div>
         {/if}
@@ -362,9 +372,9 @@
           onkeydown={(e) => e.key === 'Enter' && addColumn()}
         />
       {/if}
-      <button class="btn btn-secondary" onclick={addColumn} disabled={!newColumnLabel.trim()}>
+      <Button variant="secondary" size="sm" onclick={addColumn} disabled={!newColumnLabel.trim()}>
         Add Column
-      </button>
+      </Button>
     </div>
   </div>
 </div>
@@ -386,30 +396,27 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
-  .input,
-  .select {
+  .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
-  .input:hover,
-  .select:hover {
-    border-color: #d1d5db;
+  .input:hover {
+    border-color: hsl(var(--border));
   }
 
-  .input:focus,
-  .select:focus {
+  .input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .checkbox-label {
@@ -428,14 +435,14 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section-title {
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -452,8 +459,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.75rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
   }
 
@@ -466,21 +473,21 @@
 
   .item-label {
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .item-description,
   .item-value,
   .item-width {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .required-badge {
     display: inline-block;
     padding: 0.125rem 0.375rem;
-    background: #fee2e2;
-    color: #dc2626;
+    background: hsl(var(--destructive) / 0.15);
+    color: hsl(var(--destructive));
     font-size: 0.625rem;
     font-weight: 500;
     border-radius: 0.25rem;
@@ -492,38 +499,13 @@
     gap: 0.25rem;
   }
 
-  .action-btn {
-    padding: 0.375rem;
-    border: none;
-    background: white;
-    color: #6b7280;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .action-btn:hover:not(:disabled) {
-    background: #e5e7eb;
-    color: #374151;
-  }
-
-  .action-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .action-btn.delete:hover {
-    background: #fee2e2;
-    color: #dc2626;
-  }
-
   .edit-item {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     padding: 1rem;
-    background: white;
-    border: 2px solid #3b82f6;
+    background: hsl(var(--background));
+    border: 2px solid hsl(var(--primary));
     border-radius: 0.375rem;
   }
 
@@ -542,36 +524,4 @@
     flex: 1;
   }
 
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-primary {
-    background: #3b82f6;
-    color: white;
-  }
-
-  .btn-primary:hover {
-    background: #2563eb;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #e5e7eb;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
 </style>

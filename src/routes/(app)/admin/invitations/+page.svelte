@@ -9,6 +9,7 @@
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   let invitations: Invitation[] = [];
   let loading = true;
@@ -218,15 +219,15 @@
         </FormGroup>
 
         <FormGroup label="Role" id="invite-role">
-          <select
+          <Select
             id="invite-role"
             bind:value={inviteRole}
-            class="w-full rounded-md border-border bg-background px-3 py-2"
+            placeholder=""
           >
             <option value="viewer">Viewer - Can view questionnaires and data</option>
             <option value="member">Member - Can create and edit questionnaires</option>
             <option value="admin">Admin - Can manage users and settings</option>
-          </select>
+          </Select>
         </FormGroup>
 
         <FormGroup label="Custom Message (Optional)" id="invite-message">

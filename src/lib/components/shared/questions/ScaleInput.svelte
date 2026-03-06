@@ -170,14 +170,14 @@
     height: 0.5rem;
     -webkit-appearance: none;
     appearance: none;
-    background: #e5e7eb;
+    background: hsl(var(--border));
     border-radius: 0.25rem;
     outline: none;
     transition: background 0.15s ease;
   }
 
   .slider:hover:not(:disabled) {
-    background: #d1d5db;
+    background: hsl(var(--border));
   }
 
   .slider::-webkit-slider-thumb {
@@ -185,7 +185,7 @@
     appearance: none;
     width: 1.25rem;
     height: 1.25rem;
-    background: #3b82f6;
+    background: hsl(var(--primary));
     border-radius: 50%;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -194,7 +194,7 @@
   .slider::-moz-range-thumb {
     width: 1.25rem;
     height: 1.25rem;
-    background: #3b82f6;
+    background: hsl(var(--primary));
     border-radius: 50%;
     cursor: pointer;
     border: none;
@@ -203,12 +203,12 @@
 
   .slider::-webkit-slider-thumb:hover {
     transform: scale(1.1);
-    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 8px hsl(var(--primary) / 0.1);
   }
 
   .slider::-moz-range-thumb:hover {
     transform: scale(1.1);
-    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.1);
+    box-shadow: 0 0 0 8px hsl(var(--primary) / 0.1);
   }
 
   .slider:disabled {
@@ -220,8 +220,8 @@
     position: absolute;
     top: -1.5rem;
     transform: translateX(-50%);
-    background: #1f2937;
-    color: white;
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
     padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
     font-size: 0.75rem;
@@ -245,8 +245,8 @@
     align-items: center;
     gap: 0.25rem;
     padding: 0.75rem 1rem;
-    border: 2px solid #e5e7eb;
-    background: white;
+    border: 2px solid hsl(var(--border));
+    background: hsl(var(--background));
     border-radius: 0.5rem;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -254,13 +254,13 @@
   }
 
   .scale-button:hover:not(:disabled) {
-    border-color: #9ca3af;
-    background: #f9fafb;
+    border-color: hsl(var(--muted-foreground));
+    background: hsl(var(--muted));
   }
 
   .scale-button.selected {
-    border-color: #3b82f6;
-    background: #eff6ff;
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.1);
   }
 
   .scale-button:disabled {
@@ -271,12 +271,12 @@
   .button-value {
     font-size: 1rem;
     font-weight: 600;
-    color: #1f2937;
+    color: hsl(var(--foreground));
   }
 
   .button-label {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     text-align: center;
   }
 
@@ -291,7 +291,7 @@
   .visual-analog-track {
     flex: 1;
     height: 2rem;
-    background: #e5e7eb;
+    background: hsl(var(--border));
     border-radius: 1rem;
     position: relative;
     overflow: hidden;
@@ -303,7 +303,7 @@
     left: 0;
     top: 0;
     height: 100%;
-    background: linear-gradient(to right, #dbeafe, #3b82f6);
+    background: linear-gradient(to right, hsl(var(--primary) / 0.2), hsl(var(--primary)));
     transition: width 0.15s ease;
     pointer-events: none;
   }
@@ -321,7 +321,7 @@
   /* Labels */
   .label {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     white-space: nowrap;
   }
 

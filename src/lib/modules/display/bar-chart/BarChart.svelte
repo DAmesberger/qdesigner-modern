@@ -537,7 +537,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: #f9fafb;
+    background: hsl(var(--muted));
     border-radius: 0.5rem;
   }
 
@@ -554,13 +554,13 @@
 
   .edit-placeholder p {
     margin: 0.25rem 0;
-    color: #374151;
+    color: hsl(var(--foreground));
     font-weight: 500;
   }
 
   .placeholder-info {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-weight: 400;
   }
 </style>

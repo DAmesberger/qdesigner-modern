@@ -4,6 +4,8 @@
   import { DataVisualization } from '../DataVisualization';
   import { ExportService } from '../ExportService';
   import StatisticsCard from './StatisticsCard.svelte';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import { XCircle } from 'lucide-svelte';
   import type {
     AnalyticsData,
     DashboardConfig,
@@ -376,13 +378,7 @@
   >
     <div class="flex">
       <div class="flex-shrink-0">
-        <svg class="h-5 w-5 text-destructive" viewBox="0 0 20 20" fill="currentColor">
-          <path
-            fill-rule="evenodd"
-            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-            clip-rule="evenodd"
-          />
-        </svg>
+        <XCircle size={20} class="text-destructive" />
       </div>
       <div class="ml-3">
         <h3 class="text-sm font-medium text-destructive">Error Loading Data</h3>
@@ -484,57 +480,31 @@
 {/if}
 
 <!-- Export Dialog -->
-{#if showExportDialog && exportService}
-  <div
-    class="fixed inset-0 z-50 overflow-y-auto"
-    aria-labelledby="modal-title"
-    role="dialog"
-    aria-modal="true"
-  >
-    <div
-      class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0"
-    >
-      <div
-        class="fixed inset-0 bg-black/50 transition-opacity"
-        onclick={handleBackdropClick}
-        onkeydown={handleBackdropKeydown}
-        role="button"
-        tabindex="0"
-        aria-label="Close modal"
-      ></div>
-
-      <div
-        class="inline-block align-bottom bg-card rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
-      >
-        <div class="bg-card px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <h3 class="text-lg leading-6 font-medium text-foreground mb-4">
-            Export Analytics Data
-          </h3>
-
-          <div class="grid grid-cols-2 gap-3">
-            {#each exportService.getSupportedFormats() as format}
-              <button
-                onclick={() => handleExport(format)}
-                class="flex items-center justify-center px-4 py-3 border border-border rounded-lg text-sm font-medium text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {format.toUpperCase()}
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <div class="bg-muted px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-          <button
-            onclick={() => (showExportDialog = false)}
-            class="mt-3 w-full inline-flex justify-center rounded-md border border-border shadow-sm px-4 py-2 bg-card text-base font-medium text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
+<Dialog bind:open={showExportDialog} title="Export Analytics Data" size="sm">
+  {#if exportService}
+    <div class="grid grid-cols-2 gap-3">
+      {#each exportService.getSupportedFormats() as format}
+        <button
+          onclick={() => handleExport(format)}
+          class="flex items-center justify-center px-4 py-3 border border-border rounded-lg text-sm font-medium text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          {format.toUpperCase()}
+        </button>
+      {/each}
     </div>
-  </div>
-{/if}
+  {/if}
+
+  {#snippet footer()}
+    <div class="flex justify-end w-full">
+      <button
+        onclick={() => (showExportDialog = false)}
+        class="inline-flex justify-center rounded-md border border-border shadow-sm px-4 py-2 bg-card text-sm font-medium text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring"
+      >
+        Cancel
+      </button>
+    </div>
+  {/snippet}
+</Dialog>
 
 <style>
   canvas {

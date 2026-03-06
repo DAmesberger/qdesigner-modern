@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import Button from '$lib/components/common/Button.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface DrawingConfig {
     tools?: ('pen' | 'eraser' | 'line' | 'shape')[];
@@ -176,24 +178,25 @@
     <div class="color-input">
       <input type="color" bind:value={newColor} class="color-picker" />
       <input type="text" bind:value={newColor} placeholder="#000000" class="color-text" />
-      <button class="btn btn-secondary" onclick={addColor}> Add Color </button>
+      <Button variant="secondary" size="sm" onclick={addColor}> Add Color </Button>
     </div>
 
     <!-- Color presets -->
     <div class="preset-selector">
-      <select bind:value={selectedColorPreset} class="select select-small">
+      <Select bind:value={selectedColorPreset} class="text-sm">
         <option value="">Apply preset...</option>
         {#each colorPresets as preset}
           <option value={preset.name}>{preset.name}</option>
         {/each}
-      </select>
-      <button
-        class="btn btn-secondary btn-small"
+      </Select>
+      <Button
+        variant="secondary"
+        size="xs"
         onclick={applyColorPreset}
         disabled={!selectedColorPreset}
       >
         Apply
-      </button>
+      </Button>
     </div>
 
     <!-- Color list -->
@@ -220,15 +223,15 @@
     <div class="form-group">
       <span class="label-text">Canvas Size</span>
       <div class="preset-selector">
-        <select bind:value={selectedSizePreset} class="select">
+        <Select bind:value={selectedSizePreset}>
           <option value="">Select preset...</option>
           {#each sizePresets as preset}
             <option value={preset.name}>{preset.name} ({preset.width}×{preset.height})</option>
           {/each}
-        </select>
-        <button class="btn btn-secondary" onclick={applySizePreset} disabled={!selectedSizePreset}>
+        </Select>
+        <Button variant="secondary" size="sm" onclick={applySizePreset} disabled={!selectedSizePreset}>
           Apply
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -353,35 +356,27 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
-  .input,
-  .select {
+  .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
-  .select-small {
-    width: auto;
-    min-width: 150px;
+  .input:hover {
+    border-color: hsl(var(--border));
   }
 
-  .input:hover,
-  .select:hover {
-    border-color: #d1d5db;
-  }
-
-  .input:focus,
-  .select:focus {
+  .input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .checkbox-label,
@@ -402,14 +397,14 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section-title {
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -417,7 +412,7 @@
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   /* Tools grid */
@@ -465,14 +460,14 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem;
-    background: #f9fafb;
+    background: hsl(var(--muted));
     border-radius: 0.375rem;
   }
 
   .color-swatch {
     width: 1.5rem;
     height: 1.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
   }
 
@@ -486,13 +481,13 @@
     padding: 0.125rem 0.25rem;
     border: none;
     background: none;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     cursor: pointer;
     font-size: 0.875rem;
   }
 
   .remove-btn:hover {
-    color: #dc2626;
+    color: hsl(var(--destructive));
   }
 
   /* Size inputs */
@@ -502,47 +497,18 @@
     gap: 1rem;
   }
 
-  /* Buttons */
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-small {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.75rem;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #e5e7eb;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
 
   /* Preview */
   .preview-box {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 1rem;
   }
 
   .preview-canvas {
-    background: white;
-    border: 2px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 2px solid hsl(var(--border));
     border-radius: 0.375rem;
     position: relative;
     margin: 0 auto;
@@ -570,7 +536,7 @@
   .preview-color {
     width: 1.5rem;
     height: 1.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
   }
 </style>

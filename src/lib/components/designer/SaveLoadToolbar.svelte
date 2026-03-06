@@ -4,6 +4,8 @@
   import { page } from '$app/stores';
   import { toast } from '$lib/stores/toast';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import { Save, FolderOpen } from 'lucide-svelte';
 
   let showLoadDialog = $state(false);
   let questionnaires = $state<any[]>([]);
@@ -88,14 +90,7 @@
       </svg>
       Saving...
     {:else}
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V2"
-        ></path>
-      </svg>
+      <Save size={16} />
       Save
     {/if}
   </button>
@@ -106,14 +101,7 @@
     disabled={designerStore.isLoading}
     class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-lg hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
   >
-    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-      ></path>
-    </svg>
+    <FolderOpen size={16} />
     Load
   </button>
 
@@ -135,14 +123,8 @@
 </div>
 
 <!-- Load Dialog -->
-{#if showLoadDialog}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-    <div class="bg-card rounded-lg shadow-xl w-96 max-h-[600px] flex flex-col border border-border">
-      <div class="px-6 py-4 border-b">
-        <h3 class="text-lg font-semibold">Load Questionnaire</h3>
-      </div>
-
-      <div class="flex-1 overflow-y-auto p-6">
+<Dialog bind:open={showLoadDialog} title="Load Questionnaire" size="sm" onclose={() => { showLoadDialog = false; selectedQuestionnaireId = ''; }}>
+      <div class="max-h-[400px] overflow-y-auto">
         {#if isListLoading}
           <div class="space-y-2">
             {#each Array(3) as _}
@@ -183,7 +165,8 @@
         {/if}
       </div>
 
-      <div class="px-6 py-4 border-t flex justify-end gap-3">
+  {#snippet footer()}
+    <div class="flex justify-end gap-3 w-full">
         <button
           onclick={() => {
             showLoadDialog = false;
@@ -200,7 +183,6 @@
         >
           {designerStore.isLoading ? 'Loading...' : 'Load'}
         </button>
-      </div>
     </div>
-  </div>
-{/if}
+  {/snippet}
+</Dialog>

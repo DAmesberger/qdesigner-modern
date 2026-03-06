@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { QuestionnaireTheme } from '$lib/shared/types/theme';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface Props {
     theme: QuestionnaireTheme;
@@ -157,30 +158,32 @@
 
       <div class="control-group">
         <label for="font-family-select">Font Family</label>
-        <select
+        <Select
           id="font-family-select"
           value={theme.global.typography.fontFamily.sans}
           onchange={(e: any) =>
             updateTheme(['global', 'typography', 'fontFamily', 'sans'], e.currentTarget.value)}
+          placeholder=""
         >
           {#each fontFamilies as font}
             <option value={font.value}>{font.label}</option>
           {/each}
-        </select>
+        </Select>
       </div>
 
       <div class="control-group">
         <label for="font-size-select">Base Font Size</label>
-        <select
+        <Select
           id="font-size-select"
           value={theme.global.typography.fontSize.base}
           onchange={(e: any) =>
             updateTheme(['global', 'typography', 'fontSize', 'base'], e.currentTarget.value)}
+          placeholder=""
         >
           {#each fontSizes as size}
             <option value={size.value}>{size.label}</option>
           {/each}
-        </select>
+        </Select>
       </div>
     </div>
 
@@ -189,33 +192,35 @@
 
       <div class="control-group">
         <label for="global-shadow">Shadow</label>
-        <select
+        <Select
           id="global-shadow"
           value={theme.global.effects.shadows.base}
           onchange={(e: any) =>
             updateTheme(['global', 'effects', 'shadows', 'base'], e.currentTarget.value)}
+          placeholder=""
         >
           <option value="none">None</option>
           <option value={theme.global.effects.shadows.sm}>Small</option>
           <option value={theme.global.effects.shadows.base}>Medium</option>
           <option value={theme.global.effects.shadows.lg}>Large</option>
-        </select>
+        </Select>
       </div>
 
       <div class="control-group">
         <label for="global-radius">Border Radius</label>
-        <select
+        <Select
           id="global-radius"
           value={theme.global.borders.radius.base}
           onchange={(e: any) =>
             updateTheme(['global', 'borders', 'radius', 'base'], e.currentTarget.value)}
+          placeholder=""
         >
           <option value="0">None</option>
           <option value="0.25rem">Small</option>
           <option value="0.375rem">Medium</option>
           <option value="0.5rem">Large</option>
           <option value="0.75rem">XL</option>
-        </select>
+        </Select>
       </div>
     </div>
   {/if}
@@ -260,18 +265,19 @@
 
       <div class="control-group">
         <label for="page-width">Max Width</label>
-        <select
+        <Select
           id="page-width"
           value={theme.components.page.maxWidth || '48rem'}
           onchange={(e: any) =>
             updateTheme(['components', 'page', 'maxWidth'], e.currentTarget.value)}
+          placeholder=""
         >
           <option value="32rem">Small (512px)</option>
           <option value="48rem">Medium (768px)</option>
           <option value="64rem">Large (1024px)</option>
           <option value="80rem">XL (1280px)</option>
           <option value="none">Full Width</option>
-        </select>
+        </Select>
       </div>
     </div>
   {/if}
@@ -339,7 +345,7 @@
 
       <div class="control-group">
         <label for="q-shadow">Shadow</label>
-        <select
+        <Select
           id="q-shadow"
           value={theme.components.question.container.boxShadow || theme.global.effects.shadows.base}
           onchange={(e: any) =>
@@ -347,12 +353,13 @@
               ['components', 'question', 'container', 'boxShadow'],
               e.currentTarget.value
             )}
+          placeholder=""
         >
           <option value="none">None</option>
           <option value={theme.global.effects.shadows.sm}>Small</option>
           <option value={theme.global.effects.shadows.base}>Medium</option>
           <option value={theme.global.effects.shadows.lg}>Large</option>
-        </select>
+        </Select>
       </div>
     </div>
 
@@ -361,16 +368,17 @@
 
       <div class="control-group">
         <label for="q-fsize">Font Size</label>
-        <select
+        <Select
           id="q-fsize"
           value={theme.components.question.prompt.fontSize || '1.125rem'}
           onchange={(e: any) =>
             updateTheme(['components', 'question', 'prompt', 'fontSize'], e.currentTarget.value)}
+          placeholder=""
         >
           {#each fontSizes as size}
             <option value={size.value}>{size.label}</option>
           {/each}
-        </select>
+        </Select>
       </div>
 
       <div class="control-group">
@@ -485,14 +493,6 @@
   .control-group input[type='range'] {
     width: calc(100% - 3rem);
     margin-right: 0.5rem;
-  }
-
-  .control-group select {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
   }
 
   .color-grid {

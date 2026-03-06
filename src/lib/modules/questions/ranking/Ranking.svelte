@@ -451,20 +451,20 @@
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
-    color: #111827;
+    color: hsl(var(--foreground));
   }
 
   .count {
     font-size: 0.875rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-weight: 500;
   }
 
   .ranked-list,
   .unranked-list {
     min-height: 200px;
-    background: #f9fafb;
-    border: 2px solid #d1d5db;
+    background: hsl(var(--muted));
+    border: 2px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 0.5rem;
     transition: all 0.2s;
@@ -472,8 +472,8 @@
 
   .ranked-list.drop-active,
   .unranked-list.drop-active {
-    border-color: #3b82f6;
-    background: #eff6ff;
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.1);
   }
 
   .ranked-item,
@@ -482,8 +482,8 @@
     align-items: center;
     padding: 0.75rem;
     margin-bottom: 0.5rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     cursor: move;
     transition: all 0.2s;
@@ -496,8 +496,8 @@
 
   .ranked-item:hover,
   .unranked-item:hover {
-    border-color: #9ca3af;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-color: hsl(var(--muted-foreground));
+    box-shadow: 0 2px 4px hsl(var(--foreground) / 0.1);
   }
 
   .ranked-item.drop-above {
@@ -510,8 +510,8 @@
     justify-content: center;
     width: 2rem;
     height: 2rem;
-    background: #dbeafe;
-    color: #1e40af;
+    background: hsl(var(--primary) / 0.2);
+    color: hsl(var(--primary));
     border-radius: 50%;
     font-weight: 600;
     font-size: 0.875rem;
@@ -522,7 +522,7 @@
   .label {
     flex: 1;
     font-size: 0.875rem;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .actions {
@@ -535,8 +535,8 @@
   .remove-button,
   .add-button {
     padding: 0.25rem 0.5rem;
-    background: #f3f4f6;
-    border: 1px solid #d1d5db;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     font-size: 0.875rem;
     cursor: pointer;
@@ -546,7 +546,7 @@
   .move-button:hover:not(:disabled),
   .remove-button:hover,
   .add-button:hover {
-    background: #e5e7eb;
+    background: hsl(var(--border));
   }
 
   .move-button:disabled {
@@ -555,11 +555,11 @@
   }
 
   .remove-button {
-    color: #dc2626;
+    color: hsl(var(--destructive));
   }
 
   .add-button {
-    color: #059669;
+    color: hsl(var(--success));
     font-weight: 600;
     margin-left: auto;
   }
@@ -567,13 +567,13 @@
   .empty-message {
     text-align: center;
     padding: 2rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
   }
 
   .divider {
     height: 1px;
-    background: #d1d5db;
+    background: hsl(var(--border));
     margin: 2rem 0;
   }
 
@@ -586,8 +586,8 @@
 
   .reset-button {
     padding: 0.5rem 1rem;
-    background: white;
-    border: 1px solid #d1d5db;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
     cursor: pointer;
@@ -595,7 +595,7 @@
   }
 
   .reset-button:hover:not(:disabled) {
-    background: #f9fafb;
+    background: hsl(var(--muted));
   }
 
   .reset-button:disabled {
@@ -605,7 +605,7 @@
 
   .requirement {
     font-size: 0.875rem;
-    color: #f97316;
+    color: hsl(var(--warning));
     font-weight: 500;
   }
 

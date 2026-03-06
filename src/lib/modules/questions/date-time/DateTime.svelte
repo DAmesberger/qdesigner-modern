@@ -426,38 +426,38 @@
   .date-input,
   .time-input {
     padding: 0.75rem 1rem;
-    border: 2px solid #e5e7eb;
+    border: 2px solid hsl(var(--border));
     border-radius: 0.5rem;
     font-size: 1rem;
     font-family: inherit;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.2s;
   }
 
   .date-input:hover:not(:disabled),
   .time-input:hover:not(:disabled) {
-    border-color: #d1d5db;
+    border-color: hsl(var(--border));
   }
 
   .date-input:focus,
   .time-input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .date-input:disabled,
   .time-input:disabled {
-    background: #f9fafb;
-    color: #9ca3af;
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
     cursor: not-allowed;
   }
 
   /* Calendar button */
   .calendar-button {
     padding: 0.5rem;
-    background: #f3f4f6;
-    border: 2px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 2px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 1.25rem;
     cursor: pointer;
@@ -465,8 +465,8 @@
   }
 
   .calendar-button:hover:not(:disabled) {
-    background: #e5e7eb;
-    border-color: #d1d5db;
+    background: hsl(var(--border));
+    border-color: hsl(var(--border));
   }
 
   .calendar-button:disabled {
@@ -480,10 +480,10 @@
     top: 100%;
     left: 0;
     margin-top: 0.5rem;
-    background: white;
-    border: 2px solid #e5e7eb;
+    background: hsl(var(--card));
+    border: 2px solid hsl(var(--border));
     border-radius: 0.5rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 6px hsl(var(--foreground) / 0.1);
     z-index: 10;
     padding: 1rem;
   }
@@ -501,17 +501,17 @@
     border: none;
     font-size: 1.5rem;
     cursor: pointer;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     transition: color 0.2s;
   }
 
   .nav-button:hover {
-    color: #111827;
+    color: hsl(var(--foreground));
   }
 
   .month-year {
     font-weight: 600;
-    color: #111827;
+    color: hsl(var(--foreground));
   }
 
   .calendar-grid {
@@ -525,7 +525,7 @@
     text-align: center;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .calendar-day {
@@ -541,25 +541,25 @@
   }
 
   .calendar-day:hover:not(:disabled) {
-    background: #f3f4f6;
+    background: hsl(var(--muted));
   }
 
   .calendar-day.other-month {
-    color: #d1d5db;
+    color: hsl(var(--border));
   }
 
   .calendar-day.selected {
-    background: #3b82f6;
-    color: white;
+    background: hsl(var(--primary));
+    color: hsl(var(--background));
   }
 
   .calendar-day.today {
-    border-color: #3b82f6;
+    border-color: hsl(var(--primary));
     font-weight: 600;
   }
 
   .calendar-day.disabled {
-    color: #e5e7eb;
+    color: hsl(var(--border));
     cursor: not-allowed;
   }
 
@@ -570,14 +570,14 @@
   .calendar-footer {
     margin-top: 0.75rem;
     padding-top: 0.75rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
     text-align: center;
   }
 
   .today-button {
     padding: 0.375rem 0.75rem;
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     font-size: 0.875rem;
     font-weight: 500;
@@ -586,7 +586,7 @@
   }
 
   .today-button:hover:not(:disabled) {
-    background: #e5e7eb;
+    background: hsl(var(--border));
   }
 
   .today-button:disabled {
@@ -598,10 +598,10 @@
   .formatted-value {
     margin-top: 0.5rem;
     padding: 0.5rem 0.75rem;
-    background: #f9fafb;
+    background: hsl(var(--muted));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   }
 

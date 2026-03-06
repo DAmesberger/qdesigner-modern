@@ -3,6 +3,8 @@
   import type { Variable } from '$lib/shared';
   import { FormulaParser } from '../../../../packages/scripting-engine/src/parser';
   import { ASTEvaluator } from '../../../../packages/scripting-engine/src/ast-evaluator';
+  import { Database, Eye } from 'lucide-svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface Props {
     template?: string;
@@ -130,49 +132,30 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
   <div class="toolbar">
     <div class="toolbar-section">
       <span class="toolbar-label">Template:</span>
-      <select
+      <Select
         bind:value={selectedTemplate}
         onchange={(e) => {
           const t = templates.find((t) => t.name === e.currentTarget.value);
           if (t) loadTemplate(t);
         }}
         class="toolbar-select"
+        placeholder=""
       >
         <option value="">Custom</option>
         {#each templates as t}
           <option value={t.name}>{t.name}</option>
         {/each}
-      </select>
+      </Select>
     </div>
 
     <div class="toolbar-section">
       <button onclick={() => (showVariableList = !showVariableList)} class="toolbar-button">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
-          />
-        </svg>
+        <Database size={16} />
         Variables
       </button>
 
       <button onclick={() => (showPreview = !showPreview)} class="toolbar-button">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-          />
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-          />
-        </svg>
+        <Eye size={16} />
         Preview
       </button>
     </div>
@@ -296,9 +279,9 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: white;
+    background: hsl(var(--card));
     border-radius: 0.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     overflow: hidden;
   }
 
@@ -307,8 +290,8 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border-bottom: 1px solid hsl(var(--border));
   }
 
   .toolbar-section {
@@ -319,15 +302,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
 
   .toolbar-label {
     font-size: 0.875rem;
-    color: #374151;
-  }
-
-  .toolbar-select {
-    padding: 0.375rem 0.75rem;
-    border: 1px solid #d1d5db;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    background: white;
+    color: hsl(var(--foreground));
   }
 
   .toolbar-button {
@@ -335,17 +310,17 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     align-items: center;
     gap: 0.375rem;
     padding: 0.375rem 0.75rem;
-    background: white;
-    border: 1px solid #d1d5db;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    color: #374151;
+    color: hsl(var(--foreground));
     transition: all 150ms;
   }
 
   .toolbar-button:hover {
-    background: #f3f4f6;
-    border-color: #9ca3af;
+    background: hsl(var(--muted));
+    border-color: hsl(var(--muted-foreground));
   }
 
   .content {
@@ -356,28 +331,28 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
 
   .variable-panel {
     width: 250px;
-    border-right: 1px solid #e5e7eb;
-    background: #f9fafb;
+    border-right: 1px solid hsl(var(--border));
+    background: hsl(var(--muted));
     overflow-y: auto;
   }
 
   .panel-title {
     font-size: 0.875rem;
     font-weight: 600;
-    color: #111827;
+    color: hsl(var(--foreground));
     padding: 1rem;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid hsl(var(--border));
   }
 
   .variable-section {
     padding: 1rem;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid hsl(var(--border));
   }
 
   .section-title {
     font-size: 0.75rem;
     font-weight: 500;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     text-transform: uppercase;
     margin-bottom: 0.5rem;
   }
@@ -395,8 +370,8 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     justify-content: space-between;
     align-items: center;
     padding: 0.375rem 0.5rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     font-size: 0.813rem;
     text-align: left;
@@ -405,24 +380,24 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
 
   .variable-item:hover,
   .function-item:hover {
-    background: #e0e7ff;
-    border-color: #3b82f6;
+    background: hsl(var(--primary) / 0.15);
+    border-color: hsl(var(--primary));
   }
 
   .var-name {
     font-family: monospace;
-    color: #1f2937;
+    color: hsl(var(--foreground));
   }
 
   .var-type {
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground));
   }
 
   .function-item {
     font-family: monospace;
     font-size: 0.75rem;
-    color: #4b5563;
+    color: hsl(var(--muted-foreground));
   }
 
   .editor-container {
@@ -432,8 +407,8 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
 
   .preview-panel {
     width: 300px;
-    border-left: 1px solid #e5e7eb;
-    background: #f9fafb;
+    border-left: 1px solid hsl(var(--border));
+    background: hsl(var(--muted));
     display: flex;
     flex-direction: column;
   }
@@ -441,10 +416,10 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
   .preview-content {
     flex: 1;
     padding: 1rem;
-    background: white;
+    background: hsl(var(--card));
     margin: 1rem;
     border-radius: 0.375rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     font-size: 0.875rem;
     line-height: 1.5;
     overflow-y: auto;
@@ -458,12 +433,12 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
 
   :global(.preview-content strong) {
     font-weight: 600;
-    color: #111827;
+    color: hsl(var(--foreground));
   }
 
   .preview-variables {
     padding: 1rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .preview-var-list {
@@ -477,17 +452,17 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     display: flex;
     justify-content: space-between;
     padding: 0.25rem 0.5rem;
-    background: white;
+    background: hsl(var(--card));
     border-radius: 0.25rem;
   }
 
   .var-key {
     font-family: monospace;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .var-value {
     font-family: monospace;
-    color: #111827;
+    color: hsl(var(--foreground));
   }
 </style>

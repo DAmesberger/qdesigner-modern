@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Plus } from 'lucide-svelte';
+
   interface Props {
     title: string;
     description: string;
@@ -46,9 +48,7 @@
           class="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           onclick={onAction}
         >
-          <svg class="-ml-0.5 mr-1.5 h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-            <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-          </svg>
+          <Plus size={20} class="-ml-0.5 mr-1.5" aria-hidden="true" />
           {buttonText}
         </button>
       </div>

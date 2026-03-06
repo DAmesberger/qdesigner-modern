@@ -2,6 +2,7 @@
   import { Handle, Position, type NodeProps, type Node } from '@xyflow/svelte';
   import type { FlowControl } from '$lib/shared/types/questionnaire';
   import theme from '$lib/theme';
+  import { RefreshCw } from 'lucide-svelte';
 
   interface LoopNodeData extends Record<string, unknown> {
     flow: FlowControl;
@@ -15,14 +16,7 @@
   <Handle type="target" position={Position.Top} />
 
   <div class="node-header">
-    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-      />
-    </svg>
+    <RefreshCw size={16} />
     <span class="font-medium">Loop</span>
   </div>
 
@@ -44,21 +38,21 @@
 
 <style>
   .loop-node {
-    background: white;
-    border: 2px solid #10b981;
+    background: hsl(var(--card));
+    border: 2px solid hsl(var(--success));
     border-radius: 8px;
     padding: 0;
     min-width: 200px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px hsl(var(--foreground) / 0.1);
     transition: all 0.2s;
   }
 
   .loop-node.selected {
-    box-shadow: 0 0 0 2px #10b981;
+    box-shadow: 0 0 0 2px hsl(var(--success));
   }
 
   .loop-node:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px hsl(var(--foreground) / 0.15);
   }
 
   .node-header {
@@ -66,10 +60,10 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: #d1fae5;
-    border-bottom: 1px solid #a7f3d0;
+    background: hsl(var(--success) / 0.15);
+    border-bottom: 1px solid hsl(var(--success) / 0.3);
     border-radius: 6px 6px 0 0;
-    color: #065f46;
+    color: hsl(var(--success));
   }
 
   .node-content {
@@ -79,31 +73,31 @@
   .condition-label {
     font-size: 11px;
     font-weight: 600;
-    color: #065f46;
+    color: hsl(var(--success));
     margin-bottom: 4px;
   }
 
   .condition-text {
     display: block;
     font-size: 12px;
-    background: #ecfdf5;
+    background: hsl(var(--success) / 0.1);
     padding: 4px 8px;
     border-radius: 4px;
-    border: 1px solid #a7f3d0;
-    color: #064e3b;
+    border: 1px solid hsl(var(--success) / 0.3);
+    color: hsl(var(--success));
     word-break: break-all;
   }
 
   .iterations-info {
     margin-top: 8px;
     padding-top: 8px;
-    border-top: 1px solid #a7f3d0;
+    border-top: 1px solid hsl(var(--success) / 0.3);
   }
 
   :global(.loop-node .svelte-flow__handle) {
     width: 10px;
     height: 10px;
-    background: #10b981;
-    border: 2px solid white;
+    background: hsl(var(--success));
+    border: 2px solid hsl(var(--card));
   }
 </style>

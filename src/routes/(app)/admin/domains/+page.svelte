@@ -15,6 +15,7 @@
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   let domains: DomainConfig[] = [];
   let loading = true;
@@ -353,14 +354,14 @@
                 </FormGroup>
 
                 <FormGroup label="Default Role" id={`role-${domain.id}`}>
-                  <select
+                  <Select
                     id={`role-${domain.id}`}
                     bind:value={domainSettings[domain.id].defaultRole}
-                    class="w-full rounded-md border-border bg-background px-3 py-2"
+                    placeholder=""
                   >
                     <option value="viewer">Viewer</option>
                     <option value="member">Member</option>
-                  </select>
+                  </Select>
                 </FormGroup>
 
                 <FormGroup label="Welcome Message" id={`welcome-${domain.id}`}>

@@ -2,6 +2,7 @@
   import BaseQuestion from '../shared/BaseQuestion.svelte';
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface MatrixRow {
     id: string;
@@ -176,7 +177,7 @@
 </script>
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
-  <div class="matrix-container" class:mobile-scroll={isMobile && mobileLayout === 'scroll'}>
+  <div class="w-full overflow-auto" class:mobile-scroll={isMobile && mobileLayout === 'scroll'}>
     {#if !isMobile || mobileLayout === 'scroll'}
       <!-- Desktop/Tablet Table Layout -->
       <div class="table-wrapper">
@@ -195,13 +196,13 @@
             {#each question.config.rows as row, rowIndex}
               <tr class:alternate={question.config.alternateRowColors && rowIndex % 2 === 1}>
                 <td class="row-header">
-                  <div class="row-header-content">
-                    <span class="row-label">{row.label}</span>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-[hsl(var(--foreground))]">{row.label}</span>
                     {#if row.description}
-                      <span class="row-description">{row.description}</span>
+                      <span class="text-xs text-[hsl(var(--muted-foreground))] font-normal">{row.description}</span>
                     {/if}
                     {#if row.required}
-                      <span class="required-indicator">*</span>
+                      <span class="text-[hsl(var(--destructive))] ml-1">*</span>
                     {/if}
                   </div>
                 </td>
@@ -257,19 +258,18 @@
                         aria-label="{row.label} - {column.label}"
                       />
                     {:else if question.config.responseType === 'dropdown'}
-                      <select
+                      <Select
                         value={value[row.id] || ''}
                         onchange={(e) => handleDropdownChange(row.id, e.currentTarget.value)}
                         {disabled}
-                        class="dropdown-input"
                         id={getCellId(row.id, column.id)}
-                        aria-label="{row.label} - {column.label}"
+                        placeholder="Select..."
                       >
                         <option value="">Select...</option>
                         {#each question.config.columns as opt}
                           <option value={opt.value}>{opt.label}</option>
                         {/each}
-                      </select>
+                      </Select>
                     {:else if question.config.responseType === 'scale'}
                       <input
                         type="number"
@@ -292,22 +292,22 @@
       </div>
     {:else if mobileLayout === 'accordion'}
       <!-- Mobile Accordion Layout -->
-      <div class="accordion-container">
+      <div class="flex flex-col gap-2">
         {#each question.config.rows as row}
           <details class="accordion-item">
             <summary class="accordion-header">
               {row.label}
               {#if row.required}
-                <span class="required-indicator">*</span>
+                <span class="text-[hsl(var(--destructive))] ml-1">*</span>
               {/if}
             </summary>
-            <div class="accordion-content">
+            <div class="p-4 bg-[hsl(var(--background))]">
               {#if row.description}
-                <p class="row-description">{row.description}</p>
+                <p class="text-xs text-[hsl(var(--muted-foreground))] font-normal">{row.description}</p>
               {/if}
-              <div class="mobile-options">
+              <div class="flex flex-col gap-2 mt-2">
                 {#each question.config.columns as column}
-                  <div class="mobile-option">
+                  <div>
                     {#if question.config.responseType === 'radio'}
                       <label class="mobile-label">
                         <input
@@ -341,19 +341,19 @@
       </div>
     {:else if mobileLayout === 'cards'}
       <!-- Mobile Cards Layout -->
-      <div class="cards-container">
+      <div class="flex flex-col gap-4">
         {#each question.config.rows as row}
-          <div class="card-item">
-            <h4 class="card-title">
+          <div class="border border-[hsl(var(--border))] rounded-lg p-4 bg-[hsl(var(--background))]">
+            <h4 class="text-base font-semibold mb-1">
               {row.label}
               {#if row.required}
-                <span class="required-indicator">*</span>
+                <span class="text-[hsl(var(--destructive))] ml-1">*</span>
               {/if}
             </h4>
             {#if row.description}
-              <p class="card-description">{row.description}</p>
+              <p class="text-sm text-[hsl(var(--muted-foreground))] mb-3">{row.description}</p>
             {/if}
-            <div class="card-options">
+            <div class="flex flex-wrap gap-2">
               {#each question.config.columns as column}
                 <button
                   class="card-option"
@@ -379,11 +379,6 @@
 </BaseQuestion>
 
 <style>
-  .matrix-container {
-    width: 100%;
-    overflow: auto;
-  }
-
   /* Table styles */
   .table-wrapper {
     overflow-x: auto;
@@ -393,26 +388,26 @@
   .matrix-table {
     width: 100%;
     border-collapse: collapse;
-    background: white;
+    background: hsl(var(--background));
   }
 
   .matrix-table th,
   .matrix-table td {
     padding: 0.75rem;
     text-align: center;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
   }
 
   .corner-cell {
-    background: #f9fafb;
+    background: hsl(var(--muted));
     border-top-left-radius: 0.5rem;
   }
 
   .column-header {
-    background: #f9fafb;
+    background: hsl(var(--muted));
     font-weight: 600;
     font-size: 0.875rem;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .sticky-headers thead {
@@ -423,37 +418,16 @@
 
   .row-header {
     text-align: left;
-    background: #f9fafb;
+    background: hsl(var(--muted));
     font-weight: 500;
   }
 
-  .row-header-content {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .row-label {
-    color: #374151;
-  }
-
-  .row-description {
-    font-size: 0.75rem;
-    color: #6b7280;
-    font-weight: normal;
-  }
-
-  .required-indicator {
-    color: #ef4444;
-    margin-left: 0.25rem;
-  }
-
   .matrix-table tbody tr:hover {
-    background: #f9fafb;
+    background: hsl(var(--muted));
   }
 
   .alternate {
-    background: #f9fafb;
+    background: hsl(var(--muted));
   }
 
   /* Radio styles */
@@ -473,15 +447,15 @@
   .radio-indicator {
     width: 1.25rem;
     height: 1.25rem;
-    border: 2px solid #9ca3af;
+    border: 2px solid hsl(var(--muted-foreground));
     border-radius: 50%;
     position: relative;
     transition: all 0.2s;
   }
 
   .radio-input:checked + .radio-indicator {
-    border-color: #3b82f6;
-    background: #3b82f6;
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary));
   }
 
   .radio-input:checked + .radio-indicator::after {
@@ -492,12 +466,12 @@
     transform: translate(-50%, -50%);
     width: 0.5rem;
     height: 0.5rem;
-    background: white;
+    background: hsl(var(--background));
     border-radius: 50%;
   }
 
   .radio-label:hover .radio-indicator {
-    border-color: #60a5fa;
+    border-color: hsl(var(--primary) / 0.7);
   }
 
   /* Checkbox styles */
@@ -517,7 +491,7 @@
   .checkbox-indicator {
     width: 1.25rem;
     height: 1.25rem;
-    border: 2px solid #9ca3af;
+    border: 2px solid hsl(var(--muted-foreground));
     border-radius: 0.25rem;
     display: flex;
     align-items: center;
@@ -526,14 +500,14 @@
   }
 
   .checkbox-input:checked + .checkbox-indicator {
-    border-color: #3b82f6;
-    background: #3b82f6;
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary));
   }
 
   .checkmark {
     width: 0.875rem;
     height: 0.875rem;
-    color: white;
+    color: hsl(var(--background));
     opacity: 0;
     transform: scale(0.5);
     transition: all 0.2s;
@@ -545,14 +519,14 @@
   }
 
   .checkbox-label:hover .checkbox-indicator {
-    border-color: #60a5fa;
+    border-color: hsl(var(--primary) / 0.7);
   }
 
   /* Text input styles */
   .text-input {
     width: 100%;
     padding: 0.375rem 0.5rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     font-size: 0.875rem;
     transition: all 0.2s;
@@ -560,53 +534,30 @@
 
   .text-input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-  }
-
-  /* Dropdown styles */
-  .dropdown-input {
-    width: 100%;
-    padding: 0.375rem 0.5rem;
-    border: 1px solid #d1d5db;
-    border-radius: 0.25rem;
-    font-size: 0.875rem;
-    background: white;
-    cursor: pointer;
-  }
-
-  .dropdown-input:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.1);
   }
 
   /* Scale input styles */
   .scale-input {
     width: 3rem;
     padding: 0.375rem 0.5rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     font-size: 0.875rem;
     text-align: center;
   }
 
   /* Mobile accordion styles */
-  .accordion-container {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
   .accordion-item {
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     overflow: hidden;
   }
 
   .accordion-header {
     padding: 1rem;
-    background: #f9fafb;
+    background: hsl(var(--muted));
     cursor: pointer;
     font-weight: 500;
     display: flex;
@@ -615,19 +566,7 @@
   }
 
   .accordion-header:hover {
-    background: #f3f4f6;
-  }
-
-  .accordion-content {
-    padding: 1rem;
-    background: white;
-  }
-
-  .mobile-options {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
+    background: hsl(var(--muted));
   }
 
   .mobile-label {
@@ -635,54 +574,23 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     cursor: pointer;
   }
 
   .mobile-label:hover {
-    background: #f9fafb;
+    background: hsl(var(--muted));
   }
 
-  /* Mobile cards styles */
-  .cards-container {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .card-item {
-    border: 1px solid #e5e7eb;
-    border-radius: 0.5rem;
-    padding: 1rem;
-    background: white;
-  }
-
-  .card-title {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-  }
-
-  .card-description {
-    font-size: 0.875rem;
-    color: #6b7280;
-    margin-bottom: 0.75rem;
-  }
-
-  .card-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
+  /* Card option styles */
   .card-option {
     flex: 1;
     min-width: 5rem;
     padding: 0.5rem 1rem;
-    border: 2px solid #d1d5db;
+    border: 2px solid hsl(var(--border));
     border-radius: 0.375rem;
-    background: white;
+    background: hsl(var(--background));
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
@@ -690,14 +598,14 @@
   }
 
   .card-option:hover:not(:disabled) {
-    border-color: #60a5fa;
-    background: #eff6ff;
+    border-color: hsl(var(--primary) / 0.7);
+    background: hsl(var(--primary) / 0.05);
   }
 
   .card-option.selected {
-    border-color: #3b82f6;
-    background: #3b82f6;
-    color: white;
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary));
+    color: hsl(var(--background));
   }
 
   .card-option:disabled {

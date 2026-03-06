@@ -44,14 +44,14 @@
 <style>
   .skeleton {
     display: inline-block;
-    background-color: var(--skeleton-bg, #e5e7eb);
+    background-color: var(--skeleton-bg, hsl(var(--border)));
     position: relative;
     overflow: hidden;
   }
 
   /* Dark mode support */
   :global(.dark) .skeleton {
-    background-color: var(--skeleton-bg-dark, #374151);
+    background-color: var(--skeleton-bg-dark, hsl(var(--muted)));
   }
 
   /* Variants */

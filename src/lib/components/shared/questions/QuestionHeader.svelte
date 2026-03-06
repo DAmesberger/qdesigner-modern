@@ -36,12 +36,12 @@
     font-size: 1.125rem;
     font-weight: 500;
     line-height: 1.75rem;
-    color: var(--text-primary, #111827);
+    color: var(--text-primary, hsl(var(--foreground)));
     margin: 0;
   }
-  
+
   .required-indicator {
-    color: #ef4444;
+    color: hsl(var(--destructive));
     margin-left: 0.25rem;
     font-weight: 400;
   }
@@ -50,6 +50,6 @@
     margin-top: 0.25rem;
     font-size: 0.875rem;
     line-height: 1.25rem;
-    color: var(--text-secondary, #6b7280);
+    color: var(--text-secondary, hsl(var(--muted-foreground)));
   }
 </style>

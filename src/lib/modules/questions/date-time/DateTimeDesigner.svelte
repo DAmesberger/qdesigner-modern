@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import Button from '$lib/components/common/Button.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface DateTimeConfig {
     mode: 'date' | 'time' | 'datetime';
@@ -66,11 +68,11 @@
   <!-- Input Mode -->
   <div class="form-group">
     <label for="mode" class="label-text">Input Mode</label>
-    <select id="mode" bind:value={question.config.mode} class="select">
+    <Select id="mode" bind:value={question.config.mode}>
       <option value="date">Date Only</option>
       <option value="time">Time Only</option>
       <option value="datetime">Date & Time</option>
-    </select>
+    </Select>
   </div>
 
   <!-- Date Format -->
@@ -118,7 +120,7 @@
     {#if question.config.mode === 'time' || question.config.mode === 'datetime'}
       <div class="form-group">
         <label for="time-step">Time Step (minutes)</label>
-        <select id="time-step" bind:value={question.config.timeStep} class="select">
+        <select id="time-step" bind:value={question.config.timeStep} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
           <option value={1}>1 minute</option>
           <option value={5}>5 minutes</option>
           <option value={10}>10 minutes</option>
@@ -157,9 +159,9 @@
             placeholder="Select date to disable"
             class="input"
           />
-          <button class="btn btn-secondary" onclick={addDisabledDate} disabled={!newDisabledDate}>
+          <Button variant="secondary" size="sm" onclick={addDisabledDate} disabled={!newDisabledDate}>
             Add
-          </button>
+          </Button>
         </div>
 
         {#if question.config.disabledDates?.length}
@@ -227,30 +229,27 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
-  .input,
-  .select {
+  .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
-  .input:hover,
-  .select:hover {
-    border-color: #d1d5db;
+  .input:hover {
+    border-color: hsl(var(--border));
   }
 
-  .input:focus,
-  .select:focus {
+  .input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .checkbox-label {
@@ -269,14 +268,14 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section-title {
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -284,7 +283,7 @@
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   /* Format examples */
@@ -301,8 +300,8 @@
 
   .example-chip {
     padding: 0.25rem 0.5rem;
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     font-size: 0.75rem;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
@@ -311,8 +310,8 @@
   }
 
   .example-chip:hover {
-    background: #e5e7eb;
-    border-color: #d1d5db;
+    background: hsl(var(--border));
+    border-color: hsl(var(--border));
   }
 
   /* Disabled dates */
@@ -337,8 +336,8 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.375rem 0.75rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
   }
@@ -347,43 +346,19 @@
     padding: 0.125rem;
     border: none;
     background: none;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     cursor: pointer;
     line-height: 1;
   }
 
   .remove-btn:hover {
-    color: #dc2626;
-  }
-
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #e5e7eb;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    color: hsl(var(--destructive));
   }
 
   /* Preview */
   .preview-box {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 1rem;
   }
@@ -396,21 +371,21 @@
 
   .preview-label {
     font-size: 0.875rem;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .preview-label strong {
-    color: #111827;
+    color: hsl(var(--foreground));
   }
 
   .preview-constraints {
     margin-top: 0.5rem;
     padding: 0.5rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .preview-constraints p {
@@ -419,7 +394,7 @@
 
   .preview-note {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-style: italic;
   }
 </style>

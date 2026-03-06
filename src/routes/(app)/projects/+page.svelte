@@ -4,6 +4,7 @@
   import { api } from '$lib/services/api';
   import { Modal } from '$lib/components/ui';
   import { appPaths } from '$lib/routing/paths';
+  import Select from '$lib/components/ui/forms/Select.svelte';
   import type { PageData } from './$types';
 
   interface Props {
@@ -133,14 +134,14 @@
             class="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
           />
         </div>
-        <select
+        <Select
           bind:value={sortBy}
-          class="rounded-lg border border-border bg-background text-foreground px-3 py-2 text-sm"
+          placeholder=""
         >
           <option value="date">Newest first</option>
           <option value="name">Name (A-Z)</option>
           <option value="questionnaires">Most questionnaires</option>
-        </select>
+        </Select>
       </div>
 
       {#if filteredProjects.length === 0}

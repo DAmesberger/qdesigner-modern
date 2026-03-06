@@ -1,4 +1,7 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
+  import { ChevronDown } from 'lucide-svelte';
+
   interface Props {
     value?: string;
     options?: Array<{ value: string; label: string }>;
@@ -7,6 +10,8 @@
     error?: boolean;
     id?: string;
     name?: string;
+    class?: string;
+    children?: Snippet;
     onchange?: (event: Event & { currentTarget: HTMLSelectElement }) => void;
     onblur?: (event: FocusEvent & { currentTarget: HTMLSelectElement }) => void;
   }
@@ -19,6 +24,8 @@
     error = false,
     id = undefined,
     name = undefined,
+    class: className = '',
+    children,
     onchange,
     onblur,
   }: Props = $props();
@@ -31,6 +38,7 @@
       : 'ring-border focus:ring-primary'
     }
     ${disabled ? 'bg-muted text-muted-foreground opacity-50' : ''}
+    ${className}
   `);
 </script>
 
@@ -49,15 +57,17 @@
         {placeholder}
       </option>
     {/if}
-    {#each options as option}
-      <option value={option.value}>
-        {option.label}
-      </option>
-    {/each}
+    {#if children}
+      {@render children()}
+    {:else}
+      {#each options as option}
+        <option value={option.value}>
+          {option.label}
+        </option>
+      {/each}
+    {/if}
   </select>
   <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-    <svg class="h-5 w-5 text-muted-foreground" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-      <path fill-rule="evenodd" d="M10 3a.75.75 0 01.55.24l3.25 3.5a.75.75 0 11-1.1 1.02L10 4.852 7.3 7.76a.75.75 0 01-1.1-1.02l3.25-3.5A.75.75 0 0110 3zm-3.76 9.2a.75.75 0 011.06.04l2.7 2.908 2.7-2.908a.75.75 0 111.1 1.02l-3.25 3.5a.75.75 0 01-1.1 0l-3.25-3.5a.75.75 0 01.04-1.06z" clip-rule="evenodd" />
-    </svg>
+    <ChevronDown size={20} class="text-muted-foreground" />
   </div>
 </div>

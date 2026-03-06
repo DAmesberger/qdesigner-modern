@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-svelte';
 
   interface Column {
     key: string;
@@ -66,17 +67,15 @@
             <div class="flex items-center space-x-1">
               <span>{column.label}</span>
               {#if column.sortable}
-                <svg class="h-4 w-4 text-muted-foreground" viewBox="0 0 20 20" fill="currentColor">
-                  {#if sortKey === column.key}
-                    {#if sortDirection === 'asc'}
-                      <path fill-rule="evenodd" d="M14.77 12.79a.75.75 0 01-1.06-.02L10 8.832 6.29 12.77a.75.75 0 11-1.08-1.04l4.25-4.5a.75.75 0 011.08 0l4.25 4.5a.75.75 0 01-.02 1.06z" clip-rule="evenodd" />
-                    {:else}
-                      <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
-                    {/if}
+                {#if sortKey === column.key}
+                  {#if sortDirection === 'asc'}
+                    <ChevronUp size={16} class="text-muted-foreground" />
                   {:else}
-                    <path fill-rule="evenodd" d="M10 3a.75.75 0 01.55.24l3.25 3.5a.75.75 0 11-1.1 1.02L10 4.852 7.3 7.76a.75.75 0 01-1.1-1.02l3.25-3.5A.75.75 0 0110 3zm-3.76 9.2a.75.75 0 011.06.04l2.7 2.908 2.7-2.908a.75.75 0 111.1 1.02l-3.25 3.5a.75.75 0 01-1.1 0l-3.25-3.5a.75.75 0 01.04-1.06z" clip-rule="evenodd" />
+                    <ChevronDown size={16} class="text-muted-foreground" />
                   {/if}
-                </svg>
+                {:else}
+                  <ArrowUpDown size={16} class="text-muted-foreground" />
+                {/if}
               {/if}
             </div>
           </th>

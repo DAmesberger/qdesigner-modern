@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
   import { X } from 'lucide-svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   type RatingStyle = 'stars' | 'hearts' | 'thumbs' | 'numeric';
 
@@ -80,12 +81,12 @@
   <!-- Visual Style -->
   <div class="form-group">
     <label for="rating-style">Visual Style</label>
-    <select id="rating-style" bind:value={question.config.style} class="select">
+    <Select id="rating-style" bind:value={question.config.style}>
       <option value="stars">Stars</option>
       <option value="hearts">Hearts</option>
       <option value="thumbs">Thumbs Up</option>
       <option value="numeric">Numeric</option>
-    </select>
+    </Select>
   </div>
 
   <!-- Number of Levels -->
@@ -169,30 +170,27 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
-  .input,
-  .select {
+  .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
-  .input:hover,
-  .select:hover {
-    border-color: #d1d5db;
+  .input:hover {
+    border-color: hsl(var(--border));
   }
 
-  .input:focus,
-  .select:focus {
+  .input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .checkbox-label {
@@ -211,14 +209,14 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section-title {
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -226,7 +224,7 @@
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .labels-list {
@@ -248,11 +246,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #f3f4f6;
+    background: hsl(var(--muted));
     border-radius: 0.25rem;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     flex-shrink: 0;
   }
 
@@ -264,7 +262,7 @@
     padding: 0.25rem;
     border: none;
     background: none;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     cursor: pointer;
     border-radius: 0.25rem;
     transition: all 0.15s;
@@ -272,7 +270,7 @@
   }
 
   .remove-btn:hover {
-    background: #e5e7eb;
-    color: #374151;
+    background: hsl(var(--border));
+    color: hsl(var(--foreground));
   }
 </style>

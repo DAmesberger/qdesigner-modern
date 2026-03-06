@@ -2,6 +2,8 @@
   import type { Question } from '$lib/shared';
   import { nanoid } from 'nanoid';
   import { ChevronUp, ChevronDown, Edit, Copy, Trash } from 'lucide-svelte';
+  import Button from '$lib/components/common/Button.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface RankingItem {
     id: string;
@@ -97,12 +99,12 @@
               onkeydown={(e) => e.key === 'Enter' && updateItem(editingItem!)}
             />
             <div class="edit-actions">
-              <button class="btn btn-primary" onclick={() => updateItem(editingItem!)}>
+              <Button variant="primary" size="sm" onclick={() => updateItem(editingItem!)}>
                 Save
-              </button>
-              <button class="btn btn-secondary" onclick={() => (editingItem = null)}>
+              </Button>
+              <Button variant="secondary" size="sm" onclick={() => (editingItem = null)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         {:else}
@@ -112,39 +114,44 @@
               <span class="item-label">{item.label}</span>
             </div>
             <div class="item-actions">
-              <button
-                class="action-btn"
+              <Button
+                variant="ghost"
+                size="sm"
                 onclick={() => moveItem(index, 'up')}
                 disabled={index === 0}
                 aria-label="Move up"
               >
                 <ChevronUp size={16} />
-              </button>
-              <button
-                class="action-btn"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onclick={() => moveItem(index, 'down')}
                 disabled={index === question.config.items.length - 1}
                 aria-label="Move down"
               >
                 <ChevronDown size={16} />
-              </button>
-              <button
-                class="action-btn"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onclick={() => (editingItem = { ...item })}
                 aria-label="Edit"
               >
                 <Edit size={16} />
-              </button>
-              <button class="action-btn" onclick={() => duplicateItem(item)} aria-label="Duplicate">
+              </Button>
+              <Button variant="ghost" size="sm" onclick={() => duplicateItem(item)} aria-label="Duplicate">
                 <Copy size={16} />
-              </button>
-              <button
-                class="action-btn delete"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="hover:text-destructive"
                 onclick={() => deleteItem(item)}
                 aria-label="Delete"
               >
                 <Trash size={16} />
-              </button>
+              </Button>
             </div>
           </div>
         {/if}
@@ -159,9 +166,9 @@
         class="input"
         onkeydown={(e) => e.key === 'Enter' && addItem()}
       />
-      <button class="btn btn-secondary" onclick={addItem} disabled={!newItemLabel.trim()}>
+      <Button variant="secondary" size="sm" onclick={addItem} disabled={!newItemLabel.trim()}>
         Add Item
-      </button>
+      </Button>
     </div>
 
     {#if question.config.items.length < 2}
@@ -175,10 +182,10 @@
 
     <div class="form-group">
       <label for="layout">Layout Direction</label>
-      <select id="layout" bind:value={question.config.layout} class="select">
+      <Select id="layout" bind:value={question.config.layout}>
         <option value="vertical">Vertical (Top to Bottom)</option>
         <option value="horizontal">Horizontal (Side by Side)</option>
-      </select>
+      </Select>
     </div>
 
     <div class="form-group">
@@ -250,7 +257,7 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section:first-child {
@@ -263,7 +270,7 @@
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -280,8 +287,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.75rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
   }
 
@@ -294,12 +301,12 @@
 
   .item-number {
     font-weight: 600;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
   }
 
   .item-label {
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .item-actions {
@@ -307,38 +314,13 @@
     gap: 0.25rem;
   }
 
-  .action-btn {
-    padding: 0.375rem;
-    border: none;
-    background: white;
-    color: #6b7280;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .action-btn:hover:not(:disabled) {
-    background: #e5e7eb;
-    color: #374151;
-  }
-
-  .action-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .action-btn.delete:hover {
-    background: #fee2e2;
-    color: #dc2626;
-  }
-
   .edit-item {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     padding: 1rem;
-    background: white;
-    border: 2px solid #3b82f6;
+    background: hsl(var(--background));
+    border: 2px solid hsl(var(--primary));
     border-radius: 0.375rem;
   }
 
@@ -365,30 +347,27 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
-  .input,
-  .select {
+  .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
-  .input:hover,
-  .select:hover {
-    border-color: #d1d5db;
+  .input:hover {
+    border-color: hsl(var(--border));
   }
 
-  .input:focus,
-  .select:focus {
+  .input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .checkbox-label {
@@ -404,53 +383,20 @@
     cursor: pointer;
   }
 
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-primary {
-    background: #3b82f6;
-    color: white;
-  }
-
-  .btn-primary:hover {
-    background: #2563eb;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #e5e7eb;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .help-text.warning {
-    color: #f97316;
+    color: hsl(var(--warning));
   }
 
   /* Preview */
   .preview-box {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 1rem;
   }
@@ -458,7 +404,7 @@
   .preview-header {
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     margin-bottom: 0.75rem;
   }
 
@@ -470,17 +416,17 @@
 
   .preview-item {
     padding: 0.5rem 0.75rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     font-size: 0.875rem;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .preview-note {
     margin-top: 0.75rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-style: italic;
   }
 </style>

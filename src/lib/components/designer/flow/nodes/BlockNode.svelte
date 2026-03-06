@@ -2,6 +2,7 @@
   import { Handle, Position, type NodeProps, type Node } from '@xyflow/svelte';
   import type { Block } from '$lib/shared/types/questionnaire';
   import theme from '$lib/theme';
+  import { Layers } from 'lucide-svelte';
 
   interface BlockNodeData extends Record<string, unknown> {
     block: Block;
@@ -30,14 +31,7 @@
   <Handle type="target" position={Position.Top} />
 
   <div class="node-header">
-    <svg class="w-4 h-4" fill="none" stroke={colors.icon} viewBox="0 0 24 24">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-      />
-    </svg>
+    <Layers size={16} color={colors.icon} />
     <span class="font-medium" style="color: {colors.icon}">{data.label}</span>
   </div>
 
@@ -61,7 +55,7 @@
     border-radius: 8px;
     padding: 0;
     min-width: 160px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px hsl(var(--foreground) / 0.1);
     transition: all 0.2s;
   }
 
@@ -71,7 +65,7 @@
 
   .block-node:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px hsl(var(--foreground) / 0.15);
   }
 
   .node-header {
@@ -79,7 +73,7 @@
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid hsl(var(--foreground) / 0.1);
   }
 
   .node-content {
@@ -102,6 +96,6 @@
   :global(.block-node .svelte-flow__handle) {
     width: 8px;
     height: 8px;
-    border: 2px solid white;
+    border: 2px solid hsl(var(--card));
   }
 </style>

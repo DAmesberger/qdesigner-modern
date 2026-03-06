@@ -275,7 +275,7 @@
             <span class="interp-score">{Number.isFinite(interp.score) ? interp.score.toFixed(2) : 'N/A'}</span>
           </div>
           {#if interp.range}
-            <div class="interp-badge" style="background-color: {interp.range.color}; color: #fff;">
+            <div class="interp-badge" style="background-color: {interp.range.color}; color: white;">
               {interp.range.label}
             </div>
             <p class="interp-description">{interp.range.description}</p>
@@ -333,21 +333,21 @@
     gap: 0.75rem;
     padding: 1.25rem;
     border-radius: 0.75rem;
-    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-    border: 1px solid #e2e8f0;
-    color: #0f172a;
+    background: linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted)) 100%);
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
   }
 
   .header h3 {
     margin: 0;
     font-size: 1.05rem;
     font-weight: 700;
-    color: #0f172a;
+    color: hsl(var(--foreground));
   }
 
   .header .subtitle {
     margin: 0.15rem 0 0;
-    color: #475569;
+    color: hsl(var(--muted-foreground));
     font-size: 0.85rem;
   }
 
@@ -355,26 +355,26 @@
     margin: 0.25rem 0 0;
     font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
     font-size: 0.72rem;
-    color: #94a3b8;
+    color: hsl(var(--muted-foreground));
     text-transform: capitalize;
   }
 
   .state {
     padding: 0.5rem 0.75rem;
     border-radius: 0.5rem;
-    background: #eef2ff;
-    color: #3730a3;
+    background: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
     font-size: 0.82rem;
   }
 
   .state.warning {
-    background: #fef3c7;
-    color: #92400e;
+    background: hsl(var(--warning) / 0.15);
+    color: hsl(var(--warning));
   }
 
   .state.error {
-    background: #fee2e2;
-    color: #991b1b;
+    background: hsl(var(--destructive) / 0.15);
+    color: hsl(var(--destructive));
   }
 
   .chart-area {
@@ -392,20 +392,20 @@
     gap: 0.1rem;
     padding: 0.5rem 0.65rem;
     border-radius: 0.5rem;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
   }
 
   .summary-label {
     font-size: 0.7rem;
-    color: #64748b;
+    color: hsl(var(--muted-foreground));
     font-weight: 500;
     text-transform: capitalize;
   }
 
   .summary-item strong {
     font-size: 0.88rem;
-    color: #0f172a;
+    color: hsl(var(--foreground));
     font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
   }
 
@@ -417,8 +417,8 @@
   .interpretation-card {
     padding: 0.65rem 0.8rem;
     border-radius: 0.5rem;
-    border: 1px solid #e2e8f0;
-    background: #fff;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
     display: grid;
     gap: 0.35rem;
   }
@@ -432,14 +432,14 @@
   .interp-scale {
     font-size: 0.82rem;
     font-weight: 600;
-    color: #0f172a;
+    color: hsl(var(--foreground));
   }
 
   .interp-score {
     font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
     font-size: 0.95rem;
     font-weight: 700;
-    color: #0f172a;
+    color: hsl(var(--foreground));
   }
 
   .interp-badge {
@@ -452,13 +452,13 @@
   }
 
   .interp-badge.no-match {
-    background: #e2e8f0;
-    color: #64748b;
+    background: hsl(var(--border));
+    color: hsl(var(--muted-foreground));
   }
 
   .interp-description {
     font-size: 0.78rem;
-    color: #475569;
+    color: hsl(var(--muted-foreground));
     margin: 0;
   }
 
@@ -496,7 +496,7 @@
     height: 0;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
-    border-top: 7px solid #0f172a;
+    border-top: 7px solid hsl(var(--foreground));
   }
 
   .report-download {
@@ -508,9 +508,9 @@
   .download-button {
     padding: 0.5rem 1.25rem;
     border-radius: 0.5rem;
-    border: 1px solid #2563eb;
-    background: #2563eb;
-    color: #fff;
+    border: 1px solid hsl(var(--primary));
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
     font-size: 0.82rem;
     font-weight: 600;
     cursor: pointer;
@@ -518,7 +518,7 @@
   }
 
   .download-button:hover:not(:disabled) {
-    background: #1d4ed8;
+    background: hsl(var(--primary));
   }
 
   .download-button:disabled {

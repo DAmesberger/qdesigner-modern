@@ -14,6 +14,8 @@
     isAudioMedia,
   } from '$lib/shared/types/media';
   import theme from '$lib/theme';
+  import { Grid, List, Upload, Image, Check } from 'lucide-svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface Props {
     organizationId: string;
@@ -254,14 +256,7 @@
               : ''} rounded-l-md transition-colors"
             title="Grid view"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-              />
-            </svg>
+            <Grid size={16} />
           </button>
           <button
             onclick={() => (viewMode = 'list')}
@@ -270,14 +265,7 @@
               : ''} rounded-r-md transition-colors"
             title="List view"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
+            <List size={16} />
           </button>
         </div>
 
@@ -287,14 +275,7 @@
           class="{theme.components.button.variants.default} {theme.components.button.sizes
             .sm} rounded-md"
         >
-          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-            />
-          </svg>
+          <Upload size={16} class="mr-1" />
           Upload
         </button>
 
@@ -324,16 +305,15 @@
       </div>
 
       <!-- Type filter -->
-      <select
+      <Select
         bind:value={filter.type}
-        class="px-3 py-2 {theme.semantic.bgSurface} border {theme.semantic
-          .borderDefault} rounded-md"
+        placeholder=""
       >
         <option value="all">All Types</option>
         <option value="image">Images</option>
         <option value="video">Videos</option>
         <option value="audio">Audio</option>
-      </select>
+      </Select>
     </div>
   </div>
 
@@ -350,19 +330,7 @@
       ondragleave={handleDragLeave}
     >
       <div class="text-center">
-        <svg
-          class="mx-auto h-12 w-12 {theme.semantic.textSecondary}"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 48 48"
-        >
-          <path
-            d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
+        <Upload size={48} class="mx-auto {theme.semantic.textSecondary}" />
 
         <p class="{theme.typography.body} {theme.semantic.textSecondary} mt-2">
           Drag and drop files here, or
@@ -420,19 +388,7 @@
       </div>
     {:else if mediaAssets.length === 0}
       <div class="flex flex-col items-center justify-center h-full">
-        <svg
-          class="w-16 h-16 {theme.semantic.textSubtle} mb-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-          />
-        </svg>
+        <Image size={64} class="{theme.semantic.textSubtle} mb-4" />
         <p class={theme.semantic.textSecondary}>No media files yet</p>
         <button
           onclick={() => fileInput?.click()}
@@ -482,19 +438,7 @@
               <div
                 class="absolute top-2 right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center"
               >
-                <svg
-                  class="w-4 h-4 text-primary-foreground"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="3"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
+                <Check size={16} class="text-primary-foreground" strokeWidth={3} />
               </div>
             {/if}
           </button>
@@ -545,19 +489,7 @@
               <div
                 class="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0"
               >
-                <svg
-                  class="w-4 h-4 text-primary-foreground"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="3"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
+                <Check size={16} class="text-primary-foreground" strokeWidth={3} />
               </div>
             {/if}
           </button>

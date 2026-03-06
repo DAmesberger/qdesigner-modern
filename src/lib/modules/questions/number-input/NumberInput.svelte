@@ -265,9 +265,9 @@
     display: flex;
     align-items: center;
     padding: 0 0.75rem;
-    background: #f3f4f6;
-    border: 2px solid #e5e7eb;
-    color: #6b7280;
+    background: hsl(var(--muted));
+    border: 2px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
     font-weight: 500;
     white-space: nowrap;
@@ -293,11 +293,11 @@
   .number-input {
     width: 100%;
     padding: 0.75rem 1rem;
-    border: 2px solid #e5e7eb;
+    border: 2px solid hsl(var(--border));
     border-radius: 0.5rem;
     font-size: 1rem;
     font-family: inherit;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.2s;
     -moz-appearance: textfield;
     appearance: textfield;
@@ -318,23 +318,23 @@
   }
 
   .number-input:hover:not(:disabled) {
-    border-color: #d1d5db;
+    border-color: hsl(var(--border));
   }
 
   .number-input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .number-input:disabled {
-    background: #f9fafb;
-    color: #9ca3af;
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
     cursor: not-allowed;
   }
 
   .number-input::placeholder {
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground));
   }
 
   /* Spin buttons */
@@ -346,7 +346,7 @@
     display: flex;
     flex-direction: column;
     width: 2rem;
-    border-left: 1px solid #e5e7eb;
+    border-left: 1px solid hsl(var(--border));
   }
 
   .spin-button {
@@ -355,8 +355,8 @@
     align-items: center;
     justify-content: center;
     border: none;
-    background: #f9fafb;
-    color: #6b7280;
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
     cursor: pointer;
     transition: all 0.15s;
     padding: 0;
@@ -364,21 +364,21 @@
 
   .spin-up {
     border-radius: 0 0.375rem 0 0;
-    border-bottom: 0.5px solid #e5e7eb;
+    border-bottom: 0.5px solid hsl(var(--border));
   }
 
   .spin-down {
     border-radius: 0 0 0.375rem 0;
-    border-top: 0.5px solid #e5e7eb;
+    border-top: 0.5px solid hsl(var(--border));
   }
 
   .spin-button:hover:not(:disabled) {
-    background: #e5e7eb;
-    color: #374151;
+    background: hsl(var(--border));
+    color: hsl(var(--foreground));
   }
 
   .spin-button:active:not(:disabled) {
-    background: #d1d5db;
+    background: hsl(var(--border));
   }
 
   .spin-button:disabled {
@@ -390,7 +390,7 @@
   .range-hint {
     margin-top: 0.375rem;
     font-size: 0.75rem;
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground));
   }
 
   /* Responsive */

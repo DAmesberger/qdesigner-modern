@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   type RecordingMode = 'audio' | 'video-audio' | 'video-only';
   type AudioQuality = 'low' | 'medium' | 'high';
@@ -103,11 +104,11 @@
   <!-- Recording Mode -->
   <div class="form-group">
     <label for="recording-mode">Recording Mode</label>
-    <select id="recording-mode" bind:value={question.config.recordingMode} class="select">
+    <Select id="recording-mode" bind:value={question.config.recordingMode}>
       <option value="audio">Audio Only</option>
       <option value="video-audio">Video + Audio</option>
       <option value="video-only">Video Only</option>
-    </select>
+    </Select>
     <p class="help-text">
       {#if question.config.recordingMode === 'audio'}
         Participant records audio using their microphone.
@@ -122,7 +123,7 @@
   <!-- Max Duration -->
   <div class="form-group">
     <label for="max-duration">Maximum Duration</label>
-    <select id="max-duration" bind:value={question.config.maxDuration} class="select">
+    <select id="max-duration" bind:value={question.config.maxDuration} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
       {#each durationPresets as preset}
         <option value={preset.value}>{preset.label}</option>
       {/each}
@@ -133,7 +134,7 @@
   <!-- Max File Size -->
   <div class="form-group">
     <label for="max-file-size">Maximum File Size</label>
-    <select id="max-file-size" bind:value={question.config.maxFileSize} class="select">
+    <select id="max-file-size" bind:value={question.config.maxFileSize} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
       {#each fileSizePresets as preset}
         <option value={preset.value}>{preset.label}</option>
       {/each}
@@ -148,11 +149,11 @@
 
       <div class="form-group">
         <label for="audio-quality">Audio Quality</label>
-        <select id="audio-quality" bind:value={question.config.audioQuality} class="select">
+        <Select id="audio-quality" bind:value={question.config.audioQuality}>
           <option value="low">Low (64 kbps)</option>
           <option value="medium">Medium (128 kbps)</option>
           <option value="high">High (256 kbps)</option>
-        </select>
+        </Select>
         <p class="help-text">
           Higher quality results in larger file sizes.
         </p>
@@ -167,11 +168,11 @@
 
       <div class="form-group">
         <label for="video-quality">Video Quality</label>
-        <select id="video-quality" bind:value={question.config.videoQuality} class="select">
+        <Select id="video-quality" bind:value={question.config.videoQuality}>
           <option value="low">Low (480p)</option>
           <option value="medium">Medium (720p)</option>
           <option value="high">High (1080p)</option>
-        </select>
+        </Select>
         <p class="help-text">
           Higher quality requires more bandwidth and storage.
         </p>
@@ -195,7 +196,7 @@
 
     <div class="form-group">
       <label for="countdown">Countdown Before Recording</label>
-      <select id="countdown" bind:value={question.config.countdown} class="select">
+      <select id="countdown" bind:value={question.config.countdown} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
         {#each countdownPresets as preset}
           <option value={preset.value}>{preset.label}</option>
         {/each}
@@ -273,26 +274,6 @@
     margin-bottom: 1rem;
   }
 
-  .select {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    background: white;
-    transition: all 0.15s;
-  }
-
-  .select:hover {
-    border-color: #d1d5db;
-  }
-
-  .select:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-
   .checkbox-label {
     display: flex;
     align-items: center;
@@ -309,14 +290,14 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section-title {
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -324,7 +305,7 @@
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   label {
@@ -332,13 +313,13 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   /* Preview */
   .preview-box {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 1rem;
   }
@@ -362,12 +343,12 @@
   }
 
   .stat-label {
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .stat-value {
     font-weight: 500;
-    color: #111827;
+    color: hsl(var(--foreground));
     text-align: right;
   }
 </style>

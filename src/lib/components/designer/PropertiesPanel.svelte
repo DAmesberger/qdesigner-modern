@@ -9,12 +9,13 @@
   import { defaultTheme } from '$lib/shared/types/theme';
   import { getItemSettings } from '$lib/utils/itemSettings';
   import { api } from '$lib/services/api';
-  import { Library } from 'lucide-svelte';
+  import { Library, MousePointerClick, CheckCircle } from 'lucide-svelte';
   import {
     CARRY_FORWARD_SOURCE_TYPES,
     getAvailableModes,
     getAvailableTargetFields,
   } from '$lib/runtime/core/CarryForward';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   let activeTab = $state<'properties' | 'style' | 'script'>('properties');
   let theme = $state(defaultTheme); // In real app, this would come from store
@@ -625,7 +626,7 @@
                             for="attention-type-{questionItem.id}"
                             class="block text-xs font-medium text-muted-foreground mb-1"
                           >Check Type</label>
-                          <select
+                          <Select
                             id="attention-type-{questionItem.id}"
                             value={questionItem.attentionCheck.type || 'instructed'}
                             onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
@@ -635,12 +636,11 @@
                                   type: e.currentTarget.value as 'instructed' | 'trap',
                                 },
                               } as any)}
-                            class="w-full px-2 py-1.5 text-sm border border-input rounded-md bg-background text-foreground"
-                            data-testid="attention-check-type"
+                            placeholder=""
                           >
                             <option value="instructed">Instructed (explicit)</option>
                             <option value="trap">Trap (hidden)</option>
-                          </select>
+                          </Select>
                         </div>
 
                         <div>
@@ -711,7 +711,7 @@
                             for="cf-source-{questionItem.id}"
                             class="block text-xs font-medium text-muted-foreground mb-1"
                           >Source Question</label>
-                          <select
+                          <Select
                             id="cf-source-{questionItem.id}"
                             value={cfConfig.sourceQuestionId}
                             onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
@@ -721,15 +721,14 @@
                                   sourceQuestionId: e.currentTarget.value,
                                 },
                               } as any)}
-                            class="w-full px-2 py-1.5 text-sm border border-input rounded-md bg-background text-foreground"
-                            data-testid="carry-forward-source"
+                            placeholder=""
                           >
                             {#each carryForwardSourceQuestions as sourceQ (sourceQ.id)}
                               <option value={sourceQ.id}>
                                 {sourceQ.name || sourceQ.id} ({sourceQ.type})
                               </option>
                             {/each}
-                          </select>
+                          </Select>
                         </div>
 
                         <div>
@@ -737,7 +736,7 @@
                             for="cf-mode-{questionItem.id}"
                             class="block text-xs font-medium text-muted-foreground mb-1"
                           >Mode</label>
-                          <select
+                          <Select
                             id="cf-mode-{questionItem.id}"
                             value={cfConfig.mode}
                             onchange={(e: Event & { currentTarget: HTMLSelectElement }) => {
@@ -753,8 +752,7 @@
                                 },
                               } as any);
                             }}
-                            class="w-full px-2 py-1.5 text-sm border border-input rounded-md bg-background text-foreground"
-                            data-testid="carry-forward-mode"
+                            placeholder=""
                           >
                             {#each carryForwardModes as mode (mode)}
                               <option value={mode}>
@@ -769,7 +767,7 @@
                                 {/if}
                               </option>
                             {/each}
-                          </select>
+                          </Select>
                         </div>
 
                         <div>
@@ -777,7 +775,7 @@
                             for="cf-target-{questionItem.id}"
                             class="block text-xs font-medium text-muted-foreground mb-1"
                           >Target Field</label>
-                          <select
+                          <Select
                             id="cf-target-{questionItem.id}"
                             value={cfConfig.targetField}
                             onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
@@ -787,8 +785,7 @@
                                   targetField: e.currentTarget.value as CarryForwardTargetField,
                                 },
                               } as any)}
-                            class="w-full px-2 py-1.5 text-sm border border-input rounded-md bg-background text-foreground"
-                            data-testid="carry-forward-target"
+                            placeholder=""
                           >
                             {#each carryForwardTargetFields as field (field)}
                               <option value={field}>
@@ -801,7 +798,7 @@
                                 {/if}
                               </option>
                             {/each}
-                          </select>
+                          </Select>
                         </div>
 
                         {#if cfConfig.mode === 'text-content' && cfConfig.targetField === 'prompt'}
@@ -854,7 +851,7 @@
                 for="page-layout-{pageItem.id}"
                 class="block text-sm font-medium text-foreground mb-1">Layout</label
               >
-              <select
+              <Select
                 id="page-layout-{pageItem.id}"
                 value={pageItem.layout?.type || 'vertical'}
                 onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
@@ -862,12 +859,12 @@
                     ...pageItem.layout,
                     type: e.currentTarget.value,
                   })}
-                class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
+                placeholder=""
               >
                 <option value="vertical">Vertical</option>
                 <option value="horizontal">Horizontal</option>
                 <option value="grid">Grid</option>
-              </select>
+              </Select>
             </div>
 
             <div>
@@ -904,12 +901,12 @@
                 for="var-type-{variableItem.id}"
                 class="block text-sm font-medium text-foreground mb-1">Type</label
               >
-              <select
+              <Select
                 id="var-type-{variableItem.id}"
                 value={variableItem.type}
                 onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
                   updateVariableProperty('type', e.currentTarget.value)}
-                class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
+                placeholder=""
               >
                 <option value="number">Number</option>
                 <option value="string">Text</option>
@@ -919,7 +916,7 @@
                 <option value="array">List</option>
                 <option value="reaction_time">Reaction Time</option>
                 <option value="stimulus_onset">Stimulus Onset</option>
-              </select>
+              </Select>
             </div>
 
             <div>
@@ -957,19 +954,7 @@
         {:else}
           <!-- No Selection -->
           <div class="p-4 text-center text-muted-foreground">
-            <svg
-              class="mx-auto h-12 w-12 text-muted mb-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 48 48"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M8 16l8-8m0 0l8 8m-8-8v32m16-24l8-8m0 0l8 8m-8-8v32"
-              />
-            </svg>
+            <MousePointerClick size={48} class="mx-auto text-muted mb-3" />
             <p class="text-sm">Select an item to view its properties</p>
           </div>
         {/if}
@@ -1038,9 +1023,7 @@
       {#if templateSaveSuccess}
         <div class="text-center py-8">
           <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-emerald-500/10 flex items-center justify-center">
-            <svg class="w-6 h-6 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
+            <CheckCircle size={24} class="text-success" />
           </div>
           <p class="text-sm font-medium text-foreground">Template saved successfully</p>
           <p class="text-xs text-muted-foreground mt-1">Available in the Template Library</p>
@@ -1073,16 +1056,15 @@
 
           <div>
             <label for="template-category" class="block text-sm font-medium text-foreground mb-1">Category</label>
-            <select
+            <Select
               id="template-category"
               bind:value={templateCategory}
-              class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-              data-testid="template-category-select"
+              placeholder=""
             >
               {#each templateCategories as cat}
                 <option value={cat.id}>{cat.label}</option>
               {/each}
-            </select>
+            </Select>
           </div>
 
           <div>

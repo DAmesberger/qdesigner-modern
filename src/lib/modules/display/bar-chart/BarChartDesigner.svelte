@@ -2,6 +2,8 @@
   import type { Question } from '$lib/shared';
   import { moduleRegistry } from '$lib/modules/registry';
   import { designerStore } from '$lib/stores/designer.svelte';
+  import Button from '$lib/components/common/Button.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface BarChartConfig {
     orientation: 'vertical' | 'horizontal';
@@ -235,21 +237,21 @@
 </script>
 
 {#if item}
-  <div class="designer-panel">
+  <div class="p-6 max-h-full overflow-y-auto">
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab" class:active={activeTab === 'data'} onclick={() => (activeTab = 'data')}>
-        📊 Data
+        Data
       </button>
       <button
         class="tab"
         class:active={activeTab === 'appearance'}
         onclick={() => (activeTab = 'appearance')}
       >
-        🎨 Appearance
+        Appearance
       </button>
       <button class="tab" class:active={activeTab === 'axes'} onclick={() => (activeTab = 'axes')}>
-        📏 Axes
+        Axes
       </button>
     </div>
 
@@ -257,10 +259,10 @@
     <div class="tab-content">
       {#if activeTab === 'data'}
         <!-- Data Tab -->
-        <div class="section">
+        <div class="mb-8">
           <h4 class="section-title">Data Source</h4>
 
-          <div class="form-group">
+          <div class="mb-4">
             <span class="block text-sm font-medium text-foreground mb-2"
               >Variables to Display</span
             >
@@ -272,24 +274,24 @@
                     checked={item.dataSource?.variables?.includes(variable.id)}
                     onchange={() => toggleVariable(variable.id)}
                   />
-                  <span class="variable-name">{variable.name}</span>
+                  <span class="flex-1 text-sm font-medium text-[hsl(var(--foreground))]">{variable.name}</span>
                   <span class="variable-type">{variable.type}</span>
                 </label>
               {/each}
             </div>
             {#if availableVariables.length === 0}
-              <p class="help-text">
+              <p class="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
                 No variables available. Create variables in your questionnaire to display them here.
               </p>
             {/if}
           </div>
 
-          <div class="form-group">
-            <label for="aggregation">Aggregation</label>
-            <select
+          <div class="mb-4">
+            <label for="aggregation" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Aggregation</label>
+            <Select
               id="aggregation"
               value={item.dataSource?.aggregation || 'none'}
-              onchange={(e: Event & { currentTarget: HTMLSelectElement }) => {
+              onchange={(e) => {
                 onUpdate?.({
                   ...item,
                   dataSource: {
@@ -298,7 +300,6 @@
                   },
                 });
               }}
-              class="select"
             >
               <option value="none">None</option>
               <option value="mean">Mean</option>
@@ -306,11 +307,11 @@
               <option value="count">Count</option>
               <option value="min">Minimum</option>
               <option value="max">Maximum</option>
-            </select>
+            </Select>
           </div>
 
-          <div class="form-group">
-            <label for="value">Value Expression</label>
+          <div class="mb-4">
+            <label for="value" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Value Expression</label>
             <input
               id="value"
               type="text"
@@ -325,13 +326,13 @@
                 });
               }}
               placeholder="e.g., variableName or IF(condition, value1, value2)"
-              class="input"
+              class="input-field"
             />
-            <p class="help-text">Enter a variable name or formula to display</p>
+            <p class="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Enter a variable name or formula to display</p>
           </div>
 
-          <div class="form-group">
-            <label for="referenceValue">Reference Value (Optional)</label>
+          <div class="mb-4">
+            <label for="referenceValue" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Reference Value (Optional)</label>
             <input
               id="referenceValue"
               type="text"
@@ -346,20 +347,20 @@
                 });
               }}
               placeholder="e.g., baseline or 100"
-              class="input"
+              class="input-field"
             />
-            <p class="help-text">Enter a reference value or variable for comparison</p>
+            <p class="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Enter a reference value or variable for comparison</p>
           </div>
         </div>
       {:else if activeTab === 'appearance'}
         <!-- Appearance Tab -->
-        <div class="section">
+        <div class="mb-8">
           <h4 class="section-title">Chart Appearance</h4>
 
-          <div class="form-group">
-            <label for="orientation">Orientation</label>
-            <div class="radio-group">
-              <label class="radio-option">
+          <div class="mb-4">
+            <label for="orientation" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Orientation</label>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
                   name="orientation"
@@ -378,7 +379,7 @@
                 />
                 <span>Vertical</span>
               </label>
-              <label class="radio-option">
+              <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
                   name="orientation"
@@ -400,8 +401,8 @@
             </div>
           </div>
 
-          <div class="form-group">
-            <label class="checkbox-label">
+          <div class="mb-4">
+            <label class="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={item.config?.stacked || false}
@@ -420,8 +421,8 @@
             </label>
           </div>
 
-          <div class="form-group">
-            <label class="checkbox-label">
+          <div class="mb-4">
+            <label class="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={item.config?.showValues || false}
@@ -440,8 +441,8 @@
             </label>
           </div>
 
-          <div class="form-group">
-            <label class="checkbox-label">
+          <div class="mb-4">
+            <label class="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={item.config?.showDataLabels || false}
@@ -460,8 +461,8 @@
             </label>
           </div>
 
-          <div class="form-group">
-            <label class="checkbox-label">
+          <div class="mb-4">
+            <label class="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={item.config?.showErrorBars || false}
@@ -481,12 +482,12 @@
           </div>
 
           {#if item.config?.showErrorBars}
-            <div class="form-group indent">
-              <label for="error-type">Error Type</label>
-              <select
+            <div class="mb-4 pl-6">
+              <label for="error-type" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Error Type</label>
+              <Select
                 id="error-type"
                 value={item.config?.errorType || 'standardError'}
-                onchange={(e: Event & { currentTarget: HTMLSelectElement }) => {
+                onchange={(e) => {
                   if (!item.config) return;
                   onUpdate?.({
                     ...item,
@@ -496,18 +497,17 @@
                     },
                   });
                 }}
-                class="select"
               >
                 <option value="standardError">Standard Error</option>
                 <option value="standardDeviation">Standard Deviation</option>
                 <option value="confidence95">95% Confidence Interval</option>
-              </select>
+              </Select>
             </div>
           {/if}
 
-          <div class="form-row">
-            <div class="form-group">
-              <label for="bar-width">Bar Width</label>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="mb-4">
+              <label for="bar-width" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Bar Width</label>
               <input
                 id="bar-width"
                 type="range"
@@ -525,13 +525,13 @@
                 min="0.1"
                 max="1"
                 step="0.1"
-                class="slider"
+                class="w-full mb-1"
               />
-              <span class="value">{item?.config?.barWidth || 0.8}</span>
+              <span class="inline-block ml-2 text-sm font-mono text-[hsl(var(--muted-foreground))]">{item?.config?.barWidth || 0.8}</span>
             </div>
 
-            <div class="form-group">
-              <label for="bar-spacing">Bar Spacing</label>
+            <div class="mb-4">
+              <label for="bar-spacing" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Bar Spacing</label>
               <input
                 id="bar-spacing"
                 type="range"
@@ -549,15 +549,15 @@
                 min="0"
                 max="0.5"
                 step="0.1"
-                class="slider"
+                class="w-full mb-1"
               />
-              <span class="value">{item?.config?.barSpacing || 0.2}</span>
+              <span class="inline-block ml-2 text-sm font-mono text-[hsl(var(--muted-foreground))]">{item?.config?.barSpacing || 0.2}</span>
             </div>
           </div>
 
-          <div class="form-group">
-            <label for="color-scheme">Color Scheme</label>
-            <div class="color-schemes">
+          <div class="mb-4">
+            <label for="color-scheme" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Color Scheme</label>
+            <div class="flex flex-col gap-3">
               {#each colorSchemes as scheme}
                 <label class="color-scheme-option">
                   <input
@@ -579,10 +579,10 @@
                       });
                     }}
                   />
-                  <span class="scheme-name">{scheme.label}</span>
-                  <div class="scheme-preview">
+                  <span class="text-sm font-medium text-[hsl(var(--foreground))] w-24">{scheme.label}</span>
+                  <div class="flex gap-1 flex-1">
                     {#each scheme.preview as color}
-                      <div class="color-swatch" style="background-color: {color}"></div>
+                      <div class="w-8 h-6 rounded border border-[hsl(var(--border))]" style="background-color: {color}"></div>
                     {/each}
                   </div>
                 </label>
@@ -590,60 +590,64 @@
             </div>
           </div>
 
-          <div class="form-group">
+          <div class="mb-4">
             <span class="block text-sm font-medium text-foreground mb-2"
               >Custom Colors</span
             >
-            <div class="custom-colors">
+            <div class="flex flex-col gap-2">
               {#each item.config?.colors?.customColors || [] as color, index}
-                <div class="custom-color-item">
-                  <div class="color-display" style="background-color: {color}"></div>
-                  <span class="color-value">{color}</span>
-                  <div class="color-actions">
-                    <button
-                      class="icon-btn"
+                <div class="flex items-center gap-2 p-2 bg-[hsl(var(--muted))] rounded-md">
+                  <div class="w-8 h-8 rounded border border-[hsl(var(--border))]" style="background-color: {color}"></div>
+                  <span class="flex-1 font-mono text-sm text-[hsl(var(--foreground))]">{color}</span>
+                  <div class="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onclick={() => reorderCustomColor(index, 'up')}
                       disabled={index === 0}
-                      title="Move up"
+                      aria-label="Move up"
                     >
                       ↑
-                    </button>
-                    <button
-                      class="icon-btn"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onclick={() => reorderCustomColor(index, 'down')}
                       disabled={index === (item.config?.colors?.customColors?.length || 0) - 1}
-                      title="Move down"
+                      aria-label="Move down"
                     >
                       ↓
-                    </button>
-                    <button
-                      class="icon-btn danger"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="hover:text-destructive"
                       onclick={() => removeCustomColor(index)}
-                      title="Remove"
+                      aria-label="Remove"
                     >
                       ✕
-                    </button>
+                    </Button>
                   </div>
                 </div>
               {/each}
 
-              <div class="add-color">
+              <div class="flex gap-2 items-center mt-2">
                 <input type="color" bind:value={newColor} class="color-input" />
-                <button class="btn btn-secondary" onclick={addCustomColor}> Add Color </button>
+                <Button variant="secondary" size="sm" onclick={addCustomColor}> Add Color </Button>
               </div>
             </div>
           </div>
         </div>
       {:else if activeTab === 'axes'}
         <!-- Axes Tab -->
-        <div class="section">
+        <div class="mb-8">
           <h4 class="section-title">Axes Configuration</h4>
 
-          <div class="subsection">
-            <h5>X-Axis</h5>
+          <div class="mt-6 pl-2">
+            <h5 class="text-sm font-semibold text-gray-600 mb-3">X-Axis</h5>
 
-            <div class="form-group">
-              <label for="x-label">Label</label>
+            <div class="mb-4">
+              <label for="x-label" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Label</label>
               <input
                 id="x-label"
                 type="text"
@@ -665,12 +669,12 @@
                   });
                 }}
                 placeholder="X-axis label"
-                class="input"
+                class="input-field"
               />
             </div>
 
-            <div class="form-group">
-              <label class="checkbox-label">
+            <div class="mb-4">
+              <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={item.config?.axes?.x?.showGrid || false}
@@ -695,8 +699,8 @@
               </label>
             </div>
 
-            <div class="form-group">
-              <label class="checkbox-label">
+            <div class="mb-4">
+              <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={item.config?.axes?.x?.showTicks || false}
@@ -722,11 +726,11 @@
             </div>
           </div>
 
-          <div class="subsection">
-            <h5>Y-Axis</h5>
+          <div class="mt-6 pl-2">
+            <h5 class="text-sm font-semibold text-gray-600 mb-3">Y-Axis</h5>
 
-            <div class="form-group">
-              <label for="y-label">Label</label>
+            <div class="mb-4">
+              <label for="y-label" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Label</label>
               <input
                 id="y-label"
                 type="text"
@@ -748,36 +752,36 @@
                   });
                 }}
                 placeholder="Y-axis label"
-                class="input"
+                class="input-field"
               />
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label for="y-min">Minimum</label>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="mb-4">
+                <label for="y-min" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Minimum</label>
                 <input
                   id="y-min"
                   type="text"
                   bind:value={yMinInput}
                   placeholder="Auto"
-                  class="input"
+                  class="input-field"
                 />
               </div>
 
-              <div class="form-group">
-                <label for="y-max">Maximum</label>
+              <div class="mb-4">
+                <label for="y-max" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Maximum</label>
                 <input
                   id="y-max"
                   type="text"
                   bind:value={yMaxInput}
                   placeholder="Auto"
-                  class="input"
+                  class="input-field"
                 />
               </div>
             </div>
 
-            <div class="form-group">
-              <label class="checkbox-label">
+            <div class="mb-4">
+              <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={item.config?.axes?.y?.showGrid || false}
@@ -802,8 +806,8 @@
               </label>
             </div>
 
-            <div class="form-group">
-              <label class="checkbox-label">
+            <div class="mb-4">
+              <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={item.config?.axes?.y?.showTicks || false}
@@ -833,24 +837,18 @@
     </div>
   </div>
 {:else}
-  <div class="designer-panel">
+  <div class="p-6 max-h-full overflow-y-auto">
     <p class="text-muted-foreground">No bar chart selected</p>
   </div>
 {/if}
 
 <style>
-  .designer-panel {
-    padding: 1.5rem;
-    max-height: 100%;
-    overflow-y: auto;
-  }
-
   /* Tabs */
   .tabs {
     display: flex;
     gap: 0.5rem;
     margin-bottom: 1.5rem;
-    border-bottom: 2px solid #e5e7eb;
+    border-bottom: 2px solid hsl(var(--border));
   }
 
   .tab {
@@ -860,85 +858,45 @@
     border-bottom: 2px solid transparent;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     cursor: pointer;
     transition: all 0.15s;
   }
 
   .tab:hover {
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .tab.active {
-    color: #3b82f6;
-    border-bottom-color: #3b82f6;
+    color: hsl(var(--primary));
+    border-bottom-color: hsl(var(--primary));
   }
 
-  /* Sections */
-  .section {
-    margin-bottom: 2rem;
-  }
-
+  /* Section title */
   .section-title {
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
-  .subsection {
-    margin-top: 1.5rem;
-    padding-left: 0.5rem;
-  }
-
-  .subsection h5 {
-    margin: 0 0 0.75rem 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: #4b5563;
-  }
-
   /* Form elements */
-  .form-group {
-    margin-bottom: 1rem;
-  }
-
-  .form-group.indent {
-    padding-left: 1.5rem;
-  }
-
-  .form-group label {
-    display: block;
-    margin-bottom: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: #374151;
-  }
-
-  .input,
-  .select {
+  .input-field {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
-  .input:focus,
-  .select:focus {
+  .input-field:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   /* Variable selection */
@@ -949,8 +907,8 @@
     max-height: 200px;
     overflow-y: auto;
     padding: 0.5rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
   }
 
@@ -959,210 +917,48 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.375rem 0.5rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
     cursor: pointer;
     transition: all 0.15s;
   }
 
   .variable-option:hover {
-    background: #f3f4f6;
-  }
-
-  .variable-name {
-    flex: 1;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: #374151;
+    background: hsl(var(--muted));
   }
 
   .variable-type {
     font-size: 0.75rem;
-    color: #6b7280;
-    background: #f3f4f6;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--muted));
     padding: 0.125rem 0.375rem;
     border-radius: 0.25rem;
   }
 
-  /* Radio/Checkbox */
-  .radio-group {
-    display: flex;
-    gap: 1rem;
-  }
-
-  .radio-option {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
   /* Color schemes */
-  .color-schemes {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
   .color-scheme-option {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     padding: 0.5rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     cursor: pointer;
     transition: all 0.15s;
   }
 
   .color-scheme-option:hover {
-    border-color: #3b82f6;
-  }
-
-  .scheme-name {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: #374151;
-    width: 6rem;
-  }
-
-  .scheme-preview {
-    display: flex;
-    gap: 0.25rem;
-    flex: 1;
-  }
-
-  .color-swatch {
-    width: 2rem;
-    height: 1.5rem;
-    border-radius: 0.25rem;
-    border: 1px solid #e5e7eb;
-  }
-
-  /* Custom colors */
-  .custom-colors {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .custom-color-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem;
-    background: #f9fafb;
-    border-radius: 0.375rem;
-  }
-
-  .color-display {
-    width: 2rem;
-    height: 2rem;
-    border-radius: 0.25rem;
-    border: 1px solid #e5e7eb;
-  }
-
-  .color-value {
-    flex: 1;
-    font-family: monospace;
-    font-size: 0.875rem;
-    color: #374151;
-  }
-
-  .color-actions {
-    display: flex;
-    gap: 0.25rem;
-  }
-
-  .add-color {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    margin-top: 0.5rem;
+    border-color: hsl(var(--primary));
   }
 
   .color-input {
     width: 3rem;
     height: 2rem;
     padding: 0.25rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     cursor: pointer;
-  }
-
-  /* Slider */
-  .slider {
-    width: 100%;
-    margin-bottom: 0.25rem;
-  }
-
-  .value {
-    display: inline-block;
-    margin-left: 0.5rem;
-    font-size: 0.875rem;
-    font-family: monospace;
-    color: #6b7280;
-  }
-
-  /* Buttons */
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-secondary:hover {
-    background: #e5e7eb;
-  }
-
-  .icon-btn {
-    padding: 0.25rem 0.5rem;
-    border: none;
-    background: white;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .icon-btn:hover:not(:disabled) {
-    background: #f3f4f6;
-  }
-
-  .icon-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .icon-btn.danger:hover {
-    background: #fee2e2;
-    border-color: #ef4444;
-    color: #ef4444;
-  }
-
-  /* Help text */
-  .help-text {
-    margin-top: 0.25rem;
-    font-size: 0.75rem;
-    color: #6b7280;
   }
 </style>

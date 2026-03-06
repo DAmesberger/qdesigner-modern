@@ -7,6 +7,7 @@
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
   import { Plus, Minus } from 'lucide-svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   let questionnaireTheme = defaultTheme;
   let showTestRunner = $state(false);
@@ -165,12 +166,12 @@
             {#if designerStore.currentPageBlocks.length > 1}
               <div class="flex items-center space-x-2">
                 <label for="block-select" class="text-sm text-muted-foreground">Block:</label>
-                <select
+                <Select
                   id="block-select"
                   value={designerStore.currentBlock?.id}
                   onchange={(e) => designerStore.setCurrentBlock(e.currentTarget.value)}
-                  class="text-sm px-3 py-1 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary bg-background"
-                  data-testid="designer-block-select"
+                  placeholder=""
+                  class="text-sm"
                 >
                   {#each designerStore.currentPageBlocks as block}
                     <option value={block.id}>
@@ -178,7 +179,7 @@
                       ({(block.questions ?? []).length} questions)
                     </option>
                   {/each}
-                </select>
+                </Select>
               </div>
             {/if}
           </div>

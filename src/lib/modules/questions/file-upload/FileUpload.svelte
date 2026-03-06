@@ -473,23 +473,23 @@
 
   /* Drop zone styles */
   .drop-zone {
-    border: 2px dashed #e5e7eb;
+    border: 2px dashed hsl(var(--border));
     border-radius: 0.5rem;
     padding: 3rem 2rem;
     text-align: center;
     cursor: pointer;
     transition: all 0.2s;
-    background: #f9fafb;
+    background: hsl(var(--muted));
   }
 
   .drop-zone:hover {
-    border-color: #3b82f6;
-    background: #eff6ff;
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.1);
   }
 
   .drop-zone.dragging {
-    border-color: #3b82f6;
-    background: #dbeafe;
+    border-color: hsl(var(--primary));
+    background: hsl(var(--primary) / 0.2);
   }
 
   .drop-zone.has-files {
@@ -509,20 +509,20 @@
     margin: 0 0 0.5rem 0;
     font-size: 1.125rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .drop-hint {
     margin: 0;
     font-size: 0.875rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   /* Upload button (no drag & drop) */
   .upload-button {
     padding: 0.75rem 1.5rem;
-    background: #3b82f6;
-    color: white;
+    background: hsl(var(--primary));
+    color: hsl(var(--background));
     border: none;
     border-radius: 0.375rem;
     font-size: 1rem;
@@ -532,11 +532,12 @@
   }
 
   .upload-button:hover:not(:disabled) {
-    background: #2563eb;
+    background: hsl(var(--primary));
+    filter: brightness(0.9);
   }
 
   .upload-button:disabled {
-    background: #9ca3af;
+    background: hsl(var(--muted-foreground));
     cursor: not-allowed;
   }
 
@@ -552,15 +553,15 @@
     display: flex;
     align-items: center;
     padding: 0.75rem 1rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     position: relative;
   }
 
   .file-item.error {
-    border-color: #f87171;
-    background: #fef2f2;
+    border-color: hsl(var(--destructive));
+    background: hsl(var(--destructive) / 0.1);
   }
 
   .file-info {
@@ -585,7 +586,7 @@
   .file-name {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -593,7 +594,7 @@
 
   .file-size {
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .file-error {
@@ -601,7 +602,7 @@
     bottom: -1.25rem;
     left: 0;
     font-size: 0.75rem;
-    color: #dc2626;
+    color: hsl(var(--destructive));
   }
 
   /* Progress bar */
@@ -611,14 +612,14 @@
     left: 0;
     right: 0;
     height: 3px;
-    background: #e5e7eb;
+    background: hsl(var(--border));
     border-radius: 0 0 0.375rem 0.375rem;
     overflow: hidden;
   }
 
   .progress-fill {
     height: 100%;
-    background: #3b82f6;
+    background: hsl(var(--primary));
     transition: width 0.3s;
   }
 
@@ -627,10 +628,10 @@
     width: 1.5rem;
     height: 1.5rem;
     padding: 0;
-    background: #f3f4f6;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.25rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.2s;
@@ -638,9 +639,9 @@
   }
 
   .remove-button:hover {
-    background: #fee2e2;
-    border-color: #fca5a5;
-    color: #dc2626;
+    background: hsl(var(--destructive) / 0.15);
+    border-color: hsl(var(--destructive) / 0.5);
+    color: hsl(var(--destructive));
   }
 
   /* Responsive */

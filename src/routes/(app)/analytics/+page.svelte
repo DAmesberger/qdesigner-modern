@@ -3,6 +3,7 @@
   import type { QuestionnaireSummary, TimeSeriesBucket } from '$lib/types/api';
   import type { AnalyticsPageData } from './+page';
   import { api } from '$lib/services/api';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface Props {
     data: AnalyticsPageData;
@@ -183,42 +184,42 @@
   <div class="flex flex-wrap items-center gap-4 mb-6">
     <div>
       <label for="filter-project" class="text-xs text-[hsl(var(--muted-foreground))] block mb-1">Project</label>
-      <select
+      <Select
         id="filter-project"
         bind:value={filterProject}
-        class="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm"
+        placeholder=""
       >
         <option value="all">All Projects</option>
         {#each projects as project}
           <option value={project.id}>{project.name}</option>
         {/each}
-      </select>
+      </Select>
     </div>
     <div>
       <label for="filter-status" class="text-xs text-[hsl(var(--muted-foreground))] block mb-1">Status</label>
-      <select
+      <Select
         id="filter-status"
         bind:value={filterStatus}
-        class="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm"
+        placeholder=""
       >
         <option value="all">All</option>
         <option value="draft">Draft</option>
         <option value="published">Published</option>
         <option value="archived">Archived</option>
-      </select>
+      </Select>
     </div>
     <div>
       <label for="filter-date" class="text-xs text-[hsl(var(--muted-foreground))] block mb-1">Date Range</label>
-      <select
+      <Select
         id="filter-date"
         bind:value={filterDateRange}
-        class="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm"
+        placeholder=""
       >
         <option value="all">All Time</option>
         <option value="7d">Last 7 Days</option>
         <option value="30d">Last 30 Days</option>
         <option value="90d">Last 90 Days</option>
-      </select>
+      </Select>
     </div>
     <div class="ml-auto text-sm text-[hsl(var(--muted-foreground))]">
       {filtered.length} questionnaire{filtered.length !== 1 ? 's' : ''}

@@ -2,12 +2,15 @@
   import { designerStore } from '$lib/stores/designer.svelte';
   import type { Variable, VariableType } from '$lib/shared';
   import FormulaEditor from './FormulaEditor.svelte';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import { onMount } from 'svelte';
   import { Hash, Type, ToggleLeft, Calendar, Clock, List, Box, Zap, Target, HelpCircle, Pencil, Trash2, Network, Plus } from 'lucide-svelte';
   import HelpTip from '$lib/help/components/HelpTip.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   let showAddVariable = $state(false);
   let editingVariable = $state<Variable | null>(null);
+  const showVariableDialog = $derived(showAddVariable || editingVariable !== null);
 
   let variables = $derived(designerStore.questionnaire.variables);
   let selectedVariableId = $derived(
@@ -462,14 +465,13 @@
 </div>
 
 <!-- Add/Edit Variable Modal -->
-{#if showAddVariable || editingVariable}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div class="bg-card rounded-lg shadow-xl p-6 w-full max-w-md border border-border">
-      <h3 class="text-lg font-semibold mb-4">
-        {editingVariable ? 'Edit Variable' : 'Add Variable'}
-      </h3>
-
-      <div class="space-y-4">
+<Dialog
+  open={showVariableDialog}
+  title={editingVariable ? 'Edit Variable' : 'Add Variable'}
+  size="md"
+  onclose={() => { showAddVariable = false; editingVariable = null; }}
+>
+  <div class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-foreground mb-1" for="var-name">Name</label>
           <input
@@ -491,7 +493,7 @@
 
         <div>
           <label class="text-sm font-medium text-foreground mb-1 flex items-center gap-1" for="var-type">Type <HelpTip helpKey="variables.types.number" /></label>
-          <select
+          <Select
             id="var-type"
             value={editingVariable ? editingVariable.type : newVariable.type}
             onchange={(e) => {
@@ -502,12 +504,12 @@
                 newVariable.type = value;
               }
             }}
-            class="w-full px-3 py-2 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
+            placeholder=""
           >
             {#each variableTypes as type}
               <option value={type.value}>{type.label}</option>
             {/each}
-          </select>
+          </Select>
         </div>
 
         <div>
@@ -602,25 +604,23 @@
             placeholder="What is this variable for?"
           />
         </div>
-      </div>
-
-      <div class="flex justify-end space-x-3 mt-6">
-        <button
-          onclick={() => {
-            showAddVariable = false;
-            editingVariable = null;
-          }}
-          class="px-4 py-2 text-muted-foreground hover:text-foreground"
-        >
-          Cancel
-        </button>
-        <button
-          onclick={editingVariable ? handleUpdateVariable : handleAddVariable}
-          class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-        >
-          {editingVariable ? 'Update' : 'Add'} Variable
-        </button>
-      </div>
-    </div>
   </div>
-{/if}
+
+  {#snippet footer()}
+    <button
+      onclick={() => {
+        showAddVariable = false;
+        editingVariable = null;
+      }}
+      class="px-4 py-2 text-muted-foreground hover:text-foreground"
+    >
+      Cancel
+    </button>
+    <button
+      onclick={editingVariable ? handleUpdateVariable : handleAddVariable}
+      class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+    >
+      {editingVariable ? 'Update' : 'Add'} Variable
+    </button>
+  {/snippet}
+</Dialog>

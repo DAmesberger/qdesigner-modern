@@ -7,6 +7,7 @@
   import Input from '$lib/components/ui/forms/Input.svelte';
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   let loading = $state(true);
   let saving = $state(false);
@@ -215,15 +216,15 @@
             </div>
             {#if emailNotifications}
               <FormGroup label="Digest Frequency" id="digest-frequency">
-                <select
+                <Select
                   id="digest-frequency"
                   bind:value={digestFrequency}
-                  class="w-full rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder=""
                 >
                   <option value="daily">Daily digest</option>
                   <option value="weekly">Weekly digest</option>
                   <option value="none">Instant (no digest)</option>
-                </select>
+                </Select>
               </FormGroup>
             {/if}
           </fieldset>

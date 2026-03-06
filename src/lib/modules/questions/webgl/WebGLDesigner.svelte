@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import Button from '$lib/components/common/Button.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface WebGLContent {
     type: 'circle' | 'rectangle' | 'triangle' | 'custom';
@@ -196,12 +198,12 @@
 
     <div class="form-group">
       <label for="stimulus-type">Stimulus Type</label>
-      <select id="stimulus-type" bind:value={question.config.stimulus.type} class="select">
+      <Select id="stimulus-type" bind:value={question.config.stimulus.type}>
         <option value="shape">Shape</option>
         <option value="image">Image</option>
         <option value="video">Video</option>
         <option value="custom">Custom Shader</option>
-      </select>
+      </Select>
     </div>
 
     {#if question.config.stimulus.type === 'shape' && shapeContent}
@@ -210,29 +212,25 @@
         <div class="form-group">
           <span class="label-text">Shape Preset</span>
           <div class="preset-selector">
-            <select bind:value={selectedShapePreset} class="select">
+            <Select bind:value={selectedShapePreset}>
               <option value="">Select preset...</option>
               {#each shapePresets as preset}
                 <option value={preset.name}>{preset.name}</option>
               {/each}
-            </select>
-            <button
-              class="btn btn-secondary"
-              onclick={applyShapePreset}
-              disabled={!selectedShapePreset}
-            >
+            </Select>
+            <Button variant="secondary" size="sm" onclick={applyShapePreset} disabled={!selectedShapePreset}>
               Apply
-            </button>
+            </Button>
           </div>
         </div>
 
         <div class="form-group">
           <label for="shape-type">Shape</label>
-          <select id="shape-type" bind:value={shapeContent.type} class="select">
+          <Select id="shape-type" bind:value={shapeContent.type}>
             <option value="circle">Circle</option>
             <option value="rectangle">Rectangle</option>
             <option value="triangle">Triangle</option>
-          </select>
+          </Select>
         </div>
 
         {#if shapeContent.type === 'circle'}
@@ -334,14 +332,13 @@
       {#if question.config.stimulus.fixation?.show}
         <div class="form-group">
           <label for="fixation-type">Fixation Type</label>
-          <select
+          <Select
             id="fixation-type"
             bind:value={question.config.stimulus.fixation.type}
-            class="select"
           >
             <option value="cross">Cross (+)</option>
             <option value="dot">Dot (•)</option>
-          </select>
+          </Select>
         </div>
 
         <div class="form-group">
@@ -376,11 +373,11 @@
 
     <div class="form-group">
       <label for="response-type">Response Type</label>
-      <select id="response-type" bind:value={question.config.response.type} class="select">
+      <Select id="response-type" bind:value={question.config.response.type}>
         <option value="keyboard">Keyboard</option>
         <option value="mouse">Mouse Click</option>
         <option value="touch">Touch</option>
-      </select>
+      </Select>
     </div>
 
     {#if question.config.response.type === 'keyboard'}
@@ -394,9 +391,9 @@
             class="input"
             onkeydown={(e) => e.key === 'Enter' && addValidKey()}
           />
-          <button class="btn btn-secondary" onclick={addValidKey} disabled={!newValidKey}>
+          <Button variant="secondary" size="sm" onclick={addValidKey} disabled={!newValidKey}>
             Add
-          </button>
+          </Button>
         </div>
 
         {#if question.config.response.validKeys?.length}
@@ -431,12 +428,12 @@
       {#if question.config.response.requireCorrect}
         <div class="form-group">
           <label for="correct-key">Correct Key</label>
-          <select id="correct-key" bind:value={question.config.response.correctKey} class="select">
+          <Select id="correct-key" bind:value={question.config.response.correctKey}>
             <option value="">Select correct key...</option>
             {#each question.config.response.validKeys || [] as key}
               <option value={key}>{key === ' ' ? 'SPACE' : key.toUpperCase()}</option>
             {/each}
-          </select>
+          </Select>
         </div>
       {/if}
     {/if}
@@ -449,19 +446,15 @@
     <div class="form-group">
       <span class="label-text">Timing Preset</span>
       <div class="preset-selector">
-        <select bind:value={selectedTimingPreset} class="select">
+        <Select bind:value={selectedTimingPreset}>
           <option value="">Select preset...</option>
           {#each timingPresets as preset}
             <option value={preset.name}>{preset.name}</option>
           {/each}
-        </select>
-        <button
-          class="btn btn-secondary"
-          onclick={applyTimingPreset}
-          disabled={!selectedTimingPreset}
-        >
+        </Select>
+        <Button variant="secondary" size="sm" onclick={applyTimingPreset} disabled={!selectedTimingPreset}>
           Apply
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -538,7 +531,7 @@
 
     <div class="form-group">
       <label for="target-fps">Target FPS</label>
-      <select id="target-fps" bind:value={question.config.rendering.targetFPS} class="select">
+      <select id="target-fps" bind:value={question.config.rendering.targetFPS} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
         <option value={30}>30 FPS</option>
         <option value={60}>60 FPS</option>
         <option value={120}>120 FPS</option>
@@ -584,18 +577,17 @@
     margin-bottom: 0.375rem;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .input,
-  .select,
   .textarea {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-    background: white;
+    background: hsl(var(--background));
     transition: all 0.15s;
   }
 
@@ -605,17 +597,15 @@
   }
 
   .input:hover,
-  .select:hover,
   .textarea:hover {
-    border-color: #d1d5db;
+    border-color: hsl(var(--border));
   }
 
   .input:focus,
-  .select:focus,
   .textarea:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .checkbox-label {
@@ -634,7 +624,7 @@
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid hsl(var(--border));
   }
 
   .section:first-child {
@@ -647,7 +637,7 @@
     margin: 0 0 1rem 0;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -661,13 +651,13 @@
     margin: 0 0 0.5rem 0;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #4b5563;
+    color: hsl(var(--muted-foreground));
   }
 
   .help-text {
     margin-top: 0.25rem;
     font-size: 0.75rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   /* Color controls */
@@ -698,7 +688,7 @@
   .color-channel .value {
     font-size: 0.75rem;
     font-family: monospace;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .color-input {
@@ -731,8 +721,8 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.375rem 0.75rem;
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
   }
 
@@ -740,20 +730,20 @@
     font-family: monospace;
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .remove-btn {
     padding: 0.125rem;
     border: none;
     background: none;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     cursor: pointer;
     line-height: 1;
   }
 
   .remove-btn:hover {
-    color: #dc2626;
+    color: hsl(var(--destructive));
   }
 
   /* Preset selector */
@@ -762,28 +752,4 @@
     gap: 0.5rem;
   }
 
-  /* Buttons */
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #e5e7eb;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
 </style>

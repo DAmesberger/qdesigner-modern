@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { designerStore } from '$lib/stores/designer.svelte';
   import { toast } from '$lib/stores/toast';
+  import { Search } from 'lucide-svelte';
 
   let { isOpen = $bindable(false) } = $props();
 
@@ -199,14 +200,7 @@
       <!-- Search Input -->
       <div class="border-b border-border">
         <div class="flex items-center px-4">
-          <svg class="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
+          <Search size={20} class="text-muted-foreground" />
           <input
             bind:this={searchInput}
             bind:value={searchQuery}

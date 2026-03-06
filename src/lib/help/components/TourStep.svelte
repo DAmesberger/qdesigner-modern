@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { TourStep } from '../tours/types';
+	import { X } from 'lucide-svelte';
 
 	interface Props {
 		step: TourStep;
@@ -33,9 +34,7 @@
 			onclick={onEnd}
 			aria-label="Close tour"
 		>
-			<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-			</svg>
+			<X size={16} />
 		</button>
 	</div>
 

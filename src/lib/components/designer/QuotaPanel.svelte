@@ -2,7 +2,9 @@
   import { designerStore } from '$lib/stores/designer.svelte';
   import type { QuotaGroup, QuotaDefinition } from '$lib/shared';
   import { generateId } from '$lib/shared';
-  import { Plus, Trash2, Target, X, ChevronDown, ChevronRight } from 'lucide-svelte';
+  import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-svelte';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import Select from '$lib/components/ui/forms/Select.svelte';
 
   let { open = $bindable(false) } = $props<{ open: boolean }>();
 
@@ -123,39 +125,8 @@
   const totalQuotas = $derived(localGroups.reduce((sum, g) => sum + g.quotas.length, 0));
 </script>
 
-{#if open}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="bg-layer-modal rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto border border-border"
-      onclick={(e) => e.stopPropagation()}
-    >
-      <!-- Header -->
-      <div class="flex items-center justify-between px-6 py-4 border-b border-border">
-        <div class="flex items-center gap-2">
-          <Target class="w-5 h-5 text-primary" />
-          <h3 class="text-lg font-semibold text-foreground">Quota Management</h3>
-          {#if totalQuotas > 0}
-            <span class="text-xs text-muted-foreground bg-accent px-2 py-0.5 rounded-full">
-              {totalQuotas} quota{totalQuotas !== 1 ? 's' : ''}
-            </span>
-          {/if}
-        </div>
-        <button
-          onclick={cancel}
-          class="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          aria-label="Close"
-        >
-          <X class="w-4 h-4" />
-        </button>
-      </div>
-
-      <div class="p-6 space-y-4">
-        <p class="text-xs text-muted-foreground">
-          Set participation caps per condition or demographic. When a quota is full, respondents
-          matching that condition are routed according to the over-quota action.
-        </p>
+<Dialog bind:open={open} title="Quota Management" description="Set participation caps per condition or demographic. When a quota is full, respondents matching that condition are routed according to the over-quota action." size="lg" onclose={cancel}>
+  <div class="space-y-4">
 
         <!-- Quota Groups -->
         {#each localGroups as group, groupIndex (group.id)}
@@ -182,14 +153,15 @@
                 placeholder="Group name"
               />
 
-              <select
+              <Select
                 value={group.logic}
                 onchange={(e) => updateGroup(groupIndex, 'logic', e.currentTarget.value)}
-                class="text-xs px-2 py-1 border border-border rounded bg-background text-foreground"
+                class="text-xs"
+                placeholder=""
               >
                 <option value="independent">Independent</option>
                 <option value="cross">Cross-quota</option>
-              </select>
+              </Select>
 
               <button
                 onclick={() => removeGroup(groupIndex)}
@@ -276,7 +248,7 @@
                           >
                             Over-quota action
                           </label>
-                          <select
+                          <Select
                             id="quota-action-{quota.id}"
                             value={quota.overQuotaAction}
                             onchange={(e) =>
@@ -286,13 +258,13 @@
                                 'overQuotaAction',
                                 e.currentTarget.value
                               )}
-                            class="w-full px-2 py-1 text-sm border border-border rounded bg-background text-foreground focus:ring-2 focus:ring-primary"
+                            placeholder=""
                           >
                             <option value="terminate">Terminate</option>
                             <option value="redirect">Redirect</option>
                             <option value="skip-to-end">Skip to end</option>
                             <option value="continue">Continue (flag only)</option>
-                          </select>
+                          </Select>
                         </div>
                       </div>
 
@@ -411,24 +383,21 @@
         >
           <Plus class="w-4 h-4" /> Add Quota Group
         </button>
-      </div>
-
-      <!-- Footer -->
-      <div class="flex justify-end gap-3 px-6 py-4 border-t border-border">
-        <button
-          onclick={cancel}
-          class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onclick={save}
-          class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-          data-testid="quota-save"
-        >
-          Save
-        </button>
-      </div>
-    </div>
   </div>
-{/if}
+
+  {#snippet footer()}
+    <button
+      onclick={cancel}
+      class="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+    >
+      Cancel
+    </button>
+    <button
+      onclick={save}
+      class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+      data-testid="quota-save"
+    >
+      Save
+    </button>
+  {/snippet}
+</Dialog>

@@ -2,6 +2,7 @@
   import { Handle, Position, type NodeProps, type Node } from '@xyflow/svelte';
   import type { FlowControl } from '$lib/shared/types/questionnaire';
   import theme from '$lib/theme';
+  import { GitBranch } from 'lucide-svelte';
 
   interface BranchNodeData extends Record<string, unknown> {
     flow: FlowControl;
@@ -15,14 +16,7 @@
   <Handle type="target" position={Position.Top} />
 
   <div class="node-header">
-    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-      />
-    </svg>
+    <GitBranch size={16} />
     <span class="font-medium">Branch</span>
   </div>
 
@@ -42,21 +36,21 @@
 
 <style>
   .branch-node {
-    background: white;
-    border: 2px solid #f59e0b;
+    background: hsl(var(--card));
+    border: 2px solid hsl(var(--warning));
     border-radius: 8px;
     padding: 0;
     min-width: 200px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px hsl(var(--foreground) / 0.1);
     transition: all 0.2s;
   }
 
   .branch-node.selected {
-    box-shadow: 0 0 0 2px #f59e0b;
+    box-shadow: 0 0 0 2px hsl(var(--warning));
   }
 
   .branch-node:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px hsl(var(--foreground) / 0.15);
   }
 
   .node-header {
@@ -64,10 +58,10 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: #fef3c7;
-    border-bottom: 1px solid #fde68a;
+    background: hsl(var(--warning) / 0.15);
+    border-bottom: 1px solid hsl(var(--warning) / 0.3);
     border-radius: 6px 6px 0 0;
-    color: #92400e;
+    color: hsl(var(--warning));
   }
 
   .node-content {
@@ -77,31 +71,31 @@
   .condition-label {
     font-size: 11px;
     font-weight: 600;
-    color: #92400e;
+    color: hsl(var(--warning));
     margin-bottom: 4px;
   }
 
   .condition-text {
     display: block;
     font-size: 12px;
-    background: #fffbeb;
+    background: hsl(var(--warning) / 0.08);
     padding: 4px 8px;
     border-radius: 4px;
-    border: 1px solid #fde68a;
-    color: #78350f;
+    border: 1px solid hsl(var(--warning) / 0.3);
+    color: hsl(var(--warning));
     word-break: break-all;
   }
 
   .target-info {
     margin-top: 8px;
     padding-top: 8px;
-    border-top: 1px solid #fde68a;
+    border-top: 1px solid hsl(var(--warning) / 0.3);
   }
 
   :global(.branch-node .svelte-flow__handle) {
     width: 10px;
     height: 10px;
-    background: #f59e0b;
-    border: 2px solid white;
+    background: hsl(var(--warning));
+    border: 2px solid hsl(var(--card));
   }
 </style>

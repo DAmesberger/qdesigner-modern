@@ -617,7 +617,7 @@
     flex-wrap: wrap;
     gap: 1.5rem;
     padding: 1rem;
-    background: #f9fafb;
+    background: hsl(var(--muted));
     border-radius: 0.5rem;
     margin-bottom: 1rem;
   }
@@ -635,7 +635,7 @@
   .group-label {
     font-size: 0.75rem;
     font-weight: 600;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
     text-transform: uppercase;
   }
 
@@ -653,8 +653,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: white;
-    border: 2px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 2px solid hsl(var(--border));
     border-radius: 0.375rem;
     cursor: pointer;
     font-size: 1.25rem;
@@ -663,20 +663,20 @@
 
   .tool-button:hover,
   .shape-button:hover {
-    border-color: #d1d5db;
+    border-color: hsl(var(--border));
   }
 
   .tool-button.active,
   .shape-button.active {
-    background: #3b82f6;
-    border-color: #3b82f6;
-    color: white;
+    background: hsl(var(--primary));
+    border-color: hsl(var(--primary));
+    color: hsl(var(--background));
   }
 
   .color-button {
     width: 2rem;
     height: 2rem;
-    border: 2px solid #e5e7eb;
+    border: 2px solid hsl(var(--border));
     border-radius: 0.25rem;
     cursor: pointer;
     transition: all 0.2s;
@@ -687,10 +687,10 @@
   }
 
   .color-button.active {
-    border-color: #111827;
+    border-color: hsl(var(--foreground));
     box-shadow:
-      0 0 0 2px white,
-      0 0 0 4px #111827;
+      0 0 0 2px hsl(var(--background)),
+      0 0 0 4px hsl(var(--foreground));
   }
 
   .size-slider {
@@ -699,14 +699,14 @@
 
   .size-value {
     font-size: 0.875rem;
-    color: #374151;
+    color: hsl(var(--foreground));
     font-weight: 500;
   }
 
   .action-button {
     padding: 0.5rem 1rem;
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
     cursor: pointer;
@@ -714,7 +714,7 @@
   }
 
   .action-button:hover:not(:disabled) {
-    background: #f9fafb;
+    background: hsl(var(--muted));
   }
 
   .action-button:disabled {
@@ -723,17 +723,17 @@
   }
 
   .action-button.clear {
-    background: #fef2f2;
-    border-color: #fca5a5;
-    color: #b91c1c;
+    background: hsl(var(--destructive) / 0.05);
+    border-color: hsl(var(--destructive) / 0.4);
+    color: hsl(var(--destructive));
   }
 
   .action-button.clear:hover {
-    background: #fee2e2;
+    background: hsl(var(--destructive) / 0.1);
   }
 
   .canvas-wrapper {
-    border: 2px solid #e5e7eb;
+    border: 2px solid hsl(var(--border));
     border-radius: 0.5rem;
     overflow: hidden;
     display: inline-block;
@@ -742,7 +742,7 @@
   .drawing-canvas {
     display: block;
     cursor: crosshair;
-    background: white;
+    background: hsl(var(--background));
   }
 
   .analysis-info {
@@ -750,7 +750,7 @@
     display: flex;
     gap: 1rem;
     font-size: 0.875rem;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   /* Responsive */

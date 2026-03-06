@@ -4,6 +4,7 @@
   import type { TimeSeriesBucket } from '$lib/types/api';
   import { api } from '$lib/services/api';
   import { RealtimeAnalyticsClient } from '$lib/analytics/RealtimeAnalyticsClient';
+  import { ChevronLeft } from 'lucide-svelte';
 
   interface Props {
     data: QuestionnaireAnalyticsData;
@@ -174,9 +175,7 @@
       title="Back to analytics overview"
       class="p-2 rounded-lg hover:bg-[hsl(var(--background))]/80 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
     >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-      </svg>
+      <ChevronLeft size={20} />
     </a>
     <div class="flex-1">
       <h1 class="text-2xl font-bold text-[hsl(var(--foreground))] tracking-tight">

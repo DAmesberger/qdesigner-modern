@@ -179,19 +179,19 @@
 
   .content {
     line-height: 1.6;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .content.edit-mode {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     padding: 1rem;
     min-height: 100px;
   }
 
   .empty-state {
-    color: #9ca3af;
+    color: hsl(var(--muted-foreground));
     font-style: italic;
     text-align: center;
     margin: 0;
@@ -237,15 +237,15 @@
   }
 
   .content.markdown :global(code) {
-    background: #f3f4f6;
+    background: hsl(var(--muted));
     padding: 0.125rem 0.25rem;
     border-radius: 0.25rem;
     font-size: 0.875em;
   }
 
   .content.markdown :global(pre) {
-    background: #1f2937;
-    color: #f9fafb;
+    background: hsl(var(--foreground));
+    color: hsl(var(--muted));
     padding: 1rem;
     border-radius: 0.5rem;
     overflow-x: auto;
@@ -253,15 +253,15 @@
   }
 
   .content.markdown :global(blockquote) {
-    border-left: 4px solid #3b82f6;
+    border-left: 4px solid hsl(var(--primary));
     padding-left: 1rem;
     margin: 1em 0;
-    color: #6b7280;
+    color: hsl(var(--muted-foreground));
   }
 
   .content.markdown :global(strong) {
     font-weight: 600;
-    color: #111827;
+    color: hsl(var(--foreground));
   }
 
   .content.markdown :global(em) {
@@ -269,12 +269,12 @@
   }
 
   .content.markdown :global(a) {
-    color: #3b82f6;
+    color: hsl(var(--primary));
     text-decoration: underline;
   }
 
   .content.markdown :global(a:hover) {
-    color: #2563eb;
+    color: hsl(var(--primary));
   }
 
   .continue-container {
@@ -285,8 +285,8 @@
 
   .continue-button {
     padding: 0.625rem 1.5rem;
-    background: #3b82f6;
-    color: white;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
     border: none;
     border-radius: 0.375rem;
     font-weight: 500;
@@ -296,9 +296,9 @@
   }
 
   .continue-button:hover {
-    background: #2563eb;
+    background: hsl(var(--primary));
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    box-shadow: 0 4px 12px hsl(var(--primary) / 0.15);
   }
 
   .continue-button:active {
@@ -312,10 +312,10 @@
     gap: 0.5rem;
     margin-top: 1.5rem;
     padding: 0.75rem;
-    background: #fef3c7;
+    background: hsl(var(--warning) / 0.15);
     border-radius: 0.5rem;
     font-size: 0.875rem;
-    color: #92400e;
+    color: hsl(var(--warning));
   }
 
   .indicator-icon {

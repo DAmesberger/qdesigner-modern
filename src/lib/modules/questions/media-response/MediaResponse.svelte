@@ -4,6 +4,7 @@
   import type { Question } from '$lib/shared';
   import { onMount } from 'svelte';
   import { api } from '$lib/services/api';
+  import Button from '$lib/components/common/Button.svelte';
 
   type RecordingMode = 'audio' | 'video-audio' | 'video-only';
   type AudioQuality = 'low' | 'medium' | 'high';
@@ -483,21 +484,21 @@
 </script>
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
-  <div class="media-response-container">
+  <div class="w-full">
     <!-- Error state -->
     {#if phase === 'error'}
-      <div class="error-panel">
-        <div class="error-icon">
+      <div class="flex flex-col items-center gap-3 px-6 py-8 border-2 border-red-300 rounded-xl bg-red-50 text-center">
+        <div class="text-red-600">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
         </div>
-        <p class="error-text">{errorMessage}</p>
-        <button type="button" class="btn btn-secondary" onclick={() => { phase = 'idle'; errorMessage = ''; }}>
+        <p class="m-0 text-[0.9375rem] text-red-900">{errorMessage}</p>
+        <Button variant="secondary" size="sm" onclick={() => { phase = 'idle'; errorMessage = ''; }}>
           Try Again
-        </button>
+        </Button>
       </div>
     {/if}
 
@@ -519,7 +520,7 @@
             Record Video (No Audio)
           {/if}
         </button>
-        <p class="idle-hint">
+        <p class="m-0 text-[0.8125rem] text-[hsl(var(--muted-foreground))]">
           Max duration: {formattedMaxDuration()}
           {#if maxFileSize}
             &middot; Max size: {formatBytes(maxFileSize)}
@@ -530,9 +531,9 @@
 
     <!-- Requesting permission -->
     {#if phase === 'requesting'}
-      <div class="requesting-panel">
+      <div class="flex flex-col items-center gap-4 px-6 py-10 border-2 border-dashed border-[hsl(var(--border))] rounded-xl bg-[hsl(var(--muted))]">
         <div class="spinner"></div>
-        <p class="requesting-text">
+        <p class="m-0 text-[hsl(var(--muted-foreground))] text-[0.9375rem]">
           Requesting {hasVideo ? 'camera' : 'microphone'} access...
         </p>
       </div>
@@ -544,7 +545,7 @@
         {#if hasVideo && videoPreviewEl}
           <!-- video preview is visible behind -->
         {/if}
-        <div class="countdown-overlay">
+        <div class="relative z-[1]">
           <span class="countdown-number">{countdownValue}</span>
         </div>
         <!-- Video preview during countdown -->
@@ -580,7 +581,7 @@
 
         <!-- Audio waveform (audio-only mode) -->
         {#if isAudioOnly}
-          <div class="waveform-wrapper">
+          <div class="flex flex-col gap-2.5 px-4 pt-4 items-start">
             <div class="recording-indicator recording-indicator-inline">
               <span class="recording-dot-animated"></span>
               <span class="recording-label">Recording</span>
@@ -595,11 +596,11 @@
         {/if}
 
         <!-- Timer and controls -->
-        <div class="recording-controls">
+        <div class="flex flex-col items-center gap-3 px-4 pb-4">
           <div class="timer">
             <span class="timer-current">{formattedTime()}</span>
-            <span class="timer-separator">/</span>
-            <span class="timer-max">{formattedMaxDuration()}</span>
+            <span class="mx-1 text-[hsl(var(--muted-foreground))]">/</span>
+            <span class="text-[hsl(var(--muted-foreground))]">{formattedMaxDuration()}</span>
           </div>
 
           <div class="progress-bar">
@@ -631,8 +632,8 @@
             playsinline
           ></video>
         {:else}
-          <div class="audio-playback-wrapper">
-            <div class="audio-icon">
+          <div class="flex flex-col items-center gap-4 px-6 pt-8 pb-4 bg-[hsl(var(--muted))]">
+            <div class="text-[hsl(var(--muted-foreground))]">
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -642,17 +643,17 @@
             </div>
             <audio
               bind:this={audioPlaybackEl}
-              class="audio-playback"
+              class="w-full max-w-[400px]"
               src={recordedUrl}
               controls
             ></audio>
           </div>
         {/if}
 
-        <div class="playback-meta">
-          <span class="meta-item">Duration: {formattedTime()}</span>
-          <span class="meta-separator">&middot;</span>
-          <span class="meta-item">Size: {recordedBlob ? formatBytes(recordedBlob.size) : '---'}</span>
+        <div class="flex items-center justify-center gap-2 px-4 py-2 text-[0.8125rem] text-[hsl(var(--muted-foreground))]">
+          <span>Duration: {formattedTime()}</span>
+          <span class="text-[hsl(var(--border))]">&middot;</span>
+          <span>Size: {recordedBlob ? formatBytes(recordedBlob.size) : '---'}</span>
         </div>
 
         {#if blobSizeWarning}
@@ -667,9 +668,10 @@
         {/if}
 
         {#if allowRerecord}
-          <button
-            type="button"
-            class="btn btn-secondary re-record-btn"
+          <Button
+            variant="secondary"
+            size="sm"
+            class="re-record-btn"
             onclick={reRecord}
             {disabled}
           >
@@ -678,7 +680,7 @@
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
             </svg>
             Re-record
-          </button>
+          </Button>
         {/if}
       </div>
     {/if}
@@ -686,10 +688,6 @@
 </BaseQuestion>
 
 <style>
-  .media-response-container {
-    width: 100%;
-  }
-
   /* ---- Idle ---- */
   .idle-panel {
     display: flex;
@@ -697,9 +695,9 @@
     align-items: center;
     gap: 0.75rem;
     padding: 2.5rem 1.5rem;
-    border: 2px dashed #e5e7eb;
+    border: 2px dashed hsl(var(--border));
     border-radius: 0.75rem;
-    background: #f9fafb;
+    background: hsl(var(--muted));
     text-align: center;
   }
 
@@ -708,8 +706,8 @@
     align-items: center;
     gap: 0.625rem;
     padding: 0.75rem 1.5rem;
-    background: #dc2626;
-    color: white;
+    background: hsl(var(--destructive));
+    color: hsl(var(--background));
     border: none;
     border-radius: 0.5rem;
     font-size: 1rem;
@@ -719,12 +717,13 @@
   }
 
   .record-start-btn:hover:not(:disabled) {
-    background: #b91c1c;
+    background: hsl(var(--destructive));
+    filter: brightness(0.85);
     transform: translateY(-1px);
   }
 
   .record-start-btn:disabled {
-    background: #9ca3af;
+    background: hsl(var(--muted-foreground));
     cursor: not-allowed;
   }
 
@@ -732,34 +731,17 @@
     display: inline-block;
     width: 0.75rem;
     height: 0.75rem;
-    background: white;
+    background: hsl(var(--background));
     border-radius: 50%;
     flex-shrink: 0;
   }
 
-  .idle-hint {
-    margin: 0;
-    font-size: 0.8125rem;
-    color: #6b7280;
-  }
-
-  /* ---- Requesting ---- */
-  .requesting-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-    padding: 2.5rem 1.5rem;
-    border: 2px dashed #e5e7eb;
-    border-radius: 0.75rem;
-    background: #f9fafb;
-  }
-
+  /* ---- Spinner ---- */
   .spinner {
     width: 2rem;
     height: 2rem;
-    border: 3px solid #e5e7eb;
-    border-top-color: #3b82f6;
+    border: 3px solid hsl(var(--border));
+    border-top-color: hsl(var(--primary));
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -768,18 +750,12 @@
     to { transform: rotate(360deg); }
   }
 
-  .requesting-text {
-    margin: 0;
-    color: #6b7280;
-    font-size: 0.9375rem;
-  }
-
   /* ---- Countdown ---- */
   .countdown-panel {
     position: relative;
     border-radius: 0.75rem;
     overflow: hidden;
-    background: #111827;
+    background: hsl(var(--foreground));
     min-height: 200px;
     display: flex;
     align-items: center;
@@ -795,16 +771,11 @@
     opacity: 0.6;
   }
 
-  .countdown-overlay {
-    position: relative;
-    z-index: 1;
-  }
-
   .countdown-number {
     font-size: 5rem;
     font-weight: 700;
-    color: white;
-    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    color: hsl(var(--background));
+    text-shadow: 0 2px 8px hsl(var(--foreground) / 0.5);
     animation: pulse 1s ease-in-out infinite;
   }
 
@@ -818,15 +789,15 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    border: 2px solid #dc2626;
+    border: 2px solid hsl(var(--destructive));
     border-radius: 0.75rem;
     overflow: hidden;
-    background: #fef2f2;
+    background: hsl(var(--destructive) / 0.1);
   }
 
   .video-preview-wrapper {
     position: relative;
-    background: #111827;
+    background: hsl(var(--foreground));
   }
 
   .video-preview {
@@ -844,7 +815,7 @@
     align-items: center;
     gap: 0.375rem;
     padding: 0.25rem 0.625rem;
-    background: rgba(220, 38, 38, 0.9);
+    background: hsl(var(--destructive) / 0.9);
     border-radius: 0.25rem;
     z-index: 1;
   }
@@ -852,7 +823,7 @@
   .recording-indicator-inline {
     position: static;
     display: inline-flex;
-    background: #dc2626;
+    background: hsl(var(--destructive));
     border-radius: 0.25rem;
     align-self: flex-start;
   }
@@ -861,7 +832,7 @@
     display: inline-block;
     width: 0.5rem;
     height: 0.5rem;
-    background: white;
+    background: hsl(var(--background));
     border-radius: 50%;
     animation: blink 1s ease-in-out infinite;
   }
@@ -874,67 +845,42 @@
   .recording-label {
     font-size: 0.6875rem;
     font-weight: 700;
-    color: white;
+    color: hsl(var(--background));
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
   /* ---- Waveform ---- */
-  .waveform-wrapper {
-    display: flex;
-    flex-direction: column;
-    gap: 0.625rem;
-    padding: 1rem 1rem 0;
-    align-items: flex-start;
-  }
-
   .waveform-canvas {
     width: 100%;
     height: 80px;
     border-radius: 0.375rem;
-    background: #1f2937;
+    background: hsl(var(--foreground));
   }
 
   /* ---- Recording controls ---- */
-  .recording-controls {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0 1rem 1rem;
-  }
-
   .timer {
     font-family: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
     font-size: 1.25rem;
     font-weight: 600;
-    color: #374151;
+    color: hsl(var(--foreground));
   }
 
   .timer-current {
-    color: #dc2626;
-  }
-
-  .timer-separator {
-    margin: 0 0.25rem;
-    color: #9ca3af;
-  }
-
-  .timer-max {
-    color: #6b7280;
+    color: hsl(var(--destructive));
   }
 
   .progress-bar {
     width: 100%;
     height: 4px;
-    background: #e5e7eb;
+    background: hsl(var(--border));
     border-radius: 2px;
     overflow: hidden;
   }
 
   .progress-fill {
     height: 100%;
-    background: #dc2626;
+    background: hsl(var(--destructive));
     transition: width 1s linear;
     border-radius: 2px;
   }
@@ -944,8 +890,8 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.625rem 1.25rem;
-    background: #374151;
-    color: white;
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
     border: none;
     border-radius: 0.5rem;
     font-size: 0.9375rem;
@@ -955,14 +901,14 @@
   }
 
   .stop-btn:hover {
-    background: #1f2937;
+    opacity: 0.85;
   }
 
   .stop-square {
     display: inline-block;
     width: 0.75rem;
     height: 0.75rem;
-    background: white;
+    background: hsl(var(--background));
     border-radius: 2px;
     flex-shrink: 0;
   }
@@ -972,49 +918,17 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid hsl(var(--border));
     border-radius: 0.75rem;
     overflow: hidden;
-    background: white;
+    background: hsl(var(--card));
   }
 
   .video-playback {
     width: 100%;
     max-height: 400px;
-    background: #111827;
+    background: hsl(var(--foreground));
     display: block;
-  }
-
-  .audio-playback-wrapper {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-    padding: 2rem 1.5rem 1rem;
-    background: #f9fafb;
-  }
-
-  .audio-icon {
-    color: #6b7280;
-  }
-
-  .audio-playback {
-    width: 100%;
-    max-width: 400px;
-  }
-
-  .playback-meta {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    font-size: 0.8125rem;
-    color: #6b7280;
-  }
-
-  .meta-separator {
-    color: #d1d5db;
   }
 
   .blob-size-warning {
@@ -1023,75 +937,24 @@
     gap: 0.5rem;
     margin: 0 1rem;
     padding: 0.625rem 0.875rem;
-    background: #fffbeb;
-    border: 1px solid #fcd34d;
+    background: hsl(var(--warning) / 0.1);
+    border: 1px solid hsl(var(--warning) / 0.5);
     border-radius: 0.375rem;
     font-size: 0.8125rem;
-    color: #92400e;
+    color: hsl(var(--warning));
     line-height: 1.4;
   }
 
   .blob-size-warning svg {
     flex-shrink: 0;
     margin-top: 0.1rem;
-    color: #d97706;
+    color: hsl(var(--warning));
   }
 
-  .re-record-btn {
-    display: inline-flex;
-    align-items: center;
+  .playback-panel :global(.re-record-btn) {
     gap: 0.375rem;
     margin: 0 1rem 1rem;
     align-self: center;
-  }
-
-  /* ---- Error ---- */
-  .error-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 2rem 1.5rem;
-    border: 2px solid #fca5a5;
-    border-radius: 0.75rem;
-    background: #fef2f2;
-    text-align: center;
-  }
-
-  .error-icon {
-    color: #dc2626;
-  }
-
-  .error-text {
-    margin: 0;
-    color: #991b1b;
-    font-size: 0.9375rem;
-  }
-
-  /* ---- Shared button styles ---- */
-  .btn {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .btn-secondary {
-    background: #f3f4f6;
-    color: #374151;
-    border: 1px solid #e5e7eb;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: #e5e7eb;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   /* ---- Responsive ---- */
