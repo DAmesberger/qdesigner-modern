@@ -144,7 +144,7 @@
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
   <div
-    class="scale-container display-{question.config.displayType} orientation-{question.config
+    class="scale-container flex flex-col gap-4 py-2 display-{question.config.displayType} orientation-{question.config
       .orientation || 'horizontal'}"
     onkeydown={handleKeyPress}
     tabindex="0"
@@ -155,7 +155,7 @@
     aria-label="Rating scale"
   >
     {#if question.config.displayType === 'slider'}
-      <div class="slider-container">
+      <div class="relative py-8">
         <input
           bind:this={sliderElement}
           type="range"
@@ -171,12 +171,12 @@
         />
 
         {#if question.config.showLabels}
-          <div class="slider-labels">
+          <div class="relative h-8 mt-2">
             {#each scalePoints as point}
               {@const label = question.config.labels?.find((l) => l.value === point)}
               {#if label || point === question.config.min || point === question.config.max}
-                <div class="slider-label" style="left: {getSliderPercentage(point)}%">
-                  <span class="label-text">{getLabel(point)}</span>
+                <div class="absolute -translate-x-1/2 text-center" style="left: {getSliderPercentage(point)}%">
+                  <span class="text-xs text-muted-foreground">{getLabel(point)}</span>
                 </div>
               {/if}
             {/each}
@@ -185,16 +185,16 @@
 
         {#if question.config.showValue && value !== null}
           {@const desc = getDescription(value)}
-          <div class="value-display">
-            <span class="value-number">{value}</span>
+          <div class="text-center mt-4">
+            <span class="text-2xl font-semibold text-foreground">{value}</span>
             {#if desc}
-              <span class="value-description">{desc}</span>
+              <span class="block text-sm text-muted-foreground mt-1">{desc}</span>
             {/if}
           </div>
         {/if}
       </div>
     {:else if question.config.displayType === 'buttons'}
-      <div class="buttons-container">
+      <div class="buttons-container flex gap-2 flex-wrap max-sm:gap-1.5">
         {#each scalePoints as point}
           <button
             class="scale-button"
@@ -205,11 +205,11 @@
             {disabled}
             aria-pressed={value === point}
           >
-            <span class="button-value">{point}</span>
+            <span class="text-lg font-semibold">{point}</span>
             {#if question.config.showLabels}
               {@const label = getLabel(point)}
               {#if label !== point.toString()}
-                <span class="button-label">{label}</span>
+                <span class="text-xs opacity-80">{label}</span>
               {/if}
             {/if}
           </button>
@@ -217,12 +217,12 @@
       </div>
 
       {#if hoverValue !== null && getDescription(hoverValue)}
-        <div class="hover-description">
+        <div class="text-center text-sm text-muted-foreground p-2 bg-muted rounded-md">
           {getDescription(hoverValue)}
         </div>
       {/if}
     {:else if question.config.displayType === 'stars'}
-      <div class="stars-container">
+      <div class="flex gap-1">
         {#each scalePoints as point}
           <button
             class="star-button"
@@ -241,15 +241,15 @@
       </div>
 
       {#if question.config.showValue && value !== null}
-        <div class="stars-value">
+        <div class="text-center text-sm text-muted-foreground">
           {value} / {question.config.max}
         </div>
       {/if}
     {:else if question.config.displayType === 'visual-analog'}
-      <div class="visual-analog-container">
-        <div class="va-track">
+      <div class="py-4">
+        <div class="va-track relative h-8 bg-border rounded-2xl overflow-hidden">
           <div
-            class="va-fill"
+            class="absolute left-0 top-0 h-full bg-gradient-to-r from-primary/15 to-primary transition-[width] duration-200"
             style="width: {value !== null ? getSliderPercentage(value) : 0}%"
           ></div>
 
@@ -261,14 +261,14 @@
             bind:value
             oninput={handleSliderInput}
             {disabled}
-            class="va-slider"
+            class="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
           />
         </div>
 
         {#if question.config.showLabels}
-          <div class="va-labels">
-            <span class="va-label-min">{getLabel(question.config.min)}</span>
-            <span class="va-label-max">{getLabel(question.config.max)}</span>
+          <div class="flex justify-between mt-2 text-sm text-muted-foreground">
+            <span>{getLabel(question.config.min)}</span>
+            <span>{getLabel(question.config.max)}</span>
           </div>
         {/if}
       </div>
@@ -277,25 +277,13 @@
 </BaseQuestion>
 
 <style>
-  .scale-container {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    padding: 0.5rem 0;
-  }
-
   .scale-container:focus {
     outline: 2px solid hsl(var(--primary));
     outline-offset: 2px;
     border-radius: 0.375rem;
   }
 
-  /* Slider styles */
-  .slider-container {
-    position: relative;
-    padding: 2rem 0;
-  }
-
+  /* Slider — ::-webkit-slider-thumb pseudo-element */
   .slider {
     width: 100%;
     height: 6px;
@@ -327,52 +315,11 @@
     cursor: not-allowed;
   }
 
-  .slider-labels {
-    position: relative;
-    height: 2rem;
-    margin-top: 0.5rem;
-  }
-
-  .slider-label {
-    position: absolute;
-    transform: translateX(-50%);
-    text-align: center;
-  }
-
-  .label-text {
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .value-display {
-    text-align: center;
-    margin-top: 1rem;
-  }
-
-  .value-number {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-  }
-
-  .value-description {
-    display: block;
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-    margin-top: 0.25rem;
-  }
-
-  /* Button styles */
-  .buttons-container {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
   .orientation-vertical .buttons-container {
     flex-direction: column;
   }
 
+  /* Scale button — .selected, :hover, :disabled */
   .scale-button {
     flex: 1;
     min-width: 3rem;
@@ -404,31 +351,7 @@
     cursor: not-allowed;
   }
 
-  .button-value {
-    font-size: 1.125rem;
-    font-weight: 600;
-  }
-
-  .button-label {
-    font-size: 0.75rem;
-    opacity: 0.8;
-  }
-
-  .hover-description {
-    text-align: center;
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-    padding: 0.5rem;
-    background: hsl(var(--muted));
-    border-radius: 0.375rem;
-  }
-
-  /* Star styles */
-  .stars-container {
-    display: flex;
-    gap: 0.25rem;
-  }
-
+  /* Star button — .filled, :hover, :disabled */
   .star-button {
     padding: 0.25rem;
     background: none;
@@ -456,58 +379,8 @@
     height: 2rem;
   }
 
-  .stars-value {
-    text-align: center;
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  /* Visual analog scale */
-  .visual-analog-container {
-    padding: 1rem 0;
-  }
-
-  .va-track {
-    position: relative;
-    height: 2rem;
-    background: hsl(var(--border));
-    border-radius: 1rem;
-    overflow: hidden;
-  }
-
-  .va-fill {
-    position: absolute;
-    left: 0;
-    top: 0;
-    height: 100%;
-    background: linear-gradient(to right, hsl(var(--primary) / 0.15), hsl(var(--primary)));
-    transition: width 0.2s;
-  }
-
-  .va-slider {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    cursor: pointer;
-  }
-
-  .va-labels {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 0.5rem;
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-  }
-
   /* Responsive */
   @media (max-width: 640px) {
-    .buttons-container {
-      gap: 0.375rem;
-    }
-
     .scale-button {
       min-width: 2.5rem;
       padding: 0.5rem;

@@ -126,12 +126,12 @@
   }
 </script>
 
-<div class="designer-panel">
+<div class="p-6 flex flex-col gap-6">
   <!-- Drawing Tools -->
-  <div class="form-group">
-    <span class="label-text">Drawing Tools</span>
-    <div class="tools-grid">
-      <label class="tool-checkbox">
+  <div class="mb-4">
+    <span class="block mb-1.5 text-sm font-medium text-foreground">Drawing Tools</span>
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
           checked={question.config.tools?.includes('pen')}
@@ -140,7 +140,7 @@
         <span>✏️ Pen</span>
       </label>
 
-      <label class="tool-checkbox">
+      <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
           checked={question.config.tools?.includes('eraser')}
@@ -149,7 +149,7 @@
         <span>🧹 Eraser</span>
       </label>
 
-      <label class="tool-checkbox">
+      <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
           checked={question.config.tools?.includes('line')}
@@ -158,7 +158,7 @@
         <span>📏 Line</span>
       </label>
 
-      <label class="tool-checkbox">
+      <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
           checked={question.config.tools?.includes('shape')}
@@ -167,22 +167,22 @@
         <span>⬜ Shapes</span>
       </label>
     </div>
-    <p class="help-text">Select which tools participants can use</p>
+    <p class="mt-1 text-xs text-muted-foreground">Select which tools participants can use</p>
   </div>
 
   <!-- Colors -->
-  <div class="form-group">
-    <span class="label-text">Available Colors</span>
+  <div class="mb-4">
+    <span class="block mb-1.5 text-sm font-medium text-foreground">Available Colors</span>
 
     <!-- Color input -->
-    <div class="color-input">
-      <input type="color" bind:value={newColor} class="color-picker" />
-      <input type="text" bind:value={newColor} placeholder="#000000" class="color-text" />
+    <div class="flex gap-2 mb-2">
+      <input type="color" bind:value={newColor} class="w-12 h-10 p-1 cursor-pointer" />
+      <input type="text" bind:value={newColor} placeholder="#000000" class="flex-1 max-w-[150px]" />
       <Button variant="secondary" size="sm" onclick={addColor}> Add Color </Button>
     </div>
 
     <!-- Color presets -->
-    <div class="preset-selector">
+    <div class="flex gap-2 mb-2">
       <Select bind:value={selectedColorPreset} class="text-sm">
         <option value="">Apply preset...</option>
         {#each colorPresets as preset}
@@ -201,11 +201,11 @@
 
     <!-- Color list -->
     {#if question.config.colors?.length}
-      <div class="color-list">
+      <div class="flex flex-col gap-2 mt-2">
         {#each question.config.colors as color}
-          <div class="color-item">
-            <div class="color-swatch" style="background-color: {color}"></div>
-            <span class="color-value">{color}</span>
+          <div class="flex items-center gap-2 p-2 bg-muted rounded-md">
+            <div class="w-6 h-6 border border-border rounded" style="background-color: {color}"></div>
+            <span class="flex-1 text-sm font-mono">{color}</span>
             <button class="remove-btn" onclick={() => removeColor(color)} aria-label="Remove color">
               ✕
             </button>
@@ -216,13 +216,13 @@
   </div>
 
   <!-- Canvas Settings -->
-  <div class="section">
-    <h4 class="section-title">Canvas Settings</h4>
+  <div class="mt-8 pt-6 border-t border-border">
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Canvas Settings</h4>
 
     <!-- Size presets -->
-    <div class="form-group">
-      <span class="label-text">Canvas Size</span>
-      <div class="preset-selector">
+    <div class="mb-4">
+      <span class="block mb-1.5 text-sm font-medium text-foreground">Canvas Size</span>
+      <div class="flex gap-2 mb-2">
         <Select bind:value={selectedSizePreset}>
           <option value="">Select preset...</option>
           {#each sizePresets as preset}
@@ -237,8 +237,8 @@
 
     <!-- Custom size -->
     {#if question.config.canvas}
-      <div class="size-inputs">
-        <div class="form-group">
+      <div class="grid grid-cols-2 gap-4">
+        <div class="mb-4">
           <label for="canvas-width">Width (px)</label>
           <input
             id="canvas-width"
@@ -250,7 +250,7 @@
           />
         </div>
 
-        <div class="form-group">
+        <div class="mb-4">
           <label for="canvas-height">Height (px)</label>
           <input
             id="canvas-height"
@@ -266,72 +266,72 @@
   </div>
 
   <!-- Analysis Options -->
-  <div class="section">
-    <h4 class="section-title">Analysis Options</h4>
+  <div class="mt-8 pt-6 border-t border-border">
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Analysis Options</h4>
 
     {#if question.config.analysis}
-      <label class="checkbox-label">
+      <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
           bind:checked={question.config.analysis.extractFeatures}
-          class="checkbox"
+          class="w-4 h-4 cursor-pointer"
         />
         <span>Extract drawing features (stroke count, colors used)</span>
       </label>
 
-      <label class="checkbox-label">
+      <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
           bind:checked={question.config.analysis.detectShapes}
-          class="checkbox"
+          class="w-4 h-4 cursor-pointer"
         />
         <span>Detect shapes in drawing</span>
       </label>
 
-      <label class="checkbox-label">
+      <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
           bind:checked={question.config.analysis.measurePressure}
-          class="checkbox"
+          class="w-4 h-4 cursor-pointer"
         />
         <span>Measure drawing pressure (if supported)</span>
       </label>
 
-      <label class="checkbox-label">
+      <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
           bind:checked={question.config.analysis.trackTiming}
-          class="checkbox"
+          class="w-4 h-4 cursor-pointer"
         />
         <span>Track drawing timing and speed</span>
       </label>
     {/if}
 
-    <p class="help-text">
+    <p class="mt-1 text-xs text-muted-foreground">
       Analysis features provide detailed insights about how participants interact with the drawing
       canvas
     </p>
   </div>
 
   <!-- Preview -->
-  <div class="section">
-    <h4 class="section-title">Preview</h4>
-    <div class="preview-box">
+  <div class="mt-8 pt-6 border-t border-border">
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Preview</h4>
+    <div class="bg-muted border border-border rounded-lg p-4">
       <div
-        class="preview-canvas"
+        class="bg-background border-2 border-border rounded-md relative mx-auto flex flex-col items-center justify-center gap-4"
         style="width: {question.config.canvas?.width || 600}px; height: {question.config.canvas
           ?.height || 400}px; max-width: 100%;"
       >
-        <div class="preview-tools">
+        <div class="flex gap-2">
           {#each question.config.tools || [] as tool}
-            <span class="preview-tool">
+            <span class="text-2xl">
               {#if tool === 'pen'}✏️{:else if tool === 'eraser'}🧹{:else if tool === 'line'}📏{:else if tool === 'shape'}⬜{/if}
             </span>
           {/each}
         </div>
-        <div class="preview-colors">
+        <div class="flex gap-1">
           {#each question.config.colors || [] as color}
-            <span class="preview-color" style="background-color: {color}"></span>
+            <span class="w-6 h-6 border border-border rounded" style="background-color: {color}"></span>
           {/each}
         </div>
       </div>
@@ -340,25 +340,6 @@
 </div>
 
 <style>
-  .designer-panel {
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  .form-group {
-    margin-bottom: 1rem;
-  }
-
-  .label-text {
-    display: block;
-    margin-bottom: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: hsl(var(--foreground));
-  }
-
   .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
@@ -379,104 +360,6 @@
     box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
-  .checkbox-label,
-  .tool-checkbox {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    margin-bottom: 0.5rem;
-  }
-
-  .checkbox {
-    width: 1rem;
-    height: 1rem;
-    cursor: pointer;
-  }
-
-  .section {
-    margin-top: 2rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid hsl(var(--border));
-  }
-
-  .section-title {
-    margin: 0 0 1rem 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .help-text {
-    margin-top: 0.25rem;
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  /* Tools grid */
-  .tools-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  /* Color management */
-  .color-input {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .color-picker {
-    width: 3rem;
-    height: 2.5rem;
-    padding: 0.25rem;
-    cursor: pointer;
-  }
-
-  .color-text {
-    flex: 1;
-    max-width: 150px;
-  }
-
-  .preset-selector {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .color-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-  }
-
-  .color-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem;
-    background: hsl(var(--muted));
-    border-radius: 0.375rem;
-  }
-
-  .color-swatch {
-    width: 1.5rem;
-    height: 1.5rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.25rem;
-  }
-
-  .color-value {
-    flex: 1;
-    font-size: 0.875rem;
-    font-family: monospace;
-  }
-
   .remove-btn {
     padding: 0.125rem 0.25rem;
     border: none;
@@ -488,55 +371,5 @@
 
   .remove-btn:hover {
     color: hsl(var(--destructive));
-  }
-
-  /* Size inputs */
-  .size-inputs {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-
-
-  /* Preview */
-  .preview-box {
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    padding: 1rem;
-  }
-
-  .preview-canvas {
-    background: hsl(var(--background));
-    border: 2px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    position: relative;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1rem;
-  }
-
-  .preview-tools {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .preview-tool {
-    font-size: 1.5rem;
-  }
-
-  .preview-colors {
-    display: flex;
-    gap: 0.25rem;
-  }
-
-  .preview-color {
-    width: 1.5rem;
-    height: 1.5rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.25rem;
   }
 </style>

@@ -123,22 +123,22 @@
   <!-- Max Duration -->
   <div class="form-group">
     <label for="max-duration">Maximum Duration</label>
-    <select id="max-duration" bind:value={question.config.maxDuration} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
+    <Select id="max-duration" bind:value={question.config.maxDuration}>
       {#each durationPresets as preset}
         <option value={preset.value}>{preset.label}</option>
       {/each}
-    </select>
+    </Select>
     <p class="help-text">Recording will automatically stop after this duration.</p>
   </div>
 
   <!-- Max File Size -->
   <div class="form-group">
     <label for="max-file-size">Maximum File Size</label>
-    <select id="max-file-size" bind:value={question.config.maxFileSize} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
+    <Select id="max-file-size" bind:value={question.config.maxFileSize}>
       {#each fileSizePresets as preset}
         <option value={preset.value}>{preset.label}</option>
       {/each}
-    </select>
+    </Select>
     <p class="help-text">Current: {formatFileSize(question.config.maxFileSize || 0)}</p>
   </div>
 
@@ -196,11 +196,11 @@
 
     <div class="form-group">
       <label for="countdown">Countdown Before Recording</label>
-      <select id="countdown" bind:value={question.config.countdown} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
+      <Select id="countdown" bind:value={question.config.countdown}>
         {#each countdownPresets as preset}
           <option value={preset.value}>{preset.label}</option>
         {/each}
-      </select>
+      </Select>
       <p class="help-text">
         A countdown gives participants time to prepare before recording starts.
       </p>

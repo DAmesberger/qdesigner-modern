@@ -188,13 +188,13 @@
   }
 </script>
 
-<div class="stats-feedback" data-testid="stats-feedback-root">
-  <header class="header">
-    <h3>{config.title}</h3>
+<div class="stats-feedback grid gap-3 border border-border rounded-xl text-foreground" data-testid="stats-feedback-root">
+  <header>
+    <h3 class="m-0 text-foreground font-bold" style="font-size: 1.05rem">{config.title}</h3>
     {#if config.subtitle}
-      <p class="subtitle">{config.subtitle}</p>
+      <p class="text-muted-foreground mt-0.5 mb-0" style="font-size: 0.85rem">{config.subtitle}</p>
     {/if}
-    <p class="meta">
+    <p class="mt-1 mb-0 font-mono text-muted-foreground capitalize" style="font-size: 0.72rem">
       {config.sourceMode.replace(/-/g, ' ')} &middot; {config.metric}
       {#if cohortN !== null}
         &middot; n = {cohortN}
@@ -220,7 +220,7 @@
 
   <!-- Chart Rendering -->
   {#if series && useChartJs}
-    <div class="chart-area" data-testid="stats-feedback-chart" data-chart-type={config.chartType}>
+    <div class="min-h-[200px]" data-testid="stats-feedback-chart" data-chart-type={config.chartType}>
       {#if config.chartType === 'bell-curve'}
         <BellCurveChart
           participantValue={participantValue}
@@ -255,11 +255,11 @@
 
   <!-- Summary Stats -->
   {#if series && config.showSummary && summaryEntries.length > 0}
-    <div class="summary" data-testid="stats-feedback-summary">
+    <div class="summary grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2" data-testid="stats-feedback-summary">
       {#each summaryEntries as entry}
-        <div class="summary-item">
-          <span class="summary-label">{entry.label}</span>
-          <strong>{formatValue(entry.value)}</strong>
+        <div class="summary-item grid gap-px px-2.5 py-2 rounded-lg bg-muted border border-border" style="padding: 0.5rem 0.65rem">
+          <span class="text-muted-foreground font-medium capitalize" style="font-size: 0.7rem">{entry.label}</span>
+          <strong class="text-foreground font-mono" style="font-size: 0.88rem">{formatValue(entry.value)}</strong>
         </div>
       {/each}
     </div>
@@ -267,29 +267,29 @@
 
   <!-- Score Interpretations -->
   {#if scoreInterpretation && scoreInterpretation.interpretations.length > 0}
-    <div class="interpretations" data-testid="stats-feedback-interpretations">
+    <div class="grid gap-2" data-testid="stats-feedback-interpretations">
       {#each scoreInterpretation.interpretations as interp}
-        <div class="interpretation-card" data-testid={`interpretation-${interp.config.scaleName}`}>
-          <div class="interp-header">
-            <span class="interp-scale">{interp.config.scaleName}</span>
-            <span class="interp-score">{Number.isFinite(interp.score) ? interp.score.toFixed(2) : 'N/A'}</span>
+        <div class="interpretation-card grid rounded-lg border border-border bg-card" style="padding: 0.65rem 0.8rem; gap: 0.35rem" data-testid={`interpretation-${interp.config.scaleName}`}>
+          <div class="flex justify-between items-center">
+            <span class="font-semibold text-foreground" style="font-size: 0.82rem">{interp.config.scaleName}</span>
+            <span class="font-mono font-bold text-foreground" style="font-size: 0.95rem">{Number.isFinite(interp.score) ? interp.score.toFixed(2) : 'N/A'}</span>
           </div>
           {#if interp.range}
-            <div class="interp-badge" style="background-color: {interp.range.color}; color: white;">
+            <div class="interp-badge inline-block rounded-full font-semibold w-fit" style="padding: 0.15rem 0.6rem; font-size: 0.72rem; background-color: {interp.range.color}; color: white;">
               {interp.range.label}
             </div>
-            <p class="interp-description">{interp.range.description}</p>
+            <p class="text-muted-foreground m-0" style="font-size: 0.78rem">{interp.range.description}</p>
           {:else}
-            <div class="interp-badge no-match">No classification</div>
+            <div class="interp-badge inline-block rounded-full font-semibold w-fit bg-border text-muted-foreground" style="padding: 0.15rem 0.6rem; font-size: 0.72rem">No classification</div>
           {/if}
           {#if interp.config.ranges.length > 0}
-            <div class="interp-range-bar">
+            <div class="interp-range-bar relative flex h-1.5 overflow-visible mt-1.5" style="border-radius: 999px">
               {#each interp.config.ranges as range}
                 {@const totalSpan = Math.max(...interp.config.ranges.map(r => r.max)) - Math.min(...interp.config.ranges.map(r => r.min))}
                 {@const width = totalSpan > 0 ? ((range.max - range.min) / totalSpan) * 100 : 100 / interp.config.ranges.length}
                 <div
-                  class="interp-range-segment"
-                  style="width: {width}%; background-color: {range.color};"
+                  class="interp-range-segment opacity-75"
+                  style="width: {width}%; background-color: {range.color}; border-radius: 1px"
                   title="{range.label}: {range.min}-{range.max}"
                 ></div>
               {/each}
@@ -298,7 +298,7 @@
                 {@const totalMin = Math.min(...interp.config.ranges.map(r => r.min))}
                 {@const totalMax = Math.max(...interp.config.ranges.map(r => r.max))}
                 {@const markerPos = totalMax > totalMin ? ((interp.score - totalMin) / (totalMax - totalMin)) * 100 : 50}
-                <div class="range-marker" style="left: {Math.max(0, Math.min(100, markerPos))}%;">
+                <div class="absolute -top-[5px] -translate-x-1/2 z-[1]" style="left: {Math.max(0, Math.min(100, markerPos))}%;">
                   <div class="marker-arrow"></div>
                 </div>
               {/if}
@@ -310,10 +310,11 @@
   {/if}
 
   {#if config.enableReportDownload && mode === 'runtime'}
-    <div class="report-download" data-testid="stats-feedback-download">
+    <div class="flex justify-center mt-1" data-testid="stats-feedback-download">
       <button
         type="button"
-        class="download-button"
+        class="download-button px-5 py-2 rounded-lg border border-primary bg-primary text-primary-foreground font-semibold cursor-pointer transition-colors duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
+        style="font-size: 0.82rem"
         disabled={generatingReport}
         onclick={handleDownloadReport}
       >
@@ -329,34 +330,8 @@
 
 <style>
   .stats-feedback {
-    display: grid;
-    gap: 0.75rem;
     padding: 1.25rem;
-    border-radius: 0.75rem;
     background: linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--muted)) 100%);
-    border: 1px solid hsl(var(--border));
-    color: hsl(var(--foreground));
-  }
-
-  .header h3 {
-    margin: 0;
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: hsl(var(--foreground));
-  }
-
-  .header .subtitle {
-    margin: 0.15rem 0 0;
-    color: hsl(var(--muted-foreground));
-    font-size: 0.85rem;
-  }
-
-  .header .meta {
-    margin: 0.25rem 0 0;
-    font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-    font-size: 0.72rem;
-    color: hsl(var(--muted-foreground));
-    text-transform: capitalize;
   }
 
   .state {
@@ -377,105 +352,6 @@
     color: hsl(var(--destructive));
   }
 
-  .chart-area {
-    min-height: 200px;
-  }
-
-  .summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 0.5rem;
-  }
-
-  .summary-item {
-    display: grid;
-    gap: 0.1rem;
-    padding: 0.5rem 0.65rem;
-    border-radius: 0.5rem;
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-  }
-
-  .summary-label {
-    font-size: 0.7rem;
-    color: hsl(var(--muted-foreground));
-    font-weight: 500;
-    text-transform: capitalize;
-  }
-
-  .summary-item strong {
-    font-size: 0.88rem;
-    color: hsl(var(--foreground));
-    font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-  }
-
-  .interpretations {
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  .interpretation-card {
-    padding: 0.65rem 0.8rem;
-    border-radius: 0.5rem;
-    border: 1px solid hsl(var(--border));
-    background: hsl(var(--card));
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .interp-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .interp-scale {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-  }
-
-  .interp-score {
-    font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: hsl(var(--foreground));
-  }
-
-  .interp-badge {
-    display: inline-block;
-    padding: 0.15rem 0.6rem;
-    border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    width: fit-content;
-  }
-
-  .interp-badge.no-match {
-    background: hsl(var(--border));
-    color: hsl(var(--muted-foreground));
-  }
-
-  .interp-description {
-    font-size: 0.78rem;
-    color: hsl(var(--muted-foreground));
-    margin: 0;
-  }
-
-  .interp-range-bar {
-    position: relative;
-    display: flex;
-    height: 6px;
-    border-radius: 999px;
-    overflow: visible;
-    margin-top: 0.35rem;
-  }
-
-  .interp-range-segment {
-    opacity: 0.75;
-    border-radius: 1px;
-  }
-
   .interp-range-segment:first-child {
     border-radius: 999px 0 0 999px;
   }
@@ -484,45 +360,11 @@
     border-radius: 0 999px 999px 0;
   }
 
-  .range-marker {
-    position: absolute;
-    top: -5px;
-    transform: translateX(-50%);
-    z-index: 1;
-  }
-
   .marker-arrow {
     width: 0;
     height: 0;
     border-left: 5px solid transparent;
     border-right: 5px solid transparent;
     border-top: 7px solid hsl(var(--foreground));
-  }
-
-  .report-download {
-    display: flex;
-    justify-content: center;
-    margin-top: 0.25rem;
-  }
-
-  .download-button {
-    padding: 0.5rem 1.25rem;
-    border-radius: 0.5rem;
-    border: 1px solid hsl(var(--primary));
-    background: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
-    font-size: 0.82rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease;
-  }
-
-  .download-button:hover:not(:disabled) {
-    background: hsl(var(--primary));
-  }
-
-  .download-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
   }
 </style>

@@ -3,8 +3,8 @@
   import { ChevronDown } from 'lucide-svelte';
 
   interface Props {
-    value?: string;
-    options?: Array<{ value: string; label: string }>;
+    value?: string | number;
+    options?: Array<{ value: string | number; label: string }>;
     placeholder?: string;
     disabled?: boolean;
     error?: boolean;
@@ -53,7 +53,7 @@
     {onblur}
   >
     {#if placeholder}
-      <option value="" disabled selected={!value}>
+      <option value="" disabled selected={value === '' || value === undefined}>
         {placeholder}
       </option>
     {/if}

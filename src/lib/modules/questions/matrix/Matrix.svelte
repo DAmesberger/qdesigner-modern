@@ -180,13 +180,13 @@
   <div class="w-full overflow-auto" class:mobile-scroll={isMobile && mobileLayout === 'scroll'}>
     {#if !isMobile || mobileLayout === 'scroll'}
       <!-- Desktop/Tablet Table Layout -->
-      <div class="table-wrapper">
+      <div class="overflow-x-auto [-webkit-overflow-scrolling:touch]">
         <table class="matrix-table" class:sticky-headers={question.config.stickyHeaders}>
           <thead>
             <tr>
-              <th class="corner-cell"></th>
+              <th class="bg-muted rounded-tl-lg"></th>
               {#each question.config.columns as column}
-                <th class="column-header" style="width: {column.width || 'auto'}">
+                <th class="bg-muted font-semibold text-sm text-foreground" style="width: {column.width || 'auto'}">
                   {column.label}
                 </th>
               {/each}
@@ -195,14 +195,14 @@
           <tbody>
             {#each question.config.rows as row, rowIndex}
               <tr class:alternate={question.config.alternateRowColors && rowIndex % 2 === 1}>
-                <td class="row-header">
+                <td class="text-left bg-muted font-medium">
                   <div class="flex flex-col gap-1">
-                    <span class="text-[hsl(var(--foreground))]">{row.label}</span>
+                    <span class="text-foreground">{row.label}</span>
                     {#if row.description}
-                      <span class="text-xs text-[hsl(var(--muted-foreground))] font-normal">{row.description}</span>
+                      <span class="text-xs text-muted-foreground font-normal">{row.description}</span>
                     {/if}
                     {#if row.required}
-                      <span class="text-[hsl(var(--destructive))] ml-1">*</span>
+                      <span class="text-destructive ml-1">*</span>
                     {/if}
                   </div>
                 </td>
@@ -210,7 +210,7 @@
                 {#each question.config.columns as column}
                   <td class="matrix-cell">
                     {#if question.config.responseType === 'radio'}
-                      <label class="radio-label">
+                      <label class="group inline-flex items-center justify-center cursor-pointer">
                         <input
                           type="radio"
                           name="{question.id}-{row.id}"
@@ -221,11 +221,11 @@
                           class="radio-input"
                           id={getCellId(row.id, column.id)}
                         />
-                        <span class="radio-indicator"></span>
+                        <span class="radio-indicator group-hover:border-primary/70"></span>
                         <span class="sr-only">{row.label} - {column.label}</span>
                       </label>
                     {:else if question.config.responseType === 'checkbox'}
-                      <label class="checkbox-label">
+                      <label class="group inline-flex items-center justify-center cursor-pointer">
                         <input
                           type="checkbox"
                           value={column.value}
@@ -235,7 +235,7 @@
                           class="checkbox-input"
                           id={getCellId(row.id, column.id)}
                         />
-                        <span class="checkbox-indicator">
+                        <span class="checkbox-indicator group-hover:border-primary/70">
                           <svg class="checkmark" viewBox="0 0 20 20" fill="currentColor">
                             <path
                               fill-rule="evenodd"
@@ -252,7 +252,7 @@
                         value={value[row.id]?.[column.id] || ''}
                         oninput={(e) => handleTextChange(row.id, column.id, e.currentTarget.value)}
                         {disabled}
-                        class="text-input"
+                        class="w-full py-1.5 px-2 border border-border rounded text-sm transition-all duration-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
                         placeholder="Enter text..."
                         id={getCellId(row.id, column.id)}
                         aria-label="{row.label} - {column.label}"
@@ -278,7 +278,7 @@
                         value={value[row.id] || ''}
                         oninput={(e) => handleScaleChange(row.id, parseInt(e.currentTarget.value))}
                         {disabled}
-                        class="scale-input"
+                        class="w-12 py-1.5 px-2 border border-border rounded text-sm text-center"
                         id={getCellId(row.id, column.id)}
                         aria-label="{row.label} - Scale value"
                       />
@@ -294,22 +294,22 @@
       <!-- Mobile Accordion Layout -->
       <div class="flex flex-col gap-2">
         {#each question.config.rows as row}
-          <details class="accordion-item">
-            <summary class="accordion-header">
+          <details class="border border-border rounded-lg overflow-hidden">
+            <summary class="p-4 bg-muted cursor-pointer font-medium flex items-center justify-between hover:bg-muted">
               {row.label}
               {#if row.required}
-                <span class="text-[hsl(var(--destructive))] ml-1">*</span>
+                <span class="text-destructive ml-1">*</span>
               {/if}
             </summary>
-            <div class="p-4 bg-[hsl(var(--background))]">
+            <div class="p-4 bg-background">
               {#if row.description}
-                <p class="text-xs text-[hsl(var(--muted-foreground))] font-normal">{row.description}</p>
+                <p class="text-xs text-muted-foreground font-normal">{row.description}</p>
               {/if}
               <div class="flex flex-col gap-2 mt-2">
                 {#each question.config.columns as column}
                   <div>
                     {#if question.config.responseType === 'radio'}
-                      <label class="mobile-label">
+                      <label class="flex items-center gap-2 p-2 border border-border rounded cursor-pointer hover:bg-muted">
                         <input
                           type="radio"
                           name="{question.id}-{row.id}"
@@ -321,7 +321,7 @@
                         <span>{column.label}</span>
                       </label>
                     {:else if question.config.responseType === 'checkbox'}
-                      <label class="mobile-label">
+                      <label class="flex items-center gap-2 p-2 border border-border rounded cursor-pointer hover:bg-muted">
                         <input
                           type="checkbox"
                           value={column.value}
@@ -343,15 +343,15 @@
       <!-- Mobile Cards Layout -->
       <div class="flex flex-col gap-4">
         {#each question.config.rows as row}
-          <div class="border border-[hsl(var(--border))] rounded-lg p-4 bg-[hsl(var(--background))]">
+          <div class="border border-border rounded-lg p-4 bg-background">
             <h4 class="text-base font-semibold mb-1">
               {row.label}
               {#if row.required}
-                <span class="text-[hsl(var(--destructive))] ml-1">*</span>
+                <span class="text-destructive ml-1">*</span>
               {/if}
             </h4>
             {#if row.description}
-              <p class="text-sm text-[hsl(var(--muted-foreground))] mb-3">{row.description}</p>
+              <p class="text-sm text-muted-foreground mb-3">{row.description}</p>
             {/if}
             <div class="flex flex-wrap gap-2">
               {#each question.config.columns as column}
@@ -380,11 +380,6 @@
 
 <style>
   /* Table styles */
-  .table-wrapper {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
   .matrix-table {
     width: 100%;
     border-collapse: collapse;
@@ -398,28 +393,10 @@
     border: 1px solid hsl(var(--border));
   }
 
-  .corner-cell {
-    background: hsl(var(--muted));
-    border-top-left-radius: 0.5rem;
-  }
-
-  .column-header {
-    background: hsl(var(--muted));
-    font-weight: 600;
-    font-size: 0.875rem;
-    color: hsl(var(--foreground));
-  }
-
   .sticky-headers thead {
     position: sticky;
     top: 0;
     z-index: 10;
-  }
-
-  .row-header {
-    text-align: left;
-    background: hsl(var(--muted));
-    font-weight: 500;
   }
 
   .matrix-table tbody tr:hover {
@@ -430,14 +407,7 @@
     background: hsl(var(--muted));
   }
 
-  /* Radio styles */
-  .radio-label {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
+  /* Radio styles — :checked + span, ::after pseudo-elements */
   .radio-input {
     position: absolute;
     opacity: 0;
@@ -470,18 +440,7 @@
     border-radius: 50%;
   }
 
-  .radio-label:hover .radio-indicator {
-    border-color: hsl(var(--primary) / 0.7);
-  }
-
-  /* Checkbox styles */
-  .checkbox-label {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
+  /* Checkbox styles — :checked + span */
   .checkbox-input {
     position: absolute;
     opacity: 0;
@@ -518,72 +477,7 @@
     transform: scale(1);
   }
 
-  .checkbox-label:hover .checkbox-indicator {
-    border-color: hsl(var(--primary) / 0.7);
-  }
-
-  /* Text input styles */
-  .text-input {
-    width: 100%;
-    padding: 0.375rem 0.5rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.25rem;
-    font-size: 0.875rem;
-    transition: all 0.2s;
-  }
-
-  .text-input:focus {
-    outline: none;
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.1);
-  }
-
-  /* Scale input styles */
-  .scale-input {
-    width: 3rem;
-    padding: 0.375rem 0.5rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.25rem;
-    font-size: 0.875rem;
-    text-align: center;
-  }
-
-  /* Mobile accordion styles */
-  .accordion-item {
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    overflow: hidden;
-  }
-
-  .accordion-header {
-    padding: 1rem;
-    background: hsl(var(--muted));
-    cursor: pointer;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .accordion-header:hover {
-    background: hsl(var(--muted));
-  }
-
-  .mobile-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.25rem;
-    cursor: pointer;
-  }
-
-  .mobile-label:hover {
-    background: hsl(var(--muted));
-  }
-
-  /* Card option styles */
+  /* Card option styles — .selected, :hover, :disabled */
   .card-option {
     flex: 1;
     min-width: 5rem;
@@ -611,19 +505,6 @@
   .card-option:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  /* Screen reader only text */
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border-width: 0;
   }
 
   /* Responsive */

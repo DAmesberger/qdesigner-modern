@@ -361,7 +361,7 @@
 </script>
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
-  <div class="upload-container">
+  <div class="w-full">
     <input
       bind:this={fileInput}
       type="file"
@@ -369,12 +369,12 @@
       multiple={allowMultiple}
       onchange={handleFileSelect}
       {disabled}
-      class="file-input"
+      class="hidden"
     />
 
     {#if dragDrop}
       <div
-        class="drop-zone"
+        class="drop-zone border-2 border-dashed border-border rounded-lg text-center cursor-pointer transition-all duration-200 bg-muted hover:border-primary hover:bg-primary/10"
         class:dragging={isDragging}
         class:has-files={files.length > 0}
         ondragover={handleDragOver}
@@ -386,10 +386,10 @@
         onkeydown={(e) => e.key === 'Enter' && triggerFileInput()}
       >
         {#if files.length === 0}
-          <div class="drop-content">
-            <div class="upload-icon">📁</div>
-            <p class="drop-text">Drag & drop files here or click to browse</p>
-            <p class="drop-hint">
+          <div class="pointer-events-none">
+            <div class="text-5xl mb-4">📁</div>
+            <p class="mb-2 text-lg font-medium text-foreground">Drag & drop files here or click to browse</p>
+            <p class="text-sm text-muted-foreground">
               {#if config.accept && config.accept.length > 0}
                 Accepted: {config.accept.join(', ')}
               {/if}
@@ -404,21 +404,21 @@
         {/if}
       </div>
     {:else}
-      <button type="button" onclick={triggerFileInput} {disabled} class="upload-button">
+      <button type="button" onclick={triggerFileInput} {disabled} class="upload-button px-6 py-3 bg-primary text-background border-none rounded-md text-base font-medium cursor-pointer transition-colors duration-200 hover:brightness-90 disabled:bg-muted-foreground disabled:cursor-not-allowed">
         Choose File{allowMultiple ? 's' : ''}
       </button>
     {/if}
 
     {#if files.length > 0}
-      <div class="file-list">
+      <div class="mt-4 flex flex-col gap-2">
         {#each files as file, index}
           {@const fileId = `${file.name}-${file.size}-${file.lastModified}`}
           {@const progress = uploadProgress.get(fileId) || 0}
           {@const error = uploadErrors.get(fileId)}
 
-          <div class="file-item" class:error>
-            <div class="file-info">
-              <span class="file-icon">
+          <div class="file-item flex items-center px-4 py-3 bg-background border border-border rounded-md relative" class:error>
+            <div class="flex-1 flex items-center gap-3 min-w-0">
+              <span class="text-2xl shrink-0">
                 {#if file.type.startsWith('image/')}
                   🖼️
                 {:else if file.type.startsWith('video/')}
@@ -433,24 +433,24 @@
                   📎
                 {/if}
               </span>
-              <div class="file-details">
-                <span class="file-name">{file.name}</span>
-                <span class="file-size">{formatFileSize(file.size)}</span>
+              <div class="flex flex-col min-w-0">
+                <span class="text-sm font-medium text-foreground whitespace-nowrap overflow-hidden text-ellipsis">{file.name}</span>
+                <span class="text-xs text-muted-foreground">{formatFileSize(file.size)}</span>
               </div>
             </div>
 
             {#if error}
-              <div class="file-error">{error}</div>
+              <div class="file-error absolute -bottom-5 left-0 text-xs text-destructive">{error}</div>
             {:else if progress < 100}
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: {progress}%"></div>
+              <div class="progress-bar absolute bottom-0 left-0 right-0 h-[3px] bg-border rounded-b-md overflow-hidden">
+                <div class="h-full bg-primary transition-[width] duration-300" style="width: {progress}%"></div>
               </div>
             {/if}
 
             <button
               type="button"
               onclick={() => removeFile(index)}
-              class="remove-button"
+              class="w-6 h-6 p-0 bg-muted border border-border rounded text-muted-foreground text-sm cursor-pointer transition-all duration-200 shrink-0 hover:bg-destructive/15 hover:border-destructive/50 hover:text-destructive"
               aria-label="Remove file"
             >
               ✕
@@ -463,28 +463,8 @@
 </BaseQuestion>
 
 <style>
-  .upload-container {
-    width: 100%;
-  }
-
-  .file-input {
-    display: none;
-  }
-
-  /* Drop zone styles */
   .drop-zone {
-    border: 2px dashed hsl(var(--border));
-    border-radius: 0.5rem;
     padding: 3rem 2rem;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    background: hsl(var(--muted));
-  }
-
-  .drop-zone:hover {
-    border-color: hsl(var(--primary));
-    background: hsl(var(--primary) / 0.1);
   }
 
   .drop-zone.dragging {
@@ -496,178 +476,18 @@
     padding: 1rem;
   }
 
-  .drop-content {
-    pointer-events: none;
-  }
-
-  .upload-icon {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-  }
-
-  .drop-text {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.125rem;
-    font-weight: 500;
-    color: hsl(var(--foreground));
-  }
-
-  .drop-hint {
-    margin: 0;
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  /* Upload button (no drag & drop) */
-  .upload-button {
-    padding: 0.75rem 1.5rem;
-    background: hsl(var(--primary));
-    color: hsl(var(--background));
-    border: none;
-    border-radius: 0.375rem;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  .upload-button:hover:not(:disabled) {
-    background: hsl(var(--primary));
-    filter: brightness(0.9);
-  }
-
-  .upload-button:disabled {
-    background: hsl(var(--muted-foreground));
-    cursor: not-allowed;
-  }
-
-  /* File list */
-  .file-list {
-    margin-top: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .file-item {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    background: hsl(var(--background));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    position: relative;
-  }
-
   .file-item.error {
     border-color: hsl(var(--destructive));
     background: hsl(var(--destructive) / 0.1);
   }
 
-  .file-info {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    min-width: 0;
+  .upload-button:hover:not(:disabled) {
+    filter: brightness(0.9);
   }
 
-  .file-icon {
-    font-size: 1.5rem;
-    flex-shrink: 0;
-  }
-
-  .file-details {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  .file-name {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: hsl(var(--foreground));
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .file-size {
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .file-error {
-    position: absolute;
-    bottom: -1.25rem;
-    left: 0;
-    font-size: 0.75rem;
-    color: hsl(var(--destructive));
-  }
-
-  /* Progress bar */
-  .progress-bar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: hsl(var(--border));
-    border-radius: 0 0 0.375rem 0.375rem;
-    overflow: hidden;
-  }
-
-  .progress-fill {
-    height: 100%;
-    background: hsl(var(--primary));
-    transition: width 0.3s;
-  }
-
-  /* Remove button */
-  .remove-button {
-    width: 1.5rem;
-    height: 1.5rem;
-    padding: 0;
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.25rem;
-    color: hsl(var(--muted-foreground));
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    flex-shrink: 0;
-  }
-
-  .remove-button:hover {
-    background: hsl(var(--destructive) / 0.15);
-    border-color: hsl(var(--destructive) / 0.5);
-    color: hsl(var(--destructive));
-  }
-
-  /* Responsive */
   @media (max-width: 640px) {
     .drop-zone {
       padding: 2rem 1rem;
-    }
-
-    .upload-icon {
-      font-size: 2rem;
-    }
-
-    .drop-text {
-      font-size: 1rem;
-    }
-
-    .drop-hint {
-      font-size: 0.75rem;
-    }
-
-    .file-item {
-      padding: 0.625rem 0.875rem;
-    }
-
-    .file-icon {
-      font-size: 1.25rem;
     }
   }
 </style>

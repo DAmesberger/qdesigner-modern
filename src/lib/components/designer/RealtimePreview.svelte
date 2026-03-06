@@ -236,10 +236,10 @@
   });
 </script>
 
-<div class="preview-container" data-testid="designer-realtime-preview">
+<div class="h-full flex flex-col bg-muted relative" data-testid="designer-realtime-preview">
   <!-- Preview Controls -->
-  <div class="preview-controls" data-testid="designer-realtime-preview-controls">
-    <div class="control-group">
+  <div class="flex justify-between items-center px-4 py-3 bg-background border-b border-border" data-testid="designer-realtime-preview-controls">
+    <div class="flex items-center gap-2">
       <Button
         variant={deviceType === 'desktop' ? 'primary' : 'outline'}
         size="sm"
@@ -272,7 +272,7 @@
       </Button>
     </div>
 
-    <div class="control-group">
+    <div class="flex items-center gap-2">
       <Button
         variant="outline"
         size="sm"
@@ -295,25 +295,25 @@
         <Info size={16} />
       </Button>
 
-      <label class="auto-update-toggle">
-        <input type="checkbox" bind:checked={autoUpdate} />
+      <label class="flex items-center gap-2 text-sm text-foreground">
+        <input type="checkbox" bind:checked={autoUpdate} class="cursor-pointer" />
         <span>Auto-update</span>
       </label>
     </div>
   </div>
 
   <!-- Preview Viewport -->
-  <div class="preview-viewport" data-testid="designer-realtime-preview-viewport">
+  <div class="flex-1 flex items-center justify-center overflow-auto p-8" data-testid="designer-realtime-preview-viewport">
     {#if isLoading}
-      <div class="loading-state">
+      <div class="flex flex-col items-center justify-center p-12 text-muted-foreground">
         <div class="spinner"></div>
         <p>Updating preview...</p>
       </div>
     {:else if error}
-      <div class="error-state">
+      <div class="flex flex-col items-center justify-center p-12 text-destructive">
         <AlertCircle size={48} />
         <p>Preview Error</p>
-        <p class="error-message">{error}</p>
+        <p class="text-sm mt-2">{error}</p>
       </div>
     {:else if previewQuestionnaire}
       <div
@@ -334,15 +334,15 @@
         {/if}
 
         {#key previewKey}
-          <div class="preview-content">
+          <div class="h-full overflow-y-auto p-8">
             {#if currentPage}
-              <div class="page-header" data-testid="preview-page-header">
-                <h2>{currentPage.name || `Page ${currentPageIndex + 1}`}</h2>
+              <div class="mb-8" data-testid="preview-page-header">
+                <h2 class="text-2xl font-semibold text-foreground m-0">{currentPage.name || `Page ${currentPageIndex + 1}`}</h2>
               </div>
 
-              <div class="questions-container" data-testid="preview-question-list">
+              <div class="min-h-[300px] mb-8" data-testid="preview-question-list">
                 {#each currentQuestions as question (question.id)}
-                  <div class="question-preview" data-testid={`preview-question-${question.id}`}>
+                  <div class="mb-6" data-testid={`preview-question-${question.id}`}>
                     <QuestionRenderer
                       {question}
                       mode="runtime"
@@ -354,13 +354,13 @@
                 {/each}
 
                 {#if currentQuestions.length === 0}
-                  <div class="empty-block">
+                  <div class="p-12 text-center text-muted-foreground bg-muted rounded-lg border border-dashed border-border">
                     <p>No questions on this page</p>
                   </div>
                 {/if}
               </div>
 
-              <div class="navigation-controls">
+              <div class="flex justify-between items-center pt-6 border-t border-border">
                 <Button
                   variant="outline"
                   size="sm"
@@ -371,7 +371,7 @@
                   Previous
                 </Button>
 
-                <div class="progress-info" data-testid="preview-progress">
+                <div class="text-sm text-muted-foreground" data-testid="preview-progress">
                   Page {currentPageIndex + 1} of {previewQuestionnaire?.pages.length}
                 </div>
 
@@ -387,7 +387,7 @@
                 </Button>
               </div>
             {:else}
-              <div class="empty-state">
+              <div class="flex flex-col items-center justify-center p-12 text-muted-foreground">
                 <p>No pages in questionnaire</p>
               </div>
             {/if}
@@ -395,7 +395,7 @@
         {/key}
       </div>
     {:else}
-      <div class="empty-state">
+      <div class="flex flex-col items-center justify-center p-12 text-muted-foreground">
         <ClipboardList size={48} />
         <p>Start designing to see preview</p>
       </div>
@@ -405,48 +405,48 @@
   <!-- Debug Panel -->
   {#if showDebugPanel}
     <div class="debug-panel">
-      <h3>Debug Information</h3>
+      <h3 class="text-base font-semibold mb-4 text-foreground">Debug Information</h3>
 
-      <section>
-        <h4>Variables ({Object.keys($variables).length})</h4>
-        <div class="debug-list">
+      <section class="mb-6">
+        <h4 class="text-sm font-medium mb-2 text-foreground">Variables ({Object.keys($variables).length})</h4>
+        <div class="text-xs">
           {#each Object.entries($variables) as [name, value]}
-            <div class="debug-item">
-              <span class="debug-key">{name}</span>
-              <span class="debug-value">{JSON.stringify(value)}</span>
+            <div class="flex justify-between px-2 py-1.5 bg-muted mb-1 rounded">
+              <span class="text-muted-foreground font-medium">{name}</span>
+              <span class="text-foreground font-mono break-all">{JSON.stringify(value)}</span>
             </div>
           {/each}
         </div>
       </section>
 
-      <section>
-        <h4>Responses ({Object.keys($responses).length})</h4>
-        <div class="debug-list">
+      <section class="mb-6">
+        <h4 class="text-sm font-medium mb-2 text-foreground">Responses ({Object.keys($responses).length})</h4>
+        <div class="text-xs">
           {#each Object.entries($responses) as [id, value]}
-            <div class="debug-item">
-              <span class="debug-key">{id}</span>
-              <span class="debug-value">{JSON.stringify(value)}</span>
+            <div class="flex justify-between px-2 py-1.5 bg-muted mb-1 rounded">
+              <span class="text-muted-foreground font-medium">{id}</span>
+              <span class="text-foreground font-mono break-all">{JSON.stringify(value)}</span>
             </div>
           {/each}
         </div>
       </section>
 
-      <section>
-        <h4>Navigation State</h4>
-        <div class="debug-list">
-          <div class="debug-item">
-            <span class="debug-key">Page</span>
-            <span class="debug-value"
+      <section class="mb-6">
+        <h4 class="text-sm font-medium mb-2 text-foreground">Navigation State</h4>
+        <div class="text-xs">
+          <div class="flex justify-between px-2 py-1.5 bg-muted mb-1 rounded">
+            <span class="text-muted-foreground font-medium">Page</span>
+            <span class="text-foreground font-mono break-all"
               >{currentPageIndex + 1}/{previewQuestionnaire?.pages.length || 0}</span
             >
           </div>
-          <div class="debug-item">
-            <span class="debug-key">Block</span>
-            <span class="debug-value">{1}/{currentPage?.blocks?.length || 0}</span>
+          <div class="flex justify-between px-2 py-1.5 bg-muted mb-1 rounded">
+            <span class="text-muted-foreground font-medium">Block</span>
+            <span class="text-foreground font-mono break-all">{1}/{currentPage?.blocks?.length || 0}</span>
           </div>
-          <div class="debug-item">
-            <span class="debug-key">Can Navigate</span>
-            <span class="debug-value">{canNavigateNext() ? 'Yes' : 'No'}</span>
+          <div class="flex justify-between px-2 py-1.5 bg-muted mb-1 rounded">
+            <span class="text-muted-foreground font-medium">Can Navigate</span>
+            <span class="text-foreground font-mono break-all">{canNavigateNext() ? 'Yes' : 'No'}</span>
           </div>
         </div>
       </section>
@@ -455,50 +455,6 @@
 </div>
 
 <style>
-  .preview-container {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    background: hsl(var(--muted));
-    position: relative;
-  }
-
-  .preview-controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    background: hsl(var(--background));
-    border-bottom: 1px solid hsl(var(--border));
-  }
-
-  .control-group {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .auto-update-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-    color: hsl(var(--foreground));
-  }
-
-  .auto-update-toggle input {
-    cursor: pointer;
-  }
-
-  .preview-viewport {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: auto;
-    padding: 2rem;
-  }
-
   .device-container {
     background: hsl(var(--background));
     box-shadow:
@@ -518,66 +474,6 @@
     pointer-events: none;
   }
 
-  .preview-content {
-    height: 100%;
-    overflow-y: auto;
-    padding: 2rem;
-  }
-
-  .page-header {
-    margin-bottom: 2rem;
-  }
-
-  .page-header h2 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-    margin: 0;
-  }
-
-  .questions-container {
-    min-height: 300px;
-    margin-bottom: 2rem;
-  }
-
-  .question-preview {
-    margin-bottom: 1.5rem;
-  }
-
-  .navigation-controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 1.5rem;
-    border-top: 1px solid hsl(var(--border));
-  }
-
-  .progress-info {
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  /* State displays */
-  .loading-state,
-  .error-state,
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .error-state {
-    color: hsl(var(--destructive));
-  }
-
-  .error-message {
-    font-size: 0.875rem;
-    margin-top: 0.5rem;
-  }
-
   .spinner {
     width: 2rem;
     height: 2rem;
@@ -593,16 +489,6 @@
     }
   }
 
-  .empty-block {
-    padding: 3rem;
-    text-align: center;
-    color: hsl(var(--muted-foreground));
-    background: hsl(var(--muted));
-    border-radius: 0.5rem;
-    border: 1px dashed hsl(var(--border));
-  }
-
-  /* Debug Panel */
   .debug-panel {
     position: absolute;
     right: 0;
@@ -614,47 +500,5 @@
     overflow-y: auto;
     padding: 1rem;
     box-shadow: -4px 0 6px -1px hsl(var(--foreground) / 0.1);
-  }
-
-  .debug-panel h3 {
-    font-size: 1rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-    color: hsl(var(--foreground));
-  }
-
-  .debug-panel section {
-    margin-bottom: 1.5rem;
-  }
-
-  .debug-panel h4 {
-    font-size: 0.875rem;
-    font-weight: 500;
-    margin-bottom: 0.5rem;
-    color: hsl(var(--foreground));
-  }
-
-  .debug-list {
-    font-size: 0.75rem;
-  }
-
-  .debug-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.375rem 0.5rem;
-    background: hsl(var(--muted));
-    margin-bottom: 0.25rem;
-    border-radius: 0.25rem;
-  }
-
-  .debug-key {
-    color: hsl(var(--muted-foreground));
-    font-weight: 500;
-  }
-
-  .debug-value {
-    color: hsl(var(--foreground));
-    font-family: monospace;
-    word-break: break-all;
   }
 </style>

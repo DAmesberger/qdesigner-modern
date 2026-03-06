@@ -158,66 +158,66 @@
   const showReportButton = $derived(scoreConfigs.length > 0);
 </script>
 
-<div class="completion-screen" data-testid="fillout-completion-screen">
+<div class="min-h-screen flex items-center justify-center p-4 bg-background" data-testid="fillout-completion-screen">
   <Card class="completion-card">
-    <div class="completion-content">
+    <div class="completion-content p-8 text-center">
       <!-- Success icon -->
-      <div class="success-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <div class="w-16 h-16 mx-auto mb-6 text-success">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="w-full h-full">
           <circle cx="12" cy="12" r="10" stroke-width="2" />
           <path d="M8 12l3 3 5-6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </div>
 
-      <h1 class="completion-title" data-testid="fillout-completion-title">Thank You!</h1>
+      <h1 class="text-3xl font-bold mb-4 text-foreground" data-testid="fillout-completion-title">Thank You!</h1>
 
-      <p class="completion-message">
+      <p class="text-lg text-muted-foreground mb-8 leading-relaxed">
         {customMessage || 'Your responses have been successfully recorded.'}
       </p>
 
       {#if showStatistics && session}
-        <div class="statistics">
+        <div class="flex gap-8 justify-center mb-8 p-6 bg-muted rounded-lg">
           {#if duration()}
-            <div class="stat-item">
-              <span class="stat-label">Time taken</span>
-              <span class="stat-value">{duration()}</span>
+            <div class="flex flex-col gap-1">
+              <span class="text-sm text-muted-foreground">Time taken</span>
+              <span class="text-2xl font-semibold text-foreground">{duration()}</span>
             </div>
           {/if}
 
           {#if session.responses?.length}
-            <div class="stat-item">
-              <span class="stat-label">Questions answered</span>
-              <span class="stat-value">{session.responses.length}</span>
+            <div class="flex flex-col gap-1">
+              <span class="text-sm text-muted-foreground">Questions answered</span>
+              <span class="text-2xl font-semibold text-foreground">{session.responses.length}</span>
             </div>
           {/if}
         </div>
       {/if}
 
       <!-- Completion code -->
-      <div class="completion-code">
-        <p class="code-label">Your completion code:</p>
-        <div class="code-display">
-          <code>{completionCode()}</code>
+      <div class="mb-8 p-6 bg-muted rounded-lg">
+        <p class="text-sm text-muted-foreground mb-2">Your completion code:</p>
+        <div class="flex items-center justify-center gap-2 mb-2">
+          <code class="text-2xl font-semibold tracking-widest text-primary font-mono">{completionCode()}</code>
           <button
-            class="copy-button"
+            class="w-8 h-8 p-1.5 bg-background border border-border rounded-md cursor-pointer transition-all duration-200 text-muted-foreground hover:bg-muted hover:text-foreground active:scale-95"
             onclick={() => navigator.clipboard.writeText(completionCode())}
             title="Copy to clipboard"
             aria-label="Copy to clipboard"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="w-full h-full">
               <rect x="9" y="9" width="13" height="13" rx="2" stroke-width="2" />
               <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-width="2" />
             </svg>
           </button>
         </div>
-        <p class="code-note">Please save this code for your records.</p>
+        <p class="text-xs text-muted-foreground opacity-80">Please save this code for your records.</p>
       </div>
 
       <!-- Panel integration / redirect info -->
       {#if effectiveRedirectUrl()}
-        <div class="redirect-info" data-testid="fillout-redirect-info">
+        <div class="mb-6 p-4 bg-muted rounded-lg text-center" data-testid="fillout-redirect-info">
           {#if distributionSettings?.panelIntegration}
-            <p class="redirect-text">
+            <p class="text-sm text-foreground mb-2">
               Redirecting to {distributionSettings.panelIntegration.provider === 'prolific'
                 ? 'Prolific'
                 : distributionSettings.panelIntegration.provider === 'mturk'
@@ -229,17 +229,17 @@
                       : 'completion page'} in {redirectCountdown} seconds...
             </p>
           {:else}
-            <p class="redirect-text">
+            <p class="text-sm text-foreground mb-2">
               Redirecting in {redirectCountdown} seconds...
             </p>
           {/if}
-          <a href={effectiveRedirectUrl()} class="redirect-link">Click here if not redirected automatically</a>
+          <a href={effectiveRedirectUrl()} class="text-xs text-primary underline">Click here if not redirected automatically</a>
         </div>
       {/if}
 
       <!-- MTurk submit form -->
       {#if distributionSettings?.panelIntegration?.provider === 'mturk' && distributionSettings.panelIntegration.mturkHitId}
-        <div class="mturk-form" data-testid="fillout-mturk-form">
+        <div class="mb-6 text-center" data-testid="fillout-mturk-form">
           <form
             method="POST"
             action="https://www.mturk.com/mturk/externalSubmit"
@@ -253,7 +253,7 @@
         </div>
       {/if}
 
-      <div class="actions">
+      <div class="flex gap-4 justify-center mb-6">
         {#if showDownload && onDownload}
           <Button variant="outline" size="lg" onclick={onDownload}>Download Responses</Button>
         {/if}
@@ -274,7 +274,7 @@
         </Button>
       </div>
 
-      <p class="footer-note">
+      <p class="text-xs text-muted-foreground opacity-80">
         If you have any questions about this study, please contact the research team.
       </p>
     </div>
@@ -282,193 +282,14 @@
 </div>
 
 <style>
-  .completion-screen {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
-    background: var(--background);
-  }
-
   :global(.completion-card) {
     width: 100%;
     max-width: 600px;
   }
 
-  .completion-content {
-    padding: 2rem;
-    text-align: center;
-  }
-
-  .success-icon {
-    width: 4rem;
-    height: 4rem;
-    margin: 0 auto 1.5rem;
-    color: var(--success, #22c55e);
-  }
-
-  .success-icon svg {
-    width: 100%;
-    height: 100%;
-  }
-
-  .completion-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 1rem;
-    color: var(--foreground);
-  }
-
-  .completion-message {
-    font-size: 1.125rem;
-    color: var(--muted-foreground);
-    margin-bottom: 2rem;
-    line-height: 1.6;
-  }
-
-  .statistics {
-    display: flex;
-    gap: 2rem;
-    justify-content: center;
-    margin-bottom: 2rem;
-    padding: 1.5rem;
-    background: var(--muted);
-    border-radius: 0.5rem;
-  }
-
-  .stat-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .stat-label {
-    font-size: 0.875rem;
-    color: var(--muted-foreground);
-  }
-
-  .stat-value {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: var(--foreground);
-  }
-
-  .completion-code {
-    margin-bottom: 2rem;
-    padding: 1.5rem;
-    background: var(--muted);
-    border-radius: 0.5rem;
-  }
-
-  .code-label {
-    font-size: 0.875rem;
-    color: var(--muted-foreground);
-    margin-bottom: 0.5rem;
-  }
-
-  .code-display {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .code-display code {
-    font-size: 1.5rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    color: var(--primary);
-    font-family: monospace;
-  }
-
-  .copy-button {
-    width: 2rem;
-    height: 2rem;
-    padding: 0.375rem;
-    background: var(--background);
-    border: 1px solid var(--border);
-    border-radius: 0.375rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: var(--muted-foreground);
-  }
-
-  .copy-button:hover {
-    background: var(--muted);
-    color: var(--foreground);
-  }
-
-  .copy-button:active {
-    transform: scale(0.95);
-  }
-
-  .copy-button svg {
-    width: 100%;
-    height: 100%;
-  }
-
-  .code-note {
-    font-size: 0.75rem;
-    color: var(--muted-foreground);
-    opacity: 0.8;
-  }
-
-  .actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    margin-bottom: 1.5rem;
-  }
-
-  .redirect-info {
-    margin-bottom: 1.5rem;
-    padding: 1rem;
-    background: var(--muted);
-    border-radius: 0.5rem;
-    text-align: center;
-  }
-
-  .redirect-text {
-    font-size: 0.875rem;
-    color: var(--foreground);
-    margin-bottom: 0.5rem;
-  }
-
-  .redirect-link {
-    font-size: 0.75rem;
-    color: var(--primary);
-    text-decoration: underline;
-  }
-
-  .mturk-form {
-    margin-bottom: 1.5rem;
-    text-align: center;
-  }
-
-  .footer-note {
-    font-size: 0.75rem;
-    color: var(--muted-foreground);
-    opacity: 0.8;
-  }
-
   @media (max-width: 640px) {
     .completion-content {
       padding: 1.5rem;
-    }
-
-    .completion-title {
-      font-size: 1.5rem;
-    }
-
-    .statistics {
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .actions {
-      flex-direction: column;
     }
   }
 </style>

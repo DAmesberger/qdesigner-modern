@@ -148,11 +148,11 @@
   <!-- File Size -->
   <div class="form-group">
     <label for="max-size">Maximum File Size</label>
-    <select id="max-size" bind:value={question.config.maxSize} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
+    <Select id="max-size" bind:value={question.config.maxSize}>
       {#each fileSizePresets as preset}
         <option value={preset.value}>{preset.label}</option>
       {/each}
-    </select>
+    </Select>
     <p class="help-text">Current: {formatFileSize(question.config.maxSize || 0)}</p>
   </div>
 

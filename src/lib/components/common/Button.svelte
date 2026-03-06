@@ -36,11 +36,11 @@
   
   const variantClasses = {
     primary: 'bg-primary font-medium text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-    secondary: 'bg-secondary font-medium text-secondary-foreground shadow-sm hover:bg-secondary/80',
-    ghost: 'font-medium hover:bg-accent hover:text-accent-foreground',
+    secondary: 'bg-secondary font-medium text-secondary-foreground shadow-sm hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+    ghost: 'font-medium hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
     default: 'bg-primary font-medium text-primary-foreground shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-    outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-    destructive: 'bg-destructive font-medium text-destructive-foreground shadow-sm hover:bg-destructive/90'
+    outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+    destructive: 'bg-destructive font-medium text-destructive-foreground shadow-sm hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
   };
   
   let classes = $derived(`inline-flex items-center justify-center transition-colors ${sizeClasses[size]} ${variantClasses[variant]} ${

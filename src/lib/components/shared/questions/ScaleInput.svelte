@@ -47,14 +47,14 @@
   const percentage = $derived(((internalValue - config.min) / range) * 100);
 </script>
 
-<div class="scale-input {config.orientation || 'horizontal'} {className}">
+<div class="scale-input flex w-full {config.orientation || 'horizontal'} {className}">
   {#if config.style === 'slider'}
-    <div class="slider-container">
+    <div class="slider-container flex items-center gap-4 w-full relative">
       {#if config.labels?.min}
-        <span class="label min">{config.labels.min}</span>
+        <span class="label text-sm text-muted-foreground whitespace-nowrap">{config.labels.min}</span>
       {/if}
 
-      <div class="slider-wrapper">
+      <div class="slider-wrapper flex-1 relative py-4">
         <input
           type="range"
           min={config.min}
@@ -63,55 +63,55 @@
           value={internalValue}
           oninput={handleSliderInput}
           {disabled}
-          class="slider"
+          class="slider w-full h-2 bg-border rounded outline-none transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
         />
 
         {#if config.labels?.midpoint}
-          <span class="label midpoint" style="left: 50%">
+          <span class="label midpoint absolute -bottom-6 -translate-x-1/2 text-center text-sm text-muted-foreground whitespace-nowrap" style="left: 50%">
             {config.labels.midpoint}
           </span>
         {/if}
 
         {#if config.showValue}
-          <div class="value-indicator" style="left: {percentage}%">
+          <div class="value-indicator absolute -top-6 -translate-x-1/2 bg-foreground text-background px-2 py-1 rounded text-xs font-medium whitespace-nowrap pointer-events-none" style="left: {percentage}%">
             {internalValue}
           </div>
         {/if}
       </div>
 
       {#if config.labels?.max}
-        <span class="label max">{config.labels.max}</span>
+        <span class="label text-sm text-muted-foreground whitespace-nowrap">{config.labels.max}</span>
       {/if}
     </div>
   {:else if config.style === 'buttons'}
-    <div class="buttons-container">
+    <div class="buttons-container flex gap-2 flex-wrap justify-between w-full">
       {#each buttons as buttonValue, index}
         <button
           type="button"
-          class="scale-button"
+          class="scale-button flex flex-col items-center gap-1 py-3 px-4 border-2 border-border bg-background rounded-lg cursor-pointer transition-all duration-150 min-w-[3.5rem] hover:border-muted-foreground hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
           class:selected={internalValue === buttonValue}
           onclick={() => handleButtonClick(buttonValue)}
           {disabled}
         >
-          <span class="button-value">{buttonValue}</span>
+          <span class="text-base font-semibold text-foreground">{buttonValue}</span>
           {#if index === 0 && config.labels?.min}
-            <span class="button-label">{config.labels.min}</span>
+            <span class="text-xs text-muted-foreground text-center">{config.labels.min}</span>
           {:else if index === buttons.length - 1 && config.labels?.max}
-            <span class="button-label">{config.labels.max}</span>
+            <span class="text-xs text-muted-foreground text-center">{config.labels.max}</span>
           {:else if index === Math.floor(buttons.length / 2) && config.labels?.midpoint}
-            <span class="button-label">{config.labels.midpoint}</span>
+            <span class="text-xs text-muted-foreground text-center">{config.labels.midpoint}</span>
           {/if}
         </button>
       {/each}
     </div>
   {:else if config.style === 'visual-analog'}
-    <div class="visual-analog-container">
+    <div class="visual-analog-container flex items-center gap-4 w-full">
       {#if config.labels?.min}
-        <span class="label min">{config.labels.min}</span>
+        <span class="label text-sm text-muted-foreground whitespace-nowrap">{config.labels.min}</span>
       {/if}
 
       <div
-        class="visual-analog-track"
+        class="visual-analog-track flex-1 h-8 bg-border rounded-2xl relative overflow-hidden cursor-pointer"
         role="slider"
         tabindex="0"
         aria-valuemin={config.min}
@@ -119,7 +119,7 @@
         aria-valuenow={internalValue}
         aria-disabled={disabled}
       >
-        <div class="visual-analog-fill" style="width: {percentage}%"></div>
+        <div class="visual-analog-fill absolute left-0 top-0 h-full pointer-events-none transition-[width] duration-150" style="background: linear-gradient(to right, hsl(var(--primary) / 0.2), hsl(var(--primary))); width: {percentage}%"></div>
 
         <input
           type="range"
@@ -129,55 +129,21 @@
           value={internalValue}
           oninput={handleSliderInput}
           {disabled}
-          class="visual-analog-input"
+          class="visual-analog-input absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
         />
       </div>
 
       {#if config.labels?.max}
-        <span class="label max">{config.labels.max}</span>
+        <span class="label text-sm text-muted-foreground whitespace-nowrap">{config.labels.max}</span>
       {/if}
     </div>
   {/if}
 </div>
 
 <style>
-  .scale-input {
-    display: flex;
-    width: 100%;
-  }
-
-  .scale-input.vertical {
-    flex-direction: column;
-  }
-
-  /* Slider Style */
-  .slider-container {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    width: 100%;
-    position: relative;
-  }
-
-  .slider-wrapper {
-    flex: 1;
-    position: relative;
-    padding: 1rem 0;
-  }
-
   .slider {
-    width: 100%;
-    height: 0.5rem;
     -webkit-appearance: none;
     appearance: none;
-    background: hsl(var(--border));
-    border-radius: 0.25rem;
-    outline: none;
-    transition: background 0.15s ease;
-  }
-
-  .slider:hover:not(:disabled) {
-    background: hsl(var(--border));
   }
 
   .slider::-webkit-slider-thumb {
@@ -211,128 +177,16 @@
     box-shadow: 0 0 0 8px hsl(var(--primary) / 0.1);
   }
 
-  .slider:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .value-indicator {
-    position: absolute;
-    top: -1.5rem;
-    transform: translateX(-50%);
-    background: hsl(var(--foreground));
-    color: hsl(var(--background));
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    font-weight: 500;
-    white-space: nowrap;
-    pointer-events: none;
-  }
-
-  /* Button Style */
-  .buttons-container {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    width: 100%;
-  }
-
-  .scale-button {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.75rem 1rem;
-    border: 2px solid hsl(var(--border));
-    background: hsl(var(--background));
-    border-radius: 0.5rem;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    min-width: 3.5rem;
-  }
-
-  .scale-button:hover:not(:disabled) {
-    border-color: hsl(var(--muted-foreground));
-    background: hsl(var(--muted));
-  }
-
   .scale-button.selected {
     border-color: hsl(var(--primary));
     background: hsl(var(--primary) / 0.1);
   }
 
-  .scale-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .button-value {
-    font-size: 1rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-  }
-
-  .button-label {
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
-    text-align: center;
-  }
-
-  /* Visual Analog Style */
-  .visual-analog-container {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    width: 100%;
-  }
-
-  .visual-analog-track {
-    flex: 1;
-    height: 2rem;
-    background: hsl(var(--border));
-    border-radius: 1rem;
-    position: relative;
-    overflow: hidden;
-    cursor: pointer;
-  }
-
-  .visual-analog-fill {
-    position: absolute;
-    left: 0;
-    top: 0;
-    height: 100%;
-    background: linear-gradient(to right, hsl(var(--primary) / 0.2), hsl(var(--primary)));
-    transition: width 0.15s ease;
-    pointer-events: none;
-  }
-
-  .visual-analog-input {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    cursor: pointer;
-  }
-
-  /* Labels */
-  .label {
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-    white-space: nowrap;
-  }
-
-  .label.midpoint {
-    position: absolute;
-    bottom: -1.5rem;
-    transform: translateX(-50%);
-    text-align: center;
-  }
-
   /* Vertical orientation */
+  .scale-input.vertical {
+    flex-direction: column;
+  }
+
   .scale-input.vertical .slider-container,
   .scale-input.vertical .buttons-container,
   .scale-input.vertical .visual-analog-container {

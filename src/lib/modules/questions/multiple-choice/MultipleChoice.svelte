@@ -177,13 +177,13 @@
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
   <div
-    class="choice-container layout-{question.config.layout} {gridClass}"
+    class="choice-container flex gap-3 layout-{question.config.layout} {gridClass}"
     role={question.config.responseType.type === 'single' ? 'radiogroup' : 'group'}
     aria-labelledby="question-{question.id}-title"
   >
     {#each randomizedOptions as option (option.id)}
       <div
-        class="choice-item"
+        class="relative"
         animate:flip={{ duration: 300 }}
         transition:fade|local={{ duration: 200 }}
       >
@@ -232,41 +232,41 @@
             {/if}
           </span>
 
-          <span class="choice-content">
+          <span class="flex-1 flex items-start gap-2">
             {#if option.icon}
-              <span class="choice-icon">{option.icon}</span>
+              <span class="text-xl leading-none">{option.icon}</span>
             {/if}
 
             {#if option.image}
-              <img src={option.image} alt={option.label} class="choice-image" loading="lazy" />
+              <img src={option.image} alt={option.label} class="w-12 h-12 object-cover rounded" loading="lazy" />
             {/if}
 
-            <span class="choice-text">
-              <span class="choice-label-text">{option.label}</span>
+            <span class="flex-1 flex flex-col">
+              <span class="text-foreground leading-normal">{option.label}</span>
               {#if option.description}
-                <span class="choice-description" id="option-{option.id}-desc">
+                <span class="text-sm text-muted-foreground mt-1 leading-snug" id="option-{option.id}-desc">
                   {option.description}
                 </span>
               {/if}
             </span>
 
             {#if option.hotkey && mode === 'runtime'}
-              <kbd class="choice-hotkey">{option.hotkey}</kbd>
+              <kbd class="shrink-0 py-0.5 px-1.5 bg-muted border border-border rounded text-xs font-mono text-muted-foreground">{option.hotkey}</kbd>
             {/if}
           </span>
         </label>
 
         {#if option.exclusive}
-          <span class="exclusive-badge">Exclusive</span>
+          <span class="absolute -top-2 right-2 py-0.5 px-2 bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))] text-xs font-medium rounded border border-[hsl(var(--warning)/0.3)]">Exclusive</span>
         {/if}
       </div>
     {/each}
 
     {#if question.config.otherOption && showOtherInput}
-      <div class="other-input-container" transition:fade|local={{ duration: 200 }}>
+      <div class="ml-8" transition:fade|local={{ duration: 200 }}>
         <input
           type="text"
-          class="other-input"
+          class="w-full py-2 px-3 border-2 border-border rounded-md text-sm transition-all duration-200 focus:outline-none focus:border-primary focus:ring-3 focus:ring-primary/10"
           placeholder="Please specify..."
           bind:value={otherValue}
           onchange={handleOtherChange}
@@ -279,11 +279,7 @@
 </BaseQuestion>
 
 <style>
-  .choice-container {
-    display: flex;
-    gap: 0.75rem;
-  }
-
+  /* Layout variants */
   .layout-vertical {
     flex-direction: column;
   }
@@ -308,10 +304,7 @@
     grid-template-columns: repeat(4, 1fr);
   }
 
-  .choice-item {
-    position: relative;
-  }
-
+  /* Choice label — .selected, .disabled, :hover */
   .choice-label {
     display: flex;
     align-items: flex-start;
@@ -339,12 +332,14 @@
     cursor: not-allowed;
   }
 
+  /* Hidden input */
   .choice-input {
     position: absolute;
     opacity: 0;
     pointer-events: none;
   }
 
+  /* Indicator — :checked + span, [type='checkbox'] ~ */
   .choice-indicator {
     flex-shrink: 0;
     width: 1.25rem;
@@ -393,87 +388,6 @@
   .choice-label.selected .checkmark {
     opacity: 1;
     transform: scale(1);
-  }
-
-  .choice-content {
-    flex: 1;
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-
-  .choice-icon {
-    font-size: 1.25rem;
-    line-height: 1;
-  }
-
-  .choice-image {
-    width: 3rem;
-    height: 3rem;
-    object-fit: cover;
-    border-radius: 0.25rem;
-  }
-
-  .choice-text {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .choice-label-text {
-    color: hsl(var(--foreground));
-    line-height: 1.5;
-  }
-
-  .choice-description {
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-    margin-top: 0.25rem;
-    line-height: 1.4;
-  }
-
-  .choice-hotkey {
-    flex-shrink: 0;
-    padding: 0.125rem 0.375rem;
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .exclusive-badge {
-    position: absolute;
-    top: -0.5rem;
-    right: 0.5rem;
-    padding: 0.125rem 0.5rem;
-    background: hsl(var(--warning) / 0.15);
-    color: hsl(var(--warning));
-    font-size: 0.75rem;
-    font-weight: 500;
-    border-radius: 0.25rem;
-    border: 1px solid hsl(var(--warning) / 0.3);
-  }
-
-  /* Other input */
-  .other-input-container {
-    margin-left: 2rem;
-  }
-
-  .other-input {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 2px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    transition: all 0.2s;
-  }
-
-  .other-input:focus {
-    outline: none;
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   /* Responsive */

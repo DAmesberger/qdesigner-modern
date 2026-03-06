@@ -127,11 +127,11 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
   let renderedTemplate = $derived(renderTemplate(template));
 </script>
 
-<div class="feedback-builder">
+<div class="flex flex-col h-full bg-card rounded-lg border border-border overflow-hidden">
   <!-- Toolbar -->
-  <div class="toolbar">
-    <div class="toolbar-section">
-      <span class="toolbar-label">Template:</span>
+  <div class="flex justify-between items-center px-4 py-3 bg-muted border-b border-border">
+    <div class="flex items-center gap-2">
+      <span class="text-sm text-foreground">Template:</span>
       <Select
         bind:value={selectedTemplate}
         onchange={(e) => {
@@ -148,7 +148,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
       </Select>
     </div>
 
-    <div class="toolbar-section">
+    <div class="flex items-center gap-2">
       <button onclick={() => (showVariableList = !showVariableList)} class="toolbar-button">
         <Database size={16} />
         Variables
@@ -162,49 +162,49 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
   </div>
 
   <!-- Main Content -->
-  <div class="content">
+  <div class="flex-1 flex overflow-hidden">
     <!-- Variable List -->
     {#if showVariableList}
-      <div class="variable-panel">
-        <h4 class="panel-title">Variables</h4>
+      <div class="w-[250px] border-r border-border bg-muted overflow-y-auto">
+        <h4 class="text-sm font-semibold text-foreground p-4 border-b border-border">Variables</h4>
 
-        <div class="variable-section">
-          <h5 class="section-title">Custom Variables</h5>
-          <div class="variable-list">
+        <div class="p-4 border-b border-border">
+          <h5 class="text-xs font-medium text-muted-foreground uppercase mb-2">Custom Variables</h5>
+          <div class="flex flex-col gap-1">
             {#each variables as variable}
               <button onclick={() => insertVariable(variable.name)} class="variable-item">
-                <span class="var-name">{variable.name}</span>
-                <span class="var-type">{variable.type}</span>
+                <span class="font-mono text-foreground">{variable.name}</span>
+                <span class="text-xs text-muted-foreground">{variable.type}</span>
               </button>
             {/each}
           </div>
         </div>
 
-        <div class="variable-section">
-          <h5 class="section-title">System Variables</h5>
-          <div class="variable-list">
+        <div class="p-4 border-b border-border">
+          <h5 class="text-xs font-medium text-muted-foreground uppercase mb-2">System Variables</h5>
+          <div class="flex flex-col gap-1">
             <button onclick={() => insertVariable('score')} class="variable-item">
-              <span class="var-name">score</span>
-              <span class="var-type">number</span>
+              <span class="font-mono text-foreground">score</span>
+              <span class="text-xs text-muted-foreground">number</span>
             </button>
             <button onclick={() => insertVariable('maxScore')} class="variable-item">
-              <span class="var-name">maxScore</span>
-              <span class="var-type">number</span>
+              <span class="font-mono text-foreground">maxScore</span>
+              <span class="text-xs text-muted-foreground">number</span>
             </button>
             <button onclick={() => insertVariable('responseTime')} class="variable-item">
-              <span class="var-name">responseTime</span>
-              <span class="var-type">number</span>
+              <span class="font-mono text-foreground">responseTime</span>
+              <span class="text-xs text-muted-foreground">number</span>
             </button>
             <button onclick={() => insertVariable('completionTime')} class="variable-item">
-              <span class="var-name">completionTime</span>
-              <span class="var-type">number</span>
+              <span class="font-mono text-foreground">completionTime</span>
+              <span class="text-xs text-muted-foreground">number</span>
             </button>
           </div>
         </div>
 
-        <div class="variable-section">
-          <h5 class="section-title">Functions</h5>
-          <div class="function-list">
+        <div class="p-4 border-b border-border">
+          <h5 class="text-xs font-medium text-muted-foreground uppercase mb-2">Functions</h5>
+          <div class="flex flex-col gap-1">
             <button
               onclick={() => insertFunction('${IF(condition, "true", "false")}')}
               class="function-item"
@@ -226,7 +226,7 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     {/if}
 
     <!-- Editor -->
-    <div class="editor-container">
+    <div class="flex-1 min-w-0">
       <MonacoEditor
         bind:this={monacoEditor}
         bind:value={template}
@@ -249,8 +249,8 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
 
     <!-- Preview -->
     {#if showPreview}
-      <div class="preview-panel">
-        <h4 class="panel-title">Preview</h4>
+      <div class="w-[300px] border-l border-border bg-muted flex flex-col">
+        <h4 class="text-sm font-semibold text-foreground p-4 border-b border-border">Preview</h4>
         <div class="preview-content">
           {@html renderedTemplate
             .replace(/\n/g, '<br>')
@@ -258,13 +258,13 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
             .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}
         </div>
 
-        <div class="preview-variables">
-          <h5 class="section-title">Preview Data</h5>
-          <div class="preview-var-list">
+        <div class="p-4 border-t border-border">
+          <h5 class="text-xs font-medium text-muted-foreground uppercase mb-2">Preview Data</h5>
+          <div class="flex flex-col gap-1 text-xs">
             {#each Object.entries(previewVariables).slice(0, 6) as [key, value]}
-              <div class="preview-var">
-                <span class="var-key">{key}:</span>
-                <span class="var-value">{value}</span>
+              <div class="flex justify-between px-2 py-1 bg-card rounded">
+                <span class="font-mono text-muted-foreground">{key}:</span>
+                <span class="font-mono text-foreground">{value}</span>
               </div>
             {/each}
           </div>
@@ -275,36 +275,6 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
 </div>
 
 <style>
-  .feedback-builder {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    background: hsl(var(--card));
-    border-radius: 0.5rem;
-    border: 1px solid hsl(var(--border));
-    overflow: hidden;
-  }
-
-  .toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    background: hsl(var(--muted));
-    border-bottom: 1px solid hsl(var(--border));
-  }
-
-  .toolbar-section {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .toolbar-label {
-    font-size: 0.875rem;
-    color: hsl(var(--foreground));
-  }
-
   .toolbar-button {
     display: flex;
     align-items: center;
@@ -321,47 +291,6 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
   .toolbar-button:hover {
     background: hsl(var(--muted));
     border-color: hsl(var(--muted-foreground));
-  }
-
-  .content {
-    flex: 1;
-    display: flex;
-    overflow: hidden;
-  }
-
-  .variable-panel {
-    width: 250px;
-    border-right: 1px solid hsl(var(--border));
-    background: hsl(var(--muted));
-    overflow-y: auto;
-  }
-
-  .panel-title {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-    padding: 1rem;
-    border-bottom: 1px solid hsl(var(--border));
-  }
-
-  .variable-section {
-    padding: 1rem;
-    border-bottom: 1px solid hsl(var(--border));
-  }
-
-  .section-title {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: hsl(var(--muted-foreground));
-    text-transform: uppercase;
-    margin-bottom: 0.5rem;
-  }
-
-  .variable-list,
-  .function-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
   }
 
   .variable-item,
@@ -384,33 +313,10 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
     border-color: hsl(var(--primary));
   }
 
-  .var-name {
-    font-family: monospace;
-    color: hsl(var(--foreground));
-  }
-
-  .var-type {
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
-  }
-
   .function-item {
     font-family: monospace;
     font-size: 0.75rem;
     color: hsl(var(--muted-foreground));
-  }
-
-  .editor-container {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .preview-panel {
-    width: 300px;
-    border-left: 1px solid hsl(var(--border));
-    background: hsl(var(--muted));
-    display: flex;
-    flex-direction: column;
   }
 
   .preview-content {
@@ -433,36 +339,6 @@ $\{IF(score >= 80, "You have demonstrated excellent understanding of the materia
 
   :global(.preview-content strong) {
     font-weight: 600;
-    color: hsl(var(--foreground));
-  }
-
-  .preview-variables {
-    padding: 1rem;
-    border-top: 1px solid hsl(var(--border));
-  }
-
-  .preview-var-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    font-size: 0.75rem;
-  }
-
-  .preview-var {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.25rem 0.5rem;
-    background: hsl(var(--card));
-    border-radius: 0.25rem;
-  }
-
-  .var-key {
-    font-family: monospace;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .var-value {
-    font-family: monospace;
     color: hsl(var(--foreground));
   }
 </style>

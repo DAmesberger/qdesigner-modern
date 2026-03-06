@@ -191,12 +191,12 @@
   }
 </script>
 
-<div class="designer-panel">
+<div class="p-6 max-h-full overflow-y-auto">
   <!-- Stimulus Configuration -->
-  <div class="section">
-    <h4 class="section-title">Stimulus Configuration</h4>
+  <div class="section first">
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Stimulus Configuration</h4>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="stimulus-type">Stimulus Type</label>
       <Select id="stimulus-type" bind:value={question.config.stimulus.type}>
         <option value="shape">Shape</option>
@@ -208,10 +208,10 @@
 
     {#if question.config.stimulus.type === 'shape' && shapeContent}
       <!-- Shape Configuration -->
-      <div class="subsection">
-        <div class="form-group">
-          <span class="label-text">Shape Preset</span>
-          <div class="preset-selector">
+      <div class="mt-4 pl-4">
+        <div class="mb-4">
+          <span class="block mb-1.5 text-sm font-medium text-foreground">Shape Preset</span>
+          <div class="flex gap-2">
             <Select bind:value={selectedShapePreset}>
               <option value="">Select preset...</option>
               {#each shapePresets as preset}
@@ -224,7 +224,7 @@
           </div>
         </div>
 
-        <div class="form-group">
+        <div class="mb-4">
           <label for="shape-type">Shape</label>
           <Select id="shape-type" bind:value={shapeContent.type}>
             <option value="circle">Circle</option>
@@ -234,7 +234,7 @@
         </div>
 
         {#if shapeContent.type === 'circle'}
-          <div class="form-group">
+          <div class="mb-4">
             <label for="radius">Radius (px)</label>
             <input
               id="radius"
@@ -247,7 +247,7 @@
             />
           </div>
         {:else}
-          <div class="form-group">
+          <div class="mb-4">
             <label for="width">Width (px)</label>
             <input
               id="width"
@@ -261,7 +261,7 @@
           </div>
 
           {#if shapeContent.type === 'rectangle'}
-            <div class="form-group">
+            <div class="mb-4">
               <label for="height">Height (px)</label>
               <input
                 id="height"
@@ -277,12 +277,12 @@
         {/if}
 
         <!-- Color controls -->
-        <div class="form-group">
-          <span class="label-text">Color (RGBA)</span>
-          <div class="color-controls">
+        <div class="mb-4">
+          <span class="block mb-1.5 text-sm font-medium text-foreground">Color (RGBA)</span>
+          <div class="grid gap-2">
             {#each shapeContent.properties.color || [1, 1, 1, 1] as value, i}
               <div class="color-channel">
-                <span class="label-text">{['R', 'G', 'B', 'A'][i]}</span>
+                <span class="m-0 text-xs font-semibold text-center">{['R', 'G', 'B', 'A'][i]}</span>
                 <input
                   type="range"
                   {value}
@@ -290,9 +290,9 @@
                   min="0"
                   max="1"
                   step="0.01"
-                  class="slider"
+                  class="w-full h-6"
                 />
-                <span class="value">{value.toFixed(2)}</span>
+                <span class="text-xs font-mono text-muted-foreground">{value.toFixed(2)}</span>
               </div>
             {/each}
           </div>
@@ -300,7 +300,7 @@
       </div>
     {:else if question.config.stimulus.type === 'custom'}
       <!-- Custom Shader -->
-      <div class="form-group">
+      <div class="mb-4">
         <label for="shader">Custom Shader Code</label>
         <textarea
           id="shader"
@@ -313,16 +313,16 @@
     {/if}
 
     <!-- Fixation Configuration -->
-    <div class="subsection">
-      <h5 class="subsection-title">Fixation Settings</h5>
+    <div class="mt-4 pl-4">
+      <h5 class="mb-2 text-sm font-medium text-muted-foreground">Fixation Settings</h5>
 
-      <div class="form-group">
+      <div class="mb-4">
         {#if question.config.stimulus.fixation}
-          <label class="checkbox-label">
+          <label class="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               bind:checked={question.config.stimulus.fixation.show}
-              class="checkbox"
+              class="w-4 h-4 cursor-pointer"
             />
             <span>Show fixation</span>
           </label>
@@ -330,7 +330,7 @@
       </div>
 
       {#if question.config.stimulus.fixation?.show}
-        <div class="form-group">
+        <div class="mb-4">
           <label for="fixation-type">Fixation Type</label>
           <Select
             id="fixation-type"
@@ -341,7 +341,7 @@
           </Select>
         </div>
 
-        <div class="form-group">
+        <div class="mb-4">
           <label for="fixation-duration">Duration (ms)</label>
           <input
             id="fixation-duration"
@@ -354,13 +354,13 @@
           />
         </div>
 
-        <div class="form-group">
+        <div class="mb-4">
           <label for="fixation-color">Color</label>
           <input
             id="fixation-color"
             type="color"
             bind:value={question.config.stimulus.fixation.color}
-            class="color-input"
+            class="w-full h-10 p-1 cursor-pointer"
           />
         </div>
       {/if}
@@ -369,9 +369,9 @@
 
   <!-- Response Configuration -->
   <div class="section">
-    <h4 class="section-title">Response Settings</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Response Settings</h4>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="response-type">Response Type</label>
       <Select id="response-type" bind:value={question.config.response.type}>
         <option value="keyboard">Keyboard</option>
@@ -381,14 +381,14 @@
     </div>
 
     {#if question.config.response.type === 'keyboard'}
-      <div class="form-group">
-        <span class="label-text">Valid Keys</span>
-        <div class="key-input">
+      <div class="mb-4">
+        <span class="block mb-1.5 text-sm font-medium text-foreground">Valid Keys</span>
+        <div class="flex gap-2 mb-2">
           <input
             type="text"
             bind:value={newValidKey}
             placeholder="Enter key (e.g., 'a', 'Enter')"
-            class="input"
+            class="input flex-1"
             onkeydown={(e) => e.key === 'Enter' && addValidKey()}
           />
           <Button variant="secondary" size="sm" onclick={addValidKey} disabled={!newValidKey}>
@@ -397,10 +397,10 @@
         </div>
 
         {#if question.config.response.validKeys?.length}
-          <div class="key-list">
+          <div class="flex flex-wrap gap-2 mt-2">
             {#each question.config.response.validKeys as key}
-              <div class="key-item">
-                <span class="key-label">{key === ' ' ? 'SPACE' : key.toUpperCase()}</span>
+              <div class="flex items-center gap-2 px-3 py-1.5 bg-muted border border-border rounded-md">
+                <span class="font-mono text-sm font-medium text-foreground">{key === ' ' ? 'SPACE' : key.toUpperCase()}</span>
                 <button
                   class="remove-btn"
                   onclick={() => removeValidKey(key)}
@@ -414,19 +414,19 @@
         {/if}
       </div>
 
-      <div class="form-group">
-        <label class="checkbox-label">
+      <div class="mb-4">
+        <label class="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
             bind:checked={question.config.response.requireCorrect}
-            class="checkbox"
+            class="w-4 h-4 cursor-pointer"
           />
           <span>Require correct response</span>
         </label>
       </div>
 
       {#if question.config.response.requireCorrect}
-        <div class="form-group">
+        <div class="mb-4">
           <label for="correct-key">Correct Key</label>
           <Select id="correct-key" bind:value={question.config.response.correctKey}>
             <option value="">Select correct key...</option>
@@ -441,11 +441,11 @@
 
   <!-- Timing Configuration -->
   <div class="section">
-    <h4 class="section-title">Timing Settings</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Timing Settings</h4>
 
-    <div class="form-group">
-      <span class="label-text">Timing Preset</span>
-      <div class="preset-selector">
+    <div class="mb-4">
+      <span class="block mb-1.5 text-sm font-medium text-foreground">Timing Preset</span>
+      <div class="flex gap-2">
         <Select bind:value={selectedTimingPreset}>
           <option value="">Select preset...</option>
           {#each timingPresets as preset}
@@ -458,7 +458,7 @@
       </div>
     </div>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="pre-delay">Pre-stimulus Delay (ms)</label>
       <input
         id="pre-delay"
@@ -471,7 +471,7 @@
       />
     </div>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="post-fixation-delay">Post-fixation Delay (ms)</label>
       <input
         id="post-fixation-delay"
@@ -484,7 +484,7 @@
       />
     </div>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="stimulus-duration">Stimulus Duration (ms)</label>
       <input
         id="stimulus-duration"
@@ -495,10 +495,10 @@
         step="100"
         class="input"
       />
-      <p class="help-text">0 = stimulus remains until response</p>
+      <p class="mt-1 text-xs text-muted-foreground">0 = stimulus remains until response</p>
     </div>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="response-duration">Response Timeout (ms)</label>
       <input
         id="response-duration"
@@ -511,7 +511,7 @@
       />
     </div>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="iti">Inter-trial Interval (ms)</label>
       <input
         id="iti"
@@ -527,33 +527,33 @@
 
   <!-- Rendering Configuration -->
   <div class="section">
-    <h4 class="section-title">Rendering Settings</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Rendering Settings</h4>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="target-fps">Target FPS</label>
-      <select id="target-fps" bind:value={question.config.rendering.targetFPS} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
+      <Select id="target-fps" bind:value={question.config.rendering.targetFPS}>
         <option value={30}>30 FPS</option>
         <option value={60}>60 FPS</option>
         <option value={120}>120 FPS</option>
         <option value={144}>144 FPS</option>
         <option value={240}>240 FPS</option>
-      </select>
-      <p class="help-text">Higher FPS provides more precise timing measurements</p>
+      </Select>
+      <p class="mt-1 text-xs text-muted-foreground">Higher FPS provides more precise timing measurements</p>
     </div>
 
-    <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.rendering.vsync} class="checkbox" />
+    <div class="mb-4">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" bind:checked={question.config.rendering.vsync} class="w-4 h-4 cursor-pointer" />
         <span>Enable V-Sync</span>
       </label>
     </div>
 
-    <div class="form-group">
-      <label class="checkbox-label">
+    <div class="mb-4">
+      <label class="flex items-center gap-2 cursor-pointer">
         <input
           type="checkbox"
           bind:checked={question.config.rendering.antialias}
-          class="checkbox"
+          class="w-4 h-4 cursor-pointer"
         />
         <span>Enable Antialiasing</span>
       </label>
@@ -562,24 +562,6 @@
 </div>
 
 <style>
-  .designer-panel {
-    padding: 1.5rem;
-    max-height: 100%;
-    overflow-y: auto;
-  }
-
-  .form-group {
-    margin-bottom: 1rem;
-  }
-
-  .label-text {
-    display: block;
-    margin-bottom: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: hsl(var(--foreground));
-  }
-
   .input,
   .textarea {
     width: 100%;
@@ -608,62 +590,16 @@
     box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
-  .checkbox {
-    width: 1rem;
-    height: 1rem;
-    cursor: pointer;
-  }
-
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
     border-top: 1px solid hsl(var(--border));
   }
 
-  .section:first-child {
+  .section.first {
     margin-top: 0;
     padding-top: 0;
     border-top: none;
-  }
-
-  .section-title {
-    margin: 0 0 1rem 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .subsection {
-    margin-top: 1rem;
-    padding-left: 1rem;
-  }
-
-  .subsection-title {
-    margin: 0 0 0.5rem 0;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .help-text {
-    margin-top: 0.25rem;
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  /* Color controls */
-  .color-controls {
-    display: grid;
-    gap: 0.5rem;
   }
 
   .color-channel {
@@ -671,66 +607,6 @@
     grid-template-columns: 2rem 1fr 3rem;
     align-items: center;
     gap: 0.5rem;
-  }
-
-  .color-channel .label-text {
-    margin: 0;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-align: center;
-  }
-
-  .slider {
-    width: 100%;
-    height: 1.5rem;
-  }
-
-  .color-channel .value {
-    font-size: 0.75rem;
-    font-family: monospace;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .color-input {
-    width: 100%;
-    height: 2.5rem;
-    padding: 0.25rem;
-    cursor: pointer;
-  }
-
-  /* Key management */
-  .key-input {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .key-input .input {
-    flex: 1;
-  }
-
-  .key-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-  }
-
-  .key-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.375rem 0.75rem;
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-  }
-
-  .key-label {
-    font-family: monospace;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: hsl(var(--foreground));
   }
 
   .remove-btn {
@@ -745,11 +621,4 @@
   .remove-btn:hover {
     color: hsl(var(--destructive));
   }
-
-  /* Preset selector */
-  .preset-selector {
-    display: flex;
-    gap: 0.5rem;
-  }
-
 </style>

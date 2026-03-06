@@ -299,15 +299,15 @@
 </script>
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
-  <div class="ranking-container" class:horizontal={layout === 'horizontal'}>
+  <div class="ranking-container w-full" class:horizontal={layout === 'horizontal'}>
     <div class="ranking-area">
-      <div class="area-header">
-        <h4>Ranked Items</h4>
-        <span class="count">{rankedItems.length} / {items.length}</span>
+      <div class="flex justify-between items-center mb-4">
+        <h4 class="m-0 text-base font-semibold text-foreground">Ranked Items</h4>
+        <span class="text-sm text-muted-foreground font-medium">{rankedItems.length} / {items.length}</span>
       </div>
 
       <div
-        class="ranked-list"
+        class="ranked-list min-h-[200px] bg-muted border-2 border-border rounded-lg p-2 transition-all duration-200"
         ondragover={(e) => handleDragOver(e, 'ranked')}
         ondrop={(e) => handleDrop(e, 'ranked')}
         class:drop-active={dropTarget === 'ranked'}
@@ -316,7 +316,7 @@
         {#each rankedItems as item, index (item.id)}
           <div
             animate:flip={{ duration: animation ? 250 : 0 }}
-            class="ranked-item"
+            class="ranked-item flex items-center p-3 mb-2 last:mb-0 bg-card border border-border rounded-md cursor-move transition-all duration-200 hover:border-muted-foreground hover:shadow-sm"
             class:drop-above={dropTarget === 'ranked' && dropIndex === index}
             draggable={!disabled && mode === 'runtime'}
             ondragstart={(e) => handleDragStart(e, item, 'ranked', index)}
@@ -325,13 +325,13 @@
             role="listitem"
           >
             {#if showNumbers}
-              <span class="rank">{item.rank}</span>
+              <span class="inline-flex items-center justify-center w-8 h-8 bg-primary/20 text-primary rounded-full font-semibold text-sm mr-4 shrink-0">{item.rank}</span>
             {/if}
-            <span class="label">{item.label}</span>
+            <span class="flex-1 text-sm text-foreground">{item.label}</span>
             {#if !disabled && mode === 'runtime'}
-              <div class="actions">
+              <div class="flex gap-1 ml-4">
                 <button
-                  class="move-button"
+                  class="action-button px-2 py-1 bg-muted border border-border rounded text-sm cursor-pointer transition-all duration-200 hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed"
                   onclick={() => moveUp(index)}
                   disabled={index === 0}
                   aria-label="Move up"
@@ -339,7 +339,7 @@
                   ↑
                 </button>
                 <button
-                  class="move-button"
+                  class="action-button px-2 py-1 bg-muted border border-border rounded text-sm cursor-pointer transition-all duration-200 hover:bg-border disabled:opacity-50 disabled:cursor-not-allowed"
                   onclick={() => moveDown(index)}
                   disabled={index === rankedItems.length - 1}
                   aria-label="Move down"
@@ -347,7 +347,7 @@
                   ↓
                 </button>
                 <button
-                  class="remove-button"
+                  class="px-2 py-1 bg-muted border border-border rounded text-sm cursor-pointer transition-all duration-200 text-destructive hover:bg-border"
                   onclick={() => removeFromRanking(index)}
                   aria-label="Remove from ranking"
                 >
@@ -359,21 +359,21 @@
         {/each}
 
         {#if rankedItems.length === 0}
-          <div class="empty-message">Drag items here to rank them</div>
+          <div class="text-center p-8 text-muted-foreground text-sm">Drag items here to rank them</div>
         {/if}
       </div>
     </div>
 
-    <div class="divider"></div>
+    <div class="divider h-px bg-border my-8"></div>
 
     <div class="unranked-area">
-      <div class="area-header">
-        <h4>Unranked Items</h4>
-        <span class="count">{unrankedItems.length}</span>
+      <div class="flex justify-between items-center mb-4">
+        <h4 class="m-0 text-base font-semibold text-foreground">Unranked Items</h4>
+        <span class="text-sm text-muted-foreground font-medium">{unrankedItems.length}</span>
       </div>
 
       <div
-        class="unranked-list"
+        class="unranked-list min-h-[200px] bg-muted border-2 border-border rounded-lg p-2 transition-all duration-200"
         ondragover={(e) => handleDragOver(e, 'unranked')}
         ondrop={(e) => handleDrop(e, 'unranked')}
         class:drop-active={dropTarget === 'unranked'}
@@ -382,16 +382,16 @@
         {#each unrankedItems as item, index (item.id)}
           <div
             animate:flip={{ duration: animation ? 250 : 0 }}
-            class="unranked-item"
+            class="flex items-center p-3 mb-2 last:mb-0 bg-card border border-border rounded-md cursor-move transition-all duration-200 hover:border-muted-foreground hover:shadow-sm"
             draggable={!disabled && mode === 'runtime'}
             ondragstart={(e) => handleDragStart(e, item, 'unranked', index)}
             ondragend={handleDragEnd}
             role="listitem"
           >
-            <span class="label">{item.label}</span>
+            <span class="flex-1 text-sm text-foreground">{item.label}</span>
             {#if !disabled && mode === 'runtime'}
               <button
-                class="add-button"
+                class="px-2 py-1 bg-muted border border-border rounded text-sm cursor-pointer transition-all duration-200 text-success font-semibold ml-auto hover:bg-border"
                 onclick={() => addToRanking(index)}
                 aria-label="Add to ranking"
               >
@@ -402,19 +402,19 @@
         {/each}
 
         {#if unrankedItems.length === 0}
-          <div class="empty-message">All items have been ranked</div>
+          <div class="text-center p-8 text-muted-foreground text-sm">All items have been ranked</div>
         {/if}
       </div>
     </div>
 
     {#if !disabled && mode === 'runtime'}
-      <div class="ranking-footer">
-        <button class="reset-button" onclick={resetRanking} disabled={rankedItems.length === 0}>
+      <div class="mt-4 flex justify-between items-center">
+        <button class="reset-button px-4 py-2 bg-card border border-border rounded-md text-sm cursor-pointer transition-all duration-200 hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed" onclick={resetRanking} disabled={rankedItems.length === 0}>
           Reset Ranking
         </button>
 
         {#if !allowPartial}
-          <span class="requirement">All items must be ranked</span>
+          <span class="text-sm text-warning font-medium">All items must be ranked</span>
         {/if}
       </div>
     {/if}
@@ -422,10 +422,6 @@
 </BaseQuestion>
 
 <style>
-  .ranking-container {
-    width: 100%;
-  }
-
   .ranking-container.horizontal {
     display: flex;
     gap: 2rem;
@@ -440,176 +436,16 @@
     display: none;
   }
 
-  .area-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-  }
-
-  .area-header h4 {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-  }
-
-  .count {
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-    font-weight: 500;
-  }
-
-  .ranked-list,
-  .unranked-list {
-    min-height: 200px;
-    background: hsl(var(--muted));
-    border: 2px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    padding: 0.5rem;
-    transition: all 0.2s;
-  }
-
   .ranked-list.drop-active,
   .unranked-list.drop-active {
     border-color: hsl(var(--primary));
     background: hsl(var(--primary) / 0.1);
   }
 
-  .ranked-item,
-  .unranked-item {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem;
-    margin-bottom: 0.5rem;
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    cursor: move;
-    transition: all 0.2s;
-  }
-
-  .ranked-item:last-child,
-  .unranked-item:last-child {
-    margin-bottom: 0;
-  }
-
-  .ranked-item:hover,
-  .unranked-item:hover {
-    border-color: hsl(var(--muted-foreground));
-    box-shadow: 0 2px 4px hsl(var(--foreground) / 0.1);
-  }
-
   .ranked-item.drop-above {
     margin-top: 3rem;
   }
 
-  .rank {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    background: hsl(var(--primary) / 0.2);
-    color: hsl(var(--primary));
-    border-radius: 50%;
-    font-weight: 600;
-    font-size: 0.875rem;
-    margin-right: 1rem;
-    flex-shrink: 0;
-  }
-
-  .label {
-    flex: 1;
-    font-size: 0.875rem;
-    color: hsl(var(--foreground));
-  }
-
-  .actions {
-    display: flex;
-    gap: 0.25rem;
-    margin-left: 1rem;
-  }
-
-  .move-button,
-  .remove-button,
-  .add-button {
-    padding: 0.25rem 0.5rem;
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.25rem;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .move-button:hover:not(:disabled),
-  .remove-button:hover,
-  .add-button:hover {
-    background: hsl(var(--border));
-  }
-
-  .move-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .remove-button {
-    color: hsl(var(--destructive));
-  }
-
-  .add-button {
-    color: hsl(var(--success));
-    font-weight: 600;
-    margin-left: auto;
-  }
-
-  .empty-message {
-    text-align: center;
-    padding: 2rem;
-    color: hsl(var(--muted-foreground));
-    font-size: 0.875rem;
-  }
-
-  .divider {
-    height: 1px;
-    background: hsl(var(--border));
-    margin: 2rem 0;
-  }
-
-  .ranking-footer {
-    margin-top: 1rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .reset-button {
-    padding: 0.5rem 1rem;
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .reset-button:hover:not(:disabled) {
-    background: hsl(var(--muted));
-  }
-
-  .reset-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .requirement {
-    font-size: 0.875rem;
-    color: hsl(var(--warning));
-    font-weight: 500;
-  }
-
-  /* Responsive */
   @media (max-width: 768px) {
     .ranking-container.horizontal {
       flex-direction: column;

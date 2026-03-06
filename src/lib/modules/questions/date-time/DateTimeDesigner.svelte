@@ -120,14 +120,14 @@
     {#if question.config.mode === 'time' || question.config.mode === 'datetime'}
       <div class="form-group">
         <label for="time-step">Time Step (minutes)</label>
-        <select id="time-step" bind:value={question.config.timeStep} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
+        <Select id="time-step" bind:value={question.config.timeStep}>
           <option value={1}>1 minute</option>
           <option value={5}>5 minutes</option>
           <option value={10}>10 minutes</option>
           <option value={15}>15 minutes</option>
           <option value={30}>30 minutes</option>
           <option value={60}>1 hour</option>
-        </select>
+        </Select>
       </div>
     {/if}
   </div>

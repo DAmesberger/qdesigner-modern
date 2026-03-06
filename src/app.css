@@ -97,6 +97,15 @@
   }
 }
 
+/* Focus-visible indicators for WCAG 2.1 AA compliance */
+@layer base {
+  button:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
 /* Fix autofill styling for dark mode */
 @layer base {
   input:-webkit-autofill,

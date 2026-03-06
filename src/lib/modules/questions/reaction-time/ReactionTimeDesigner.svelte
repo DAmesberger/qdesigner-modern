@@ -510,12 +510,12 @@
   }
 </script>
 
-<div class="designer-panel">
+<div class="p-6 flex flex-col gap-6">
   <!-- Task Selection -->
   <div class="section">
-    <h4 class="section-title">Task Mode</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Task Mode</h4>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="task-type">Task Type</label>
       <Select id="task-type" bind:value={question.config.task.type}>
         <option value="standard">Standard Reaction Time</option>
@@ -532,11 +532,11 @@
     </div>
 
     {#if question.config.task.type === 'n-back'}
-      <div class="subsection">
-        <h5 class="subsection-title">N-Back Configuration</h5>
+      <div class="mt-4 pl-4">
+        <h5 class="mb-2 text-sm font-medium text-muted-foreground">N-Back Configuration</h5>
 
-        <div class="form-grid">
-          <div class="form-group">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="mb-4">
             <label for="nback-n">N</label>
             <input
               id="nback-n"
@@ -547,7 +547,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="nback-sequence-length">Sequence Length</label>
             <input
               id="nback-sequence-length"
@@ -558,7 +558,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="nback-target-rate">Target Rate</label>
             <input
               id="nback-target-rate"
@@ -570,7 +570,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="nback-target-key">Target Key</label>
             <input
               id="nback-target-key"
@@ -579,7 +579,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="nback-non-target-key">Non-Target Key</label>
             <input
               id="nback-non-target-key"
@@ -588,7 +588,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="nback-fixation-ms">Fixation (ms)</label>
             <input
               id="nback-fixation-ms"
@@ -600,7 +600,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="nback-timeout-ms">Response Timeout (ms)</label>
             <input
               id="nback-timeout-ms"
@@ -614,9 +614,9 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <span class="label-text">Stimulus Set</span>
-          <div class="key-input">
+        <div class="mb-4">
+          <span class="block mb-1.5 text-sm font-medium text-foreground">Stimulus Set</span>
+          <div class="flex gap-2 mb-2">
             <input
               type="text"
               bind:value={newNBackStimulus}
@@ -628,10 +628,10 @@
               >Add</Button
             >
           </div>
-          <div class="key-list">
+          <div class="flex flex-wrap gap-2 mt-2">
             {#each question.config.task.nBack.stimulusSet || [] as item}
-              <div class="key-item">
-                <span class="key-label">{item}</span>
+              <div class="flex items-center gap-2 px-3 py-1.5 bg-muted border border-border rounded-md">
+                <span class="font-mono text-sm font-medium text-foreground">{item}</span>
                 <button class="remove-btn" onclick={() => removeNBackStimulus(item)}>✕</button>
               </div>
             {/each}
@@ -641,14 +641,14 @@
     {/if}
 
     {#if question.config.task.type === 'stroop'}
-      <div class="subsection">
-        <h5 class="subsection-title">Stroop Configuration</h5>
-        <p class="help-text">
+      <div class="mt-4 pl-4">
+        <h5 class="mb-2 text-sm font-medium text-muted-foreground">Stroop Configuration</h5>
+        <p class="mt-1 text-xs text-muted-foreground">
           Color words displayed in congruent or incongruent ink colors. Participants respond to the ink color, not the word.
         </p>
 
-        <div class="form-grid">
-          <div class="form-group">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="mb-4">
             <label for="stroop-trial-count">Trial Count</label>
             <input
               id="stroop-trial-count"
@@ -659,7 +659,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="stroop-congruent-ratio">Congruent Ratio</label>
             <input
               id="stroop-congruent-ratio"
@@ -671,7 +671,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="stroop-fixation-ms">Fixation (ms)</label>
             <input
               id="stroop-fixation-ms"
@@ -683,7 +683,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="stroop-timeout-ms">Response Timeout (ms)</label>
             <input
               id="stroop-timeout-ms"
@@ -695,7 +695,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="stroop-isi">Inter-Stimulus Interval (ms)</label>
             <input
               id="stroop-isi"
@@ -709,9 +709,9 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <span class="label-text">Colors</span>
-          <div class="key-input">
+        <div class="mb-4">
+          <span class="block mb-1.5 text-sm font-medium text-foreground">Colors</span>
+          <div class="flex gap-2 mb-2">
             <input
               type="text"
               bind:value={newStroopColor}
@@ -721,11 +721,11 @@
             />
             <Button variant="secondary" size="sm" onclick={addStroopColor} disabled={!newStroopColor}>Add</Button>
           </div>
-          <div class="key-list">
+          <div class="flex flex-wrap gap-2 mt-2">
             {#each question.config.task.stroop.colors || [] as color}
-              <div class="key-item">
-                <span class="color-swatch" style="background-color: {color};"></span>
-                <span class="key-label">{color}</span>
+              <div class="flex items-center gap-2 px-3 py-1.5 bg-muted border border-border rounded-md">
+                <span class="inline-block w-3.5 h-3.5 rounded border border-foreground/15 shrink-0" style="background-color: {color};"></span>
+                <span class="font-mono text-sm font-medium text-foreground">{color}</span>
                 <button class="remove-btn" onclick={() => removeStroopColor(color)}>&#10005;</button>
               </div>
             {/each}
@@ -735,14 +735,14 @@
     {/if}
 
     {#if question.config.task.type === 'flanker'}
-      <div class="subsection">
-        <h5 class="subsection-title">Flanker Configuration</h5>
-        <p class="help-text">
+      <div class="mt-4 pl-4">
+        <h5 class="mb-2 text-sm font-medium text-muted-foreground">Flanker Configuration</h5>
+        <p class="mt-1 text-xs text-muted-foreground">
           A central target surrounded by flankers. Congruent: flankers match target. Incongruent: flankers differ.
         </p>
 
-        <div class="form-grid">
-          <div class="form-group">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="mb-4">
             <label for="flanker-trial-count">Trial Count</label>
             <input
               id="flanker-trial-count"
@@ -753,7 +753,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="flanker-congruent-ratio">Congruent Ratio</label>
             <input
               id="flanker-congruent-ratio"
@@ -765,7 +765,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="flanker-count">Flankers per Side</label>
             <input
               id="flanker-count"
@@ -776,7 +776,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="flanker-fixation-ms">Fixation (ms)</label>
             <input
               id="flanker-fixation-ms"
@@ -788,7 +788,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="flanker-timeout-ms">Response Timeout (ms)</label>
             <input
               id="flanker-timeout-ms"
@@ -800,7 +800,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="flanker-isi">Inter-Stimulus Interval (ms)</label>
             <input
               id="flanker-isi"
@@ -814,19 +814,19 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <label class="checkbox-label">
+        <div class="mb-4">
+          <label class="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               bind:checked={question.config.task.flanker.includeNeutral}
-              class="checkbox"
+              class="w-4 h-4 cursor-pointer"
             />
             <span>Include neutral condition (e.g., --&lt;--)</span>
           </label>
         </div>
 
         {#if question.config.task.flanker.includeNeutral}
-          <div class="form-group">
+          <div class="mb-4">
             <label for="flanker-neutral-ratio">Neutral Ratio</label>
             <input
               id="flanker-neutral-ratio"
@@ -840,10 +840,10 @@
           </div>
         {/if}
 
-        <div class="form-group">
-          <span class="label-text">Stimulus Characters</span>
-          <div class="form-grid">
-            <div class="form-group">
+        <div class="mb-4">
+          <span class="block mb-1.5 text-sm font-medium text-foreground">Stimulus Characters</span>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="mb-4">
               <label for="flanker-stim-0">Left Response</label>
               <input
                 id="flanker-stim-0"
@@ -853,7 +853,7 @@
                 class="input"
               />
             </div>
-            <div class="form-group">
+            <div class="mb-4">
               <label for="flanker-stim-1">Right Response</label>
               <input
                 id="flanker-stim-1"
@@ -864,7 +864,7 @@
               />
             </div>
           </div>
-          <p class="help-text">
+          <p class="mt-1 text-xs text-muted-foreground">
             Preview: {question.config.task.flanker.stimulusSet[0].repeat(question.config.task.flanker.flankerCount)}{question.config.task.flanker.stimulusSet[0]}{question.config.task.flanker.stimulusSet[0].repeat(question.config.task.flanker.flankerCount)} (congruent) |
             {question.config.task.flanker.stimulusSet[1].repeat(question.config.task.flanker.flankerCount)}{question.config.task.flanker.stimulusSet[0]}{question.config.task.flanker.stimulusSet[1].repeat(question.config.task.flanker.flankerCount)} (incongruent)
           </p>
@@ -874,52 +874,52 @@
 
     <!-- Stimulus Preview Panel -->
     {#if question.config.task.type === 'stroop' || question.config.task.type === 'flanker'}
-      <div class="subsection">
-        <h5 class="subsection-title">Stimulus Preview</h5>
-        <div class="stimulus-preview-box">
+      <div class="mt-4 pl-4">
+        <h5 class="mb-2 text-sm font-medium text-muted-foreground">Stimulus Preview</h5>
+        <div class="bg-foreground border border-foreground rounded-lg p-5 overflow-hidden">
           {#if question.config.task.type === 'stroop'}
             {@const colors = question.config.task.stroop.colors || []}
             {@const congruent = colors.length >= 1}
-            <div class="stimulus-preview-content">
-              <div class="preview-fixation">+</div>
-              <div class="preview-arrow">&#x2192;</div>
-              <div class="preview-stimuli">
+            <div class="flex items-center gap-4 justify-center">
+              <div class="text-3xl font-bold text-muted-foreground font-mono shrink-0">+</div>
+              <div class="text-xl text-muted-foreground shrink-0">&#x2192;</div>
+              <div class="flex flex-col gap-3">
                 {#if congruent && colors.length >= 2}
-                  <div class="stroop-example">
-                    <span class="stroop-label">Congruent:</span>
+                  <div class="flex items-center gap-3">
+                    <span class="stroop-flanker-label">Congruent:</span>
                     <span class="stroop-word" style="color: {colors[0]}; font-size: 1.5rem; font-weight: 700;">
                       {(colors[0] ?? 'RED').toUpperCase()}
                     </span>
                   </div>
-                  <div class="stroop-example">
-                    <span class="stroop-label">Incongruent:</span>
+                  <div class="flex items-center gap-3">
+                    <span class="stroop-flanker-label">Incongruent:</span>
                     <span class="stroop-word" style="color: {colors[1]}; font-size: 1.5rem; font-weight: 700;">
                       {(colors[0] ?? 'RED').toUpperCase()}
                     </span>
                   </div>
                 {:else}
-                  <span class="preview-placeholder">Add at least 2 colors to see preview</span>
+                  <span class="text-muted-foreground text-[0.8125rem] italic">Add at least 2 colors to see preview</span>
                 {/if}
               </div>
             </div>
           {:else if question.config.task.type === 'flanker'}
             {@const stim = question.config.task.flanker.stimulusSet}
             {@const n = question.config.task.flanker.flankerCount}
-            <div class="stimulus-preview-content">
-              <div class="preview-fixation">+</div>
-              <div class="preview-arrow">&#x2192;</div>
-              <div class="preview-stimuli">
-                <div class="flanker-example">
-                  <span class="flanker-label">Congruent:</span>
+            <div class="flex items-center gap-4 justify-center">
+              <div class="text-3xl font-bold text-muted-foreground font-mono shrink-0">+</div>
+              <div class="text-xl text-muted-foreground shrink-0">&#x2192;</div>
+              <div class="flex flex-col gap-3">
+                <div class="flex items-center gap-3">
+                  <span class="stroop-flanker-label">Congruent:</span>
                   <span class="flanker-display">{stim[0].repeat(n)}{stim[0]}{stim[0].repeat(n)}</span>
                 </div>
-                <div class="flanker-example">
-                  <span class="flanker-label">Incongruent:</span>
+                <div class="flex items-center gap-3">
+                  <span class="stroop-flanker-label">Incongruent:</span>
                   <span class="flanker-display">{stim[1].repeat(n)}{stim[0]}{stim[1].repeat(n)}</span>
                 </div>
                 {#if question.config.task.flanker.includeNeutral}
-                  <div class="flanker-example">
-                    <span class="flanker-label">Neutral:</span>
+                  <div class="flex items-center gap-3">
+                    <span class="stroop-flanker-label">Neutral:</span>
                     <span class="flanker-display">{'-'.repeat(n)}{stim[0]}{'-'.repeat(n)}</span>
                   </div>
                 {/if}
@@ -931,14 +931,14 @@
     {/if}
 
     {#if question.config.task.type === 'iat'}
-      <div class="subsection">
-        <h5 class="subsection-title">IAT Configuration</h5>
-        <p class="help-text">
+      <div class="mt-4 pl-4">
+        <h5 class="mb-2 text-sm font-medium text-muted-foreground">IAT Configuration</h5>
+        <p class="mt-1 text-xs text-muted-foreground">
           Standard 7-block Implicit Association Test. Categories are sorted with E (left) and I (right) keys.
         </p>
 
-        <div class="form-grid">
-          <div class="form-group">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="mb-4">
             <label for="iat-trials-per-block">Trials per Test Block</label>
             <input
               id="iat-trials-per-block"
@@ -949,7 +949,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="iat-practice-trials">Trials per Practice Block</label>
             <input
               id="iat-practice-trials"
@@ -960,7 +960,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="iat-fixation-ms">Fixation (ms)</label>
             <input
               id="iat-fixation-ms"
@@ -972,7 +972,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="iat-timeout-ms">Response Timeout (ms)</label>
             <input
               id="iat-timeout-ms"
@@ -986,10 +986,10 @@
           </div>
         </div>
 
-        <h5 class="subsection-title" style="margin-top: 1rem;">Categories &amp; Attributes</h5>
+        <h5 class="mb-2 text-sm font-medium text-muted-foreground" style="margin-top: 1rem;">Categories &amp; Attributes</h5>
 
-        <div class="form-grid">
-          <div class="form-group">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="mb-4">
             <label for="iat-cat1-name">Category 1 Name</label>
             <input
               id="iat-cat1-name"
@@ -998,7 +998,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="iat-cat2-name">Category 2 Name</label>
             <input
               id="iat-cat2-name"
@@ -1007,7 +1007,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="iat-attr1-name">Attribute 1 Name</label>
             <input
               id="iat-attr1-name"
@@ -1016,7 +1016,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="iat-attr2-name">Attribute 2 Name</label>
             <input
               id="iat-attr2-name"
@@ -1027,9 +1027,9 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <span class="label-text">Add Items</span>
-          <div class="key-input">
+        <div class="mb-4">
+          <span class="block mb-1.5 text-sm font-medium text-foreground">Add Items</span>
+          <div class="flex gap-2 mb-2">
             <Select bind:value={iatItemTarget} class="text-sm">
               <option value="cat1">{question.config.task.iat.category1Name}</option>
               <option value="cat2">{question.config.task.iat.category2Name}</option>
@@ -1053,12 +1053,12 @@
           { label: question.config.task.iat.attribute1Name, key: 'attribute1Items' as const, items: question.config.task.iat.attribute1Items },
           { label: question.config.task.iat.attribute2Name, key: 'attribute2Items' as const, items: question.config.task.iat.attribute2Items },
         ] as group}
-          <div class="form-group">
-            <span class="label-text">{group.label}</span>
-            <div class="key-list">
+          <div class="mb-4">
+            <span class="block mb-1.5 text-sm font-medium text-foreground">{group.label}</span>
+            <div class="flex flex-wrap gap-2 mt-2">
               {#each group.items as item}
-                <div class="key-item">
-                  <span class="key-label">{item}</span>
+                <div class="flex items-center gap-2 px-3 py-1.5 bg-muted border border-border rounded-md">
+                  <span class="font-mono text-sm font-medium text-foreground">{item}</span>
                   <button class="remove-btn" onclick={() => removeIatItem(group.key, item)}>&#10005;</button>
                 </div>
               {/each}
@@ -1069,14 +1069,14 @@
     {/if}
 
     {#if question.config.task.type === 'dot-probe'}
-      <div class="subsection">
-        <h5 class="subsection-title">Dot-Probe Configuration</h5>
-        <p class="help-text">
+      <div class="mt-4 pl-4">
+        <h5 class="mb-2 text-sm font-medium text-muted-foreground">Dot-Probe Configuration</h5>
+        <p class="mt-1 text-xs text-muted-foreground">
           Two stimuli are shown briefly, then a probe replaces one. Congruent = probe at salient location. Measures attentional bias.
         </p>
 
-        <div class="form-grid">
-          <div class="form-group">
+        <div class="grid grid-cols-2 gap-3">
+          <div class="mb-4">
             <label for="dotprobe-trial-count">Trial Count</label>
             <input
               id="dotprobe-trial-count"
@@ -1087,7 +1087,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="dotprobe-congruent-ratio">Congruent Ratio</label>
             <input
               id="dotprobe-congruent-ratio"
@@ -1099,7 +1099,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="dotprobe-cue-duration">Cue Duration (ms)</label>
             <input
               id="dotprobe-cue-duration"
@@ -1111,7 +1111,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="dotprobe-probe-symbol">Probe Symbol</label>
             <input
               id="dotprobe-probe-symbol"
@@ -1121,7 +1121,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="dotprobe-fixation-ms">Fixation (ms)</label>
             <input
               id="dotprobe-fixation-ms"
@@ -1133,7 +1133,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="dotprobe-timeout-ms">Response Timeout (ms)</label>
             <input
               id="dotprobe-timeout-ms"
@@ -1145,7 +1145,7 @@
               class="input"
             />
           </div>
-          <div class="form-group">
+          <div class="mb-4">
             <label for="dotprobe-isi">Inter-Trial Interval (ms)</label>
             <input
               id="dotprobe-isi"
@@ -1159,9 +1159,9 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <span class="label-text">Stimulus Pairs (Salient / Neutral)</span>
-          <div class="key-input">
+        <div class="mb-4">
+          <span class="block mb-1.5 text-sm font-medium text-foreground">Stimulus Pairs (Salient / Neutral)</span>
+          <div class="flex gap-2 mb-2">
             <input
               type="text"
               bind:value={newDotProbeSalient}
@@ -1181,10 +1181,10 @@
               disabled={!newDotProbeSalient || !newDotProbeNeutral}
             >Add</Button>
           </div>
-          <div class="key-list" style="flex-direction: column;">
+          <div class="flex flex-wrap gap-2 mt-2" style="flex-direction: column;">
             {#each question.config.task.dotProbe.stimulusPairs as pair, idx}
-              <div class="key-item" style="width: 100%; justify-content: space-between;">
-                <span class="key-label">{pair.salient} / {pair.neutral}</span>
+              <div class="flex items-center gap-2 px-3 py-1.5 bg-muted border border-border rounded-md" style="width: 100%; justify-content: space-between;">
+                <span class="font-mono text-sm font-medium text-foreground">{pair.salient} / {pair.neutral}</span>
                 <button class="remove-btn" onclick={() => removeDotProbePair(idx)}>&#10005;</button>
               </div>
             {/each}
@@ -1194,9 +1194,9 @@
     {/if}
 
     {#if question.config.study}
-      <div class="subsection">
-        <h5 class="subsection-title">Visual Trial Blocks</h5>
-        <p class="help-text">
+      <div class="mt-4 pl-4">
+        <h5 class="mb-2 text-sm font-medium text-muted-foreground">Visual Trial Blocks</h5>
+        <p class="mt-1 text-xs text-muted-foreground">
           Build fully programmable reaction tasks with visual blocks and trial templates. No JSON is
           required.
         </p>
@@ -1207,9 +1207,9 @@
 
   <!-- Stimulus Configuration -->
   <div class="section">
-    <h4 class="section-title">Stimulus Settings</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Stimulus Settings</h4>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="stimulus-type">Stimulus Type</label>
       <Select
         id="stimulus-type"
@@ -1225,7 +1225,7 @@
     </div>
 
     {#if question.config.stimulus.type === 'shape'}
-      <div class="form-group">
+      <div class="mb-4">
         <label for="stimulus-content">Shape Type</label>
         <Select id="stimulus-content" bind:value={question.config.stimulus.content}>
           <option value="circle">Circle</option>
@@ -1233,7 +1233,7 @@
         </Select>
       </div>
     {:else if question.config.stimulus.type === 'text'}
-      <div class="form-group">
+      <div class="mb-4">
         <label for="stimulus-content">Text to Display</label>
         <input
           id="stimulus-content"
@@ -1245,46 +1245,46 @@
       </div>
     {:else if stimulusUsesMedia}
       <!-- Media stimulus: Image, Video, or Audio -->
-      <div class="form-group">
-        <span class="label-text">
+      <div class="mb-4">
+        <span class="block mb-1.5 text-sm font-medium text-foreground">
           {question.config.stimulus.type === 'image' ? 'Image' : question.config.stimulus.type === 'video' ? 'Video' : 'Audio'} Stimulus
         </span>
 
         {#if question.config.stimulus.mediaRef}
           <!-- Media preview card -->
-          <div class="media-preview-card">
+          <div class="flex items-center gap-3 p-3 bg-muted border border-border rounded-lg">
             {#if question.config.stimulus.type === 'image' && mediaThumbnailUrl}
-              <div class="media-thumbnail">
+              <div class="w-16 h-16 shrink-0 rounded-md overflow-hidden bg-border">
                 <img
                   src={mediaThumbnailUrl}
                   alt={question.config.stimulus.mediaRef.filename || 'Stimulus image'}
-                  class="media-thumbnail-img"
+                  class="w-full h-full object-cover"
                 />
               </div>
             {:else if question.config.stimulus.type === 'video'}
-              <div class="media-thumbnail media-icon-container">
-                <svg class="media-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div class="w-16 h-16 shrink-0 rounded-md overflow-hidden bg-border flex items-center justify-center">
+                <svg class="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
               </div>
             {:else if question.config.stimulus.type === 'audio'}
-              <div class="media-thumbnail media-icon-container">
-                <svg class="media-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div class="w-16 h-16 shrink-0 rounded-md overflow-hidden bg-border flex items-center justify-center">
+                <svg class="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                 </svg>
               </div>
             {/if}
 
-            <div class="media-info">
-              <span class="media-filename">{question.config.stimulus.mediaRef.filename || 'Media file'}</span>
+            <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+              <span class="text-sm font-medium text-foreground whitespace-nowrap overflow-hidden text-ellipsis">{question.config.stimulus.mediaRef.filename || 'Media file'}</span>
               {#if question.config.stimulus.mediaRef.mimeType}
-                <span class="media-meta">{question.config.stimulus.mediaRef.mimeType}</span>
+                <span class="text-xs text-muted-foreground">{question.config.stimulus.mediaRef.mimeType}</span>
               {/if}
               {#if question.config.stimulus.mediaRef.width && question.config.stimulus.mediaRef.height}
-                <span class="media-meta">{question.config.stimulus.mediaRef.width} x {question.config.stimulus.mediaRef.height}</span>
+                <span class="text-xs text-muted-foreground">{question.config.stimulus.mediaRef.width} x {question.config.stimulus.mediaRef.height}</span>
               {/if}
               {#if question.config.stimulus.mediaRef.durationSeconds}
-                <span class="media-meta">{question.config.stimulus.mediaRef.durationSeconds.toFixed(1)}s</span>
+                <span class="text-xs text-muted-foreground">{question.config.stimulus.mediaRef.durationSeconds.toFixed(1)}s</span>
               {/if}
             </div>
 
@@ -1296,7 +1296,7 @@
           </div>
         {:else}
           <!-- No media selected - show select button and manual URL option -->
-          <div class="media-select-area">
+          <div class="flex flex-col gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -1325,11 +1325,11 @@
       </div>
     {/if}
 
-    <div class="subsection">
-      <h5 class="subsection-title">Fixation Settings</h5>
+    <div class="mt-4 pl-4">
+      <h5 class="mb-2 text-sm font-medium text-muted-foreground">Fixation Settings</h5>
 
       {#if question.config.stimulus.fixation}
-        <div class="form-group">
+        <div class="mb-4">
           <label for="fixation-type">Fixation Type</label>
           <Select
             id="fixation-type"
@@ -1340,7 +1340,7 @@
           </Select>
         </div>
 
-        <div class="form-group">
+        <div class="mb-4">
           <label for="fixation-duration">Fixation Duration (ms)</label>
           <input
             id="fixation-duration"
@@ -1358,13 +1358,13 @@
 
   <!-- Response Configuration -->
   <div class="section">
-    <h4 class="section-title">Response Settings</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Response Settings</h4>
 
-    <div class="form-group">
-      <span class="label-text">Valid Response Keys</span>
+    <div class="mb-4">
+      <span class="block mb-1.5 text-sm font-medium text-foreground">Valid Response Keys</span>
 
       <!-- Key input -->
-      <div class="key-input">
+      <div class="flex gap-2 mb-2">
         <input
           type="text"
           bind:value={newKey}
@@ -1376,7 +1376,7 @@
       </div>
 
       <!-- Key presets -->
-      <div class="preset-selector">
+      <div class="flex gap-2 mb-2">
         <Select bind:value={selectedKeyPreset} class="text-sm">
           <option value="">Select preset...</option>
           {#each keyPresets as preset}
@@ -1395,10 +1395,10 @@
 
       <!-- Key list -->
       {#if question.config.response.validKeys.length}
-        <div class="key-list">
+        <div class="flex flex-wrap gap-2 mt-2">
           {#each question.config.response.validKeys as key}
-            <div class="key-item">
-              <span class="key-label">{key === ' ' ? 'SPACE' : key.toUpperCase()}</span>
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-muted border border-border rounded-md">
+              <span class="font-mono text-sm font-medium text-foreground">{key === ' ' ? 'SPACE' : key.toUpperCase()}</span>
               <button class="remove-btn" onclick={() => removeKey(key)} aria-label="Remove key">
                 ✕
               </button>
@@ -1408,7 +1408,7 @@
       {/if}
     </div>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="response-timeout">Response Timeout (ms)</label>
       <input
         id="response-timeout"
@@ -1419,22 +1419,22 @@
         step="100"
         class="input"
       />
-      <p class="help-text">Time allowed for participant to respond (0 = no timeout)</p>
+      <p class="mt-1 text-xs text-muted-foreground">Time allowed for participant to respond (0 = no timeout)</p>
     </div>
 
-    <div class="form-group">
-      <label class="checkbox-label">
+    <div class="mb-4">
+      <label class="flex items-center gap-2 cursor-pointer">
         <input
           type="checkbox"
           bind:checked={question.config.response.requireCorrect}
-          class="checkbox"
+          class="w-4 h-4 cursor-pointer"
         />
         <span>Require correct response</span>
       </label>
     </div>
 
     {#if question.config.response.requireCorrect}
-      <div class="form-group">
+      <div class="mb-4">
         <label for="correct-key">Correct Response Key</label>
         <Select id="correct-key" bind:value={question.config.correctKey}>
           <option value="">Select correct key...</option>
@@ -1448,17 +1448,17 @@
 
   <!-- Trial Configuration -->
   <div class="section">
-    <h4 class="section-title">Trial Configuration</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Trial Configuration</h4>
 
-    <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.practice} class="checkbox" />
+    <div class="mb-4">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" bind:checked={question.config.practice} class="w-4 h-4 cursor-pointer" />
         <span>Include practice trials</span>
       </label>
     </div>
 
     {#if question.config.practice}
-      <div class="form-group">
+      <div class="mb-4">
         <label for="practice-trials">Number of Practice Trials</label>
         <input
           id="practice-trials"
@@ -1472,7 +1472,7 @@
     {/if}
 
     {#if question.config.task.type === 'standard' || question.config.task.type === 'custom'}
-      <div class="form-group">
+      <div class="mb-4">
         <label for="test-trials">Number of Test Trials</label>
         <input
           id="test-trials"
@@ -1485,9 +1485,9 @@
       </div>
     {/if}
 
-    <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.feedback} class="checkbox" />
+    <div class="mb-4">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" bind:checked={question.config.feedback} class="w-4 h-4 cursor-pointer" />
         <span>Show feedback after each response</span>
       </label>
     </div>
@@ -1495,23 +1495,23 @@
 
   <!-- Performance Settings -->
   <div class="section">
-    <h4 class="section-title">Performance Settings</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Performance Settings</h4>
 
-    <div class="form-group">
+    <div class="mb-4">
       <label for="target-fps">Target FPS</label>
-      <select id="target-fps" bind:value={question.config.targetFPS} class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6">
+      <Select id="target-fps" bind:value={question.config.targetFPS}>
         <option value={30}>30 FPS</option>
         <option value={60}>60 FPS</option>
         <option value={120}>120 FPS</option>
         <option value={144}>144 FPS</option>
-      </select>
-      <p class="help-text">Higher FPS provides more precise timing measurements</p>
+      </Select>
+      <p class="mt-1 text-xs text-muted-foreground">Higher FPS provides more precise timing measurements</p>
     </div>
 
     <!-- Timing presets -->
-    <div class="form-group">
-      <span class="label-text">Timing Presets</span>
-      <div class="preset-selector">
+    <div class="mb-4">
+      <span class="block mb-1.5 text-sm font-medium text-foreground">Timing Presets</span>
+      <div class="flex gap-2 mb-2">
         <Select bind:value={selectedTimingPreset}>
           <option value="">Select preset...</option>
           {#each timingPresets as preset}
@@ -1534,17 +1534,17 @@
 
   <!-- Preview -->
   <div class="section">
-    <h4 class="section-title">Configuration Summary</h4>
-    <div class="preview-box">
-      <div class="preview-content">
-        <div class="preview-item">
-          <span class="preview-label">Task:</span>
-          <span class="preview-value">{question.config.task.type}</span>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Configuration Summary</h4>
+    <div class="bg-muted border border-border rounded-lg p-4">
+      <div class="grid gap-2">
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-muted-foreground">Task:</span>
+          <span class="font-medium text-foreground text-right">{question.config.task.type}</span>
         </div>
 
-        <div class="preview-item">
-          <span class="preview-label">Stimulus:</span>
-          <span class="preview-value">
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-muted-foreground">Stimulus:</span>
+          <span class="font-medium text-foreground text-right">
             {question.config.stimulus.type}
             {#if question.config.stimulus.type === 'shape'}
               ({question.config.stimulus.content})
@@ -1556,31 +1556,31 @@
           </span>
         </div>
 
-        <div class="preview-item">
-          <span class="preview-label">Fixation:</span>
-          <span class="preview-value">
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-muted-foreground">Fixation:</span>
+          <span class="font-medium text-foreground text-right">
             {question.config.stimulus.fixation?.type} for {question.config.stimulus.fixation
               ?.duration}ms
           </span>
         </div>
 
-        <div class="preview-item">
-          <span class="preview-label">Valid Keys:</span>
-          <span class="preview-value">
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-muted-foreground">Valid Keys:</span>
+          <span class="font-medium text-foreground text-right">
             {question.config.response.validKeys
               .map((k) => (k === ' ' ? 'SPACE' : k.toUpperCase()))
               .join(', ')}
           </span>
         </div>
 
-        <div class="preview-item">
-          <span class="preview-label">Timeout:</span>
-          <span class="preview-value">{question.config.response.timeout}ms</span>
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-muted-foreground">Timeout:</span>
+          <span class="font-medium text-foreground text-right">{question.config.response.timeout}ms</span>
         </div>
 
-        <div class="preview-item">
-          <span class="preview-label">Trials:</span>
-          <span class="preview-value">
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-muted-foreground">Trials:</span>
+          <span class="font-medium text-foreground text-right">
             {#if question.config.task.type === 'n-back'}
               {question.config.practice ? `${question.config.practiceTrials} practice + ` : ''}
               {question.config.task.nBack.sequenceLength} n-back
@@ -1610,9 +1610,9 @@
           </span>
         </div>
 
-        <div class="preview-item">
-          <span class="preview-label">Features:</span>
-          <span class="preview-value">
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-muted-foreground">Features:</span>
+          <span class="font-medium text-foreground text-right">
             {[
               question.config.feedback && 'Feedback',
               question.config.response.requireCorrect && 'Accuracy tracking',
@@ -1637,25 +1637,6 @@
 />
 
 <style>
-  .designer-panel {
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  .form-group {
-    margin-bottom: 1rem;
-  }
-
-  .label-text {
-    display: block;
-    margin-bottom: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: hsl(var(--foreground));
-  }
-
   .input {
     width: 100%;
     padding: 0.5rem 0.75rem;
@@ -1676,19 +1657,6 @@
     box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
-  .checkbox {
-    width: 1rem;
-    height: 1rem;
-    cursor: pointer;
-  }
-
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
@@ -1699,80 +1667,6 @@
     margin-top: 0;
     padding-top: 0;
     border-top: none;
-  }
-
-  .section-title {
-    margin: 0 0 1rem 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .subsection {
-    margin-top: 1rem;
-    padding-left: 1rem;
-  }
-
-  .form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-  }
-
-  .subsection-title {
-    margin: 0 0 0.5rem 0;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .help-text {
-    margin-top: 0.25rem;
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  /* Key management */
-  .key-input {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .key-input .input {
-    flex: 1;
-  }
-
-  .preset-selector {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .key-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-  }
-
-  .key-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.375rem 0.75rem;
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-  }
-
-  .key-label {
-    font-family: monospace;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: hsl(var(--foreground));
   }
 
   .remove-btn {
@@ -1786,76 +1680,6 @@
 
   .remove-btn:hover {
     color: hsl(var(--destructive));
-  }
-
-  .color-swatch {
-    display: inline-block;
-    width: 0.875rem;
-    height: 0.875rem;
-    border-radius: 0.25rem;
-    border: 1px solid hsl(var(--foreground) / 0.15);
-    flex-shrink: 0;
-  }
-
-
-  /* Media picker */
-  .media-preview-card {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
-  }
-
-  .media-thumbnail {
-    width: 4rem;
-    height: 4rem;
-    flex-shrink: 0;
-    border-radius: 0.375rem;
-    overflow: hidden;
-    background: hsl(var(--border));
-  }
-
-  .media-thumbnail-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .media-icon-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .media-icon {
-    width: 2rem;
-    height: 2rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .media-info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
-  }
-
-  .media-filename {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: hsl(var(--foreground));
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .media-meta {
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
   }
 
   .remove-media-btn {
@@ -1874,13 +1698,6 @@
     background: hsl(var(--destructive) / 0.1);
   }
 
-  .media-select-area {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-
   .media-url-divider {
     display: flex;
     align-items: center;
@@ -1897,87 +1714,7 @@
     background: hsl(var(--border));
   }
 
-  /* Preview */
-  .preview-box {
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    padding: 1rem;
-  }
-
-  .preview-content {
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  .preview-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.875rem;
-  }
-
-  .preview-label {
-    color: hsl(var(--muted-foreground));
-  }
-
-  .preview-value {
-    font-weight: 500;
-    color: hsl(var(--foreground));
-    text-align: right;
-  }
-
-  /* Stimulus Preview */
-  .stimulus-preview-box {
-    background: hsl(var(--foreground));
-    border: 1px solid hsl(var(--foreground));
-    border-radius: 0.5rem;
-    padding: 1.25rem;
-    overflow: hidden;
-  }
-
-  .stimulus-preview-content {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    justify-content: center;
-  }
-
-  .preview-fixation {
-    font-size: 2rem;
-    font-weight: 700;
-    color: hsl(var(--muted-foreground));
-    font-family: monospace;
-    flex-shrink: 0;
-  }
-
-  .preview-arrow {
-    font-size: 1.25rem;
-    color: hsl(var(--muted-foreground));
-    flex-shrink: 0;
-  }
-
-  .preview-stimuli {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .preview-placeholder {
-    color: hsl(var(--muted-foreground));
-    font-size: 0.8125rem;
-    font-style: italic;
-  }
-
-  .stroop-example,
-  .flanker-example {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .stroop-label,
-  .flanker-label {
+  .stroop-flanker-label {
     font-size: 0.6875rem;
     color: hsl(var(--muted-foreground));
     text-transform: uppercase;

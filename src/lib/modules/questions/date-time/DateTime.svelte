@@ -292,10 +292,10 @@
 </script>
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
-  <div class="datetime-container">
-    <div class="input-group">
+  <div class="datetime-container w-full relative">
+    <div class="input-group flex gap-4 items-center flex-wrap max-sm:flex-col max-sm:items-stretch">
       {#if inputMode === 'date' || inputMode === 'datetime'}
-        <div class="input-wrapper">
+        <div class="relative flex items-center gap-2 max-sm:w-full">
           <input
             type="date"
             bind:value={dateValue}
@@ -303,14 +303,14 @@
             min={config.minDate}
             max={config.maxDate}
             {disabled}
-            class="date-input"
+            class="date-input py-3 px-4 border-2 border-border rounded-lg text-base font-[inherit] bg-background transition-all duration-200 focus:outline-none focus:border-primary focus:ring-3 focus:ring-primary/10 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed max-sm:w-full"
           />
           {#if showCalendar}
             <button
               type="button"
               onclick={toggleCalendar}
               {disabled}
-              class="calendar-button"
+              class="p-2 bg-muted border-2 border-border rounded-md text-xl cursor-pointer transition-all duration-200 hover:not-disabled:bg-border disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label="Open calendar"
             >
               📅
@@ -320,14 +320,14 @@
       {/if}
 
       {#if inputMode === 'time' || inputMode === 'datetime'}
-        <div class="input-wrapper">
+        <div class="relative flex items-center gap-2 max-sm:w-full">
           <input
             type="time"
             bind:value={timeValue}
             oninput={handleTimeInput}
             step={config.timeStep ? config.timeStep * 60 : undefined}
             {disabled}
-            class="time-input"
+            class="time-input py-3 px-4 border-2 border-border rounded-lg text-base font-[inherit] bg-background transition-all duration-200 focus:outline-none focus:border-primary focus:ring-3 focus:ring-primary/10 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed max-sm:w-full"
           />
         </div>
       {/if}
@@ -335,33 +335,33 @@
 
     {#if showDatePicker && showCalendar && (inputMode === 'date' || inputMode === 'datetime')}
       <div
-        class="calendar-dropdown"
+        class="absolute top-full left-0 mt-2 bg-[hsl(var(--card))] border-2 border-border rounded-lg shadow-md z-10 p-4 max-sm:left-1/2 max-sm:-translate-x-1/2"
         onclick={(e) => e.stopPropagation()}
         role="dialog"
         tabindex="-1"
         onkeydown={(e) => e.key === 'Escape' && (showDatePicker = false)}
       >
-        <div class="calendar-header">
+        <div class="flex justify-between items-center mb-4">
           <button
             type="button"
             onclick={previousMonth}
-            class="nav-button"
+            class="py-1 px-2 bg-transparent border-none text-2xl cursor-pointer text-muted-foreground transition-colors duration-200 hover:text-foreground"
             aria-label="Previous month"
           >
             ‹
           </button>
-          <span class="month-year">
+          <span class="font-semibold text-foreground">
             {monthNames[currentMonth.getMonth()]}
             {currentMonth.getFullYear()}
           </span>
-          <button type="button" onclick={nextMonth} class="nav-button" aria-label="Next month">
+          <button type="button" onclick={nextMonth} class="py-1 px-2 bg-transparent border-none text-2xl cursor-pointer text-muted-foreground transition-colors duration-200 hover:text-foreground" aria-label="Next month">
             ›
           </button>
         </div>
 
-        <div class="calendar-grid">
+        <div class="grid grid-cols-7 gap-1">
           {#each weekDays as day}
-            <div class="weekday">{day}</div>
+            <div class="p-2 text-center text-xs font-semibold text-muted-foreground">{day}</div>
           {/each}
 
           {#each getDaysInMonth(currentMonth) as date}
@@ -381,11 +381,11 @@
         </div>
 
         {#if config.defaultToToday}
-          <div class="calendar-footer">
+          <div class="mt-3 pt-3 border-t border-border text-center">
             <button
               type="button"
               onclick={() => selectDate(new Date())}
-              class="today-button"
+              class="py-1.5 px-3 bg-muted border border-border rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:not-disabled:bg-border disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isDisabled(new Date())}
             >
               Today
@@ -396,7 +396,7 @@
     {/if}
 
     {#if selectedDate && format !== 'YYYY-MM-DD' && format !== 'HH:mm'}
-      <div class="formatted-value">
+      <div class="mt-2 py-2 px-3 bg-muted rounded-md text-sm text-muted-foreground font-mono">
         {formatDate(selectedDate, format)}
       </div>
     {/if}
@@ -404,130 +404,7 @@
 </BaseQuestion>
 
 <style>
-  .datetime-container {
-    width: 100%;
-    position: relative;
-  }
-
-  .input-group {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .input-wrapper {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .date-input,
-  .time-input {
-    padding: 0.75rem 1rem;
-    border: 2px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    font-size: 1rem;
-    font-family: inherit;
-    background: hsl(var(--background));
-    transition: all 0.2s;
-  }
-
-  .date-input:hover:not(:disabled),
-  .time-input:hover:not(:disabled) {
-    border-color: hsl(var(--border));
-  }
-
-  .date-input:focus,
-  .time-input:focus {
-    outline: none;
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
-  }
-
-  .date-input:disabled,
-  .time-input:disabled {
-    background: hsl(var(--muted));
-    color: hsl(var(--muted-foreground));
-    cursor: not-allowed;
-  }
-
-  /* Calendar button */
-  .calendar-button {
-    padding: 0.5rem;
-    background: hsl(var(--muted));
-    border: 2px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    font-size: 1.25rem;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .calendar-button:hover:not(:disabled) {
-    background: hsl(var(--border));
-    border-color: hsl(var(--border));
-  }
-
-  .calendar-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  /* Calendar dropdown */
-  .calendar-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    margin-top: 0.5rem;
-    background: hsl(var(--card));
-    border: 2px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    box-shadow: 0 4px 6px hsl(var(--foreground) / 0.1);
-    z-index: 10;
-    padding: 1rem;
-  }
-
-  .calendar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-  }
-
-  .nav-button {
-    padding: 0.25rem 0.5rem;
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: hsl(var(--muted-foreground));
-    transition: color 0.2s;
-  }
-
-  .nav-button:hover {
-    color: hsl(var(--foreground));
-  }
-
-  .month-year {
-    font-weight: 600;
-    color: hsl(var(--foreground));
-  }
-
-  .calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 0.25rem;
-  }
-
-  .weekday {
-    padding: 0.5rem;
-    text-align: center;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: hsl(var(--muted-foreground));
-  }
-
+  /* Calendar day — .selected, .today, .other-month, .disabled, :hover */
   .calendar-day {
     padding: 0.5rem;
     background: none;
@@ -565,65 +442,5 @@
 
   .calendar-day.disabled:hover {
     background: none;
-  }
-
-  .calendar-footer {
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid hsl(var(--border));
-    text-align: center;
-  }
-
-  .today-button {
-    padding: 0.375rem 0.75rem;
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.25rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .today-button:hover:not(:disabled) {
-    background: hsl(var(--border));
-  }
-
-  .today-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  /* Formatted value display */
-  .formatted-value {
-    margin-top: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    background: hsl(var(--muted));
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-  }
-
-  /* Responsive */
-  @media (max-width: 640px) {
-    .input-group {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .input-wrapper {
-      width: 100%;
-    }
-
-    .date-input,
-    .time-input {
-      width: 100%;
-    }
-
-    .calendar-dropdown {
-      left: 50%;
-      transform: translateX(-50%);
-    }
   }
 </style>

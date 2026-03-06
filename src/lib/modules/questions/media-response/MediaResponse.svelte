@@ -504,14 +504,14 @@
 
     <!-- Idle state: start button -->
     {#if phase === 'idle'}
-      <div class="idle-panel">
+      <div class="flex flex-col items-center gap-3 px-6 py-10 border-2 border-dashed border-border rounded-xl bg-muted text-center max-sm:px-4 max-sm:py-6">
         <button
           type="button"
           class="record-start-btn"
           onclick={startRecording}
           {disabled}
         >
-          <span class="record-dot"></span>
+          <span class="inline-block w-3 h-3 bg-background rounded-full shrink-0"></span>
           {#if isAudioOnly}
             Record Audio
           {:else if recordingMode === 'video-audio'}
@@ -520,7 +520,7 @@
             Record Video (No Audio)
           {/if}
         </button>
-        <p class="m-0 text-[0.8125rem] text-[hsl(var(--muted-foreground))]">
+        <p class="m-0 text-[0.8125rem] text-muted-foreground">
           Max duration: {formattedMaxDuration()}
           {#if maxFileSize}
             &middot; Max size: {formatBytes(maxFileSize)}
@@ -531,9 +531,9 @@
 
     <!-- Requesting permission -->
     {#if phase === 'requesting'}
-      <div class="flex flex-col items-center gap-4 px-6 py-10 border-2 border-dashed border-[hsl(var(--border))] rounded-xl bg-[hsl(var(--muted))]">
+      <div class="flex flex-col items-center gap-4 px-6 py-10 border-2 border-dashed border-border rounded-xl bg-muted">
         <div class="spinner"></div>
-        <p class="m-0 text-[hsl(var(--muted-foreground))] text-[0.9375rem]">
+        <p class="m-0 text-muted-foreground text-[0.9375rem]">
           Requesting {hasVideo ? 'camera' : 'microphone'} access...
         </p>
       </div>
@@ -541,7 +541,7 @@
 
     <!-- Countdown -->
     {#if phase === 'countdown'}
-      <div class="countdown-panel">
+      <div class="relative rounded-xl overflow-hidden bg-foreground min-h-[200px] flex items-center justify-center">
         {#if hasVideo && videoPreviewEl}
           <!-- video preview is visible behind -->
         {/if}
@@ -552,7 +552,7 @@
         {#if hasVideo}
           <video
             bind:this={videoPreviewEl}
-            class="video-preview"
+            class="countdown-video-preview"
             playsinline
             muted
           ></video>
@@ -562,19 +562,19 @@
 
     <!-- Recording state -->
     {#if phase === 'recording'}
-      <div class="recording-panel">
+      <div class="flex flex-col gap-4 border-2 border-destructive rounded-xl overflow-hidden bg-destructive/10">
         <!-- Video preview -->
         {#if hasVideo}
-          <div class="video-preview-wrapper">
+          <div class="relative bg-foreground">
             <video
               bind:this={videoPreviewEl}
-              class="video-preview"
+              class="w-full max-h-[400px] object-cover block"
               playsinline
               muted
             ></video>
-            <div class="recording-indicator">
+            <div class="absolute top-3 left-3 flex items-center gap-1.5 py-1 px-2.5 bg-destructive/90 rounded z-[1]">
               <span class="recording-dot-animated"></span>
-              <span class="recording-label">REC</span>
+              <span class="text-[0.6875rem] font-bold text-background uppercase tracking-wide">REC</span>
             </div>
           </div>
         {/if}
@@ -582,13 +582,13 @@
         <!-- Audio waveform (audio-only mode) -->
         {#if isAudioOnly}
           <div class="flex flex-col gap-2.5 px-4 pt-4 items-start">
-            <div class="recording-indicator recording-indicator-inline">
+            <div class="inline-flex items-center gap-1.5 py-1 px-2.5 bg-destructive rounded self-start">
               <span class="recording-dot-animated"></span>
-              <span class="recording-label">Recording</span>
+              <span class="text-[0.6875rem] font-bold text-background uppercase tracking-wide">Recording</span>
             </div>
             <canvas
               bind:this={waveformCanvas}
-              class="waveform-canvas"
+              class="w-full h-20 rounded-md bg-foreground max-sm:h-[60px]"
               width="400"
               height="80"
             ></canvas>
@@ -597,22 +597,22 @@
 
         <!-- Timer and controls -->
         <div class="flex flex-col items-center gap-3 px-4 pb-4">
-          <div class="timer">
-            <span class="timer-current">{formattedTime()}</span>
-            <span class="mx-1 text-[hsl(var(--muted-foreground))]">/</span>
-            <span class="text-[hsl(var(--muted-foreground))]">{formattedMaxDuration()}</span>
+          <div class="font-mono text-xl font-semibold text-foreground max-sm:text-base">
+            <span class="text-destructive">{formattedTime()}</span>
+            <span class="mx-1 text-muted-foreground">/</span>
+            <span class="text-muted-foreground">{formattedMaxDuration()}</span>
           </div>
 
-          <div class="progress-bar">
-            <div class="progress-fill" style="width: {progressPercent}%"></div>
+          <div class="w-full h-1 bg-border rounded-sm overflow-hidden">
+            <div class="h-full bg-destructive transition-[width] duration-1000 ease-linear rounded-sm" style="width: {progressPercent}%"></div>
           </div>
 
           <button
             type="button"
-            class="stop-btn"
+            class="inline-flex items-center gap-2 px-5 py-2.5 bg-foreground text-background border-none rounded-lg text-[0.9375rem] font-semibold cursor-pointer transition-[background] duration-200 hover:opacity-85"
             onclick={stopRecording}
           >
-            <span class="stop-square"></span>
+            <span class="inline-block w-3 h-3 bg-background rounded-sm shrink-0"></span>
             Stop Recording
           </button>
         </div>
@@ -621,12 +621,12 @@
 
     <!-- Recorded / Playback state -->
     {#if phase === 'recorded'}
-      <div class="playback-panel">
+      <div class="playback-panel flex flex-col gap-4 border border-border rounded-xl overflow-hidden bg-[hsl(var(--card))]">
         {#if hasVideo}
           <!-- svelte-ignore a11y_media_has_caption -->
           <video
             bind:this={videoPlaybackEl}
-            class="video-playback"
+            class="w-full max-h-[400px] bg-foreground block"
             src={recordedUrl}
             controls
             playsinline
@@ -650,15 +650,15 @@
           </div>
         {/if}
 
-        <div class="flex items-center justify-center gap-2 px-4 py-2 text-[0.8125rem] text-[hsl(var(--muted-foreground))]">
+        <div class="flex items-center justify-center gap-2 px-4 py-2 text-[0.8125rem] text-muted-foreground">
           <span>Duration: {formattedTime()}</span>
-          <span class="text-[hsl(var(--border))]">&middot;</span>
+          <span class="text-border">&middot;</span>
           <span>Size: {recordedBlob ? formatBytes(recordedBlob.size) : '---'}</span>
         </div>
 
         {#if blobSizeWarning}
-          <div class="blob-size-warning">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <div class="flex items-start gap-2 mx-4 px-3.5 py-2.5 bg-[hsl(var(--warning)/0.1)] border border-[hsl(var(--warning)/0.5)] rounded-md text-[0.8125rem] text-[hsl(var(--warning))] leading-relaxed">
+            <svg class="shrink-0 mt-0.5 text-[hsl(var(--warning))]" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
               <line x1="12" y1="9" x2="12" y2="13"></line>
               <line x1="12" y1="17" x2="12.01" y2="17"></line>
@@ -688,19 +688,7 @@
 </BaseQuestion>
 
 <style>
-  /* ---- Idle ---- */
-  .idle-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 2.5rem 1.5rem;
-    border: 2px dashed hsl(var(--border));
-    border-radius: 0.75rem;
-    background: hsl(var(--muted));
-    text-align: center;
-  }
-
+  /* Record button with hover/disabled states */
   .record-start-btn {
     display: inline-flex;
     align-items: center;
@@ -717,7 +705,6 @@
   }
 
   .record-start-btn:hover:not(:disabled) {
-    background: hsl(var(--destructive));
     filter: brightness(0.85);
     transform: translateY(-1px);
   }
@@ -727,16 +714,7 @@
     cursor: not-allowed;
   }
 
-  .record-dot {
-    display: inline-block;
-    width: 0.75rem;
-    height: 0.75rem;
-    background: hsl(var(--background));
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  /* ---- Spinner ---- */
+  /* Spinner with animation */
   .spinner {
     width: 2rem;
     height: 2rem;
@@ -750,19 +728,8 @@
     to { transform: rotate(360deg); }
   }
 
-  /* ---- Countdown ---- */
-  .countdown-panel {
-    position: relative;
-    border-radius: 0.75rem;
-    overflow: hidden;
-    background: hsl(var(--foreground));
-    min-height: 200px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .countdown-panel .video-preview {
+  /* Countdown video overlay */
+  .countdown-video-preview {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -784,50 +751,7 @@
     50% { transform: scale(1.15); opacity: 0.8; }
   }
 
-  /* ---- Recording ---- */
-  .recording-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    border: 2px solid hsl(var(--destructive));
-    border-radius: 0.75rem;
-    overflow: hidden;
-    background: hsl(var(--destructive) / 0.1);
-  }
-
-  .video-preview-wrapper {
-    position: relative;
-    background: hsl(var(--foreground));
-  }
-
-  .video-preview {
-    width: 100%;
-    max-height: 400px;
-    object-fit: cover;
-    display: block;
-  }
-
-  .recording-indicator {
-    position: absolute;
-    top: 0.75rem;
-    left: 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.25rem 0.625rem;
-    background: hsl(var(--destructive) / 0.9);
-    border-radius: 0.25rem;
-    z-index: 1;
-  }
-
-  .recording-indicator-inline {
-    position: static;
-    display: inline-flex;
-    background: hsl(var(--destructive));
-    border-radius: 0.25rem;
-    align-self: flex-start;
-  }
-
+  /* Blinking recording dot */
   .recording-dot-animated {
     display: inline-block;
     width: 0.5rem;
@@ -842,142 +766,22 @@
     50% { opacity: 0.3; }
   }
 
-  .recording-label {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    color: hsl(var(--background));
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  /* ---- Waveform ---- */
-  .waveform-canvas {
-    width: 100%;
-    height: 80px;
-    border-radius: 0.375rem;
-    background: hsl(var(--foreground));
-  }
-
-  /* ---- Recording controls ---- */
-  .timer {
-    font-family: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-  }
-
-  .timer-current {
-    color: hsl(var(--destructive));
-  }
-
-  .progress-bar {
-    width: 100%;
-    height: 4px;
-    background: hsl(var(--border));
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  .progress-fill {
-    height: 100%;
-    background: hsl(var(--destructive));
-    transition: width 1s linear;
-    border-radius: 2px;
-  }
-
-  .stop-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.625rem 1.25rem;
-    background: hsl(var(--foreground));
-    color: hsl(var(--background));
-    border: none;
-    border-radius: 0.5rem;
-    font-size: 0.9375rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  .stop-btn:hover {
-    opacity: 0.85;
-  }
-
-  .stop-square {
-    display: inline-block;
-    width: 0.75rem;
-    height: 0.75rem;
-    background: hsl(var(--background));
-    border-radius: 2px;
-    flex-shrink: 0;
-  }
-
-  /* ---- Playback ---- */
-  .playback-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.75rem;
-    overflow: hidden;
-    background: hsl(var(--card));
-  }
-
-  .video-playback {
-    width: 100%;
-    max-height: 400px;
-    background: hsl(var(--foreground));
-    display: block;
-  }
-
-  .blob-size-warning {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-    margin: 0 1rem;
-    padding: 0.625rem 0.875rem;
-    background: hsl(var(--warning) / 0.1);
-    border: 1px solid hsl(var(--warning) / 0.5);
-    border-radius: 0.375rem;
-    font-size: 0.8125rem;
-    color: hsl(var(--warning));
-    line-height: 1.4;
-  }
-
-  .blob-size-warning svg {
-    flex-shrink: 0;
-    margin-top: 0.1rem;
-    color: hsl(var(--warning));
-  }
-
+  /* :global for re-record button */
   .playback-panel :global(.re-record-btn) {
     gap: 0.375rem;
     margin: 0 1rem 1rem;
     align-self: center;
   }
 
-  /* ---- Responsive ---- */
+  /* Responsive record button */
   @media (max-width: 640px) {
-    .idle-panel {
-      padding: 1.5rem 1rem;
-    }
-
     .record-start-btn {
       padding: 0.625rem 1.25rem;
       font-size: 0.9375rem;
     }
 
-    .waveform-canvas {
-      height: 60px;
-    }
-
     .countdown-number {
       font-size: 3.5rem;
-    }
-
-    .timer {
-      font-size: 1rem;
     }
   }
 </style>
