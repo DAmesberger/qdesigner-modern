@@ -65,8 +65,8 @@ importers:
         specifier: ^16.0.0
         version: 16.4.2
       mathjs:
-        specifier: ^14.5.3
-        version: 14.9.1
+        specifier: ^15.1.1
+        version: 15.1.1
       monaco-editor:
         specifier: ^0.45.0
         version: 0.45.0
@@ -4576,8 +4576,8 @@ packages:
     engines: {node: '>= 0.4'}
     dev: true
 
-  /mathjs@14.9.1:
-    resolution: {integrity: sha512-xhqv8Xjf+caWG3WlaPekg4v8QFOR3D5+8ycfcjMcPcnCNDgAONQLaLfyGgrggJrcHx2yUGCpACRpiD4GmXwX+Q==}
+  /mathjs@15.1.1:
+    resolution: {integrity: sha512-rM668DTtpSzMVoh/cKAllyQVEbBApM5g//IMGD8vD7YlrIz9ITRr3SrdhjaDxcBNTdyETWwPebj2unZyHD7ZdA==}
     engines: {node: '>= 18'}
     hasBin: true
     dependencies:
