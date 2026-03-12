@@ -1,186 +1,84 @@
 # QDesigner Modern
 
-A modern, high-performance questionnaire platform built with Svelte, TypeScript, and WebGL 2.0. Features a sophisticated designer interface with real-time persistence to Supabase.
+A high-performance questionnaire platform for psychological and behavioral research. Features microsecond-accurate reaction time measurements, WebGL 2.0 rendering at 120+ FPS, fully offline-capable questionnaire fillout, and semantic versioning for questionnaire definitions.
 
-## ✨ Features
+## Stack
 
-- **🎨 Visual Questionnaire Designer**: Drag-and-drop interface with real-time preview
-- **💾 Cloud Persistence**: Automatic save/load with Supabase integration
-- **⚡ WebGL 2.0 Rendering**: 120+ FPS support for precise reaction time measurements
-- **🧮 Sophisticated Variable System**: Mathematical formulas, dependencies, and custom functions
-- **🎬 Multimedia Stimuli**: Support for images, videos, audio, and composite stimuli
-- **⏱️ High-Precision Timing**: Microsecond-accurate response collection
-- **🚀 Modern Stack**: Svelte 5, TypeScript, Tailwind CSS, Vite, Supabase
+- **Frontend**: Svelte 5 (runes) + SvelteKit + TypeScript strict + Tailwind CSS 4.1
+- **Backend**: Rust/Axum REST API
+- **Database**: PostgreSQL 18
+- **Cache**: Redis 7 (rate limiting)
+- **Storage**: MinIO (S3-compatible)
+- **Email**: MailPit (dev SMTP + web UI)
+- **Auth**: JWT access/refresh tokens with Argon2id password hashing
+- **Offline**: Dexie/IndexedDB + Service Worker + Cache API
 
-## 🏗️ Architecture
-
-This is a monorepo managed with pnpm workspaces:
-
-```
-qdesigner-modern/
-├── apps/
-│   ├── designer/           # Main designer application
-│   ├── fillout/           # Questionnaire runtime (planned)
-│   └── admin/             # Admin interface (planned)
-├── packages/
-│   ├── api/               # Backend API server
-│   ├── database/          # Supabase client and types
-│   ├── renderer/          # WebGL 2.0 rendering engine
-│   ├── scripting-engine/  # Variable system & formula evaluation
-│   └── shared/            # Shared types and utilities
-├── supabase/
-│   └── migrations/        # Database schema
-└── docs/                  # Technical documentation
-```
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- pnpm (`npm install -g pnpm`)
-- Docker and Docker Compose
-
-### Development Setup
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd qdesigner-modern
-
 # Install dependencies
 pnpm install
 
-# First-time setup (creates database, runs migrations, seeds data)
-pnpm dev:setup
+# Start infrastructure
+docker compose up -d
 
-# Start development (Supabase + app)
-pnpm dev:full
+# Start backend (auto-runs migrations, port from `.env.development`, default `4100`)
+cd server && cargo run
+
+# Start frontend (port from `.env.development`, default `4173`)
+pnpm dev
 ```
 
-That's it! No manual configuration needed. The development environment includes:
+## Service URLs
 
-- 🐘 PostgreSQL database (via Supabase)
-- 🔐 Authentication service
-- 📦 File storage
-- 📧 Email testing (Mailhog)
+| Service         | URL                     |
+|-----------------|-------------------------|
+| App             | http://localhost:4173   |
+| Backend API     | http://localhost:4100   |
+| MinIO Console   | http://localhost:19001  |
+| MailPit         | http://localhost:18026  |
 
-### Service URLs
-
-| Service  | URL                    | Description             |
-| -------- | ---------------------- | ----------------------- |
-| App      | http://localhost:5173  | QDesigner application   |
-| Supabase | http://localhost:54321 | Database management UI  |
-| Mailhog  | http://localhost:18026 | Email testing interface |
-
-### Test Credentials
-
-For local development, you can use the following test account:
+## Test Credentials
 
 - **Email**: `demo@example.com`
 - **Password**: `demo123456`
 
-#### Auto-Login Test Mode
-
-For faster development, enable test mode to automatically log in as the demo user:
-
+Enable auto-login in dev:
 ```javascript
-// In browser console (dev mode only):
-window.testMode.enable(); // Enable auto-login
-window.testMode.disable(); // Disable auto-login
+window.testMode.enable();
 ```
 
-When enabled, navigating to protected routes automatically logs you in.
+## Features
 
-## 📝 Variable System
+- **Visual Questionnaire Designer**: Drag-and-drop with real-time preview
+- **WebGL 2.0 Rendering**: 120+ FPS for precise reaction time measurements
+- **Variable System**: 47+ formula functions, conditional logic, array operations
+- **Offline-First Fillout**: Full offline capability with background sync
+- **Semantic Versioning**: Questionnaire definitions versioned for data comparability
+- **High-Precision Timing**: Microsecond-accurate response collection
+- **Multimedia Stimuli**: Images, video, audio, composite stimuli
+- **Statistical Analysis**: Built-in bell curve, gauge, and feedback chart components
 
-The variable system supports complex formulas with:
-
-- **Basic Operations**: `+`, `-`, `*`, `/`, `^`, `sqrt()`, etc.
-- **Conditional Logic**: `IF(condition, trueValue, falseValue)`
-- **Array Functions**: `SUM()`, `AVG()`, `COUNT()`, `MIN()`, `MAX()`
-- **String Functions**: `CONCAT()`, `LENGTH()`
-- **Time Functions**: `NOW()`, `TIME_SINCE()`
-- **Random Functions**: `RANDOM()`, `RANDINT(min, max)`
-
-Example formula:
-
-```javascript
-IF(reactionTime < 300, 'Fast', IF(reactionTime < 500, 'Normal', 'Slow'));
-```
-
-## 🎯 Question Types
-
-- **Text/Instructions**: Display information or instructions
-- **Choice Questions**: Single/multiple choice with customizable options
-- **Scale Questions**: Likert scales, sliders, visual analog scales
-- **Reaction Tests**: High-precision timing tasks with WebGL rendering
-- **Multimedia Questions**: Image/video/audio stimuli presentation
-- **Matrix Questions**: Grid-based questions for complex data collection
-
-## 📊 Data Collection
-
-- ⏱️ Microsecond-precision timing for all responses
-- ⌨️ Complete keystroke logging with timestamps
-- 🖱️ Optional mouse tracking and click coordinates
-- 📝 Response history and corrections
-- 🔄 Automatic variable computation and updates
-- 💾 Real-time data persistence to Supabase
-
-## 🛠️ Development Commands
+## Development Commands
 
 ```bash
-# Start everything (recommended)
-pnpm dev:full
-
-# Start only the app (if services are already running)
-pnpm dev
-
-# Manage Supabase services
-pnpm dev:services        # Start services
-pnpm dev:services:down   # Stop services
-pnpm dev:services:logs   # View logs
-
-# Testing
-pnpm test               # Run unit tests
-pnpm test:e2e          # Run E2E tests
-pnpm test:coverage     # Generate coverage report
-
-# Code quality
-pnpm lint              # Check linting
-pnpm lint:fix          # Auto-fix issues
-pnpm format            # Format code
-pnpm check             # Type checking
+pnpm test              # Unit tests (Vitest)
+pnpm check             # svelte-check + tsc
+pnpm api:export        # Export backend OpenAPI to openapi/openapi.json
+pnpm api:generate      # Export OpenAPI and regenerate src/lib/api/generated
+pnpm api:check         # Fail if exported spec or generated client drifted
+pnpm lint              # ESLint
+pnpm lint:fix          # Auto-fix
+pnpm format            # Prettier
+pnpm build             # Production build
+pnpm test:e2e          # E2E tests (Playwright)
+cd server && cargo test    # Rust tests
+cd server && cargo check   # Rust type check
 ```
 
-## 🐳 Docker Support
+## Documentation
 
-```bash
-# Development with Docker
-docker-compose up qdesigner-dev
-
-# Production build
-docker-compose up qdesigner-prod
-
-# Run specific services
-docker-compose up supabase-db supabase-auth
-```
-
-## 📚 Documentation
-
-- [Development Setup](docs/DEVELOPMENT.md) - Detailed development environment guide
-- [Designer Overview](docs/DESIGNER_OVERVIEW.md) - Architecture of the designer interface
-- [Runtime Architecture](docs/RUNTIME_ARCHITECTURE.md) - How questionnaires are executed
-- [Precise Timing](docs/PRECISE_TIMING.md) - Technical details on timing precision
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-See LICENSE file for details.
+- [CLAUDE.md](CLAUDE.md) — Architecture, API reference, and development guidance
+- [openapi/openapi.json](openapi/openapi.json) — Generated REST contract
+- [src/lib/api/generated/index.ts](src/lib/api/generated/index.ts) — Generated TypeScript client
+- [docs/asyncapi/realtime.asyncapi.yaml](docs/asyncapi/realtime.asyncapi.yaml) — WebSocket/AsyncAPI contract

@@ -64,23 +64,23 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            server/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('server/Cargo.lock') }}
+            apps/server/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/server/Cargo.lock') }}
 
       - name: Check formatting
-        working-directory: server
+        working-directory: apps/server
         run: cargo fmt --check
 
       - name: Clippy
-        working-directory: server
+        working-directory: apps/server
         run: cargo clippy -- -D warnings
 
       - name: Build
-        working-directory: server
+        working-directory: apps/server
         run: cargo build
 
       - name: Test
-        working-directory: server
+        working-directory: apps/server
         run: cargo test
 
   # Frontend checks

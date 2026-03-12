@@ -1,0 +1,259 @@
+asyncapi: 3.0.0
+info:
+  title: QDesigner Realtime API
+  version: 0.1.0
+  description: |
+    AsyncAPI contract for QDesigner websocket collaboration and realtime analytics.
+servers:
+  development:
+    host: localhost:4100
+    pathname: /api/ws
+    protocol: ws
+    description: Local development websocket endpoint.
+channels:
+  designerChannel:
+    address: designer:{questionnaireId}
+    parameters:
+      questionnaireId:
+        description: Questionnaire id for collaborative editing.
+    messages:
+      subscribe:
+        $ref: '#/components/messages/subscribe'
+      unsubscribe:
+        $ref: '#/components/messages/unsubscribe'
+      presence:
+        $ref: '#/components/messages/presenceBroadcast'
+      yjsBinary:
+        $ref: '#/components/messages/yjsBinary'
+  questionnaireChannel:
+    address: questionnaire:{questionnaireId}
+    parameters:
+      questionnaireId:
+        description: Questionnaire id for fillout session events.
+    messages:
+      subscribe:
+        $ref: '#/components/messages/subscribe'
+      unsubscribe:
+        $ref: '#/components/messages/unsubscribe'
+      sessionCreated:
+        $ref: '#/components/messages/sessionCreated'
+      sessionUpdated:
+        $ref: '#/components/messages/sessionUpdated'
+      sessionCompleted:
+        $ref: '#/components/messages/sessionCompleted'
+      responseSubmitted:
+        $ref: '#/components/messages/responseSubmitted'
+      presence:
+        $ref: '#/components/messages/presenceBroadcast'
+  analyticsChannel:
+    address: analytics:{questionnaireId}
+    parameters:
+      questionnaireId:
+        description: Questionnaire id for realtime dashboard updates.
+    messages:
+      subscribe:
+        $ref: '#/components/messages/subscribe'
+      unsubscribe:
+        $ref: '#/components/messages/unsubscribe'
+      responseSubmitted:
+        $ref: '#/components/messages/analyticsResponseSubmitted'
+      responseSynced:
+        $ref: '#/components/messages/analyticsResponseSynced'
+operations:
+  connect:
+    action: send
+    channel:
+      $ref: '#/channels/designerChannel'
+    security:
+      - $ref: '#/components/securitySchemes/tokenQuery'
+components:
+  securitySchemes:
+    tokenQuery:
+      type: apiKey
+      in: query
+      name: token
+  messages:
+    subscribe:
+      name: subscribe
+      payload:
+        type: object
+        required: [type, channel]
+        properties:
+          type:
+            const: subscribe
+          channel:
+            type: string
+    unsubscribe:
+      name: unsubscribe
+      payload:
+        type: object
+        required: [type, channel]
+        properties:
+          type:
+            const: unsubscribe
+          channel:
+            type: string
+    presenceBroadcast:
+      name: presence
+      payload:
+        type: object
+        required: [channel, event, payload]
+        properties:
+          channel:
+            type: string
+          event:
+            const: presence
+          payload:
+            type: object
+            required: [user_id, action]
+            properties:
+              user_id:
+                type: string
+                format: uuid
+              action:
+                type: string
+                enum: [join, leave]
+    sessionCreated:
+      name: session.created
+      payload:
+        type: object
+        required: [channel, event, payload]
+        properties:
+          channel:
+            type: string
+          event:
+            const: session.created
+          payload:
+            type: object
+            required: [session_id, questionnaire_id, status]
+            properties:
+              session_id:
+                type: string
+                format: uuid
+              questionnaire_id:
+                type: string
+                format: uuid
+              status:
+                type: string
+    sessionUpdated:
+      name: session.updated
+      payload:
+        type: object
+        required: [channel, event, payload]
+        properties:
+          channel:
+            type: string
+          event:
+            const: session.updated
+          payload:
+            type: object
+            required: [session_id, questionnaire_id, status]
+            properties:
+              session_id:
+                type: string
+                format: uuid
+              questionnaire_id:
+                type: string
+                format: uuid
+              status:
+                type: string
+    sessionCompleted:
+      name: session.completed
+      payload:
+        type: object
+        required: [channel, event, payload]
+        properties:
+          channel:
+            type: string
+          event:
+            const: session.completed
+          payload:
+            type: object
+            required: [session_id, questionnaire_id, status]
+            properties:
+              session_id:
+                type: string
+                format: uuid
+              questionnaire_id:
+                type: string
+                format: uuid
+              status:
+                type: string
+    responseSubmitted:
+      name: response.submitted
+      payload:
+        type: object
+        required: [channel, event, payload]
+        properties:
+          channel:
+            type: string
+          event:
+            const: response.submitted
+          payload:
+            type: object
+            required: [session_id, questionnaire_id, count]
+            properties:
+              session_id:
+                type: string
+                format: uuid
+              questionnaire_id:
+                type: string
+                format: uuid
+              count:
+                type: integer
+    analyticsResponseSubmitted:
+      name: analytics.response.submitted
+      payload:
+        type: object
+        required: [channel, event, payload]
+        properties:
+          channel:
+            type: string
+          event:
+            const: response.submitted
+          payload:
+            type: object
+            required: [session_id, questionnaire_id, count, timestamp]
+            properties:
+              session_id:
+                type: string
+                format: uuid
+              questionnaire_id:
+                type: string
+                format: uuid
+              count:
+                type: integer
+              timestamp:
+                type: string
+                format: date-time
+    analyticsResponseSynced:
+      name: analytics.response.synced
+      payload:
+        type: object
+        required: [channel, event, payload]
+        properties:
+          channel:
+            type: string
+          event:
+            const: response.synced
+          payload:
+            type: object
+            required: [session_id, questionnaire_id, responses_synced, timestamp]
+            properties:
+              session_id:
+                type: string
+                format: uuid
+              questionnaire_id:
+                type: string
+                format: uuid
+              responses_synced:
+                type: integer
+              timestamp:
+                type: string
+                format: date-time
+    yjsBinary:
+      name: yjs.binary
+      contentType: application/octet-stream
+      payload:
+        type: string
+        format: binary

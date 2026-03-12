@@ -14,10 +14,16 @@ FORBIDDEN_TOKENS=(
 
 found=0
 
+SEARCH_PATHS=(
+  "apps/web/src"
+  "packages/questionnaire-core/src"
+  "packages/scripting-engine/src"
+)
+
 for token in "${FORBIDDEN_TOKENS[@]}"; do
-  matches="$(rg -n -S --glob '!**/*.test.*' --glob '!**/*.spec.*' --glob '!**/*.d.ts' "$token" src || true)"
+  matches="$(rg -n -S --glob '!**/*.test.*' --glob '!**/*.spec.*' --glob '!**/*.d.ts' "$token" "${SEARCH_PATHS[@]}" || true)"
   if [[ -n "$matches" ]]; then
-    echo "Forbidden hardcoded token found in src: $token"
+    echo "Forbidden hardcoded token found in tracked sources: $token"
     echo "$matches"
     found=1
   fi

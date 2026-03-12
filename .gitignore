@@ -69,6 +69,7 @@ temp/
 
 # Rust build artifacts
 server/target/
+apps/server/target/
 
 # Database
 *.sqlite

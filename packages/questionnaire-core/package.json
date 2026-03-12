@@ -1,0 +1,35 @@
+{
+  "name": "@qdesigner/questionnaire-core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./questionnaire": {
+      "types": "./src/questionnaire.ts",
+      "default": "./src/questionnaire.ts"
+    },
+    "./response": {
+      "types": "./src/response.ts",
+      "default": "./src/response.ts"
+    },
+    "./media": {
+      "types": "./src/media.ts",
+      "default": "./src/media.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "nanoid": "^5.1.5"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.3"
+  }
+}

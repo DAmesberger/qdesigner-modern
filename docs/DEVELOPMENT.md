@@ -114,7 +114,8 @@ pnpm clean:all          # Remove everything (including node_modules)
 
 | Service         | URL                    | Description             |
 | --------------- | ---------------------- | ----------------------- |
-| App             | http://localhost:5173  | QDesigner application   |
+| App             | `http://${APP_HOST:-localhost}:${APP_PORT:-4173}` | QDesigner application   |
+| Backend API     | `http://localhost:${SERVER_PORT:-4100}` | Rust backend API        |
 | Supabase Studio | http://localhost:54321 | Database management UI  |
 | Mailhog         | http://localhost:18026 | Email testing interface |
 | PostgreSQL      | localhost:54322        | Database connection     |
