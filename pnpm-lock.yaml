@@ -213,8 +213,8 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@22.19.12)(@vitest/ui@3.2.4)(jsdom@26.1.0)(tsx@4.21.0)
       wait-on:
-        specifier: ^8.0.3
-        version: 8.0.5
+        specifier: ^9.0.4
+        version: 9.0.4
 
   packages/contracts:
     devDependencies:
@@ -2581,8 +2581,8 @@ packages:
       postcss-value-parser: 4.2.0
     dev: true
 
-  /axios@1.13.5:
-    resolution: {integrity: sha512-cz4ur7Vb0xS4/KUN0tPWe44eqxrIu31me+fbang3ijiNscE129POzipJJA6zniq2C/Z6sJCjMimjS8Lc/GAs8Q==}
+  /axios@1.13.6:
+    resolution: {integrity: sha512-ChTCHMouEe2kn713WHbQGcuYrr6fXTBiu460OTwWrWob16g1bXn4vtz07Ope7ewMozJAnEquLk5lWQWtBig9DQ==}
     dependencies:
       follow-redirects: 1.15.11
       form-data: 4.0.5
@@ -6001,12 +6001,12 @@ packages:
       xml-name-validator: 5.0.0
     dev: true
 
-  /wait-on@8.0.5:
-    resolution: {integrity: sha512-J3WlS0txVHkhLRb2FsmRg3dkMTCV1+M6Xra3Ho7HzZDHpE7DCOnoSoCJsZotrmW3uRMhvIJGSKUKrh/MeF4iag==}
-    engines: {node: '>=12.0.0'}
+  /wait-on@9.0.4:
+    resolution: {integrity: sha512-k8qrgfwrPVJXTeFY8tl6BxVHiclK11u72DVKhpybHfUL/K6KM4bdyK9EhIVYGytB5MJe/3lq4Tf0hrjM+pvJZQ==}
+    engines: {node: '>=20.0.0'}
     hasBin: true
     dependencies:
-      axios: 1.13.5
+      axios: 1.13.6
       joi: 18.0.2
       lodash: 4.17.23
       minimist: 1.2.8

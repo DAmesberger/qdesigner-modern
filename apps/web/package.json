@@ -91,7 +91,7 @@
     "typescript": "~5.8.3",
     "vite": "^6.0.0",
     "vitest": "^3.2.4",
-    "wait-on": "^8.0.3"
+    "wait-on": "^9.0.4"
   },
   "dependencies": {
     "@qdesigner/contracts": "workspace:*",
