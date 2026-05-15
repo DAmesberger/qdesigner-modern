@@ -1,8 +1,9 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     Json,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::PgExecutor;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
@@ -10,7 +11,7 @@ use validator::Validate;
 use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
-use crate::state::AppState;
+use crate::middleware::tx::Tx;
 
 // ── Models ───────────────────────────────────────────────────────────
 
@@ -95,12 +96,17 @@ pub struct OrgTemplatePath {
     tags = ["templates"]
 )]
 pub async fn list_templates(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
     Query(q): Query<TemplateListQuery>,
 ) -> Result<Json<Vec<QuestionTemplate>>, ApiError> {
-    access::verify_org_membership(&state.pool, user.user_id, org_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    access::verify_org_membership(&mut **tx, user.user_id, org_id).await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -133,7 +139,7 @@ pub async fn list_templates(
     .bind(&q.search)
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(templates))
@@ -158,15 +164,20 @@ pub async fn list_templates(
     tags = ["templates"]
 )]
 pub async fn create_template(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
     Json(body): Json<CreateTemplateRequest>,
 ) -> Result<(axum::http::StatusCode, Json<QuestionTemplate>), ApiError> {
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    access::verify_org_membership(&state.pool, user.user_id, org_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    access::verify_org_membership(&mut **tx, user.user_id, org_id).await?;
 
     let is_shared = body.is_shared.unwrap_or(false);
     let tags = body.tags.unwrap_or_default();
@@ -191,7 +202,7 @@ pub async fn create_template(
     .bind(&body.question_type)
     .bind(&body.question_config)
     .bind(is_shared)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok((axum::http::StatusCode::CREATED, Json(template)))
@@ -215,11 +226,16 @@ pub async fn create_template(
     tags = ["templates"]
 )]
 pub async fn get_template(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(path): Path<OrgTemplatePath>,
 ) -> Result<Json<QuestionTemplate>, ApiError> {
-    access::verify_org_membership(&state.pool, user.user_id, path.id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    access::verify_org_membership(&mut **tx, user.user_id, path.id).await?;
 
     let template = sqlx::query_as::<_, QuestionTemplate>(
         r#"
@@ -234,7 +250,7 @@ pub async fn get_template(
     .bind(path.tid)
     .bind(path.id)
     .bind(user.user_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Template not found".into()))?;
 
@@ -242,7 +258,7 @@ pub async fn get_template(
     let _ =
         sqlx::query("UPDATE question_templates SET usage_count = usage_count + 1 WHERE id = $1")
             .bind(path.tid)
-            .execute(&state.pool)
+            .execute(&mut **tx)
             .await;
 
     Ok(Json(template))
@@ -270,18 +286,23 @@ pub async fn get_template(
     tags = ["templates"]
 )]
 pub async fn update_template(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(path): Path<OrgTemplatePath>,
     Json(body): Json<UpdateTemplateRequest>,
 ) -> Result<Json<QuestionTemplate>, ApiError> {
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    access::verify_org_membership(&state.pool, user.user_id, path.id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    access::verify_org_membership(&mut **tx, user.user_id, path.id).await?;
 
     // Only the creator or org admins can update
-    verify_template_write_access(&state, user.user_id, path.id, path.tid).await?;
+    verify_template_write_access(&mut **tx, user.user_id, path.id, path.tid).await?;
 
     let mut parts: Vec<String> = Vec::new();
     let mut bind_idx = 3u32; // $1 = tid, $2 = org_id
@@ -348,7 +369,7 @@ pub async fn update_template(
     }
 
     let template = query
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| ApiError::NotFound("Template not found".into()))?;
 
@@ -374,18 +395,23 @@ pub async fn update_template(
     tags = ["templates"]
 )]
 pub async fn delete_template(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(path): Path<OrgTemplatePath>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    access::verify_org_membership(&state.pool, user.user_id, path.id).await?;
-    verify_template_write_access(&state, user.user_id, path.id, path.tid).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    access::verify_org_membership(&mut **tx, user.user_id, path.id).await?;
+    verify_template_write_access(&mut **tx, user.user_id, path.id, path.tid).await?;
 
     let result =
         sqlx::query("DELETE FROM question_templates WHERE id = $1 AND organization_id = $2")
             .bind(path.tid)
             .bind(path.id)
-            .execute(&state.pool)
+            .execute(&mut **tx)
             .await?;
 
     if result.rows_affected() == 0 {
@@ -397,8 +423,8 @@ pub async fn delete_template(
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-async fn verify_template_write_access(
-    state: &AppState,
+async fn verify_template_write_access<'e>(
+    executor: impl PgExecutor<'e>,
     user_id: Uuid,
     org_id: Uuid,
     template_id: Uuid,
@@ -419,7 +445,7 @@ async fn verify_template_write_access(
     .bind(template_id)
     .bind(org_id)
     .bind(user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(executor)
     .await?;
 
     if !has_write {
