@@ -12,6 +12,7 @@ use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::middleware::auth::OptionalUser;
+use crate::middleware::tx::Tx;
 use crate::state::AppState;
 use crate::websocket::manager::WsMessage;
 
@@ -461,17 +462,21 @@ pub async fn check_duplicate(
     tags = ["sessions"]
 )]
 pub async fn list_sessions(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Query(query): Query<SessionListQuery>,
 ) -> Result<Json<Vec<Session>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     // Require questionnaire_id so we can verify access
     let questionnaire_id = query.questionnaire_id.ok_or_else(|| {
         ApiError::BadRequest("questionnaire_id query parameter is required".into())
     })?;
 
     // Verify the user has access to this questionnaire's project org
-    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
+    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 
     let normalized_status = query
         .status
@@ -516,7 +521,7 @@ pub async fn list_sessions(
         db_query = db_query.bind(status);
     }
 
-    let sessions = db_query.fetch_all(&state.pool).await?;
+    let sessions = db_query.fetch_all(&mut **tx).await?;
     Ok(Json(sessions))
 }
 
@@ -538,9 +543,14 @@ pub async fn list_sessions(
 pub async fn aggregate_sessions(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Query(query): Query<SessionAggregateQuery>,
 ) -> Result<Json<SessionAggregateResponse>, ApiError> {
-    access::verify_questionnaire_access(&state.pool, user.user_id, query.questionnaire_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+    access::verify_questionnaire_access(&mut **tx, user.user_id, query.questionnaire_id).await?;
     let source = parse_aggregate_source(query.source.as_deref())?;
     let key = query.key.trim();
 
@@ -593,9 +603,14 @@ pub async fn aggregate_sessions(
 pub async fn compare_sessions(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Query(query): Query<SessionCompareQuery>,
 ) -> Result<Json<SessionCompareResponse>, ApiError> {
-    access::verify_questionnaire_access(&state.pool, user.user_id, query.questionnaire_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+    access::verify_questionnaire_access(&mut **tx, user.user_id, query.questionnaire_id).await?;
     let source = parse_aggregate_source(query.source.as_deref())?;
     let key = query.key.trim();
     let left_participant_id = query.left_participant_id.trim();
@@ -686,10 +701,14 @@ pub async fn compare_sessions(
     tags = ["analytics"]
 )]
 pub async fn dashboard_summary(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Query(query): Query<DashboardQuery>,
 ) -> Result<Json<DashboardSummary>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     // Verify the user is a member of the organization
     let is_member = sqlx::query_scalar::<_, bool>(
         r#"
@@ -701,7 +720,7 @@ pub async fn dashboard_summary(
     )
     .bind(query.organization_id)
     .bind(user.user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     if !is_member {
@@ -735,7 +754,7 @@ pub async fn dashboard_summary(
         "#,
     )
     .bind(query.organization_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     // Get recent activity (last 20 sessions)
@@ -759,7 +778,7 @@ pub async fn dashboard_summary(
         "#,
     )
     .bind(query.organization_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     // Compute aggregate stats
@@ -822,9 +841,14 @@ pub async fn dashboard_summary(
 pub async fn cross_project_analytics(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
     Query(query): Query<CrossProjectAnalyticsQuery>,
 ) -> Result<Json<CrossProjectAnalyticsResponse>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     // Verify org membership
     let is_member = sqlx::query_scalar::<_, bool>(
         r#"
@@ -836,7 +860,7 @@ pub async fn cross_project_analytics(
     )
     .bind(org_id)
     .bind(user.user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     if !is_member {
@@ -882,7 +906,7 @@ pub async fn cross_project_analytics(
     )
     .bind(org_id)
     .bind(&questionnaire_ids)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     if valid_ids.is_empty() {
@@ -931,7 +955,7 @@ pub async fn cross_project_analytics(
             "#,
         )
         .bind(qid)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?;
 
         let summary = match summary {
@@ -950,7 +974,7 @@ pub async fn cross_project_analytics(
             "#,
         )
         .bind(qid)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?;
 
         let timing_stats = if timing_rows.is_empty() {
@@ -1074,10 +1098,14 @@ pub async fn cross_project_analytics(
     tags = ["sessions"]
 )]
 pub async fn get_session(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(session_id): Path<Uuid>,
 ) -> Result<Json<Session>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     let session = sqlx::query_as::<_, Session>(
         r#"
         SELECT id, questionnaire_id, participant_id, status, started_at,
@@ -1087,12 +1115,12 @@ pub async fn get_session(
         "#,
     )
     .bind(session_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
 
     // Verify the user has access to this session's questionnaire
-    access::verify_questionnaire_access(&state.pool, user.user_id, session.questionnaire_id)
+    access::verify_questionnaire_access(&mut **tx, user.user_id, session.questionnaire_id)
         .await?;
 
     Ok(Json(session))
@@ -1118,9 +1146,14 @@ pub async fn get_session(
 pub async fn get_responses(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(session_id): Path<Uuid>,
     Query(query): Query<ResponseListQuery>,
 ) -> Result<Json<Vec<ResponseRecord>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     ensure_session_access(&state, user.user_id, session_id).await?;
 
     let limit = query.limit.unwrap_or(500).clamp(1, 5000);
@@ -1141,7 +1174,7 @@ pub async fn get_responses(
         .bind(question_id)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?
     } else {
         sqlx::query_as::<_, ResponseRecord>(
@@ -1157,7 +1190,7 @@ pub async fn get_responses(
         .bind(session_id)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?
     };
 
@@ -1183,8 +1216,13 @@ pub async fn get_responses(
 pub async fn get_events(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(session_id): Path<Uuid>,
 ) -> Result<Json<Vec<InteractionEventRecord>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     ensure_session_access(&state, user.user_id, session_id).await?;
 
     let events = sqlx::query_as::<_, InteractionEventRecord>(
@@ -1196,7 +1234,7 @@ pub async fn get_events(
         "#,
     )
     .bind(session_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(events))
@@ -1221,8 +1259,13 @@ pub async fn get_events(
 pub async fn get_variables(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(session_id): Path<Uuid>,
 ) -> Result<Json<Vec<SessionVariableRecord>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     ensure_session_access(&state, user.user_id, session_id).await?;
 
     let variables = sqlx::query_as::<_, SessionVariableRecord>(
@@ -1234,7 +1277,7 @@ pub async fn get_variables(
         "#,
     )
     .bind(session_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(variables))
@@ -2396,12 +2439,16 @@ pub struct ConditionCount {
     tags = ["analytics"]
 )]
 pub async fn condition_counts(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(questionnaire_id): Path<Uuid>,
 ) -> Result<Json<Vec<ConditionCount>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     // Verify access via the questionnaire's project
-    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
+    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 
     let counts = sqlx::query_as::<_, ConditionCount>(
         r#"
@@ -2414,7 +2461,7 @@ pub async fn condition_counts(
         "#,
     )
     .bind(questionnaire_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(counts))
@@ -2836,11 +2883,15 @@ fn is_safe_filter_key(key: &str) -> bool {
     tags = ["analytics"]
 )]
 pub async fn filter_sessions(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Json(body): Json<FilterRequest>,
 ) -> Result<Json<FilterResponse>, ApiError> {
-    access::verify_questionnaire_access(&state.pool, user.user_id, body.questionnaire_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+    access::verify_questionnaire_access(&mut **tx, user.user_id, body.questionnaire_id).await?;
 
     let top_logic = body.logic.as_deref().unwrap_or("AND");
     if top_logic != "AND" && top_logic != "OR" {
@@ -3030,7 +3081,7 @@ pub async fn filter_sessions(
     for p in &params {
         count_query = count_query.bind(p);
     }
-    let total = count_query.fetch_one(&state.pool).await?;
+    let total = count_query.fetch_one(&mut **tx).await?;
 
     // Fetch matching sessions
     let select_sql = format!(
@@ -3058,7 +3109,7 @@ pub async fn filter_sessions(
     for p in &params {
         select_query = select_query.bind(p);
     }
-    let rows = select_query.fetch_all(&state.pool).await?;
+    let rows = select_query.fetch_all(&mut **tx).await?;
 
     let sessions: Vec<FilteredSessionRow> = rows
         .into_iter()
@@ -3092,7 +3143,7 @@ pub async fn filter_sessions(
                         )
                         .bind(&session_ids)
                         .bind(key)
-                        .fetch_all(&state.pool)
+                        .fetch_all(&mut **tx)
                         .await?
                     }
                     AggregateSource::Response => {
@@ -3105,7 +3156,7 @@ pub async fn filter_sessions(
                         )
                         .bind(&session_ids)
                         .bind(key)
-                        .fetch_all(&state.pool)
+                        .fetch_all(&mut **tx)
                         .await?
                     }
                 };
@@ -3166,11 +3217,15 @@ pub struct TimeSeriesBucket {
     tags = ["analytics"]
 )]
 pub async fn timeseries(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Query(query): Query<TimeSeriesQuery>,
 ) -> Result<Json<Vec<TimeSeriesBucket>>, ApiError> {
-    access::verify_questionnaire_access(&state.pool, user.user_id, query.questionnaire_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+    access::verify_questionnaire_access(&mut **tx, user.user_id, query.questionnaire_id).await?;
 
     let interval = match query.interval.as_deref().unwrap_or("day") {
         "hour" => "hour",
@@ -3204,7 +3259,7 @@ pub async fn timeseries(
 
     let buckets = sqlx::query_as::<_, TimeSeriesBucket>(&sql)
         .bind(query.questionnaire_id)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?;
 
     Ok(Json(buckets))
