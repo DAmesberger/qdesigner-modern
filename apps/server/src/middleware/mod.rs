@@ -3,6 +3,7 @@ pub mod cors;
 pub mod csrf;
 pub mod rate_limit;
 pub mod rls_context;
+pub mod tx;
 
 // NOTE: For production, fillout routes (serving questionnaire completion pages)
 // should include cross-origin isolation headers for full timer precision:

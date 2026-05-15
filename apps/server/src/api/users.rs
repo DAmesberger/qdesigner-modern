@@ -1,4 +1,5 @@
-use axum::{extract::State, Json};
+use axum::extract::Query;
+use axum::Json;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -6,7 +7,7 @@ use validator::Validate;
 
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
-use crate::state::AppState;
+use crate::middleware::tx::Tx;
 
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct UserProfile {
@@ -29,6 +30,16 @@ pub struct UpdateProfileRequest {
     pub locale: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub struct GetProfileQuery {
+    /// Debug-only switch used by the Phase 5 spike to verify the
+    /// rls_context middleware rolls back the per-request transaction
+    /// and returns the connection to the pool when a handler panics.
+    /// Compiled out of release builds.
+    #[serde(default)]
+    pub panic: Option<u8>,
+}
+
 /// GET /api/users/me
 #[utoipa::path(
     get,
@@ -43,9 +54,22 @@ pub struct UpdateProfileRequest {
     tags = ["users"]
 )]
 pub async fn get_profile(
-    State(state): State<AppState>,
+    Query(query): Query<GetProfileQuery>,
     user: AuthenticatedUser,
+    tx: Tx,
 ) -> Result<Json<UserProfile>, ApiError> {
+    #[cfg(debug_assertions)]
+    if matches!(query.panic, Some(1)) {
+        panic!("spike: simulated handler panic for rollback verification");
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = query;
+
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     let profile = sqlx::query_as::<_, UserProfile>(
         r#"
         SELECT id, email, full_name, avatar_url, timezone, locale, email_verified, created_at
@@ -53,7 +77,7 @@ pub async fn get_profile(
         "#,
     )
     .bind(user.user_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
 
@@ -76,8 +100,8 @@ pub async fn get_profile(
     tags = ["users"]
 )]
 pub async fn update_profile(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Json(body): Json<UpdateProfileRequest>,
 ) -> Result<Json<UserProfile>, ApiError> {
     body.validate()
@@ -130,8 +154,13 @@ pub async fn update_profile(
         query = query.bind(v);
     }
 
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     let profile = query
-        .fetch_one(&state.pool)
+        .fetch_one(&mut **tx)
         .await
         .map_err(|_| ApiError::Internal("Failed to update profile".into()))?;
 

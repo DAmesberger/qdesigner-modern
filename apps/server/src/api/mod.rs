@@ -3,6 +3,7 @@ use axum::{
     routing::{delete, get, patch, post},
     Router,
 };
+use tower_http::catch_panic::CatchPanicLayer;
 
 use crate::middleware::rate_limit::rate_limit_middleware;
 use crate::middleware::rls_context::set_rls_context;
@@ -45,6 +46,7 @@ pub fn router(state: AppState) -> Router {
 
     let user_routes = Router::new()
         .route("/me", get(users::get_profile).patch(users::update_profile))
+        .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let org_routes = Router::new()
@@ -97,6 +99,7 @@ pub fn router(state: AppState) -> Router {
                 .delete(templates::delete_template),
         )
         .route("/{id}/analytics", get(sessions::cross_project_analytics))
+        .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let project_routes = Router::new()
@@ -140,6 +143,7 @@ pub fn router(state: AppState) -> Router {
             "/{id}/members/{uid}",
             patch(projects::update_project_member).delete(projects::remove_project_member),
         )
+        .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let invitation_routes = Router::new()
@@ -206,11 +210,13 @@ pub fn router(state: AppState) -> Router {
             get(sessions::get_variables).post(sessions::upsert_variable),
         )
         .route("/{id}/media", post(media::upload_session_media))
+        .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let media_routes = Router::new()
         .route("/", get(media::list_media).post(media::upload_media))
         .route("/{id}", get(media::get_media).delete(media::delete_media))
+        .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let ws_route = Router::new().route("/ws", get(crate::websocket::handler::ws_upgrade));
