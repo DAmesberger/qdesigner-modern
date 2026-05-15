@@ -23,10 +23,6 @@ pub struct YjsRoom {
     pub last_persisted: std::time::Instant,
 }
 
-// Safety: `yrs::Doc` is Send + Sync.
-unsafe impl Send for YjsRoom {}
-unsafe impl Sync for YjsRoom {}
-
 impl YjsRoom {
     pub fn new() -> Self {
         Self {
