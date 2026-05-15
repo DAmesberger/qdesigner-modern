@@ -1,1 +1,1 @@
-export * from '../../../../../../packages/contracts/src/generated/client.gen';
+export * from '@qdesigner/contracts/generated/client.gen';

@@ -1,1 +1,1 @@
-export { generateId } from '../../../../../../packages/questionnaire-core/src/id';
+export { generateId } from '@qdesigner/questionnaire-core';

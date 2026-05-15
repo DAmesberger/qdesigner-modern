@@ -1,1 +1,1 @@
-export * from '../../../../../../packages/questionnaire-core/src/media';
+export * from '@qdesigner/questionnaire-core/media';

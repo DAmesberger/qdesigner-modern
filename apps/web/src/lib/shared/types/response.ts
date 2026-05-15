@@ -1,4 +1,4 @@
-export * from '../../../../../../packages/questionnaire-core/src/response';
+export * from '@qdesigner/questionnaire-core/response';
 
 export interface ResponseData {
 	questionId: string;
