@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: qdesigner
       POSTGRES_PASSWORD: qdesigner
     volumes:
-      - postgres-test-data:/var/lib/postgresql/data
+      - postgres-test-data:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U qdesigner -d qdesigner_test']
       interval: 5s
