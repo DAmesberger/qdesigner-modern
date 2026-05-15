@@ -5,6 +5,14 @@
 [ADR 0001](0001-rls.md) — its connection-pinning clause is delivered
 here; its enforcement clause is deferred to a future phase.
 
+**Forward references (deferred-work scope refined in Phase 6):** the
+three "What's deferred" bullets below are addressed by
+[ADR 0012](0012-fillout-dual-path-rls.md) (fillout-path strategy),
+[ADR 0013](0013-admin-mutation-permissive.md) (mutation-policy
+approach), and [ADR 0014](0014-qdesigner-app-role.md) (app role).
+This ADR will be superseded in Phase 6 closeout once enforcement
+lands.
+
 ## Decision
 
 Phase 5's deliverable is the **per-request transaction infrastructure**
