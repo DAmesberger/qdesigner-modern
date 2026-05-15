@@ -1,25 +1,30 @@
-use sqlx::PgPool;
+use sqlx::PgExecutor;
 use uuid::Uuid;
 
 use crate::error::ApiError;
-use crate::rbac::models::{OrgRole, Permission, ProjectRole};
+use crate::rbac::models::{OrgRole, ProjectRole};
 
-/// Central authority for checking roles and permissions.
-#[derive(Clone)]
-pub struct RbacManager {
-    pool: PgPool,
-}
+/// Central authority for checking roles.
+///
+/// Stateless — every method takes an `executor` (`&PgPool` or
+/// `&mut **tx` from the per-request transaction extractor). When a
+/// handler runs inside `set_rls_context`, passing `&mut **tx` keeps
+/// the role-check query on the same pinned connection as the
+/// surrounding handler so RLS sees the same `app.user_id`.
+#[derive(Clone, Default)]
+pub struct RbacManager;
 
 impl RbacManager {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new() -> Self {
+        Self
     }
 
     // ── Organisation membership ──────────────────────────────────────
 
     /// Return the user's role inside the given organisation, or None.
-    pub async fn get_org_role(
+    pub async fn get_org_role<'e>(
         &self,
+        executor: impl PgExecutor<'e>,
         user_id: Uuid,
         org_id: Uuid,
     ) -> Result<Option<OrgRole>, ApiError> {
@@ -31,26 +36,31 @@ impl RbacManager {
         )
         .bind(user_id)
         .bind(org_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(executor)
         .await?;
 
         Ok(row.and_then(|r| OrgRole::from_str(&r)))
     }
 
     /// Check whether the user holds *at least* the required org role.
-    pub async fn has_org_role(
+    pub async fn has_org_role<'e>(
         &self,
+        executor: impl PgExecutor<'e>,
         user_id: Uuid,
         org_id: Uuid,
         required: &OrgRole,
     ) -> Result<bool, ApiError> {
-        let role = self.get_org_role(user_id, org_id).await?;
+        let role = self.get_org_role(executor, user_id, org_id).await?;
         Ok(role.is_some_and(|r| org_role_level(&r) >= org_role_level(required)))
     }
 
     /// Return all organisation IDs + roles for a user.
     #[allow(dead_code)]
-    pub async fn get_user_org_roles(&self, user_id: Uuid) -> Result<Vec<(Uuid, String)>, ApiError> {
+    pub async fn get_user_org_roles<'e>(
+        &self,
+        executor: impl PgExecutor<'e>,
+        user_id: Uuid,
+    ) -> Result<Vec<(Uuid, String)>, ApiError> {
         let rows = sqlx::query_as::<_, (Uuid, String)>(
             r#"
             SELECT organization_id, role
@@ -59,7 +69,7 @@ impl RbacManager {
             "#,
         )
         .bind(user_id)
-        .fetch_all(&self.pool)
+        .fetch_all(executor)
         .await?;
 
         Ok(rows)
@@ -68,8 +78,9 @@ impl RbacManager {
     // ── Project membership ───────────────────────────────────────────
 
     /// Return the user's role inside the given project, or None.
-    pub async fn get_project_role(
+    pub async fn get_project_role<'e>(
         &self,
+        executor: impl PgExecutor<'e>,
         user_id: Uuid,
         project_id: Uuid,
     ) -> Result<Option<ProjectRole>, ApiError> {
@@ -81,69 +92,24 @@ impl RbacManager {
         )
         .bind(user_id)
         .bind(project_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(executor)
         .await?;
 
         Ok(row.and_then(|r| ProjectRole::from_str(&r)))
     }
 
     /// Check whether the user holds *at least* the required project role.
-    pub async fn has_project_role(
+    pub async fn has_project_role<'e>(
         &self,
+        executor: impl PgExecutor<'e>,
         user_id: Uuid,
         project_id: Uuid,
         required: &ProjectRole,
     ) -> Result<bool, ApiError> {
-        let role = self.get_project_role(user_id, project_id).await?;
+        let role = self
+            .get_project_role(executor, user_id, project_id)
+            .await?;
         Ok(role.is_some_and(|r| project_role_level(&r) >= project_role_level(required)))
-    }
-
-    // ── Permission checks ────────────────────────────────────────────
-
-    /// Check whether a user has a given permission for an organisation.
-    #[allow(dead_code)]
-    pub async fn has_org_permission(
-        &self,
-        user_id: Uuid,
-        org_id: Uuid,
-        perm: Permission,
-    ) -> Result<bool, ApiError> {
-        let role = match self.get_org_role(user_id, org_id).await? {
-            Some(r) => r,
-            None => return Ok(false),
-        };
-
-        Ok(org_role_has_permission(&role, perm))
-    }
-
-    /// Check whether a user has a given permission for a project.
-    /// Falls back to the org role if no project-level membership exists.
-    #[allow(dead_code)]
-    pub async fn has_project_permission(
-        &self,
-        user_id: Uuid,
-        project_id: Uuid,
-        perm: Permission,
-    ) -> Result<bool, ApiError> {
-        // Check project-level role first
-        if let Some(role) = self.get_project_role(user_id, project_id).await? {
-            if project_role_has_permission(&role, perm) {
-                return Ok(true);
-            }
-        }
-
-        // Fall back to org-level role
-        let org_id =
-            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
-                .bind(project_id)
-                .fetch_optional(&self.pool)
-                .await?;
-
-        if let Some(oid) = org_id {
-            return self.has_org_permission(user_id, oid, perm).await;
-        }
-
-        Ok(false)
     }
 }
 
@@ -164,64 +130,5 @@ fn project_role_level(role: &ProjectRole) -> u8 {
         ProjectRole::Editor => 2,
         ProjectRole::Admin => 3,
         ProjectRole::Owner => 4,
-    }
-}
-
-#[allow(dead_code)]
-fn org_role_has_permission(role: &OrgRole, perm: Permission) -> bool {
-    match role {
-        OrgRole::Owner => true, // owner can do everything
-        OrgRole::Admin => !matches!(perm, Permission::OrgDelete),
-        OrgRole::Member => matches!(
-            perm,
-            Permission::OrgRead
-                | Permission::ProjectRead
-                | Permission::ProjectWrite
-                | Permission::QuestionnaireRead
-                | Permission::QuestionnaireWrite
-                | Permission::SessionRead
-                | Permission::SessionWrite
-                | Permission::ResponseRead
-                | Permission::ResponseWrite
-                | Permission::MediaRead
-                | Permission::MediaWrite
-        ),
-        OrgRole::Viewer => matches!(
-            perm,
-            Permission::OrgRead
-                | Permission::ProjectRead
-                | Permission::QuestionnaireRead
-                | Permission::SessionRead
-                | Permission::ResponseRead
-                | Permission::MediaRead
-        ),
-    }
-}
-
-#[allow(dead_code)]
-fn project_role_has_permission(role: &ProjectRole, perm: Permission) -> bool {
-    match role {
-        ProjectRole::Owner => true,
-        ProjectRole::Admin => !matches!(perm, Permission::ProjectDelete | Permission::OrgDelete),
-        ProjectRole::Editor => matches!(
-            perm,
-            Permission::ProjectRead
-                | Permission::QuestionnaireRead
-                | Permission::QuestionnaireWrite
-                | Permission::SessionRead
-                | Permission::SessionWrite
-                | Permission::ResponseRead
-                | Permission::ResponseWrite
-                | Permission::MediaRead
-                | Permission::MediaWrite
-        ),
-        ProjectRole::Viewer => matches!(
-            perm,
-            Permission::ProjectRead
-                | Permission::QuestionnaireRead
-                | Permission::SessionRead
-                | Permission::ResponseRead
-                | Permission::MediaRead
-        ),
     }
 }

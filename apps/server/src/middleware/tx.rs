@@ -36,7 +36,7 @@ pub type SharedTx = Arc<Mutex<Option<Transaction<'static, Postgres>>>>;
 /// Handler extractor that yields the per-request transaction handle.
 ///
 /// Usage:
-/// ```ignore
+/// ```text
 /// pub async fn handler(tx: Tx, ...) -> Result<..., ApiError> {
 ///     let mut guard = tx.lock().await;
 ///     let tx = guard.as_mut().expect("rls_context middleware sets the tx");

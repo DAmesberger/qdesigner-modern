@@ -164,7 +164,7 @@ pub async fn create_project(
     // Require at least member role in the org
     if !state
         .rbac
-        .has_org_role(user.user_id, body.organization_id, &OrgRole::Member)
+        .has_org_role(&state.pool, user.user_id, body.organization_id, &OrgRole::Member)
         .await?
     {
         return Err(ApiError::Forbidden(
@@ -279,6 +279,7 @@ pub async fn update_project(
     if !state
         .rbac
         .has_project_role(
+            &state.pool,
             user.user_id,
             project_id,
             &crate::rbac::models::ProjectRole::Editor,
@@ -295,7 +296,7 @@ pub async fn update_project(
 
         if !state
             .rbac
-            .has_org_role(user.user_id, org_id, &OrgRole::Admin)
+            .has_org_role(&state.pool, user.user_id, org_id, &OrgRole::Admin)
             .await?
         {
             return Err(ApiError::Forbidden("Insufficient permissions".into()));
@@ -398,6 +399,7 @@ pub async fn delete_project(
     let is_project_owner = state
         .rbac
         .has_project_role(
+            &state.pool,
             user.user_id,
             project_id,
             &crate::rbac::models::ProjectRole::Owner,
@@ -405,7 +407,7 @@ pub async fn delete_project(
         .await?;
     let is_org_admin = state
         .rbac
-        .has_org_role(user.user_id, org_id, &OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &OrgRole::Admin)
         .await?;
 
     if !is_project_owner && !is_org_admin {
@@ -524,6 +526,7 @@ pub async fn add_project_member(
     let has_project_admin = state
         .rbac
         .has_project_role(
+            &state.pool,
             user.user_id,
             project_id,
             &crate::rbac::models::ProjectRole::Admin,
@@ -540,7 +543,7 @@ pub async fn add_project_member(
 
         if !state
             .rbac
-            .has_org_role(user.user_id, org_id, &OrgRole::Admin)
+            .has_org_role(&state.pool, user.user_id, org_id, &OrgRole::Admin)
             .await?
         {
             return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -622,6 +625,7 @@ pub async fn update_project_member(
     let has_project_admin = state
         .rbac
         .has_project_role(
+            &state.pool,
             user.user_id,
             project_id,
             &crate::rbac::models::ProjectRole::Admin,
@@ -638,7 +642,7 @@ pub async fn update_project_member(
 
         if !state
             .rbac
-            .has_org_role(user.user_id, org_id, &OrgRole::Admin)
+            .has_org_role(&state.pool, user.user_id, org_id, &OrgRole::Admin)
             .await?
         {
             return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -689,6 +693,7 @@ pub async fn remove_project_member(
     let has_project_admin = state
         .rbac
         .has_project_role(
+            &state.pool,
             user.user_id,
             project_id,
             &crate::rbac::models::ProjectRole::Admin,
@@ -705,7 +710,7 @@ pub async fn remove_project_member(
 
         if !state
             .rbac
-            .has_org_role(user.user_id, org_id, &OrgRole::Admin)
+            .has_org_role(&state.pool, user.user_id, org_id, &OrgRole::Admin)
             .await?
         {
             return Err(ApiError::Forbidden("Requires admin role".into()));

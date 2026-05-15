@@ -21,6 +21,13 @@ use crate::state::AppState;
 /// - everything else (including 5xx synthesized by the `CatchPanicLayer`
 ///   above this middleware) → rollback.
 ///
+/// One edge case: if `tx.commit().await` itself panics (after the handler
+/// returned successfully and `CatchPanicLayer` has already finished), the
+/// panic propagates uncaught past this middleware. Connection-leak risk
+/// is bounded by sqlx's `Transaction::drop` rolling back on unhappy drop,
+/// so the connection still returns to the pool — just via the drop path
+/// rather than the explicit rollback branch above.
+///
 /// If the request carries no valid `Authorization: Bearer` header the
 /// middleware does *not* open a transaction. Routes that require auth
 /// rely on the `AuthenticatedUser` extractor to issue the 401 themselves;

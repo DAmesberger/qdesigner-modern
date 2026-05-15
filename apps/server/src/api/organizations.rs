@@ -376,7 +376,7 @@ pub async fn update_organization(
     // Require at least admin role
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -458,7 +458,7 @@ pub async fn delete_organization(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
         .await?
     {
         return Err(ApiError::Forbidden(
@@ -568,7 +568,7 @@ pub async fn add_member(
     if body.role == "owner"
         && !state
             .rbac
-            .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
+            .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
             .await?
     {
         return Err(ApiError::Forbidden(
@@ -578,7 +578,7 @@ pub async fn add_member(
 
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -636,7 +636,7 @@ pub async fn remove_member(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -700,7 +700,7 @@ pub async fn list_invitations(
 ) -> Result<Json<Vec<Invitation>>, ApiError> {
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -758,7 +758,7 @@ pub async fn create_invitation(
 
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1164,7 +1164,7 @@ pub async fn revoke_invitation(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1217,7 +1217,7 @@ pub async fn list_domains(
 ) -> Result<Json<Vec<DomainRecord>>, ApiError> {
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1265,7 +1265,7 @@ pub async fn create_domain(
 ) -> Result<(axum::http::StatusCode, Json<DomainRecord>), ApiError> {
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1316,7 +1316,7 @@ pub async fn verify_domain(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1367,7 +1367,7 @@ pub async fn update_domain(
 ) -> Result<Json<DomainRecord>, ApiError> {
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1455,7 +1455,7 @@ pub async fn delete_domain(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));

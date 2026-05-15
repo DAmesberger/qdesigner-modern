@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query},
     Json,
 };
 use chrono::{DateTime, Utc};
@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
-use crate::state::AppState;
+use crate::middleware::tx::Tx;
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -71,12 +71,17 @@ pub struct ListCommentsQuery {
     tags = ["comments"]
 )]
 pub async fn create_comment(
-    State(state): State<AppState>,
     Path(questionnaire_id): Path<Uuid>,
     user: AuthenticatedUser,
+    tx: Tx,
     Json(body): Json<CreateCommentRequest>,
 ) -> Result<Json<CommentResponse>, ApiError> {
-    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 
     let comment = sqlx::query_as::<_, CommentResponse>(
         r#"
@@ -93,7 +98,7 @@ pub async fn create_comment(
     .bind(&body.anchor_type)
     .bind(&body.anchor_id)
     .bind(&body.body)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(Json(comment))
@@ -117,12 +122,17 @@ pub async fn create_comment(
     tags = ["comments"]
 )]
 pub async fn list_comments(
-    State(state): State<AppState>,
     Path(questionnaire_id): Path<Uuid>,
     user: AuthenticatedUser,
+    tx: Tx,
     Query(query): Query<ListCommentsQuery>,
 ) -> Result<Json<Vec<CommentResponse>>, ApiError> {
-    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 
     let comments = sqlx::query_as::<_, CommentResponse>(
         r#"
@@ -140,7 +150,7 @@ pub async fn list_comments(
     .bind(&query.anchor_type)
     .bind(&query.anchor_id)
     .bind(query.resolved)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(comments))
@@ -166,12 +176,17 @@ pub async fn list_comments(
     tags = ["comments"]
 )]
 pub async fn update_comment(
-    State(state): State<AppState>,
     Path((questionnaire_id, comment_id)): Path<(Uuid, Uuid)>,
     user: AuthenticatedUser,
+    tx: Tx,
     Json(body): Json<UpdateCommentRequest>,
 ) -> Result<Json<CommentResponse>, ApiError> {
-    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 
     let resolved_by: Option<Uuid> = if body.resolved == Some(true) {
         Some(user.user_id)
@@ -214,7 +229,7 @@ pub async fn update_comment(
     .bind(body.resolved)
     .bind(resolved_by)
     .bind(resolved_at)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Comment not found or unauthorized".to_string()))?;
 
@@ -240,11 +255,16 @@ pub async fn update_comment(
     tags = ["comments"]
 )]
 pub async fn delete_comment(
-    State(state): State<AppState>,
     Path((questionnaire_id, comment_id)): Path<(Uuid, Uuid)>,
     user: AuthenticatedUser,
+    tx: Tx,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    access::verify_questionnaire_access(&state.pool, user.user_id, questionnaire_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 
     let result = sqlx::query(
         r#"
@@ -255,7 +275,7 @@ pub async fn delete_comment(
     .bind(comment_id)
     .bind(questionnaire_id)
     .bind(user.user_id)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?;
 
     if result.rows_affected() == 0 {

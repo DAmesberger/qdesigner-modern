@@ -71,7 +71,7 @@ async fn main() {
     );
 
     // ── RBAC ─────────────────────────────────────────────────────────
-    let rbac = RbacManager::new(pool.clone());
+    let rbac = RbacManager::new();
 
     // ── S3 / MinIO ───────────────────────────────────────────────────
     let storage = S3StorageService::new(

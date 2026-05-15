@@ -2,26 +2,36 @@
 //!
 //! These functions centralise the most common authorization checks so that
 //! individual route handlers don't need to duplicate SQL.
+//!
+//! Every helper takes an `executor: impl sqlx::PgExecutor<'_>`, which
+//! accepts both `&PgPool` (for auth/dev routes that don't run inside the
+//! `set_rls_context` middleware) and `&mut **tx` from the per-request
+//! transaction (for protected routes). Running these checks on the same
+//! transaction-pinned connection as the surrounding handler is what lets
+//! them benefit from RLS once Phase 5 P5.3 lands the FORCE migration.
 
-use sqlx::PgPool;
+use sqlx::PgExecutor;
 use uuid::Uuid;
 
 use crate::error::ApiError;
 
 /// Look up the organization that owns a project.
-pub async fn get_project_org_id(pool: &PgPool, project_id: Uuid) -> Result<Uuid, ApiError> {
+pub async fn get_project_org_id<'e>(
+    executor: impl PgExecutor<'e>,
+    project_id: Uuid,
+) -> Result<Uuid, ApiError> {
     sqlx::query_scalar::<_, Uuid>(
         "SELECT organization_id FROM projects WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(project_id)
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await?
     .ok_or_else(|| ApiError::NotFound("Project not found".into()))
 }
 
 /// Verify that `user_id` is an active member of `org_id`.
-pub async fn verify_org_membership(
-    pool: &PgPool,
+pub async fn verify_org_membership<'e>(
+    executor: impl PgExecutor<'e>,
     user_id: Uuid,
     org_id: Uuid,
 ) -> Result<(), ApiError> {
@@ -30,7 +40,7 @@ pub async fn verify_org_membership(
     )
     .bind(org_id)
     .bind(user_id)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await?;
 
     if !is_member {
@@ -45,8 +55,8 @@ pub async fn verify_org_membership(
 ///
 /// Access is granted when the user is an active member of the project's
 /// parent organization.
-pub async fn verify_project_access(
-    pool: &PgPool,
+pub async fn verify_project_access<'e>(
+    executor: impl PgExecutor<'e>,
     user_id: Uuid,
     project_id: Uuid,
 ) -> Result<(), ApiError> {
@@ -62,7 +72,7 @@ pub async fn verify_project_access(
     )
     .bind(project_id)
     .bind(user_id)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await?;
 
     if !has_access {
@@ -75,8 +85,8 @@ pub async fn verify_project_access(
 ///
 /// Write access is granted when the user is a project member with at least
 /// `editor` role, **or** an org-level `admin`/`owner`.
-pub async fn verify_project_write_access(
-    pool: &PgPool,
+pub async fn verify_project_write_access<'e>(
+    executor: impl PgExecutor<'e>,
     user_id: Uuid,
     project_id: Uuid,
 ) -> Result<(), ApiError> {
@@ -95,7 +105,7 @@ pub async fn verify_project_write_access(
     )
     .bind(project_id)
     .bind(user_id)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await?;
 
     if !has_write {
@@ -108,8 +118,8 @@ pub async fn verify_project_write_access(
 
 /// Verify that `user_id` has access to a questionnaire through its project's
 /// parent organization.
-pub async fn verify_questionnaire_access(
-    pool: &PgPool,
+pub async fn verify_questionnaire_access<'e>(
+    executor: impl PgExecutor<'e>,
     user_id: Uuid,
     questionnaire_id: Uuid,
 ) -> Result<(), ApiError> {
@@ -126,7 +136,7 @@ pub async fn verify_questionnaire_access(
     )
     .bind(questionnaire_id)
     .bind(user_id)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await?;
 
     if !has_access {

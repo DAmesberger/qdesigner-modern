@@ -73,6 +73,7 @@ pub async fn list_media(
     if !state
         .rbac
         .has_org_role(
+            &state.pool,
             user.user_id,
             q.organization_id,
             &crate::rbac::models::OrgRole::Viewer,
@@ -171,7 +172,7 @@ pub async fn upload_media(
     // Verify write access
     if !state
         .rbac
-        .has_org_role(user.user_id, org_id, &crate::rbac::models::OrgRole::Member)
+        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Member)
         .await?
     {
         return Err(ApiError::Forbidden("No write access".into()));
@@ -254,6 +255,7 @@ pub async fn get_media(
     if !state
         .rbac
         .has_org_role(
+            &state.pool,
             user.user_id,
             asset.organization_id,
             &crate::rbac::models::OrgRole::Viewer,
@@ -310,6 +312,7 @@ pub async fn delete_media(
     let is_admin = state
         .rbac
         .has_org_role(
+            &state.pool,
             user.user_id,
             asset.organization_id,
             &crate::rbac::models::OrgRole::Admin,
