@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
+use crate::middleware::tx::Tx;
 use crate::state::AppState;
 use crate::storage::s3::S3StorageService;
 
@@ -67,13 +68,19 @@ pub struct MediaUploadRequest {
 pub async fn list_media(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Query(q): Query<MediaListQuery>,
 ) -> Result<Json<Vec<MediaAsset>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Verify org membership
     if !state
         .rbac
         .has_org_role(
-            &state.pool,
+            &mut **tx,
             user.user_id,
             q.organization_id,
             &crate::rbac::models::OrgRole::Viewer,
@@ -101,7 +108,7 @@ pub async fn list_media(
     .bind(q.organization_id)
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(assets))
@@ -125,6 +132,7 @@ pub async fn list_media(
 pub async fn upload_media(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     mut multipart: Multipart,
 ) -> Result<(axum::http::StatusCode, Json<MediaAssetWithUrl>), ApiError> {
     let mut organization_id: Option<Uuid> = None;
@@ -169,10 +177,15 @@ pub async fn upload_media(
     let (filename, bytes, content_type) =
         file_data.ok_or_else(|| ApiError::BadRequest("file is required".into()))?;
 
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Verify write access
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Member)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Member)
         .await?
     {
         return Err(ApiError::Forbidden("No write access".into()));
@@ -203,7 +216,7 @@ pub async fn upload_media(
     .bind(size_bytes)
     .bind(&storage_key)
     .bind(user.user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     let url = state
@@ -237,8 +250,14 @@ pub async fn upload_media(
 pub async fn get_media(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(media_id): Path<Uuid>,
 ) -> Result<Json<MediaAssetWithUrl>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     let asset = sqlx::query_as::<_, MediaAsset>(
         r#"
         SELECT id, organization_id, filename, content_type, size_bytes,
@@ -247,7 +266,7 @@ pub async fn get_media(
         "#,
     )
     .bind(media_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Media asset not found".into()))?;
 
@@ -255,7 +274,7 @@ pub async fn get_media(
     if !state
         .rbac
         .has_org_role(
-            &state.pool,
+            &mut **tx,
             user.user_id,
             asset.organization_id,
             &crate::rbac::models::OrgRole::Viewer,
@@ -293,8 +312,14 @@ pub async fn get_media(
 pub async fn delete_media(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(media_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     let asset = sqlx::query_as::<_, MediaAsset>(
         r#"
         SELECT id, organization_id, filename, content_type, size_bytes,
@@ -303,7 +328,7 @@ pub async fn delete_media(
         "#,
     )
     .bind(media_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Media asset not found".into()))?;
 
@@ -312,7 +337,7 @@ pub async fn delete_media(
     let is_admin = state
         .rbac
         .has_org_role(
-            &state.pool,
+            &mut **tx,
             user.user_id,
             asset.organization_id,
             &crate::rbac::models::OrgRole::Admin,
@@ -329,7 +354,7 @@ pub async fn delete_media(
     // Delete from DB
     sqlx::query("DELETE FROM media_assets WHERE id = $1")
         .bind(media_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
     Ok(Json(serde_json::json!({ "message": "Media deleted" })))
