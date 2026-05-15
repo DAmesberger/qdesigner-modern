@@ -94,3 +94,23 @@ pub async fn is_access_token_revoked(pool: &PgPool, jti: Uuid) -> Result<bool, A
     .await?;
     Ok(row)
 }
+
+/// Purge revoked-access-token entries older than `older_than`. An entry only
+/// matters until the original access token would have expired; after that
+/// the JWT is rejected on its own merits and the revocation row is dead
+/// weight that grows the per-request lookup unbounded.
+pub async fn purge_expired_revoked_tokens(
+    pool: &PgPool,
+    older_than: chrono::Duration,
+) -> Result<u64, ApiError> {
+    let cutoff = chrono::Utc::now() - older_than;
+    let result = sqlx::query(
+        r#"
+        DELETE FROM revoked_tokens WHERE revoked_at < $1
+        "#,
+    )
+    .bind(cutoff)
+    .execute(pool)
+    .await?;
+    Ok(result.rows_affected())
+}

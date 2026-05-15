@@ -134,6 +134,31 @@ async fn main() {
     // ── Yjs Store ────────────────────────────────────────────────────
     let yjs_store = crate::websocket::yjs_store::YjsStore::new();
 
+    // ── Revoked-access-token purger ───────────────────────────────────
+    // revoked_tokens entries only matter until the access token would have
+    // expired anyway; without a purger this table grows unbounded and is
+    // hit on every authenticated request.
+    {
+        let pool = pool.clone();
+        let access_ttl = config.jwt_access_expiry;
+        tokio::spawn(async move {
+            // Sweep daily; the per-row lookup stays cheap because expired
+            // rows are deleted long before they accumulate.
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
+            loop {
+                interval.tick().await;
+                let ttl = chrono::Duration::from_std(access_ttl).unwrap_or(chrono::Duration::hours(1));
+                match crate::auth::session::purge_expired_revoked_tokens(&pool, ttl).await {
+                    Ok(deleted) if deleted > 0 => {
+                        tracing::info!(deleted, "purged expired revoked_tokens");
+                    }
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!("revoked_tokens purge failed: {e}"),
+                }
+            }
+        });
+    }
+
     // ── App State ────────────────────────────────────────────────────
     let state = AppState {
         pool,
