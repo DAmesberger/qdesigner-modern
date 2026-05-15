@@ -10,6 +10,7 @@ use validator::Validate;
 use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
+use crate::middleware::tx::Tx;
 use crate::rbac::models::OrgRole;
 use crate::state::AppState;
 
@@ -86,10 +87,15 @@ pub struct ProjectListQuery {
     tags = ["projects"]
 )]
 pub async fn list_projects(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Query(q): Query<ProjectListQuery>,
 ) -> Result<Json<Vec<Project>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
 
@@ -112,7 +118,7 @@ pub async fn list_projects(
         .bind(org_id)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?
     } else {
         sqlx::query_as::<_, Project>(
@@ -131,7 +137,7 @@ pub async fn list_projects(
         .bind(user.user_id)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?
     };
 
@@ -156,15 +162,21 @@ pub async fn list_projects(
 pub async fn create_project(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Json(body): Json<CreateProjectRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Project>), ApiError> {
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Require at least member role in the org
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, body.organization_id, &OrgRole::Member)
+        .has_org_role(&mut **tx, user.user_id, body.organization_id, &OrgRole::Member)
         .await?
     {
         return Err(ApiError::Forbidden(
@@ -192,14 +204,14 @@ pub async fn create_project(
     .bind(body.start_date)
     .bind(body.end_date)
     .bind(user.user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     // Add creator as project owner
     sqlx::query("INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'owner')")
         .bind(project.id)
         .bind(user.user_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
     Ok((axum::http::StatusCode::CREATED, Json(project)))
@@ -222,10 +234,15 @@ pub async fn create_project(
     tags = ["projects"]
 )]
 pub async fn get_project(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Project>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     let project = sqlx::query_as::<_, Project>(
         r#"
         SELECT p.id, p.organization_id, p.name, p.code, p.description, p.is_public,
@@ -239,7 +256,7 @@ pub async fn get_project(
     )
     .bind(project_id)
     .bind(user.user_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
 
@@ -269,17 +286,23 @@ pub async fn get_project(
 pub async fn update_project(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(project_id): Path<Uuid>,
     Json(body): Json<UpdateProjectRequest>,
 ) -> Result<Json<Project>, ApiError> {
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Check project-level permission
     if !state
         .rbac
         .has_project_role(
-            &state.pool,
+            &mut **tx,
             user.user_id,
             project_id,
             &crate::rbac::models::ProjectRole::Editor,
@@ -290,13 +313,13 @@ pub async fn update_project(
         let org_id =
             sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
                 .bind(project_id)
-                .fetch_optional(&state.pool)
+                .fetch_optional(&mut **tx)
                 .await?
                 .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
 
         if !state
             .rbac
-            .has_org_role(&state.pool, user.user_id, org_id, &OrgRole::Admin)
+            .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
             .await?
         {
             return Err(ApiError::Forbidden("Insufficient permissions".into()));
@@ -359,7 +382,7 @@ pub async fn update_project(
     bind_opt!(settings);
 
     let project = query
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
 
@@ -386,20 +409,26 @@ pub async fn update_project(
 pub async fn delete_project(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Require project owner or org admin
     let org_id =
         sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
             .bind(project_id)
-            .fetch_optional(&state.pool)
+            .fetch_optional(&mut **tx)
             .await?
             .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
 
     let is_project_owner = state
         .rbac
         .has_project_role(
-            &state.pool,
+            &mut **tx,
             user.user_id,
             project_id,
             &crate::rbac::models::ProjectRole::Owner,
@@ -407,7 +436,7 @@ pub async fn delete_project(
         .await?;
     let is_org_admin = state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
         .await?;
 
     if !is_project_owner && !is_org_admin {
@@ -418,7 +447,7 @@ pub async fn delete_project(
 
     sqlx::query("UPDATE projects SET deleted_at = NOW(), status = 'deleted' WHERE id = $1")
         .bind(project_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
     Ok(Json(serde_json::json!({ "message": "Project deleted" })))
@@ -464,11 +493,16 @@ pub struct UpdateProjectMemberRequest {
     tags = ["projects"]
 )]
 pub async fn list_project_members(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Vec<ProjectMember>>, ApiError> {
-    access::verify_project_access(&state.pool, user.user_id, project_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    access::verify_project_access(&mut **tx, user.user_id, project_id).await?;
 
     let members = sqlx::query_as::<_, ProjectMember>(
         r#"
@@ -480,7 +514,7 @@ pub async fn list_project_members(
         "#,
     )
     .bind(project_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(members))
@@ -509,6 +543,7 @@ pub async fn list_project_members(
 pub async fn add_project_member(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(project_id): Path<Uuid>,
     Json(body): Json<AddProjectMemberRequest>,
 ) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ApiError> {
@@ -522,11 +557,16 @@ pub async fn add_project_member(
         ));
     }
 
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Require project admin+ or org admin+
     let has_project_admin = state
         .rbac
         .has_project_role(
-            &state.pool,
+            &mut **tx,
             user.user_id,
             project_id,
             &crate::rbac::models::ProjectRole::Admin,
@@ -537,13 +577,13 @@ pub async fn add_project_member(
         let org_id =
             sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
                 .bind(project_id)
-                .fetch_optional(&state.pool)
+                .fetch_optional(&mut **tx)
                 .await?
                 .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
 
         if !state
             .rbac
-            .has_org_role(&state.pool, user.user_id, org_id, &OrgRole::Admin)
+            .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
             .await?
         {
             return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -554,13 +594,13 @@ pub async fn add_project_member(
         "SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL",
     )
     .bind(&body.email)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
 
     // Verify the target user is an active member of the project's parent org.
-    let org_id = access::get_project_org_id(&state.pool, project_id).await?;
-    access::verify_org_membership(&state.pool, target_user, org_id)
+    let org_id = access::get_project_org_id(&mut **tx, project_id).await?;
+    access::verify_org_membership(&mut **tx, target_user, org_id)
         .await
         .map_err(|_| {
             ApiError::BadRequest(
@@ -579,7 +619,7 @@ pub async fn add_project_member(
     .bind(project_id)
     .bind(target_user)
     .bind(&body.role)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?;
 
     Ok((
@@ -611,6 +651,7 @@ pub async fn add_project_member(
 pub async fn update_project_member(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path((project_id, target_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateProjectMemberRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -621,11 +662,16 @@ pub async fn update_project_member(
         ));
     }
 
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Require project admin+ or org admin+
     let has_project_admin = state
         .rbac
         .has_project_role(
-            &state.pool,
+            &mut **tx,
             user.user_id,
             project_id,
             &crate::rbac::models::ProjectRole::Admin,
@@ -636,13 +682,13 @@ pub async fn update_project_member(
         let org_id =
             sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
                 .bind(project_id)
-                .fetch_optional(&state.pool)
+                .fetch_optional(&mut **tx)
                 .await?
                 .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
 
         if !state
             .rbac
-            .has_org_role(&state.pool, user.user_id, org_id, &OrgRole::Admin)
+            .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
             .await?
         {
             return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -654,7 +700,7 @@ pub async fn update_project_member(
             .bind(&body.role)
             .bind(project_id)
             .bind(target_id)
-            .execute(&state.pool)
+            .execute(&mut **tx)
             .await?
             .rows_affected();
 
@@ -687,13 +733,19 @@ pub async fn update_project_member(
 pub async fn remove_project_member(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path((project_id, target_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Require project admin+ or org admin+
     let has_project_admin = state
         .rbac
         .has_project_role(
-            &state.pool,
+            &mut **tx,
             user.user_id,
             project_id,
             &crate::rbac::models::ProjectRole::Admin,
@@ -704,13 +756,13 @@ pub async fn remove_project_member(
         let org_id =
             sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
                 .bind(project_id)
-                .fetch_optional(&state.pool)
+                .fetch_optional(&mut **tx)
                 .await?
                 .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
 
         if !state
             .rbac
-            .has_org_role(&state.pool, user.user_id, org_id, &OrgRole::Admin)
+            .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
             .await?
         {
             return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -723,7 +775,7 @@ pub async fn remove_project_member(
     )
     .bind(project_id)
     .bind(target_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Project member not found".into()))?;
 
@@ -732,7 +784,7 @@ pub async fn remove_project_member(
             "SELECT COUNT(*) FROM project_members WHERE project_id = $1 AND role = 'owner'",
         )
         .bind(project_id)
-        .fetch_one(&state.pool)
+        .fetch_one(&mut **tx)
         .await?;
 
         if owner_count <= 1 {
@@ -745,7 +797,7 @@ pub async fn remove_project_member(
     sqlx::query("DELETE FROM project_members WHERE project_id = $1 AND user_id = $2")
         .bind(project_id)
         .bind(target_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
     Ok(Json(serde_json::json!({ "message": "Member removed" })))
