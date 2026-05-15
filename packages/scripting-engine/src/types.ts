@@ -37,7 +37,8 @@ export interface FormulaFunction {
   description: string;
   parameters: FunctionParameter[];
   returns: string;
-  implementation: (...args: unknown[]) => unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- function-table holds heterogeneously-typed implementations; caller narrows return via FormulaFunction.returns
+  implementation: (...args: any[]) => unknown;
   examples?: string[];
 }
 

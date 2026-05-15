@@ -263,7 +263,7 @@ export class FormulaEvaluator {
       ],
       returns: 'number',
       implementation: (min: number, max: number) => {
-        const rand = this.functions.get('RANDOM')!.implementation();
+        const rand = this.functions.get('RANDOM')!.implementation() as number;
         return Math.floor(rand * (max - min + 1)) + min;
       }
     });

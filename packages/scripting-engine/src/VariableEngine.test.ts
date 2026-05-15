@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { VariableEngine } from '$lib/scripting-engine';
-import type { Variable } from '$lib/shared';
+import { VariableEngine } from './VariableEngine';
+import type { Variable } from '@qdesigner/questionnaire-core';
 
 describe('VariableEngine', () => {
   let engine: VariableEngine;

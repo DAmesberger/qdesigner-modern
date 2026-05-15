@@ -140,9 +140,10 @@ export const irtFunctions: FormulaFunction[] = [
         let secondDeriv = 0;
 
         for (let i = 0; i < n; i++) {
-          const a = items[i].a;
-          const b = items[i].b;
-          const c = items[i].c;
+          const item = items[i]!;
+          const a = item.a;
+          const b = item.b;
+          const c = item.c;
           const P = irt3pl(theta, a, b, c);
           const Q = 1 - P;
 
@@ -151,7 +152,7 @@ export const irtFunctions: FormulaFunction[] = [
           const pStar = (P - c) / (1 - c);
 
           // First derivative of log-likelihood
-          firstDeriv += a * pStar * (resp[i] - P) / P;
+          firstDeriv += a * pStar * (resp[i]! - P) / P;
 
           // Second derivative (approximation using expected information)
           secondDeriv -= a * a * pStar * pStar * Q / P;

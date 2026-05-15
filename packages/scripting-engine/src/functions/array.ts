@@ -29,7 +29,9 @@ export const arrayFunctions: FormulaFunction[] = [
         
         for (const operator of operators) {
           if (condition.includes(operator)) {
-            [op, value] = condition.split(operator).map(s => s.trim());
+            const parts = condition.split(operator).map(s => s.trim());
+            op = parts[0] ?? '';
+            value = parts[1] ?? '';
             if (!op) {
               op = operator;
               break;
@@ -92,7 +94,7 @@ export const arrayFunctions: FormulaFunction[] = [
             const parts = transform.split(operator);
             if (parts.length === 2) {
               op = operator;
-              value = parts[1].trim();
+              value = parts[1]!.trim();
               break;
             }
           }

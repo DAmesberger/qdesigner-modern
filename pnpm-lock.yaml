@@ -236,6 +236,13 @@ importers:
         version: 5.8.3
 
   packages/scripting-engine:
+    dependencies:
+      '@qdesigner/questionnaire-core':
+        specifier: workspace:*
+        version: link:../questionnaire-core
+      mathjs:
+        specifier: ^14.5.3
+        version: 14.9.1
     devDependencies:
       '@types/node':
         specifier: ^20.11.5
@@ -243,6 +250,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^1.2.0
         version: 1.6.1(vitest@1.6.1)
+      monaco-editor:
+        specifier: ^0.45.0
+        version: 0.45.0
       typescript:
         specifier: ^5.3.3
         version: 5.8.3
@@ -4679,7 +4689,6 @@ packages:
 
   /monaco-editor@0.45.0:
     resolution: {integrity: sha512-mjv1G1ZzfEE3k9HZN0dQ2olMdwIfaeAAjFiwNprLfYNRSz7ctv9XuCT7gPtBGrMUeV1/iZzYKj17Khu1hxoHOA==}
-    dev: false
 
   /mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}

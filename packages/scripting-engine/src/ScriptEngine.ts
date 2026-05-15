@@ -2,7 +2,7 @@
 // AST-first evaluation for formula expressions, Worker fallback for
 // general scripts.
 
-import { ScriptWorker, type WorkerResponse } from '$lib/runtime/core/ScriptWorker';
+import { ScriptWorker, type WorkerResponse } from './ScriptWorker';
 import { FormulaParser } from './parser';
 import { ASTEvaluator, type ASTEvaluatorOptions } from './ast-evaluator';
 

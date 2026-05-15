@@ -1,5 +1,5 @@
 import { create, all, type FactoryFunctionMap } from 'mathjs';
-import type { Variable, VariableType } from '$lib/shared';
+import type { Variable, VariableType } from '@qdesigner/questionnaire-core';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variable engine evaluates dynamic formula payloads
 type DynamicValue = any;

@@ -15,8 +15,8 @@ function pearsonCorrelation(x: number[], y: number[]): number {
 
   let ssXX = 0, ssYY = 0, ssXY = 0;
   for (let i = 0; i < n; i++) {
-    const dx = x[i] - meanX;
-    const dy = y[i] - meanY;
+    const dx = x[i]! - meanX;
+    const dy = y[i]! - meanY;
     ssXX += dx * dx;
     ssYY += dy * dy;
     ssXY += dx * dy;
@@ -58,9 +58,9 @@ export const psychometricFunctions: FormulaFunction[] = [
         let oddSum = 0, evenSum = 0;
         for (let j = 0; j < nItems; j++) {
           if (j % 2 === 0) {
-            evenSum += row[j];
+            evenSum += row[j]!;
           } else {
-            oddSum += row[j];
+            oddSum += row[j]!;
           }
         }
         oddSums.push(oddSum);
@@ -102,7 +102,7 @@ export const psychometricFunctions: FormulaFunction[] = [
       // Calculate total scores for each participant
       const totals = rows.map(row => {
         let s = 0;
-        for (let j = 0; j < k; j++) s += row[j];
+        for (let j = 0; j < k; j++) s += row[j]!;
         return s;
       });
 
@@ -117,7 +117,7 @@ export const psychometricFunctions: FormulaFunction[] = [
       for (let j = 0; j < k; j++) {
         let correct = 0;
         for (let i = 0; i < n; i++) {
-          correct += rows[i][j];
+          correct += rows[i]![j]!;
         }
         const p = correct / n;
         const q = 1 - p;
@@ -155,7 +155,7 @@ export const psychometricFunctions: FormulaFunction[] = [
       // Extract item columns
       const columns: number[][] = [];
       for (let j = 0; j < k; j++) {
-        columns.push(rows.map(row => row[j]));
+        columns.push(rows.map(row => row[j]!));
       }
 
       // Average inter-item correlation
@@ -163,7 +163,7 @@ export const psychometricFunctions: FormulaFunction[] = [
       let count = 0;
       for (let i = 0; i < k; i++) {
         for (let j = i + 1; j < k; j++) {
-          const r = pearsonCorrelation(columns[i], columns[j]);
+          const r = pearsonCorrelation(columns[i]!, columns[j]!);
           if (!isNaN(r)) {
             sumR += r;
             count++;
