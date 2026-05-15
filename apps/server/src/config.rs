@@ -61,7 +61,7 @@ impl Config {
         Self {
             database_url: env_required("DATABASE_URL"),
             jwt_secret: env_required("JWT_SECRET"),
-            jwt_refresh_secret: env_or("JWT_REFRESH_SECRET", "refresh-secret-change-me"),
+            jwt_refresh_secret: env_required("JWT_REFRESH_SECRET"),
             jwt_access_expiry: Duration::from_secs(jwt_access_expiry_secs),
             jwt_refresh_expiry: Duration::from_secs(jwt_refresh_expiry_secs),
             minio_endpoint: env_or("MINIO_ENDPOINT", "http://localhost:9000"),
