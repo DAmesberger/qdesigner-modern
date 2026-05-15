@@ -1,12 +1,12 @@
 # ADR 0010 — Partial FORCE ROW LEVEL SECURITY (admin-side tables only)
 
-**Status:** Accepted (2026-05-15). Companion to [ADR 0001](0001-rls.md) Phase
-5 work. Narrows the original wording of this ADR (first drafted 2026-05-15
-earlier the same day; first version proposed full FORCE on all 11 protected
-tables — rewritten after the P5.2 mid-phase discovery that full FORCE
-breaks both anonymous fillout reads and *all* INSERT/UPDATE/DELETE traffic
-under the existing `00014_rls_policies.sql`, which declares `FOR SELECT`
-policies only).
+**Status:** Superseded by [ADR 0011](0011-rls-infra-only.md) (2026-05-15).
+The partial-FORCE plan in this document (and its earlier full-FORCE
+wording) does not enforce anything while the application connects as
+the postgres bootstrap superuser, which empirical verification in
+Phase 5 surfaced. ADR 0011 documents what shipped (infrastructure only)
+and the scope of the deferred enforcement work. This ADR is retained
+for historical context on the route that wasn't taken.
 
 ## Decision
 

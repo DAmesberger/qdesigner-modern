@@ -1,4 +1,3 @@
-use axum::extract::Query;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -30,16 +29,6 @@ pub struct UpdateProfileRequest {
     pub locale: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
-pub struct GetProfileQuery {
-    /// Debug-only switch used by the Phase 5 spike to verify the
-    /// rls_context middleware rolls back the per-request transaction
-    /// and returns the connection to the pool when a handler panics.
-    /// Compiled out of release builds.
-    #[serde(default)]
-    pub panic: Option<u8>,
-}
-
 /// GET /api/users/me
 #[utoipa::path(
     get,
@@ -54,17 +43,9 @@ pub struct GetProfileQuery {
     tags = ["users"]
 )]
 pub async fn get_profile(
-    Query(query): Query<GetProfileQuery>,
     user: AuthenticatedUser,
     tx: Tx,
 ) -> Result<Json<UserProfile>, ApiError> {
-    #[cfg(debug_assertions)]
-    if matches!(query.panic, Some(1)) {
-        panic!("spike: simulated handler panic for rollback verification");
-    }
-    #[cfg(not(debug_assertions))]
-    let _ = query;
-
     let mut guard = tx.lock().await;
     let tx = guard
         .as_mut()

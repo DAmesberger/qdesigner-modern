@@ -51,10 +51,10 @@ DATABASE_URL=postgresql://qdesigner:qdesigner@localhost:15434/qdesigner \
   cargo test --manifest-path apps/server/Cargo.toml -- --include-ignored
 ```
 
-Test count baseline (post-Phase 4):
+Test count baseline (post-Phase 5):
 - frontend web suite: 43 files / 716 passing (includes package tests via vitest glob)
 - scripting-engine standalone: 6 files / 223
-- server: 35 across 1 lib + 5 integration files (10 bin unit + 8 auth_flows + 3 sync_session_dedup + 5 bump_version_semver + 8 rbac_integration + 1 revoked_tokens_purge)
+- server: 36 across 1 lib + 6 integration files (10 bin unit + 8 auth_flows + 3 sync_session_dedup + 5 bump_version_semver + 8 rbac_integration + 1 revoked_tokens_purge + 1 rls_context)
 
 ## Ports
 
@@ -119,7 +119,8 @@ The crate is bin+lib hybrid: `tests/` integration tests import via `qdesigner_se
 
 - Migrations: `apps/server/migrations/00001 … 00016` (single live directory; the dead `db/migrations/` directory was deleted in Phase 2.4 per ADR 0009 — schemas had diverged, port wasn't viable).
 - `00014_rls_policies.sql` declares helper functions (`current_app_user_id`, `current_app_user_role`, `is_super_admin`) and `ENABLE ROW LEVEL SECURITY` policies on users, organizations, organization_members, projects, project_members, questionnaire_definitions, sessions, responses, interaction_events, session_variables, media_assets.
-- **RLS enforcement status**: policies are `ENABLE`d but not `FORCE`d. The Rust backend connects as the table owner and **bypasses RLS on application traffic**. Policies enforce defense-in-depth against ad-hoc DB sessions only. Connection-pinning (per-request transactions so `set_config('app.user_id', …)` persists) is **deferred to Phase 5** — see ADR 0001 status.
+- **RLS infrastructure landed in Phase 5; enforcement deferred (ADR 0011).** Every authenticated handler now runs inside a per-request transaction opened by `middleware/rls_context.rs`; `app.user_id` and `app.user_role` are set as transaction-local GUCs via `set_config(..., true)` and are readable through `current_app_user_id()`. Handlers take a `Tx` extractor from `middleware/tx.rs` and pass `&mut **tx` to queries; `api/access::*` and `RbacManager` methods take `executor: impl PgExecutor<'_>` so the same call site works for `&PgPool` (anonymous handlers) and `&mut **tx` (authenticated handlers).
+- **Enforcement is NOT yet active.** `qdesigner` is the postgres bootstrap superuser (`SUPERUSER` + `BYPASSRLS` per the docker image), which bypasses RLS regardless of FORCE. Making policies bind on application traffic requires a role switch + INSERT/UPDATE/DELETE policies + a fillout-path strategy; that's deferred to a future Phase. ADR 0011 has the full scope.
 - Authorization on application traffic is enforced by `api/access::*` checks composed in handlers, plus the trigger `trg_project_members_org_check` for cross-tenant project_member inserts.
 
 ## Offline fillout
@@ -173,6 +174,8 @@ All architectural and scoping decisions through Phase 4 live in `docs/decisions/
 - `0007-rbac-manager.md` — superseded by 0008 (RbacManager has live consumers)
 - `0008-rbac-manager-retained.md` — keep RbacManager; delete only the unused middleware
 - `0009-rls-author-not-port.md` — RLS authored against live schema (not ported from dead dir)
+- `0010-rls-force.md` — superseded by 0011; archived partial-FORCE plan
+- `0011-rls-infra-only.md` — Phase 5 ships RLS infrastructure (per-request tx, Tx extractor, GUC); enforcement deferred
 - `SUPERVISOR_PROTOCOL.md` — message format for the team-lead / supervisor / user loop
 - `baseline.md` — metrics captured at the start of Phase 1
 
@@ -180,7 +183,7 @@ When an ADR's status changes, a new ADR supersedes it rather than editing in pla
 
 ## Known TODOs
 
-- **Phase 5 (not yet started): connection-pinning refactor.** Every authenticated handler currently takes `&PgPool`. To make RLS policies enforce against application traffic, each handler needs to take a `&mut Transaction<'_, Postgres>` (or use a task-local connection registry) so `set_config('app.user_id', …)` persists across the queries it runs. ADR 0001 details the choice.
+- **Future phase: actually enforce RLS.** Phase 5 shipped the infrastructure (per-request tx + Tx extractor + GUC set per authenticated request, see ADR 0011). Enforcement still requires three pieces of design work: (1) switch the application connection to a non-superuser non-BYPASSRLS role (e.g., `qdesigner_app`) created in a new migration; (2) author INSERT/UPDATE/DELETE policies on tables where enforcement should bind — either permissive `WITH CHECK (true)` or rule-encoding to match `api/access::*`; (3) decide what happens to fillout-path tables (`questionnaire_definitions`, `sessions`, `responses`, `interaction_events`, `session_variables`) whose anonymous readers have no `app.user_id` — drop RLS on them, or design a session-token GUC. None of these has a clean single-phase answer.
 - **rbac_integration env-file path** was fixed in P3.4a; if you copy that test pattern elsewhere, use `.parent().and_then(|p| p.parent())` to reach the repo root from `CARGO_MANIFEST_DIR`.
 - **Testability gaps surfaced in Phase 4** (logged in commit `44cbb5e`): handler-level HTTP round-trip tests (auth, sessions, questionnaires) need a server harness with full AppState construction. The pure-logic and SQL-level tests cover the building blocks.
 - **Frontend build prerender** requires every `<a href>` target to either exist as a route or be marked external. Phase 1.0.6 cleaned up the marketing surface; any new internal links should be backed by a real `+page.svelte`.
