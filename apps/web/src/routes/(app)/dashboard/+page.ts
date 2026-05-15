@@ -6,7 +6,7 @@ import type {
   DashboardData,
   DashboardQuestionnaire,
   DashboardActivity,
-} from '$lib/types/dashboard';
+} from '$lib/shared/types/dashboard';
 
 export const load: PageLoad = async ({ parent, depends }) => {
   depends('app:organization');

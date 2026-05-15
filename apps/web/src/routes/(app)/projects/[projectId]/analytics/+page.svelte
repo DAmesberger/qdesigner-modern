@@ -8,7 +8,7 @@
 		type ResponseExportFormat,
 		type ScriptFormat,
 	} from '$lib/analytics/ResponseExportService';
-	import type { QuestionnaireDefinition, SessionData, ExportRow } from '$lib/types/api';
+	import type { QuestionnaireDefinition, SessionData, ExportRow } from '$lib/shared/types/api';
 	import type { PageData } from './$types';
 	import {
 		ArrowLeft,

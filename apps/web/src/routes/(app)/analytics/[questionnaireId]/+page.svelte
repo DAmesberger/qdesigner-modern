@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import type { QuestionnaireAnalyticsData } from './+page';
-  import type { TimeSeriesBucket } from '$lib/types/api';
+  import type { TimeSeriesBucket } from '$lib/shared/types/api';
   import { api } from '$lib/services/api';
   import { RealtimeAnalyticsClient } from '$lib/analytics/RealtimeAnalyticsClient.svelte';
   import { ChevronLeft } from 'lucide-svelte';

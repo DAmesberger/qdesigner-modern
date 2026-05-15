@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { QuestionnaireSummary, TimeSeriesBucket } from '$lib/types/api';
+  import type { QuestionnaireSummary, TimeSeriesBucket } from '$lib/shared/types/api';
   import type { AnalyticsPageData } from './+page';
   import { api } from '$lib/services/api';
   import Select from '$lib/components/ui/forms/Select.svelte';

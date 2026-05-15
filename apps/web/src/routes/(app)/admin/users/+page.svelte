@@ -5,7 +5,7 @@
   import Card from '$lib/components/common/Card.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
-  import type { OrganizationMember } from '$lib/types/api';
+  import type { OrganizationMember } from '$lib/shared/types/api';
 
   let members: OrganizationMember[] = [];
   let loading = true;

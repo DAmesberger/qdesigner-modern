@@ -5,7 +5,7 @@ import type {
   QuestionnaireSummary,
   TimeSeriesBucket,
   SessionAggregateData,
-} from '$lib/types/api';
+} from '$lib/shared/types/api';
 
 export interface QuestionnaireAnalyticsData {
   questionnaireId: string;

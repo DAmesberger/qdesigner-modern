@@ -1,7 +1,7 @@
 <script lang="ts">
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
-  import type { DashboardSummary } from '$lib/types/api';
+  import type { DashboardSummary } from '$lib/shared/types/api';
   import {
     Users,
     FileText,

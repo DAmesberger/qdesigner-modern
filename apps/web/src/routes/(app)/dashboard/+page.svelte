@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
   import { formatDistanceToNow } from '$lib/shared/utils/date';
-  import type { DashboardQuestionnaire } from '$lib/types/dashboard';
+  import type { DashboardQuestionnaire } from '$lib/shared/types/dashboard';
   import { appPaths } from '$lib/routing/paths';
   import { ws, type WsEvent } from '$lib/services/ws';
   import { api } from '$lib/services/api';

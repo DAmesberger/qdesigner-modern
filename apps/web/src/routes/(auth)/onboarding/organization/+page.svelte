@@ -9,8 +9,8 @@
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
-  import type { User } from '$lib/types/auth';
-  import type { Invitation } from '$lib/types/api';
+  import type { User } from '$lib/shared/types/auth';
+  import type { Invitation } from '$lib/shared/types/api';
 
   let organizationName = $state('');
   let loading = $state(false);

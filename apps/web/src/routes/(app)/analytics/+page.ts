@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import { browser } from '$app/environment';
 import { api } from '$lib/services/api';
-import type { QuestionnaireSummary } from '$lib/types/api';
+import type { QuestionnaireSummary } from '$lib/shared/types/api';
 
 export interface AnalyticsPageData {
   organizationId: string;
