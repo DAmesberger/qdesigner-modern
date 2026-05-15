@@ -122,9 +122,33 @@ ALTER ROLE qdesigner_app WITH LOGIN PASSWORD '<dev-only>';
 
 Update `.env.development`, `.env.test`, `docker-compose.yml` to use `qdesigner_app` for the app DSN. Migrations continue as `qdesigner`.
 
-**Verification:** `docker compose down -v; up`; `cargo run` applies migrations cleanly; full app works end-to-end (login + dashboard + one CRUD + fillout). RLS doesn't bind yet — no FORCE, no policies referencing the new role state.
+**Verification (amended 2026-05-15 mid-P6.1 by supervisor advisory):**
+`docker compose down -v; up`; `cargo run` applies migrations cleanly
+under the split-DSN pattern; startup probe logs
+`current_user = qdesigner_app`; `pg_stat_activity` shows app
+connections under `qdesigner_app` and migration connections under
+`qdesigner`; `cargo check` passes. **End-to-end curl smoke (login +
+CRUD + fillout) deferred to the P6.2 gate.**
+
+**Correction to the original P6.1 text ("RLS doesn't bind yet"):** the
+plan was wrong. Non-owner ENABLE binds without FORCE. The DSN switch
+alone activates RLS for `qdesigner_app` on every table where 00014
+ran ENABLE — i.e., starting at P6.1, every admin-table
+INSERT/UPDATE/DELETE default-denies because no mutation policies
+exist yet, and the existing SELECT policies return empty for
+anonymous routes (no `app.user_id` GUC). This is the same condition
+the P6.5 empirical claim describes; the claim is answered early at
+P6.1, not at P6.5. `cargo test auth_flows` is expected to fail in
+the interval between P6.1 and P6.2; this is intentional ordering, not
+a defect. P6.2 (admin permissive INSERT/UPDATE/DELETE policies in
+migration 00020) restores the green state. The P6.5 FORCE migration
+remains valuable as defence against the migration superuser
+(`qdesigner`) accidentally hitting application data — note the
+empirical confirmation in the P6.5 commit body when it lands.
 
 **Risk:** every dev needs a fresh DB. Document loudly in commit body.
+The intermediate-broken state between P6.1 and P6.2 lasts exactly one
+commit; land P6.2 same-day.
 
 ### P6.2 — Sessions schema + admin mutation policies
 

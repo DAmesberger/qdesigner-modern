@@ -5,6 +5,10 @@ use std::time::Duration;
 pub struct Config {
     // Database
     pub database_url: String,
+    // Optional separate DSN for migrations (P6.1: app connects as
+    // qdesigner_app, migrations continue as qdesigner). Falls back to
+    // `database_url` when unset so single-role deployments keep working.
+    pub database_url_migrations: Option<String>,
 
     // JWT
     pub jwt_secret: String,
@@ -60,6 +64,7 @@ impl Config {
 
         Self {
             database_url: env_required("DATABASE_URL"),
+            database_url_migrations: std::env::var("DATABASE_URL_MIGRATIONS").ok(),
             jwt_secret: env_required("JWT_SECRET"),
             jwt_refresh_secret: env_required("JWT_REFRESH_SECRET"),
             jwt_access_expiry: Duration::from_secs(jwt_access_expiry_secs),

@@ -54,13 +54,38 @@ async fn main() {
     );
 
     // ── Database ─────────────────────────────────────────────────────
+    // P6.1: migrations run as the bootstrap superuser `qdesigner` if a
+    // dedicated DSN is supplied (DATABASE_URL_MIGRATIONS); the app pool
+    // then opens against `qdesigner_app` via DATABASE_URL. When the
+    // migration DSN is unset, migrations run on the app pool — preserves
+    // single-role setups (legacy and prod-without-the-split).
+    if let Some(migration_url) = config.database_url_migrations.as_deref() {
+        db::run_migrations_with_url(migration_url)
+            .await
+            .expect("Failed to run migrations (via DATABASE_URL_MIGRATIONS)");
+    }
+
     let pool = db::connect(&config.database_url)
         .await
         .expect("Failed to connect to database");
 
-    db::run_migrations(&pool)
+    if config.database_url_migrations.is_none() {
+        db::run_migrations(&pool)
+            .await
+            .expect("Failed to run migrations");
+    }
+
+    // Empirical probe (P6.1): log the role the app pool actually
+    // connected as. The .env.development DATABASE_URL change is the only
+    // thing flipping it; if the file isn't read, everything else looks
+    // fine but the role hasn't changed.
+    match sqlx::query_scalar::<_, String>("SELECT current_user")
+        .fetch_one(&pool)
         .await
-        .expect("Failed to run migrations");
+    {
+        Ok(role) => tracing::info!(db_role = %role, "app pool connected as DB role"),
+        Err(e) => tracing::warn!("could not probe current_user: {e}"),
+    }
 
     // ── JWT ──────────────────────────────────────────────────────────
     let jwt_manager = JwtManager::new(
