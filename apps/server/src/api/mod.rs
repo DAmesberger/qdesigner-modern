@@ -173,7 +173,9 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/comments/{cid}",
             patch(comments::update_comment).delete(comments::delete_comment),
-        );
+        )
+        .layer(CatchPanicLayer::new())
+        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let session_routes = Router::new()
         .route(
