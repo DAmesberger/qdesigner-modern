@@ -1,6 +1,6 @@
 # ADR 0007 — Delete RbacManager and rbac middleware
 
-**Status:** Accepted (2026-05-15)
+**Status:** Superseded by [ADR 0008](0008-rbac-manager-retained.md) (2026-05-15)
 
 **Decision.** Delete `apps/server/src/rbac/manager.rs` and `apps/server/src/rbac/middleware.rs`. `RbacManager` is constructed at `apps/server/src/main.rs:85` and held in `AppState`, but never read. The four `require_*` helpers in `rbac/middleware.rs` are never wired into any route.
 
