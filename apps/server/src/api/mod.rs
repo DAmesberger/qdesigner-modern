@@ -5,6 +5,7 @@ use axum::{
 };
 use tower_http::catch_panic::CatchPanicLayer;
 
+use crate::middleware::fillout_rls_context::set_fillout_rls_context;
 use crate::middleware::rate_limit::rate_limit_middleware;
 use crate::middleware::rls_context::set_rls_context;
 use crate::state::AppState;
@@ -215,7 +216,10 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/{id}/media", post(media::upload_session_media))
         .layer(CatchPanicLayer::new())
-        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            set_fillout_rls_context,
+        ));
 
     let media_routes = Router::new()
         .route("/", get(media::list_media).post(media::upload_media))

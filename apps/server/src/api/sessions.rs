@@ -342,14 +342,20 @@ pub struct CheckDuplicateResponse {
 pub async fn create_session(
     State(state): State<AppState>,
     OptionalUser(user): OptionalUser,
+    tx: Tx,
     Json(body): Json<CreateSessionRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Session>), ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("fillout_rls_context middleware placed a transaction");
+
     // Verify the questionnaire exists and is published (or user is authenticated and has access).
     let q_status = sqlx::query_scalar::<_, String>(
         "SELECT status FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(body.questionnaire_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
@@ -369,7 +375,7 @@ pub async fn create_session(
             "SELECT version_major, version_minor, version_patch FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(body.questionnaire_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?;
 
         match ver {
@@ -379,23 +385,35 @@ pub async fn create_session(
     };
 
     // P6.2: link authenticated sessions to the user_id so the dual-path
-    // RLS policies in 00021 can admit `user_id = current_app_user_id()`.
-    // Anonymous fillout keeps NULL; the policy's session_id arm covers
-    // it once 00021 lands.
+    // RLS policies in 00021 admit via `user_id = current_app_user_id()`.
+    // Anonymous fillout keeps NULL.
     let session_user_id = user.as_ref().map(|u| u.user_id);
+
+    // P6.3: generate the session id in the handler and set `app.session_id`
+    // before the INSERT. The INSERT's WITH CHECK and the SELECT applied to
+    // RETURNING both admit via the session_id branch. This avoids relying
+    // on the policy's bootstrap branch — bootstrap admits INSERT but
+    // RETURNING also requires SELECT visibility, which the bootstrap
+    // branch (deliberately) does not grant.
+    let new_session_id = Uuid::new_v4();
+    sqlx::query("SELECT set_config('app.session_id', $1, true)")
+        .bind(new_session_id.to_string())
+        .execute(&mut **tx)
+        .await?;
 
     let session = sqlx::query_as::<_, Session>(
         r#"
-        INSERT INTO sessions (questionnaire_id, participant_id, status, started_at,
+        INSERT INTO sessions (id, questionnaire_id, participant_id, status, started_at,
                               browser_info, metadata,
                               questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch,
                               user_id)
-        VALUES ($1, $2, 'active', NOW(), $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, 'active', NOW(), $4, $5, $6, $7, $8, $9)
         RETURNING id, questionnaire_id, participant_id, status, started_at,
                   completed_at, last_activity_at, metadata, browser_info, created_at,
                   questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch
         "#,
     )
+    .bind(new_session_id)
     .bind(body.questionnaire_id)
     .bind(&participant_id)
     .bind(&body.browser_info)
@@ -404,7 +422,7 @@ pub async fn create_session(
     .bind(ver_minor)
     .bind(ver_patch)
     .bind(session_user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     // Broadcast session.created via WebSocket
@@ -432,9 +450,26 @@ pub async fn create_session(
     tags = ["sessions"]
 )]
 pub async fn check_duplicate(
-    State(state): State<AppState>,
+    tx: Tx,
     Json(body): Json<CheckDuplicateRequest>,
 ) -> Result<Json<CheckDuplicateResponse>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("fillout_rls_context middleware placed a transaction");
+    // Anonymous check: this reads across all sessions for a questionnaire
+    // to count completed duplicates by fingerprint. Since the request
+    // carries no JWT and no session id, only the bootstrap branch of the
+    // dual-path SELECT policy would apply — and bootstrap is only on
+    // INSERT, not SELECT. So this SELECT returns 0 under qdesigner_app
+    // for anonymous callers.
+    //
+    // The fillout client invokes /check-duplicate before creating a
+    // session, so the anonymous read returning 0 means the dedup probe
+    // becomes a no-op. The product behaviour (fingerprint-based
+    // duplicate detection) needs an alternative path that doesn't
+    // require reading other sessions' metadata; tracked in the
+    // P6.3 deferred list.
     let count: i64 = sqlx::query_scalar(
         r#"
         SELECT COUNT(*) FROM sessions
@@ -445,7 +480,7 @@ pub async fn check_duplicate(
     )
     .bind(body.questionnaire_id)
     .bind(&body.fingerprint)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(Json(CheckDuplicateResponse {
@@ -549,7 +584,6 @@ pub async fn list_sessions(
     tags = ["analytics"]
 )]
 pub async fn aggregate_sessions(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Query(query): Query<SessionAggregateQuery>,
@@ -569,7 +603,7 @@ pub async fn aggregate_sessions(
     }
 
     let samples = load_numeric_samples(
-        &state,
+        &mut **tx,
         source,
         query.questionnaire_id,
         key,
@@ -609,7 +643,6 @@ pub async fn aggregate_sessions(
     tags = ["analytics"]
 )]
 pub async fn compare_sessions(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Query(query): Query<SessionCompareQuery>,
@@ -637,7 +670,7 @@ pub async fn compare_sessions(
     }
 
     let left_samples = load_numeric_samples(
-        &state,
+        &mut **tx,
         source,
         query.questionnaire_id,
         key,
@@ -645,7 +678,7 @@ pub async fn compare_sessions(
     )
     .await?;
     let right_samples = load_numeric_samples(
-        &state,
+        &mut **tx,
         source,
         query.questionnaire_id,
         key,
@@ -847,7 +880,6 @@ pub async fn dashboard_summary(
     tags = ["analytics"]
 )]
 pub async fn cross_project_analytics(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(org_id): Path<Uuid>,
@@ -994,7 +1026,7 @@ pub async fn cross_project_analytics(
 
         // Gather variable stats if key is provided
         let variable_stats = if !key.is_empty() {
-            let samples = load_numeric_samples(&state, source, qid, &key, None).await?;
+            let samples = load_numeric_samples(&mut **tx, source, qid, &key, None).await?;
             let values: Vec<f64> = samples.iter().map(|s| s.value).collect();
             if !values.is_empty() {
                 let stats = compute_numeric_stats(&values);
@@ -1152,7 +1184,6 @@ pub async fn get_session(
     tags = ["sessions"]
 )]
 pub async fn get_responses(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(session_id): Path<Uuid>,
@@ -1162,7 +1193,7 @@ pub async fn get_responses(
     let tx = guard
         .as_mut()
         .expect("rls_context middleware placed a transaction");
-    ensure_session_access(&state, user.user_id, session_id).await?;
+    ensure_session_access(&mut **tx, user.user_id, session_id).await?;
 
     let limit = query.limit.unwrap_or(500).clamp(1, 5000);
     let offset = query.offset.unwrap_or(0).max(0);
@@ -1222,7 +1253,6 @@ pub async fn get_responses(
     tags = ["sessions"]
 )]
 pub async fn get_events(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(session_id): Path<Uuid>,
@@ -1231,7 +1261,7 @@ pub async fn get_events(
     let tx = guard
         .as_mut()
         .expect("rls_context middleware placed a transaction");
-    ensure_session_access(&state, user.user_id, session_id).await?;
+    ensure_session_access(&mut **tx, user.user_id, session_id).await?;
 
     let events = sqlx::query_as::<_, InteractionEventRecord>(
         r#"
@@ -1265,7 +1295,6 @@ pub async fn get_events(
     tags = ["sessions"]
 )]
 pub async fn get_variables(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(session_id): Path<Uuid>,
@@ -1274,7 +1303,7 @@ pub async fn get_variables(
     let tx = guard
         .as_mut()
         .expect("rls_context middleware placed a transaction");
-    ensure_session_access(&state, user.user_id, session_id).await?;
+    ensure_session_access(&mut **tx, user.user_id, session_id).await?;
 
     let variables = sqlx::query_as::<_, SessionVariableRecord>(
         r#"
@@ -1308,11 +1337,16 @@ pub async fn get_variables(
 pub async fn update_session(
     State(state): State<AppState>,
     OptionalUser(user): OptionalUser,
+    tx: Tx,
     Path(session_id): Path<Uuid>,
     Json(body): Json<UpdateSessionRequest>,
 ) -> Result<Json<Session>, ApiError> {
-    // Verify session ownership: either the participant or an org member
-    ensure_session_participant_or_member(&state, user.as_ref(), session_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("fillout_rls_context middleware placed a transaction");
+    // Verify session ownership: either the participant or an org member.
+    ensure_session_participant_or_member(&mut **tx, user.as_ref(), session_id).await?;
     let mut parts: Vec<String> = vec!["last_activity_at = NOW()".into()];
     let mut bind_idx = 2u32;
     let normalized_status = body
@@ -1353,12 +1387,12 @@ pub async fn update_session(
     }
 
     let session = query
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
 
     if session.status == "completed" {
-        refresh_session_variable_projection(&state, session_id).await?;
+        refresh_session_variable_projection(&mut **tx, session_id).await?;
     }
 
     // Broadcast session update via WebSocket
@@ -1398,12 +1432,18 @@ pub async fn update_session(
 pub async fn submit_response(
     State(state): State<AppState>,
     OptionalUser(user): OptionalUser,
+    tx: Tx,
     Path(session_id): Path<Uuid>,
     Json(payload): Json<SubmitResponsesPayload>,
 ) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("fillout_rls_context middleware placed a transaction");
+
     // Session must be active and the caller must be the participant or an org member
-    ensure_session_active(&state, session_id).await?;
-    ensure_session_participant_or_member(&state, user.as_ref(), session_id).await?;
+    ensure_session_active(&mut **tx, session_id).await?;
+    ensure_session_participant_or_member(&mut **tx, user.as_ref(), session_id).await?;
 
     let responses = match payload {
         SubmitResponsesPayload::Single(response) => vec![response],
@@ -1417,20 +1457,20 @@ pub async fn submit_response(
     let response_count = responses.len();
 
     for response in responses.iter() {
-        insert_response(&state, session_id, response).await?;
+        insert_response(&mut **tx, session_id, response).await?;
     }
 
     // Update last_activity_at on the session
     sqlx::query("UPDATE sessions SET last_activity_at = NOW() WHERE id = $1")
         .bind(session_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
     // Broadcast response.submitted via WebSocket
     let questionnaire_id =
         sqlx::query_scalar::<_, Uuid>("SELECT questionnaire_id FROM sessions WHERE id = $1")
             .bind(session_id)
-            .fetch_optional(&state.pool)
+            .fetch_optional(&mut **tx)
             .await?;
 
     if let Some(qid) = questionnaire_id {
@@ -1477,13 +1517,18 @@ pub async fn submit_response(
     tags = ["sessions"]
 )]
 pub async fn submit_events(
-    State(state): State<AppState>,
     OptionalUser(user): OptionalUser,
+    tx: Tx,
     Path(session_id): Path<Uuid>,
     Json(events): Json<Vec<InteractionEventRequest>>,
 ) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ApiError> {
-    ensure_session_exists(&state, session_id).await?;
-    ensure_session_participant_or_member(&state, user.as_ref(), session_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("fillout_rls_context middleware placed a transaction");
+
+    ensure_session_exists(&mut **tx, session_id).await?;
+    ensure_session_participant_or_member(&mut **tx, user.as_ref(), session_id).await?;
 
     if events.is_empty() {
         return Ok((
@@ -1511,13 +1556,13 @@ pub async fn submit_events(
         .bind(&event.question_id)
         .bind(timestamp_us)
         .bind(metadata)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
     }
 
     sqlx::query("UPDATE sessions SET last_activity_at = NOW() WHERE id = $1")
         .bind(session_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
     Ok((
@@ -1542,19 +1587,27 @@ pub async fn submit_events(
     tags = ["sessions"]
 )]
 pub async fn upsert_variable(
-    State(state): State<AppState>,
     OptionalUser(user): OptionalUser,
+    tx: Tx,
     Path(session_id): Path<Uuid>,
     Json(body): Json<SessionVariableRequest>,
 ) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ApiError> {
-    ensure_session_exists(&state, session_id).await?;
-    ensure_session_participant_or_member(&state, user.as_ref(), session_id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("fillout_rls_context middleware placed a transaction");
+
+    ensure_session_exists(&mut **tx, session_id).await?;
+    ensure_session_participant_or_member(&mut **tx, user.as_ref(), session_id).await?;
 
     let variable_name = normalize_variable_name(&body.name)?;
-    let context = fetch_session_variable_context(&state, session_id).await?;
-    let definition_map =
-        load_variable_definition_map(&state, &context, std::slice::from_ref(&variable_name))
-            .await?;
+    let context = fetch_session_variable_context(&mut **tx, session_id).await?;
+    let definition_map = load_variable_definition_map(
+        &mut **tx,
+        &context,
+        std::slice::from_ref(&variable_name),
+    )
+    .await?;
     let normalized = normalize_variable_value(
         Some(body.value),
         body.value_type.as_deref(),
@@ -1562,11 +1615,12 @@ pub async fn upsert_variable(
         definition_map.get(&variable_name),
     );
 
-    persist_session_variable(&state, session_id, &context, &variable_name, normalized).await?;
+    persist_session_variable(&mut **tx, session_id, &context, &variable_name, normalized)
+        .await?;
 
     sqlx::query("UPDATE sessions SET last_activity_at = NOW() WHERE id = $1")
         .bind(session_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
     Ok((
@@ -1658,8 +1712,8 @@ fn normalize_variable_name(name: &str) -> Result<String, ApiError> {
     Ok(normalized.to_string())
 }
 
-async fn fetch_session_variable_context(
-    state: &AppState,
+async fn fetch_session_variable_context<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
     session_id: Uuid,
 ) -> Result<SessionVariableContext, ApiError> {
     sqlx::query_as::<_, SessionVariableContext>(
@@ -1674,13 +1728,13 @@ async fn fetch_session_variable_context(
         "#,
     )
     .bind(session_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(executor)
     .await?
     .ok_or_else(|| ApiError::NotFound("Session not found".into()))
 }
 
-async fn load_variable_definition_map(
-    state: &AppState,
+async fn load_variable_definition_map<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
     context: &SessionVariableContext,
     names: &[String],
 ) -> Result<HashMap<String, VariableDefinitionMetadata>, ApiError> {
@@ -1726,7 +1780,7 @@ async fn load_variable_definition_map(
     .bind(version_minor)
     .bind(version_patch)
     .bind(&unique_names)
-    .fetch_all(&state.pool)
+    .fetch_all(executor)
     .await?;
 
     Ok(rows
@@ -1945,7 +1999,7 @@ fn normalize_variable_value(
 }
 
 async fn persist_session_variable(
-    state: &AppState,
+    conn: &mut sqlx::PgConnection,
     session_id: Uuid,
     context: &SessionVariableContext,
     variable_name: &str,
@@ -1962,7 +2016,7 @@ async fn persist_session_variable(
     .bind(session_id)
     .bind(variable_name)
     .bind(&normalized.raw_value)
-    .execute(&state.pool)
+    .execute(&mut *conn)
     .await?;
 
     sqlx::query(
@@ -2012,17 +2066,17 @@ async fn persist_session_variable(
     .bind(normalized.boolean_value)
     .bind(normalized.timestamp_value)
     .bind(normalized.raw_value)
-    .execute(&state.pool)
+    .execute(&mut *conn)
     .await?;
 
     Ok(())
 }
 
 async fn refresh_session_variable_projection(
-    state: &AppState,
+    conn: &mut sqlx::PgConnection,
     session_id: Uuid,
 ) -> Result<(), ApiError> {
-    let context = fetch_session_variable_context(state, session_id).await?;
+    let context = fetch_session_variable_context(&mut *conn, session_id).await?;
     let rows = sqlx::query_as::<_, SessionVariableRecord>(
         r#"
         SELECT id, session_id, variable_name, variable_value, updated_at
@@ -2032,7 +2086,7 @@ async fn refresh_session_variable_projection(
         "#,
     )
     .bind(session_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut *conn)
     .await?;
 
     if rows.is_empty() {
@@ -2040,7 +2094,8 @@ async fn refresh_session_variable_projection(
     }
 
     let variable_names: Vec<String> = rows.iter().map(|row| row.variable_name.clone()).collect();
-    let definition_map = load_variable_definition_map(state, &context, &variable_names).await?;
+    let definition_map =
+        load_variable_definition_map(&mut *conn, &context, &variable_names).await?;
 
     for row in rows {
         let variable_name = normalize_variable_name(&row.variable_name)?;
@@ -2051,14 +2106,15 @@ async fn refresh_session_variable_projection(
             definition_map.get(&variable_name),
         );
 
-        persist_session_variable(state, session_id, &context, &variable_name, normalized).await?;
+        persist_session_variable(&mut *conn, session_id, &context, &variable_name, normalized)
+            .await?;
     }
 
     Ok(())
 }
 
-async fn load_numeric_samples(
-    state: &AppState,
+async fn load_numeric_samples<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
     source: AggregateSource,
     questionnaire_id: Uuid,
     key: &str,
@@ -2104,7 +2160,7 @@ async fn load_numeric_samples(
                 query = query.bind(participant_id);
             }
 
-            let rows = query.fetch_all(&state.pool).await?;
+            let rows = query.fetch_all(executor).await?;
 
             Ok(rows
                 .into_iter()
@@ -2140,7 +2196,7 @@ async fn load_numeric_samples(
                 query = query.bind(participant_id);
             }
 
-            let rows = query.fetch_all(&state.pool).await?;
+            let rows = query.fetch_all(executor).await?;
 
             Ok(rows
                 .into_iter()
@@ -2256,10 +2312,13 @@ fn normalize_session_status(status: &str) -> Result<String, ApiError> {
     Ok(normalized.to_string())
 }
 
-async fn ensure_session_active(state: &AppState, session_id: Uuid) -> Result<(), ApiError> {
+async fn ensure_session_active<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    session_id: Uuid,
+) -> Result<(), ApiError> {
     let status = sqlx::query_scalar::<_, String>("SELECT status FROM sessions WHERE id = $1")
         .bind(session_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(executor)
         .await?
         .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
 
@@ -2270,11 +2329,14 @@ async fn ensure_session_active(state: &AppState, session_id: Uuid) -> Result<(),
     Ok(())
 }
 
-async fn ensure_session_exists(state: &AppState, session_id: Uuid) -> Result<(), ApiError> {
+async fn ensure_session_exists<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    session_id: Uuid,
+) -> Result<(), ApiError> {
     let exists =
         sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)")
             .bind(session_id)
-            .fetch_one(&state.pool)
+            .fetch_one(executor)
             .await?;
 
     if !exists {
@@ -2284,8 +2346,8 @@ async fn ensure_session_exists(state: &AppState, session_id: Uuid) -> Result<(),
     Ok(())
 }
 
-async fn insert_response(
-    state: &AppState,
+async fn insert_response<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
     session_id: Uuid,
     response: &SubmitResponseRequest,
 ) -> Result<ResponseRecord, ApiError> {
@@ -2310,7 +2372,7 @@ async fn insert_response(
     .bind(response.presented_at)
     .bind(response.answered_at)
     .bind(metadata)
-    .fetch_one(&state.pool)
+    .fetch_one(executor)
     .await?;
 
     Ok(inserted)
@@ -2346,19 +2408,22 @@ fn pearson_correlation(x: &[f64], y: &[f64]) -> Option<f64> {
 }
 
 /// Verify the authenticated user has access to a session's questionnaire.
+/// Takes `&mut PgConnection` so the two queries (lookup + access check)
+/// run on the same connection — necessary because `impl PgExecutor` is
+/// consumed by the first call.
 async fn ensure_session_access(
-    state: &AppState,
+    conn: &mut sqlx::PgConnection,
     user_id: Uuid,
     session_id: Uuid,
 ) -> Result<(), ApiError> {
     let questionnaire_id =
         sqlx::query_scalar::<_, Uuid>("SELECT questionnaire_id FROM sessions WHERE id = $1")
             .bind(session_id)
-            .fetch_optional(&state.pool)
+            .fetch_optional(&mut *conn)
             .await?
             .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
 
-    access::verify_questionnaire_access(&state.pool, user_id, questionnaire_id).await
+    access::verify_questionnaire_access(&mut *conn, user_id, questionnaire_id).await
 }
 
 /// For participant-facing endpoints (submit response, events, variables, update session):
@@ -2369,7 +2434,7 @@ async fn ensure_session_access(
 /// This permits anonymous questionnaire fill-out while preventing arbitrary
 /// unauthenticated access to unpublished questionnaire sessions.
 async fn ensure_session_participant_or_member(
-    state: &AppState,
+    conn: &mut sqlx::PgConnection,
     user: Option<&AuthenticatedUser>,
     session_id: Uuid,
 ) -> Result<(), ApiError> {
@@ -2382,7 +2447,7 @@ async fn ensure_session_participant_or_member(
         "#,
     )
     .bind(session_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut *conn)
     .await?
     .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
 
@@ -2396,7 +2461,7 @@ async fn ensure_session_participant_or_member(
     // For unpublished questionnaires, require authenticated org member
     match user {
         Some(u) => {
-            access::verify_questionnaire_access(&state.pool, u.user_id, questionnaire_id).await
+            access::verify_questionnaire_access(&mut *conn, u.user_id, questionnaire_id).await
         }
         None => Err(ApiError::Forbidden(
             "Authentication required for unpublished questionnaires".into(),
@@ -2658,11 +2723,17 @@ pub struct SyncResult {
 pub async fn sync_session(
     State(state): State<AppState>,
     OptionalUser(user): OptionalUser,
+    tx: Tx,
     Path(session_id): Path<Uuid>,
     Json(body): Json<SyncPayload>,
 ) -> Result<Json<SyncResult>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("fillout_rls_context middleware placed a transaction");
+
     // Verify session exists and user is authorized
-    ensure_session_participant_or_member(&state, user.as_ref(), session_id).await?;
+    ensure_session_participant_or_member(&mut **tx, user.as_ref(), session_id).await?;
 
     let mut responses_synced = 0i32;
     let mut events_synced = 0i32;
@@ -2670,7 +2741,7 @@ pub async fn sync_session(
     let session_context = if body.variables.is_empty() {
         None
     } else {
-        Some(fetch_session_variable_context(&state, session_id).await?)
+        Some(fetch_session_variable_context(&mut **tx, session_id).await?)
     };
     let variable_definition_map = if let Some(context) = &session_context {
         let variable_names: Vec<String> = body
@@ -2679,7 +2750,7 @@ pub async fn sync_session(
             .filter_map(|item| normalize_variable_name(&item.variable_name).ok())
             .collect();
 
-        load_variable_definition_map(&state, context, &variable_names).await?
+        load_variable_definition_map(&mut **tx, context, &variable_names).await?
     } else {
         HashMap::new()
     };
@@ -2701,7 +2772,7 @@ pub async fn sync_session(
         .bind(&resp.answered_at)
         .bind(&resp.metadata)
         .bind(resp.client_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
         if result.rows_affected() > 0 {
@@ -2724,7 +2795,7 @@ pub async fn sync_session(
         .bind(evt.timestamp_us)
         .bind(&evt.metadata)
         .bind(evt.client_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
         if result.rows_affected() > 0 {
@@ -2743,8 +2814,14 @@ pub async fn sync_session(
         );
 
         if let Some(context) = &session_context {
-            persist_session_variable(&state, session_id, context, &variable_name, normalized)
-                .await?;
+            persist_session_variable(
+                &mut **tx,
+                session_id,
+                context,
+                &variable_name,
+                normalized,
+            )
+            .await?;
         }
 
         variables_synced += 1;
@@ -2767,17 +2844,17 @@ pub async fn sync_session(
         sqlx::query(sql)
             .bind(session_id)
             .bind(status)
-            .execute(&state.pool)
+            .execute(&mut **tx)
             .await?;
     } else if responses_synced > 0 || events_synced > 0 || variables_synced > 0 {
         sqlx::query("UPDATE sessions SET last_activity_at = NOW() WHERE id = $1")
             .bind(session_id)
-            .execute(&state.pool)
+            .execute(&mut **tx)
             .await?;
     }
 
     if normalized_status.as_deref() == Some("completed") {
-        refresh_session_variable_projection(&state, session_id).await?;
+        refresh_session_variable_projection(&mut **tx, session_id).await?;
     }
 
     // Broadcast analytics event if new responses were synced
@@ -2785,7 +2862,7 @@ pub async fn sync_session(
         let questionnaire_id =
             sqlx::query_scalar::<_, Uuid>("SELECT questionnaire_id FROM sessions WHERE id = $1")
                 .bind(session_id)
-                .fetch_optional(&state.pool)
+                .fetch_optional(&mut **tx)
                 .await?;
 
         if let Some(qid) = questionnaire_id {
