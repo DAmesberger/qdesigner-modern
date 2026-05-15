@@ -15,7 +15,6 @@ const MAX_RETRY_COUNT = 3;
 // Files to cache immediately on install
 const STATIC_CACHE_URLS = [
   '/',
-  '/manifest.json',
   '/offline.html',
 ];
 

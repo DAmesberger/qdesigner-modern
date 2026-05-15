@@ -520,14 +520,7 @@
         </div>
 
         <p class="mt-8 text-center text-sm text-slate-500 dark:text-slate-400">
-          By signing in, you agree to our
-          <a href="/terms" class="font-semibold leading-6 text-primary hover:text-primary/80">
-            Terms
-          </a>
-          and
-          <a href="/privacy" class="font-semibold leading-6 text-primary hover:text-primary/80">
-            Privacy Policy
-          </a>
+          By signing in, you agree to our Terms and Privacy Policy.
         </p>
       </div>
     </section>

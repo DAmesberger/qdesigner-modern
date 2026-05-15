@@ -298,22 +298,7 @@
               class="h-4 w-4 rounded border-border text-primary focus:ring-primary"
             />
             <label for="agree-terms" class="ml-2 block text-sm text-muted-foreground">
-              I agree to the
-              <a
-                href="/terms"
-                target="_blank"
-                class="font-medium text-primary hover:text-primary/80"
-              >
-                Terms of Service
-              </a>
-              and
-              <a
-                href="/privacy"
-                target="_blank"
-                class="font-medium text-primary hover:text-primary/80"
-              >
-                Privacy Policy
-              </a>
+              I agree to the Terms of Service and Privacy Policy
             </label>
           </div>
 
