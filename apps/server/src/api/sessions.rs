@@ -378,12 +378,19 @@ pub async fn create_session(
         }
     };
 
+    // P6.2: link authenticated sessions to the user_id so the dual-path
+    // RLS policies in 00021 can admit `user_id = current_app_user_id()`.
+    // Anonymous fillout keeps NULL; the policy's session_id arm covers
+    // it once 00021 lands.
+    let session_user_id = user.as_ref().map(|u| u.user_id);
+
     let session = sqlx::query_as::<_, Session>(
         r#"
         INSERT INTO sessions (questionnaire_id, participant_id, status, started_at,
                               browser_info, metadata,
-                              questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch)
-        VALUES ($1, $2, 'active', NOW(), $3, $4, $5, $6, $7)
+                              questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch,
+                              user_id)
+        VALUES ($1, $2, 'active', NOW(), $3, $4, $5, $6, $7, $8)
         RETURNING id, questionnaire_id, participant_id, status, started_at,
                   completed_at, last_activity_at, metadata, browser_info, created_at,
                   questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch
@@ -396,6 +403,7 @@ pub async fn create_session(
     .bind(ver_major)
     .bind(ver_minor)
     .bind(ver_patch)
+    .bind(session_user_id)
     .fetch_one(&state.pool)
     .await?;
 

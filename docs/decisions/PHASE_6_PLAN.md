@@ -48,10 +48,14 @@ Existing rows retain NULL `user_id` (historical anonymous sessions). New session
 
 ### Policy structure
 
-**Admin tables** (users, organizations, organization_members, projects, project_members, media_assets):
+**Admin tables, RLS-bound** (organization_members, projects, project_members, media_assets):
 
 - SELECT: existing `current_app_user_id()`-based policies from `00014` (unchanged).
 - INSERT/UPDATE/DELETE: new permissive policies — `WITH CHECK (true)` / `USING (true)`. `api/access::*` is the authorization.
+
+**Admin tables, RLS-exempt** (users, organizations) — added mid-P6.2 per ADR 0015:
+
+- Anonymous public-read paths (login by email, auto-join by domain) make RLS incoherent on these tables. `DISABLE ROW LEVEL SECURITY` lands in `00020_admin_mutation_policies.sql`. Permissive mutation policies are still declared so a future re-enable doesn't default-deny writes. `api/access::*` is the sole authorization for authenticated-side reads; the `organization_members` join (still RLS-bound) provides cross-tenant defense-in-depth via that path.
 
 **Fillout-path tables with dual policies** (sessions, responses, interaction_events, session_variables):
 
@@ -174,7 +178,20 @@ Apply to: `users`, `organizations`, `organization_members`, `projects`, `project
 
 Handler change: `create_session` in `sessions.rs` populates `user_id` from JWT if the request is authenticated.
 
-**Verification:** migrations apply; cargo check + cargo test; sessions table accepts both NULL and populated user_id.
+**Discovered mid-P6.2 (amended 2026-05-15):** admin tables with
+intentional anonymous-read paths (`users` via auth flows,
+`organizations` via domain auto-join) must also exit RLS. Same pattern
+as `questionnaire_definitions` in ADR 0012. Recorded in ADR 0015; the
+two `DISABLE ROW LEVEL SECURITY` statements land in migration 00020
+alongside the mutation policies. The permissive mutation policies are
+still declared on those two tables so a future re-enable doesn't
+default-deny writes. See ADR 0015 for the threat-model argument.
+
+**Verification:** migrations apply; cargo check + cargo test
+(`auth_flows` back to green after the DISABLE on `users` unblocks
+login); curl smoke: register + login + one authenticated CRUD +
+anonymous fillout (fillout still expected to partially fail until
+P6.3 lands dual policies).
 
 ### P6.3 — Fillout-path GUC + dual policies
 

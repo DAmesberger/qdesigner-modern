@@ -32,19 +32,28 @@ async fn get_test_pool() -> Option<PgPool> {
         .parent()
         .and_then(|p| p.parent())
         .map(|p| p.join(".env.development"));
+    // P6.2: prefer DATABASE_URL_MIGRATIONS (qdesigner — SUPERUSER,
+    // BYPASSRLS, CREATEROLE) so fixture INSERTs aren't denied by the
+    // RLS policies and pin_as() can CREATE ROLE inside its tx. The
+    // actual policy-under-test queries happen after SET LOCAL ROLE
+    // inside a transaction, so we don't need to start on the app role.
+    // Falls back to DATABASE_URL for environments without the split.
     if let Some(path) = env_path.as_ref() {
         if path.exists() {
             if let Ok(contents) = std::fs::read_to_string(path) {
                 for line in contents.lines() {
-                    if let Some(val) = line.strip_prefix("DATABASE_URL=") {
+                    if let Some(val) = line.strip_prefix("DATABASE_URL_MIGRATIONS=") {
+                        std::env::set_var("DATABASE_URL_MIGRATIONS", val.trim());
+                    } else if let Some(val) = line.strip_prefix("DATABASE_URL=") {
                         std::env::set_var("DATABASE_URL", val.trim());
-                        break;
                     }
                 }
             }
         }
     }
-    let url = std::env::var("DATABASE_URL").ok()?;
+    let url = std::env::var("DATABASE_URL_MIGRATIONS")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .ok()?;
     PgPool::connect(&url).await.ok()
 }
 
@@ -324,27 +333,10 @@ async fn sessions_policy_denies_non_member() {
     assert_eq!(count, 0, "cross-org user must not see another org's session");
 }
 
-#[tokio::test]
-async fn organizations_policy_denies_non_member() {
-    let Some(pool) = get_test_pool().await else {
-        eprintln!("Skipping: DATABASE_URL not set");
-        return;
-    };
-
-    let user_a = create_test_user(&pool, &format!("a-{}@test.local", Uuid::new_v4())).await.expect("user a");
-    let user_b = create_test_user(&pool, &format!("b-{}@test.local", Uuid::new_v4())).await.expect("user b");
-    let org_a = create_test_org(&pool, "Org A", user_a).await.expect("org a");
-    let _org_b = create_test_org(&pool, "Org B", user_b).await.expect("org b");
-
-    // user_b queries org_a — policy must filter it out.
-    let mut tx = pool.begin().await.expect("begin");
-    pin_as(&mut tx, user_b).await;
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM organizations WHERE id = $1")
-        .bind(org_a)
-        .fetch_one(&mut *tx)
-        .await
-        .expect("count");
-    tx.rollback().await.ok();
-
-    assert_eq!(count, 0, "user_b should not see org_a via policy");
-}
+// `organizations_policy_denies_non_member` was deleted in P6.2 with
+// migration 00020. ADR 0015 records the decision: `organizations` is
+// RLS-exempt because the `/api/domains/auto-join` endpoint is an
+// intentional anonymous-read path. Cross-tenant denial on
+// `organizations` now lives in `api/access::*` (handler layer), not
+// the DB; `organization_members` still enforces RLS, and the
+// authenticated reads that need org-scope filter through that table.

@@ -20,19 +20,26 @@ async fn get_test_pool() -> Option<PgPool> {
         .parent()
         .and_then(|p| p.parent())
         .map(|p| p.join(".env.development"));
+    // P6.2: tests SQL semver-bump SQL semantics, not role-bound RLS,
+    // so we use the migration DSN (qdesigner) to bypass RLS on fixture
+    // INSERTs into the RLS-bound `projects` and `questionnaire_definitions`
+    // tables. Falls back to DATABASE_URL for envs without the split.
     if let Some(path) = env_path.as_ref() {
         if path.exists() {
             if let Ok(contents) = std::fs::read_to_string(path) {
                 for line in contents.lines() {
-                    if let Some(val) = line.strip_prefix("DATABASE_URL=") {
+                    if let Some(val) = line.strip_prefix("DATABASE_URL_MIGRATIONS=") {
+                        std::env::set_var("DATABASE_URL_MIGRATIONS", val.trim());
+                    } else if let Some(val) = line.strip_prefix("DATABASE_URL=") {
                         std::env::set_var("DATABASE_URL", val.trim());
-                        break;
                     }
                 }
             }
         }
     }
-    let url = std::env::var("DATABASE_URL").ok()?;
+    let url = std::env::var("DATABASE_URL_MIGRATIONS")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .ok()?;
     PgPool::connect(&url).await.ok()
 }
 
