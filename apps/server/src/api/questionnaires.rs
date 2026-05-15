@@ -12,6 +12,7 @@ use validator::Validate;
 use crate::api::access::{verify_project_access, verify_project_write_access};
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
+use crate::middleware::tx::Tx;
 use crate::state::AppState;
 
 // ── Models ───────────────────────────────────────────────────────────
@@ -171,13 +172,18 @@ pub async fn get_questionnaire_by_code(
     tags = ["questionnaires"]
 )]
 pub async fn list_questionnaires(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(project_id): Path<Uuid>,
     Query(q): Query<QuestionnaireListQuery>,
 ) -> Result<Json<Vec<Questionnaire>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Verify access to the project
-    verify_project_access(&state.pool, user.user_id, project_id).await?;
+    verify_project_access(&mut **tx, user.user_id, project_id).await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -198,7 +204,7 @@ pub async fn list_questionnaires(
         .bind(status)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?
     } else {
         sqlx::query_as::<_, Questionnaire>(
@@ -215,7 +221,7 @@ pub async fn list_questionnaires(
         .bind(project_id)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?
     };
 
@@ -241,16 +247,21 @@ pub async fn list_questionnaires(
     tags = ["questionnaires"]
 )]
 pub async fn create_questionnaire(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(project_id): Path<Uuid>,
     Json(body): Json<CreateQuestionnaireRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Questionnaire>), ApiError> {
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Verify write access
-    verify_project_write_access(&state.pool, user.user_id, project_id).await?;
+    verify_project_write_access(&mut **tx, user.user_id, project_id).await?;
 
     let content = body.content.unwrap_or_else(|| serde_json::json!({}));
     let settings = body.settings.unwrap_or_else(|| serde_json::json!({}));
@@ -271,10 +282,10 @@ pub async fn create_questionnaire(
     .bind(&content)
     .bind(&settings)
     .bind(user.user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
-    sync_questionnaire_variable_definitions(&state, &q).await?;
+    sync_questionnaire_variable_definitions(&mut **tx, &q).await?;
 
     Ok((axum::http::StatusCode::CREATED, Json(q)))
 }
@@ -297,11 +308,16 @@ pub async fn create_questionnaire(
     tags = ["questionnaires"]
 )]
 pub async fn get_questionnaire(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<Questionnaire>, ApiError> {
-    verify_project_access(&state.pool, user.user_id, path.id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    verify_project_access(&mut **tx, user.user_id, path.id).await?;
 
     let q = sqlx::query_as::<_, Questionnaire>(
         r#"
@@ -314,7 +330,7 @@ pub async fn get_questionnaire(
     )
     .bind(path.qid)
     .bind(path.id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
@@ -341,18 +357,23 @@ pub async fn get_questionnaire(
     tags = ["questionnaires"]
 )]
 pub async fn update_questionnaire(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
     Json(body): Json<UpdateQuestionnaireRequest>,
 ) -> Result<Json<Questionnaire>, ApiError> {
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    verify_project_write_access(&state.pool, user.user_id, path.id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
 
     // Snapshot current state into questionnaire_versions before updating
-    snapshot_questionnaire_version(&state, path.qid, user.user_id).await?;
+    snapshot_questionnaire_version(&mut **tx, path.qid, user.user_id).await?;
 
     // Handle publish action
     if body.status.as_deref() == Some("published") {
@@ -369,11 +390,11 @@ pub async fn update_questionnaire(
         )
         .bind(path.qid)
         .bind(path.id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
-        sync_questionnaire_variable_definitions(&state, &q).await?;
+        sync_questionnaire_variable_definitions(&mut **tx, &q).await?;
 
         return Ok(Json(q));
     }
@@ -438,11 +459,11 @@ pub async fn update_questionnaire(
     }
 
     let q = query
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
-    sync_questionnaire_variable_definitions(&state, &q).await?;
+    sync_questionnaire_variable_definitions(&mut **tx, &q).await?;
 
     Ok(Json(q))
 }
@@ -465,13 +486,18 @@ pub async fn update_questionnaire(
     tags = ["questionnaires"]
 )]
 pub async fn publish_questionnaire(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<Questionnaire>, ApiError> {
-    verify_project_write_access(&state.pool, user.user_id, path.id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
 
-    snapshot_questionnaire_version(&state, path.qid, user.user_id).await?;
+    verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
+
+    snapshot_questionnaire_version(&mut **tx, path.qid, user.user_id).await?;
 
     let questionnaire = sqlx::query_as::<_, Questionnaire>(
         r#"
@@ -485,11 +511,11 @@ pub async fn publish_questionnaire(
     )
     .bind(path.qid)
     .bind(path.id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
-    sync_questionnaire_variable_definitions(&state, &questionnaire).await?;
+    sync_questionnaire_variable_definitions(&mut **tx, &questionnaire).await?;
 
     Ok(Json(questionnaire))
 }
@@ -519,15 +545,20 @@ pub struct BumpVersionRequest {
     tags = ["questionnaires"]
 )]
 pub async fn bump_version(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
     Json(body): Json<BumpVersionRequest>,
 ) -> Result<Json<Questionnaire>, ApiError> {
-    verify_project_write_access(&state.pool, user.user_id, path.id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
 
     // Snapshot current version first
-    snapshot_questionnaire_version(&state, path.qid, user.user_id).await?;
+    snapshot_questionnaire_version(&mut **tx, path.qid, user.user_id).await?;
 
     let q = match body.bump_type.as_str() {
         "major" => {
@@ -547,7 +578,7 @@ pub async fn bump_version(
             )
             .bind(path.qid)
             .bind(path.id)
-            .fetch_optional(&state.pool)
+            .fetch_optional(&mut **tx)
             .await?
         }
         "minor" => {
@@ -566,7 +597,7 @@ pub async fn bump_version(
             )
             .bind(path.qid)
             .bind(path.id)
-            .fetch_optional(&state.pool)
+            .fetch_optional(&mut **tx)
             .await?
         }
         "patch" => {
@@ -584,7 +615,7 @@ pub async fn bump_version(
             )
             .bind(path.qid)
             .bind(path.id)
-            .fetch_optional(&state.pool)
+            .fetch_optional(&mut **tx)
             .await?
         }
         _ => {
@@ -595,7 +626,7 @@ pub async fn bump_version(
     };
 
     let questionnaire = q.ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
-    sync_questionnaire_variable_definitions(&state, &questionnaire).await?;
+    sync_questionnaire_variable_definitions(&mut **tx, &questionnaire).await?;
 
     Ok(Json(questionnaire))
 }
@@ -618,18 +649,23 @@ pub async fn bump_version(
     tags = ["questionnaires"]
 )]
 pub async fn delete_questionnaire(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    verify_project_write_access(&state.pool, user.user_id, path.id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
 
     let result = sqlx::query(
         "UPDATE questionnaire_definitions SET deleted_at = NOW() WHERE id = $1 AND project_id = $2",
     )
     .bind(path.qid)
     .bind(path.id)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?;
 
     if result.rows_affected() == 0 {
@@ -708,12 +744,17 @@ struct ExportSessionMetadata {
     tags = ["questionnaires"]
 )]
 pub async fn export_responses(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
     Query(query): Query<ExportQuery>,
 ) -> Result<Response, ApiError> {
-    verify_project_access(&state.pool, user.user_id, path.id).await?;
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    verify_project_access(&mut **tx, user.user_id, path.id).await?;
 
     // Verify questionnaire exists
     let exists = sqlx::query_scalar::<_, bool>(
@@ -721,7 +762,7 @@ pub async fn export_responses(
     )
     .bind(path.qid)
     .bind(path.id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     if !exists {
@@ -763,7 +804,7 @@ pub async fn export_responses(
         "#,
     )
     .bind(path.qid)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     // Optionally fetch variables
@@ -778,7 +819,7 @@ pub async fn export_responses(
             "#,
         )
         .bind(path.qid)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?
     } else {
         vec![]
@@ -796,7 +837,7 @@ pub async fn export_responses(
             "#,
         )
         .bind(path.qid)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?
     } else {
         vec![]
@@ -813,7 +854,7 @@ pub async fn export_responses(
             "#,
         )
         .bind(path.qid)
-        .fetch_all(&state.pool)
+        .fetch_all(&mut **tx)
         .await?
     } else {
         vec![]
@@ -958,21 +999,26 @@ pub struct VersionListQuery {
     tags = ["questionnaires"]
 )]
 pub async fn list_versions(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(questionnaire_id): Path<Uuid>,
     Query(q): Query<VersionListQuery>,
 ) -> Result<Json<Vec<QuestionnaireVersion>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
     // Verify access via the questionnaire's project
     let project_id = sqlx::query_scalar::<_, Uuid>(
         "SELECT project_id FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(questionnaire_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
-    verify_project_access(&state.pool, user.user_id, project_id).await?;
+    verify_project_access(&mut **tx, user.user_id, project_id).await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -991,15 +1037,15 @@ pub async fn list_versions(
     .bind(questionnaire_id)
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(versions))
 }
 
 /// Snapshot the current questionnaire state into the versions table.
-async fn snapshot_questionnaire_version(
-    state: &AppState,
+async fn snapshot_questionnaire_version<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
     questionnaire_id: Uuid,
     user_id: Uuid,
 ) -> Result<(), ApiError> {
@@ -1013,7 +1059,7 @@ async fn snapshot_questionnaire_version(
     )
     .bind(questionnaire_id)
     .bind(user_id)
-    .execute(&state.pool)
+    .execute(executor)
     .await?;
 
     Ok(())
@@ -1108,12 +1154,16 @@ fn normalize_variable_storage(declared_type: &str) -> (&'static str, &'static st
     }
 }
 
+/// Reconcile the questionnaire_variable_definitions rows for one (q, version)
+/// pair: delete-then-insert. Takes the caller's per-request connection so the
+/// DELETE/INSERT pair commits together with whatever else the handler does;
+/// before P5 this helper opened its own sub-transaction off `state.pool`,
+/// which was unnecessary once handlers themselves run inside a tx.
 async fn sync_questionnaire_variable_definitions(
-    state: &AppState,
+    conn: &mut sqlx::PgConnection,
     questionnaire: &Questionnaire,
 ) -> Result<(), ApiError> {
     let definitions = extract_questionnaire_variable_definitions(&questionnaire.content);
-    let mut tx = state.pool.begin().await?;
 
     sqlx::query(
         r#"
@@ -1128,7 +1178,7 @@ async fn sync_questionnaire_variable_definitions(
     .bind(questionnaire.version_major)
     .bind(questionnaire.version_minor)
     .bind(questionnaire.version_patch)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
 
     for (name, definition) in definitions {
@@ -1163,11 +1213,10 @@ async fn sync_questionnaire_variable_definitions(
         .bind(storage_class)
         .bind(index_strategy)
         .bind(definition)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await?;
     }
 
-    tx.commit().await?;
     Ok(())
 }
 
