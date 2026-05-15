@@ -145,7 +145,13 @@ pub fn router(state: AppState) -> Router {
     let invitation_routes = Router::new()
         .route("/pending", get(organizations::list_pending_invitations))
         .route("/{id}", get(organizations::get_invitation))
-        .route("/{id}/accept", post(organizations::accept_invitation))
+        .route(
+            "/{id}/accept",
+            post(organizations::accept_invitation).route_layer(axum_mw::from_fn_with_state(
+                state.clone(),
+                rate_limit_middleware,
+            )),
+        )
         .route("/{id}/decline", post(organizations::decline_invitation));
 
     let questionnaire_routes = Router::new()
@@ -188,7 +194,13 @@ pub fn router(state: AppState) -> Router {
             "/{id}/events",
             get(sessions::get_events).post(sessions::submit_events),
         )
-        .route("/{id}/sync", post(sessions::sync_session))
+        .route(
+            "/{id}/sync",
+            post(sessions::sync_session).route_layer(axum_mw::from_fn_with_state(
+                state.clone(),
+                rate_limit_middleware,
+            )),
+        )
         .route(
             "/{id}/variables",
             get(sessions::get_variables).post(sessions::upsert_variable),
@@ -234,7 +246,12 @@ pub fn router(state: AppState) -> Router {
     let app = if dev_helpers_enabled {
         base.nest(
             "/api/dev",
-            Router::new().route("/bootstrap-personas", post(dev::bootstrap_personas)),
+            Router::new()
+                .route("/bootstrap-personas", post(dev::bootstrap_personas))
+                .layer(axum_mw::from_fn_with_state(
+                    state.clone(),
+                    rate_limit_middleware,
+                )),
         )
     } else {
         base

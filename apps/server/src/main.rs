@@ -112,7 +112,8 @@ async fn main() {
     };
 
     // ── Rate Limiter ─────────────────────────────────────────────────
-    let rate_limiter = RateLimiter::new(10, 60); // 10 req / 60s (applied to auth routes)
+    // 10 req / 60s, Redis-backed when available (per-process in-memory fallback).
+    let rate_limiter = RateLimiter::new(10, 60, redis.clone());
 
     // ── WebSocket ────────────────────────────────────────────────────
     let mut websocket_state = WebSocketState::new();
