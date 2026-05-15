@@ -1,7 +1,7 @@
 import { ResponsePersistenceService } from '../services/ResponsePersistenceService';
 import { SessionManagementService } from '../services/SessionManagementService';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
-import { VariableEngine } from '$lib/scripting-engine';
+import { VariableEngine } from '@qdesigner/scripting-engine';
 import { RuntimeEventBus } from './RuntimeEventBus';
 import type { Questionnaire, Question, Response, Page, QuestionnaireSession } from '$lib/shared';
 

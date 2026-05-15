@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
   import type { Questionnaire, Question, QuestionnaireTheme, Variable } from '$lib/shared';
-  import { VariableEngine } from '$lib/scripting-engine';
+  import { VariableEngine } from '@qdesigner/scripting-engine';
   import QuestionRenderer from '../questions/QuestionRenderer.svelte';
   import { writable } from 'svelte/store';
   import Button from '$lib/components/common/Button.svelte';

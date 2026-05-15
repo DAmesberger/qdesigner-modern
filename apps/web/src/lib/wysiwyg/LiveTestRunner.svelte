@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Questionnaire, QuestionnaireTheme, Variable, Question } from '$lib/shared';
   import { onMount } from 'svelte';
-  import { VariableEngine } from '$lib/scripting-engine';
+  import { VariableEngine } from '@qdesigner/scripting-engine';
   import QuestionVisualRenderer from './QuestionVisualRenderer.svelte';
   import Button from '$lib/components/common/Button.svelte';
   import { Monitor, Tablet, Smartphone, X } from 'lucide-svelte';

@@ -1,5 +1,5 @@
 import type { Question } from '$lib/shared';
-import type { VariableEngine } from '$lib/scripting-engine';
+import type { VariableEngine } from '@qdesigner/scripting-engine';
 import type { WebGLRenderer } from '$lib/renderer';
 import type { ResourceManager } from '../resources/ResourceManager';
 import { moduleRegistry } from '$lib/modules/registry';

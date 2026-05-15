@@ -1,5 +1,5 @@
 import type { Question } from '$lib/shared';
-import type { VariableEngine } from '$lib/scripting-engine';
+import type { VariableEngine } from '@qdesigner/scripting-engine';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- script execution context handles dynamic payloads
 type DynamicValue = any;

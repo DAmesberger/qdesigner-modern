@@ -1,6 +1,6 @@
 // Scripting Engine Service - Integration with the modular system
 
-import { VariableEngine as Evaluator } from '$lib/scripting-engine';
+import { VariableEngine as Evaluator } from '@qdesigner/scripting-engine';
 import type { ConditionalLogic } from '$lib/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- service stores dynamic variables/responses from questionnaire runtime

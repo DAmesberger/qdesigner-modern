@@ -6,7 +6,7 @@ import {
   type DesignerViewMode,
 } from './designer/UiStore';
 import { DesignerPersistenceService } from './designer/PersistenceService';
-import { VariableEngine } from '$lib/scripting-engine';
+import { VariableEngine } from '@qdesigner/scripting-engine';
 import type { CollaborativeDesigner } from '$lib/collaboration/CollaborativeDesigner';
 
 export type SelectedItem = Question | Page | Block | Variable;

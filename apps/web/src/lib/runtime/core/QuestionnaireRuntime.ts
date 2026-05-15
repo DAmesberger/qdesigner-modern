@@ -16,7 +16,7 @@ import type {
   QuestionRuntimeContext,
   QuestionRuntimeResult,
 } from './question-runtime';
-import { VariableEngine } from '$lib/scripting-engine';
+import { VariableEngine } from '@qdesigner/scripting-engine';
 import { WebGLRenderer } from '$lib/renderer';
 import { ResourceManager } from '../resources/ResourceManager';
 import { MediaValidator } from '../validation/MediaValidator';

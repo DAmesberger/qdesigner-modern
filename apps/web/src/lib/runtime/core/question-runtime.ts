@@ -1,5 +1,5 @@
 import type { WebGLRenderer } from '$lib/renderer';
-import type { VariableEngine } from '$lib/scripting-engine';
+import type { VariableEngine } from '@qdesigner/scripting-engine';
 import type { ResourceManager } from '../resources/ResourceManager';
 import type { ResponseCollector } from './ResponseCollector';
 

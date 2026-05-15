@@ -1,7 +1,7 @@
 // Variable interpolation service
 
-import { FormulaParser } from '$lib/scripting-engine/parser';
-import { ASTEvaluator } from '$lib/scripting-engine/ast-evaluator';
+import { FormulaParser } from '@qdesigner/scripting-engine';
+import { ASTEvaluator } from '@qdesigner/scripting-engine';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- interpolation evaluates dynamic variable maps and expression results
 type DynamicValue = any;

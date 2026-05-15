@@ -1,8 +1,8 @@
 <script lang="ts">
   import MonacoEditor from '$lib/wysiwyg/MonacoEditor.svelte';
   import type { Variable } from '$lib/shared';
-  import { FormulaParser } from '$lib/scripting-engine/parser';
-  import { ASTEvaluator } from '$lib/scripting-engine/ast-evaluator';
+  import { FormulaParser } from '@qdesigner/scripting-engine';
+  import { ASTEvaluator } from '@qdesigner/scripting-engine';
   import { Database, Eye } from 'lucide-svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 

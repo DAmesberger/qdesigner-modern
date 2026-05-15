@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import type { editor } from 'monaco-editor';
-  import { registerFormulaProviders, qdesignerTheme, qdesignerDarkTheme } from '$lib/scripting-engine/MonacoConfig';
+  import { registerFormulaProviders, qdesignerTheme, qdesignerDarkTheme } from '@qdesigner/scripting-engine';
   import { BookOpen } from 'lucide-svelte';
 
   let showFormulaRef = $state(false);
