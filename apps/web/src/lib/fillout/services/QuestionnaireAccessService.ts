@@ -1,6 +1,6 @@
 import { api } from '$lib/services/api';
 import type { Questionnaire } from '$lib/shared';
-import type { Session } from '$lib/types/session';
+import type { Session } from '$lib/shared/types/session';
 
 export interface QuestionnaireAccess {
 	questionnaire: Questionnaire;

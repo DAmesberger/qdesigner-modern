@@ -21,7 +21,7 @@ import type {
   MultiScaleInterpretation,
 } from './ScoreInterpreter';
 import { interpretMultipleScales } from './ScoreInterpreter';
-import type { SessionStatsSummary } from '$lib/types/api';
+import type { SessionStatsSummary } from '$lib/shared/types/api';
 
 // ---------------------------------------------------------------------------
 // Public Types

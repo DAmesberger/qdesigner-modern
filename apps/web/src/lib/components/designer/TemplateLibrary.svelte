@@ -1,7 +1,7 @@
 <script lang="ts">
   import { designerStore } from '$lib/stores/designer.svelte';
   import { api } from '$lib/services/api';
-  import type { QuestionTemplate } from '$lib/types/api';
+  import type { QuestionTemplate } from '$lib/shared/types/api';
   import type { Question } from '$lib/shared';
   import { generateId } from '$lib/shared/utils/id';
   import {

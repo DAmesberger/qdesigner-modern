@@ -1,5 +1,5 @@
 import { api } from '$lib/services/api';
-import type { DomainConfig as ApiDomainConfig } from '$lib/types/api';
+import type { DomainConfig as ApiDomainConfig } from '$lib/shared/types/api';
 
 export interface DomainConfig {
   id: string;

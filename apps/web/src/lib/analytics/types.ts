@@ -3,7 +3,7 @@
  * Comprehensive TypeScript interfaces for QDesigner Modern analytics system
  */
 
-import type { ResponseData, InteractionEvent } from '$lib/types/response';
+import type { ResponseData, InteractionEvent } from '$lib/shared/types/response';
 
 // ============================================================================
 // Core Analytics Types

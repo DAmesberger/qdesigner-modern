@@ -7,7 +7,7 @@
 
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
-import type { ExportRow } from '$lib/types/api';
+import type { ExportRow } from '$lib/shared/types/api';
 
 export type ScriptFormat = 'spss' | 'r' | 'stata' | 'sas' | 'python';
 export type ResponseExportFormat = 'xlsx' | ScriptFormat;

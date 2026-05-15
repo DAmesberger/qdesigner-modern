@@ -1,5 +1,5 @@
 import { api } from '$lib/services/api';
-import type { Invitation as ApiInvitation } from '$lib/types/api';
+import type { Invitation as ApiInvitation } from '$lib/shared/types/api';
 
 export interface CreateInvitationOptions {
   organizationId: string;

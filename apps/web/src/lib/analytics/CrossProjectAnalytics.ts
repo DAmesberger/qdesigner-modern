@@ -13,7 +13,7 @@ import type {
   QuestionnaireAnalytics,
   CrossComparison,
   SessionStatsSummary,
-} from '$lib/types/api';
+} from '$lib/shared/types/api';
 import { StatisticalEngine } from './StatisticalEngine';
 
 export interface CompareQuestionnaireOptions {

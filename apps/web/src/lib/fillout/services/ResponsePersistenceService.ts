@@ -1,6 +1,6 @@
 import { api } from '$lib/services/api';
 import { OfflineResponsePersistence } from './OfflineResponsePersistence';
-import type { ResponseData, InteractionEvent } from '$lib/types/response';
+import type { ResponseData, InteractionEvent } from '$lib/shared/types/response';
 
 export interface PersistenceOptions {
 	sessionId: string;

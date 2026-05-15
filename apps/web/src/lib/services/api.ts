@@ -65,7 +65,7 @@ import type {
   CrossProjectAnalyticsData,
   TimeSeriesBucket,
   FilterResponse,
-} from '$lib/types/api';
+} from '$lib/shared/types/api';
 
 type ApiErrorPayload = {
   error?: string | { message?: string; status?: number };

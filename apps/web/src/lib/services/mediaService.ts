@@ -7,7 +7,7 @@ import type {
   MediaReference
 } from '$lib/shared/types/media';
 import { validateMediaFile } from '$lib/shared/types/media';
-import type { MediaAsset as ApiMediaAsset } from '$lib/types/api';
+import type { MediaAsset as ApiMediaAsset } from '$lib/shared/types/api';
 
 const MEDIA_LIST_TIMEOUT_MS = 8000;
 const MEDIA_URL_TIMEOUT_MS = 5000;

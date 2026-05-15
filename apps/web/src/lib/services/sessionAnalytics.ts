@@ -4,7 +4,7 @@ import type {
   SessionCompareData,
   SessionStatsSummary,
   SessionData,
-} from '$lib/types/api';
+} from '$lib/shared/types/api';
 
 export type AggregateSourceType = 'variable' | 'response';
 export type AnalyticsMetric =

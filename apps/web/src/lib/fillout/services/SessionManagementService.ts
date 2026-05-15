@@ -1,5 +1,5 @@
 import { api } from '$lib/services/api';
-import type { Session } from '$lib/types/session';
+import type { Session } from '$lib/shared/types/session';
 import { browser } from '$app/environment';
 
 export interface SessionConfig {

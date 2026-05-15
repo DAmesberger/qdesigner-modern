@@ -6,7 +6,7 @@ import {
   refresh as refreshRequest,
   register as registerRequest,
 } from '$lib/api/generated/sdk.gen';
-import type { User, Session, AuthResult, AuthChangeEvent } from '$lib/types/auth';
+import type { User, Session, AuthResult, AuthChangeEvent } from '$lib/shared/types/auth';
 
 const STORAGE_KEY = 'qdesigner-auth';
 const API_BASE = import.meta.env.VITE_API_URL || '';
