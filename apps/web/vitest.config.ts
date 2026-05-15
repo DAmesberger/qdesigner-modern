@@ -51,12 +51,12 @@ export default defineConfig({
     alias: {
       $lib: path.resolve('./src/lib'),
       $app: path.resolve('./src/app'),
-      '@qdesigner/contracts': path.resolve('../../packages/contracts/src/index.ts'),
       '@qdesigner/contracts/generated': path.resolve('../../packages/contracts/src/generated'),
-      '@qdesigner/questionnaire-core': path.resolve('../../packages/questionnaire-core/src/index.ts'),
+      '@qdesigner/contracts': path.resolve('../../packages/contracts/src/index.ts'),
       '@qdesigner/questionnaire-core/questionnaire': path.resolve('../../packages/questionnaire-core/src/questionnaire.ts'),
       '@qdesigner/questionnaire-core/response': path.resolve('../../packages/questionnaire-core/src/response.ts'),
       '@qdesigner/questionnaire-core/media': path.resolve('../../packages/questionnaire-core/src/media.ts'),
+      '@qdesigner/questionnaire-core': path.resolve('../../packages/questionnaire-core/src/index.ts'),
       '@qdesigner/scripting-engine': path.resolve('../../packages/scripting-engine/src')
     }
   }

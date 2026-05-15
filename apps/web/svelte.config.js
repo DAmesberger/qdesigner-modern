@@ -9,14 +9,14 @@ const config = {
 
   kit: {
     alias: {
-      '@qdesigner/contracts': '../../packages/contracts/src/index.ts',
       '@qdesigner/contracts/generated': '../../packages/contracts/src/generated',
-      '@qdesigner/questionnaire-core': '../../packages/questionnaire-core/src/index.ts',
+      '@qdesigner/contracts': '../../packages/contracts/src/index.ts',
       '@qdesigner/questionnaire-core/questionnaire':
         '../../packages/questionnaire-core/src/questionnaire.ts',
       '@qdesigner/questionnaire-core/response':
         '../../packages/questionnaire-core/src/response.ts',
       '@qdesigner/questionnaire-core/media': '../../packages/questionnaire-core/src/media.ts',
+      '@qdesigner/questionnaire-core': '../../packages/questionnaire-core/src/index.ts',
       '@qdesigner/scripting-engine': '../../packages/scripting-engine/src/index.ts',
     },
     // adapter-auto only supports some environments, see https://kit.svelte.dev/docs/adapter-auto for a list.
