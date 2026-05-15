@@ -4,27 +4,16 @@ use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
-mod api;
-mod auth;
-mod config;
-mod db;
-mod error;
-mod middleware;
-mod openapi;
-mod rbac;
-mod state;
-mod storage;
-mod websocket;
-
-use crate::auth::jwt::JwtManager;
-use crate::config::Config;
-use crate::middleware::cors::cors_layer;
-use crate::middleware::csrf::csrf_middleware;
-use crate::middleware::rate_limit::RateLimiter;
-use crate::rbac::manager::RbacManager;
-use crate::state::AppState;
-use crate::storage::s3::S3StorageService;
-use crate::websocket::manager::WebSocketState;
+use qdesigner_server::auth::jwt::JwtManager;
+use qdesigner_server::config::Config;
+use qdesigner_server::middleware::cors::cors_layer;
+use qdesigner_server::middleware::csrf::csrf_middleware;
+use qdesigner_server::middleware::rate_limit::RateLimiter;
+use qdesigner_server::rbac::manager::RbacManager;
+use qdesigner_server::state::AppState;
+use qdesigner_server::storage::s3::S3StorageService;
+use qdesigner_server::websocket::manager::WebSocketState;
+use qdesigner_server::{api, auth, db, openapi, websocket};
 
 #[tokio::main]
 async fn main() {
@@ -120,7 +109,7 @@ async fn main() {
 
     // ── Redis Bridge (optional) ──────────────────────────────────────
     if let Some(ref redis_client) = redis {
-        let bridge = crate::websocket::redis_bridge::RedisBridge::new(redis_client.clone());
+        let bridge = websocket::redis_bridge::RedisBridge::new(redis_client.clone());
         websocket_state.set_redis_bridge(bridge);
     }
 
@@ -128,12 +117,12 @@ async fn main() {
 
     // Start Redis bridge subscriber if configured.
     if let Some(ref redis_client) = redis {
-        let bridge = crate::websocket::redis_bridge::RedisBridge::new(redis_client.clone());
+        let bridge = websocket::redis_bridge::RedisBridge::new(redis_client.clone());
         bridge.start(websocket_state.clone());
     }
 
     // ── Yjs Store ────────────────────────────────────────────────────
-    let yjs_store = crate::websocket::yjs_store::YjsStore::new();
+    let yjs_store = websocket::yjs_store::YjsStore::new();
 
     // ── Revoked-access-token purger ───────────────────────────────────
     // revoked_tokens entries only matter until the access token would have
@@ -149,7 +138,7 @@ async fn main() {
             loop {
                 interval.tick().await;
                 let ttl = chrono::Duration::from_std(access_ttl).unwrap_or(chrono::Duration::hours(1));
-                match crate::auth::session::purge_expired_revoked_tokens(&pool, ttl).await {
+                match auth::session::purge_expired_revoked_tokens(&pool, ttl).await {
                     Ok(deleted) if deleted > 0 => {
                         tracing::info!(deleted, "purged expired revoked_tokens");
                     }

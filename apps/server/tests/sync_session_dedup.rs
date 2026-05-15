@@ -1,0 +1,222 @@
+//! P4.1 sessions::sync_session ON CONFLICT dedup tests.
+//!
+//! sync_session bulk-inserts responses and interaction_events from the
+//! offline client; each row carries a `client_id UUID` that's UNIQUE so
+//! a retry-after-timeout doesn't create duplicates. This file asserts
+//! the DB-level dedup invariant directly:
+//!   INSERT INTO responses (session_id, client_id, ...) VALUES (..., $client_id, ...)
+//!   ON CONFLICT (client_id) DO NOTHING
+//!
+//! Same shape for interaction_events.
+//!
+//! Requires running PostgreSQL with migrations applied.
+
+use sqlx::PgPool;
+use uuid::Uuid;
+
+async fn get_test_pool() -> Option<PgPool> {
+    let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join(".env.development"));
+    if let Some(path) = env_path.as_ref() {
+        if path.exists() {
+            if let Ok(contents) = std::fs::read_to_string(path) {
+                for line in contents.lines() {
+                    if let Some(val) = line.strip_prefix("DATABASE_URL=") {
+                        std::env::set_var("DATABASE_URL", val.trim());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    let url = std::env::var("DATABASE_URL").ok()?;
+    PgPool::connect(&url).await.ok()
+}
+
+/// Create a minimal session row that responses/events can reference.
+async fn make_session(pool: &PgPool) -> sqlx::Result<Uuid> {
+    let user_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO users (email, password_hash) VALUES ($1, 'placeholder') RETURNING id",
+    )
+    .bind(format!("u-{}@test.local", Uuid::new_v4()))
+    .fetch_one(pool)
+    .await?;
+
+    let org_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO organizations (name, slug, created_by) VALUES ('O', $1, $2) RETURNING id",
+    )
+    .bind(format!("o-{}", &Uuid::new_v4().to_string()[..8]))
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+    sqlx::query(
+        "INSERT INTO organization_members (organization_id, user_id, role, status) VALUES ($1, $2, 'owner', 'active')",
+    )
+    .bind(org_id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+
+    let project_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO projects (organization_id, name, code) VALUES ($1, 'P', $2) RETURNING id",
+    )
+    .bind(org_id)
+    .bind(format!("p-{}", &Uuid::new_v4().to_string()[..8]))
+    .fetch_one(pool)
+    .await?;
+
+    let q_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO questionnaire_definitions (project_id, name, content, status, created_by) \
+         VALUES ($1, $2, '{}'::jsonb, 'draft', $3) RETURNING id",
+    )
+    .bind(project_id)
+    .bind(format!("Q-{}", &Uuid::new_v4().to_string()[..8]))
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+
+    sqlx::query_scalar("INSERT INTO sessions (questionnaire_id) VALUES ($1) RETURNING id")
+        .bind(q_id)
+        .fetch_one(pool)
+        .await
+}
+
+#[tokio::test]
+async fn responses_dedup_on_client_id() {
+    let Some(pool) = get_test_pool().await else {
+        eprintln!("Skipping: DATABASE_URL not set");
+        return;
+    };
+
+    let session_id = make_session(&pool).await.expect("session");
+    let client_id = Uuid::new_v4();
+
+    // First insert succeeds. Values are parameterized as JSON to dodge
+    // SQL string-literal escaping pitfalls.
+    let first_value = serde_json::json!("first");
+    let inserted = sqlx::query(
+        "INSERT INTO responses (session_id, client_id, question_id, value) \
+         VALUES ($1, $2, 'q-1', $3) ON CONFLICT (client_id) DO NOTHING",
+    )
+    .bind(session_id)
+    .bind(client_id)
+    .bind(&first_value)
+    .execute(&pool)
+    .await
+    .expect("insert 1")
+    .rows_affected();
+    assert_eq!(inserted, 1, "first insert should write one row");
+
+    // Retry with same client_id — dedup'd.
+    let retry_value = serde_json::json!("retried-value-must-not-overwrite");
+    let inserted_retry = sqlx::query(
+        "INSERT INTO responses (session_id, client_id, question_id, value) \
+         VALUES ($1, $2, 'q-1', $3) ON CONFLICT (client_id) DO NOTHING",
+    )
+    .bind(session_id)
+    .bind(client_id)
+    .bind(&retry_value)
+    .execute(&pool)
+    .await
+    .expect("insert 2")
+    .rows_affected();
+    assert_eq!(inserted_retry, 0, "duplicate client_id should be skipped");
+
+    // Confirm there's still exactly ONE row for this client_id and that
+    // its value is the ORIGINAL (not overwritten by the retry).
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM responses WHERE client_id = $1",
+    )
+    .bind(client_id)
+    .fetch_one(&pool)
+    .await
+    .expect("count");
+    assert_eq!(count, 1);
+
+    let value: serde_json::Value = sqlx::query_scalar(
+        "SELECT value FROM responses WHERE client_id = $1",
+    )
+    .bind(client_id)
+    .fetch_one(&pool)
+    .await
+    .expect("value");
+    assert_eq!(value, first_value);
+}
+
+#[tokio::test]
+async fn interaction_events_dedup_on_client_id() {
+    let Some(pool) = get_test_pool().await else {
+        eprintln!("Skipping: DATABASE_URL not set");
+        return;
+    };
+
+    let session_id = make_session(&pool).await.expect("session");
+    let client_id = Uuid::new_v4();
+
+    let first = sqlx::query(
+        "INSERT INTO interaction_events (session_id, client_id, event_type, timestamp_us) \
+         VALUES ($1, $2, 'click', 1000) ON CONFLICT (client_id) DO NOTHING",
+    )
+    .bind(session_id)
+    .bind(client_id)
+    .execute(&pool)
+    .await
+    .expect("insert 1")
+    .rows_affected();
+    assert_eq!(first, 1);
+
+    let retry = sqlx::query(
+        "INSERT INTO interaction_events (session_id, client_id, event_type, timestamp_us) \
+         VALUES ($1, $2, 'click', 9999) ON CONFLICT (client_id) DO NOTHING",
+    )
+    .bind(session_id)
+    .bind(client_id)
+    .execute(&pool)
+    .await
+    .expect("insert 2")
+    .rows_affected();
+    assert_eq!(retry, 0);
+
+    let ts: i64 = sqlx::query_scalar(
+        "SELECT timestamp_us FROM interaction_events WHERE client_id = $1",
+    )
+    .bind(client_id)
+    .fetch_one(&pool)
+    .await
+    .expect("ts");
+    assert_eq!(ts, 1000, "original value must survive retry");
+}
+
+#[tokio::test]
+async fn distinct_client_ids_each_create_a_row() {
+    let Some(pool) = get_test_pool().await else {
+        eprintln!("Skipping: DATABASE_URL not set");
+        return;
+    };
+
+    let session_id = make_session(&pool).await.expect("session");
+    let cid_a = Uuid::new_v4();
+    let cid_b = Uuid::new_v4();
+
+    sqlx::query("INSERT INTO responses (session_id, client_id, question_id, value) \
+                 VALUES ($1, $2, 'q-1', '1'::jsonb) ON CONFLICT (client_id) DO NOTHING")
+        .bind(session_id).bind(cid_a)
+        .execute(&pool).await.expect("a");
+    sqlx::query("INSERT INTO responses (session_id, client_id, question_id, value) \
+                 VALUES ($1, $2, 'q-1', '2'::jsonb) ON CONFLICT (client_id) DO NOTHING")
+        .bind(session_id).bind(cid_b)
+        .execute(&pool).await.expect("b");
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM responses WHERE session_id = $1 AND client_id IN ($2, $3)",
+    )
+    .bind(session_id)
+    .bind(cid_a)
+    .bind(cid_b)
+    .fetch_one(&pool)
+    .await
+    .expect("count");
+    assert_eq!(count, 2, "two distinct client_ids should leave two rows");
+}
