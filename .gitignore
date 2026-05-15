@@ -101,3 +101,6 @@ vite.config.ts.timestamp-*
 *.bak
 .eslintcache
 .prettiercache
+
+# direnv
+.direnv/
