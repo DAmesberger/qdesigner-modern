@@ -156,7 +156,9 @@ pub fn router(state: AppState) -> Router {
                 rate_limit_middleware,
             )),
         )
-        .route("/{id}/decline", post(organizations::decline_invitation));
+        .route("/{id}/decline", post(organizations::decline_invitation))
+        .layer(CatchPanicLayer::new())
+        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let questionnaire_routes = Router::new()
         .route(

@@ -11,6 +11,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::auth::models::AuthenticatedUser;
+use crate::middleware::tx::Tx;
 use crate::error::ApiError;
 use crate::state::AppState;
 
@@ -197,10 +198,14 @@ pub struct InvitationDetail {
     tags = ["organizations"]
 )]
 pub async fn list_organizations(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<Vec<Organization>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
 
@@ -217,7 +222,7 @@ pub async fn list_organizations(
     .bind(user.user_id)
     .bind(limit)
     .bind(offset)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(orgs))
@@ -239,10 +244,14 @@ pub async fn list_organizations(
     tags = ["organizations"]
 )]
 pub async fn create_organization(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Json(body): Json<CreateOrgRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Organization>), ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -253,7 +262,7 @@ pub async fn create_organization(
     let exists =
         sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM organizations WHERE slug = $1)")
             .bind(&slug)
-            .fetch_one(&state.pool)
+            .fetch_one(&mut **tx)
             .await?;
 
     if exists {
@@ -275,7 +284,7 @@ pub async fn create_organization(
     .bind(&body.domain)
     .bind(&body.logo_url)
     .bind(user.user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     // Add the creator as owner
@@ -287,7 +296,7 @@ pub async fn create_organization(
     )
     .bind(org_id)
     .bind(user.user_id)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?;
 
     Ok((axum::http::StatusCode::CREATED, Json(org)))
@@ -311,17 +320,21 @@ pub async fn create_organization(
     tags = ["organizations"]
 )]
 pub async fn get_organization(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<Organization>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     // Verify membership
     let is_member = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active')",
     )
     .bind(org_id)
     .bind(user.user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     if !is_member {
@@ -337,7 +350,7 @@ pub async fn get_organization(
         "#,
     )
     .bind(org_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Organization not found".into()))?;
 
@@ -367,16 +380,21 @@ pub async fn get_organization(
 pub async fn update_organization(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
     Json(body): Json<UpdateOrgRequest>,
 ) -> Result<Json<Organization>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
     // Require at least admin role
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -428,7 +446,7 @@ pub async fn update_organization(
     }
 
     let org = query
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| ApiError::NotFound("Organization not found".into()))?;
 
@@ -454,11 +472,16 @@ pub async fn update_organization(
 pub async fn delete_organization(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
         .await?
     {
         return Err(ApiError::Forbidden(
@@ -468,7 +491,7 @@ pub async fn delete_organization(
 
     sqlx::query("UPDATE organizations SET deleted_at = NOW() WHERE id = $1")
         .bind(org_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
     Ok(Json(
@@ -495,17 +518,21 @@ pub async fn delete_organization(
     tags = ["organizations"]
 )]
 pub async fn list_members(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<Vec<OrgMember>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     // Verify membership
     let is_member = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active')",
     )
     .bind(org_id)
     .bind(user.user_id)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     if !is_member {
@@ -522,7 +549,7 @@ pub async fn list_members(
         "#,
     )
     .bind(org_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(members))
@@ -551,9 +578,14 @@ pub async fn list_members(
 pub async fn add_member(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
     Json(body): Json<AddMemberRequest>,
 ) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -568,7 +600,7 @@ pub async fn add_member(
     if body.role == "owner"
         && !state
             .rbac
-            .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
+            .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
             .await?
     {
         return Err(ApiError::Forbidden(
@@ -578,7 +610,7 @@ pub async fn add_member(
 
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -588,7 +620,7 @@ pub async fn add_member(
         "SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL",
     )
     .bind(&body.email)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
 
@@ -602,7 +634,7 @@ pub async fn add_member(
     .bind(org_id)
     .bind(target_user)
     .bind(&body.role)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?;
 
     Ok((
@@ -632,11 +664,16 @@ pub async fn add_member(
 pub async fn remove_member(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path((org_id, target_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -649,7 +686,7 @@ pub async fn remove_member(
         )
         .bind(org_id)
         .bind(target_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?;
 
         if target_role.as_deref() == Some("owner") {
@@ -657,7 +694,7 @@ pub async fn remove_member(
                 "SELECT COUNT(*) FROM organization_members WHERE organization_id = $1 AND role = 'owner' AND status = 'active'",
             )
             .bind(org_id)
-            .fetch_one(&state.pool)
+            .fetch_one(&mut **tx)
             .await?;
 
             if owner_count <= 1 {
@@ -669,7 +706,7 @@ pub async fn remove_member(
     sqlx::query("DELETE FROM organization_members WHERE organization_id = $1 AND user_id = $2")
         .bind(org_id)
         .bind(target_id)
-        .execute(&state.pool)
+        .execute(&mut **tx)
         .await?;
 
     Ok(Json(serde_json::json!({ "message": "Member removed" })))
@@ -696,11 +733,16 @@ pub async fn remove_member(
 pub async fn list_invitations(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<Vec<Invitation>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -715,7 +757,7 @@ pub async fn list_invitations(
         "#,
     )
     .bind(org_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(invitations))
@@ -743,9 +785,14 @@ pub async fn list_invitations(
 pub async fn create_invitation(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
     Json(body): Json<CreateInvitationRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Invitation>), ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -758,7 +805,7 @@ pub async fn create_invitation(
 
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -779,13 +826,13 @@ pub async fn create_invitation(
     .bind(user.user_id)
     .bind(expires_at)
     .bind(&body.custom_message)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     // Send invitation email
     let org_name = sqlx::query_scalar::<_, String>("SELECT name FROM organizations WHERE id = $1")
         .bind(org_id)
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?
         .unwrap_or_else(|| "your organization".to_string());
 
@@ -892,15 +939,19 @@ pub struct PendingInvitation {
     tags = ["organizations"]
 )]
 pub async fn list_pending_invitations(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
 ) -> Result<Json<Vec<PendingInvitation>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     // Look up the user's email
     let email = sqlx::query_scalar::<_, String>(
         "SELECT email FROM users WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(user.user_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
 
@@ -915,7 +966,7 @@ pub async fn list_pending_invitations(
         "#,
     )
     .bind(&email)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(invitations))
@@ -1030,16 +1081,20 @@ pub async fn get_invitation(
     tags = ["organizations"]
 )]
 pub async fn accept_invitation(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(invitation_token): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     // Look up the user's email
     let email = sqlx::query_scalar::<_, String>(
         "SELECT email FROM users WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(user.user_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
 
@@ -1053,7 +1108,7 @@ pub async fn accept_invitation(
     )
     .bind(invitation_token)
     .bind(&email)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Invitation not found or expired".into()))?;
 
@@ -1064,7 +1119,7 @@ pub async fn accept_invitation(
         "UPDATE organization_invitations SET status = 'accepted', accepted_at = NOW() WHERE token = $1",
     )
     .bind(invitation_token)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?;
 
     // Add user as org member (upsert in case they were previously removed)
@@ -1078,7 +1133,7 @@ pub async fn accept_invitation(
     .bind(org_id)
     .bind(user.user_id)
     .bind(&role)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?;
 
     Ok(Json(
@@ -1103,15 +1158,19 @@ pub async fn accept_invitation(
     tags = ["organizations"]
 )]
 pub async fn decline_invitation(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(invitation_token): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     let email = sqlx::query_scalar::<_, String>(
         "SELECT email FROM users WHERE id = $1 AND deleted_at IS NULL",
     )
     .bind(user.user_id)
-    .fetch_optional(&state.pool)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
 
@@ -1124,7 +1183,7 @@ pub async fn decline_invitation(
     )
     .bind(invitation_token)
     .bind(&email)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?
     .rows_affected();
 
@@ -1160,11 +1219,16 @@ pub async fn decline_invitation(
 pub async fn revoke_invitation(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path((org_id, invitation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1179,7 +1243,7 @@ pub async fn revoke_invitation(
     )
     .bind(invitation_id)
     .bind(org_id)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?
     .rows_affected();
 
@@ -1213,11 +1277,16 @@ pub async fn revoke_invitation(
 pub async fn list_domains(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<Vec<DomainRecord>>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1234,7 +1303,7 @@ pub async fn list_domains(
         "#,
     )
     .bind(org_id)
-    .fetch_all(&state.pool)
+    .fetch_all(&mut **tx)
     .await?;
 
     Ok(Json(domains))
@@ -1260,12 +1329,17 @@ pub async fn list_domains(
 pub async fn create_domain(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path(org_id): Path<Uuid>,
     Json(body): Json<CreateDomainRequest>,
 ) -> Result<(axum::http::StatusCode, Json<DomainRecord>), ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1285,7 +1359,7 @@ pub async fn create_domain(
     .bind(org_id)
     .bind(&body.domain)
     .bind(&verification_token)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok((axum::http::StatusCode::CREATED, Json(record)))
@@ -1312,11 +1386,16 @@ pub async fn create_domain(
 pub async fn verify_domain(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path((org_id, domain_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1328,7 +1407,7 @@ pub async fn verify_domain(
     )
     .bind(domain_id)
     .bind(org_id)
-    .execute(&state.pool)
+    .execute(&mut **tx)
     .await?
     .rows_affected();
 
@@ -1362,12 +1441,17 @@ pub async fn verify_domain(
 pub async fn update_domain(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path((org_id, domain_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateDomainRequest>,
 ) -> Result<Json<DomainRecord>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1423,7 +1507,7 @@ pub async fn update_domain(
     }
 
     let record = query
-        .fetch_optional(&state.pool)
+        .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| ApiError::NotFound("Domain not found".into()))?;
 
@@ -1451,11 +1535,16 @@ pub async fn update_domain(
 pub async fn delete_domain(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    tx: Tx,
     Path((org_id, domain_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
     if !state
         .rbac
-        .has_org_role(&state.pool, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1465,7 +1554,7 @@ pub async fn delete_domain(
         sqlx::query("DELETE FROM organization_domains WHERE id = $1 AND organization_id = $2")
             .bind(domain_id)
             .bind(org_id)
-            .execute(&state.pool)
+            .execute(&mut **tx)
             .await?
             .rows_affected();
 
