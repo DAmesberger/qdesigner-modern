@@ -2805,6 +2805,22 @@ pub struct FilterResponse {
 ///
 /// Accepts a structured filter query and returns matching sessions
 /// with optional aggregated statistics on a key field.
+/// Filter keys (metadata.X / variable.X) are interpolated into a SQL string
+/// literal. PostgreSQL `''` escape would also work, but a strict identifier
+/// allowlist is defense-in-depth: it rules out future regressions if anyone
+/// adds a field type that uses the key in a non-literal context.
+fn is_safe_filter_key(key: &str) -> bool {
+    if key.is_empty() || key.len() > 128 {
+        return false;
+    }
+    let mut chars = key.chars();
+    let first = chars.next().unwrap();
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 #[utoipa::path(
     post,
     path = "/api/sessions/filter",
@@ -2860,14 +2876,23 @@ pub async fn filter_sessions(
                 // Support metadata JSON field access with metadata.xxx
                 f if f.starts_with("metadata.") => {
                     let json_key = &f["metadata.".len()..];
-                    format!("s.metadata->>'{}'", json_key.replace('\'', "''"))
+                    if !is_safe_filter_key(json_key) {
+                        return Err(ApiError::BadRequest(format!(
+                            "Invalid metadata key '{json_key}'. Expected [A-Za-z_][A-Za-z0-9_]*."
+                        )));
+                    }
+                    format!("s.metadata->>'{json_key}'")
                 }
                 // Support variable names with variable.xxx
                 f if f.starts_with("variable.") => {
                     let var_name = &f["variable.".len()..];
+                    if !is_safe_filter_key(var_name) {
+                        return Err(ApiError::BadRequest(format!(
+                            "Invalid variable name '{var_name}'. Expected [A-Za-z_][A-Za-z0-9_]*."
+                        )));
+                    }
                     format!(
-                        "(SELECT sv.variable_value::text FROM session_variables sv WHERE sv.session_id = s.id AND sv.variable_name = '{}')",
-                        var_name.replace('\'', "''")
+                        "(SELECT sv.variable_value::text FROM session_variables sv WHERE sv.session_id = s.id AND sv.variable_name = '{var_name}')"
                     )
                 }
                 other => {
@@ -3187,8 +3212,30 @@ pub async fn timeseries(
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_numeric_stats, json_value_to_f64, parse_aggregate_source};
+    use super::{compute_numeric_stats, is_safe_filter_key, json_value_to_f64, parse_aggregate_source};
     use serde_json::json;
+
+    #[test]
+    fn safe_filter_keys_pass() {
+        assert!(is_safe_filter_key("score"));
+        assert!(is_safe_filter_key("user_id"));
+        assert!(is_safe_filter_key("_private"));
+        assert!(is_safe_filter_key("a1"));
+    }
+
+    #[test]
+    fn unsafe_filter_keys_rejected() {
+        assert!(!is_safe_filter_key(""));
+        assert!(!is_safe_filter_key("1leading_digit"));
+        assert!(!is_safe_filter_key("with space"));
+        assert!(!is_safe_filter_key("quote'inside"));
+        assert!(!is_safe_filter_key("semi;colon"));
+        assert!(!is_safe_filter_key("dash-name"));
+        assert!(!is_safe_filter_key("dot.name"));
+        assert!(!is_safe_filter_key("union/**/select"));
+        // 129 chars — over length cap
+        assert!(!is_safe_filter_key(&"a".repeat(129)));
+    }
 
     #[test]
     fn parses_numeric_json_values() {
