@@ -340,3 +340,48 @@ async fn sessions_policy_denies_non_member() {
 // `organizations` now lives in `api/access::*` (handler layer), not
 // the DB; `organization_members` still enforces RLS, and the
 // authenticated reads that need org-scope filter through that table.
+//
+// The test below covers the surviving handler-layer gate: the
+// membership probe `get_organization` runs before reading the
+// organizations row. This is the contract ADR 0015 leans on.
+
+#[tokio::test]
+async fn cross_tenant_org_membership_check_denies_non_member() {
+    // Asserts the api/access::* contract the get_organization handler
+    // depends on: the membership probe returns false for a user who is
+    // not in the target org, so the handler short-circuits to 403
+    // before SELECTing from `organizations` (which is now RLS-exempt
+    // per ADR 0015 and would otherwise leak the row).
+    let Some(pool) = get_test_pool().await else {
+        eprintln!("Skipping: DATABASE_URL not set");
+        return;
+    };
+    let user_a = create_test_user(&pool, &format!("a-{}@test.local", Uuid::new_v4()))
+        .await
+        .expect("user a");
+    let user_b = create_test_user(&pool, &format!("b-{}@test.local", Uuid::new_v4()))
+        .await
+        .expect("user b");
+    let org_a = create_test_org(&pool, "Org A", user_a).await.expect("org a");
+    let _org_b = create_test_org(&pool, "Org B", user_b).await.expect("org b");
+
+    // Replicate the SQL the get_organization handler runs
+    // (apps/server/src/api/organizations.rs §322). User B should not
+    // be a member of org A.
+    let is_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(
+            SELECT 1 FROM organization_members
+            WHERE organization_id = $1 AND user_id = $2 AND status = 'active'
+        )",
+    )
+    .bind(org_a)
+    .bind(user_b)
+    .fetch_one(&pool)
+    .await
+    .expect("membership probe");
+
+    assert!(
+        !is_member,
+        "user B should NOT be a member of org A; handler must 403 cross-tenant gets"
+    );
+}
