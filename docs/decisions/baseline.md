@@ -191,3 +191,62 @@ Exit status 1
 7. **Healthcheck timing.** Postgres reached healthy in ~12s (dev) / ~8s (test); well under the 55s ceiling. No action.
 
 8. **`psql` not in the project flake.** Used `nix shell nixpkgs#postgresql -c psql ...` as a one-shot in Phase 1.0.5 verification. Per the Phase 1.0.5 closeout advisory's disposition of D-1.0.5/1, `pkgs.postgresql` will be added to `flake.nix` when first regularly needed (Phase 2.4 or Phase 3.4).
+
+---
+
+# Phase 6 — RLS enforcement (closeout)
+
+**Captured:** 2026-05-16
+**Branch:** `phase-6` (8 commits, ready to fast-forward into `main`)
+**Final commit:** P6.7 closeout (this commit)
+**Parent of phase:** `303ecff` (Phase 5 closeout)
+
+## Phase 6 summary
+
+| # | Metric | Phase 1 baseline | Post-Phase 5 | Post-Phase 6 |
+|---|---|---|---|---|
+| 1 | Frontend tests | 40 files / 691 | 43 files / 716 | 43 files / 716 (unchanged) |
+| 2 | Scripting-engine standalone | not tracked | 6 files / 223 | 6 files / 223 |
+| 3 | Server tests (`--include-ignored`) | 6/11 (5 rbac FAILED, schema empty) | 36/36 | **44/44** |
+| 4 | svelte-check | 0/0 | 0/0 | 0/0 (no frontend changes) |
+| 5 | Lint | 0/0 | 0/0 | 0/0 (no frontend changes) |
+| 6 | Frontend build | FAILED (favicon prerender) | varies | not re-run (no frontend changes) |
+| 7 | `cargo check` | exit 0 | exit 0 | exit 0 |
+| 8 | `cargo build` | exit 0 | exit 0 | exit 0 |
+
+Server test breakdown after Phase 6 (`cargo test --include-ignored`):
+
+| File | Tests | Notes |
+|---|---|---|
+| bin unit | 12 | +2 from P6.3 (`middleware::fillout_rls_context::tests`) |
+| `tests/auth_flows.rs` | 8 | unchanged |
+| `tests/bump_version_semver.rs` | 5 | unchanged (get_test_pool switched to migration DSN in P6.2) |
+| `tests/rbac_integration.rs` | 8 | –1 deleted (`organizations_policy_denies_non_member`, ADR 0015), +1 added (`cross_tenant_org_membership_check_denies_non_member`, P6.6) |
+| `tests/revoked_tokens_purge.rs` | 1 | unchanged |
+| `tests/rls_context.rs` | 1 | unchanged (Phase 5 GUC contract test) |
+| `tests/rls_enforcement.rs` | **6 new** | P6.6 — admin SELECT denial, D2a permissive INSERT, anonymous fillout session isolation, authenticated fillout user-bound isolation |
+| `tests/sync_session_dedup.rs` | 3 | unchanged (get_test_pool switched in P6.2) |
+
+## Phase 6 deliverables
+
+- **5 new migrations** (`00018`–`00022`):
+  - `00018_app_role.sql` — `qdesigner_app` non-superuser role + grants (ADR 0014)
+  - `00019_sessions_user_id.sql` — `sessions.user_id` column + partial index
+  - `00020_admin_mutation_policies.sql` — DISABLE on `users`/`organizations` (ADR 0015), permissive `_all` policies on the six admin tables
+  - `00021_fillout_dual_policies.sql` — `current_app_session_id()` helper, dual-path policies on the four fillout-path tables, DISABLE on `questionnaire_definitions`, `projects_select_via_published_questionnaire`
+  - `00022_force_rls_admin.sql` — FORCE RLS on the four admin-RLS-bound tables
+- **1 new middleware** — `apps/server/src/middleware/fillout_rls_context.rs` (sibling to `set_rls_context`; always opens tx, extracts both GUCs)
+- **3 new code patterns**:
+  - Split-DSN startup (migration DSN runs migrations, then app pool opens) — `apps/server/src/main.rs`
+  - `executor: impl PgExecutor<'_>` / `&mut PgConnection` for all 11 helpers in `sessions.rs` (folded P6.4 into P6.3)
+  - `OptionalUser` handlers take `Tx` and pass `&mut **tx` to queries
+- **4 new ADRs** (`0012`–`0015`) + 1 PHASE_6_PLAN amendments
+- **2 ADR status updates** — `0001` → Complete; `0011` → Superseded
+- **2 plan-text mid-phase amendments** — `P6.1` (correcting "RLS doesn't bind yet"); `P6.2` (recording the ADR 0015 discovery)
+
+## Operational notes for future work
+
+1. Every developer needs a fresh DB after pulling Phase 6 (`docker compose down -v; up`). The `qdesigner_app` role is created by `00018`; pre-existing volumes don't have it.
+2. The bonus probe in P6.6 confirmed: rls_enforcement tests pass with FORCE removed because non-owner ENABLE is what binds the test role. FORCE in `00022` is declarative posture / future-proofing, not load-bearing protection against current roles.
+3. `check_duplicate` is functionally a no-op for anonymous callers post-Phase-6 (dual-path SELECT hides other sessions). Logged as the only behavioural regression — see Known TODOs in `CLAUDE.md`.
+4. `tests/rbac_integration.rs::organizations_policy_denies_non_member` was deleted in P6.2 because the policy it tested no longer exists (ADR 0015 disabled RLS on `organizations`). The handler-layer test (`cross_tenant_org_membership_check_denies_non_member`, P6.6) covers the surviving contract.

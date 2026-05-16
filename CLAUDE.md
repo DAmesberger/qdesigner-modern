@@ -47,14 +47,16 @@ pnpm --filter @qdesigner/scripting-engine test
 pnpm --filter @qdesigner/web build
 cargo check --manifest-path apps/server/Cargo.toml
 cargo build --manifest-path apps/server/Cargo.toml
-DATABASE_URL=postgresql://qdesigner:qdesigner@localhost:15434/qdesigner \
-  cargo test --manifest-path apps/server/Cargo.toml -- --include-ignored
+# Server tests inherit DATABASE_URL from .env.development (qdesigner_app
+# for the app pool; tests that need to seed RLS-bound tables fall back
+# to DATABASE_URL_MIGRATIONS — qdesigner — via the get_test_pool helper).
+cargo test --manifest-path apps/server/Cargo.toml -- --include-ignored
 ```
 
-Test count baseline (post-Phase 5):
+Test count baseline (post-Phase 6):
 - frontend web suite: 43 files / 716 passing (includes package tests via vitest glob)
 - scripting-engine standalone: 6 files / 223
-- server: 36 across 1 lib + 6 integration files (10 bin unit + 8 auth_flows + 3 sync_session_dedup + 5 bump_version_semver + 8 rbac_integration + 1 revoked_tokens_purge + 1 rls_context)
+- server: 44 across 1 lib + 7 integration files (12 bin unit + 8 auth_flows + 3 sync_session_dedup + 5 bump_version_semver + 8 rbac_integration + 1 revoked_tokens_purge + 1 rls_context + 6 rls_enforcement). The bin-unit count went 10→12 with the two unit tests in `middleware::fillout_rls_context` covering the URL-path session-id matcher; rbac_integration went 8 (after P6.2 deleted the now-incoherent `organizations_policy_denies_non_member`) → 7 → 8 (P6.6 added `cross_tenant_org_membership_check_denies_non_member`).
 
 ## Ports
 
@@ -103,7 +105,7 @@ apps/server/src/
   main.rs          thin shell, imports from `qdesigner_server::*`
   api/             route handlers (auth, organizations, projects, questionnaires, sessions, media, comments, dev)
   auth/            JwtManager, password (argon2), session, models
-  middleware/      cors, csrf, rate_limit (Redis-backed with in-memory fallback), rls_context
+  middleware/      cors, csrf, rate_limit (Redis-backed with in-memory fallback), rls_context, fillout_rls_context, tx
   rbac/            manager.rs (live, 28 call sites), models.rs (Org/Project role enums)
   websocket/       handler, yjs_store, yjs_relay, redis_bridge, manager
   state.rs         AppState (pool, jwt_manager, rbac, storage, websocket_state, yjs_store, redis, rate_limiter, config)
@@ -117,11 +119,18 @@ The crate is bin+lib hybrid: `tests/` integration tests import via `qdesigner_se
 
 ## Database
 
-- Migrations: `apps/server/migrations/00001 … 00016` (single live directory; the dead `db/migrations/` directory was deleted in Phase 2.4 per ADR 0009 — schemas had diverged, port wasn't viable).
-- `00014_rls_policies.sql` declares helper functions (`current_app_user_id`, `current_app_user_role`, `is_super_admin`) and `ENABLE ROW LEVEL SECURITY` policies on users, organizations, organization_members, projects, project_members, questionnaire_definitions, sessions, responses, interaction_events, session_variables, media_assets.
-- **RLS infrastructure landed in Phase 5; enforcement deferred (ADR 0011).** Every authenticated handler now runs inside a per-request transaction opened by `middleware/rls_context.rs`; `app.user_id` and `app.user_role` are set as transaction-local GUCs via `set_config(..., true)` and are readable through `current_app_user_id()`. Handlers take a `Tx` extractor from `middleware/tx.rs` and pass `&mut **tx` to queries; `api/access::*` and `RbacManager` methods take `executor: impl PgExecutor<'_>` so the same call site works for `&PgPool` (anonymous handlers) and `&mut **tx` (authenticated handlers).
-- **Enforcement is NOT yet active.** `qdesigner` is the postgres bootstrap superuser (`SUPERUSER` + `BYPASSRLS` per the docker image), which bypasses RLS regardless of FORCE. Making policies bind on application traffic requires a role switch + INSERT/UPDATE/DELETE policies + a fillout-path strategy; that's deferred to a future Phase. ADR 0011 has the full scope.
-- Authorization on application traffic is enforced by `api/access::*` checks composed in handlers, plus the trigger `trg_project_members_org_check` for cross-tenant project_member inserts.
+- Migrations: `apps/server/migrations/00001 … 00022` (single live directory; the dead `db/migrations/` directory was deleted in Phase 2.4 per ADR 0009 — schemas had diverged, port wasn't viable). Numbering jumps `00014 → 00018` — the gap reflects the abandoned `00017_rls_force` plan from ADR 0010, never shipped.
+- **Two roles.** `qdesigner` is the postgres bootstrap superuser (`SUPERUSER` + `BYPASSRLS`). It runs migrations and is available as an ad-hoc bypass connection in tests. `qdesigner_app` (created by `00018_app_role.sql`, ADR 0014) is the non-superuser, non-BYPASSRLS role the application connects as; it has DML on all tables in `public` and USAGE/SELECT on sequences, nothing more.
+- **DSNs.** `.env.development` carries both: `DATABASE_URL=postgresql://qdesigner_app:…` (app pool), `DATABASE_URL_MIGRATIONS=postgresql://qdesigner:…` (migration pool, opens briefly at startup to run `sqlx::migrate!`, then closed). See `apps/server/src/main.rs` for the split.
+- **RLS infrastructure** (Phase 5, ADR 0011): every authenticated handler runs inside a per-request transaction opened by `middleware/rls_context.rs`; `app.user_id` is set as a transaction-local GUC via `set_config(..., true)`. Handlers take a `Tx` extractor from `middleware/tx.rs` and pass `&mut **tx` to queries; `api/access::*` and the 11 `sessions.rs` helpers take `executor: impl PgExecutor<'_>` (single-shot) or `&mut PgConnection` (multi-shot) so the same call site works for `&PgPool` and `&mut **tx`.
+- **Fillout middleware** (Phase 6.3, ADR 0012): `middleware/fillout_rls_context.rs` is a sibling layer on `session_routes`. It *always* opens a tx, extracts the optional JWT into `app.user_id`, and parses the URL path for `/<uuid>/...` to populate `app.session_id`. Anonymous create (`POST /api/sessions`) generates its session id in the handler and sets the GUC before the INSERT so RETURNING-applied SELECT admission works.
+- **Policy posture** (Phase 6 closeout):
+  - **RLS-exempt** — `users` and `organizations` (ADR 0015: anonymous read by email/domain is intentional product behaviour), `questionnaire_definitions` (ADR 0012: public `GET /api/q/by-code/{code}`).
+  - **Admin-RLS-bound** — `organization_members`, `projects`, `project_members`, `media_assets`. SELECT policies from `00014` enforce cross-tenant denial; INSERT/UPDATE/DELETE policies from `00020_admin_mutation_policies.sql` are permissive `_all` (ADR 0013 D2a — `api/access::*` is the mutation authorization gate). `projects` additionally carries `projects_select_via_published_questionnaire` so anonymous by-code reads can JOIN.
+  - **Fillout-RLS-dual** — `sessions`, `responses`, `interaction_events`, `session_variables`. Dual-path policies in `00021_fillout_dual_policies.sql` admit via either `app.user_id = sessions.user_id` (authenticated) or `app.session_id = sessions.id` (anonymous). `sessions_insert_dual` has a bootstrap branch for the entry-point anonymous create.
+  - **FORCE** on the four admin-RLS-bound tables (`00022_force_rls_admin.sql`). Empirically confirmed declarative posture only — non-owner ENABLE already binds `qdesigner_app`; `qdesigner`'s BYPASSRLS overrides FORCE; no current role's behaviour depends on FORCE. Future-proofing for any new owner-but-non-BYPASSRLS role.
+- Authorization on application traffic is enforced by **both** `api/access::*` checks in handlers (the sole gate for mutations on admin tables; the membership probe in `get_organization` for the RLS-exempt org reads) **and** RLS on the four still-bound admin tables + the four fillout-path tables (defense-in-depth against SQL-injection or compromised handler code that issues queries without an explicit access check). The trigger `trg_project_members_org_check` covers cross-tenant `project_members` INSERTs at the schema layer.
+- `tests/rls_enforcement.rs` (P6.6) asserts the contract end-to-end: cross-tenant SELECT denial, D2a permissive INSERT, dual-path session-bound and user-bound isolation.
 
 ## Offline fillout
 
@@ -163,9 +172,9 @@ Yjs end-to-end:
 
 ## ADR trail
 
-All architectural and scoping decisions through Phase 4 live in `docs/decisions/`:
+All architectural and scoping decisions through Phase 6 live in `docs/decisions/`:
 
-- `0001-rls.md` — RLS as defense-in-depth (connection-pinning deferred to Phase 5)
+- `0001-rls.md` — RLS as defense-in-depth. **Complete** after Phase 6.
 - `0002-pipeline.md` — `lib/pipeline/` deleted
 - `0003-scripting.md` — scripting consolidated into the package
 - `0004-aliases.md` — `@qdesigner/*` adopted
@@ -175,17 +184,25 @@ All architectural and scoping decisions through Phase 4 live in `docs/decisions/
 - `0008-rbac-manager-retained.md` — keep RbacManager; delete only the unused middleware
 - `0009-rls-author-not-port.md` — RLS authored against live schema (not ported from dead dir)
 - `0010-rls-force.md` — superseded by 0011; archived partial-FORCE plan
-- `0011-rls-infra-only.md` — Phase 5 ships RLS infrastructure (per-request tx, Tx extractor, GUC); enforcement deferred
+- `0011-rls-infra-only.md` — Phase 5 RLS infrastructure (per-request tx, Tx extractor, GUC). **Superseded** by the Phase 6 closeout.
+- `0012-fillout-dual-path-rls.md` — Phase 6 fillout-path strategy: dual GUC, dual-path policies, `questionnaire_definitions` exited from RLS.
+- `0013-admin-mutation-permissive.md` — Phase 6 admin-table mutation policies are permissive `WITH CHECK (true)`; `api/access::*` is the gate.
+- `0014-qdesigner-app-role.md` — Phase 6 introduces the non-superuser `qdesigner_app` application role; tests inherit the app DSN.
+- `0015-anon-read-rls-exempt.md` — Phase 6 mid-step finding: `users` and `organizations` join `questionnaire_definitions` as RLS-exempt because they have intentional public-anonymous read paths.
+- `PHASE_6_PLAN.md` — Phase 6 implementation plan (with mid-phase amendments).
 - `SUPERVISOR_PROTOCOL.md` — message format for the team-lead / supervisor / user loop
-- `baseline.md` — metrics captured at the start of Phase 1
+- `baseline.md` — metrics captured at the start of Phase 1 + per-phase rows added at closeout
 
 When an ADR's status changes, a new ADR supersedes it rather than editing in place.
 
 ## Known TODOs
 
-- **Future phase: actually enforce RLS.** Phase 5 shipped the infrastructure (per-request tx + Tx extractor + GUC set per authenticated request, see ADR 0011). Enforcement still requires three pieces of design work: (1) switch the application connection to a non-superuser non-BYPASSRLS role (e.g., `qdesigner_app`) created in a new migration; (2) author INSERT/UPDATE/DELETE policies on tables where enforcement should bind — either permissive `WITH CHECK (true)` or rule-encoding to match `api/access::*`; (3) decide what happens to fillout-path tables (`questionnaire_definitions`, `sessions`, `responses`, `interaction_events`, `session_variables`) whose anonymous readers have no `app.user_id` — drop RLS on them, or design a session-token GUC. None of these has a clean single-phase answer.
+- **`check_duplicate` anonymous regression** (logged in P6.3 commit body): the OptionalUser `POST /api/sessions/check-duplicate` handler counts other sessions' `completed` rows by fingerprint, which the dual-path SELECT policy hides for anonymous callers (no GUC matches). Returns 0 for anonymous → frontend dedup probe becomes a no-op. The product behaviour needs an alternative path that doesn't require reading other sessions' metadata (e.g., server-side fingerprint hash dedup at create time).
+- **Test fixture pool pattern** (introduced in P6.2): tests that need to seed RLS-bound tables read `DATABASE_URL_MIGRATIONS` (qdesigner superuser) so fixture INSERTs aren't denied. Tests that exercise RLS policies use `SET LOCAL ROLE` inside a transaction to switch to a fresh non-owner test role. See `tests/rbac_integration.rs` and `tests/rls_enforcement.rs` for the pattern.
+- **Production password handling for `qdesigner_app`** (ADR 0014 §Deferred): dev/test use a literal `'qdesigner_app'` password. Production needs env-sourced or cert auth before the role goes live in any non-dev environment.
+- **Migration role for ad-hoc workflows**: any future migration that needs to bulk-update a FORCE'd admin table across tenants works because `qdesigner` has BYPASSRLS. If the BYPASSRLS attribute is ever dropped from `qdesigner`, those migrations need a temporary `ALTER TABLE … NO FORCE …; … ; FORCE …` dance.
 - **rbac_integration env-file path** was fixed in P3.4a; if you copy that test pattern elsewhere, use `.parent().and_then(|p| p.parent())` to reach the repo root from `CARGO_MANIFEST_DIR`.
-- **Testability gaps surfaced in Phase 4** (logged in commit `44cbb5e`): handler-level HTTP round-trip tests (auth, sessions, questionnaires) need a server harness with full AppState construction. The pure-logic and SQL-level tests cover the building blocks.
+- **Testability gaps surfaced in Phase 4** (logged in commit `44cbb5e`): handler-level HTTP round-trip tests (auth, sessions, questionnaires) need a server harness with full AppState construction. The pure-logic, SQL-level, and RLS-enforcement tests cover the building blocks; an end-to-end Axum tower-test harness would close the last gap.
 - **Frontend build prerender** requires every `<a href>` target to either exist as a route or be marked external. Phase 1.0.6 cleaned up the marketing surface; any new internal links should be backed by a real `+page.svelte`.
 
 ## Test credentials

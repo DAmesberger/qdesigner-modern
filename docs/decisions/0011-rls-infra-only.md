@@ -1,17 +1,26 @@
 # ADR 0011 — Phase 5 ships RLS infrastructure; enforcement deferred
 
-**Status:** Accepted (2026-05-15). Closes Phase 5. Supersedes
-[ADR 0010](0010-rls-force.md). Partially supersedes
-[ADR 0001](0001-rls.md) — its connection-pinning clause is delivered
-here; its enforcement clause is deferred to a future phase.
+**Status:** **Superseded** by the Phase 6 closeout (2026-05-16,
+SHA `0758364`). The three "What's deferred" bullets below are all
+addressed:
 
-**Forward references (deferred-work scope refined in Phase 6):** the
-three "What's deferred" bullets below are addressed by
-[ADR 0012](0012-fillout-dual-path-rls.md) (fillout-path strategy),
-[ADR 0013](0013-admin-mutation-permissive.md) (mutation-policy
-approach), and [ADR 0014](0014-qdesigner-app-role.md) (app role).
-This ADR will be superseded in Phase 6 closeout once enforcement
-lands.
+- Role-switch to a non-superuser non-BYPASSRLS app role →
+  [ADR 0014](0014-qdesigner-app-role.md).
+- INSERT/UPDATE/DELETE policies on admin tables →
+  [ADR 0013](0013-admin-mutation-permissive.md), with a mid-P6.2
+  amendment recorded in [ADR 0015](0015-anon-read-rls-exempt.md) for
+  the `users` and `organizations` anonymous-read exemptions.
+- Fillout-path strategy → [ADR 0012](0012-fillout-dual-path-rls.md)
+  (Option C: dual GUC, dual-path policies, `questionnaire_definitions`
+  exited from RLS).
+
+This ADR was Accepted on 2026-05-15 closing Phase 5. It supersedes
+[ADR 0010](0010-rls-force.md) and partially supersedes
+[ADR 0001](0001-rls.md) (the connection-pinning clause is delivered
+here). The full text below is retained as the historical record of
+what shipped in Phase 5 and why the enforcement deferral was correct
+at that time. ADR 0001's enforcement clause is now Complete; see its
+status header.
 
 ## Decision
 
