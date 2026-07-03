@@ -8,12 +8,16 @@
   import { ws, type WsEvent } from '$lib/services/ws';
   import { api } from '$lib/services/api';
   import TourOverlay from '$lib/help/components/TourOverlay.svelte';
+  import { tourEngine } from '$lib/help/tours/TourEngine.svelte';
+  import { dashboardWelcomeTour } from '$lib/help/tours/definitions/dashboardWelcome';
+  import { helpStore } from '$lib/help/stores/helpStore.svelte';
   import {
     Activity,
     ArrowRight,
     BarChart3,
     CheckCircle2,
     Clock3,
+    Compass,
     FileText,
     FolderKanban,
     PieChart,
@@ -168,10 +172,22 @@
     }
   }
 
+  function startDashboardTour() {
+    tourEngine.start(dashboardWelcomeTour);
+    helpStore.markFeatureSeen(dashboardWelcomeTour.triggerKey ?? dashboardWelcomeTour.id);
+  }
+
   onMount(() => {
     if (questionnaires.length > 0) {
       subscribeRealtime();
       loadSparklines();
+    }
+
+    // First-run: auto-start the welcome tour once for users who have
+    // neither seen nor completed it, then mark it seen so it won't refire.
+    const tourKey = dashboardWelcomeTour.triggerKey ?? dashboardWelcomeTour.id;
+    if (!helpStore.hasSeenFeature(tourKey) && !helpStore.hasTourCompleted(dashboardWelcomeTour.id)) {
+      startDashboardTour();
     }
   });
 
@@ -294,6 +310,15 @@
           >
             <FolderKanban class="h-4 w-4 text-primary" />
             Open projects
+          </button>
+
+          <button
+            type="button"
+            onclick={startDashboardTour}
+            class="inline-flex items-center gap-2 rounded-2xl border border-border bg-background/90 px-5 py-3 text-sm font-semibold text-foreground transition hover:bg-accent"
+          >
+            <Compass class="h-4 w-4 text-primary" />
+            Take a tour
           </button>
 
         </div>
