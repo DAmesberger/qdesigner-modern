@@ -152,7 +152,9 @@ Out-of-plan discoveries and consciously-deferred findings land here (SUPERVISOR_
 
 | Item | From task | Rationale | Disposition |
 |---|---|---|---|
-| _(none yet)_ | | | |
+| Dedicated `media-display` runtime component | MOD-05 | Aliased to `text-instruction` for now (renders content + media, no silent drop). A purpose-built media-display component is a UX nicety, not a data-loss fix. | Defer |
+| Per-type fillout UX verification for ranking / date-time / file-upload / media-response / drawing | MOD-02 | Capture is wired (mounted component → onResponse) and the components read `config` defensively; Matrix + choice are test-proven, the other five need a manual browser pass for layout/validation polish. | Defer (browser-drive in a later P7.1 pass) |
+| WebGL presenter chart/display blocks render as placeholder text | MOD-07 / STB-03 | Separate findings; `[bar-chart visualization]` placeholder in the WebGL presenter is out of ADR 0018's form-question scope. | Track under MOD-07/STB-03 |
 
 ## Amendment log
 

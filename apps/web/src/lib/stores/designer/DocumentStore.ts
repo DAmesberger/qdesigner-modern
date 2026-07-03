@@ -824,6 +824,45 @@ export class DocumentStore {
       };
     }
 
+    // MOD-02: the previously-unanswerable advanced question types. These render
+    // through their mounted runtime component (ADR 0018); the responseType is used
+    // for variable typing and to keep them out of the 'none' auto-advance branch.
+    if (question.type === QuestionTypes.MATRIX) {
+      const matrixDisplay = (question as DynamicValue).display ?? {};
+      return {
+        type: 'matrix',
+        rows: matrixDisplay.rows ?? [],
+        columns: matrixDisplay.columns ?? [],
+        responseType: matrixDisplay.responseType ?? 'single',
+      };
+    }
+
+    if (question.type === QuestionTypes.RANKING) {
+      return {
+        type: 'ranking',
+        items:
+          (question as DynamicValue).display?.items ??
+          (question as DynamicValue).display?.options ??
+          [],
+      };
+    }
+
+    if (question.type === QuestionTypes.DATE_TIME) {
+      return { type: 'datetime' };
+    }
+
+    if (question.type === QuestionTypes.FILE_UPLOAD) {
+      return { type: 'file' };
+    }
+
+    if (question.type === QuestionTypes.MEDIA_RESPONSE) {
+      return { type: 'file' };
+    }
+
+    if (question.type === QuestionTypes.DRAWING) {
+      return { type: 'drawing' };
+    }
+
     if (question.type === QuestionTypes.REACTION_TIME) {
       return {
         type: 'keypress',

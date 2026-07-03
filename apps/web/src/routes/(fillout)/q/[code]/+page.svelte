@@ -10,6 +10,8 @@
   import CompletionScreen from '$lib/fillout/components/CompletionScreen.svelte';
   import { FilloutRuntime } from '$lib/fillout/runtime/FilloutRuntime';
   import { WebGLRenderer } from '$lib/renderer/WebGLRenderer';
+  import ModularRenderer from '$lib/runtime/ModularRenderer.svelte';
+  import type { FormQuestionHost, FormHostPresentation } from '$lib/runtime/core/FormQuestionHost';
   import type { Questionnaire } from '$lib/shared/types/questionnaire';
   import { QuestionnaireAccessService } from '$lib/fillout/services/QuestionnaireAccessService';
   import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
@@ -46,6 +48,54 @@
   let isOffline = $state(!navigator.onLine);
   let syncStatus = $state<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   let savedLocally = $state(false);
+
+  // HTML-overlay form rendering (ADR 0018: hybrid fillout rendering contract).
+  // The runtime mounts per-module runtime Svelte components here for form-style
+  // questions and instruction/display items; reaction-time paradigms stay on WebGL.
+  let activePresentation = $state<FormHostPresentation | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- captured value spans every module answer shape
+  let currentValue = $state<any>(undefined);
+  let hasAnswered = $state(false);
+
+  const activeItem = $derived(
+    activePresentation
+      ? {
+          ...activePresentation.item,
+          category: activePresentation.category,
+          config: activePresentation.config,
+        }
+      : null
+  );
+
+  const canAdvance = $derived(
+    !activePresentation || !activePresentation.interactive || !activePresentation.required || hasAnswered
+  );
+
+  const formHost: FormQuestionHost = {
+    present(presentation) {
+      currentValue = presentation.initialValue;
+      hasAnswered = presentation.initialValue !== undefined && presentation.initialValue !== null;
+      activePresentation = presentation;
+    },
+    clear() {
+      activePresentation = null;
+      currentValue = undefined;
+      hasAnswered = false;
+    },
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- module answer payloads are heterogeneous
+  function handleOverlayResponse(value: any) {
+    currentValue = value;
+    hasAnswered = value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0);
+  }
+
+  function submitOverlayAnswer() {
+    const presentation = activePresentation;
+    if (!presentation) return;
+    if (presentation.interactive && presentation.required && !hasAnswered) return;
+    presentation.onSubmit(currentValue);
+  }
 
   // Initialize on mount
   onMount(() => {
@@ -266,6 +316,7 @@
         sessionId: session.id,
         participantId: data.participantId || undefined,
         conditionGroupCounts,
+        formHost,
         enableOfflineSync: true,
         onComplete: async (completed) => {
           completedSession = completed;
@@ -396,7 +447,35 @@
     ></canvas>
 
     <div class="html-overlay" data-testid="fillout-runtime-overlay">
-      <!-- Dynamic HTML content rendered here -->
+      {#if activePresentation && activeItem}
+        <div class="form-overlay" data-testid="fillout-form-overlay">
+          <div class="form-card" data-question-type={activePresentation.type}>
+            {#key activePresentation.item.id}
+              <ModularRenderer
+                item={activeItem}
+                mode="runtime"
+                variables={activePresentation.variables}
+                bind:value={currentValue}
+                onResponse={handleOverlayResponse}
+                onValidation={activePresentation.onValidation}
+                onInteraction={activePresentation.onInteraction}
+              />
+            {/key}
+
+            <div class="form-actions">
+              <button
+                type="button"
+                class="form-continue"
+                data-testid="fillout-form-continue"
+                disabled={!canAdvance}
+                onclick={submitOverlayAnswer}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
   {:else if currentScreen === 'over-quota'}
     <div class="loading-container" data-testid="fillout-over-quota">
@@ -526,6 +605,51 @@
 
   .html-overlay :global(*) {
     pointer-events: auto;
+  }
+
+  .form-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    overflow-y: auto;
+  }
+
+  .form-card {
+    width: 100%;
+    max-width: 720px;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
+    background: var(--card, #ffffff);
+    color: var(--card-foreground, #0f172a);
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 40px rgb(0 0 0 / 0.15);
+    padding: 2rem;
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1.5rem;
+  }
+
+  .form-continue {
+    padding: 0.625rem 1.5rem;
+    border-radius: 0.5rem;
+    border: none;
+    background: var(--primary, #2563eb);
+    color: var(--primary-foreground, #ffffff);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  .form-continue:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   :global(.dark) .status-badge.offline {

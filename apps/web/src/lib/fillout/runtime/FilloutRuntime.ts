@@ -3,6 +3,7 @@ import { SessionManagementService } from '../services/SessionManagementService';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
 import { VariableEngine } from '@qdesigner/scripting-engine';
 import { RuntimeEventBus } from './RuntimeEventBus';
+import type { FormQuestionHost } from '$lib/runtime/core/FormQuestionHost';
 import type { Questionnaire, Question, Response, Page, QuestionnaireSession } from '$lib/shared';
 
 export interface FilloutRuntimeConfig {
@@ -11,6 +12,7 @@ export interface FilloutRuntimeConfig {
 	sessionId: string;
 	participantId?: string;
 	conditionGroupCounts?: number[];
+	formHost?: FormQuestionHost;
 	enableOfflineSync?: boolean;
 	syncInterval?: number;
 	onComplete?: (session: QuestionnaireSession) => void;
