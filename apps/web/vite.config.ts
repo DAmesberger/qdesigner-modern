@@ -77,7 +77,13 @@ export default defineConfig(({ mode }) => {
       }
     },
     optimizeDeps: {
-      include: ['svelte', '@sveltejs/kit']
+      // NB: never add '@sveltejs/kit' here. SvelteKit's own Vite plugin
+      // deliberately puts it in optimizeDeps.exclude — prebundling it produces
+      // a second copy of its control classes (Redirect/HttpError), so a
+      // `throw redirect()` from a universal load fails the runtime's
+      // `instanceof Redirect` check during hydration and surfaces as a 500
+      // error page instead of navigating. (sveltejs/kit#5952)
+      include: ['svelte']
     },
     server: {
       port: appPort,
