@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-
   interface Props {
     open?: boolean;
     size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
@@ -32,6 +30,10 @@
   };
 
   let modalElement = $state<HTMLDivElement>();
+  let previousActiveElement: HTMLElement | null = null;
+
+  const FOCUSABLE_SELECTOR =
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
   function handleBackdropClick(event: MouseEvent) {
     if (closable && event.target === event.currentTarget) {
@@ -47,25 +49,53 @@
     }
   }
 
-  // Focus trap management
-  onMount(() => {
-    // Note: In runes mode, onMount might run before open is true if initially false?
-    // Actually effects are better.
-  });
+  function handleTrap(event: KeyboardEvent) {
+    if (event.key !== 'Tab' || !modalElement) return;
 
+    const focusable = Array.from(
+      modalElement.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+    ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      modalElement.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+
+    if (event.shiftKey) {
+      if (active === first || !modalElement.contains(active)) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || !modalElement.contains(active)) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  // Focus management: capture activeElement on open, restore on close,
+  // and focus the first focusable child on open.
   $effect(() => {
-    if (open && modalElement) {
+    if (open) {
+      previousActiveElement = document.activeElement as HTMLElement;
+
       // Small delay for DOM
       requestAnimationFrame(() => {
         if (!modalElement) return;
-        const focusableElements = modalElement.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-        const firstFocusable = focusableElements[0] as HTMLElement;
+        const focusableElements = modalElement.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+        const firstFocusable = focusableElements[0];
         if (firstFocusable) {
           firstFocusable.focus();
+        } else {
+          modalElement.focus();
         }
       });
+    } else if (previousActiveElement) {
+      previousActiveElement.focus();
+      previousActiveElement = null;
     }
   });
 
@@ -87,6 +117,7 @@
     role="dialog"
     aria-modal="true"
     data-testid="app-modal"
+    onkeydown={handleTrap}
   >
     <!-- Backdrop with proper theme opacity -->
     <div
@@ -102,6 +133,7 @@
       <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
         <div
           bind:this={modalElement}
+          tabindex="-1"
           class="relative transform overflow-hidden rounded-lg bg-layer-modal border border-border text-left shadow-xl transition-all animate-in fade-in zoom-in-95 duration-200 sm:my-8 sm:w-full {sizeClasses[
             size
           ]}"
