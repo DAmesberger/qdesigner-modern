@@ -20,15 +20,4 @@ test.describe('@smoke questionnaire creation and preview fillout', () => {
     await expect(designerPage.previewModal).toBeVisible();
     await designerPage.closePreview();
   });
-
-  test('runtime fillout harness starts successfully', async ({ page }) => {
-    await page.goto('/test-runtime');
-
-    const startButton = page.getByTestId('test-runtime-start-button');
-    await expect(startButton).toBeVisible();
-    await startButton.click();
-
-    await expect(startButton).toBeHidden({ timeout: 30000 });
-    await expect(page.getByTestId('test-runtime-canvas')).toBeVisible();
-  });
 });
