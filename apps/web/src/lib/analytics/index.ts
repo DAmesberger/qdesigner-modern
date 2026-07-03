@@ -16,7 +16,6 @@ import { ScoringPipeline } from './ScoringPipeline';
 export { StatisticalEngine, DataVisualization, ScoreInterpreter, MissingDataHandler, PowerAnalysis, RealtimeAnalyticsClient, ScoringPipeline };
 
 // Svelte Components
-export { default as AnalyticsDashboard } from './components/AnalyticsDashboard.svelte';
 export { default as StatisticsCard } from './components/StatisticsCard.svelte';
 export { default as DashboardBuilder } from './components/DashboardBuilder.svelte';
 export { default as WidgetPalette } from './components/WidgetPalette.svelte';

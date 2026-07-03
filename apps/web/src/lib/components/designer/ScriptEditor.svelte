@@ -193,7 +193,7 @@ declare namespace QuestionAPI {
     monaco.languages.typescript.javascriptDefaults.addExtraLib(typeDefinitions, 'questionapi.d.ts');
 
     // Create editor
-    editor = monaco.editor.create(editorContainer, {
+    const editorInstance = monaco.editor.create(editorContainer, {
       value: question.settings?.script || scriptTemplate,
       language: 'javascript',
       theme: 'vs-dark',
@@ -214,16 +214,18 @@ declare namespace QuestionAPI {
     });
 
     // Handle changes
-    editor.onDidChangeModelContent(() => {
-      const value = editor.getValue();
+    editorInstance.onDidChangeModelContent(() => {
+      const value = editorInstance.getValue();
       onUpdate(value);
     });
 
     // Add keyboard shortcuts
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+    editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       // Save shortcut - could trigger save
       console.log('Save triggered');
     });
+
+    editor = editorInstance;
   });
 
   onDestroy(() => {
