@@ -811,7 +811,7 @@ export class DocumentStore {
 
     if (question.type === QuestionTypes.MULTIPLE_CHOICE) {
       return {
-        type: 'single',
+        type: 'multiple',
         options: normalizeOptions(displayOptions),
       };
     }
