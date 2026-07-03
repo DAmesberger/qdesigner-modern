@@ -104,3 +104,6 @@ vite.config.ts.timestamp-*
 
 # direnv
 .direnv/
+
+# Claude Code workflow worktrees (transient)
+.claude/worktrees/
