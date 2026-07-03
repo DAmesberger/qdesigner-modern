@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { goto } from '$app/navigation';
   import { designerStore } from '$lib/stores/designer.svelte';
@@ -132,12 +132,13 @@
     }
   }
 
+  // onMount only runs on the client; its returned cleanup runs on unmount
+  // (also client-only). This keeps all window access off the SSR path —
+  // onDestroy, unlike onMount, executes during server render and would throw
+  // `ReferenceError: window is not defined`.
   onMount(() => {
     window.addEventListener('keydown', handleGlobalKeydown);
-  });
-
-  onDestroy(() => {
-    window.removeEventListener('keydown', handleGlobalKeydown);
+    return () => window.removeEventListener('keydown', handleGlobalKeydown);
   });
 
   function createEmptyQuestionnaire() {
