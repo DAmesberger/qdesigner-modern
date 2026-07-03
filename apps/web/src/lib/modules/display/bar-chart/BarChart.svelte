@@ -1,10 +1,35 @@
 <script lang="ts">
   import BaseAnalytics from '../shared/analytics/BaseAnalytics.svelte';
-  import { Chart, registerables } from 'chart.js';
+  import type { Chart } from 'chart.js';
   import { scriptingEngine } from '$lib/services/scriptingEngine';
 
-  // Register all Chart.js components
-  Chart.register(...registerables);
+  // Lazily load chart.js so it is excluded from the initial/fillout critical
+  // path, and register only the controllers/elements/scales a bar chart needs.
+  let ChartClass: typeof Chart | null = null;
+  async function loadChart(): Promise<typeof Chart> {
+    if (ChartClass) return ChartClass;
+    const {
+      Chart: ChartCtor,
+      BarController,
+      BarElement,
+      CategoryScale,
+      LinearScale,
+      Title,
+      Tooltip,
+      Legend,
+    } = await import('chart.js');
+    ChartCtor.register(
+      BarController,
+      BarElement,
+      CategoryScale,
+      LinearScale,
+      Title,
+      Tooltip,
+      Legend
+    );
+    ChartClass = ChartCtor;
+    return ChartCtor;
+  }
 
   interface BarChartConfig {
     orientation: 'vertical' | 'horizontal';
@@ -369,6 +394,8 @@
 
     const ctx = chartCanvas.getContext('2d');
     if (!ctx) return;
+
+    const Chart = await loadChart();
 
     // Use provided data or create placeholder data
     const chartData = data && data.length > 0 ? data : [];
