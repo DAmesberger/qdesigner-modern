@@ -57,12 +57,14 @@
   let {
     question = $bindable(),
     mode = 'runtime',
-    value = $bindable(null),
+    value = $bindable(),
     disabled = false,
     onResponse,
     onValidation,
     onInteraction,
   }: Props = $props();
+
+  if (value === undefined) value = null;
 
   // Configuration
   const config = $derived(question.config);

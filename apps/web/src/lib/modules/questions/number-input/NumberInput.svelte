@@ -22,12 +22,14 @@
   let {
     question,
     mode = 'runtime',
-    value = $bindable<number | null>(null),
+    value = $bindable<number | null>(),
     disabled = false,
     onResponse,
     onValidation,
     onInteraction,
   }: Props = $props();
+
+  if (value === undefined) value = null;
 
   let inputElement = $state<HTMLInputElement>();
   let validationMessage = $state('');

@@ -34,12 +34,14 @@
   let {
     question,
     mode = 'runtime',
-    value = $bindable({}),
+    value = $bindable(),
     disabled = false,
     onResponse,
     onValidation,
     onInteraction,
   }: Props = $props();
+
+  if (value === undefined) value = {};
 
   // Initialize value object for all rows
   $effect(() => {

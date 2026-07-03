@@ -27,12 +27,14 @@
   let {
     question,
     mode = 'runtime',
-    value = $bindable(''),
+    value = $bindable(),
     disabled = false,
     onResponse,
     onValidation,
     onInteraction,
   }: Props = $props();
+
+  if (value === undefined) value = '';
 
   let inputElement = $state<HTMLInputElement | HTMLTextAreaElement>();
   let showSuggestions = $state(false);
