@@ -9,6 +9,7 @@ import {
 import { DesignerPersistenceService } from './designer/PersistenceService';
 import { VariableEngine } from '@qdesigner/scripting-engine';
 import type { CollaborativeDesigner } from '$lib/collaboration/CollaborativeDesigner';
+import { toast } from '$lib/stores/toast';
 
 export type SelectedItem = Question | Page | Block | Variable;
 export type SelectedItemType = 'question' | 'page' | 'block' | 'variable' | null;
@@ -764,11 +765,19 @@ class DesignerStore {
       const result = await this.persistenceService.publish(this.projectId, this.questionnaire.id);
       if (!result.success) {
         this.saveError = result.error || 'Publish failed';
+        toast.error(result.error || 'Failed to publish questionnaire');
         return false;
       }
 
+      // Reflect the new published status locally so status-derived UI updates
+      // without needing a reload from the server.
+      this.questionnaire.metadata = {
+        ...(this.questionnaire.metadata ?? {}),
+        status: 'published',
+      };
       this.lastSaved = Date.now();
       this.saveError = null;
+      toast.success('Questionnaire published');
       return true;
     } finally {
       this.isPublishing = false;

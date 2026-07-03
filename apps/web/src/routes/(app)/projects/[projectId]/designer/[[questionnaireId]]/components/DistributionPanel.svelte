@@ -23,7 +23,7 @@
   const filloutUrl = $derived.by(() => {
     if (!shareCode) return '';
     if (typeof window === 'undefined') return '';
-    return `${window.location.origin}/${shareCode}`;
+    return `${window.location.origin}/q/${shareCode}`;
   });
 
   const embedCode = $derived.by(() => {
