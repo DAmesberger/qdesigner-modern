@@ -412,15 +412,15 @@
     <Panel position="bottom-left" class="{theme.components.container.card} p-2">
       <div class={theme.typography.caption}>
         <div class="flex items-center gap-2 mb-1">
-          <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+          <div class="w-3 h-3 rounded-full" style="background: hsl(var(--primary));"></div>
           <span>Pages & Blocks</span>
         </div>
         <div class="flex items-center gap-2 mb-1">
-          <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+          <div class="w-3 h-3 rounded-full" style="background: hsl(var(--success));"></div>
           <span>Variables</span>
         </div>
         <div class="flex items-center gap-2">
-          <div class="w-3 h-3 bg-orange-500 rounded-full"></div>
+          <div class="w-3 h-3 rounded-full" style="background: hsl(var(--warning));"></div>
           <span>Flow Controls</span>
         </div>
       </div>

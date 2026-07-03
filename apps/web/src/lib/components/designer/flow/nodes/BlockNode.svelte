@@ -13,10 +13,26 @@
   let { data, selected }: NodeProps<Node<BlockNodeData>> = $props();
 
   const blockTypeColors = {
-    standard: { bg: '#F3F4F6', border: '#9CA3AF', icon: '#6B7280' },
-    randomized: { bg: '#FEF3C7', border: '#F59E0B', icon: '#D97706' },
-    conditional: { bg: '#DBEAFE', border: '#3B82F6', icon: '#2563EB' },
-    loop: { bg: '#D1FAE5', border: '#10B981', icon: '#059669' },
+    standard: {
+      bg: 'hsl(var(--muted))',
+      border: 'hsl(var(--border))',
+      icon: 'hsl(var(--muted-foreground))',
+    },
+    randomized: {
+      bg: 'hsl(var(--warning) / 0.15)',
+      border: 'hsl(var(--warning))',
+      icon: 'hsl(var(--warning))',
+    },
+    conditional: {
+      bg: 'hsl(var(--primary) / 0.15)',
+      border: 'hsl(var(--primary))',
+      icon: 'hsl(var(--primary))',
+    },
+    loop: {
+      bg: 'hsl(var(--success) / 0.15)',
+      border: 'hsl(var(--success))',
+      icon: 'hsl(var(--success))',
+    },
   };
 
   const colors = $derived(

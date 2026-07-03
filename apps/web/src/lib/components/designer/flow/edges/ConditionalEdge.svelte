@@ -51,7 +51,10 @@
   }
 
   const displayCondition = $derived(formatCondition(data.condition));
-  const edgeColor = $derived(selected ? '#3B82F6' : '#F59E0B');
+  const edgeColor = $derived(selected ? 'hsl(var(--primary))' : 'hsl(var(--warning))');
+  const labelBg = $derived(
+    selected ? 'hsl(var(--primary) / 0.15)' : 'hsl(var(--warning) / 0.15)'
+  );
 </script>
 
 <g class="conditional-edge">
@@ -66,9 +69,9 @@
     <EdgeLabel x={labelX} y={labelY}>
       <div
         class="edge-label nodrag nopan"
-        style="background: {selected ? '#EFF6FF' : '#FEF3C7'}; border-color: {edgeColor};"
+        style="background: {labelBg}; border-color: {edgeColor};"
       >
-        <code class="condition-text" style="color: {selected ? '#1E40AF' : '#92400E'};">
+        <code class="condition-text" style="color: {edgeColor};">
           {displayCondition}
         </code>
       </div>
