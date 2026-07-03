@@ -25,6 +25,7 @@ import { ResponseCollector, type ResponseCaptureMetadata } from './ResponseColle
 import type { FormQuestionHost } from './FormQuestionHost';
 import { buildModuleRuntimeConfig } from './moduleConfigAdapter';
 import { BlockRandomizer } from './BlockRandomizer';
+import { computeReactionTimeMs } from './reactionTiming';
 import { ScriptExecutor } from './ScriptExecutor';
 import { ConditionAssigner, getBlockOrder } from '../experimental';
 import { QualityReport } from '../quality/QualityReport';
@@ -851,7 +852,7 @@ export class QuestionnaireRuntime {
     );
 
     const timestamp = performance.now();
-    const reactionTime = runtimeResult.reactionTimeMs ?? Math.max(0, timestamp - onsetTime);
+    const reactionTime = runtimeResult.reactionTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
 
     const response: Response = {
       id: nanoid(),
@@ -910,7 +911,7 @@ export class QuestionnaireRuntime {
     }
 
     const timestamp = responseMetadata?.timestamp ?? performance.now();
-    const reactionTime = responseMetadata?.responseTimeMs ?? Math.max(0, timestamp - onsetTime);
+    const reactionTime = responseMetadata?.responseTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
 
     const response: Response = {
       id: nanoid(),
