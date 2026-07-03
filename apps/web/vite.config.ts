@@ -83,7 +83,24 @@ export default defineConfig(({ mode }) => {
       // `throw redirect()` from a universal load fails the runtime's
       // `instanceof Redirect` check during hydration and surfaces as a 500
       // error page instead of navigating. (sveltejs/kit#5952)
-      include: ['svelte']
+      //
+      // The svelte/* submodules below are reachable ONLY through the
+      // lazily-loaded, ssr=false designer route (svelte/motion + svelte/easing
+      // via AppLoader; svelte/transition + svelte/animate via Dialog /
+      // MultipleChoice). Because they are not seen during the initial dep scan,
+      // Vite discovers them at navigation time and triggers a re-optimization;
+      // if the cache is invalidated in that window the browser 504s on the
+      // stale hash and the dynamic import of the designer node rejects with
+      // "Failed to fetch dynamically imported module" — a bare 500 on open.
+      // Pre-including them makes the optimize set deterministic so the designer
+      // route never depends on runtime re-optimization.
+      include: [
+        'svelte',
+        'svelte/motion',
+        'svelte/easing',
+        'svelte/transition',
+        'svelte/animate'
+      ]
     },
     server: {
       port: appPort,

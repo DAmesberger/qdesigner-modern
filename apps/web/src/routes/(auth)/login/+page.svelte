@@ -309,7 +309,7 @@
 
     <section class="flex items-center justify-center">
       <div
-        class="w-full max-w-xl rounded-[32px] border border-border bg-card/95 p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:shadow-black/50 sm:p-8"
+        class="w-full max-w-xl rounded-[32px] border border-slate-200/80 bg-white/95 p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/90 dark:shadow-black/50 sm:p-8"
       >
         <div class="mb-8 flex items-center justify-between gap-4">
           <a href="/" class="inline-flex items-center gap-3 lg:hidden">

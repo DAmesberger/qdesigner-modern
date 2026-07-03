@@ -249,7 +249,7 @@
     class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl z-50"
     transition:fly={{ y: -20, duration: 200 }}
   >
-    <div class="bg-popover rounded-lg shadow-2xl overflow-hidden">
+    <div class="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100 rounded-lg shadow-2xl overflow-hidden">
       <!-- Search Input -->
       <div class="border-b border-border">
         <div class="flex items-center px-4">

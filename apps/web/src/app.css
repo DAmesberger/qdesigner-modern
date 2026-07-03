@@ -1,6 +1,16 @@
 @import "tailwindcss";
 @import "./lib/styles/themes/variables.css";
 
+/*
+ * Tailwind v4 defaults the `dark:` variant to the `prefers-color-scheme`
+ * media query. This app ships a manual theme toggle that sets a `.dark` class
+ * on <html> (see ThemeToggle / variables.css `.dark { … }`), i.e. the v3
+ * `darkMode: 'class'` contract. Re-declare the variant so every existing
+ * `dark:*` utility responds to the toggle instead of the OS setting — without
+ * this the login/page backgrounds and countless `dark:` utilities never switch.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Custom responsive container */
 @layer components {
   .container {
