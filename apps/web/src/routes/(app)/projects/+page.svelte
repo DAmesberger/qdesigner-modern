@@ -4,6 +4,7 @@
   import { api } from '$lib/services/api';
   import { Modal } from '$lib/components/ui';
   import { appPaths } from '$lib/routing/paths';
+  import { toast } from '$lib/stores/toast';
   import Select from '$lib/components/ui/forms/Select.svelte';
   import type { PageData } from './$types';
 
@@ -65,6 +66,9 @@
       }
     } catch (error) {
       console.error('Error creating project:', error);
+      toast.error('Failed to create project', {
+        message: error instanceof Error ? error.message : 'Please try again.',
+      });
     }
   }
 
