@@ -47,8 +47,18 @@ export default defineConfig(({ mode }) => {
     envDir: workspaceRoot,
     clearScreen: false,
     build: {
-      sourcemap: true,
-      minify: false // Disable minification for better debugging
+      sourcemap: mode !== 'production',
+      minify: mode === 'production' ? 'esbuild' : false,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('monaco-editor')) return 'monaco';
+            if (id.includes('chart.js')) return 'charts';
+            if (id.includes('mathjs')) return 'mathjs';
+            if (id.includes('yjs')) return 'yjs';
+          }
+        }
+      }
     },
     optimizeDeps: {
       include: ['svelte', '@sveltejs/kit']
