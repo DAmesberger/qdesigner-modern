@@ -43,12 +43,10 @@ export const load: LayoutLoad = async ({ url, depends }) => {
       }
     }
 
-    // Special handling for routes that need client-side auth
-    const protectedRoutes = ['/designer', '/admin', '/dashboard'];
-    const isProtectedRoute = protectedRoutes.some(r => url.pathname.startsWith(r));
-
-    if (!session && isProtectedRoute) {
-      throw redirect(303, '/login');
+    // Every route in the (app) group requires an authenticated session.
+    // Preserve the attempted destination so login can send the user back.
+    if (!session) {
+      throw redirect(303, `/login?redirect=${encodeURIComponent(url.pathname)}`);
     }
 
     // If we have a session, get the user's organization

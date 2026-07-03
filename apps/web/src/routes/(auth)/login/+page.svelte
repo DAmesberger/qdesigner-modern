@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import {
     ArrowRight,
     BarChart3,
@@ -24,6 +25,18 @@
   let loading = false;
   let error: string | null = null;
   let successMessage: string | null = null;
+
+  // Same-origin relative redirect target (must start with a single '/').
+  function safeRedirect(raw: string | null): string | null {
+    if (!raw) return null;
+    if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return null;
+    return raw;
+  }
+
+  $: redirectParam = safeRedirect($page.url.searchParams.get('redirect'));
+  $: signupHref = redirectParam
+    ? `/signup?redirect=${encodeURIComponent(redirectParam)}`
+    : '/signup';
 
   interface DevQuickLoginPersona {
     id: string;
@@ -172,6 +185,11 @@
       if (signedInUser) {
         console.log('Login successful, user:', signedInUser.email);
 
+        if (redirectParam) {
+          await goto(redirectParam);
+          return;
+        }
+
         const orgs = await api.organizations.list();
         if (orgs.length === 0) {
           console.log('No organizations, redirecting to onboarding');
@@ -204,21 +222,6 @@
     await signInAndRedirect(persona.email, persona.password);
   }
 
-  async function handleSignUp() {
-    loading = true;
-    error = null;
-
-    const { error: signUpError } = await auth.signUp(email, password, '');
-
-    if (signUpError) {
-      error = normalizeErrorMessage(signUpError, 'Sign up failed');
-      loading = false;
-    } else {
-      successMessage = 'Check your email for the confirmation link!';
-      error = null;
-      loading = false;
-    }
-  }
 </script>
 
 <div class="flex min-h-screen items-center px-4 py-6 sm:px-6 lg:px-8">
@@ -495,12 +498,10 @@
 
             <div class="mt-5">
               <Button
-                type="button"
+                href={signupHref}
                 variant="secondary"
                 size="lg"
                 class="h-12 w-full rounded-xl text-base font-semibold"
-                onclick={handleSignUp}
-                {loading}
               >
                 {$t('auth:signup.submit')}
               </Button>

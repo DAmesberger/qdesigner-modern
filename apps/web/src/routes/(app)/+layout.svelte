@@ -56,13 +56,11 @@
     };
   });
 
-  // Redirect to onboarding if user has no organization
+  // The whole (app) group requires an organization; the (app)/+layout.ts guard
+  // already gates on an authenticated session. If a signed-in user has no
+  // organization, send them to onboarding regardless of which app page they hit.
   $effect(() => {
-    // Only redirect if we're on a protected route and user has no organization
-    const protectedPaths = ['/dashboard', '/projects', '/admin'];
-    const isProtectedPath = protectedPaths.some(path => $page?.url?.pathname?.startsWith(path));
-
-    if (data.user && !data.organizationId && isProtectedPath) {
+    if (data.user && !data.organizationId) {
       if (typeof window !== 'undefined') {
         window.location.href = '/onboarding/organization';
       }
