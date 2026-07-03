@@ -1,8 +1,15 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
+import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
+
+// Paraglide i18n (ADR 0019). Compiles messages/{locale}.json into
+// tree-shakeable m.*() calls at ./src/lib/paraglide. Keep `strategy` in sync
+// with the `paraglide:compile` script in package.json (which regenerates the
+// same output for `check`/`test`, where the Vite pipeline does not run).
+const PARAGLIDE_STRATEGY = ['cookie', 'preferredLanguage', 'baseLocale'] as const;
 
 function buildManifestPlugin(): Plugin {
   return {
@@ -43,7 +50,16 @@ export default defineConfig(({ mode }) => {
   const serverPort = Number(env.SERVER_PORT || '4100');
 
   return {
-    plugins: [tailwindcss(), sveltekit(), buildManifestPlugin()],
+    plugins: [
+      paraglideVitePlugin({
+        project: './project.inlang',
+        outdir: './src/lib/paraglide',
+        strategy: [...PARAGLIDE_STRATEGY],
+      }),
+      tailwindcss(),
+      sveltekit(),
+      buildManifestPlugin(),
+    ],
     envDir: workspaceRoot,
     clearScreen: false,
     build: {

@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { auth } from '$lib/services/auth';
   import ThemeToggle from '../ThemeToggle.svelte';
-  import LanguageSwitcher from '$lib/i18n/components/LanguageSwitcher.svelte';
+  import LanguageSwitcher from '$lib/i18n/LanguageSwitcher.svelte';
   import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
   import { LayoutDashboard, FolderKanban, Shield, X, Menu, ChevronDown } from 'lucide-svelte';
 

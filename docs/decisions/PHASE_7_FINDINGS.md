@@ -70,9 +70,10 @@ Each row is one loop task. Check the box when the fix is committed AND its phase
   - **Evidence:** `packages/questionnaire-core/src/questionnaire.ts:242 ; apps/web/src/lib/modules/register-all.ts:50`
   - **Action:** Reconcile the enum with the registry: alias INSTRUCTION to 'text-instruction' (or register 'instruction'), register or remove 'media-display', and make 'single-choice' resolve to the multiple-choice module. At minimum surface a designer-time validation error instead of a silent runtime skip.
   - **Resolved (2026-07-03):** `register-all.ts` registers three aliases (ADR 0018): `single-choice` → multiple-choice (single-select), `instruction` and `media-display` → text-instruction (category `instruction`). They now resolve to a real handler and render via the overlay instead of the `showCurrentItem` "Unknown module type" skip. Verified by `register-all.test.ts`. A dedicated media-display component (vs. the text-instruction alias) is deferred.
-- [ ] **MOD-06** `medium/feature-gap/confirmed` — RTL support is declared but non-functional; 5 of 8 advertised languages have no message files
+- [x] **MOD-06** `medium/feature-gap/confirmed` — RTL support is declared but non-functional; 5 of 8 advertised languages have no message files
   - **Evidence:** `apps/web/src/lib/i18n/languages.ts:74 ; apps/web/src/lib/i18n/locales:1`
   - **Action:** Trim the advertised language list to those with message files, and either wire rtl.css into the app shell or drop the RTL claim until a locale that needs it ships.
+  - **Resolved (2026-07-03):** i18next → Paraglide (ADR 0019). The 8-language `languages.ts` is deleted; the advertised set is now exactly the 3 with committed message files (`messages/{en,de,es}.json`), derived from Paraglide's `locales` single source of truth. `LanguageSwitcher`'s list mirrors it. RTL is not dropped as a *mechanism*: `applyDocumentLocale()` still sets `dir`/`.rtl` from `getTextDirection(locale)` (Arabic/Hebrew resolve to `rtl` automatically) — but no RTL locale is advertised until one ships with messages + styling.
 - [ ] **MOD-07** `medium/feature-gap/confirmed` — Display/analytics blocks render as placeholder text in fillout (bar-chart, generic analytics)
   - **Evidence:** `apps/web/src/lib/runtime/core/QuestionPresenter.ts:470 ; apps/web/src/lib/modules/display/bar-chart/BarChart.svelte:1`
   - **Action:** Render bar-chart and statistical display blocks with their real components in fillout (ties into finding #1), or mark them designer/preview-only so participants are not shown '[bar-chart visualization]'.
@@ -163,6 +164,7 @@ Each row is one loop task. Check the box when the fix is committed AND its phase
 - [x] **AUT-05** `medium/inconsistency/confirmed` — i18n applied inconsistently; signup translation keys likely resolve to raw key strings
   - **Evidence:** `apps/web/src/routes/(auth)/login/+page.svelte:344 ; apps/web/src/routes/(auth)/signup/+page.svelte:205`
   - **Action:** Standardize on the colon-namespace form ('auth:signup.title') everywhere, and either translate the four hardcoded auth pages or drop $t from the two that use it so the surface is consistent.
+  - **Superseded (2026-07-03, ADR 0019):** the colon-namespace fix is moot — i18next is replaced by Paraglide compile-time i18n. login/signup call typed `m.auth_login_*()`/`m.auth_signup_*()`; a missing/renamed key is now a build error and there is no async-init window that rendered the raw key. Verified real strings in en/de/es.
 - [ ] **AUT-06** `medium/duplication/confirmed` — Duplicated password-strength and error-normalization logic
   - **Evidence:** `apps/web/src/routes/(auth)/signup/+page.svelte:172 ; apps/web/src/routes/(auth)/reset-password/+page.svelte:23`
   - **Action:** Extract a shared passwordStrength() util and a single error-message normalizer used by both the service layer and the pages.
@@ -289,6 +291,7 @@ Each row is one loop task. Check the box when the fix is committed AND its phase
 - [x] **THM-03** `high/feature-gap/confirmed` — RTL stylesheet (570 lines) is orphaned though dir="rtl" and .rtl class are applied at runtime
   - **Evidence:** `apps/web/src/lib/i18n/config.ts:150 ; apps/web/src/lib/i18n/styles/rtl.css:5`
   - **Action:** Either import rtl.css from app.css / i18n config (activating it) or delete it and the dir/.rtl toggling if RTL is out of scope. Do not ship the attribute toggle without the stylesheet — it's a silent half-feature.
+  - **Resolved (2026-07-03, ADR 0019):** taken the "delete + keep the toggle" branch. `styles/rtl.css` (and its `app.css` `@import`, which was actually live, not orphaned) are deleted; the `dir`/`.rtl` mechanism is retained via `applyDocumentLocale()` → `getTextDirection(locale)`. No RTL locale is shipped, so no RTL styling is needed yet, but the attribute toggle is no longer a sheet-less half-feature — it is a lightweight hook for a future RTL locale.
 - [ ] **HCS-02** `medium/duplication/partial` — Two competing dark-mode mechanisms with different localStorage keys; one is dead
   - **→ partial at action time (wave 1):** live store lib/stores/theme.ts confirmed canonical; ThemeProvider.svelte NOT deleted — its themeMode store has a live importer (StyleGuide, /style-guide route).
   - **Evidence:** `apps/web/src/lib/stores/theme.ts:1 ; apps/web/src/routes/+layout.svelte:39`
@@ -406,6 +409,7 @@ Each row is one loop task. Check the box when the fix is committed AND its phase
 - [ ] **MOD-08** `high/inconsistency/confirmed` — i18n adoption is ~2 of 204 components; designer/analytics/admin are hardcoded English despite a full translation system
   - **Evidence:** `apps/web/src/routes/+layout.svelte:10 ; apps/web/src/lib/i18n/locales/en/index.ts:1`
   - **Action:** Either drive a real localization pass (route designer/analytics strings through the translation function) or scope the LanguageSwitcher to the surfaces that are actually translated, so the advertised locale set matches reality.
+  - **Note (2026-07-03, ADR 0019):** the i18n *engine* was migrated i18next → Paraglide; the 486-key message set is ported at parity to `messages/{en,de,es}.json` as typed `m.*()`. Adoption *breadth* is unchanged (still login/signup only), so this row stays open — but a future sweep is now cheap (add `m.*` ids + swap hardcoded strings) and type-checked. Scoping the switcher vs. a full pass remains the open decision.
 - [x] **PRF-05** `high/inconsistency/confirmed` — Monaco editor is statically bundled into the designer route, defeating the dynamic-import lazy loading used elsewhere
   - **Evidence:** `apps/web/src/lib/components/designer/ScriptEditor.svelte:3 ; apps/web/src/lib/components/designer/PropertiesPanel.svelte:8`
   - **Action:** Convert ScriptEditor.svelte to the same dynamic-import pattern as the other three wrappers (load monaco in onMount/$effect), and/or lazy-mount PropertiesPanel's script section behind `{#await import(...)}`. Consolidate the four wrappers onto one shared bootstrap to remove the duplicated Monaco setup.

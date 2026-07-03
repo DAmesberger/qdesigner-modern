@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "./lib/styles/themes/variables.css";
-@import "./lib/i18n/styles/rtl.css";
 
 /* Custom responsive container */
 @layer components {

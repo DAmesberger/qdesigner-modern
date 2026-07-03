@@ -1,6 +1,20 @@
 import type { Handle } from '@sveltejs/kit';
+import { sequence } from '@sveltejs/kit/hooks';
+import { paraglideMiddleware } from '$lib/paraglide/server';
 
-export const handle: Handle = async ({ event, resolve }) => {
+// Paraglide (ADR 0019): resolve the request locale from the cookie /
+// Accept-Language strategy and expose it to server-rendered `m.*()` calls via
+// AsyncLocalStorage, so SSR matches the client-side (cookie-persisted) locale
+// and returning non-English users see localized auth pages without a hydration
+// mismatch. No URL-locale routing is configured, so this performs no redirects.
+const paraglideHandle: Handle = ({ event, resolve }) =>
+  paraglideMiddleware(event.request, ({ locale }) =>
+    resolve(event, {
+      transformPageChunk: ({ html }) => html.replace('%lang%', locale),
+    })
+  );
+
+const appHandle: Handle = async ({ event, resolve }) => {
   // For now, just add a dummy getSession method
   // The actual authentication is handled client-side
   event.locals.getSession = async () => null;
@@ -19,3 +33,5 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   return response;
 };
+
+export const handle: Handle = sequence(paraglideHandle, appHandle);

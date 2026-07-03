@@ -7,7 +7,7 @@
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
-  import LanguageSwitcher from '$lib/i18n/components/LanguageSwitcher.svelte';
+  import LanguageSwitcher from '$lib/i18n/LanguageSwitcher.svelte';
 
   let loading = $state(true);
   let saving = $state(false);
