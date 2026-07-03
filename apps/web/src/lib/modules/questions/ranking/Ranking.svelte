@@ -26,12 +26,14 @@
   let {
     question,
     mode = 'runtime',
-    value = $bindable([]),
+    value = $bindable(),
     disabled = false,
     onResponse,
     onValidation,
     onInteraction,
   }: Props = $props();
+
+  if (value === undefined) value = [];
 
   // State
   let rankedItems = $state<Array<RankingItem & { rank?: number }>>([]);

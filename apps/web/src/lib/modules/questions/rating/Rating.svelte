@@ -21,12 +21,14 @@
   let {
     question,
     mode = 'runtime',
-    value = $bindable<number | null>(null),
+    value = $bindable<number | null>(),
     disabled = false,
     onResponse,
     onValidation,
     onInteraction,
   }: Props = $props();
+
+  if (value === undefined) value = null;
 
   let hoverValue = $state<number | null>(null);
   let containerElement = $state<HTMLDivElement>();

@@ -29,12 +29,14 @@
   let {
     question,
     mode = 'runtime',
-    value = $bindable(question.config.defaultValue || null),
+    value = $bindable(),
     disabled = false,
     onResponse,
     onValidation,
     onInteraction,
   }: Props = $props();
+
+  if (value === undefined) value = question.config.defaultValue || null;
 
   let sliderElement = $state<HTMLInputElement>();
   let isDragging = $state(false);
