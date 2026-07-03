@@ -29,6 +29,7 @@ import type {
   TimingMethod,
 } from './types';
 import type { TimingGatekeeper } from '../timing/TimingGatekeeper';
+import { computeReactionTimeMs } from '../core/reactionTiming';
 
 interface ReactionEngineOptions {
   canvas: HTMLCanvasElement;
@@ -544,7 +545,7 @@ export class ReactionEngine {
     if (this.stimulusOnsetTime == null) {
       return 0;
     }
-    return Math.max(0, timestamp - this.stimulusOnsetTime);
+    return computeReactionTimeMs(this.stimulusOnsetTime, timestamp);
   }
 
   private setStimulusOnset(timestamp: number, method: TimingMethod = 'performance.now'): void {
