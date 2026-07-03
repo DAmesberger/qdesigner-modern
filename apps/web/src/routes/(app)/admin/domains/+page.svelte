@@ -4,7 +4,6 @@
   import { api } from '$lib/services/api';
   import {
     addDomain,
-    verifyDomain,
     updateDomainConfig,
     removeDomain,
     type DomainConfig,
@@ -21,6 +20,7 @@
   let loading = true;
   let error: string | null = null;
   let success: string | null = null;
+  let notice: string | null = null;
 
   // Add domain form
   let showAddDomainForm = false;
@@ -126,15 +126,17 @@
     addingDomain = false;
   }
 
-  async function handleVerifyDomain(domainId: string) {
-    const result = await verifyDomain(currentOrg!.id, domainId);
-
-    if (result.success) {
-      success = `Domain verified successfully using ${result.method} method!`;
-      await loadDomains();
-    } else {
-      error = result.error || 'Verification failed';
-    }
+  function handleVerifyDomain() {
+    // Automated domain verification (resolving the DNS TXT record or fetching
+    // the .well-known file and comparing the token) is not yet implemented.
+    // Previously this called an endpoint that auto-verified unconditionally,
+    // which falsely marked unproven domains as verified and enabled auto-join.
+    // Until real verification exists we leave the domain Pending and explain
+    // the current state rather than fake a success.
+    error = null;
+    success = null;
+    notice =
+      'Automated domain verification is not available yet. Add the DNS TXT record shown below, then contact your administrator to confirm ownership. Domains remain pending until verification is implemented, and auto-join stays disabled for unverified domains.';
   }
 
   async function handleUpdateDomain(domainId: string) {
@@ -209,6 +211,12 @@
   {#if success}
     <Alert variant="success" class="mb-4">
       {success}
+    </Alert>
+  {/if}
+
+  {#if notice}
+    <Alert variant="info" class="mb-4">
+      {notice}
     </Alert>
   {/if}
 
@@ -291,7 +299,7 @@
 
               <div class="flex gap-2">
                 {#if !domain.verifiedAt}
-                  <Button size="sm" variant="primary" onclick={() => handleVerifyDomain(domain.id)}>
+                  <Button size="sm" variant="primary" onclick={() => handleVerifyDomain()}>
                     Verify Domain
                   </Button>
                 {:else if editingDomain === domain.id}
@@ -319,7 +327,11 @@
             {#if !domain.verifiedAt}
               <Alert variant="info">
                 <h4 class="font-semibold mb-2">Verification Instructions</h4>
-                <p class="mb-2">Add one of the following records to verify domain ownership:</p>
+                <p class="mb-2">
+                  Add the following record to prove domain ownership. Note: automated
+                  verification is not available yet, so the domain will stay pending until
+                  ownership is confirmed manually.
+                </p>
                 <div class="space-y-2 text-sm font-mono bg-background p-3 rounded">
                   <p><strong>DNS TXT Record:</strong></p>
                   <p>Name: _qdesigner.{domain.domain}</p>
