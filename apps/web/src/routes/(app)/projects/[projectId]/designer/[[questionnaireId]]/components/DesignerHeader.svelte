@@ -7,6 +7,7 @@
   import ExperimentalDesignPanel from '$lib/components/designer/ExperimentalDesignPanel.svelte';
   import DataQualityPanel from '$lib/components/designer/DataQualityPanel.svelte';
   import QuotaPanel from '$lib/components/designer/QuotaPanel.svelte';
+  import VersionManager from '$lib/components/designer/VersionManager.svelte';
   import type { PresenceUser } from '$lib/services/presence.svelte';
 
   interface Props {
@@ -29,6 +30,7 @@
     titleValue = questionnaireName || 'Untitled Questionnaire';
   });
 
+  const questionnaireId = $derived(designerStore.questionnaire?.id ?? '');
   const validationState = $derived(designerStore.validate());
   const hasValidationErrors = $derived(validationState.validationErrors.length > 0);
   const questionCount = $derived(designerStore.questionnaire.questions.length);
@@ -261,6 +263,13 @@
     <Share2 class="h-3.5 w-3.5" />
     Share
   </button>
+
+  <!-- Version manager (bump / publish / history) -->
+  {#if questionnaireId}
+    <div class="hidden sm:block">
+      <VersionManager {questionnaireId} />
+    </div>
+  {/if}
 
   <!-- Preview button -->
   <button
