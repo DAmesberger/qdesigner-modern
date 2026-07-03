@@ -17,7 +17,6 @@
     FileText,
     FolderKanban,
     PieChart,
-    PlayCircle,
     Plus,
     Sparkles,
     TrendingUp,
@@ -236,10 +235,6 @@
     void navigateTo(appPaths.projects());
   }
 
-  function openRuntime() {
-    void navigateTo('/fillout');
-  }
-
   function createNewQuestionnaire() {
     void navigateTo(appPaths.projects());
   }
@@ -301,14 +296,6 @@
             Open projects
           </button>
 
-          <button
-            type="button"
-            onclick={openRuntime}
-            class="inline-flex items-center gap-2 rounded-2xl border border-border bg-background/90 px-5 py-3 text-sm font-semibold text-foreground transition hover:bg-accent"
-          >
-            <PlayCircle class="h-4 w-4 text-primary" />
-            Test runtime
-          </button>
         </div>
       </div>
     </div>
