@@ -34,6 +34,13 @@
 
   let { question = $bindable() }: Props = $props();
 
+  // Defensive reads: a newly-created or legacy question may lack these
+  // fields. Falling back keeps {#each} iteration and comparisons from
+  // throwing during render and freezing the entire designer.
+  const rows = $derived(question.config?.rows ?? []);
+  const columns = $derived(question.config?.columns ?? []);
+  const responseType = $derived(question.config?.responseType ?? 'radio');
+
   let editingRow: MatrixRow | null = $state(null);
   let editingColumn: MatrixColumn | null = $state(null);
   let newRowLabel = $state('');
@@ -49,21 +56,22 @@
       required: true,
     };
 
-    question.config.rows = [...question.config.rows, newRow];
+    question.config.rows = [...(question.config.rows ?? []), newRow];
     newRowLabel = '';
   }
 
   function updateRow(row: MatrixRow) {
-    const index = question.config.rows.findIndex((r) => r.id === row.id);
+    const current = question.config.rows ?? [];
+    const index = current.findIndex((r) => r.id === row.id);
     if (index !== -1) {
-      question.config.rows[index] = row;
-      question.config.rows = [...question.config.rows];
+      current[index] = row;
+      question.config.rows = [...current];
     }
     editingRow = null;
   }
 
   function deleteRow(row: MatrixRow) {
-    question.config.rows = question.config.rows.filter((r) => r.id !== row.id);
+    question.config.rows = (question.config.rows ?? []).filter((r) => r.id !== row.id);
   }
 
   function addColumn() {
@@ -75,26 +83,27 @@
       value: newColumnValue.trim() || newColumnLabel.trim(),
     };
 
-    question.config.columns = [...question.config.columns, newColumn];
+    question.config.columns = [...(question.config.columns ?? []), newColumn];
     newColumnLabel = '';
     newColumnValue = '';
   }
 
   function updateColumn(column: MatrixColumn) {
-    const index = question.config.columns.findIndex((c) => c.id === column.id);
+    const current = question.config.columns ?? [];
+    const index = current.findIndex((c) => c.id === column.id);
     if (index !== -1) {
-      question.config.columns[index] = column;
-      question.config.columns = [...question.config.columns];
+      current[index] = column;
+      question.config.columns = [...current];
     }
     editingColumn = null;
   }
 
   function deleteColumn(column: MatrixColumn) {
-    question.config.columns = question.config.columns.filter((c) => c.id !== column.id);
+    question.config.columns = (question.config.columns ?? []).filter((c) => c.id !== column.id);
   }
 
   function moveRow(index: number, direction: 'up' | 'down') {
-    const newRows = [...question.config.rows];
+    const newRows = [...(question.config.rows ?? [])];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
 
     if (targetIndex >= 0 && targetIndex < newRows.length) {
@@ -109,7 +118,7 @@
   }
 
   function moveColumn(index: number, direction: 'left' | 'right') {
-    const newColumns = [...question.config.columns];
+    const newColumns = [...(question.config.columns ?? [])];
     const targetIndex = direction === 'left' ? index - 1 : index + 1;
 
     if (targetIndex >= 0 && targetIndex < newColumns.length) {
@@ -125,8 +134,8 @@
 
   // Auto-generate numeric values for scale type
   $effect(() => {
-    if (question.config.responseType === 'scale' && question.config.columns.length > 0) {
-      question.config.columns = question.config.columns.map((col, index) => ({
+    if (responseType === 'scale' && columns.length > 0) {
+      question.config.columns = columns.map((col, index) => ({
         ...col,
         value: index + 1,
       }));
@@ -180,7 +189,7 @@
     <h4 class="section-title">Rows</h4>
 
     <div class="items-list">
-      {#each question.config.rows as row, index}
+      {#each rows as row, index}
         {#if editingRow?.id === row.id}
           <div class="edit-item">
             <input
@@ -231,7 +240,7 @@
                 variant="ghost"
                 size="sm"
                 onclick={() => moveRow(index, 'down')}
-                disabled={index === question.config.rows.length - 1}
+                disabled={index === rows.length - 1}
                 aria-label="Move down"
               >
                 <ChevronDown size={16} />
@@ -272,7 +281,7 @@
     <h4 class="section-title">Columns</h4>
 
     <div class="items-list">
-      {#each question.config.columns as column, index}
+      {#each columns as column, index}
         {#if editingColumn?.id === column.id}
           <div class="edit-item">
             <input
@@ -281,7 +290,7 @@
               class="input"
               placeholder="Column label"
             />
-            {#if question.config.responseType !== 'scale'}
+            {#if responseType !== 'scale'}
               <input
                 type="text"
                 bind:value={editingColumn.value}
@@ -327,7 +336,7 @@
                 variant="ghost"
                 size="sm"
                 onclick={() => moveColumn(index, 'right')}
-                disabled={index === question.config.columns.length - 1}
+                disabled={index === columns.length - 1}
                 aria-label="Move right"
               >
                 <ChevronRight size={16} />
@@ -363,7 +372,7 @@
         class="input"
         onkeydown={(e) => e.key === 'Enter' && addColumn()}
       />
-      {#if question.config.responseType !== 'scale'}
+      {#if responseType !== 'scale'}
         <input
           type="text"
           bind:value={newColumnValue}

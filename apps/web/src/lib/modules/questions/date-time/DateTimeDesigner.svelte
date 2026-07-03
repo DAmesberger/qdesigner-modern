@@ -28,6 +28,11 @@
     datetime: ['YYYY-MM-DD HH:mm', 'DD/MM/YYYY HH:mm', 'MM-DD-YYYY hh:mm A'],
   };
 
+  // Defensive read: a newly-created or legacy question may lack `mode`.
+  // Falling back keeps formatExamples[mode] iteration and mode comparisons
+  // from throwing during render and freezing the entire designer.
+  const mode = $derived(question.config?.mode ?? 'date');
+
   function addDisabledDate() {
     if (!newDisabledDate) return;
 
@@ -57,9 +62,9 @@
 
     if (
       !question.config.format ||
-      !question.config.format.includes(question.config.mode === 'time' ? ':' : '-')
+      !question.config.format.includes(mode === 'time' ? ':' : '-')
     ) {
-      question.config.format = defaultFormats[question.config.mode];
+      question.config.format = defaultFormats[mode];
     }
   });
 </script>
@@ -86,9 +91,9 @@
       class="input"
     />
     <div class="format-examples">
-      <p class="help-text">Examples for {question.config.mode}:</p>
+      <p class="help-text">Examples for {mode}:</p>
       <div class="example-chips">
-        {#each formatExamples[question.config.mode] as example}
+        {#each formatExamples[mode] as example}
           <button class="example-chip" onclick={() => (question.config.format = example)}>
             {example}
           </button>
@@ -101,7 +106,7 @@
   <div class="section">
     <h4 class="section-title">Display Options</h4>
 
-    {#if question.config.mode !== 'time'}
+    {#if mode !== 'time'}
       <div class="form-group">
         <label class="checkbox-label">
           <input type="checkbox" bind:checked={question.config.showCalendar} class="checkbox" />
@@ -117,7 +122,7 @@
       </label>
     </div>
 
-    {#if question.config.mode === 'time' || question.config.mode === 'datetime'}
+    {#if mode === 'time' || mode === 'datetime'}
       <div class="form-group">
         <label for="time-step">Time Step (minutes)</label>
         <Select id="time-step" bind:value={question.config.timeStep}>
@@ -133,7 +138,7 @@
   </div>
 
   <!-- Date Constraints -->
-  {#if question.config.mode !== 'time'}
+  {#if mode !== 'time'}
     <div class="section">
       <h4 class="section-title">Date Constraints</h4>
 
@@ -190,7 +195,7 @@
     <h4 class="section-title">Preview</h4>
     <div class="preview-box">
       <div class="preview-content">
-        <p class="preview-label">Input Type: <strong>{question.config.mode}</strong></p>
+        <p class="preview-label">Input Type: <strong>{mode}</strong></p>
         <p class="preview-label">Format: <strong>{question.config.format}</strong></p>
 
         {#if question.config.minDate || question.config.maxDate}
