@@ -4,7 +4,8 @@
   import { auth } from '$lib/services/auth';
   import ThemeToggle from '../ThemeToggle.svelte';
   import LanguageSwitcher from '$lib/i18n/components/LanguageSwitcher.svelte';
-  import { LayoutDashboard, FolderKanban, Shield, Play, X, Menu, ChevronDown } from 'lucide-svelte';
+  import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
+  import { LayoutDashboard, FolderKanban, Shield, X, Menu, ChevronDown } from 'lucide-svelte';
 
   interface Props {
     user?: any;
@@ -20,7 +21,6 @@
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Projects', href: '/projects', icon: FolderKanban },
     { name: 'Admin', href: '/admin', icon: Shield },
-    { name: 'Test', href: '/fillout', icon: Play },
   ];
 
   // Check if current route needs minimal layout
@@ -54,6 +54,9 @@
 </script>
 
 <svelte:window onclick={handleClickOutside} />
+
+<!-- Global Cmd/Ctrl+K command palette (self-manages open state) -->
+<CommandPalette />
 
 <div class="flex min-h-dvh bg-background text-foreground">
   {#if !isMinimalLayout}
