@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import * as monaco from 'monaco-editor';
+  import type * as Monaco from 'monaco-editor';
   import type { Question } from '$lib/shared';
   import Button from '$lib/components/common/Button.svelte';
   import { AlignLeft, RotateCcw } from 'lucide-svelte';
@@ -9,7 +9,8 @@
   export let onUpdate: (script: string) => void;
 
   let editorContainer: HTMLDivElement;
-  let editor: monaco.editor.IStandaloneCodeEditor;
+  let editor: Monaco.editor.IStandaloneCodeEditor | undefined;
+  let monaco: typeof Monaco;
 
   // Script template
   const scriptTemplate = `// Question Script: ${question.name || question.id}
@@ -163,7 +164,17 @@ declare namespace QuestionAPI {
 }
 `;
 
-  onMount(() => {
+  onMount(async () => {
+    // Only load Monaco in browser environment
+    if (typeof window === 'undefined') return;
+
+    // Setup Monaco environment
+    const { setupMonacoEnvironment } = await import('$lib/utils/monacoConfig');
+    setupMonacoEnvironment();
+
+    // Dynamically import Monaco
+    monaco = await import('monaco-editor');
+
     // Configure Monaco
     monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: false,
