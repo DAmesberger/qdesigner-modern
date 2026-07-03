@@ -154,7 +154,11 @@ Out-of-plan discoveries and consciously-deferred findings land here (SUPERVISOR_
 |---|---|---|---|
 | Dedicated `media-display` runtime component | MOD-05 | Aliased to `text-instruction` for now (renders content + media, no silent drop). A purpose-built media-display component is a UX nicety, not a data-loss fix. | Defer |
 | Per-type fillout UX verification for ranking / date-time / file-upload / media-response / drawing | MOD-02 | Capture is wired (mounted component → onResponse) and the components read `config` defensively; Matrix + choice are test-proven, the other five need a manual browser pass for layout/validation polish. | Defer (browser-drive in a later P7.1 pass) |
-| WebGL presenter chart/display blocks render as placeholder text | MOD-07 / STB-03 | Separate findings; `[bar-chart visualization]` placeholder in the WebGL presenter is out of ADR 0018's form-question scope. | Track under MOD-07/STB-03 |
+| WebGL display-block placeholders — chart/display blocks render as literal placeholder text on the WebGL fillout path | MOD-07 / STB-03 / STB-04 | `[bar-chart visualization]` placeholder + the non-painting WebGL texture-blit pipeline are out of ADR 0018's form-question scope (form questions now route to the DOM overlay). Assess the WebGL presenter as one unit. | Track under MOD-07 / STB-03 / STB-04 |
+| Org-member role-change endpoint (backend) | ADM-01 | Remove-member action landed; role change / deactivate need a `PATCH /organizations/{id}/members/{user_id}` handler that does not yet exist. G1 architectural fork — needs a backend ADR. | Defer (backend arc) |
+| Per-questionnaire translation model | MOD-04 | Participant fillout content has a single-language model; a per-questionnaire translations model (question/option text keyed by locale) is a data-model change. G1 architectural fork. | Defer (needs ADR + data model) |
+| CI-backend e2e (Postgres/Redis/MinIO + seeded users, golden-path→analytics, smoke auth) | E2E-02 / E2E-03 / E2E-04 | Requires a CI stack that boots the backend and seeds users; `/test-runtime` dead specs already removed (E2E-01) and orphaned setup deleted (E2E-07), but wiring live-backend CI jobs is infra work beyond the doc/lane cleanup. | Defer (CI/infra) |
+| Overlay primitive consolidation (Dialog / Modal) | A11-04 / CMP-04 | Dead Sheet.svelte deleted and a focus trap added to Modal; consolidating Modal onto the canonical Dialog primitive and migrating the remaining Modal consumers is a larger refactor. | Defer |
 
 ## Amendment log
 
