@@ -163,11 +163,16 @@ describe('QuestionFactory', () => {
     
     it('should create a valid matrix question', () => {
       const question = QuestionFactory.create(QuestionTypes.MATRIX) as MatrixQuestion;
-      
+      // Matrix stores rows/columns/responseType flat on config (post-flatten
+      // metadata); the MatrixQuestion type still models the legacy nested
+      // display shape, so read the runtime shape through an untyped view.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- flat runtime config shape
+      const config = (question as any).config as { rows: unknown[]; columns: unknown[]; responseType: string };
+
       expect(question.type).toBe(QuestionTypes.MATRIX);
-      expect(question.display.rows).toHaveLength(2);
-      expect(question.display.columns).toHaveLength(5);
-      expect(question.display.responseType).toBe('single');
+      expect(config.rows).toHaveLength(2);
+      expect(config.columns).toHaveLength(5);
+      expect(config.responseType).toBe('radio');
       
       const validation = QuestionValidator.validateQuestion(question);
       expect(validation.valid).toBe(true);
@@ -246,13 +251,20 @@ describe('QuestionFactory', () => {
       const original = QuestionFactory.create(QuestionTypes.MATRIX) as MatrixQuestion;
       const cloned = QuestionFactory.clone(original) as MatrixQuestion;
       
-      const originalRowIds = original.display.rows.map(row => row.id);
-      const clonedRowIds = cloned.display.rows.map(row => row.id);
-      
+      // Read the flat runtime config shape (see matrix create test above).
+      type MatrixConfig = { rows: Array<{ id: string }>; columns: Array<{ id: string }> };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- flat runtime config shape
+      const originalConfig = (original as any).config as MatrixConfig;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- flat runtime config shape
+      const clonedConfig = (cloned as any).config as MatrixConfig;
+
+      const originalRowIds = originalConfig.rows.map(row => row.id);
+      const clonedRowIds = clonedConfig.rows.map(row => row.id);
+
       expect(clonedRowIds).not.toEqual(originalRowIds);
-      
-      const originalColIds = original.display.columns.map(col => col.id);
-      const clonedColIds = cloned.display.columns.map(col => col.id);
+
+      const originalColIds = originalConfig.columns.map(col => col.id);
+      const clonedColIds = clonedConfig.columns.map(col => col.id);
       
       expect(clonedColIds).not.toEqual(originalColIds);
     });

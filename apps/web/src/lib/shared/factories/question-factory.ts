@@ -148,11 +148,20 @@ export class QuestionFactory {
       /* eslint-enable @typescript-eslint/no-explicit-any */
     };
     
+    // Preserve any flat module config (e.g. matrix rows/columns, date-time
+    // mode) that lives directly on question.config. Post-flatten these
+    // fields are the source of truth for the designer + runtime; without
+    // this the clone would silently drop them.
+    if ((question as any).config && typeof (question as any).config === 'object') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- flat module config is dynamic
+      moduleItem.config = { ...moduleItem.config, ...(question as any).config };
+    }
+
     // Extract response configuration
     if (question.response) {
       moduleItem.config.response = question.response;
     }
-    
+
     // Extract display configuration (including media)
     if (question.display) {
       moduleItem.config.display = question.display;
