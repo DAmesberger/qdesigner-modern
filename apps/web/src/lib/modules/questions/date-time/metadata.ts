@@ -22,17 +22,18 @@ export const metadata: ModuleMetadata = {
     designer: () => import('./DateTimeDesigner.svelte')
   },
   defaultConfig: {
-    display: {
-      prompt: 'Please select a date/time:',
-      mode: 'date',
-      format: 'YYYY-MM-DD',
-      showCalendar: true,
-      minDate: null,
-      maxDate: null,
-      disabledDates: [],
-      defaultToToday: false,
-      timeStep: 15
-    }
+    // Fields live at the top level of config: the module factory copies
+    // defaultConfig verbatim into question.config, and both the designer
+    // and runtime read these flat (question.config.mode, .format, …).
+    prompt: 'Please select a date/time:',
+    mode: 'date',
+    format: 'YYYY-MM-DD',
+    showCalendar: true,
+    minDate: null,
+    maxDate: null,
+    disabledDates: [],
+    defaultToToday: false,
+    timeStep: 15
   },
   answerType: AnswerTypes.DATE
 };
