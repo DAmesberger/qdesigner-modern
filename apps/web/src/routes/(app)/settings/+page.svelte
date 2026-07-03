@@ -18,11 +18,6 @@
   let fullName = $state('');
   let email = $state('');
 
-  // Password fields
-  let currentPassword = $state('');
-  let newPassword = $state('');
-  let confirmPassword = $state('');
-
   onMount(async () => {
     try {
       const profile = await api.users.getProfile();
@@ -113,24 +108,20 @@
       <!-- Password Section -->
       <Card>
         <h3 class="text-lg font-semibold text-foreground mb-4">Password</h3>
-        <form onsubmit={(e) => e.preventDefault()} class="space-y-4">
-          <FormGroup label="Current Password" id="current-password">
-            <Input id="current-password" type="password" bind:value={currentPassword} placeholder="Enter current password" />
-          </FormGroup>
-
-          <FormGroup label="New Password" id="new-password">
-            <Input id="new-password" type="password" bind:value={newPassword} placeholder="Enter new password" />
-          </FormGroup>
-
-          <FormGroup label="Confirm New Password" id="confirm-password">
-            <Input id="confirm-password" type="password" bind:value={confirmPassword} placeholder="Confirm new password" />
-          </FormGroup>
-
-          <div class="flex items-center justify-end gap-3">
-            <span class="text-sm text-muted-foreground">Coming soon</span>
-            <Button type="submit" variant="primary" disabled title="Password change coming soon">Change Password</Button>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-foreground">Change your password</p>
+            <p class="text-sm text-muted-foreground">
+              We'll email you a secure link to set a new password.
+            </p>
           </div>
-        </form>
+          <a
+            href="/forgot-password"
+            class="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Send Reset Link
+          </a>
+        </div>
       </Card>
 
       <!-- Appearance Section -->
@@ -158,15 +149,13 @@
       <!-- Account Section -->
       <Card>
         <h3 class="text-lg font-semibold text-foreground mb-4">Account</h3>
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium text-foreground">Delete Account</p>
-            <p class="text-sm text-muted-foreground">Permanently delete your account and all associated data</p>
-          </div>
-          <div class="flex items-center gap-3">
-            <span class="text-sm text-muted-foreground">Coming soon</span>
-            <Button variant="destructive" disabled title="Account deletion coming soon">Delete Account</Button>
-          </div>
+        <div>
+          <p class="text-sm font-medium text-foreground">Delete Account</p>
+          <p class="text-sm text-muted-foreground">
+            Self-service account deletion is not yet available. To permanently delete
+            your account and all associated data, contact your organization administrator
+            or email support.
+          </p>
         </div>
       </Card>
     </div>
