@@ -13,7 +13,9 @@
 
   let questionnaires = $state<(QuestionnaireSummary & { project_name: string })[]>([]);
   let projects = $state<{ id: string; name: string }[]>([]);
-  let sparklineData = $state<Record<string, number[]>>({});
+  // Raw per-questionnaire timeseries buckets (with timestamps) drive both the
+  // sparkline column and the date-range filter's real last-activity check.
+  let timeseriesData = $state<Record<string, TimeSeriesBucket[]>>({});
 
   // Filters
   let filterProject = $state('all');
@@ -39,18 +41,23 @@
       result = result.filter((q) => q.status === filterStatus);
     }
     if (filterDateRange !== 'all') {
-      const now = Date.now();
-      const cutoffs: Record<string, number> = {
+      const spans: Record<string, number> = {
         '7d': 7 * 86400000,
         '30d': 30 * 86400000,
         '90d': 90 * 86400000,
       };
-      const cutoff = cutoffs[filterDateRange];
-      if (cutoff) {
+      const span = spans[filterDateRange];
+      if (span) {
+        const cutoff = Date.now() - span;
+        // Keep questionnaires with real session activity inside the selected
+        // window, using the fetched timeseries buckets' actual timestamps.
         result = result.filter((q) => {
-          // Use sparkline data presence as a proxy for recent activity
-          const values = sparklineData[q.id];
-          return values && values.some((v) => v > 0);
+          const buckets = timeseriesData[q.id];
+          return (
+            buckets?.some(
+              (b) => b.sessions_started > 0 && new Date(b.timestamp).getTime() >= cutoff
+            ) ?? false
+          );
         });
       }
     }
@@ -147,19 +154,26 @@
   }
 
   async function loadSparklines() {
-    const results: Record<string, number[]> = {};
-    for (const q of questionnaires) {
-      try {
-        const buckets = await api.sessions.timeseries({
-          questionnaireId: q.id,
-          interval: 'day',
-        });
-        results[q.id] = buckets.slice(-7).map((b) => b.sessions_started);
-      } catch {
-        results[q.id] = [];
-      }
-    }
-    sparklineData = results;
+    // Fetch every questionnaire's timeseries in parallel rather than
+    // sequentially (was an N+1 waterfall on mount).
+    const entries = await Promise.all(
+      questionnaires.map(async (q): Promise<[string, TimeSeriesBucket[]]> => {
+        try {
+          const buckets = await api.sessions.timeseries({
+            questionnaireId: q.id,
+            interval: 'day',
+          });
+          return [q.id, buckets];
+        } catch {
+          return [q.id, []];
+        }
+      })
+    );
+    timeseriesData = Object.fromEntries(entries);
+  }
+
+  function sparklineValues(id: string): number[] {
+    return (timeseriesData[id] ?? []).slice(-7).map((b) => b.sessions_started);
   }
 
   onMount(() => {
@@ -295,11 +309,10 @@
                   {formatTime(q.avg_completion_time_ms)}
                 </td>
                 <td class="px-4 py-3">
-                  {#if sparklineData[q.id]?.length && sparklineData[q.id]?.some((v: number) => v > 0)}
-                    {@const lineValues = sparklineData[q.id] ?? []}
+                  {#if sparklineValues(q.id).some((v: number) => v > 0)}
                     <svg viewBox="0 0 80 20" class="w-20 h-5 mx-auto" preserveAspectRatio="none">
                       <path
-                        d={sparklinePath(lineValues, 80, 20)}
+                        d={sparklinePath(sparklineValues(q.id), 80, 20)}
                         fill="none"
                         stroke="#6366f1"
                         stroke-width="1.5"
