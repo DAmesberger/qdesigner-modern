@@ -1,4 +1,5 @@
 import type { Block, FlowControl, Page, Question, Questionnaire, Variable } from '$lib/shared';
+import { defaultTheme, type QuestionnaireTheme } from '$lib/shared';
 import { DocumentStore, type DocumentValidationResult } from './designer/DocumentStore';
 import {
   UiStore,
@@ -317,6 +318,39 @@ class DesignerStore {
     }
     const next = this.documentStore.updateQuestionnaire(this.questionnaire, updates);
     this.commit(next, { markDirty: true });
+  }
+
+  /** The questionnaire-level theme (global/page/question style sections). */
+  get theme(): QuestionnaireTheme {
+    // theme is persisted under settings; the QuestionnaireSettings type does not
+    // formally declare it (runtime reads it via cast — see ResourceManager).
+    const stored = (this.questionnaire.settings as { theme?: QuestionnaireTheme } | undefined)
+      ?.theme;
+    return stored ?? defaultTheme;
+  }
+
+  /** Apply a single dotted-path edit from the StyleEditor and persist it. */
+  updateTheme(path: string[], value: unknown) {
+    if (path.length === 0) return;
+
+    const nextTheme = JSON.parse(JSON.stringify(this.theme)) as Record<string, unknown>;
+    let cursor: Record<string, unknown> = nextTheme;
+    for (let i = 0; i < path.length - 1; i++) {
+      const key = path[i];
+      if (key === undefined) return;
+      const child = cursor[key];
+      if (child === null || typeof child !== 'object') {
+        cursor[key] = {};
+      }
+      cursor = cursor[key] as Record<string, unknown>;
+    }
+    const lastKey = path[path.length - 1];
+    if (lastKey === undefined) return;
+    cursor[lastKey] = value;
+
+    this.updateQuestionnaire({
+      settings: { ...this.questionnaire.settings, theme: nextTheme } as Questionnaire['settings'],
+    });
   }
 
   addPage() {
