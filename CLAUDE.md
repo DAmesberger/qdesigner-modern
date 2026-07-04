@@ -4,7 +4,7 @@ Guidance for Claude Code (claude.ai/code) when working in this repo.
 
 ## Project overview
 
-QDesigner Modern is a questionnaire platform for psychological and behavioral research. Microsecond-accurate reaction time measurements, WebGL 2.0 rendering, fully offline-capable fillout, semver-versioned questionnaire definitions. Svelte 5 + SvelteKit + TypeScript strict on the frontend; Rust/Axum on the backend.
+QDesigner Modern is a questionnaire platform for psychological and behavioral research. Reaction timing (post-Phase 3): frame-accurate stimulus onset with measured display-latency correction, high-resolution input timestamps (`event.timeStamp`), and audio onset corrected for output latency — yielding sub-millisecond *relative* precision on difference scores (not absolute microsecond accuracy). Full timer resolution requires cross-origin isolation (COOP/COEP). Plus WebGL 2.0 rendering, fully offline-capable fillout, semver-versioned questionnaire definitions. Svelte 5 + SvelteKit + TypeScript strict on the frontend; Rust/Axum on the backend.
 
 ## Workspace layout
 
@@ -84,8 +84,8 @@ apps/web/src/
     (public)/                    redirects / → /login (no marketing surface; cleanup Phase 1.0.6)
     invite/[token]               accept-invitation
   lib/
-    runtime/         QuestionnaireRuntime, QuestionPresenter, reaction-time engine + presets
-    renderer/        WebGL rendering pipeline (used by fillout)
+    runtime/         QuestionnaireRuntime, FormQuestionHost + moduleConfigAdapter (DOM overlay), reaction/ReactionEngine + presets
+    renderer/        WebGL rendering pipeline — the ONLY drawing path (v1 reaction stimuli only)
     fillout/         FilloutRuntime, OfflineSessionService, OfflineResponsePersistence, FilloutSyncEngine
     services/        api client, auth, offline, persistence; db/indexeddb.ts (Dexie)
     shared/          types, factories, utils, validators (the canonical type root post-P2.2)
@@ -96,6 +96,8 @@ apps/web/src/
 ```
 
 The fillout route (`/q/[code]`) runs entirely client-side. Online-first load with IndexedDB fallback; sessions are client-generated UUIDs; responses carry a `client_id UUID UNIQUE` for server-side dedup via `ON CONFLICT (client_id) DO NOTHING`.
+
+**Hybrid rendering contract (ADR 0023).** The runtime has exactly one WebGL path and one DOM path. WebGL (`renderer/WebGLRenderer` driven by `runtime/reaction/ReactionEngine`) draws **only** stimuli for modules that register a `questionRuntime` v1 contract (reaction-time, reaction-experiment, webgl) — frame-exact onset is their reason to exist. **Everything else** — form questions *and* display/analytics/instruction items — renders as Svelte DOM mounted into `(fillout)/q/[code]/+page.svelte` via the `FormQuestionHost` overlay (`runtime/core/FormQuestionHost.ts` + `moduleConfigAdapter.ts`, ADR 0018). The fork is the single predicate `isFormStyle()` in `QuestionnaireRuntime`. Phase 8 deleted the parallel hollow stack that never drew — `runtime/QuestionPresenter`, `runtime/renderers/*`, `runtime/stimuli/*` (its `RenderContext` type was inlined into `WebGLRenderer`) — keeping only the loader/cache half of `ResourceManager`. Fillout media resolves through a same-origin streaming proxy (`GET /api/media/{id}/content`, ADR 0023 D1: stable cache key, `immutable`, Range support — fixes cross-origin texture taint, COEP, offline cache expiry); the designer keeps presigned URLs. Results take one offline-first write path (ADR 0023 D2): IndexedDB first with a `clientId` UUID, then `FilloutSyncEngine.syncNow()`, idempotent on `ON CONFLICT (client_id) DO NOTHING`. Sessions pin an exact `(questionnaireId, major.minor.patch)` + definition snapshot; resumed/offline sessions load the pinned snapshot, never the latest cached one. Reaction timing is **frame-accurate onset with sub-ms relative precision** (display/output-latency corrected, COOP/COEP required for full timer resolution) — not microsecond-absolute; each trial persists a `timing_provenance` blob.
 
 ## Backend architecture
 
@@ -172,7 +174,7 @@ Yjs end-to-end:
 
 ## ADR trail
 
-All architectural and scoping decisions through Phase 6 live in `docs/decisions/`:
+All architectural and scoping decisions through Phase 8 live in `docs/decisions/`:
 
 - `0001-rls.md` — RLS as defense-in-depth. **Complete** after Phase 6.
 - `0002-pipeline.md` — `lib/pipeline/` deleted
@@ -189,7 +191,16 @@ All architectural and scoping decisions through Phase 6 live in `docs/decisions/
 - `0013-admin-mutation-permissive.md` — Phase 6 admin-table mutation policies are permissive `WITH CHECK (true)`; `api/access::*` is the gate.
 - `0014-qdesigner-app-role.md` — Phase 6 introduces the non-superuser `qdesigner_app` application role; tests inherit the app DSN.
 - `0015-anon-read-rls-exempt.md` — Phase 6 mid-step finding: `users` and `organizations` join `questionnaire_definitions` as RLS-exempt because they have intentional public-anonymous read paths.
+- `0016-supervisor-protocol-v2.md` — bumps `SUPERVISOR_PROTOCOL.md` to v2.
+- `0017-product-completion-arc.md` — opens the Phase 7 product-completion & wire-up arc.
+- `0018-fillout-rendering-contract.md` — Phase 7 hybrid fillout rendering: form-style questions mount runtime Svelte components into the DOM overlay; v1 reaction paradigms stay on WebGL. **Finalized** by 0023.
+- `0019-paraglide-i18n.md` — replace i18next with Paraglide (compile-time i18n).
+- `0020-org-role-change.md` — Phase 8 org member role-change endpoint.
+- `0021-analytics-psychometrics.md` — Phase 8 mounts the analytics psychometrics suite.
+- `0022-questionnaire-translation.md` — Phase 8 per-questionnaire content translation.
+- `0023-fillout-hybrid-rendering.md` — Phase 8 finalizes the hybrid fillout contract: one WebGL path (`ReactionEngine`+`WebGLRenderer`, v1 stimuli only), everything else on the DOM overlay; deletes the hollow `QuestionPresenter`/`runtime/renderers`/`runtime/stimuli` stacks; D1 same-origin media proxy + D2 offline-first single write path + per-session version pinning.
 - `PHASE_6_PLAN.md` — Phase 6 implementation plan (with mid-phase amendments).
+- `PHASE_8_FILLOUT_FIX_PLAN.md` — Phase 8 fillout renderer & reaction-framework remediation plan (Phases 1–5).
 - `SUPERVISOR_PROTOCOL.md` — message format for the team-lead / supervisor / user loop
 - `baseline.md` — metrics captured at the start of Phase 1 + per-phase rows added at closeout
 

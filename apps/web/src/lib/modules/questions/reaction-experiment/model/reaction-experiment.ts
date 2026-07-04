@@ -339,7 +339,19 @@ export function summarizeReactionExperiment(config: ReactionExperimentConfig) {
 export function compileReactionExperimentPlan(
   config: ReactionExperimentConfig,
   context: Pick<QuestionRuntimeContext, 'questionnaire' | 'question' | 'variableEngine'>,
-  options?: { previewParticipantId?: string }
+  options?: {
+    previewParticipantId?: string;
+    /**
+     * Resolve a selected asset to the URL the stimulus is loaded from. Defaults
+     * to the URL baked into the config by the designer (a presigned link — fine
+     * for the authenticated designer preview). The FILLOUT runtime overrides this
+     * to the stable same-origin proxy path `mediaContentUrl(mediaId)` so the WebGL
+     * texture is not cross-origin-tainted and the URL is a durable offline cache
+     * key. Without this, published reaction media would bake expiring, cross-origin
+     * presigned URLs the participant runtime uses verbatim.
+     */
+    resolveAssetSrc?: (asset: ReactionExperimentAssetRef) => string | undefined;
+  }
 ): PlannedReactionTrial[] {
   const seedRoot =
     config.randomization.seed ||
@@ -454,8 +466,13 @@ export function compileReactionExperimentPlan(
         rng,
         index
       );
-      if (asset?.url) {
-        nextStimulus.src = asset.url;
+      if (asset) {
+        const resolvedSrc = options?.resolveAssetSrc
+          ? options.resolveAssetSrc(asset)
+          : asset.url;
+        if (resolvedSrc) {
+          nextStimulus.src = resolvedSrc;
+        }
       }
     }
 

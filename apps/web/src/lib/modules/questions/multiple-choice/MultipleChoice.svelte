@@ -3,17 +3,27 @@
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
   import { getAnswerType } from './answerType';
+  import { seededShuffleByKey } from '$lib/runtime/core/seededRandom';
+  import { onMount } from 'svelte';
   import { flip } from 'svelte/animate';
   import { fade } from 'svelte/transition';
 
   interface MultipleChoiceConfig {
-    responseType: { type: 'single' | 'multiple' };
+    responseType: { type: 'single' | 'multiple'; minChoices?: number; maxChoices?: number };
     options: ChoiceOption[];
     layout: 'vertical' | 'horizontal' | 'grid';
     columns?: number;
     randomizeOptions?: boolean;
     otherOption?: boolean;
     exclusiveOptions?: string[];
+    // Selection-count constraints (multiple only). Primary field names come from
+    // MultipleChoiceDisplayConfig; `responseType.min/maxChoices` is read as a fallback.
+    minSelections?: number;
+    maxSelections?: number;
+    // Optional stable seed to make the shuffle reproducible when no session id is
+    // reachable (see resolveSessionSeed below).
+    randomizationSeed?: string | number;
+    seed?: string | number;
   }
 
   interface ChoiceOption {
@@ -30,6 +40,9 @@
 
   interface Props extends QuestionProps {
     question: Question & { config: MultipleChoiceConfig };
+    // Runtime variables map (supplied by ModularRenderer). Used only as a
+    // best-effort fallback source for the shuffle seed.
+    variables?: Record<string, any>;
   }
 
   let {
@@ -37,20 +50,107 @@
     mode = 'runtime',
     value = $bindable(),
     disabled = false,
+    variables = {},
     onResponse,
     onValidation,
     onInteraction,
   }: Props = $props();
 
-  if (value === undefined) value = question.config.responseType.type === 'multiple' ? [] : null;
+  const isMultiple = question.config.responseType?.type === 'multiple';
 
+  // --- Internal selection state --------------------------------------------
+  // The rendered selection is kept internal so it survives the fillout page
+  // clobbering the bound `value` when we gate an invalid selection (below-min /
+  // empty) to `null`. `value` is the *emitted / persisted* answer; the checkbox
+  // and radio state render from these instead.
+  let selectedValues = $state<any[]>([]);
+  let selectedValue = $state<any>(null);
   let otherValue = $state('');
   let showOtherInput = $state(false);
-  let randomizedOptions = $state<ChoiceOption[]>([]);
+  let hasInteracted = $state(false);
 
-  // Initialize randomized options
-  $effect(() => {
-    randomizedOptions = getDisplayOptions(question.config.options);
+  // One-time hydration from the incoming (carry-forward / resumed) value.
+  {
+    const v = value;
+    if (v && typeof v === 'object' && !Array.isArray(v) && 'selection' in (v as any)) {
+      otherValue = (v as any).other ?? '';
+      const sel = (v as any).selection;
+      if (isMultiple) selectedValues = Array.isArray(sel) ? [...sel] : sel != null ? [sel] : [];
+      else selectedValue = sel ?? null;
+    } else if (isMultiple) {
+      selectedValues = Array.isArray(v) ? [...v] : v != null ? [v] : [];
+    } else {
+      selectedValue = v ?? null;
+    }
+    const otherOpt = (question.config.options ?? []).find((o) => o.id === 'other');
+    if (otherOpt) {
+      showOtherInput = isMultiple
+        ? selectedValues.includes(otherOpt.value)
+        : selectedValue === otherOpt.value;
+    }
+  }
+
+  // --- Selection-count constraints -----------------------------------------
+  const minSel = $derived(
+    Number(
+      (question.config as any).minSelections ??
+        (question.config as any).responseType?.minChoices ??
+        (question as any).responseType?.minChoices ??
+        0
+    ) || 0
+  );
+  const maxSel = $derived.by(() => {
+    const raw =
+      (question.config as any).maxSelections ??
+      (question.config as any).responseType?.maxChoices ??
+      (question as any).responseType?.maxChoices;
+    if (raw == null) return Infinity;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : Infinity;
+  });
+
+  const atMax = $derived(isMultiple && maxSel !== Infinity && selectedValues.length >= maxSel);
+  const belowMin = $derived(isMultiple && minSel > 0 && selectedValues.length < minSel);
+
+  const constraintLabel = $derived.by(() => {
+    if (!isMultiple) return '';
+    const hasMin = minSel > 0;
+    const hasMax = maxSel !== Infinity;
+    if (hasMin && hasMax)
+      return minSel === maxSel
+        ? `Select exactly ${minSel} option${minSel === 1 ? '' : 's'}`
+        : `Select between ${minSel} and ${maxSel} options`;
+    if (hasMin) return `Select at least ${minSel} option${minSel === 1 ? '' : 's'}`;
+    if (hasMax) return `Select up to ${maxSel} option${maxSel === 1 ? '' : 's'}`;
+    return '';
+  });
+
+  // --- Deterministic option order ------------------------------------------
+  // Fold a stable per-session identifier + the question id into a seed so the
+  // presented order is reproducible and reconstructable from persisted keys.
+  function resolveSessionSeed(): string {
+    let sid: string | null = null;
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sid = sessionStorage.getItem('qd_api_session_id');
+      }
+    } catch {
+      sid = null;
+    }
+    const pid = (variables as any)?._participantId ?? (variables as any)?.participantId;
+    const cfgSeed =
+      (question.config as any)?.randomizationSeed ??
+      (question.config as any)?.seed ??
+      (question as any)?.randomizationSeed;
+    return String(sid || pid || cfgSeed || '');
+  }
+
+  const shuffleKey = `${resolveSessionSeed()}::${question.id}`;
+
+  const randomizedOptions = $derived.by(() => {
+    const options = question.config.options ?? [];
+    if (!question.config.randomizeOptions || mode === 'edit') return options;
+    return seededShuffleByKey(options, shuffleKey);
   });
 
   // Update answer type based on response type
@@ -60,28 +160,42 @@
     }
   });
 
-  function getDisplayOptions(options: ChoiceOption[]): ChoiceOption[] {
-    if (!question.config.randomizeOptions || mode === 'edit') {
-      return options;
-    }
+  /**
+   * Compute the answer to emit/persist. Invalid selections (nothing selected, or
+   * below the minimum for multiple) gate to `null` so the fillout page's
+   * "answered" signal (and any required check) blocks advancing. When an
+   * other-option is configured the payload always carries the `{ selection, other }`
+   * shape (other = '' until typed).
+   */
+  function computeEmitValue(): any {
+    const hasSelection = isMultiple
+      ? selectedValues.length > 0
+      : selectedValue !== null && selectedValue !== undefined;
 
-    // Fisher-Yates shuffle
-    const shuffled = [...options];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
-    }
+    if (!hasSelection) return null;
+    if (isMultiple && minSel > 0 && selectedValues.length < minSel) return null;
 
-    return shuffled;
+    const body = isMultiple ? [...selectedValues] : selectedValue;
+    if (question.config.otherOption) {
+      return { selection: body, other: otherValue };
+    }
+    return body;
+  }
+
+  function emit() {
+    const emitValue = computeEmitValue();
+    value = emitValue;
+    onResponse?.(emitValue);
   }
 
   function handleSingleChoice(option: ChoiceOption) {
     if (disabled) return;
+    hasInteracted = true;
 
-    value = option.value;
+    selectedValue = option.value;
     showOtherInput = option.id === 'other';
 
-    onResponse?.(value);
+    emit();
     onInteraction?.({
       type: 'change',
       timestamp: Date.now(),
@@ -91,37 +205,37 @@
 
   function handleMultipleChoice(option: ChoiceOption) {
     if (disabled) return;
+    hasInteracted = true;
 
-    if (!Array.isArray(value)) {
-      value = [];
-    }
-
-    const currentValues = [...value];
-    const index = currentValues.indexOf(option.value);
+    const current = [...selectedValues];
+    const index = current.indexOf(option.value);
 
     if (index > -1) {
-      currentValues.splice(index, 1);
+      // Deselecting is always allowed.
+      current.splice(index, 1);
+    } else if (option.exclusive) {
+      // Exclusive selection replaces everything (count becomes 1, ignores max).
+      current.length = 0;
+      current.push(option.value);
     } else {
-      // Handle exclusive options
-      if (option.exclusive) {
-        currentValues.length = 0;
-        currentValues.push(option.value);
-      } else {
-        // Remove exclusive options if selecting non-exclusive
-        const exclusiveValues = question.config.options
-          .filter((o) => o.exclusive)
-          .map((o) => o.value);
-        const filtered = currentValues.filter((v) => !exclusiveValues.includes(v));
-        filtered.push(option.value);
-        currentValues.length = 0;
-        currentValues.push(...filtered);
+      // Selecting a non-exclusive option: drop any exclusive selections first.
+      const exclusiveValues = (question.config.options ?? [])
+        .filter((o) => o.exclusive)
+        .map((o) => o.value);
+      const filtered = current.filter((v) => !exclusiveValues.includes(v));
+      // Enforce max: ignore the selection when already at the cap.
+      if (maxSel !== Infinity && filtered.length >= maxSel) {
+        return;
       }
+      filtered.push(option.value);
+      current.length = 0;
+      current.push(...filtered);
     }
 
-    value = currentValues;
-    showOtherInput = option.id === 'other' && currentValues.includes(option.value);
+    selectedValues = current;
+    showOtherInput = option.id === 'other' && current.includes(option.value);
 
-    onResponse?.(value);
+    emit();
     onInteraction?.({
       type: 'change',
       timestamp: Date.now(),
@@ -130,25 +244,23 @@
   }
 
   function handleOtherChange() {
-    const responseValue = question.config.otherOption
-      ? {
-          selection: value,
-          other: otherValue,
-        }
-      : value;
-
-    onResponse?.(responseValue);
+    hasInteracted = true;
+    emit();
   }
 
   function handleKeyPress(event: KeyboardEvent, option: ChoiceOption) {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      if (question.config.responseType.type === 'single') {
-        handleSingleChoice(option);
-      } else {
+      if (isMultiple) {
         handleMultipleChoice(option);
+      } else {
+        handleSingleChoice(option);
       }
     }
+  }
+
+  function isOptionChecked(option: ChoiceOption): boolean {
+    return isMultiple ? selectedValues.includes(option.value) : selectedValue === option.value;
   }
 
   // Handle hotkeys
@@ -159,16 +271,31 @@
       const option = randomizedOptions.find((o) => o.hotkey === event.key);
       if (option) {
         event.preventDefault();
-        if (question.config.responseType.type === 'single') {
-          handleSingleChoice(option);
-        } else {
+        if (isMultiple) {
           handleMultipleChoice(option);
+        } else {
+          handleSingleChoice(option);
         }
       }
     }
 
     window.addEventListener('keydown', handleHotkey);
     return () => window.removeEventListener('keydown', handleHotkey);
+  });
+
+  // Reconcile the gated value with the hydrated selection so the page's
+  // "answered" gate reflects min/required for resumed / carry-forward values,
+  // and surface the presented order for provenance (see risks: the form host
+  // does not currently forward onInteraction for form-style questions, so this
+  // is future-proofing; the order remains reconstructable from the seed).
+  onMount(() => {
+    if (mode === 'edit') return;
+    // Reconcile the gated value on mount (resumed / carry-forward). We do NOT
+    // emit a second interaction event for the presented order: BaseQuestion
+    // already emits the canonical `view` event (reusing it would double-count),
+    // and the shuffle is deterministic in the seed (sessionId + questionId), so
+    // the order stays reconstructable without storing it.
+    emit();
   });
 
   // Grid layout classes
@@ -191,30 +318,19 @@
       >
         <label
           class="choice-label"
-          class:selected={question.config.responseType.type === 'single'
-            ? value === option.value
-            : value?.includes(option.value)}
-          class:disabled
-          style:border-color={option.color &&
-          (question.config.responseType.type === 'single'
-            ? value === option.value
-            : value?.includes(option.value))
-            ? option.color
-            : undefined}
+          class:selected={isOptionChecked(option)}
+          class:disabled={disabled || (isMultiple && atMax && !isOptionChecked(option))}
+          style:border-color={option.color && isOptionChecked(option) ? option.color : undefined}
         >
           <input
-            type={question.config.responseType.type === 'single' ? 'radio' : 'checkbox'}
+            type={isMultiple ? 'checkbox' : 'radio'}
             name="question-{question.id}"
             value={option.value}
-            checked={question.config.responseType.type === 'single'
-              ? value === option.value
-              : value?.includes(option.value)}
+            checked={isOptionChecked(option)}
             onchange={() =>
-              question.config.responseType.type === 'single'
-                ? handleSingleChoice(option)
-                : handleMultipleChoice(option)}
+              isMultiple ? handleMultipleChoice(option) : handleSingleChoice(option)}
             onkeypress={(e) => handleKeyPress(e, option)}
-            {disabled}
+            disabled={disabled || (isMultiple && atMax && !isOptionChecked(option))}
             class="choice-input"
             aria-label={option.label}
             aria-describedby={option.description ? `option-${option.id}-desc` : undefined}
@@ -271,13 +387,23 @@
           class="w-full py-2 px-3 border-2 border-border rounded-md text-sm transition-all duration-200 focus:outline-none focus:border-primary focus:ring-3 focus:ring-primary/10"
           placeholder="Please specify..."
           bind:value={otherValue}
-          onchange={handleOtherChange}
+          oninput={handleOtherChange}
           {disabled}
           aria-label="Other option text"
         />
       </div>
     {/if}
   </div>
+
+  {#if constraintLabel && mode === 'runtime'}
+    <p class="selection-constraints">{constraintLabel}</p>
+  {/if}
+
+  {#if isMultiple && belowMin && hasInteracted && mode === 'runtime'}
+    <div class="selection-error" role="alert">
+      Please select at least {minSel} option{minSel === 1 ? '' : 's'} to continue.
+    </div>
+  {/if}
 </BaseQuestion>
 
 <style>
@@ -390,6 +516,20 @@
   .choice-label.selected .checkmark {
     opacity: 1;
     transform: scale(1);
+  }
+
+  /* Selection-count hint + violation message */
+  .selection-constraints {
+    margin-top: 0.75rem;
+    font-size: 0.8125rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .selection-error {
+    margin-top: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: hsl(var(--destructive));
   }
 
   /* Responsive */

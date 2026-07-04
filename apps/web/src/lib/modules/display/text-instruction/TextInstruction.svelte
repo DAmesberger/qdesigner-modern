@@ -79,7 +79,13 @@
 
     if (mediaIds.length > 0) {
       try {
-        const urls = await mediaService.getSignedUrls(mediaIds);
+        // This runtime component is also rendered with mode 'preview'/'edit' in the designer
+        // canvas. Runtime (fillout) uses the same-origin streaming proxy; designer preview
+        // uses presigned urls so unpublished media loads in a bare <img>.
+        const urls =
+          mode === 'runtime'
+            ? await mediaService.getContentUrls(mediaIds)
+            : await mediaService.getSignedUrls(mediaIds);
         mediaUrls = urls;
         // Update content after URLs are loaded
         updateContent();
@@ -101,6 +107,7 @@
         format: (instruction.display?.enableMarkdown ?? true) ? 'markdown' : 'text',
         processVariables: instruction.display?.variables ?? true,
         variables: mode === 'runtime' ? scriptingEngine.getAllVariables() : {},
+        preview: mode !== 'runtime',
       });
 
       // If markdown is disabled and we still have plain text, convert newlines

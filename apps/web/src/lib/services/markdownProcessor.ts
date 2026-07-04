@@ -18,6 +18,12 @@ export interface MarkdownProcessorOptions {
   processVariables?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- template variables can be any interpolated value
   variables?: Record<string, any>;
+  /**
+   * When true, resolve any media ids not already in `mediaUrls` to PRESIGNED urls (for
+   * authenticated designer preview of possibly-unpublished media). When false (default),
+   * resolve to the same-origin streaming proxy (fillout runtime, published media).
+   */
+  preview?: boolean;
 }
 
 /**
@@ -29,35 +35,36 @@ export async function processMarkdownContent(
 ): Promise<string> {
   if (!content) return '';
   
-  const { 
-    media = [], 
-    mediaUrls = {}, 
-    format = 'markdown', 
+  const {
+    media = [],
+    mediaUrls = {},
+    format = 'markdown',
     processVariables = true,
-    variables = {} 
+    variables = {},
+    preview = false
   } = options;
-  
+
   // If format is plain text, return as-is
   if (format === 'text') {
     return content;
   }
-  
+
   // If format is HTML and doesn't contain markdown, return as-is
   if (format === 'html' && !containsMarkdown(content)) {
     return content;
   }
-  
+
   try {
     let processedContent = content;
-    
+
     // Process variable interpolation first (before markdown parsing)
     if (processVariables && Object.keys(variables).length > 0) {
       processedContent = interpolateVariables(processedContent, variables);
     }
-    
+
     // Replace media references with actual URLs
     if (media.length > 0) {
-      processedContent = await replaceMediaReferences(processedContent, media, mediaUrls);
+      processedContent = await replaceMediaReferences(processedContent, media, mediaUrls, preview);
     }
     
     // Parse markdown to HTML
@@ -120,23 +127,27 @@ export function processMarkdownContentSync(
 async function replaceMediaReferences(
   content: string,
   media: MediaConfig[],
-  existingUrls: Record<string, string> = {}
+  existingUrls: Record<string, string> = {},
+  preview = false
 ): Promise<string> {
   let processedContent = content;
   const urlsToFetch: string[] = [];
-  
+
   // Collect media IDs that need URL fetching
   media.forEach((mediaItem) => {
     if (mediaItem.mediaId && !existingUrls[mediaItem.mediaId]) {
       urlsToFetch.push(mediaItem.mediaId);
     }
   });
-  
-  // Fetch missing URLs
+
+  // Fetch missing URLs. Designer preview resolves to presigned urls (may be unpublished
+  // media); the fillout runtime resolves to the same-origin streaming proxy.
   let mediaUrls = { ...existingUrls };
   if (urlsToFetch.length > 0) {
     try {
-      const fetchedUrls = await mediaService.getSignedUrls(urlsToFetch);
+      const fetchedUrls = preview
+        ? await mediaService.getSignedUrls(urlsToFetch)
+        : await mediaService.getContentUrls(urlsToFetch);
       mediaUrls = { ...mediaUrls, ...fetchedUrls };
     } catch (error) {
       console.error('Failed to fetch media URLs:', error);

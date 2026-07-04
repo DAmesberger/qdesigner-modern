@@ -20,7 +20,6 @@ import { VariableEngine } from '@qdesigner/scripting-engine';
 import { WebGLRenderer } from '$lib/renderer';
 import { ResourceManager } from '../resources/ResourceManager';
 import { MediaValidator } from '../validation/MediaValidator';
-import { QuestionPresenter } from './QuestionPresenter';
 import { ResponseCollector, type ResponseCaptureMetadata } from './ResponseCollector';
 import type { FormQuestionHost } from './FormQuestionHost';
 import { buildModuleRuntimeConfig } from './moduleConfigAdapter';
@@ -69,9 +68,11 @@ export class QuestionnaireRuntime {
   private readonly config: RuntimeConfig;
   private readonly session: QuestionnaireSession;
   private readonly variableEngine: VariableEngine;
-  private readonly renderer: WebGLRenderer;
+  // CONTRACT-LAZY (Slice 4.6/4.7): the single owned WebGL renderer is created on first
+  // need (ensureRenderer), never eagerly. A questionnaire with no v1 reaction/webgl item
+  // keeps this null and never calls getContext('webgl2').
+  private renderer: WebGLRenderer | null = null;
   private readonly resourceManager: ResourceManager;
-  private readonly questionPresenter: QuestionPresenter;
   private readonly responseCollector: ResponseCollector;
   private readonly blockRandomizer: BlockRandomizer;
   private readonly scriptExecutor: ScriptExecutor;
@@ -120,14 +121,9 @@ export class QuestionnaireRuntime {
     };
 
     this.variableEngine = new VariableEngine();
-    this.renderer = new WebGLRenderer({
-      canvas: config.canvas,
-      targetFPS: config.questionnaire.settings.webgl?.targetFPS || 60,
-      antialias: config.questionnaire.settings.webgl?.antialias ?? false,
-      vsync: true,
-    });
+    // The WebGL renderer is constructed lazily by ensureRenderer() the first time a v1
+    // reaction/webgl item actually draws via WebGL (CONTRACT-LAZY, Slice 4.7).
     this.resourceManager = new ResourceManager();
-    this.questionPresenter = new QuestionPresenter(this.renderer, this.resourceManager);
     this.responseCollector = new ResponseCollector();
     this.blockRandomizer = new BlockRandomizer(
       config.questionnaire.settings.randomizationSeed || config.questionnaire.id
@@ -150,6 +146,83 @@ export class QuestionnaireRuntime {
     this.initializeExperimentalDesign();
   }
 
+  /**
+   * Lazily construct the single owned WebGLRenderer (CONTRACT-LAZY, Slice 4.7). Called
+   * the first time an item actually draws via WebGL — a v1 reaction/webgl question
+   * runtime. A questionnaire with no v1 item never reaches here, so getContext('webgl2')
+   * is never invoked on a device without WebGL 2.0.
+   *
+   * If WebGL 2.0 is required but unavailable, throws a participant-facing message so the
+   * fillout page surfaces a specific "requires WebGL 2.0" error rather than the generic
+   * "Failed to start questionnaire".
+   */
+  private ensureRenderer(): WebGLRenderer {
+    if (this.renderer) return this.renderer;
+
+    let renderer: WebGLRenderer;
+    try {
+      renderer = new WebGLRenderer({
+        canvas: this.config.canvas,
+        targetFPS: this.config.questionnaire.settings.webgl?.targetFPS || 60,
+        antialias: this.config.questionnaire.settings.webgl?.antialias ?? false,
+        vsync: true,
+      });
+    } catch (err) {
+      // The constructor throws "WebGL 2.0 is required but not supported" ONLY when
+      // getContext('webgl2') returns null. Other messages (shader compile/link,
+      // buffer/uniform creation) are genuine GPU/driver failures — do not mask
+      // those as "no WebGL2", which would send a misleading participant message.
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('WebGL 2.0 is required')) {
+        throw new Error(
+          'This study requires WebGL 2.0, which your browser or device does not support.'
+        );
+      }
+      throw err;
+    }
+
+    this.renderer = renderer;
+    // Renderer created on first WebGL item mid-run (rather than during preload): start
+    // its render loop now so the freshly-created context actually paints.
+    if (this.isRunning) {
+      renderer.start();
+    }
+    return renderer;
+  }
+
+  /**
+   * Whether a given module draws via WebGL (CONTRACT-LAZY): a v1 reaction/webgl question
+   * runtime, or — absent an HTML-overlay formHost — any item (the legacy all-WebGL path).
+   * Since Slice 5.1, display / analytics items render in the overlay (not WebGL), so they
+   * no longer force a WebGL context.
+   */
+  private itemNeedsWebGL(metadata: ModuleMetadata): boolean {
+    if (metadata.questionRuntime?.contract === 'v1') return true;
+    if (!this.config.formHost) return true;
+    return false;
+  }
+
+  /**
+   * Scan the definition up front for any item that draws via WebGL. Unknown module types
+   * are treated as "no WebGL" here; they surface loudly later in showCurrentItem().
+   */
+  private questionnaireNeedsWebGL(): boolean {
+    for (const question of this.config.questionnaire.questions) {
+      const metadata = moduleRegistry.get(question.type);
+      if (!metadata) continue;
+      if (this.itemNeedsWebGL(metadata)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Delegate a viewport resize to the owned renderer (Slice 4.6). No-op until the
+   * renderer exists, so the fillout page can route window resizes here unconditionally.
+   */
+  public resize(width: number, height: number): void {
+    this.renderer?.resize(width, height);
+  }
+
   public async preload(onProgress?: (progress: number) => void): Promise<void> {
     const validator = new MediaValidator();
     const validationResult = await validator.validateQuestionnaire(this.config.questionnaire);
@@ -159,7 +232,13 @@ export class QuestionnaireRuntime {
     }
 
     await this.resourceManager.scanQuestionnaire(this.config.questionnaire);
-    this.resourceManager.setWebGLContext(this.renderer.getContext());
+
+    // CONTRACT-LAZY: only stand up WebGL when the definition actually needs it (a v1
+    // reaction/webgl item). A questionnaire of only form / display / analytics items
+    // skips this entirely — no getContext('webgl2') call.
+    if (this.questionnaireNeedsWebGL()) {
+      this.ensureRenderer();
+    }
 
     await this.resourceManager.preloadAll((progress) => {
       onProgress?.(progress.percentage);
@@ -179,7 +258,7 @@ export class QuestionnaireRuntime {
     }
 
     this.isRunning = true;
-    this.renderer.start();
+    this.renderer?.start();
 
     await this.navigateToPage(0);
   }
@@ -188,7 +267,7 @@ export class QuestionnaireRuntime {
     if (!this.isRunning || this.isPaused) return;
 
     this.isPaused = true;
-    this.renderer.stop();
+    this.renderer?.stop();
     this.responseCollector.pause();
   }
 
@@ -196,7 +275,7 @@ export class QuestionnaireRuntime {
     if (!this.isRunning || !this.isPaused) return;
 
     this.isPaused = false;
-    this.renderer.start();
+    this.renderer?.start();
     this.responseCollector.resume();
   }
 
@@ -214,7 +293,7 @@ export class QuestionnaireRuntime {
 
     this.responseCollector.stop();
     this.config.formHost?.clear();
-    this.renderer.stop();
+    this.renderer?.stop();
     this.resourceManager.dispose();
 
     for (const runtime of this.questionRuntimeCache.values()) {
@@ -222,6 +301,18 @@ export class QuestionnaireRuntime {
     }
     this.questionRuntimeCache.clear();
     this.scriptExecutor.clearCache();
+  }
+
+  /**
+   * Full teardown for unmount: stop the run (which halts the render loop and
+   * disposes resources) and then release the GL context itself. The runtime is
+   * now the SOLE renderer owner (the page-level instance was removed), so this is
+   * where the WebGL renderer must be destroyed — `stop()` alone only pauses it.
+   */
+  public dispose(): void {
+    this.stop();
+    this.renderer?.destroy();
+    this.renderer = null;
   }
 
   public async navigateBack(): Promise<void> {
@@ -591,10 +682,18 @@ export class QuestionnaireRuntime {
 
     const metadata = moduleRegistry.get(item.type);
     if (!metadata) {
-      console.warn(`Unknown module type: ${item.type}`);
-      this.currentItemIndex += 1;
-      await this.showCurrentItem();
-      return;
+      // Fail loud instead of silently skipping the item. A missing module type is
+      // almost always the module registry not being populated before the runtime
+      // started (Slice 1.8 race on resumed sessions — callers must first await
+      // ensureModulesRegistered()). Silently dropping the question corrupts the
+      // dataset with no signal, so surface it: this rejection propagates through
+      // navigateToPage -> start() to the fillout page's catch, which renders a
+      // visible error rather than continuing past a dropped question.
+      throw new Error(
+        `Unknown module type "${item.type}" for question "${item.id}" — the module ` +
+          `registry is not populated. Ensure ensureModulesRegistered() has resolved ` +
+          `before starting the runtime.`
+      );
     }
 
     this.currentQuestion = item;
@@ -669,34 +768,17 @@ export class QuestionnaireRuntime {
       return;
     }
 
-    await this.questionPresenter.present(question, this.variableEngine);
-
-    const responseType = (question as DynamicValue).responseType;
-    if (responseType?.type === 'none') {
-      const delay = responseType.delay || 0;
-      this.scheduleAutoAdvance(delay, async () => {
-        await this.handleCollectedResponse(question, onsetTime, 'auto-advanced', {
-          source: 'programmatic',
-          timestamp: performance.now(),
-          responseTimeMs: Math.max(0, performance.now() - onsetTime),
-        });
-      });
-      return;
-    }
-
-    this.responseCollector.setup(question, {
-      onResponse: (value, responseMetadata) => {
-        void this.handleCollectedResponse(question, onsetTime, value, responseMetadata);
-      },
-      onTimeout: () => {
-        void this.handleTimeout(question, onsetTime);
-      },
-      eventTarget: document,
-      pointerTarget: this.config.canvas,
-      isResponseAllowed: () => this.isRunning && !this.isPaused,
-    });
-
-    this.responseCollector.start();
+    // No WebGL question-presenter path remains (Slice 5.2). In fillout this is
+    // unreachable: the page always supplies a formHost, v1 reaction/webgl questions
+    // are handled by the runtime branch above, and every other `question`-category
+    // module is form-style and mounts in the overlay. Reaching here means the runtime
+    // was constructed without a formHost for a non-v1 question — fail loud rather than
+    // silently dropping it.
+    throw new Error(
+      `Cannot present question "${question.id}" (${question.type}): no formHost is ` +
+        `configured and the legacy WebGL question presenter was removed. Supply a ` +
+        `formHost, or use a reaction/webgl (v1) module for WebGL presentation.`
+    );
   }
 
   private async presentNonInteractiveItem(
@@ -712,46 +794,53 @@ export class QuestionnaireRuntime {
       await this.showCurrentItem();
     };
 
-    // Hybrid render (ADR 0018): mount the module's runtime Svelte component into
-    // the HTML overlay so instruction / media-display items are actually visible
-    // (the WebGL text path never painted). Reconciles the MOD-05 enum-drop types.
-    // Scoped to the `instruction` category: `display`/`analytics` items (bar-chart,
-    // statistical-feedback) stay on the existing WebGL presenter path (MOD-07/STB-03).
-    if (this.config.formHost && metadata.category === 'instruction') {
-      const item = question as DynamicValue;
-      this.config.formHost.present({
-        item,
-        type: item.type,
-        category: metadata.category,
-        config: buildModuleRuntimeConfig(item),
-        variables: this.variableEngine.getAllVariables(),
-        interactive: false,
-        required: false,
-        onSubmit: () => {
-          void advance();
-        },
-      });
+    const formHost = this.config.formHost;
+    if (!formHost) {
+      // The legacy all-WebGL presenter (QuestionPresenter.presentModular) was removed
+      // in Slice 5.2. A non-interactive item (instruction / display / analytics) has
+      // nowhere to render without an HTML-overlay formHost — fail loud rather than
+      // silently skipping it.
+      throw new Error(
+        `Cannot present non-interactive item "${question.id}" (${metadata.category}): ` +
+          `no formHost is configured and the WebGL presenter path was removed.`
+      );
+    }
 
-      const timing = item.timing;
+    // Hybrid render (ADR 0018): mount the module's runtime Svelte component into the
+    // HTML overlay so instruction / display / analytics items are actually visible.
+    // Slice 5.1 extended this from the `instruction` category alone to also cover
+    // `display` / `analytics` items (bar-chart, statistical-feedback) — previously the
+    // WebGL presenter rasterized them into a texture nothing drew, so they were invisible.
+    const item = question as DynamicValue;
+    formHost.present({
+      item,
+      type: item.type,
+      category: metadata.category,
+      config: buildModuleRuntimeConfig(item),
+      variables: this.variableEngine.getAllVariables(),
+      interactive: false,
+      required: false,
+      onSubmit: () => {
+        void advance();
+      },
+    });
+
+    // Auto-advance / timing. Instruction items opt IN to auto-advance; display /
+    // analytics items auto-advance by default — preserving the prior WebGL presenter
+    // semantics (autoAdvance !== false, with a 2500ms fallback duration).
+    const timing = item.timing;
+    if (metadata.category === 'instruction') {
       const duration = timing?.duration || item.displayDuration;
       const autoAdvance = item.autoAdvance === true || item.navigation?.autoAdvance === true;
       if (autoAdvance && duration) {
         this.scheduleAutoAdvance(duration, advance);
       }
-      return;
+    } else {
+      const duration = timing?.duration || item.displayDuration || 2500;
+      if (item.autoAdvance !== false) {
+        this.scheduleAutoAdvance(duration, advance);
+      }
     }
-
-    await this.questionPresenter.presentModular(question as DynamicValue, this.variableEngine);
-
-    const timing = (question as DynamicValue).timing;
-    const duration = timing?.duration || (question as DynamicValue).displayDuration || 2500;
-    const autoAdvance = (question as DynamicValue).autoAdvance !== false;
-
-    if (!autoAdvance) {
-      return;
-    }
-
-    this.scheduleAutoAdvance(duration, advance);
   }
 
   /**
@@ -802,9 +891,12 @@ export class QuestionnaireRuntime {
     });
   }
 
-  private async clearPresentation(): Promise<void> {
+  private clearPresentation(): void {
     this.config.formHost?.clear();
-    await this.questionPresenter.clear();
+    // Parity with the removed QuestionPresenter.clear() (Slice 5.2): drop any leftover
+    // WebGL renderables so a form/display item after a reaction trial starts clean.
+    // No-op when no WebGL renderer exists (form/display/analytics-only run).
+    this.renderer?.clearRenderables();
   }
 
   private createQuestionRuntimeContext(question: Question): QuestionRuntimeContext {
@@ -814,7 +906,10 @@ export class QuestionnaireRuntime {
       question,
       questionnaire: this.config.questionnaire,
       canvas: this.config.canvas,
-      renderer: this.renderer,
+      // v1 reaction/webgl runtimes draw via WebGL — spin up (or reuse) the single owned
+      // renderer here. Throws the participant-facing "requires WebGL 2.0" error if the
+      // device lacks WebGL 2.0 (CONTRACT-LAZY).
+      renderer: this.ensureRenderer(),
       variableEngine: this.variableEngine,
       resourceManager: this.resourceManager,
       responseCollector: this.responseCollector,
@@ -1114,7 +1209,7 @@ export class QuestionnaireRuntime {
     }
 
     this.responseCollector.stop();
-    this.renderer.stop();
+    this.renderer?.stop();
 
     this.config.onComplete?.(this.session);
   }
@@ -1163,7 +1258,7 @@ export class QuestionnaireRuntime {
     this.clearPageTimer();
     this.responseCollector.stop();
     this.config.formHost?.clear();
-    this.renderer.clearRenderables();
+    this.renderer?.clearRenderables();
   }
 
   private clearPageTimer(): void {

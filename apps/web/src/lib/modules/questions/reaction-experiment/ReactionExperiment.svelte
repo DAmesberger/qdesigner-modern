@@ -3,19 +3,37 @@
   import type { QuestionProps } from '$lib/modules/types';
   import { ReactionEngine } from '$lib/runtime/reaction';
   import type { ReactionTrialResult } from '$lib/runtime/reaction';
+  import type { ReactionTaskType } from '$lib/modules/questions/reaction-time/model/reaction-schema';
   import {
     compileReactionExperimentPlan,
     normalizeReactionExperimentConfig,
   } from './model/reaction-experiment';
 
+  // Kept in sync with ReactionExperimentRuntime's TrialResponse so the
+  // Svelte-component path preserves the full timing provenance per trial
+  // (timing methods, stimulus onset, frame health) rather than dropping it.
   interface TrialRecord {
     trialId: string;
     trialNumber: number;
+    isPractice: boolean;
+    taskType: ReactionTaskType;
     blockId: string;
     condition: string | null;
+    trialTemplateId: string | null;
+    key: string | null;
     reactionTime: number | null;
     isCorrect: boolean | null;
     timeout: boolean;
+    stimulusOnsetTime: number | null;
+    expectedResponse: string | null;
+    isTarget: boolean | null;
+    responseTimingMethod: string | null;
+    stimulusTimingMethod: string | null;
+    frameStats: {
+      fps: number;
+      droppedFrames: number;
+      jitter: number;
+    };
   }
 
   interface ReactionExperimentValue {
@@ -130,14 +148,31 @@
         throw error;
       }
 
+      const key =
+        result.response && typeof result.response.value === 'string' ? result.response.value : null;
+
       responses.push({
         trialId: planned.trial.id,
         trialNumber: index + 1,
+        isPractice: planned.metadata.isPractice,
+        taskType: planned.metadata.taskType,
         blockId: planned.metadata.blockId,
         condition: planned.metadata.condition || null,
+        trialTemplateId: planned.metadata.trialTemplateId || null,
+        key,
         reactionTime: result.response?.reactionTimeMs ?? null,
         isCorrect: result.isCorrect,
         timeout: result.timeout,
+        stimulusOnsetTime: result.stimulusOnsetTime,
+        expectedResponse: planned.metadata.expectedResponse || null,
+        isTarget: planned.metadata.isTarget ?? null,
+        responseTimingMethod: result.response?.timingMethod || null,
+        stimulusTimingMethod: result.stimulusTimingMethod || null,
+        frameStats: {
+          fps: result.stats.fps,
+          droppedFrames: result.stats.droppedFrames,
+          jitter: result.stats.jitter,
+        },
       });
 
       if (showFeedback) {

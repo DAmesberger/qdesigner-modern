@@ -233,7 +233,7 @@ export const questionTypeEntries: HelpEntry[] = [
 		key: 'questionTypes.reactionTime',
 		title: 'Reaction Time',
 		description:
-			'Measures response latency with microsecond precision. Designed for cognitive and behavioral experiments requiring accurate timing.\n\n' +
+			'Measures response latency with high-resolution timing — frame-accurate stimulus onset and `event.timeStamp` input capture. Designed for cognitive and behavioral experiments requiring accurate relative timing.\n\n' +
 			'**Built-in presets:**\n' +
 			'- **Stroop** -- Color-word interference task\n' +
 			'- **IAT** -- Implicit Association Test\n' +

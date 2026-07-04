@@ -225,11 +225,27 @@ pub fn router(state: AppState) -> Router {
             set_fillout_rls_context,
         ));
 
+    // Same-origin streaming proxy (contract D1). Runs under the
+    // optional-JWT fillout context so anonymous fillout can fetch bytes of
+    // assets referenced by a published questionnaire (RLS admits via the
+    // 00025 media_assets_select_via_published_questionnaire policy), while
+    // authenticated project members are admitted by the 00014 org-member
+    // policy. Merged into media_routes so `/{id}/content` sits alongside
+    // the JWT-only `/{id}` presigned handler with its own middleware stack.
+    let media_content_routes = Router::new()
+        .route("/{id}/content", get(media::stream_media_content))
+        .layer(CatchPanicLayer::new())
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            set_fillout_rls_context,
+        ));
+
     let media_routes = Router::new()
         .route("/", get(media::list_media).post(media::upload_media))
         .route("/{id}", get(media::get_media).delete(media::delete_media))
         .layer(CatchPanicLayer::new())
-        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
+        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context))
+        .merge(media_content_routes);
 
     let ws_route = Router::new().route("/ws", get(crate::websocket::handler::ws_upgrade));
 

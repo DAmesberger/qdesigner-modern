@@ -1,7 +1,7 @@
 import { browser } from '$app/environment';
 import { api } from '$lib/services/api';
 import { OfflineSessionService } from './OfflineSessionService';
-import { OfflineResponsePersistence } from './OfflineResponsePersistence';
+import { OfflineResponsePersistence, type StoredFilloutResponse } from './OfflineResponsePersistence';
 import type { FilloutSession } from '$lib/services/db/indexeddb';
 
 export interface SyncResult {
@@ -86,9 +86,9 @@ export class FilloutSyncEngine {
 		};
 
 		try {
-			const unsyncedSessions = await OfflineSessionService.getUnsyncedSessions();
+			const sessions = await this.collectSessionsToSync();
 
-			for (const session of unsyncedSessions) {
+			for (const session of sessions) {
 				try {
 					const sessionResult = await this.syncSession(session);
 					result.sessionsSynced++;
@@ -118,6 +118,52 @@ export class FilloutSyncEngine {
 	}
 
 	/**
+	 * The set of sessions with data to sync: the union of locally-tracked
+	 * unsynced sessions AND any session id that has unsynced child records.
+	 *
+	 * The second half is load-bearing: an online-created session lives only on
+	 * the server (no `filloutSessions` row), so it would never appear in
+	 * `getUnsyncedSessions()`, yet its responses are queued offline-first. We
+	 * also never gate draining on a session's own `synced` flag — new responses
+	 * arriving after a session was marked synced are picked up here again.
+	 */
+	private async collectSessionsToSync(): Promise<FilloutSession[]> {
+		const byId = new Map<string, FilloutSession>();
+
+		for (const session of await OfflineSessionService.getUnsyncedSessions()) {
+			byId.set(session.id, session);
+		}
+
+		const orphanIds = await OfflineResponsePersistence.getSessionIdsWithUnsyncedData();
+		for (const id of orphanIds) {
+			if (byId.has(id)) continue;
+			const row = await OfflineSessionService.getSession(id);
+			byId.set(id, row ?? this.stubSession(id));
+		}
+
+		return [...byId.values()];
+	}
+
+	/**
+	 * Minimal session object for an online-created session that has no local
+	 * `filloutSessions` row. Only `id`/`status` are load-bearing here: the
+	 * server session already exists, so `ensureServerSession` short-circuits on
+	 * `api.sessions.get` and never needs the version/questionnaire fields.
+	 */
+	private stubSession(id: string): FilloutSession {
+		return {
+			id,
+			questionnaireId: '',
+			status: 'active',
+			versionMajor: 0,
+			versionMinor: 0,
+			versionPatch: 0,
+			createdAt: 0,
+			synced: 0,
+		};
+	}
+
+	/**
 	 * Sync a single session's data to the backend.
 	 */
 	private async syncSession(session: FilloutSession): Promise<{
@@ -131,15 +177,21 @@ export class FilloutSyncEngine {
 
 		// Build sync payload
 		const payload = {
-			responses: responses.map((r) => ({
-				client_id: r.clientId,
-				question_id: r.questionId,
-				value: r.value,
-				reaction_time_us: r.reactionTimeUs ?? null,
-				presented_at: r.presentedAt ?? null,
-				answered_at: r.answeredAt ?? null,
-				metadata: r.metadata ?? null,
-			})),
+			responses: responses.map((r) => {
+				// `timingProvenance` is a widened field on the stored row (not on
+				// the base FilloutResponse type); read it via the widened alias.
+				const stored = r as StoredFilloutResponse;
+				return {
+					client_id: r.clientId,
+					question_id: r.questionId,
+					value: r.value,
+					reaction_time_us: r.reactionTimeUs ?? null,
+					presented_at: r.presentedAt ?? null,
+					answered_at: r.answeredAt ?? null,
+					timing_provenance: stored.timingProvenance ?? null,
+					metadata: r.metadata ?? null,
+				};
+			}),
 			events: events.map((e) => ({
 				client_id: e.clientId,
 				event_type: e.eventType,
@@ -187,9 +239,26 @@ export class FilloutSyncEngine {
 			return;
 		} catch (error) {
 			const message = error instanceof Error ? error.message.toLowerCase() : '';
+			// CRITICAL: the session GET requires an Authorization header, so an
+			// ANONYMOUS fillout caller receives 401 here even when the session
+			// EXISTS on the server (the common case — an online session is created
+			// with the server's id at the fillout entry point). A non-"not found"
+			// error is therefore NOT evidence the session is missing: proceed to the
+			// sync POST, which is anonymous-capable and idempotent (ON CONFLICT
+			// client_id). Rethrowing here strands every anonymous participant's
+			// responses locally. Only a definitive "not found" (below) triggers a
+			// recreate.
 			if (!message.includes('not found')) {
-				throw error;
+				return;
 			}
+		}
+
+		// A stub session (online-created, no local row) carries no questionnaire
+		// id, so it cannot be recreated. In practice the server session exists and
+		// the `get` above already returned; reaching here means the record is
+		// genuinely orphaned — surface it rather than POSTing an invalid create.
+		if (!session.questionnaireId) {
+			throw new Error(`Session ${session.id} not found on server and has no local definition to recreate it`);
 		}
 
 		await api.sessions.create({

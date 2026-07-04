@@ -10,6 +10,12 @@
     checkboxes?: ConsentCheckbox[];
     onAccept: (data: ConsentData) => void;
     onDecline: () => void;
+    /**
+     * Optional audio-unlock hook (CONTRACT-AUDIO). Invoked on the "I Agree"
+     * click — a guaranteed user gesture — so Web Audio can be unlocked before
+     * the first reaction trial, which may run after async session creation.
+     */
+    onPrimeAudio?: () => void | Promise<void>;
   }
 
   interface ConsentCheckbox {
@@ -32,6 +38,7 @@
     checkboxes = [],
     onAccept,
     onDecline,
+    onPrimeAudio,
   }: Props = $props();
 
   let checkboxStates = $state<Record<string, boolean>>({});
@@ -64,6 +71,11 @@
       showError = true;
       return;
     }
+
+    // Unlock audio on this user gesture before the (possibly async) session
+    // start so the reaction engine's AudioContext can resume without tripping
+    // the browser autoplay policy. Best-effort; never blocks consent.
+    void onPrimeAudio?.();
 
     const consentData: ConsentData = {
       accepted: true,

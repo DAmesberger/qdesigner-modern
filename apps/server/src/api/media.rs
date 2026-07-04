@@ -1,5 +1,8 @@
 use axum::{
+    body::Body,
     extract::{Multipart, Path, Query, State},
+    http::{header, HeaderMap, StatusCode},
+    response::Response,
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -290,6 +293,123 @@ pub async fn get_media(
         .await?;
 
     Ok(Json(MediaAssetWithUrl { asset, url }))
+}
+
+/// GET /api/media/:id/content — same-origin streaming proxy (contract D1).
+///
+/// Streams the S3 object bytes on the API origin instead of redirecting to
+/// an expiring presigned MinIO URL. This is what fixes cross-origin WebGL
+/// texture taint, COEP `require-corp` on the fillout route, and the
+/// Cache-API keying problem (a presigned URL expires and re-issues, so it
+/// can't be a durable cache key).
+///
+/// Authorization is by RLS admission, mirroring the by-code anonymous-read
+/// posture (ADR 0012/0015): this route runs under `set_fillout_rls_context`
+/// (optional JWT), and the `SELECT` below is admitted either by the 00014
+/// `media_assets_select` org-member policy (authenticated project member)
+/// or by the 00025 `media_assets_select_via_published_questionnaire` policy
+/// (asset referenced by a published questionnaire — anonymous fillout). A
+/// non-admitted row simply isn't returned → 404.
+///
+/// Honors a single `Range` (`bytes=start-end`) by passing it through to S3
+/// and replying `206` with `Content-Range`; otherwise `200` full body.
+/// The response carries `Content-Type` (from the stored mime), an `ETag`
+/// (the immutable storage key), `Accept-Ranges: bytes`, and
+/// `Cache-Control: public, max-age=31536000, immutable`.
+#[utoipa::path(
+    get,
+    path = "/api/media/{id}/content",
+    params(
+        ("id" = Uuid, Path, description = "Media asset id")
+    ),
+    responses(
+        (status = 200, description = "Media object bytes", content_type = "application/octet-stream"),
+        (status = 206, description = "Partial media object bytes (range request)", content_type = "application/octet-stream"),
+        (status = 404, description = "Media asset not found", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["media"]
+)]
+pub async fn stream_media_content(
+    State(state): State<AppState>,
+    tx: Tx,
+    Path(media_id): Path<Uuid>,
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    // Look the asset up inside the fillout RLS transaction. Admission by
+    // the OR-merged SELECT policies decides visibility; a hidden row
+    // resolves to 404, which is exactly the anonymous-authz behaviour we
+    // want. The guard is scoped so the tx lock is released before the S3
+    // stream is set up (and before the middleware commits the read-only tx).
+    let asset = {
+        let mut guard = tx.lock().await;
+        let tx = guard
+            .as_mut()
+            .expect("fillout_rls_context middleware placed a transaction");
+
+        sqlx::query_as::<_, MediaAsset>(
+            r#"
+            SELECT id, organization_id, filename, content_type, size_bytes,
+                   storage_key, uploaded_by, created_at
+            FROM media_assets WHERE id = $1
+            "#,
+        )
+        .bind(media_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Media asset not found".into()))?
+    };
+
+    let range = headers
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+
+    let object = state
+        .storage
+        .get_object(&asset.storage_key, range.as_deref())
+        .await?;
+
+    // Build a streaming Body directly over the S3 ByteStream — the object
+    // is never fully buffered in memory. `ByteStream::next` yields
+    // `Result<Bytes, _>` chunks; `unfold` threads the stream as state.
+    let body = Body::from_stream(futures_util::stream::unfold(
+        object.body,
+        |mut stream| async move { stream.next().await.map(|chunk| (chunk, stream)) },
+    ));
+
+    // The storage key is immutable and unique per asset → a stable, strong
+    // cache validator.
+    let etag = format!("\"{}\"", asset.storage_key);
+
+    let mut builder = Response::builder()
+        .header(header::CONTENT_TYPE, asset.content_type.as_str())
+        .header(header::ACCEPT_RANGES, "bytes")
+        .header(header::ETAG, etag)
+        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable");
+
+    // S3 populates content_range only when it actually served a range.
+    let is_partial = range.is_some() && object.content_range.is_some();
+    if is_partial {
+        builder = builder.status(StatusCode::PARTIAL_CONTENT);
+        if let Some(cr) = object.content_range.as_deref() {
+            builder = builder.header(header::CONTENT_RANGE, cr);
+        }
+        if let Some(len) = object.content_length {
+            builder = builder.header(header::CONTENT_LENGTH, len);
+        }
+    } else {
+        builder = builder.status(StatusCode::OK);
+        // Prefer S3's authoritative length for the bytes actually streamed;
+        // fall back to the DB size only when S3 omits it. Using the DB value in
+        // preference would truncate/hang the connection if the row's size_bytes
+        // ever diverges from the real object (e.g. replaced out-of-band).
+        let len = object.content_length.filter(|&n| n > 0).unwrap_or(asset.size_bytes);
+        builder = builder.header(header::CONTENT_LENGTH, len);
+    }
+
+    builder
+        .body(body)
+        .map_err(|e| ApiError::Internal(format!("Failed to build media response: {e}")))
 }
 
 /// DELETE /api/media/:id

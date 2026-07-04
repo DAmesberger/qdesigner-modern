@@ -1,4 +1,5 @@
 import type { Questionnaire, Question, StimulusConfig as Stimulus } from '$lib/shared';
+import { mediaContentUrl } from '$lib/services/mediaService';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- resource manager caches heterogeneous decoded assets
 type DynamicValue = any;
@@ -28,18 +29,9 @@ export class ResourceManager {
   private videoCache: Map<string, HTMLVideoElement> = new Map();
   private audioCache: Map<string, AudioBuffer> = new Map();
   private audioContext: AudioContext;
-  private gl: WebGL2RenderingContext | null = null;
-  private textureCache: Map<string, WebGLTexture> = new Map();
-  
+
   constructor() {
     this.audioContext = new AudioContext();
-  }
-
-  /**
-   * Initialize with WebGL context for texture creation
-   */
-  public setWebGLContext(gl: WebGL2RenderingContext) {
-    this.gl = gl;
   }
 
   /**
@@ -68,6 +60,10 @@ export class ResourceManager {
       this.scanStimulus(question.stimulus as DynamicValue);
     }
 
+    // Scan reaction-experiment media assets (config.assets) so they are preloaded and
+    // seeded into ReactionEngine's caches via seedFromResourceManager.
+    this.scanReactionAssets(question);
+
     // Scan response options for images
     if (question.responseOptions) {
       for (const option of question.responseOptions) {
@@ -75,6 +71,31 @@ export class ResourceManager {
           this.registerResource(option.label, 'image', option.label);
         }
       }
+    }
+  }
+
+  /**
+   * Scan a reaction-experiment question's media assets. Each `config.assets` entry is a
+   * ReactionExperimentAssetRef ({ mediaId, kind, url? }); the reaction runtime resolves
+   * its stimulus src to the stable same-origin proxy `mediaContentUrl(mediaId)` (or the
+   * literal `url`). Registering resources under that exact key means preloadAll() fills
+   * the image/video/audio caches with entries ReactionEngine.seedFromResourceManager can
+   * copy by key — avoiding on-demand network loads at trial time.
+   */
+  private scanReactionAssets(question: Question) {
+    const config = (question as DynamicValue).config;
+    const assets = config?.assets;
+    if (!Array.isArray(assets)) return;
+
+    for (const asset of assets) {
+      if (!asset) continue;
+      const kind = asset.kind;
+      if (kind !== 'image' && kind !== 'video' && kind !== 'audio') continue;
+
+      const url = asset.mediaId ? mediaContentUrl(asset.mediaId) : asset.url;
+      if (!url) continue;
+
+      this.registerResource(url, kind, url);
     }
   }
 
@@ -212,19 +233,15 @@ export class ResourceManager {
   private async loadImage(resource: Resource): Promise<void> {
     return new Promise((resolve, reject) => {
       const img = new Image();
+      // Set crossOrigin BEFORE src: media now resolves to the same-origin proxy
+      // (`/api/media/{id}/content`), so this is a no-op for those, but keeping it
+      // 'anonymous' and assigned before the request starts is defense-in-depth that
+      // guarantees the decoded image is never tainted for WebGL texture upload
+      // (texImage2D throws SECURITY_ERR on a tainted source).
       img.crossOrigin = 'anonymous';
-      
+
       img.onload = () => {
         this.imageCache.set(resource.id, img);
-        
-        // Create WebGL texture if context available
-        if (this.gl) {
-          const texture = this.createTexture(img);
-          if (texture) {
-            this.textureCache.set(resource.id, texture);
-          }
-        }
-        
         resolve();
       };
       
@@ -237,50 +254,13 @@ export class ResourceManager {
   }
 
   /**
-   * Create WebGL texture from image
-   */
-  private createTexture(image: HTMLImageElement): WebGLTexture | null {
-    if (!this.gl) return null;
-    
-    const gl = this.gl;
-    const texture = gl.createTexture();
-    if (!texture) return null;
-
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    
-    // Upload image to texture
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    
-    // Set texture parameters
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    
-    // Generate mipmaps if power of 2
-    if (this.isPowerOf2(image.width) && this.isPowerOf2(image.height)) {
-      gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-    } else {
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    }
-    
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    return texture;
-  }
-
-  /**
-   * Check if value is power of 2
-   */
-  private isPowerOf2(value: number): boolean {
-    return (value & (value - 1)) === 0;
-  }
-
-  /**
    * Load video and prepare for playback
    */
   private async loadVideo(resource: Resource): Promise<void> {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
+      // crossOrigin MUST be assigned before src (same rationale as loadImage): a video
+      // sampled into a WebGL texture taints the context unless it was fetched with CORS.
       video.crossOrigin = 'anonymous';
       video.preload = 'auto';
       video.muted = true; // Required for autoplay
@@ -344,10 +324,6 @@ export class ResourceManager {
   
   public getImage(id: string): HTMLImageElement | undefined {
     return this.imageCache.get(id);
-  }
-
-  public getTexture(id: string): WebGLTexture | undefined {
-    return this.textureCache.get(id);
   }
 
   public getVideo(id: string): HTMLVideoElement | undefined {
@@ -425,13 +401,6 @@ export class ResourceManager {
    * Clean up resources
    */
   public dispose(): void {
-    // Clean up WebGL textures
-    if (this.gl) {
-      for (const texture of this.textureCache.values()) {
-        this.gl.deleteTexture(texture);
-      }
-    }
-
     // Clean up video elements
     for (const video of this.videoCache.values()) {
       video.pause();
@@ -448,6 +417,5 @@ export class ResourceManager {
     this.imageCache.clear();
     this.videoCache.clear();
     this.audioCache.clear();
-    this.textureCache.clear();
   }
 }

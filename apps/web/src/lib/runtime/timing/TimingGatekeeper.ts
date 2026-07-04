@@ -29,7 +29,23 @@ export interface GatekeeperResult {
  */
 export class TimingGatekeeper {
   private cachedResult: GatekeeperResult | null = null;
+  private inFlight: Promise<GatekeeperResult> | null = null;
   private readonly qualification = new DeviceQualification();
+
+  private static sharedInstance: TimingGatekeeper | null = null;
+
+  /**
+   * Session-wide gatekeeper. Both reaction runtimes and the fillout page banner
+   * resolve the same instance so device qualification/calibration runs exactly
+   * ONCE per session (cached) and the ReactionEngine reuses that measurement for
+   * visual-latency compensation instead of re-calibrating per question type.
+   */
+  static shared(): TimingGatekeeper {
+    if (!TimingGatekeeper.sharedInstance) {
+      TimingGatekeeper.sharedInstance = new TimingGatekeeper();
+    }
+    return TimingGatekeeper.sharedInstance;
+  }
 
   /**
    * Run qualification and calibration. Results are cached so subsequent
@@ -39,18 +55,30 @@ export class TimingGatekeeper {
     if (this.cachedResult && !force) {
       return this.cachedResult;
     }
+    // Memoize the in-flight run so concurrent callers (the page's pre-qualify and
+    // the ReactionEngine's qualify() inside runTrial) share ONE ~320ms calibration
+    // instead of racing two — the whole point of the shared() singleton.
+    if (this.inFlight && !force) {
+      return this.inFlight;
+    }
 
-    const report = await this.qualification.qualify();
-    const recommended = this.selectMethods(report);
+    this.inFlight = (async () => {
+      try {
+        const report = await this.qualification.qualify();
+        const recommended = this.selectMethods(report);
+        this.cachedResult = {
+          qualification: report,
+          recommended,
+          warnings: report.warnings,
+          grade: report.grade,
+        };
+        return this.cachedResult;
+      } finally {
+        this.inFlight = null;
+      }
+    })();
 
-    this.cachedResult = {
-      qualification: report,
-      recommended,
-      warnings: report.warnings,
-      grade: report.grade,
-    };
-
-    return this.cachedResult;
+    return this.inFlight;
   }
 
   /**
@@ -59,6 +87,23 @@ export class TimingGatekeeper {
    */
   getResult(): GatekeeperResult | null {
     return this.cachedResult;
+  }
+
+  /**
+   * Measured display latency in milliseconds (CONTRACT-CAL). Valid only after
+   * qualify() has run; returns 0 when unqualified so callers never over-correct
+   * on an unmeasured device.
+   *
+   * The value is the calibrated frame interval (`estimatedDisplayLatency`): a
+   * RAF timestamp marks the START of a frame's render window, but the pixels are
+   * only presented at the following vsync — roughly one frame interval later.
+   * The ReactionEngine adds this to raf-based VISUAL onset only
+   * (recorded onset = rafFrameTime + displayLatencyMs); video (rvfc) and audio
+   * (audioContext) onsets use their own hardware clocks and are NOT shifted.
+   */
+  getEstimatedDisplayLatencyMs(): number {
+    if (!this.cachedResult) return 0;
+    return this.cachedResult.qualification.calibration.estimatedDisplayLatency;
   }
 
   /**

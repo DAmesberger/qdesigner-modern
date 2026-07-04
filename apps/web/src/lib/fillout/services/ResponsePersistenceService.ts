@@ -1,6 +1,18 @@
 import { api } from '$lib/services/api';
-import { OfflineResponsePersistence } from './OfflineResponsePersistence';
+import { OfflineResponsePersistence, type TimingProvenance } from './OfflineResponsePersistence';
+import { FilloutSyncEngine } from './FilloutSyncEngine';
 import type { ResponseData, InteractionEvent } from '$lib/shared/types/response';
+
+/**
+ * Convert a performance.now()-domain timestamp (ms since the document's time
+ * origin) to a wall-clock ISO string. Returns undefined for absent/invalid
+ * values so optional server columns stay null rather than 1970/NaN.
+ */
+function toIsoFromPerf(perfMs: number | undefined): string | undefined {
+	if (perfMs == null || !Number.isFinite(perfMs) || perfMs <= 0) return undefined;
+	const origin = typeof performance !== 'undefined' ? performance.timeOrigin : 0;
+	return new Date(origin + perfMs).toISOString();
+}
 
 export interface PersistenceOptions {
 	sessionId: string;
@@ -14,10 +26,10 @@ export class ResponsePersistenceService {
 	private batchSize: number;
 	private syncInterval: number;
 	private enableOffline: boolean;
-	private responseQueue: ResponseData[] = [];
 	private eventQueue: InteractionEvent[] = [];
 	private syncTimer?: number;
 	private isSyncing = false;
+	private syncEngine: FilloutSyncEngine;
 
 	constructor(options: PersistenceOptions) {
 		this.sessionId = options.sessionId;
@@ -25,46 +37,56 @@ export class ResponsePersistenceService {
 		this.syncInterval = options.syncInterval || 5000; // 5 seconds
 		this.enableOffline = options.enableOffline ?? true;
 
+		// Drains the IndexedDB response/event/variable queue to the server.
+		this.syncEngine = new FilloutSyncEngine();
+
 		// Start periodic sync
 		this.startPeriodicSync();
 	}
 
 	/**
-	 * Save a response to the database
+	 * Save a response.
+	 *
+	 * Contract D2 (offline-first): every response is written to IndexedDB first
+	 * with a clientId UUID, then a sync is triggered when online. The server
+	 * reconciles idempotently via `ON CONFLICT (client_id) DO NOTHING`, so there
+	 * is a single result path — no direct online-submit branch.
 	 */
 	async saveResponse(response: ResponseData): Promise<void> {
 		try {
-			// Add microsecond timestamp
-			const enhancedResponse = {
-				...response,
-				session_id: this.sessionId,
-				stimulus_onset_us: response.stimulusOnset != null ? Math.floor(response.stimulusOnset * 1000) : null,
-				response_time_us: response.responseTime != null ? Math.floor(response.responseTime * 1000) : null,
-				reaction_time_us: response.reactionTime != null ? Math.floor(response.reactionTime * 1000) : null,
-				time_on_question_ms: response.timeOnQuestion ?? null,
-				client_timestamp: new Date().toISOString(),
-				is_current: true
-			};
+			await OfflineResponsePersistence.saveResponse(this.sessionId, {
+				questionId: response.questionId,
+				value: response.value,
+				reactionTimeUs:
+					response.reactionTime != null ? Math.floor(response.reactionTime * 1000) : undefined,
+				// `stimulusOnset` / `responseTime` are performance.now()-domain
+				// timestamps (ms since time origin); convert to wall-clock ISO for
+				// the server's `presented_at` / `answered_at` columns.
+				presentedAt: toIsoFromPerf(response.stimulusOnset),
+				answeredAt: toIsoFromPerf(response.responseTime),
+				// C-PROVENANCE (may be undefined): carried on the response metadata
+				// blob when the runtime captured it.
+				timingProvenance: response.metadata?.timingProvenance as TimingProvenance | undefined,
+				// Preserve the raw high-resolution timing so nothing is dropped on
+				// the way to the server (only presented/answered/reaction have
+				// dedicated columns; the rest survive in metadata).
+				metadata: {
+					...response.metadata,
+					stimulusOnsetUs:
+						response.stimulusOnset != null ? Math.floor(response.stimulusOnset * 1000) : undefined,
+					responseTimeUs:
+						response.responseTime != null ? Math.floor(response.responseTime * 1000) : undefined,
+					timeOnQuestionMs: response.timeOnQuestion,
+				},
+			});
 
-			if (this.enableOffline && !navigator.onLine) {
-				// Queue for later sync
-				this.responseQueue.push(enhancedResponse);
-				await this.saveToOfflineStore();
-			} else {
-				try {
-					await api.sessions.submitResponses(this.sessionId, [enhancedResponse]);
-				} catch (err) {
-					console.error('Failed to save response:', err);
-					// Queue for retry
-					this.responseQueue.push(enhancedResponse);
-				}
+			// Fire-and-forget flush; syncNow() is a no-op while offline and the
+			// server dedups on retry, so double-triggering is safe.
+			if (navigator.onLine) {
+				void this.syncEngine.syncNow();
 			}
 		} catch (error) {
 			console.error('Error saving response:', error as Error);
-			if (this.enableOffline) {
-				this.responseQueue.push(response);
-				await this.saveToOfflineStore();
-			}
 		}
 	}
 
@@ -176,38 +198,18 @@ export class ResponsePersistenceService {
 
 		this.isSyncing = true;
 		try {
-			// Sync responses
-			if (this.responseQueue.length > 0) {
-				await this.syncResponses();
-			}
-
 			// Sync events
 			if (this.eventQueue.length > 0) {
 				await this.flushEventQueue();
 			}
 
-			// Note: IndexedDB offline data is synced by FilloutSyncEngine (single pipeline)
+			// Responses/variables persist to IndexedDB and are drained to the
+			// server by FilloutSyncEngine (the single response pipeline, D2).
+			if (navigator.onLine) {
+				await this.syncEngine.syncNow();
+			}
 		} finally {
 			this.isSyncing = false;
-		}
-	}
-
-	/**
-	 * Sync queued responses
-	 */
-	private async syncResponses(): Promise<void> {
-		const toSync = [...this.responseQueue];
-		this.responseQueue = [];
-
-		if (toSync.length === 0) return;
-
-		try {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic response payload
-			await api.sessions.submitResponses(this.sessionId, toSync as any);
-		} catch (error) {
-			// Re-queue failed items
-			this.responseQueue.push(...toSync);
-			console.error('Failed to sync responses:', error as Error);
 		}
 	}
 
@@ -230,19 +232,12 @@ export class ResponsePersistenceService {
 	}
 
 	/**
-	 * Persist queued data to IndexedDB (via OfflineResponsePersistence).
+	 * Persist queued events to IndexedDB (via OfflineResponsePersistence).
 	 * This ensures the FilloutSyncEngine can pick it up for later sync.
+	 * Responses take the offline-first path directly in {@link saveResponse}.
 	 */
 	private async saveToOfflineStore(): Promise<void> {
 		try {
-			for (const resp of this.responseQueue) {
-				await OfflineResponsePersistence.saveResponse(this.sessionId, {
-					questionId: resp.questionId,
-					value: resp.value,
-					reactionTimeUs: resp.reactionTime != null ? Math.floor(resp.reactionTime * 1000) : undefined,
-					metadata: resp.metadata,
-				});
-			}
 			for (const evt of this.eventQueue) {
 				await OfflineResponsePersistence.saveEvent(this.sessionId, {
 					eventType: evt.eventType,

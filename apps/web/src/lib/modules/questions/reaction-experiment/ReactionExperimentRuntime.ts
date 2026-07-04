@@ -4,7 +4,9 @@ import type {
   QuestionRuntimeResult,
 } from '$lib/runtime/core/question-runtime';
 import { ReactionEngine } from '$lib/runtime/reaction';
-import { computeDerivedReactionMetrics } from '$lib/modules/questions/reaction-time/model/reaction-scoring';
+import { TimingGatekeeper } from '$lib/runtime/timing';
+import { mediaContentUrl } from '$lib/services/mediaService';
+import { computeDerivedReactionMetrics, aggregateReactionProvenance } from '$lib/modules/questions/reaction-time/model/reaction-scoring';
 import type { ReactionTaskType } from '$lib/modules/questions/reaction-time/model/reaction-schema';
 import {
   compileReactionExperimentPlan,
@@ -33,6 +35,9 @@ interface TrialResponse {
     droppedFrames: number;
     jitter: number;
   };
+  /** True when the trial was invalidated (e.g. stimulus render failed); not a genuine timeout. */
+  invalid: boolean;
+  invalidReason: string | null;
 }
 
 export class ReactionExperimentRuntime implements IQuestionRuntime {
@@ -52,9 +57,27 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
       canvas: context.canvas,
       renderer: context.renderer,
       eventTarget: document,
+      // Slice 3.4 (CONTRACT-CAL): hand the engine the session-wide gatekeeper.
+      // The engine runs qualify() once before the first trial and reads
+      // getEstimatedDisplayLatencyMs() to compensate raf-based visual onset.
+      gatekeeper: TimingGatekeeper.shared(),
     });
 
     this.engine.seedFromResourceManager(context.resourceManager);
+
+    // Slice 3.4 (CONTRACT-AUDIO): create + resume the AudioContext now. prepare()
+    // runs right before the first trial, under the sticky user activation from
+    // the consent / start gesture, so resume() is permitted and audio decode
+    // won't stall onset timing mid-trial.
+    await this.engine.primeAudio().catch(() => {});
+  }
+
+  /**
+   * Prime the reaction engine's AudioContext (CONTRACT-AUDIO). Safe to call from
+   * a user-gesture handler; no-op if the engine is not constructed yet.
+   */
+  public async primeAudio(): Promise<void> {
+    await this.engine?.primeAudio();
   }
 
   public async run(context: QuestionRuntimeContext): Promise<QuestionRuntimeResult> {
@@ -68,11 +91,21 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
     }
 
     const config = normalizeReactionExperimentConfig(context.question);
-    const trialPlan = compileReactionExperimentPlan(config, {
-      questionnaire: context.questionnaire,
-      question: context.question,
-      variableEngine: context.variableEngine,
-    });
+    const trialPlan = compileReactionExperimentPlan(
+      config,
+      {
+        questionnaire: context.questionnaire,
+        question: context.question,
+        variableEngine: context.variableEngine,
+      },
+      {
+        // Fillout runtime: load reaction media from the stable same-origin proxy
+        // (not the designer-baked, expiring, cross-origin presigned URL) so the
+        // WebGL texture isn't tainted and the URL is a durable offline cache key.
+        resolveAssetSrc: (asset) =>
+          asset.mediaId ? mediaContentUrl(asset.mediaId) : asset.url,
+      }
+    );
 
     const stimuli = trialPlan.map((planned) => planned.trial.stimulus).filter(Boolean);
     await engine.warmUpStimuli(stimuli);
@@ -111,6 +144,8 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
           droppedFrames: result.stats.droppedFrames,
           jitter: result.stats.jitter,
         },
+        invalid: result.invalid ?? false,
+        invalidReason: result.invalidReason ?? null,
       });
     }
 
@@ -144,6 +179,10 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
         trialCount: responses.length,
         assetCount: config.assets.length,
         blockCount: config.blocks.length,
+        // C-PROVENANCE aggregate: rolls the per-trial timing methods and frame
+        // health up to the response level so `timing_provenance` is populated on
+        // the persistence path (per-trial detail stays in `value.responses`).
+        timingProvenance: aggregateReactionProvenance(testResponses, averageRT),
       },
     };
   }

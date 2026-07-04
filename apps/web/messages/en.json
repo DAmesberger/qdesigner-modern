@@ -330,7 +330,7 @@
   "help_steps_reactionTime_stimulus_title": "Configure Stimuli",
   "help_steps_reactionTime_taskType_description": "Choose a task paradigm: Simple RT, Choice RT, Go/No-Go, Stroop, Flanker, IAT, or custom.",
   "help_steps_reactionTime_taskType_title": "Reaction Time Tasks",
-  "help_steps_reactionTime_timing_description": "Configure timing with microsecond precision: stimulus duration, inter-stimulus interval, response timeout.",
+  "help_steps_reactionTime_timing_description": "Configure timing with frame-accurate, high-resolution onset: stimulus duration, inter-stimulus interval, response timeout.",
   "help_steps_reactionTime_timing_title": "Timing Settings",
   "help_steps_reactionTime_trials_description": "Define the sequence of trials, randomization, and block structure for your reaction time task.",
   "help_steps_reactionTime_trials_title": "Trial Sequence",

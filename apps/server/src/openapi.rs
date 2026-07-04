@@ -160,6 +160,7 @@ impl Modify for SecurityAddon {
         api::media::list_media,
         api::media::upload_media,
         api::media::get_media,
+        api::media::stream_media_content,
         api::media::delete_media,
         api::media::upload_session_media
     ),
@@ -223,6 +224,7 @@ impl Modify for SecurityAddon {
             api::templates::UpdateTemplateRequest,
             api::sessions::Session,
             api::sessions::CreateSessionRequest,
+            api::sessions::CreateSessionResponse,
             api::sessions::UpdateSessionRequest,
             api::sessions::ResponseRecord,
             api::sessions::SubmitResponseRequest,

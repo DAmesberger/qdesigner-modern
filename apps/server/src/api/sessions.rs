@@ -44,6 +44,23 @@ pub struct CreateSessionRequest {
     pub version_major: Option<i32>,
     pub version_minor: Option<i32>,
     pub version_patch: Option<i32>,
+    /// Client-generated browser fingerprint hash used for create-time
+    /// duplicate-participation detection. Optional; when omitted we fall
+    /// back to `metadata->>'fingerprint'` for backward compatibility.
+    pub fingerprint: Option<String>,
+}
+
+/// Response for `POST /api/sessions`. Flattens the created [`Session`] and
+/// adds `duplicate` — true when a prior COMPLETED session for the same
+/// questionnaire shares the caller-provided fingerprint. The session is
+/// created regardless; the client decides whether to warn or block per the
+/// questionnaire's fraud-prevention settings (repeat participation may be
+/// allowed, so the server does not hard-block here).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CreateSessionResponse {
+    #[serde(flatten)]
+    pub session: Session,
+    pub duplicate: bool,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -335,7 +352,7 @@ pub struct CheckDuplicateResponse {
     path = "/api/sessions",
     request_body = CreateSessionRequest,
     responses(
-        (status = 201, description = "Session created", body = Session),
+        (status = 201, description = "Session created", body = CreateSessionResponse),
         (status = 403, description = "Questionnaire not published or access denied", body = crate::openapi::ErrorEnvelope),
         (status = 404, description = "Questionnaire not found", body = crate::openapi::ErrorEnvelope)
     ),
@@ -346,7 +363,7 @@ pub async fn create_session(
     OptionalUser(user): OptionalUser,
     tx: Tx,
     Json(body): Json<CreateSessionRequest>,
-) -> Result<(axum::http::StatusCode, Json<Session>), ApiError> {
+) -> Result<(axum::http::StatusCode, Json<CreateSessionResponse>), ApiError> {
     let mut guard = tx.lock().await;
     let tx = guard
         .as_mut()
@@ -391,6 +408,43 @@ pub async fn create_session(
     // Anonymous fillout keeps NULL.
     let session_user_id = user.as_ref().map(|u| u.user_id);
 
+    let metadata = body
+        .metadata
+        .clone()
+        .unwrap_or_else(|| serde_json::json!({}));
+
+    // Fingerprint for create-time duplicate-participation detection.
+    // Prefer the dedicated request field; fall back to the legacy
+    // `metadata->>'fingerprint'` slot the pre-00026 client wrote to.
+    let fingerprint = body.fingerprint.clone().or_else(|| {
+        metadata
+            .get("fingerprint")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    });
+
+    // Slice 2.5: create-time dedup that works for anonymous callers. The
+    // SECURITY DEFINER counter (00026) runs with the definer's BYPASSRLS
+    // rights, so it sees prior COMPLETED sessions across all callers —
+    // unlike a plain SELECT under `qdesigner_app`, which the anonymous
+    // fillout GUC cannot admit through the 00021 dual-path policy. The
+    // session is still created; `duplicate` lets the client react per the
+    // questionnaire's fraud-prevention settings (repeat participation may
+    // be allowed, so we do not hard-block here).
+    let duplicate = match fingerprint.as_deref() {
+        Some(fp) => {
+            let prior: i64 = sqlx::query_scalar(
+                "SELECT public.count_completed_fingerprint_sessions($1, $2)",
+            )
+            .bind(body.questionnaire_id)
+            .bind(fp)
+            .fetch_one(&mut **tx)
+            .await?;
+            prior > 0
+        }
+        None => false,
+    };
+
     // P6.3: generate the session id in the handler and set `app.session_id`
     // before the INSERT. The INSERT's WITH CHECK and the SELECT applied to
     // RETURNING both admit via the session_id branch. This avoids relying
@@ -408,8 +462,8 @@ pub async fn create_session(
         INSERT INTO sessions (id, questionnaire_id, participant_id, status, started_at,
                               browser_info, metadata,
                               questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch,
-                              user_id)
-        VALUES ($1, $2, $3, 'active', NOW(), $4, $5, $6, $7, $8, $9)
+                              user_id, fingerprint)
+        VALUES ($1, $2, $3, 'active', NOW(), $4, $5, $6, $7, $8, $9, $10)
         RETURNING id, questionnaire_id, participant_id, status, started_at,
                   completed_at, last_activity_at, metadata, browser_info, created_at,
                   questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch
@@ -419,11 +473,12 @@ pub async fn create_session(
     .bind(body.questionnaire_id)
     .bind(&participant_id)
     .bind(&body.browser_info)
-    .bind(body.metadata.unwrap_or_else(|| serde_json::json!({})))
+    .bind(metadata)
     .bind(ver_major)
     .bind(ver_minor)
     .bind(ver_patch)
     .bind(session_user_id)
+    .bind(&fingerprint)
     .fetch_one(&mut **tx)
     .await?;
 
@@ -438,7 +493,10 @@ pub async fn create_session(
         }),
     });
 
-    Ok((axum::http::StatusCode::CREATED, Json(session)))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(CreateSessionResponse { session, duplicate }),
+    ))
 }
 
 /// POST /api/sessions/check-duplicate — check if a fingerprint already completed this questionnaire.
@@ -459,26 +517,32 @@ pub async fn check_duplicate(
     let tx = guard
         .as_mut()
         .expect("fillout_rls_context middleware placed a transaction");
-    // Anonymous check: this reads across all sessions for a questionnaire
-    // to count completed duplicates by fingerprint. Since the request
-    // carries no JWT and no session id, only the bootstrap branch of the
-    // dual-path SELECT policy would apply — and bootstrap is only on
-    // INSERT, not SELECT. So this SELECT returns 0 under qdesigner_app
-    // for anonymous callers.
-    //
-    // The fillout client invokes /check-duplicate before creating a
-    // session, so the anonymous read returning 0 means the dedup probe
-    // becomes a no-op. The product behaviour (fingerprint-based
-    // duplicate detection) needs an alternative path that doesn't
-    // require reading other sessions' metadata; tracked in the
-    // P6.3 deferred list.
+    // Only expose the completion count for a PUBLISHED questionnaire, matching
+    // create_session's anonymous gate. Otherwise the SECURITY DEFINER counter
+    // below (which bypasses RLS) would be a count-oracle over unpublished /
+    // other-tenant drafts for any anonymous caller who guesses an id.
+    let q_status: Option<String> = sqlx::query_scalar(
+        "SELECT status FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(body.questionnaire_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if q_status.as_deref() != Some("published") {
+        return Ok(Json(CheckDuplicateResponse {
+            is_duplicate: false,
+            previous_completions: 0,
+        }));
+    }
+    // Slice 2.5: delegate to the SECURITY DEFINER counter (00026), which
+    // runs with the definer's BYPASSRLS rights and therefore sees prior
+    // COMPLETED sessions across all callers. This replaces the pre-00026
+    // plain SELECT under `qdesigner_app`, which always returned 0 for
+    // anonymous fillout — the 00021 dual-path SELECT policy admits no
+    // other session's row when the request carries no JWT and no matching
+    // `app.session_id` GUC. That no-op was tracked in the P6.3 deferred
+    // list / CLAUDE.md "Known TODOs".
     let count: i64 = sqlx::query_scalar(
-        r#"
-        SELECT COUNT(*) FROM sessions
-        WHERE questionnaire_id = $1
-          AND metadata->>'fingerprint' = $2
-          AND status = 'completed'
-        "#,
+        "SELECT public.count_completed_fingerprint_sessions($1, $2)",
     )
     .bind(body.questionnaire_id)
     .bind(&body.fingerprint)
@@ -2682,6 +2746,11 @@ pub struct SyncResponseItem {
     #[serde(alias = "answeredAt")]
     pub answered_at: Option<String>,
     pub metadata: Option<serde_json::Value>,
+    /// Per-response timing-provenance blob (contract C-PROVENANCE). Sent
+    /// snake_case as `timing_provenance`; `timingProvenance` accepted as an
+    /// alias. Optional so older clients that omit it still deserialize.
+    #[serde(default, alias = "timingProvenance")]
+    pub timing_provenance: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -2770,8 +2839,8 @@ pub async fn sync_session(
     for resp in &body.responses {
         let result = sqlx::query(
             r#"
-            INSERT INTO responses (session_id, question_id, value, reaction_time_us, presented_at, answered_at, metadata, client_id)
-            VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, COALESCE($7, '{}'::jsonb), $8)
+            INSERT INTO responses (session_id, question_id, value, reaction_time_us, presented_at, answered_at, metadata, client_id, timing_provenance)
+            VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz, COALESCE($7, '{}'::jsonb), $8, $9)
             ON CONFLICT (client_id) DO NOTHING
             "#,
         )
@@ -2783,6 +2852,7 @@ pub async fn sync_session(
         .bind(&resp.answered_at)
         .bind(&resp.metadata)
         .bind(resp.client_id)
+        .bind(&resp.timing_provenance)
         .execute(&mut **tx)
         .await?;
 

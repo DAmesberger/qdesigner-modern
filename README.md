@@ -1,6 +1,6 @@
 # QDesigner Modern
 
-A high-performance questionnaire platform for psychological and behavioral research. Features microsecond-accurate reaction time measurements, WebGL 2.0 rendering at 120+ FPS, fully offline-capable questionnaire fillout, and semantic versioning for questionnaire definitions.
+A high-performance questionnaire platform for psychological and behavioral research. Features frame-accurate reaction-time measurement (measured display-latency correction, high-resolution `event.timeStamp` input, output-latency-corrected audio onset — sub-millisecond *relative* precision, not absolute microsecond accuracy), WebGL 2.0 rendering at 120+ FPS, fully offline-capable questionnaire fillout, and semantic versioning for questionnaire definitions.
 
 ## Stack
 
@@ -55,8 +55,8 @@ window.testMode.enable();
 - **Variable System**: 47+ formula functions, conditional logic, array operations
 - **Offline-First Fillout**: Full offline capability with background sync
 - **Semantic Versioning**: Questionnaire definitions versioned for data comparability
-- **High-Precision Timing**: Microsecond-accurate response collection
-- **Multimedia Stimuli**: Images, video, audio, composite stimuli
+- **High-Resolution Timing**: frame-accurate stimulus onset + `event.timeStamp` input capture (sub-ms relative precision)
+- **Multimedia Stimuli**: Image, video, and audio reaction-time stimuli (WebGL-rendered)
 - **Statistical Analysis**: Built-in bell curve, gauge, and feedback chart components
 
 ## Development Commands

@@ -4,7 +4,19 @@
 let modulesRegistered = false;
 let registrationPromise: Promise<void> | null = null;
 
-export async function registerAllModules() {
+/**
+ * Idempotent, awaitable module registration. Resolves once the module registry
+ * is fully populated. Safe to call repeatedly and concurrently: the first call
+ * kicks off registration; later calls await the same in-flight (or already
+ * settled) promise. On the server (no `window`) it resolves immediately — module
+ * registration only matters client-side.
+ *
+ * Every code path that reads `moduleRegistry` before it is guaranteed populated
+ * (notably the fillout runtime on a resumed session — see Slice 1.8) must
+ * `await ensureModulesRegistered()` first; otherwise the runtime can start
+ * against an empty registry and drop questions.
+ */
+export async function ensureModulesRegistered(): Promise<void> {
   // Only run on client-side
   if (typeof window === 'undefined') {
     return;
@@ -111,7 +123,16 @@ export async function registerAllModules() {
   return registrationPromise;
 }
 
-// Auto-register if on client-side
+/**
+ * Back-compat alias for {@link ensureModulesRegistered}. Existing designer/palette
+ * call sites import `registerAllModules`; new code should prefer the clearer
+ * `ensureModulesRegistered` name. Both share the same in-flight promise.
+ */
+export function registerAllModules(): Promise<void> {
+  return ensureModulesRegistered();
+}
+
+// Auto-register if on client-side (import side-effect — kept for the fast path)
 if (typeof window !== 'undefined') {
-  void registerAllModules();
+  void ensureModulesRegistered();
 }

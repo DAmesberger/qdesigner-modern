@@ -49,13 +49,51 @@ export interface DraftData {
 // ── Fillout offline tables ─────────────────────────────────────────
 
 export interface FilloutQuestionnaire {
+  /**
+   * Synthetic primary key: `${questionnaireId}@${versionMajor}.${versionMinor}.${versionPatch}`
+   * (build with {@link filloutDefinitionKey}). Keying by (id, version) lets multiple versions
+   * of the same questionnaire coexist so a background refresh to a newer version never
+   * overwrites the snapshot an in-flight session pinned. The IndexedDB keyPath stays `id`
+   * (Dexie 4 forbids changing a table's primary key in an upgrade), so the composite lives
+   * in this field rather than a compound key.
+   */
   id: string;
+  /** Raw questionnaire id (the value the API and runtime use). */
+  questionnaireId: string;
   accessCode: string;
   versionMajor: number;
   versionMinor: number;
   versionPatch: number;
   data: Record<string, unknown>; // raw questionnaire JSON from API
   syncedAt: number;
+}
+
+/**
+ * Accounting row for a media asset cached in the `fillout-media-v*` Cache-API store.
+ * The Cache API carries no metadata, so recency + ownership needed to bound the cache
+ * (evict oldest-questionnaire-first, never evict a version an unsynced session pinned)
+ * live here. Compound-keyed by (url, questionnaireKey) so a URL shared by two versions
+ * has one row per version and is only deleted from the Cache once no version references it.
+ */
+export interface FilloutMediaEntry {
+  url: string; // Cache-API key (same-origin streaming-proxy URL per shared contract D1)
+  questionnaireKey: string; // filloutDefinitionKey() of the owning definition version
+  questionnaireId: string;
+  versionMajor: number;
+  versionMinor: number;
+  versionPatch: number;
+  size: number; // best-effort byte size (Content-Length at cache time); 0 when unknown
+  cachedAt: number;
+}
+
+/** Build the synthetic primary key for a version-pinned fillout definition row. */
+export function filloutDefinitionKey(
+  questionnaireId: string,
+  versionMajor: number,
+  versionMinor: number,
+  versionPatch: number
+): string {
+  return `${questionnaireId}@${versionMajor}.${versionMinor}.${versionPatch}`;
 }
 
 export interface FilloutSession {
@@ -117,6 +155,7 @@ class QDesignerDatabase extends Dexie {
   filloutResponses!: Table<FilloutResponse>;
   filloutEvents!: Table<FilloutEvent>;
   filloutVariables!: Table<FilloutVariable>;
+  filloutMedia!: Table<FilloutMediaEntry>;
 
   constructor() {
     super('QDesignerOfflineDB');
@@ -141,6 +180,52 @@ class QDesignerDatabase extends Dexie {
       filloutEvents: '++id, sessionId, clientId, synced, [sessionId+synced]',
       filloutVariables: '[sessionId+name], sessionId, synced'
     });
+
+    // v3: version-pin fillout definitions + media-cache accounting.
+    //  - filloutQuestionnaires KEEPS keyPath `id` (Dexie 4 throws on a primary-key change in
+    //    an upgrade). `id` now holds the `${questionnaireId}@maj.min.patch` composite so an
+    //    (id, version) pair is addressable and concurrent versions coexist; `questionnaireId`
+    //    is added as a plain index for GC / grouping.
+    //  - filloutMedia is new (compound PK [url+questionnaireKey]) — see FilloutMediaEntry.
+    this.version(3)
+      .stores({
+        questionnaires: 'id, userId, syncStatus, lastModified, [id+userId]',
+        syncQueue: '++id, userId, status, timestamp, [userId+status]',
+        resources: 'id, url, lastAccessed, expiresAt',
+        drafts: 'id, userId, questionnaireId, timestamp, [userId+questionnaireId]',
+        filloutQuestionnaires: 'id, questionnaireId, accessCode, syncedAt',
+        filloutSessions: 'id, questionnaireId, status, createdAt, synced, [questionnaireId+status]',
+        filloutResponses: '++id, sessionId, clientId, synced, [sessionId+synced]',
+        filloutEvents: '++id, sessionId, clientId, synced, [sessionId+synced]',
+        filloutVariables: '[sessionId+name], sessionId, synced',
+        filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt'
+      })
+      .upgrade(async (tx) => {
+        // Re-key existing v2 filloutQuestionnaires rows (keyed by bare questionnaire id) to
+        // the composite key. Read all first, then clear + re-put: every new id differs from
+        // its old id and v2 held at most one row per questionnaire id, so this is
+        // collision-free, and the whole thing runs inside the version transaction (atomic).
+        const table = tx.table('filloutQuestionnaires');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-migration row shape
+        const rows: any[] = await table.toArray();
+        if (rows.length === 0) return;
+        await table.clear();
+        for (const row of rows) {
+          const questionnaireId: string =
+            typeof row.questionnaireId === 'string' ? row.questionnaireId : row.id;
+          const versionMajor = typeof row.versionMajor === 'number' ? row.versionMajor : 1;
+          const versionMinor = typeof row.versionMinor === 'number' ? row.versionMinor : 0;
+          const versionPatch = typeof row.versionPatch === 'number' ? row.versionPatch : 0;
+          await table.put({
+            ...row,
+            id: filloutDefinitionKey(questionnaireId, versionMajor, versionMinor, versionPatch),
+            questionnaireId,
+            versionMajor,
+            versionMinor,
+            versionPatch
+          });
+        }
+      });
   }
 
   // Helper methods

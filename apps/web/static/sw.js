@@ -4,7 +4,11 @@
 const CACHE_NAME = 'qdesigner-v3';
 const RUNTIME_CACHE = 'qdesigner-runtime';
 const BUNDLE_CACHE = 'qdesigner-bundles';
-const FILLOUT_MEDIA_CACHE = 'fillout-media-v1';
+// Bumped v1 -> v2: media now keys on the stable same-origin proxy path
+// `/api/media/{id}/content` (contract D1) instead of expiring presigned MinIO URLs.
+// The old v1 cache (keyed on presigned URLs that have since expired) is dropped on
+// activate by the cache-allowlist cleanup below.
+const FILLOUT_MEDIA_CACHE = 'fillout-media-v2';
 const PROGRESS_CHANNEL = new BroadcastChannel('sw-progress');
 
 const DB_NAME = 'qdesigner-offline';
@@ -266,6 +270,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Fillout media proxy (`/api/media/{id}/content`): stable, immutable, same-origin.
+  // Cache-first against the durable media cache so offline fillout can replay it.
+  // Must be checked before the networkFirst `/api/` rule, which would otherwise
+  // capture this path.
+  if (isFilloutMedia(url)) {
+    event.respondWith(filloutMediaStrategy(request));
+    return;
+  }
+
   // Check fillout media cache first for media requests
   if (matchesPattern(request.url, CACHE_STRATEGIES.cacheFirst)) {
     event.respondWith(cacheFirstWithFilloutMedia(request));
@@ -325,6 +338,72 @@ async function fetchWithOfflineQueue(request) {
 }
 
 // ---------- Cache strategies ----------
+
+// Matches the same-origin media streaming proxy: `GET /api/media/{id}/content`.
+// The full request URL is a stable, immutable cache key (contract D1).
+const FILLOUT_MEDIA_PATH = /^\/api\/media\/[^/]+\/content$/;
+
+function isFilloutMedia(url) {
+  return url.origin === self.location.origin && FILLOUT_MEDIA_PATH.test(url.pathname);
+}
+
+async function filloutMediaStrategy(request) {
+  const cache = await caches.open(FILLOUT_MEDIA_CACHE);
+
+  // Cache-first by URL (immutable content). A cached full 200 also satisfies a
+  // range request — the media element degrades to a non-ranged load. ignoreVary
+  // so an Accept-Ranges/Vary response header can't cause a spurious miss.
+  const cached = await cache.match(request, { ignoreVary: true });
+  if (cached) {
+    return cached;
+  }
+
+  const isRange = request.headers.has('range');
+
+  // Video elements issue their FIRST request WITH a Range header (bytes=0-), so
+  // the response is a 206 that Cache.put() rejects — the object would never cache
+  // and offline video replay would be impossible. Kick off a background full
+  // (non-range) GET to populate the durable cache while the 206 streams through.
+  if (isRange) {
+    backgroundCacheFullMedia(cache, request.url);
+  }
+
+  try {
+    const response = await fetch(request);
+
+    // Only store complete 200 responses under the stable URL key (206 is skipped;
+    // the background full GET above handles the range case).
+    if (response && response.status === 200 && !isRange) {
+      cache.put(request, response.clone());
+    }
+
+    return response;
+  } catch (error) {
+    console.error('[SW] Fillout media fetch failed:', error);
+    // Return a clean transport error, NOT offline.html — an <img>/<video>/audio
+    // consumer must see a failed load, not an HTML document it would try to decode
+    // (ResourceManager.loadAudio would call decodeAudioData on HTML bytes).
+    return new Response('', {
+      status: 504,
+      statusText: 'Media Unavailable',
+      headers: { 'Content-Type': 'application/octet-stream' },
+    });
+  }
+}
+
+// Best-effort background fetch of a full (non-range) media object so the durable
+// cache is populated for offline replay. Fire-and-forget; failure is non-fatal.
+function backgroundCacheFullMedia(cache, url) {
+  fetch(url)
+    .then((full) => {
+      if (full && full.status === 200) {
+        return cache.put(url, full.clone());
+      }
+    })
+    .catch(() => {
+      // Offline or fetch failed — nothing to cache.
+    });
+}
 
 async function cacheFirstWithFilloutMedia(request) {
   // Also check fillout media cache

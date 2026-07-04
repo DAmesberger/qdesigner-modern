@@ -9,7 +9,6 @@
   import ConsentScreen from '$lib/fillout/components/ConsentScreen.svelte';
   import CompletionScreen from '$lib/fillout/components/CompletionScreen.svelte';
   import { FilloutRuntime } from '$lib/fillout/runtime/FilloutRuntime';
-  import { WebGLRenderer } from '$lib/renderer/WebGLRenderer';
   import ModularRenderer from '$lib/runtime/ModularRenderer.svelte';
   import type { FormQuestionHost, FormHostPresentation } from '$lib/runtime/core/FormQuestionHost';
   import type { Questionnaire } from '$lib/shared/types/questionnaire';
@@ -20,12 +19,16 @@
     getAvailableLocales,
     getLocaleLabel,
   } from '$lib/shared';
-  import { QuestionnaireAccessService } from '$lib/fillout/services/QuestionnaireAccessService';
   import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
+  import { FilloutOfflineSyncService } from '$lib/fillout/services/FilloutOfflineSyncService';
   import { FilloutSyncEngine } from '$lib/fillout/services/FilloutSyncEngine';
   import { QuotaService } from '$lib/fillout/services/QuotaService';
   import { FraudDetectionService } from '$lib/fillout/services/FraudDetectionService';
   import { api } from '$lib/services/api';
+  import { ensureModulesRegistered } from '$lib/modules/register-all';
+  import { TimingGatekeeper } from '$lib/runtime/timing';
+  import type { GatekeeperResult } from '$lib/runtime/timing';
+  import DeviceQualificationBanner from '$lib/runtime/timing/components/DeviceQualificationBanner.svelte';
 
   interface Props {
     data: PageData;
@@ -91,8 +94,10 @@
 
   let container = $state<HTMLDivElement>();
   let canvas = $state<HTMLCanvasElement>();
+  // CONTRACT-LAZY (Slice 4.6): the page no longer owns a WebGLRenderer. There is exactly
+  // ONE renderer, owned + lazily created by the runtime; the page keeps only the canvas
+  // (bound below) and delegates resize to runtime.resize().
   let runtime: FilloutRuntime | null = null;
-  let renderer: WebGLRenderer | null = null;
   let syncEngine: FilloutSyncEngine | null = null;
   let loading = $state(false);
   let loadingMessage = $state('Loading questionnaire...');
@@ -111,6 +116,74 @@
   let isOffline = $state(!navigator.onLine);
   let syncStatus = $state<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   let savedLocally = $state(false);
+
+  // --- Timing qualification (Slice 3.4) -------------------------------------
+  // Reaction paradigms depend on frame-exact stimulus onset. The session-wide
+  // TimingGatekeeper runs device calibration once; the ReactionEngine reuses
+  // that exact measurement (TimingGatekeeper.shared()) for visual-latency
+  // compensation, and the banner below surfaces the grade to the participant.
+  const REACTION_QUESTION_TYPES = new Set(['reaction-time', 'reaction-experiment']);
+  let qualification = $state<GatekeeperResult | null>(null);
+  let bannerDismissed = $state(false);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
+  const questionList = $derived((definition?.questions ?? []) as any[]);
+  const hasReactionQuestion = $derived(
+    questionList.some((q) => REACTION_QUESTION_TYPES.has(q?.type))
+  );
+  // The reaction-experiment paradigm (IAT / Stroop / Flanker / …) is the one that
+  // "declares it requires precision timing": its scientific validity hinges on
+  // sub-frame onset accuracy, so a red grade there is a hard warning.
+  const requiresPrecisionTiming = $derived(
+    questionList.some((q) => q?.type === 'reaction-experiment')
+  );
+  // Warn on yellow/red; green needs no banner (it would just be noise).
+  const showTimingBanner = $derived(
+    hasReactionQuestion && !bannerDismissed && qualification !== null && qualification.grade !== 'green'
+  );
+  // Red grade on a precision paradigm: prominent block/warn (participants are not
+  // hard-stopped — dead-ending a study is worse — but are strongly cautioned).
+  const timingBlocked = $derived(
+    hasReactionQuestion && requiresPrecisionTiming && qualification?.grade === 'red'
+  );
+
+  // Shared Web Audio unlock. Created + resumed on a user gesture (welcome start /
+  // consent accept) so the browser's document-scoped autoplay policy permits the
+  // reaction engine's own AudioContext.resume() when it primes audio pre-trial.
+  let audioUnlockContext: AudioContext | null = null;
+  function ensureAudioUnlocked(): void {
+    try {
+      const Ctor =
+        typeof AudioContext !== 'undefined'
+          ? AudioContext
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkit-prefixed fallback
+          : (window as any).webkitAudioContext;
+      if (!Ctor) return;
+      if (!audioUnlockContext) {
+        audioUnlockContext = new Ctor();
+      }
+      if (audioUnlockContext && audioUnlockContext.state === 'suspended') {
+        void audioUnlockContext.resume().catch(() => {});
+      }
+    } catch {
+      // Best-effort: audio unlock never blocks participation.
+    }
+  }
+
+  function beginTimingQualification(): void {
+    if (!hasReactionQuestion || qualification) return;
+    // Runs calibration once (shared + cached). The reaction engines resolve the
+    // same instance, so this does NOT double-calibrate — it just populates the
+    // banner grade in parallel with runtime startup.
+    TimingGatekeeper.shared()
+      .qualify()
+      .then((result) => {
+        qualification = result;
+      })
+      .catch(() => {
+        // Non-critical: absence of a grade just means no banner.
+      });
+  }
 
   // HTML-overlay form rendering (ADR 0018: hybrid fillout rendering contract).
   // The runtime mounts per-module runtime Svelte components here for form-style
@@ -196,8 +269,11 @@
 
     return () => {
       runtime?.dispose();
-      renderer?.destroy();
       syncEngine?.stop();
+      if (audioUnlockContext) {
+        void audioUnlockContext.close().catch(() => {});
+        audioUnlockContext = null;
+      }
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       document.body.classList.remove('fillout');
@@ -206,6 +282,9 @@
   });
 
   async function handleStart() {
+    // "Start" is a user gesture — unlock audio here so the no-consent path also
+    // satisfies the autoplay policy before any reaction trial (CONTRACT-AUDIO).
+    ensureAudioUnlocked();
     if (data.questionnaire.definition.settings?.requireConsent) {
       currentScreen = 'consent';
     } else {
@@ -225,7 +304,10 @@
     try {
       loading = true;
 
-      // Fraud prevention checks before session creation
+      // Fraud prevention checks before session creation. The fingerprint is generated here
+      // and sent to the server AT create time (below); server-side fingerprint dedup is
+      // reported back via the create response `duplicate` flag rather than a separate
+      // read-probe that RLS hides from anonymous callers (slice 2.5).
       const fpSettings = data.questionnaire.definition.settings?.fraudPrevention;
       if (fpSettings && navigator.onLine) {
         const fraudResult = await FraudDetectionService.checkAll(
@@ -234,18 +316,7 @@
         );
         fraudFingerprint = fraudResult.fingerprint;
 
-        // Server-side duplicate check via fingerprint
-        if (fpSettings.preventDuplicates && fraudResult.fingerprint) {
-          const dupCheck = await FraudDetectionService.checkDuplicateViaAPI(
-            data.questionnaire.id,
-            fraudResult.fingerprint
-          );
-          if (dupCheck.isDuplicate) {
-            fraudResult.flags.push('duplicate_fingerprint');
-            fraudResult.passed = false;
-          }
-        }
-
+        // Cookie/behavior fraud (evaluated locally) can terminate before we create a session.
         if (!fraudResult.passed) {
           if (fpSettings.fraudAction === 'terminate') {
             error = fpSettings.fraudMessage || 'This survey is not available for your submission.';
@@ -260,15 +331,69 @@
       }
 
       if (navigator.onLine) {
-        // Online: use the existing API flow
-        const { session: newSession } = await QuestionnaireAccessService.createOrResumeSession(
-          data.questionnaire.id,
-          data.participantId || undefined,
-          data.existingSession?.id
-        );
-        session = newSession;
+        if (data.existingSession) {
+          // Resume the in-flight server session addressed by ?sid= (already non-completed).
+          session = data.existingSession;
+        } else {
+          // Create a fresh server session. The version pin + fingerprint + consent/urlParams
+          // all go in the CREATE request so the server can (a) record the exact version this
+          // session ran against (slice 2.2) and (b) dedup by fingerprint atomically (slice 2.5).
+          const metadata: Record<string, unknown> = {
+            device_info: OfflineSessionService.getDeviceInfo(),
+          };
+          if (consentData) {
+            metadata.consent = { ...consentData, timestamp: new Date().toISOString() };
+          }
+          if (data.urlParams && Object.keys(data.urlParams).length > 0) {
+            metadata.urlParams = data.urlParams;
+          }
+          if (fraudFingerprint) {
+            metadata.fingerprint = fraudFingerprint;
+          }
+
+          const created = await api.sessions.create({
+            questionnaireId: data.questionnaire.id,
+            participantId: data.participantId || undefined,
+            versionMajor: data.questionnaire.versionMajor ?? 1,
+            versionMinor: data.questionnaire.versionMinor ?? 0,
+            versionPatch: data.questionnaire.versionPatch ?? 0,
+            metadata,
+          });
+          session = created;
+
+          // Server-side fingerprint dedup (slice 2.5): react to the response flag.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const createdAny = created as any;
+          const isDuplicate = createdAny.duplicate === true || createdAny.is_duplicate === true;
+          if (fpSettings?.preventDuplicates && isDuplicate) {
+            if (fpSettings.fraudAction === 'terminate') {
+              error = fpSettings.fraudMessage || 'This survey is not available for your submission.';
+              loading = false;
+              return;
+            } else if (fpSettings.fraudAction === 'redirect' && fpSettings.fraudRedirectUrl) {
+              window.location.href = fpSettings.fraudRedirectUrl;
+              return;
+            }
+            // 'flag' action: continue; the server already recorded the fingerprint + flag.
+          }
+        }
+
+        // Persist a durable LOCAL pin row for the online session so version GC /
+        // media eviction can see the version it runs against, and so it can be
+        // resumed offline. Online sessions otherwise have no filloutSessions row
+        // (the recurring trap). Fire-and-forget; failure only loses the local pin.
+        if (session?.id) {
+          await OfflineSessionService.recordServerSession({
+            id: session.id,
+            questionnaireId: data.questionnaire.id,
+            versionMajor: data.questionnaire.versionMajor ?? 1,
+            versionMinor: data.questionnaire.versionMinor ?? 0,
+            versionPatch: data.questionnaire.versionPatch ?? 0,
+            participantId: data.participantId || undefined,
+          }).catch(() => {});
+        }
       } else {
-        // Offline: create session locally
+        // Offline: create session locally, pinning the version it started against.
         const offlineSession = await OfflineSessionService.createSession(
           data.questionnaire.id,
           data.questionnaire.versionMajor ?? 1,
@@ -286,27 +411,6 @@
       }
 
       sessionStorage.setItem('qd_api_session_id', session.id);
-
-      // Store consent data, URL params, and fingerprint as session metadata
-      if (navigator.onLine) {
-        const metadata: Record<string, unknown> = {};
-        if (consentData) {
-          metadata.consent = { ...consentData, timestamp: new Date().toISOString() };
-        }
-        if (data.urlParams && Object.keys(data.urlParams).length > 0) {
-          metadata.urlParams = data.urlParams;
-        }
-        if (fraudFingerprint) {
-          metadata.fingerprint = fraudFingerprint;
-        }
-        if (Object.keys(metadata).length > 0) {
-          try {
-            await api.sessions.update(session.id, { metadata } as any);
-          } catch (err) {
-            console.error('Failed to store session metadata:', err);
-          }
-        }
-      }
 
       // Check quotas before starting runtime (online only)
       const quotaGroups = data.questionnaire.definition?.settings?.quotas;
@@ -346,19 +450,35 @@
   }
 
   async function initializeRuntime() {
-    if (!canvas) {
-      await tick();
-      if (!canvas) {
-        throw new Error('Runtime canvas is not ready');
-      }
-    }
-
     try {
       loading = true;
-      loadingMessage = 'Initializing WebGL...';
 
-      renderer = new WebGLRenderer({ canvas });
+      // Modules must be registered before the runtime can resolve question types.
+      // On a resumed session this is invoked directly from onMount (fire-and-forget)
+      // and can win the race against the root layout's un-awaited registration; an
+      // empty registry previously made QuestionnaireRuntime.showCurrentItem silently
+      // skip every item (Slice 1.8). Awaiting the shared, idempotent promise here
+      // guarantees a populated registry for both the resumed path and
+      // createSessionAndStart. Kept INSIDE the try so a registration rejection
+      // surfaces the error screen instead of stranding the participant on a blank
+      // runtime (the resumed path has no outer try/catch).
+      await ensureModulesRegistered();
 
+      // Kick device qualification for the timing banner (no-op unless this
+      // questionnaire contains a reaction paradigm). Shared + cached, so the
+      // reaction engines reuse the same result without re-calibrating.
+      beginTimingQualification();
+
+      if (!canvas) {
+        await tick();
+        if (!canvas) {
+          throw new Error('Runtime canvas is not ready');
+        }
+      }
+
+      // No page-level WebGLRenderer (CONTRACT-LAZY, Slice 4.6): the runtime owns the
+      // single renderer and creates it lazily — only if a WebGL item is reached — so a
+      // form-only questionnaire never calls getContext('webgl2').
       loadingMessage = 'Loading questionnaire...';
 
       // Fetch condition counts (online only)
@@ -394,6 +514,12 @@
 
           // Trigger sync
           syncEngine?.syncNow();
+
+          // Opportunistic GC now that a session finished. The just-completed session's
+          // definition + media stay protected until its records sync (protectedVersionKeys
+          // covers unsynced sessions), so this only reclaims already-synced stale versions.
+          FilloutOfflineSyncService.pruneDefinitions().catch(() => {});
+          FilloutOfflineSyncService.enforceMediaQuota().catch(() => {});
         },
         onSessionUpdate: (progress) => {
           if (loading) {
@@ -423,9 +549,9 @@
   }
 
   function handleResize() {
-    if (renderer && canvas) {
-      renderer.resize(window.innerWidth, window.innerHeight);
-    }
+    // Delegate to the runtime's single owned renderer (Slice 4.6). No-op until that
+    // renderer is lazily created — form-only questionnaires never allocate one.
+    runtime?.resize(window.innerWidth, window.innerHeight);
   }
 </script>
 
@@ -503,8 +629,25 @@
       requireSignature={rawDefinition.consent?.requireSignature}
       onAccept={handleConsent}
       onDecline={handleDeclineConsent}
+      onPrimeAudio={ensureAudioUnlocked}
     />
   {:else if currentScreen === 'runtime'}
+    {#if showTimingBanner && qualification}
+      <div class="timing-banner" data-testid="fillout-timing-banner">
+        <DeviceQualificationBanner
+          result={qualification}
+          onDismiss={timingBlocked ? undefined : () => (bannerDismissed = true)}
+        />
+        {#if timingBlocked}
+          <p class="timing-block-note" data-testid="fillout-timing-block-note">
+            This study measures reaction times to within a few milliseconds and
+            your device did not pass the timing check. You may continue, but the
+            recorded times may be less accurate than the study requires.
+          </p>
+        {/if}
+      </div>
+    {/if}
+
     <canvas
       bind:this={canvas}
       class="fillout-canvas"
@@ -659,6 +802,27 @@
     width: 100%;
     height: 100%;
     touch-action: none;
+  }
+
+  .timing-banner {
+    position: fixed;
+    top: 0.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 90;
+    width: min(640px, calc(100vw - 1.5rem));
+    pointer-events: auto;
+  }
+
+  .timing-block-note {
+    margin-top: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    background: hsl(var(--destructive) / 0.1);
+    border: 1px solid hsl(var(--destructive) / 0.3);
+    color: var(--destructive);
+    font-size: 0.8125rem;
+    line-height: 1.4;
   }
 
   .html-overlay {

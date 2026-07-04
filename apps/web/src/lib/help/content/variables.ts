@@ -123,7 +123,7 @@ export const variableEntries: HelpEntry[] = [
 		description:
 			'Stores reaction time measurements in microseconds (BIGINT precision). Specifically designed for psychological experiments requiring precise timing.\n\n' +
 			'**Default value:** 0\n\n' +
-			'**Precision:** Microsecond accuracy using high-resolution timers. Values are stored as integers to avoid floating-point rounding.\n\n' +
+			'**Precision:** High-resolution timing — frame-accurate stimulus onset (with measured display-latency correction) and `event.timeStamp` input capture, giving sub-millisecond *relative* precision. Values are stored as integer microseconds to avoid floating-point rounding.\n\n' +
 			'**Example uses:**\n' +
 			'- Stroop task response latency\n' +
 			'- IAT trial timing\n' +

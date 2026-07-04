@@ -37,6 +37,43 @@ export class OfflineSessionService {
 	}
 
 	/**
+	 * Record a durable LOCAL pin row for a session that was created on the SERVER
+	 * (online path). Online sessions otherwise have no `filloutSessions` row, which
+	 * would make their pinned definition/media invisible to `protectedVersionKeys`
+	 * (GC/eviction could discard an in-flight session's assets) and unavailable for
+	 * offline resume. Written with `synced = 1` so `getUnsyncedSessions()` never
+	 * treats it as a session needing a server create — the sync engine drains this
+	 * session's data via its unsynced CHILD records, and `ensureServerSession`
+	 * short-circuits on `api.sessions.get`. Idempotent (keyed by id).
+	 */
+	static async recordServerSession(input: {
+		id: string;
+		questionnaireId: string;
+		versionMajor: number;
+		versionMinor: number;
+		versionPatch: number;
+		participantId?: string;
+		metadata?: Record<string, unknown>;
+	}): Promise<void> {
+		const existing = await db.filloutSessions.get(input.id);
+		const session: FilloutSession = {
+			id: input.id,
+			questionnaireId: input.questionnaireId,
+			status: existing?.status ?? 'active',
+			versionMajor: input.versionMajor,
+			versionMinor: input.versionMinor,
+			versionPatch: input.versionPatch,
+			participantId: input.participantId ?? existing?.participantId,
+			metadata: input.metadata ?? existing?.metadata,
+			browserInfo: existing?.browserInfo,
+			createdAt: existing?.createdAt ?? Date.now(),
+			completedAt: existing?.completedAt,
+			synced: 1,
+		};
+		await db.filloutSessions.put(session);
+	}
+
+	/**
 	 * Resume an existing session from IndexedDB.
 	 */
 	static async resumeSession(sessionId: string): Promise<FilloutSession | null> {
@@ -88,6 +125,13 @@ export class OfflineSessionService {
 			status: 'abandoned',
 			synced: 0,
 		});
+	}
+
+	/**
+	 * Get a session row by id (undefined when it exists only on the server).
+	 */
+	static async getSession(sessionId: string): Promise<FilloutSession | undefined> {
+		return db.filloutSessions.get(sessionId);
 	}
 
 	/**

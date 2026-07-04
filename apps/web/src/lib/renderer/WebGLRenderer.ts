@@ -7,7 +7,27 @@ import type {
 } from '$lib/shared';
 import { vertexShaderSource, fragmentShaderSource, createShader, createProgram } from './shaders';
 
-import type { RenderContext } from '$lib/runtime/stimuli/Stimulus';
+/**
+ * Per-frame context handed to every {@link Renderable.render} and frame callback.
+ * Moved here from the deleted `runtime/stimuli/Stimulus` module (Slice 5.2) — the
+ * WebGL renderer is now the sole owner of this shape.
+ */
+export interface RenderContext {
+  /** Current time in ms (performance.now()-based). */
+  time: number;
+  /** Time since the last frame in ms. */
+  deltaTime: number;
+  /** Time since stimulus onset in ms (0 until markStimulusOnset). */
+  stimulusTime: number;
+  /** 0-1 progress for in/out transitions, when applicable. */
+  transitionProgress?: number;
+  /** Backing-store width in physical pixels. */
+  width: number;
+  /** Backing-store height in physical pixels. */
+  height: number;
+  /** Physical-to-CSS pixel ratio. */
+  pixelRatio: number;
+}
 
 export interface Renderable {
   id: string;
@@ -22,6 +42,18 @@ export type FrameCallback = (
   stats: FrameStats,
   context: RenderContext
 ) => void;
+
+/** Payload delivered to {@link WebGLRenderer.onError} when a render/upload op fails. */
+export interface RendererErrorInfo {
+  /** Human-readable label for the failing operation or resource (e.g. an image URL). */
+  source: string;
+  /** The underlying error thrown by the WebGL/DOM API. */
+  error: unknown;
+}
+
+export type RendererErrorCallback = (info: RendererErrorInfo) => void;
+export type ContextLostCallback = () => void;
+export type ContextRestoredCallback = () => void;
 
 const IDENTITY_MATRIX = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
 
@@ -57,13 +89,29 @@ export class WebGLRenderer {
   private useTextureLocation!: WebGLUniformLocation;
 
   private frameCallbacks: Set<FrameCallback> = new Set();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- WebGL API requires untyped access
-  private ext: any;
-  private gpuTime = 0;
+  private errorCallbacks: Set<RendererErrorCallback> = new Set();
+  private contextLostCallbacks: Set<ContextLostCallback> = new Set();
+  private contextRestoredCallbacks: Set<ContextRestoredCallback> = new Set();
   private backgroundColor: RGBAColor;
+
+  /** Physical-to-CSS pixel ratio applied by resizeToDisplaySize (HiDPI backing store). */
+  private pixelRatio: number;
+
+  /** True between webglcontextlost and webglcontextrestored — the loop is paused. */
+  private contextLost = false;
+  /** Whether the render loop was running when the context was lost (resume on restore). */
+  private wasRunningBeforeLoss = false;
 
   private textureCache = new WeakMap<TextureSource, WebGLTexture>();
   private uploadedTextures = new Set<WebGLTexture>();
+  /**
+   * Ordered log of every uploaded texture and the source it was created from.
+   * Enables marker-based per-trial freeing (markTextures/deleteTexturesSince) and
+   * re-upload after a context restore — neither of which the WeakMap can iterate.
+   */
+  private textureRecords: Array<{ source: TextureSource; texture: WebGLTexture }> = [];
+  /** Sources flagged for a one-shot re-upload on their next resolve (explicit dirty bit). */
+  private dirtyTextureSources = new WeakSet<TextureSource>();
 
   constructor(options: RendererOptions) {
     this.canvas = options.canvas;
@@ -87,8 +135,10 @@ export class WebGLRenderer {
     }
 
     this.gl = gl;
+    this.pixelRatio =
+      options.pixelRatio ?? (typeof window !== 'undefined' ? window.devicePixelRatio : 1) ?? 1;
+    this.registerContextListeners();
     this.initializeWebGL();
-    this.setupPerformanceMonitoring();
     this.resize(
       this.canvas.width || this.canvas.clientWidth || 1,
       this.canvas.height || this.canvas.clientHeight || 1
@@ -153,13 +203,116 @@ export class WebGLRenderer {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
 
-  private setupPerformanceMonitoring(): void {
-    this.ext = this.gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  private registerContextListeners(): void {
+    this.canvas.addEventListener(
+      'webglcontextlost',
+      this.handleContextLost as EventListener,
+      false
+    );
+    this.canvas.addEventListener(
+      'webglcontextrestored',
+      this.handleContextRestored as EventListener,
+      false
+    );
+  }
+
+  /**
+   * WebGL context loss handler. `preventDefault()` is REQUIRED — without it the
+   * browser will not fire `webglcontextrestored`. We pause the loop, flag the
+   * lost state, and surface it through both the dedicated hook and `onError` so a
+   * consumer that only subscribes to errors (the ReactionEngine, CONTRACT-ERR)
+   * still learns the frame it recorded against is invalid.
+   */
+  private handleContextLost = (event: Event): void => {
+    event.preventDefault();
+    this.contextLost = true;
+    this.wasRunningBeforeLoss = this.animationId !== null;
+    this.stop();
+    this.emitError('webglcontextlost', new Error('WebGL context lost'));
+    for (const cb of this.contextLostCallbacks) {
+      this.safeInvoke(cb);
+    }
+  };
+
+  /**
+   * WebGL context restored handler. All GPU objects created against the old
+   * context (program, uniforms, buffers, VAO, textures) are gone; rebuild them,
+   * re-assert the viewport, re-upload every known texture, then resume the loop
+   * if it was running when the context was lost.
+   */
+  private handleContextRestored = (): void => {
+    try {
+      this.contextLost = false;
+      this.initializeWebGL();
+      // Canvas backing-store dimensions survive context loss; re-assert the viewport.
+      this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+      this.rebuildTextures();
+    } catch (error) {
+      this.emitError('webglcontextrestored', error);
+      return;
+    }
+
+    for (const cb of this.contextRestoredCallbacks) {
+      this.safeInvoke(cb);
+    }
+
+    if (this.wasRunningBeforeLoss) {
+      this.wasRunningBeforeLoss = false;
+      this.start();
+    }
+  };
+
+  private emitError(source: string, error: unknown): void {
+    for (const cb of this.errorCallbacks) {
+      try {
+        cb({ source, error });
+      } catch {
+        // A misbehaving subscriber must not take down the render loop.
+      }
+    }
+  }
+
+  private safeInvoke(cb: () => void): void {
+    try {
+      cb();
+    } catch {
+      // A misbehaving subscriber must not take down the render loop.
+    }
   }
 
   public onFrame(callback: FrameCallback): () => void {
     this.frameCallbacks.add(callback);
     return () => this.frameCallbacks.delete(callback);
+  }
+
+  /**
+   * Subscribe to render/upload errors (CONTRACT-ERR). Fired when a texture upload
+   * throws (e.g. a cross-origin SecurityError), on context loss, and when an
+   * unsupported custom shader is requested. Returns an unsubscribe function.
+   */
+  public onError(callback: RendererErrorCallback): () => void {
+    this.errorCallbacks.add(callback);
+    return () => this.errorCallbacks.delete(callback);
+  }
+
+  /** Subscribe to WebGL context-loss events. Returns an unsubscribe function. */
+  public onContextLost(callback: ContextLostCallback): () => void {
+    this.contextLostCallbacks.add(callback);
+    return () => this.contextLostCallbacks.delete(callback);
+  }
+
+  /**
+   * Subscribe to context-restore events, fired after the renderer has rebuilt its
+   * program/buffers/textures. Returns an unsubscribe function.
+   */
+  public onContextRestored(callback: ContextRestoredCallback): () => void {
+    this.contextRestoredCallbacks.add(callback);
+    return () => this.contextRestoredCallbacks.delete(callback);
+  }
+
+  /** Whether the WebGL context is currently lost (loop paused, draws are no-ops). */
+  public isContextLost(): boolean {
+    return this.contextLost;
   }
 
   public setTargetFPS(targetFPS: number): void {
@@ -265,6 +418,7 @@ export class WebGLRenderer {
   }
 
   private renderFrame(currentTime: number, deltaTime: number): void {
+    if (this.contextLost) return;
     const gl = this.gl;
 
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
@@ -289,6 +443,7 @@ export class WebGLRenderer {
   }
 
   public executeCommand(command: RenderCommand): void {
+    if (this.contextLost) return;
     switch (command.type) {
       case 'clear':
         this.setBackgroundColor([
@@ -420,17 +575,28 @@ export class WebGLRenderer {
     );
   }
 
-  private executeCustomShader(params: {
+  /**
+   * Custom user-supplied fragment shaders are NOT compiled or executed by this
+   * renderer. The previous implementation silently drew white fallback geometry
+   * in the stimulus's place — it claimed to render the stimulus but showed the
+   * wrong pixels, so a reaction time captured against it would be meaningless.
+   * Rather than a silent no-op that lies about drawing, we surface the failure
+   * once per shader through onError so the engine can invalidate the trial
+   * (CONTRACT-ERR), and we draw nothing.
+   */
+  private executeCustomShader(_params: {
     shader: string;
     vertices: number[];
     uniforms?: Record<string, number | number[] | boolean>;
   }): void {
-    if (params.vertices.length < 6) {
-      return;
-    }
-
-    const fallbackColor: RGBAColor = [1, 1, 1, 1];
-    this.drawGeometry(params.vertices, fallbackColor, params.vertices.length / 2);
+    // Emit on EVERY invocation (not deduped for the renderer's lifetime): a
+    // reaction block reuses one custom-shader stimulus across many trials, and
+    // each such trial must be invalidated (CONTRACT-ERR). The sole subscriber
+    // (ReactionEngine) dedupes within a trial, so per-frame re-emits are cheap.
+    this.emitError(
+      'customShader',
+      new Error('Custom shaders are not supported by WebGLRenderer')
+    );
   }
 
   private resolveTexture(
@@ -444,21 +610,119 @@ export class WebGLRenderer {
 
     const cached = this.textureCache.get(source);
     if (cached) {
-      this.uploadTextureSource(cached, source);
+      // Re-upload only when the pixels can change (4.5): a <video> advances every
+      // frame, and callers can force a refresh via invalidateTexture. Static
+      // images and text/2D canvases are uploaded once on creation — re-uploading
+      // them on every cache hit was a needless per-frame GPU transfer.
+      if (this.isVideoSource(source) || this.dirtyTextureSources.has(source)) {
+        this.uploadTextureSource(cached, source);
+        this.dirtyTextureSources.delete(source);
+      }
       return cached;
     }
 
+    return this.createTextureForSource(source);
+  }
+
+  private createTextureForSource(source: TextureSource): WebGLTexture | null {
     const texture = this.gl.createTexture();
     if (!texture) {
       return null;
     }
 
     this.configureTexture(texture);
-    this.uploadTextureSource(texture, source);
+    // Do NOT cache a failed upload (CONTRACT-ERR): a persistently-failing source
+    // (cross-origin SecurityError, decode/OOM) would otherwise be served from the
+    // cache on trials 2..N with no re-upload and no error — so those trials would
+    // draw a blank texture yet not be invalidated. By returning null and not
+    // caching, each subsequent draw retries here and re-emits onError, so EVERY
+    // trial that uses the bad source is invalidated.
+    if (!this.uploadTextureSource(texture, source)) {
+      this.gl.deleteTexture(texture);
+      return null;
+    }
     this.textureCache.set(source, texture);
     this.uploadedTextures.add(texture);
+    this.textureRecords.push({ source, texture });
 
     return texture;
+  }
+
+  private isVideoSource(source: TextureSource): boolean {
+    return typeof HTMLVideoElement !== 'undefined' && source instanceof HTMLVideoElement;
+  }
+
+  /**
+   * Mark this source's GPU texture stale so the next draw re-uploads its pixels.
+   * Use for a 2D canvas whose contents changed between frames (video sources
+   * re-upload automatically and do not need this).
+   */
+  public invalidateTexture(source: TextureSource): void {
+    this.dirtyTextureSources.add(source);
+  }
+
+  /**
+   * Return a marker for the current texture set. Pair with deleteTexturesSince to
+   * free every texture uploaded after this point (e.g. a trial's per-trial media).
+   */
+  public markTextures(): number {
+    return this.textureRecords.length;
+  }
+
+  /**
+   * Delete every texture created since `marker`, releasing GPU memory and dropping
+   * the corresponding WeakMap cache entries so a later draw re-creates them.
+   */
+  public deleteTexturesSince(marker: number): void {
+    const from = Math.max(0, Math.min(marker, this.textureRecords.length));
+    const removed = this.textureRecords.splice(from);
+    for (const { source, texture } of removed) {
+      this.gl.deleteTexture(texture);
+      this.uploadedTextures.delete(texture);
+      this.dirtyTextureSources.delete(source);
+      if (this.textureCache.get(source) === texture) {
+        this.textureCache.delete(source);
+      }
+    }
+  }
+
+  /**
+   * Delete the texture cached for a specific source, freeing its GPU memory. The
+   * next draw of that source re-creates the texture. Returns whether one existed.
+   */
+  public deleteTexture(source: TextureSource): boolean {
+    const texture = this.textureCache.get(source);
+    if (!texture) {
+      return false;
+    }
+
+    this.gl.deleteTexture(texture);
+    this.uploadedTextures.delete(texture);
+    this.dirtyTextureSources.delete(source);
+    this.textureCache.delete(source);
+
+    const index = this.textureRecords.findIndex((record) => record.texture === texture);
+    if (index !== -1) {
+      this.textureRecords.splice(index, 1);
+    }
+
+    return true;
+  }
+
+  /**
+   * Re-create and re-upload every known texture after a context restore. The old
+   * WebGLTexture handles died with the context; we drop them and rebuild from the
+   * retained sources (the WeakMap cannot be iterated, hence textureRecords).
+   */
+  private rebuildTextures(): void {
+    const records = this.textureRecords;
+    this.textureRecords = [];
+    this.uploadedTextures.clear();
+
+    for (const { source } of records) {
+      this.textureCache.delete(source);
+      this.createTextureForSource(source);
+    }
   }
 
   private isWebGLTexture(
@@ -478,17 +742,35 @@ export class WebGLRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
 
-  private uploadTextureSource(
-    texture: WebGLTexture,
-    source: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement
-  ): void {
+  /** Returns true on a successful upload, false when texImage2D threw. */
+  private uploadTextureSource(texture: WebGLTexture, source: TextureSource): boolean {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, texture);
     try {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-    } catch {
-      // Ignore transient upload failures (e.g., media not ready yet).
+      return true;
+    } catch (error) {
+      // Do NOT silently swallow the failure (4.1 / CONTRACT-ERR). A cross-origin
+      // (tainted) source throws a SecurityError here; a consumer must be able to
+      // observe it and invalidate the trial rather than record a reaction time
+      // against a blank screen. Rendering stays resilient — we never rethrow, the
+      // loop keeps running.
+      this.emitError(this.describeTextureSource(source), error);
+      return false;
     }
+  }
+
+  private describeTextureSource(source: TextureSource): string {
+    if (typeof HTMLImageElement !== 'undefined' && source instanceof HTMLImageElement) {
+      return source.currentSrc || source.src || 'image';
+    }
+    if (typeof HTMLVideoElement !== 'undefined' && source instanceof HTMLVideoElement) {
+      return source.currentSrc || source.src || 'video';
+    }
+    if (typeof HTMLCanvasElement !== 'undefined' && source instanceof HTMLCanvasElement) {
+      return 'canvas';
+    }
+    return 'texture';
   }
 
   private drawGeometry(
@@ -561,6 +843,10 @@ export class WebGLRenderer {
           this.recentFrameTimes.length
         : 0;
 
+    // NOTE: `gpuTime` (FrameStats' optional field) is intentionally omitted. It
+    // was always 0 — EXT_disjoint_timer_query was acquired but never issued a
+    // query — so reporting it was a fake stat (4.8). Left out until a real GPU
+    // timer-query implementation lands; consumers already treat it as optional.
     return {
       fps: this.currentFPS,
       frameTime: averageFrameTime,
@@ -568,7 +854,6 @@ export class WebGLRenderer {
       targetFPS: this.targetFPS,
       totalFrames: this.totalFrames,
       jitter: Math.sqrt(variance),
-      gpuTime: this.gpuTime,
     };
   }
 
@@ -580,7 +865,17 @@ export class WebGLRenderer {
     this.gl.viewport(0, 0, clampedWidth, clampedHeight);
   }
 
-  public resizeToDisplaySize(pixelRatio = window.devicePixelRatio || 1): void {
+  /**
+   * DPR-aware resize (4.4). `resize()` takes PHYSICAL (backing-store) pixels; this
+   * multiplies the canvas's CSS size by `pixelRatio` so the backing store matches
+   * physical pixels on HiDPI displays. All draw math (drawRect/drawCircle/
+   * toClipSpace) and the viewport operate in backing-store pixels, so scaling the
+   * backing store up here only sharpens output — the pixel-space geometry stays
+   * correct. The default ratio is the one captured at construction (options.
+   * pixelRatio ?? devicePixelRatio); callers may pass a live devicePixelRatio.
+   */
+  public resizeToDisplaySize(pixelRatio: number = this.pixelRatio): void {
+    this.pixelRatio = pixelRatio;
     const width = Math.max(1, Math.floor(this.canvas.clientWidth * pixelRatio));
     const height = Math.max(1, Math.floor(this.canvas.clientHeight * pixelRatio));
 
@@ -593,6 +888,15 @@ export class WebGLRenderer {
     this.stop();
     const gl = this.gl;
 
+    this.canvas.removeEventListener(
+      'webglcontextlost',
+      this.handleContextLost as EventListener
+    );
+    this.canvas.removeEventListener(
+      'webglcontextrestored',
+      this.handleContextRestored as EventListener
+    );
+
     gl.deleteBuffer(this.positionBuffer);
     gl.deleteBuffer(this.texCoordBuffer);
     gl.deleteProgram(this.program);
@@ -601,6 +905,11 @@ export class WebGLRenderer {
       gl.deleteTexture(texture);
     }
     this.uploadedTextures.clear();
+    this.textureRecords = [];
+    this.frameCallbacks.clear();
+    this.errorCallbacks.clear();
+    this.contextLostCallbacks.clear();
+    this.contextRestoredCallbacks.clear();
   }
 
   public addRenderable(renderable: Renderable): void {

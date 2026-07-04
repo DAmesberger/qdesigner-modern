@@ -10,8 +10,32 @@ import { validateMediaFile } from '$lib/shared/types/media';
 import type { MediaAsset as ApiMediaAsset } from '$lib/shared/types/api';
 
 const MEDIA_LIST_TIMEOUT_MS = 8000;
-const MEDIA_URL_TIMEOUT_MS = 5000;
 const MEDIA_UPLOAD_TIMEOUT_MS = 120000;
+
+// Same-origin API base for the media streaming proxy. Empty in dev/prod (the SvelteKit
+// `/api` proxy / same origin serves the backend); mirrors `$lib/api/runtime` so proxied
+// media URLs share the app's origin.
+//
+// The backend is Bearer-only (NO cookie auth). The streaming proxy
+// (`GET /api/media/{id}/content`) authorizes via the `Authorization: Bearer` header OR
+// anonymously when the asset is referenced by a PUBLISHED questionnaire. A bare
+// `<img>`/`<video>` element cannot send a Bearer header, so the proxy path only loads in
+// such an element for PUBLISHED media (the fillout runtime). Authenticated DESIGNER
+// surfaces previewing DRAFT/unpublished media must instead use a PRESIGNED url — the
+// signature is the auth, so it loads in a bare element. Hence the split below:
+// `getContentUrl` (proxy, fillout) vs `getSignedUrl` (presigned, designer).
+const MEDIA_API_BASE = import.meta.env.VITE_API_URL || '';
+
+/**
+ * Resolve a media asset id to its stable, same-origin streaming URL (contract D1):
+ * `GET /api/media/{id}/content`. The path is deterministic and immutable, so it is
+ * (a) same-origin (no WebGL texture taint / COEP require-corp violation) and (b) usable
+ * as a durable Cache-API key for offline fillout. Used by the fillout runtime, where
+ * participants only ever see PUBLISHED media (for which the proxy authorizes anonymously).
+ */
+export function mediaContentUrl(mediaId: string): string {
+  return `${MEDIA_API_BASE}/api/media/${encodeURIComponent(mediaId)}/content`;
+}
 
 type ApiMediaAssetPayload = Partial<ApiMediaAsset> & {
   asset?: Partial<ApiMediaAsset>;
@@ -151,28 +175,68 @@ export class MediaService {
   }
 
   /**
-   * Get a URL for media access
+   * Resolve a media id to a PRESIGNED url via `GET /api/media/{id}` (authenticated).
+   *
+   * The presigned signature is itself the authorization, so the returned url loads in a
+   * bare `<img>`/`<video>` element with no `Authorization` header. This is the resolver
+   * for authenticated DESIGNER surfaces, which may preview DRAFT/unpublished media that
+   * the anonymous streaming proxy would 404. Fillout runtime code must use `getContentUrl`.
    */
   async getSignedUrl(mediaId: string): Promise<string> {
-    const result = await withTimeout(api.media.getUrl(mediaId), MEDIA_URL_TIMEOUT_MS, 'Media URL lookup');
-    return result.url;
+    const { url } = await api.media.getUrl(mediaId);
+    return url;
   }
 
   /**
-   * Get multiple URLs at once
+   * Resolve multiple media ids to PRESIGNED urls (designer). There is no batch presign
+   * endpoint, so this fans out one `GET /api/media/{id}` per id. Ids that fail to resolve
+   * are omitted from the map (the caller renders a broken-media placeholder for those).
+   *
+   * `_expiresInSeconds` is retained for call-site compatibility; expiry is set server-side.
    */
   async getSignedUrls(mediaIds: string[], _expiresInSeconds?: number): Promise<Record<string, string>> {
     const urls: Record<string, string> = {};
 
-    await Promise.all(
+    const resolved = await Promise.all(
       mediaIds.map(async (id) => {
         try {
-          urls[id] = await this.getSignedUrl(id);
+          const { url } = await api.media.getUrl(id);
+          return [id, url] as const;
         } catch (error) {
-          console.error(`Failed to get URL for media ${id}:`, error);
+          console.error(`[MediaService] Failed to resolve presigned URL for ${id}:`, error);
+          return null;
         }
       })
     );
+
+    for (const entry of resolved) {
+      if (entry) {
+        urls[entry[0]] = entry[1];
+      }
+    }
+
+    return urls;
+  }
+
+  /**
+   * Resolve a media id to its stable same-origin streaming-proxy URL (contract D1) for the
+   * FILLOUT runtime. No network round-trip — the URL is deterministic. Kept async for
+   * call-site symmetry with `getSignedUrl`.
+   */
+  async getContentUrl(mediaId: string): Promise<string> {
+    return mediaContentUrl(mediaId);
+  }
+
+  /**
+   * Resolve multiple media ids to their stable same-origin streaming-proxy URLs (fillout
+   * runtime). The proxy path is immutable (`Cache-Control: ..., immutable`) and never expires.
+   */
+  async getContentUrls(mediaIds: string[]): Promise<Record<string, string>> {
+    const urls: Record<string, string> = {};
+
+    for (const id of mediaIds) {
+      urls[id] = mediaContentUrl(id);
+    }
 
     return urls;
   }

@@ -250,3 +250,56 @@ Server test breakdown after Phase 6 (`cargo test --include-ignored`):
 2. The bonus probe in P6.6 confirmed: rls_enforcement tests pass with FORCE removed because non-owner ENABLE is what binds the test role. FORCE in `00022` is declarative posture / future-proofing, not load-bearing protection against current roles.
 3. `check_duplicate` is functionally a no-op for anonymous callers post-Phase-6 (dual-path SELECT hides other sessions). Logged as the only behavioural regression — see Known TODOs in `CLAUDE.md`.
 4. `tests/rbac_integration.rs::organizations_policy_denies_non_member` was deleted in P6.2 because the policy it tested no longer exists (ADR 0015 disabled RLS on `organizations`). The handler-layer test (`cross_tenant_org_membership_check_denies_non_member`, P6.6) covers the surviving contract.
+
+---
+
+# Phase 8 — Fillout renderer & reaction-framework remediation (closeout)
+
+**Captured:** 2026-07-04
+**Branch:** `phase-8/design-system` (carries the design-system arc + Phases 1–5 of the fillout fix)
+**Plan:** `PHASE_8_FILLOUT_FIX_PLAN.md` (Phases 1–5; ADR 0023)
+
+## Phase 8 summary
+
+| # | Metric | Post-Phase 6 | Post-Phase 8 |
+|---|---|---|---|
+| 1 | Frontend web suite | 43 files / 716 | **~800 passed** (768 → 770 → 784 → 800 across fillout-fix Phases 1→2→3→4) |
+| 2 | Scripting-engine standalone | 6 files / 223 | 6 files / 223 (unchanged) |
+| 3 | Server tests (`--include-ignored`) | 44/44 | **44/44** (new fillout migrations 00024/00025/00026 apply in order on a clean DB; `sync_session_dedup` exercises the `timing_provenance` insert) |
+| 4 | svelte-check | 0/0 | 0/0 |
+| 5 | Lint | 0/0 | 0/0 |
+| 6 | Frontend build | FAILED (favicon) → later fixed | not re-captured here |
+| 7 | `cargo check` | exit 0 | exit 0 |
+| 8 | `cargo build` | exit 0 | exit 0 |
+
+The web-suite growth tracks per-phase additions: persistence-timing + offline-roundtrip
+regressions (Phases 1–2), deterministic `ReactionEngine` tests with a mock renderer + injected
+clock (Phase 3), and `WebGLRenderer`/engine-robustness tests (Phase 4).
+
+## Phase 8 deliverables (fillout fix)
+
+- **3 new migrations** (`00024`–`00026`) — `responses.timing_provenance JSONB` + supporting
+  columns/indexes for version-pinned sessions and media proxying.
+- **Rendering finalized to a single hybrid contract** (ADR 0023): one WebGL path
+  (`ReactionEngine` + `WebGLRenderer`, v1 reaction stimuli only); the DOM overlay
+  (`FormQuestionHost`) renders all form/display/analytics/instruction items. The hollow
+  `QuestionPresenter` + `runtime/renderers/*` + `runtime/stimuli/*` stacks were deleted (its
+  `RenderContext` type inlined into `WebGLRenderer`); the loader/cache half of `ResourceManager`
+  was kept.
+- **D1 same-origin media proxy** (`GET /api/media/{id}/content`) + **D2 offline-first single
+  write path** (IndexedDB-first, `clientId` dedup) + **per-session version pinning**.
+- **Reaction-timing correctness** — display/output-latency correction, rVFC video onset,
+  anticipatory/false-start flagging, and the corrected "frame-accurate onset; sub-ms relative
+  precision" claim across CLAUDE.md / README / app.html / help / tour.
+- **1 new ADR** (`0023-fillout-hybrid-rendering.md`) finalizing ADR 0018; CLAUDE.md architecture
+  sections updated; this baseline row.
+
+## Operational notes
+
+1. Migrations `00024`/`00025`/`00026` must apply in order on a clean DB; a fresh volume is the
+   safe path after pulling Phase 8.
+2. Each fillout-fix phase carried a live-browser golden-path gate in addition to type/test green
+   — type/test green has demonstrably lied about this surface (the prompt-never-renders bug
+   passed a green suite). Live browser QA consolidation is tracked in the plan.
+3. Slices 5.2 (delete the hollow stacks) and 5.3 (this doc + ADR 0023) are companion slices; the
+   docs describe the finalized end state where the dead stacks are gone.

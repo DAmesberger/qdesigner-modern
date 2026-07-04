@@ -1,61 +1,107 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { WebGLRenderer } from './WebGLRenderer';
 
+type MockGl = ReturnType<typeof createMockGl>;
+
+/**
+ * A reasonably complete WebGL2 mock. Every method is a spy so tests can assert
+ * call counts (rebuild-after-restore, video-only re-upload) or override behaviour
+ * (a throwing texImage2D for the upload-error path).
+ */
+function createMockGl() {
+  return {
+    // renderFrame reads gl.canvas.width/height — filled in by setup().
+    canvas: undefined as unknown as HTMLCanvasElement,
+    getExtension: vi.fn(),
+    createShader: vi.fn(() => ({})),
+    shaderSource: vi.fn(),
+    compileShader: vi.fn(),
+    getShaderParameter: vi.fn(() => true),
+    createProgram: vi.fn(() => ({})),
+    attachShader: vi.fn(),
+    linkProgram: vi.fn(),
+    getProgramParameter: vi.fn(() => true),
+    getAttribLocation: vi.fn(() => 0),
+    getUniformLocation: vi.fn(() => ({})),
+    createBuffer: vi.fn(() => ({})),
+    createVertexArray: vi.fn(() => ({})),
+    bindVertexArray: vi.fn(),
+    enableVertexAttribArray: vi.fn(),
+    bindBuffer: vi.fn(),
+    vertexAttribPointer: vi.fn(),
+    enable: vi.fn(),
+    blendFunc: vi.fn(),
+    viewport: vi.fn(),
+    clearColor: vi.fn(),
+    clear: vi.fn(),
+    useProgram: vi.fn(),
+    createTexture: vi.fn(() => ({})),
+    bindTexture: vi.fn(),
+    texParameteri: vi.fn(),
+    texImage2D: vi.fn(),
+    activeTexture: vi.fn(),
+    uniform1i: vi.fn(),
+    uniform4fv: vi.fn(),
+    uniformMatrix3fv: vi.fn(),
+    bufferData: vi.fn(),
+    drawArrays: vi.fn(),
+    deleteBuffer: vi.fn(),
+    deleteProgram: vi.fn(),
+    deleteTexture: vi.fn(),
+    deleteShader: vi.fn(),
+    getShaderInfoLog: vi.fn(() => ''),
+    getProgramInfoLog: vi.fn(() => ''),
+    VERTEX_SHADER: 35633,
+    FRAGMENT_SHADER: 35632,
+    COMPILE_STATUS: 35713,
+    LINK_STATUS: 35714,
+    ARRAY_BUFFER: 34962,
+    FLOAT: 5126,
+    BLEND: 3042,
+    SRC_ALPHA: 770,
+    ONE_MINUS_SRC_ALPHA: 771,
+    COLOR_BUFFER_BIT: 16384,
+    TRIANGLES: 4,
+    TRIANGLE_FAN: 6,
+    DYNAMIC_DRAW: 35048,
+    TEXTURE_2D: 3553,
+    TEXTURE_WRAP_S: 10242,
+    TEXTURE_WRAP_T: 10243,
+    TEXTURE_MIN_FILTER: 10241,
+    TEXTURE_MAG_FILTER: 10240,
+    CLAMP_TO_EDGE: 33071,
+    LINEAR: 9729,
+    TEXTURE0: 33984,
+    RGBA: 6408,
+    UNSIGNED_BYTE: 5121,
+  };
+}
+
+function drawTexture(
+  renderer: WebGLRenderer,
+  texture: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement
+) {
+  renderer.executeCommand({
+    type: 'drawTexture',
+    params: { texture, x: 0, y: 0, width: 10, height: 10 },
+  });
+}
+
 describe('WebGLRenderer', () => {
   let canvas: HTMLCanvasElement;
+  let gl: MockGl;
   let renderer: WebGLRenderer | null;
 
   beforeEach(() => {
-    // Create a mock canvas
     canvas = document.createElement('canvas');
     canvas.width = 800;
     canvas.height = 600;
 
-    // Mock WebGL2 context
-    const mockContext = {
-      getExtension: vi.fn(),
-      createShader: vi.fn(() => ({})),
-      shaderSource: vi.fn(),
-      compileShader: vi.fn(),
-      getShaderParameter: vi.fn(() => true),
-      createProgram: vi.fn(() => ({})),
-      attachShader: vi.fn(),
-      linkProgram: vi.fn(),
-      getProgramParameter: vi.fn(() => true),
-      getAttribLocation: vi.fn(() => 0),
-      getUniformLocation: vi.fn(() => ({})),
-      createBuffer: vi.fn(() => ({})),
-      createVertexArray: vi.fn(() => ({})),
-      bindVertexArray: vi.fn(),
-      enableVertexAttribArray: vi.fn(),
-      bindBuffer: vi.fn(),
-      vertexAttribPointer: vi.fn(),
-      enable: vi.fn(),
-      blendFunc: vi.fn(),
-      viewport: vi.fn(),
-      clearColor: vi.fn(),
-      clear: vi.fn(),
-      useProgram: vi.fn(),
-      deleteBuffer: vi.fn(),
-      deleteProgram: vi.fn(),
-      deleteShader: vi.fn(),
-      getShaderInfoLog: vi.fn(() => ''),
-      getProgramInfoLog: vi.fn(() => ''),
-      VERTEX_SHADER: 35633,
-      FRAGMENT_SHADER: 35632,
-      COMPILE_STATUS: 35713,
-      LINK_STATUS: 35714,
-      ARRAY_BUFFER: 34962,
-      FLOAT: 5126,
-      BLEND: 3042,
-      SRC_ALPHA: 770,
-      ONE_MINUS_SRC_ALPHA: 771,
-      COLOR_BUFFER_BIT: 16384,
-    };
+    gl = createMockGl();
+    gl.canvas = canvas;
 
-    // Mock getContext to return our mock WebGL2 context
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mock/test fixture with dynamic shape
-    vi.spyOn(canvas, 'getContext').mockReturnValue(mockContext as any);
+    vi.spyOn(canvas, 'getContext').mockReturnValue(gl as any);
   });
 
   afterEach(() => {
@@ -88,17 +134,14 @@ describe('WebGLRenderer', () => {
 
   it('should start and stop rendering', () => {
     renderer = new WebGLRenderer({ canvas });
-    
-    // Should be able to start
+
     expect(() => renderer!.start()).not.toThrow();
-    
-    // Should be able to stop
     expect(() => renderer!.stop()).not.toThrow();
   });
 
   it('should handle resize', () => {
     renderer = new WebGLRenderer({ canvas });
-    
+
     expect(() => renderer!.resize(1920, 1080)).not.toThrow();
     expect(canvas.width).toBe(1920);
     expect(canvas.height).toBe(1080);
@@ -113,5 +156,220 @@ describe('WebGLRenderer', () => {
     expect(stats).toHaveProperty('droppedFrames');
     expect(stats).toHaveProperty('targetFPS');
     expect(stats.targetFPS).toBe(60);
+  });
+
+  it('should not report a fake gpuTime stat (4.8)', () => {
+    renderer = new WebGLRenderer({ canvas });
+    const stats = renderer.getStats();
+    // gpuTime was always 0 (timer query never issued); it is now omitted rather
+    // than reported as a real measurement.
+    expect(stats.gpuTime).toBeUndefined();
+  });
+
+  // ---- 4.1 error surfacing (CONTRACT-ERR) ----
+
+  it('fires onError when a texture upload throws instead of swallowing it', () => {
+    const uploadError = new DOMException('tainted canvas', 'SecurityError');
+    gl.texImage2D = vi.fn(() => {
+      throw uploadError;
+    });
+    renderer = new WebGLRenderer({ canvas });
+
+    const errors: Array<{ source: string; error: unknown }> = [];
+    const unsubscribe = renderer.onError((info) => errors.push(info));
+
+    const img = document.createElement('img');
+    img.src = 'https://cross-origin.example/stimulus.png';
+
+    // Rendering stays resilient — the failing upload must NOT throw out of the call.
+    expect(() => drawTexture(renderer!, img)).not.toThrow();
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.error).toBe(uploadError);
+    expect(typeof errors[0]!.source).toBe('string');
+    expect(errors[0]!.source.length).toBeGreaterThan(0);
+
+    unsubscribe();
+    drawTexture(renderer, img);
+    // Cached source is not a video and not dirty → no second upload, no second error.
+    expect(errors).toHaveLength(1);
+  });
+
+  it('rejects custom shaders via onError rather than silently drawing (4.8)', () => {
+    renderer = new WebGLRenderer({ canvas });
+
+    const errors: Array<{ source: string }> = [];
+    renderer.onError((info) => errors.push(info));
+    gl.drawArrays.mockClear();
+
+    renderer.executeCommand({
+      type: 'customShader',
+      params: { shader: 'my-shader', vertices: [0, 0, 1, 0, 0, 1] },
+    });
+
+    expect(errors.some((e) => e.source === 'customShader')).toBe(true);
+    // The old stub drew white fallback geometry; the correct behaviour draws nothing.
+    expect(gl.drawArrays).not.toHaveBeenCalled();
+  });
+
+  // ---- 4.3 context loss / restore ----
+
+  it('marks the context lost, preventing default, and notifies subscribers', () => {
+    renderer = new WebGLRenderer({ canvas });
+
+    const lost: number[] = [];
+    const errors: Array<{ source: string }> = [];
+    renderer.onContextLost(() => lost.push(1));
+    renderer.onError((info) => errors.push(info));
+
+    renderer.start();
+
+    const event = new Event('webglcontextlost', { cancelable: true });
+    canvas.dispatchEvent(event);
+
+    expect(renderer.isContextLost()).toBe(true);
+    // preventDefault() is required for the browser to fire webglcontextrestored.
+    expect(event.defaultPrevented).toBe(true);
+    expect(lost).toHaveLength(1);
+    expect(errors.some((e) => e.source === 'webglcontextlost')).toBe(true);
+  });
+
+  it('rebuilds program, buffers and textures on context restore', () => {
+    renderer = new WebGLRenderer({ canvas });
+
+    // Create a texture before loss so restore has something to re-upload.
+    const img = document.createElement('img');
+    img.src = 'https://example.test/stimulus.png';
+    drawTexture(renderer, img);
+
+    const restored: number[] = [];
+    renderer.onContextRestored(() => restored.push(1));
+
+    const programsBefore = gl.createProgram.mock.calls.length;
+    const buffersBefore = gl.createBuffer.mock.calls.length;
+    const texturesBefore = gl.createTexture.mock.calls.length;
+    const uploadsBefore = gl.texImage2D.mock.calls.length;
+
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    expect(renderer.isContextLost()).toBe(true);
+
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+
+    expect(renderer.isContextLost()).toBe(false);
+    expect(restored).toHaveLength(1);
+    // Program + buffers rebuilt, textures re-created and re-uploaded.
+    expect(gl.createProgram.mock.calls.length).toBeGreaterThan(programsBefore);
+    expect(gl.createBuffer.mock.calls.length).toBeGreaterThan(buffersBefore);
+    expect(gl.createTexture.mock.calls.length).toBeGreaterThan(texturesBefore);
+    expect(gl.texImage2D.mock.calls.length).toBeGreaterThan(uploadsBefore);
+  });
+
+  it('removes context-loss listeners on destroy', () => {
+    renderer = new WebGLRenderer({ canvas });
+    renderer.destroy();
+
+    const lost: number[] = [];
+    renderer.onContextLost(() => lost.push(1));
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+
+    // Listener was removed in destroy(): dispatch is a no-op.
+    expect(lost).toHaveLength(0);
+    renderer = null; // already destroyed
+  });
+
+  // ---- 4.4 DPR-aware resize ----
+
+  it('applies devicePixelRatio in resizeToDisplaySize (4.4)', () => {
+    Object.defineProperty(canvas, 'clientWidth', { value: 500, configurable: true });
+    Object.defineProperty(canvas, 'clientHeight', { value: 400, configurable: true });
+
+    renderer = new WebGLRenderer({ canvas });
+    gl.viewport.mockClear();
+
+    renderer.resizeToDisplaySize(2);
+
+    // Backing store = CSS size * DPR, so it matches physical pixels on HiDPI.
+    expect(canvas.width).toBe(1000);
+    expect(canvas.height).toBe(800);
+    expect(gl.viewport).toHaveBeenCalledWith(0, 0, 1000, 800);
+  });
+
+  it('uses the construction-time pixelRatio as the resizeToDisplaySize default', () => {
+    Object.defineProperty(canvas, 'clientWidth', { value: 300, configurable: true });
+    Object.defineProperty(canvas, 'clientHeight', { value: 200, configurable: true });
+
+    renderer = new WebGLRenderer({ canvas, pixelRatio: 3 });
+    renderer.resizeToDisplaySize();
+
+    expect(canvas.width).toBe(900);
+    expect(canvas.height).toBe(600);
+  });
+
+  // ---- 4.5 video-only re-upload + texture freeing ----
+
+  it('re-uploads video textures every draw but static textures only once (4.5)', () => {
+    renderer = new WebGLRenderer({ canvas });
+
+    const staticCanvas = document.createElement('canvas');
+    gl.texImage2D.mockClear();
+    drawTexture(renderer, staticCanvas);
+    drawTexture(renderer, staticCanvas);
+    // Uploaded once on creation; the cache hit skips re-upload for a static source.
+    expect(gl.texImage2D).toHaveBeenCalledTimes(1);
+
+    const video = document.createElement('video');
+    gl.texImage2D.mockClear();
+    drawTexture(renderer, video);
+    drawTexture(renderer, video);
+    // Video advances per frame — every draw re-uploads.
+    expect(gl.texImage2D).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-uploads a static texture after invalidateTexture', () => {
+    renderer = new WebGLRenderer({ canvas });
+
+    const staticCanvas = document.createElement('canvas');
+    gl.texImage2D.mockClear();
+    drawTexture(renderer, staticCanvas);
+    expect(gl.texImage2D).toHaveBeenCalledTimes(1);
+
+    renderer.invalidateTexture(staticCanvas);
+    drawTexture(renderer, staticCanvas);
+    // Dirty flag forces one re-upload, then reverts to cached.
+    expect(gl.texImage2D).toHaveBeenCalledTimes(2);
+    drawTexture(renderer, staticCanvas);
+    expect(gl.texImage2D).toHaveBeenCalledTimes(2);
+  });
+
+  it('frees textures created since a marker (4.5)', () => {
+    renderer = new WebGLRenderer({ canvas });
+
+    const marker = renderer.markTextures();
+    const img = document.createElement('img');
+    img.src = 'https://example.test/a.png';
+    drawTexture(renderer, img);
+
+    gl.deleteTexture.mockClear();
+    renderer.deleteTexturesSince(marker);
+    expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
+
+    // The cache entry was evicted, so the next draw re-creates the texture.
+    const createdBefore = gl.createTexture.mock.calls.length;
+    drawTexture(renderer, img);
+    expect(gl.createTexture.mock.calls.length).toBe(createdBefore + 1);
+  });
+
+  it('deletes a texture for a specific source', () => {
+    renderer = new WebGLRenderer({ canvas });
+
+    const img = document.createElement('img');
+    img.src = 'https://example.test/b.png';
+    drawTexture(renderer, img);
+
+    gl.deleteTexture.mockClear();
+    expect(renderer.deleteTexture(img)).toBe(true);
+    expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
+    // Already freed → no-op the second time.
+    expect(renderer.deleteTexture(img)).toBe(false);
   });
 });

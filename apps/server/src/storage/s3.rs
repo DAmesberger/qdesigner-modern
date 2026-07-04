@@ -93,6 +93,49 @@ impl S3StorageService {
         Ok(url.uri().to_string())
     }
 
+    /// Stream an object's bytes from S3, optionally a single byte range.
+    ///
+    /// `range` is passed straight through as an HTTP `Range` header value
+    /// (e.g. `"bytes=0-1023"`); S3/MinIO performs the range selection and
+    /// returns a partial body plus a `Content-Range`. The returned
+    /// [`ObjectStream`] carries the raw [`ByteStream`] — the body is NOT
+    /// buffered into memory, so large media (video) streams straight
+    /// through the proxy. When a range was honored, `content_range` is
+    /// populated and the caller should reply `206 Partial Content`.
+    pub async fn get_object(
+        &self,
+        key: &str,
+        range: Option<&str>,
+    ) -> Result<ObjectStream, ApiError> {
+        let mut req = self.client.get_object().bucket(&self.bucket).key(key);
+        if let Some(r) = range {
+            req = req.range(r);
+        }
+
+        let output = match req.send().await {
+            Ok(o) => o,
+            Err(e) => {
+                // Missing object (e.g. an orphaned DB row) → 404 rather
+                // than a 500. `as_service_error` never panics on transport
+                // errors (unlike `into_service_error`).
+                if e.as_service_error()
+                    .map(|se| se.is_no_such_key())
+                    .unwrap_or(false)
+                {
+                    return Err(ApiError::NotFound("Media object not found".into()));
+                }
+                return Err(ApiError::Internal(format!("S3 get failed: {e}")));
+            }
+        };
+
+        Ok(ObjectStream {
+            content_type: output.content_type().map(str::to_string),
+            content_length: output.content_length(),
+            content_range: output.content_range().map(str::to_string),
+            body: output.body,
+        })
+    }
+
     /// Delete an object by key.
     pub async fn delete(&self, key: &str) -> Result<(), ApiError> {
         self.client
@@ -152,4 +195,19 @@ pub struct S3Object {
     pub key: String,
     pub size: i64,
     pub last_modified: String,
+}
+
+/// Streaming handle for a single object GET. Wraps the raw, un-buffered
+/// [`ByteStream`] plus the response metadata the media proxy needs to
+/// build its HTTP headers.
+pub struct ObjectStream {
+    /// The un-buffered object body straight from S3.
+    pub body: ByteStream,
+    /// S3-reported content type (the DB `content_type` is authoritative
+    /// for the proxy response; this is exposed for completeness).
+    pub content_type: Option<String>,
+    /// Byte length of the (possibly partial) body S3 returned.
+    pub content_length: Option<i64>,
+    /// Present iff S3 honored a `Range` request — signals `206` semantics.
+    pub content_range: Option<String>,
 }

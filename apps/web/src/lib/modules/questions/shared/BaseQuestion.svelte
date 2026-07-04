@@ -95,16 +95,63 @@
     }
   }
 
+  // Treat empty arrays (and the empty `{ selection }` shape emitted by
+  // multiple-choice) as unanswered so `required` is not satisfied by `[]`.
+  function isEmptyValue(v: unknown): boolean {
+    if (v === null || v === undefined || v === '') return true;
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === 'object' && v !== null && 'selection' in (v as Record<string, unknown>)) {
+      const sel = (v as Record<string, unknown>).selection;
+      if (Array.isArray(sel)) return sel.length === 0;
+      return sel === null || sel === undefined || sel === '';
+    }
+    return false;
+  }
+
+  // Extract the selection array for min/max checks, unwrapping the
+  // `{ selection, other }` multiple-choice payload when present.
+  function getSelectionArray(v: unknown): unknown[] | null {
+    if (Array.isArray(v)) return v;
+    if (
+      v !== null &&
+      typeof v === 'object' &&
+      Array.isArray((v as Record<string, unknown>).selection)
+    ) {
+      return (v as Record<string, unknown>).selection as unknown[];
+    }
+    return null;
+  }
+
   async function validate() {
     const result: ValidationResult = {
       valid: true,
       errors: [],
     };
 
-    // Required validation
-    if (question.required && (value === null || value === undefined || value === '')) {
+    // Required validation. For array values (multiple-choice, ranking, …) an
+    // empty array does NOT satisfy `required`.
+    if (question.required && isEmptyValue(value)) {
       result.valid = false;
       result.errors.push('This question is required');
+    }
+
+    // Min/max selection validation (generic: any array-valued response, e.g.
+    // multiple-choice). Field names: config.minSelections/maxSelections, with
+    // responseType.minChoices/maxChoices as a fallback.
+    const cfg = ((question as any).config ?? {}) as Record<string, unknown>;
+    const rt = ((question as any).responseType ?? {}) as Record<string, unknown>;
+    const minSel = (cfg.minSelections ?? rt.minChoices) as number | undefined;
+    const maxSel = (cfg.maxSelections ?? rt.maxChoices) as number | undefined;
+    const selectionArray = getSelectionArray(value);
+    if (selectionArray) {
+      if (typeof minSel === 'number' && minSel > 0 && selectionArray.length < minSel) {
+        result.valid = false;
+        result.errors.push(`Please select at least ${minSel} option${minSel === 1 ? '' : 's'}`);
+      }
+      if (typeof maxSel === 'number' && selectionArray.length > maxSel) {
+        result.valid = false;
+        result.errors.push(`Please select no more than ${maxSel} option${maxSel === 1 ? '' : 's'}`);
+      }
     }
 
     // Custom validation
@@ -158,7 +205,12 @@
 
     if (mediaIds.length > 0) {
       try {
-        const urls = await mediaService.getSignedUrls(mediaIds);
+        // Runtime (fillout) resolves to the same-origin streaming proxy; designer preview
+        // (edit/preview) resolves to presigned urls so unpublished media loads in a bare <img>.
+        const urls =
+          mode === 'runtime'
+            ? await mediaService.getContentUrls(mediaIds)
+            : await mediaService.getSignedUrls(mediaIds);
         mediaUrls = urls;
       } catch (error) {
         console.error('Failed to load media URLs:', error);

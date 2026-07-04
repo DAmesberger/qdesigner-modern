@@ -4,10 +4,35 @@ import type {
   QuestionRuntimeResult,
 } from '$lib/runtime/core/question-runtime';
 import { ReactionEngine } from '$lib/runtime/reaction';
+import { TimingGatekeeper } from '$lib/runtime/timing';
+import { mediaContentUrl } from '$lib/services/mediaService';
 import { compileReactionPlan } from './model/reaction-compiler';
 import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
-import { computeDerivedReactionMetrics } from './model/reaction-scoring';
+import { computeDerivedReactionMetrics, aggregateReactionProvenance } from './model/reaction-scoring';
 import type { ReactionTaskType } from './model/reaction-schema';
+
+/**
+ * Recursively rewrite every media reference in a freshly-normalized (mutable)
+ * reaction config to the stable same-origin proxy URL derived from its mediaId.
+ * A mediaRef is any object carrying both a `mediaId` string and a `mediaUrl`
+ * field; this covers top-level, per-block, and per-trial stimulus references
+ * generically without threading a resolver through the whole compiler.
+ */
+function resolveConfigMediaToProxy(value: unknown): void {
+  if (!value || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    for (const item of value) resolveConfigMediaToProxy(item);
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  const mediaId = record.mediaId;
+  if (typeof mediaId === 'string' && mediaId.length > 0 && 'mediaUrl' in record) {
+    record.mediaUrl = mediaContentUrl(mediaId);
+  }
+  for (const v of Object.values(record)) {
+    if (v && typeof v === 'object') resolveConfigMediaToProxy(v);
+  }
+}
 
 interface TrialResponse {
   trialId: string;
@@ -31,6 +56,9 @@ interface TrialResponse {
     droppedFrames: number;
     jitter: number;
   };
+  /** True when the trial was invalidated (e.g. stimulus render failed); not a genuine timeout. */
+  invalid: boolean;
+  invalidReason: string | null;
 }
 
 export class ReactionTimeRuntime implements IQuestionRuntime {
@@ -50,9 +78,27 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       canvas: context.canvas,
       renderer: context.renderer,
       eventTarget: document,
+      // Slice 3.4 (CONTRACT-CAL): hand the engine the session-wide gatekeeper.
+      // The engine runs qualify() once before the first trial and reads
+      // getEstimatedDisplayLatencyMs() to compensate raf-based visual onset.
+      gatekeeper: TimingGatekeeper.shared(),
     });
 
     this.engine.seedFromResourceManager(context.resourceManager);
+
+    // Slice 3.4 (CONTRACT-AUDIO): create + resume the AudioContext now. prepare()
+    // runs right before the first trial, under the sticky user activation from
+    // the consent / start gesture, so resume() is permitted and audio decode
+    // won't stall onset timing mid-trial.
+    await this.engine.primeAudio().catch(() => {});
+  }
+
+  /**
+   * Prime the reaction engine's AudioContext (CONTRACT-AUDIO). Safe to call from
+   * a user-gesture handler; no-op if the engine is not constructed yet.
+   */
+  public async primeAudio(): Promise<void> {
+    await this.engine?.primeAudio();
   }
 
   public async run(context: QuestionRuntimeContext): Promise<QuestionRuntimeResult> {
@@ -66,6 +112,11 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
     }
 
     const config = normalizeReactionQuestionConfig(context.question);
+    // Fillout runtime: rewrite every baked media reference to the stable
+    // same-origin proxy path from its mediaId, so the WebGL stimulus isn't loaded
+    // from a cross-origin / expiring presigned URL (taints the texture and breaks
+    // the offline cache key). Designer preview keeps the baked presigned URL.
+    resolveConfigMediaToProxy(config);
     const trialPlan = compileReactionPlan(config, {
       questionnaire: context.questionnaire,
       question: context.question,
@@ -114,6 +165,8 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
           droppedFrames: trialResult.stats.droppedFrames,
           jitter: trialResult.stats.jitter,
         },
+        invalid: trialResult.invalid ?? false,
+        invalidReason: trialResult.invalidReason ?? null,
       });
     }
 
@@ -157,6 +210,9 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
         testTrials: testResponses.length,
         taskType: config.task.type,
         blockCount: new Set(allResponses.map((response) => response.blockId)).size,
+        // C-PROVENANCE: roll per-trial timing up so reaction-time responses persist a
+        // non-empty timing_provenance (parity with reaction-experiment).
+        timingProvenance: aggregateReactionProvenance(testResponses, averageRT),
       },
     };
   }

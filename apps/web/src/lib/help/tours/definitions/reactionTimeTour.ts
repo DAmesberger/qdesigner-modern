@@ -3,7 +3,7 @@ import type { TourDefinition } from '../types';
 export const reactionTimeTour: TourDefinition = {
 	id: 'reaction-time-tour',
 	name: 'Reaction Time Tasks',
-	description: 'Learn how to configure reaction time experiments with microsecond precision.',
+	description: 'Learn how to configure reaction time experiments with frame-accurate, high-resolution timing.',
 	triggerKey: 'qd-tour:reaction-time',
 	steps: [
 		{
@@ -29,7 +29,7 @@ export const reactionTimeTour: TourDefinition = {
 			target: '.designer-panel .form-grid',
 			title: 'Timing Settings',
 			description:
-				'Configure timing with **microsecond precision**: fixation duration, stimulus display time, inter-stimulus interval (ISI), and response timeout. All timing uses high-resolution performance counters.',
+				'Configure timing with **high-resolution, frame-accurate onset**: fixation duration, stimulus display time, inter-stimulus interval (ISI), and response timeout. All timing uses high-resolution performance counters with measured display-latency correction.',
 			placement: 'left',
 			waitForElement: true,
 		},

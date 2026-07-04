@@ -76,7 +76,9 @@
     }
 
     try {
-      const urls = await loadMediaUrls(media);
+      // Designer canvas (mode 'edit'/'preview'): resolve to presigned urls so unpublished
+      // media loads in a bare <img> element (the proxy path 404s without a Bearer header).
+      const urls = await loadMediaUrls(media, true);
       mediaUrls = { ...urls };
     } catch (error) {
       console.error('[QuestionVisualRenderer] Failed to load media URLs:', error);

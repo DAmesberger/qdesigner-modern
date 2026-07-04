@@ -43,6 +43,34 @@ function normalizeMatrixResponseType(raw: DynamicValue): string {
   return 'radio';
 }
 
+/** First argument that is a non-empty string, else undefined. */
+function firstNonEmptyString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return undefined;
+}
+
+/**
+ * Canonical prompt precedence, single-sourced so the config adapter and
+ * {@link ModularRenderer} cannot diverge: `title → prompt(string) →
+ * config.prompt → display.prompt → display.content → text`. Only non-empty
+ * strings qualify, so a WebGL stimulus's object-shaped `prompt` is skipped.
+ */
+export function resolveQuestionPrompt(question: DynamicValue): string | undefined {
+  const q = question ?? {};
+  const display = q.display ?? {};
+  const config = q.config ?? {};
+  return firstNonEmptyString(q.title, q.prompt, config.prompt, display.prompt, display.content, q.text);
+}
+
+/** Canonical description precedence: `description → display.description → instruction`. */
+export function resolveQuestionDescription(question: DynamicValue): string | undefined {
+  const q = question ?? {};
+  const display = q.display ?? {};
+  return firstNonEmptyString(q.description, display.description, q.instruction);
+}
+
 /**
  * Build the `config` object a runtime module component consumes from a stored question.
  * Always returns a plain object so components that read `question.config.<field>`
@@ -56,6 +84,23 @@ export function buildModuleRuntimeConfig(question: DynamicValue): DynamicValue {
 
   // Start from display, then let any already-present flat config win.
   const base: DynamicValue = { ...display, ...existing };
+
+  // Canonical prompt / description. BaseQuestion renders the prompt from
+  // `question.title` (with a `config.prompt` fallback) and the description from
+  // `question.description`. Authored questions store the prompt under `text` or
+  // `display.prompt` and the description under `display.description` /
+  // `instruction`; surface both on the config so a form-style question never
+  // renders its widget with no visible question text (Slice 1.1, ADR 0018).
+  // Guarded so an empty/unauthored question still yields a bare `{}` config.
+  const canonicalPrompt = resolveQuestionPrompt(q);
+  if (canonicalPrompt !== undefined) {
+    base.title = base.title ?? canonicalPrompt;
+    base.prompt = base.prompt ?? canonicalPrompt;
+  }
+  const canonicalDescription = resolveQuestionDescription(q);
+  if (canonicalDescription !== undefined) {
+    base.description = base.description ?? canonicalDescription;
+  }
 
   switch (q.type) {
     case 'multiple-choice': {

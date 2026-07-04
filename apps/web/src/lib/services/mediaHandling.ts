@@ -11,19 +11,28 @@ import { processMarkdownContent, processMarkdownContentSync } from './markdownPr
 type DynamicValue = any;
 
 /**
- * Load media URLs for a collection of media items
+ * Load media URLs for a collection of media items.
+ *
+ * `preview` selects the resolver: true → PRESIGNED urls for authenticated designer preview
+ * (media may be unpublished); false (default) → same-origin streaming proxy for the fillout
+ * runtime (published media, offline-cacheable, no WebGL texture taint).
  */
-export async function loadMediaUrls(media: MediaConfig[]): Promise<Record<string, string>> {
+export async function loadMediaUrls(
+  media: MediaConfig[],
+  preview = false
+): Promise<Record<string, string>> {
   if (!media || media.length === 0) return {};
-  
+
   const mediaIds = media
     .filter(m => m.mediaId)
     .map(m => m.mediaId!);
-  
+
   if (mediaIds.length === 0) return {};
-  
+
   try {
-    return await mediaService.getSignedUrls(mediaIds);
+    return preview
+      ? await mediaService.getSignedUrls(mediaIds)
+      : await mediaService.getContentUrls(mediaIds);
   } catch (error) {
     console.error('[MediaHandling] Failed to load media URLs:', error);
     return {};
@@ -40,20 +49,24 @@ export async function processContentWithMedia(
     format?: 'text' | 'markdown' | 'html';
     processVariables?: boolean;
     variables?: Record<string, DynamicValue>;
+    preview?: boolean;
   } = {}
 ): Promise<string> {
   if (!content) return '';
-  
-  // Load media URLs if needed
-  const mediaUrls = await loadMediaUrls(media);
-  
+
+  const preview = options.preview ?? false;
+
+  // Load media URLs if needed (presigned for designer preview, proxy for fillout runtime)
+  const mediaUrls = await loadMediaUrls(media, preview);
+
   // Process content with markdown processor
   return processMarkdownContent(content, {
     media,
     mediaUrls,
     format: options.format || 'markdown',
     processVariables: options.processVariables ?? false,
-    variables: options.variables || {}
+    variables: options.variables || {},
+    preview
   });
 }
 

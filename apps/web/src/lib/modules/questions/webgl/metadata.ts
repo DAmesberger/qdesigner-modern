@@ -9,7 +9,7 @@ export const metadata: ModuleMetadata = {
   category: 'question',
   name: 'WebGL Stimulus',
   icon: '🎮',
-  description: 'High-performance GPU-rendered stimuli with microsecond timing precision',
+  description: 'High-performance GPU-rendered stimuli with frame-accurate onset timing',
   capabilities: {
     supportsScripting: true,
     supportsConditionals: true,

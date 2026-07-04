@@ -1,6 +1,35 @@
 import { db, type FilloutResponse, type FilloutEvent, type FilloutVariable } from '$lib/services/db/indexeddb';
 
 /**
+ * Per-response timing provenance (contract C-PROVENANCE). Captured alongside
+ * the raw reaction time so downstream analysis can audit HOW a measurement was
+ * made (which clock, what latencies, frame health). Persisted as a distinct
+ * camelCase field on the offline record and mapped to the snake_case
+ * `timing_provenance` column on sync.
+ */
+export interface TimingProvenance {
+	onsetMethod: string;
+	responseMethod: string;
+	displayLatencyMs?: number;
+	outputLatencyMs?: number;
+	rawRtMs?: number;
+	anticipatory?: boolean;
+	frameStats?: { fps: number; droppedFrames: number; jitter: number };
+	calibration?: Record<string, unknown>;
+}
+
+/**
+ * The offline response row carries {@link TimingProvenance} in addition to the
+ * columns declared on {@link FilloutResponse}. IndexedDB stores whole
+ * structured clones (the schema only declares indexes), so this extra field
+ * round-trips without a schema bump; we widen the type here rather than in the
+ * shared db module.
+ */
+export type StoredFilloutResponse = FilloutResponse & {
+	timingProvenance?: TimingProvenance;
+};
+
+/**
  * Offline-first response persistence using IndexedDB.
  * Each record gets a clientId = crypto.randomUUID() for server-side dedup.
  */
@@ -16,10 +45,11 @@ export class OfflineResponsePersistence {
 			reactionTimeUs?: number;
 			presentedAt?: string;
 			answeredAt?: string;
+			timingProvenance?: TimingProvenance;
 			metadata?: Record<string, unknown>;
 		}
 	): Promise<void> {
-		const record: FilloutResponse = {
+		const record: StoredFilloutResponse = {
 			sessionId,
 			clientId: crypto.randomUUID(),
 			questionId: data.questionId,
@@ -27,6 +57,7 @@ export class OfflineResponsePersistence {
 			reactionTimeUs: data.reactionTimeUs,
 			presentedAt: data.presentedAt,
 			answeredAt: data.answeredAt,
+			timingProvenance: data.timingProvenance,
 			metadata: data.metadata,
 			synced: 0,
 		};
@@ -101,6 +132,28 @@ export class OfflineResponsePersistence {
 			.where('sessionId')
 			.equals(sessionId)
 			.toArray();
+	}
+
+	/**
+	 * Distinct session ids that have ANY unsynced child record (response, event,
+	 * or variable). The sync engine drives off this — NOT the `filloutSessions`
+	 * table — because online-created sessions live only on the server and never
+	 * get a local `filloutSessions` row, yet their responses are still queued
+	 * here offline-first (contract D2). Keying sync on the session table would
+	 * strand every online session's data.
+	 */
+	static async getSessionIdsWithUnsyncedData(): Promise<string[]> {
+		const [responses, events, variables] = await Promise.all([
+			db.filloutResponses.where('synced').equals(0).toArray(),
+			db.filloutEvents.where('synced').equals(0).toArray(),
+			db.filloutVariables.where('synced').equals(0).toArray(),
+		]);
+
+		const ids = new Set<string>();
+		for (const r of responses) ids.add(r.sessionId);
+		for (const e of events) ids.add(e.sessionId);
+		for (const v of variables) ids.add(v.sessionId);
+		return [...ids];
 	}
 
 	/**

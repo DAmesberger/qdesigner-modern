@@ -4,6 +4,8 @@ import type { QuestionRuntimeContext } from '$lib/runtime/core/question-runtime'
 const mockEngineState = {
   scheduled: [] as Array<{ name: string; durationMs: number }>,
   runTrialCalls: 0,
+  primeAudioCalls: 0,
+  gatekeeperPassed: false,
 };
 
 interface MockTrialResult {
@@ -31,9 +33,15 @@ interface MockTrialResult {
 
 vi.mock('$lib/runtime/reaction', () => {
   class MockReactionEngine {
-    constructor(_config: unknown) {}
+    constructor(config: { gatekeeper?: unknown }) {
+      mockEngineState.gatekeeperPassed = Boolean(config?.gatekeeper);
+    }
 
     seedFromResourceManager(): void {}
+
+    async primeAudio(): Promise<void> {
+      mockEngineState.primeAudioCalls++;
+    }
 
     async warmUpStimuli(): Promise<void> {}
 
@@ -85,6 +93,8 @@ describe('ReactionTimeRuntime', () => {
   beforeEach(() => {
     mockEngineState.scheduled = [];
     mockEngineState.runTrialCalls = 0;
+    mockEngineState.primeAudioCalls = 0;
+    mockEngineState.gatekeeperPassed = false;
   });
 
   it('executes canonical study.blocks with scheduled phases', async () => {
@@ -153,6 +163,13 @@ describe('ReactionTimeRuntime', () => {
     } as unknown as QuestionRuntimeContext;
 
     await runtime.prepare(context);
+
+    // Slice 3.4: prepare() hands the engine a TimingGatekeeper (CONTRACT-CAL)
+    // and primes the AudioContext on the (post-consent) user gesture
+    // (CONTRACT-AUDIO) before the first trial runs.
+    expect(mockEngineState.gatekeeperPassed).toBe(true);
+    expect(mockEngineState.primeAudioCalls).toBe(1);
+
     const result = await runtime.run(context);
     const responseValue = result.value as {
       responses: Array<{
@@ -165,5 +182,37 @@ describe('ReactionTimeRuntime', () => {
     expect(mockEngineState.scheduled).toEqual([{ name: 'cue', durationMs: 50 }]);
     expect(responseValue.responses[0]?.blockId).toBe('block-a');
     expect(responseValue.responses[0]?.trialTemplateId).toBe('trial-a');
+  });
+
+  it('exposes a primeAudio hook that delegates to the engine', async () => {
+    const runtime = new ReactionTimeRuntime();
+
+    const context = {
+      question: {
+        id: 'q1',
+        type: 'reaction-time',
+        config: {
+          task: { type: 'custom', customTrials: [] },
+          response: { validKeys: ['f'], timeout: 800, requireCorrect: false },
+          stimulus: { type: 'text', content: '' },
+          practice: false,
+          testTrials: 1,
+          targetFPS: 120,
+        },
+      },
+      questionnaire: { settings: {} },
+      canvas: document.createElement('canvas'),
+      renderer: null,
+      variableEngine: null,
+      resourceManager: null,
+      responseCollector: null,
+      abortSignal: new AbortController().signal,
+    } as unknown as QuestionRuntimeContext;
+
+    await runtime.prepare(context);
+    mockEngineState.primeAudioCalls = 0;
+    await runtime.primeAudio();
+
+    expect(mockEngineState.primeAudioCalls).toBe(1);
   });
 });

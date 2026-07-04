@@ -7,7 +7,6 @@
  */
 
 import type { FraudPreventionSettings } from '$lib/shared/types/questionnaire';
-import { api } from '$lib/services/api';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -300,22 +299,10 @@ export class FraudDetectionService {
     };
   }
 
-  /**
-   * Check for duplicate via backend fingerprint lookup.
-   * Returns true if a duplicate was found.
-   */
-  static async checkDuplicateViaAPI(
-    questionnaireId: string,
-    fingerprint: string
-  ): Promise<{ isDuplicate: boolean; previousCompletions: number }> {
-    try {
-      const response = await api.sessions.checkDuplicate(questionnaireId, fingerprint);
-      return {
-        isDuplicate: response.is_duplicate,
-        previousCompletions: response.previous_completions,
-      };
-    } catch {
-      return { isDuplicate: false, previousCompletions: 0 };
-    }
-  }
+  // NOTE (slice 2.5): the former `checkDuplicateViaAPI` read-probe was removed. It counted
+  // other sessions' completed rows by fingerprint, which the dual-path RLS SELECT policy
+  // hides from anonymous fillout callers (it always returned 0 — a no-op). Server-side
+  // fingerprint dedup now happens atomically at session create: the fingerprint is sent in
+  // POST /api/sessions metadata and the caller reacts to the response `duplicate` flag. The
+  // localStorage cookie UX (checkCookieDuplicate / markCompleted) is unchanged.
 }

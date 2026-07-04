@@ -16,19 +16,16 @@
     // Reflect the active locale onto <html> (lang + dir + rtl/ltr class).
     applyDocumentLocale();
 
-    // Import modules on client-side only (Async, fire-and-forget)
+    // Register question/display modules on client-side (async, fire-and-forget).
+    // This is the fast path; the registration is idempotent and awaitable, so the
+    // fillout runtime awaits the very same promise before starting a resumed
+    // session rather than racing this onMount (Slice 1.8).
     (async () => {
       console.log('[Layout] Starting module registration...');
       try {
-        const moduleExports = await import('$lib/modules');
-        console.log('[Layout] Module exports:', Object.keys(moduleExports));
-
-        if (moduleExports.registerAllModules) {
-          await moduleExports.registerAllModules();
-          console.log('[Layout] Modules registered successfully');
-        } else {
-          console.error('[Layout] registerAllModules not found in module exports');
-        }
+        const { ensureModulesRegistered } = await import('$lib/modules/register-all');
+        await ensureModulesRegistered();
+        console.log('[Layout] Modules registered successfully');
       } catch (err) {
         console.error('[Layout] Failed to load modules:', err);
       }

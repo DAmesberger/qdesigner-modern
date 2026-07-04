@@ -75,7 +75,12 @@
 
     if (mediaIds.length > 0) {
       try {
-        const urls = await mediaService.getSignedUrls(mediaIds);
+        // Runtime (fillout) resolves to the same-origin streaming proxy; designer preview
+        // (edit/preview) resolves to presigned urls so unpublished media loads in a bare <img>.
+        const urls =
+          mode === 'runtime'
+            ? await mediaService.getContentUrls(mediaIds)
+            : await mediaService.getSignedUrls(mediaIds);
         mediaUrls = urls;
       } catch (error) {
         console.error('Failed to load media URLs:', error);

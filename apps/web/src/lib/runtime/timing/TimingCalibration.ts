@@ -2,6 +2,12 @@ export interface CalibrationReport {
   meanFrameInterval: number;
   frameJitter: number;
   timerResolution: number;
+  /**
+   * Estimated visual display latency (ms) from a RAF timestamp to photons on
+   * screen. Modelled as one frame interval: content painted during a frame is
+   * presented at the following vsync. Consumed by
+   * TimingGatekeeper.getEstimatedDisplayLatencyMs() (CONTRACT-CAL).
+   */
   estimatedDisplayLatency: number;
   sampleCount: number;
   timestamps: number[];

@@ -178,6 +178,9 @@ export class FilloutRuntime {
 				timeOnQuestion: this.getTimeOnQuestion(question.id),
 				valid: response.valid,
 				metadata: {
+					// Forward the runtime-attached metadata (e.g. the C-PROVENANCE
+					// `timingProvenance` aggregate) so it survives to persistence.
+					...response.metadata,
 					pageId: response.pageId,
 					questionType: question.type,
 					questionIndex: this.completedQuestions
@@ -296,6 +299,15 @@ export class FilloutRuntime {
 
 	resume(): void {
 		this.runtime.resume();
+	}
+
+	/**
+	 * Delegate a viewport resize to the underlying runtime's single owned WebGL renderer
+	 * (Slice 4.6). No-op until that renderer is lazily created, so the fillout page can
+	 * route window resizes here unconditionally without owning a renderer of its own.
+	 */
+	resize(width: number, height: number): void {
+		this.runtime.resize(width, height);
 	}
 
 	handleKeyPress(event: KeyboardEvent): void {

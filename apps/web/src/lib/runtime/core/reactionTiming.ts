@@ -18,5 +18,20 @@ export function computeReactionTimeMs(
   stimulusOnsetTime: number,
   responseTimestamp: number
 ): number {
-  return Math.max(0, responseTimestamp - stimulusOnsetTime);
+  return Math.max(0, computeSignedReactionTimeMs(stimulusOnsetTime, responseTimestamp));
+}
+
+/**
+ * The *signed* reaction time (`responseTimestamp - stimulusOnsetTime`) with no
+ * clamping. A negative result means the response was captured on the same frame
+ * as (or fractionally before) the corrected onset — information the clamped
+ * {@link computeReactionTimeMs} deliberately discards. Anticipatory-response
+ * analysis and provenance need the raw signed value, so it is exported here as
+ * the single canonical formula rather than recomputed inline.
+ */
+export function computeSignedReactionTimeMs(
+  stimulusOnsetTime: number,
+  responseTimestamp: number
+): number {
+  return responseTimestamp - stimulusOnsetTime;
 }

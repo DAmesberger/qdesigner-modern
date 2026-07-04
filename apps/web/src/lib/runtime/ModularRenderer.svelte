@@ -4,6 +4,7 @@
   import type { ModuleCategory } from '$lib/modules/types';
   import { moduleRegistry } from '$lib/modules/registry';
   import { interpolateVariables } from '$lib/services/variableInterpolation';
+  import { resolveQuestionPrompt, resolveQuestionDescription } from '$lib/runtime/core/moduleConfigAdapter';
 
   interface ModularItem {
     id: string;
@@ -94,29 +95,56 @@
     isVisible = true;
   }
 
-  // Process item data with variable interpolation
+  // Process item data with variable interpolation.
+  //
+  // Beyond interpolation, this normalizes the canonical prompt/description fields
+  // BaseQuestion renders from (`question.title` / `question.description`). Authored
+  // form questions store the prompt under `text` / `display.prompt` (flattened to
+  // `config.prompt` by the module-config adapter) and the description under
+  // `display.description` / `instruction`; without surfacing them top-level a form
+  // question renders its widget with no visible question text (Slice 1.1, ADR 0018).
   const processedItem = $derived.by(() => {
-    if (!variables || Object.keys(variables).length === 0) {
-      return item;
+    const hasVars = !!variables && Object.keys(variables).length > 0;
+
+    // Clone so neither interpolation nor canonical-field injection mutates the
+    // source item (the runtime reuses it across presentations).
+    const processed = hasVars ? JSON.parse(JSON.stringify(item)) : { ...item };
+    const cfg = processed.config ?? {};
+
+    // Resolve the canonical prompt/description before interpolation, via the
+    // same single-sourced precedence the config adapter uses (config.prompt is
+    // already the adapter's canonical value by the time we run).
+    const resolvedTitle =
+      resolveQuestionPrompt(processed) ?? cfg.title;
+    const resolvedDescription = resolveQuestionDescription(processed) ?? cfg.description;
+
+    const interp = (val: any) =>
+      hasVars && typeof val === 'string' ? interpolateVariables(val, variables) : val;
+
+    // Interpolate the legacy/WebGL text fields (unchanged behaviour).
+    if (hasVars) {
+      if (processed.text) {
+        processed.text = interpolateVariables(processed.text, variables);
+      }
+      if (processed.instruction) {
+        processed.instruction = interpolateVariables(processed.instruction, variables);
+      }
+      if (processed.config) {
+        processed.config = interpolateObject(processed.config, variables);
+      }
     }
 
-    // Deep clone the item
-    const processed = JSON.parse(JSON.stringify(item));
-
-    // Interpolate text fields
-    if (processed.text) {
-      processed.text = interpolateVariables(processed.text, variables);
+    // Surface + interpolate the canonical fields BaseQuestion reads. Guarded so
+    // reaction / display / analytics items without prompt text are untouched.
+    if (resolvedTitle !== undefined && resolvedTitle !== null && resolvedTitle !== '') {
+      processed.title = interp(resolvedTitle);
     }
-    if (processed.instruction) {
-      processed.instruction = interpolateVariables(processed.instruction, variables);
-    }
-    if (processed.description) {
-      processed.description = interpolateVariables(processed.description, variables);
-    }
-
-    // Process config recursively
-    if (processed.config) {
-      processed.config = interpolateObject(processed.config, variables);
+    if (
+      resolvedDescription !== undefined &&
+      resolvedDescription !== null &&
+      resolvedDescription !== ''
+    ) {
+      processed.description = interp(resolvedDescription);
     }
 
     return processed;
@@ -175,6 +203,23 @@
           onInteraction,
           onUpdate,
           data: [], // Would be computed from variables
+        };
+
+      case 'display':
+        // Display modules are heterogeneous: text-display / text-instruction read
+        // `instruction`; bar-chart / statistical-feedback read `analytics` / `block`.
+        // Pass the item under each name so every display component finds its prop
+        // (Svelte 5 ignores the extras it doesn't destructure). Without this,
+        // display items fell to `default` and bar-chart threw on a missing
+        // `analytics` prop once Phase 5 routed them through the overlay.
+        return {
+          ...base,
+          instruction: processedItem,
+          analytics: processedItem,
+          block: processedItem,
+          onInteraction,
+          onUpdate,
+          data: [],
         };
 
       default:
