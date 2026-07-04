@@ -4,6 +4,7 @@
   import {
     optionTranslationKey,
     getLocaleLabel,
+    getQuestionBasePrompt,
     type LocaleCode,
     type LocaleTranslation,
     type TranslationPath,
@@ -86,18 +87,18 @@
     designerStore.removeTranslationLocale(code);
   }
 
-  // Base-text accessors (shown as reference / placeholder).
+  // Base-text accessors (shown as reference / placeholder). These mirror the
+  // fields the fillout runtime renders so the author sees the real base text.
   function questionBasePrompt(q: Question): string {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- display shape varies per question type
-    const display = (q as any).display ?? {};
-    return display.prompt ?? display.content ?? '';
+    return getQuestionBasePrompt(q);
   }
   function questionOptions(
     q: Question
   ): Array<{ id?: string | number; value?: string | number; label?: string }> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- display shape varies per question type
-    const display = (q as any).display ?? {};
-    return Array.isArray(display.options) ? display.options : [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- option lists vary per question type
+    const anyQ = q as any;
+    const options = anyQ.display?.options ?? anyQ.config?.options ?? anyQ.responseType?.options;
+    return Array.isArray(options) ? options : [];
   }
 
   let chromeBase = $derived({
