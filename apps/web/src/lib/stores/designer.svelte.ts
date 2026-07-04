@@ -121,6 +121,10 @@ class DesignerStore {
   isPublishing = $state(false);
   lastSaved = $state<number | null>(null);
   saveError = $state<string | null>(null);
+  // Last save-failure message we surfaced via a toast. Used to avoid spamming
+  // identical error toasts (e.g. a persistent failure re-hit by the 30s
+  // autosave loop); cleared on the next successful save.
+  private lastSaveErrorToast: string | null = null;
 
   // Navigation state
   currentPageId = $state<string | null>(null);
@@ -877,9 +881,17 @@ class DesignerStore {
 
       this.lastSaved = Date.now();
       this.isDirty = false;
+      this.lastSaveErrorToast = null;
       return true;
     } catch (error) {
       this.saveError = error instanceof Error ? error.message : 'Unknown save error';
+      // Surface the failure to the user instead of only flipping the red
+      // save-status dot. Dedupe identical consecutive errors so the autosave
+      // loop can't stack a wall of non-dismissing error toasts.
+      if (this.saveError !== this.lastSaveErrorToast) {
+        toast.error('Failed to save questionnaire', { message: this.saveError });
+        this.lastSaveErrorToast = this.saveError;
+      }
       return false;
     } finally {
       this.isLoading = false;

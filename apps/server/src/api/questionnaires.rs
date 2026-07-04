@@ -1044,22 +1044,48 @@ pub async fn list_versions(
 }
 
 /// Snapshot the current questionnaire state into the versions table.
-async fn snapshot_questionnaire_version<'e>(
-    executor: impl sqlx::PgExecutor<'e>,
+///
+/// Takes an exclusive row lock on the questionnaire *before* reading its
+/// version so that concurrent save/publish/bump requests are serialized on
+/// this questionnaire — without the lock, two transactions could both read the
+/// same `version` for their snapshot before either increments it and then both
+/// try to INSERT the same `(questionnaire_id, version)` pair, colliding on the
+/// `idx_questionnaire_versions_identity` unique index (HTTP 500).
+///
+/// The INSERT is also idempotent (`ON CONFLICT ... DO NOTHING`): publish does
+/// not bump `version`, so re-publishing — or any save that doesn't advance the
+/// version — must not create a duplicate snapshot row. `DO NOTHING` (rather
+/// than `DO UPDATE`) preserves the first snapshot captured for a given version
+/// number, which is the published/historical content for that version.
+async fn snapshot_questionnaire_version(
+    conn: &mut sqlx::PgConnection,
     questionnaire_id: Uuid,
     user_id: Uuid,
 ) -> Result<(), ApiError> {
+    // Serialize concurrent version mutations on this questionnaire.
+    sqlx::query(
+        r#"
+        SELECT 1 FROM questionnaire_definitions
+        WHERE id = $1 AND deleted_at IS NULL
+        FOR UPDATE
+        "#,
+    )
+    .bind(questionnaire_id)
+    .execute(&mut *conn)
+    .await?;
+
     sqlx::query(
         r#"
         INSERT INTO questionnaire_versions (questionnaire_id, version, content, title, description, created_by, version_major, version_minor, version_patch)
         SELECT id, version, content, name, description, $2, version_major, version_minor, version_patch
         FROM questionnaire_definitions
         WHERE id = $1 AND deleted_at IS NULL
+        ON CONFLICT (questionnaire_id, version) DO NOTHING
         "#,
     )
     .bind(questionnaire_id)
     .bind(user_id)
-    .execute(executor)
+    .execute(&mut *conn)
     .await?;
 
     Ok(())
