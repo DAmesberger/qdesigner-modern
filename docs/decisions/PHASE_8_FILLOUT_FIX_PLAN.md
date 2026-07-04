@@ -202,10 +202,20 @@ went `synced: 0 → 1` (server-acked); a fresh end-to-end run shows `allSynced: 
 reload. Locked with a regression test (`persistence-timing.test.ts` — 401 GET still syncs).
 Web suite now 801 passing. This is the canonical example of why live QA is a required gate.
 
-Known pre-existing gap (documented, out of scope): a purely OFFLINE-created session cannot
-sync because the create endpoint generates its own id (doesn't accept the client id) and the
-sync endpoint requires the session to exist — needs a server change to accept a client id or
-have sync upsert the session. Not introduced by this work; the online golden path is fixed.
+Pre-existing offline-session gap — ✅ FIXED. A purely OFFLINE-created session (exists only on
+the client) now syncs: the `sync_session` endpoint UPSERTS the session from a `session` init
+block in the payload (idempotent `ON CONFLICT (id) DO NOTHING`), gated by the same
+published-questionnaire rule as create and running under the fillout GUC so RLS admits ONLY a
+session id the caller already possesses. The fragile client-side `ensureServerSession` GET
+probe (which 401'd for anonymous callers) was removed. Verified live against a rebuilt backend:
+anonymous sync-upsert of a never-created session (published q) → 200 responses_synced:1;
+anonymous against an UNPUBLISHED q → 403; owner against their own draft → 200. A two-lens
+adversarial security review passed on tenant-isolation/RLS and found only 3 LOW issues (all
+fixed: create-parity metadata/participant_id normalization, a vacuous frontend test, and
+missing coverage). Added `rls_enforcement::session_insert_admitted_only_for_matching_app_session_id`
+(session-insert bootstrap admission — no hijack). The Rust published-gate itself is covered by
+the live verification; a handler-level HTTP test remains blocked by the documented no-AppState-
+harness limitation (project-wide, pre-existing).
 
 ## Post-implementation (user directive, 2026-07-04)
 

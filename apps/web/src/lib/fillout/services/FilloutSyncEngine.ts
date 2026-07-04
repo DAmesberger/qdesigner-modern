@@ -204,12 +204,28 @@ export class FilloutSyncEngine {
 				variable_value: v.value,
 			})),
 			status: session.status === 'completed' ? 'completed' : undefined,
+			// Carry session-creation fields so the server can materialize an
+			// OFFLINE-created session (one that exists only locally) at sync time.
+			// Omitted for a stub (an online session that already exists on the
+			// server and has no local definition to send). This replaces the old
+			// ensureServerSession get-probe, which 401'd for anonymous callers and
+			// stranded their responses.
+			session: session.questionnaireId
+				? {
+						questionnaire_id: session.questionnaireId,
+						participant_id: session.participantId ?? null,
+						version_major: session.versionMajor,
+						version_minor: session.versionMinor,
+						version_patch: session.versionPatch,
+						metadata: session.metadata ?? null,
+						browser_info: session.browserInfo ?? null,
+					}
+				: undefined,
 		};
 
-		// First ensure the session exists on the server
-		await this.ensureServerSession(session);
-
-		// Sync data via the bulk sync endpoint
+		// The sync endpoint is self-sufficient: it upserts the session from the
+		// init fields above (idempotent) and is anonymous-capable, so no separate
+		// existence probe is needed.
 		const result = await api.sessions.sync(session.id, payload);
 
 		// Mark records as synced
@@ -228,48 +244,6 @@ export class FilloutSyncEngine {
 			eventsSynced: result.events_synced ?? 0,
 			variablesSynced: result.variables_synced ?? 0,
 		};
-	}
-
-	/**
-	 * Ensure the session exists on the server (create if not).
-	 */
-	private async ensureServerSession(session: FilloutSession): Promise<void> {
-		try {
-			await api.sessions.get(session.id);
-			return;
-		} catch (error) {
-			const message = error instanceof Error ? error.message.toLowerCase() : '';
-			// CRITICAL: the session GET requires an Authorization header, so an
-			// ANONYMOUS fillout caller receives 401 here even when the session
-			// EXISTS on the server (the common case — an online session is created
-			// with the server's id at the fillout entry point). A non-"not found"
-			// error is therefore NOT evidence the session is missing: proceed to the
-			// sync POST, which is anonymous-capable and idempotent (ON CONFLICT
-			// client_id). Rethrowing here strands every anonymous participant's
-			// responses locally. Only a definitive "not found" (below) triggers a
-			// recreate.
-			if (!message.includes('not found')) {
-				return;
-			}
-		}
-
-		// A stub session (online-created, no local row) carries no questionnaire
-		// id, so it cannot be recreated. In practice the server session exists and
-		// the `get` above already returned; reaching here means the record is
-		// genuinely orphaned — surface it rather than POSTing an invalid create.
-		if (!session.questionnaireId) {
-			throw new Error(`Session ${session.id} not found on server and has no local definition to recreate it`);
-		}
-
-		await api.sessions.create({
-			questionnaireId: session.questionnaireId,
-			participantId: session.participantId ?? undefined,
-			metadata: session.metadata,
-			browserInfo: session.browserInfo as Record<string, unknown> | undefined,
-			versionMajor: session.versionMajor ?? undefined,
-			versionMinor: session.versionMinor ?? undefined,
-			versionPatch: session.versionPatch ?? undefined,
-		});
 	}
 
 	private scheduleRetry(): void {

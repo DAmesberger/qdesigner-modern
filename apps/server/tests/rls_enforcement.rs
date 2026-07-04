@@ -288,6 +288,59 @@ async fn user_a_can_insert_project_with_org_bs_id_at_rls_layer() {
 }
 
 #[tokio::test]
+async fn session_insert_admitted_only_for_matching_app_session_id() {
+    // The Phase-8 offline-sync upsert (sync_session) INSERTs a session under the
+    // `app.session_id` GUC that fillout_rls_context set from the URL path. The
+    // 00021 `sessions_insert_dual` bootstrap must admit an INSERT ONLY when
+    // `app.session_id = sessions.id`, so an anonymous caller can never materialize
+    // a session id they do not already possess (tenant isolation for the new
+    // anonymous-reachable upsert path).
+    let Some(pool) = get_test_pool().await else {
+        eprintln!("skipping: DATABASE_URL_MIGRATIONS not set / db unreachable");
+        return;
+    };
+    let f = build_fixture(&pool).await;
+    let qid: Uuid = sqlx::query_scalar(
+        "SELECT id FROM questionnaire_definitions WHERE project_id = $1 LIMIT 1",
+    )
+    .bind(f.project_a)
+    .fetch_one(&pool)
+    .await
+    .expect("fixture questionnaire id");
+
+    // Case 1: bound to session X, INSERT session id = X → admitted (bootstrap).
+    let own = Uuid::new_v4();
+    let mut tx = pool.begin().await.expect("begin");
+    pin_as_app_role(&mut tx, None, Some(own)).await;
+    let admitted = sqlx::query("INSERT INTO sessions (id, questionnaire_id) VALUES ($1, $2)")
+        .bind(own)
+        .bind(qid)
+        .execute(&mut *tx)
+        .await;
+    tx.rollback().await.ok();
+    assert!(
+        admitted.is_ok(),
+        "bootstrap must admit inserting the caller's own session id. Got: {admitted:?}"
+    );
+
+    // Case 2: bound to session X, INSERT a DIFFERENT session id Y ≠ X → denied.
+    let bound = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    let mut tx2 = pool.begin().await.expect("begin");
+    pin_as_app_role(&mut tx2, None, Some(bound)).await;
+    let denied = sqlx::query("INSERT INTO sessions (id, questionnaire_id) VALUES ($1, $2)")
+        .bind(other)
+        .bind(qid)
+        .execute(&mut *tx2)
+        .await;
+    tx2.rollback().await.ok();
+    assert!(
+        denied.is_err(),
+        "RLS must DENY inserting a session id != app.session_id (no session hijack). Got: {denied:?}"
+    );
+}
+
+#[tokio::test]
 async fn anon_fillout_can_select_its_own_responses() {
     let Some(pool) = get_test_pool().await else {
         eprintln!("skipping");

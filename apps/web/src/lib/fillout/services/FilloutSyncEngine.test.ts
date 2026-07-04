@@ -113,16 +113,18 @@ describe('FilloutSyncEngine.syncNow', () => {
 		expect(payload.responses[0].client_id).toBe(stored?.clientId);
 	});
 
-	it('creates the server session when api.sessions.get reports "not found"', async () => {
+	it('carries session-init fields so the server can upsert an offline-created session (no client-side create/probe)', async () => {
+		// The sync endpoint is now self-sufficient: it materializes an
+		// offline-created session from the payload's `session` fields. The client
+		// no longer probes with api.sessions.get (which 401'd for anonymous callers)
+		// nor calls api.sessions.create separately.
 		setOnline(true);
-		const session = await OfflineSessionService.createSession('q-1', 1, 0, 0);
+		const session = await OfflineSessionService.createSession('q-1', 2, 1, 3);
 		await OfflineResponsePersistence.saveResponse(session.id, {
 			questionId: 'q-1',
 			value: 1,
 		});
 
-		apiMock.sessions.get.mockRejectedValue(new Error('Session not found'));
-		apiMock.sessions.create.mockResolvedValue({ id: session.id });
 		apiMock.sessions.sync.mockResolvedValue({
 			responses_synced: 1,
 			events_synced: 0,
@@ -132,7 +134,16 @@ describe('FilloutSyncEngine.syncNow', () => {
 		const engine = new FilloutSyncEngine();
 		await engine.syncNow();
 
-		expect(apiMock.sessions.create).toHaveBeenCalledTimes(1);
 		expect(apiMock.sessions.sync).toHaveBeenCalledTimes(1);
+		// No standalone get-probe or create — the sync POST does it all.
+		expect(apiMock.sessions.get).not.toHaveBeenCalled();
+		expect(apiMock.sessions.create).not.toHaveBeenCalled();
+		const [, payload] = apiMock.sessions.sync.mock.calls[0]!;
+		expect(payload.session).toMatchObject({
+			questionnaire_id: 'q-1',
+			version_major: 2,
+			version_minor: 1,
+			version_patch: 3,
+		});
 	});
 });

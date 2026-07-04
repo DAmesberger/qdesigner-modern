@@ -2724,12 +2724,36 @@ pub async fn quota_status(
 
 // ── Sync Endpoint ────────────────────────────────────────────────
 
+/// Session-creation fields carried by the sync payload so a session that was
+/// created while OFFLINE (exists only on the client) can be materialized on the
+/// server at sync time. Optional: online sessions already exist and omit this.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SyncSessionInit {
+    #[serde(alias = "questionnaireId")]
+    pub questionnaire_id: Uuid,
+    #[serde(default, alias = "participantId")]
+    pub participant_id: Option<String>,
+    #[serde(default, alias = "versionMajor")]
+    pub version_major: Option<i32>,
+    #[serde(default, alias = "versionMinor")]
+    pub version_minor: Option<i32>,
+    #[serde(default, alias = "versionPatch")]
+    pub version_patch: Option<i32>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(default, alias = "browserInfo")]
+    pub browser_info: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct SyncPayload {
     pub responses: Vec<SyncResponseItem>,
     pub events: Vec<SyncEventItem>,
     pub variables: Vec<SyncVariableItem>,
     pub status: Option<String>,
+    /// Present when the session may not yet exist on the server (offline-created).
+    #[serde(default)]
+    pub session: Option<SyncSessionInit>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -2811,6 +2835,75 @@ pub async fn sync_session(
     let tx = guard
         .as_mut()
         .expect("fillout_rls_context middleware placed a transaction");
+
+    // Offline-first: a session created while OFFLINE exists only on the client, so
+    // materialize it here (idempotent) from the init fields the sync payload
+    // carries. This runs under the fillout GUC (`app.session_id` = the URL-path id,
+    // set by fillout_rls_context), so the 00021 `sessions_insert_dual` bootstrap
+    // admits EXACTLY this session id — a caller can never create a session id they
+    // do not already possess. The published-questionnaire gate mirrors
+    // create_session so anonymous callers cannot open a session against an
+    // unpublished / other-tenant questionnaire.
+    if let Some(init) = &body.session {
+        let already = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM sessions WHERE id = $1)")
+            .bind(session_id)
+            .fetch_one(&mut **tx)
+            .await?;
+        if !already {
+            let q_status = sqlx::query_scalar::<_, String>(
+                "SELECT status FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+            )
+            .bind(init.questionnaire_id)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+
+            if q_status != "published" {
+                match user.as_ref() {
+                    Some(u) => {
+                        access::verify_questionnaire_access(&mut **tx, u.user_id, init.questionnaire_id)
+                            .await?
+                    }
+                    None => {
+                        return Err(ApiError::Forbidden(
+                            "Questionnaire is not published".into(),
+                        ))
+                    }
+                }
+            }
+
+            let session_user_id = user.as_ref().map(|u| u.user_id);
+            // Mirror create_session's normalization so an offline session
+            // materializes identically to the same session created online:
+            // participant_id falls back to the authenticated user, metadata
+            // defaults to '{}' (COALESCE below) rather than SQL NULL.
+            let participant_id = init
+                .participant_id
+                .clone()
+                .or_else(|| user.as_ref().map(|u| u.user_id.to_string()));
+            sqlx::query(
+                r#"
+                INSERT INTO sessions (id, questionnaire_id, participant_id, status, started_at,
+                                      browser_info, metadata,
+                                      questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch,
+                                      user_id)
+                VALUES ($1, $2, $3, 'active', NOW(), $4, COALESCE($5, '{}'::jsonb), $6, $7, $8, $9)
+                ON CONFLICT (id) DO NOTHING
+                "#,
+            )
+            .bind(session_id)
+            .bind(init.questionnaire_id)
+            .bind(&participant_id)
+            .bind(&init.browser_info)
+            .bind(&init.metadata)
+            .bind(init.version_major)
+            .bind(init.version_minor)
+            .bind(init.version_patch)
+            .bind(session_user_id)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
 
     // Verify session exists and user is authorized
     ensure_session_participant_or_member(&mut **tx, user.as_ref(), session_id).await?;

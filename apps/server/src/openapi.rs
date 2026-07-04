@@ -249,6 +249,7 @@ impl Modify for SecurityAddon {
             api::sessions::CheckDuplicateRequest,
             api::sessions::CheckDuplicateResponse,
             api::sessions::SyncPayload,
+            api::sessions::SyncSessionInit,
             api::sessions::SyncResponseItem,
             api::sessions::SyncEventItem,
             api::sessions::SyncVariableItem,

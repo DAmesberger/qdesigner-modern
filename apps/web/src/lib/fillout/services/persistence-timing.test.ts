@@ -147,12 +147,13 @@ describe('timing provenance round-trip', () => {
 		expect(apiMock.sessions.create).not.toHaveBeenCalled();
 	});
 
-	it('still syncs when the session GET returns 401 (anonymous fillout — the probe cannot auth)', async () => {
-		// Regression for the live-QA bug: for an anonymous participant the session
-		// GET in ensureServerSession returns 401 "Missing Authorization header" even
-		// though the session EXISTS on the server. That 401 must NOT abort the sync —
-		// otherwise every anonymous participant's responses are stranded locally.
-		// (Unit tests previously mocked get() to resolve, hiding this entirely.)
+	it('syncs an anonymous session without probing the session GET (the 401-abort bug is gone)', async () => {
+		// The live-QA bug: ensureServerSession probed api.sessions.get, which 401s
+		// for anonymous callers, aborting the sync and stranding every participant's
+		// responses. That probe is now removed — the sync endpoint is self-sufficient
+		// (upserts the session). This locks that the GET is never called and the sync
+		// still happens. For a stub (online session, no local row) the payload omits
+		// the session-init block; server-side ON CONFLICT handles the already-exists case.
 		setOnline(true);
 		const sessionId = 'anon-online-session-1';
 		await OfflineResponsePersistence.saveResponse(sessionId, {
@@ -161,7 +162,6 @@ describe('timing provenance round-trip', () => {
 			reactionTimeUs: 300_000,
 		});
 
-		apiMock.sessions.get.mockRejectedValue(new Error('Missing Authorization header'));
 		apiMock.sessions.sync.mockResolvedValue({
 			responses_synced: 1,
 			events_synced: 0,
@@ -171,9 +171,13 @@ describe('timing provenance round-trip', () => {
 		const engine = new FilloutSyncEngine();
 		await engine.syncNow();
 
-		// The 401 did NOT abort: the sync POST happened and the response is marked synced.
 		expect(apiMock.sessions.sync).toHaveBeenCalledTimes(1);
+		// The fragile get-probe and the client-side create are both gone.
+		expect(apiMock.sessions.get).not.toHaveBeenCalled();
 		expect(apiMock.sessions.create).not.toHaveBeenCalled();
+		// Stub session (no local filloutSessions row) → no session-init block sent.
+		const [, payload] = apiMock.sessions.sync.mock.calls[0]!;
+		expect(payload.session).toBeUndefined();
 		const [record] = await db.filloutResponses.toArray();
 		expect(record?.synced).toBe(1);
 	});
