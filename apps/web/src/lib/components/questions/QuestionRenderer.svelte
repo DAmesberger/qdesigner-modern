@@ -2,6 +2,7 @@
   import type { ExtendedQuestion } from './types';
   import { untrack, type ComponentType } from 'svelte';
   import { moduleRegistry } from '$lib/modules/registry';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
 
   interface Props {
     question: ExtendedQuestion;
@@ -115,13 +116,15 @@
     }
   }
 
-  // Merge question properties with type-specific config
+  // Merge question properties with the normalized runtime module config. The
+  // per-module runtime components read their fields off `question.config`
+  // (e.g. `config.options`, `config.prompt`), but stored questions keep those
+  // under `display`/`responseType`. buildModuleRuntimeConfig is the same adapter
+  // the live fillout path (ModularRenderer) uses, so the preview path renders an
+  // identical body instead of an empty one. See ADR 0018 / moduleConfigAdapter.
   const fullQuestion = $derived({
     ...question,
-    config: {
-      ...question.config,
-      ...(question as any), // Type-specific properties
-    },
+    config: buildModuleRuntimeConfig(question),
   });
 
   // Transform question to analytics format for display modules

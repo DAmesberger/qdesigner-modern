@@ -44,6 +44,16 @@
   let processedTitle = $state('');
   let processedDescription = $state('');
 
+  // Resolve the question prompt/title. Stored questions keep the prompt under
+  // `display.prompt` (flattened into `config.prompt` by the runtime module-config
+  // adapter); `title` is the ExtendedQuestion display field and `text` is the
+  // legacy/WebGL field. Without this fallback the prompt never renders in the
+  // modular fillout/preview path (it only read `title`). See ADR 0018.
+  const resolvedTitle = $derived.by(() => {
+    const q = question as any;
+    return q.title ?? q.prompt ?? q.config?.prompt ?? q.display?.prompt ?? q.text ?? '';
+  });
+
   // Check conditional visibility
   $effect(() => {
     if (question.conditions && mode === 'runtime') {
@@ -158,15 +168,16 @@
 
   function processContent() {
     // Process title with markdown and media
-    const q = question as any;
-    if (q.title) {
-      processedTitle = processMarkdownContentSync(q.title, {
+    if (resolvedTitle) {
+      processedTitle = processMarkdownContentSync(resolvedTitle, {
         media: question.media || [],
         mediaUrls,
         format: 'markdown',
         processVariables: true,
         variables: {},
       });
+    } else {
+      processedTitle = '';
     }
 
     // Process description with markdown and media
@@ -228,9 +239,9 @@
       </div>
     {/if}
 
-    {#if (question as any).title}
+    {#if resolvedTitle}
       <div class="question-title" id="question-{question.id}-title">
-        {@html processedTitle || (question as any).title}
+        {@html processedTitle || resolvedTitle}
         {#if question.required && mode === 'runtime'}
           <span class="required-indicator" aria-label="Required">*</span>
         {/if}
