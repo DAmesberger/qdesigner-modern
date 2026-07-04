@@ -309,7 +309,7 @@
 
     <section class="flex items-center justify-center">
       <div
-        class="w-full max-w-xl rounded-[32px] border border-slate-200/80 bg-white/95 p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/90 dark:shadow-black/50 sm:p-8"
+        class="w-full max-w-xl rounded-[32px] border border-border/80 bg-card/95 p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/10 dark:bg-card/90 dark:shadow-black/50 sm:p-8"
       >
         <div class="mb-8 flex items-center justify-between gap-4">
           <a href="/" class="inline-flex items-center gap-3 lg:hidden">
@@ -322,16 +322,16 @@
             </div>
             <div>
               <p
-                class="text-sm font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400"
+                class="text-sm font-semibold uppercase tracking-[0.28em] text-muted-foreground"
               >
                 QDesigner
               </p>
-              <p class="text-sm text-slate-500 dark:text-slate-400">Research workspace</p>
+              <p class="text-sm text-muted-foreground">Research workspace</p>
             </div>
           </a>
 
           <div
-            class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+            class="rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground dark:border-white/10 dark:bg-white/5"
           >
             Access
           </div>
@@ -342,11 +342,11 @@
             Workspace sign in
           </p>
           <h2
-            class="mt-4 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-4xl"
+            class="mt-4 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
           >
             {m.auth_login_title()}
           </h2>
-          <p class="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
+          <p class="mt-4 text-sm leading-7 text-muted-foreground sm:text-base">
             Continue to active studies, quota monitoring, and version-aware exports from one place.
           </p>
         </div>
@@ -361,7 +361,7 @@
               required
               bind:value={email}
               placeholder="Enter your email"
-              class="h-12 rounded-xl border border-slate-200/80 bg-white/80 px-4 shadow-none dark:border-white/10 dark:bg-white/5"
+              class="h-12 rounded-xl border border-border/80 bg-card/80 px-4 shadow-none dark:border-white/10 dark:bg-white/5"
             />
           </FormGroup>
 
@@ -386,7 +386,7 @@
                 required
                 bind:value={password}
                 placeholder="Enter your password"
-                class="h-12 rounded-xl border border-slate-200/80 bg-white/80 px-4 shadow-none dark:border-white/10 dark:bg-white/5"
+                class="h-12 rounded-xl border border-border/80 bg-card/80 px-4 shadow-none dark:border-white/10 dark:bg-white/5"
               />
             </FormGroup>
           </div>
@@ -405,28 +405,28 @@
 
           <div class="grid gap-3 sm:grid-cols-2">
             <div
-              class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5"
+              class="rounded-2xl border border-border bg-muted/80 p-4 dark:border-white/10 dark:bg-white/5"
             >
               <div
-                class="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white"
+                class="flex items-center gap-2 text-sm font-semibold text-foreground"
               >
                 <Clock class="h-4 w-4 text-sky-500 dark:text-sky-300" />
                 Fast return to active work
               </div>
-              <p class="mt-2 text-xs leading-6 text-slate-600 dark:text-slate-300">
+              <p class="mt-2 text-xs leading-6 text-muted-foreground">
                 Resume study reviews, live runs, and release checks without digging through menus.
               </p>
             </div>
             <div
-              class="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-white/5"
+              class="rounded-2xl border border-border bg-muted/80 p-4 dark:border-white/10 dark:bg-white/5"
             >
               <div
-                class="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white"
+                class="flex items-center gap-2 text-sm font-semibold text-foreground"
               >
                 <ShieldCheck class="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
                 Safer operator flow
               </div>
-              <p class="mt-2 text-xs leading-6 text-slate-600 dark:text-slate-300">
+              <p class="mt-2 text-xs leading-6 text-muted-foreground">
                 Release context, permissions, and audit history stay close to the work.
               </p>
             </div>
@@ -445,22 +445,22 @@
 
           {#if showDevQuickLogin}
             <div
-              class="rounded-[24px] border border-amber-300/70 bg-amber-50/90 p-4 shadow-sm shadow-amber-900/5 dark:border-amber-400/30 dark:bg-amber-500/10 dark:shadow-transparent"
+              class="rounded-[24px] border border-warning/40 bg-warning/10 p-4 shadow-sm shadow-warning/10 dark:border-warning/30 dark:shadow-transparent"
               data-testid="dev-quick-login-panel"
             >
               <div class="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <p
-                    class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-900 dark:text-amber-200"
+                    class="text-xs font-semibold uppercase tracking-[0.24em] text-warning"
                   >
                     Dev quick login
                   </p>
-                  <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                  <p class="mt-1 text-xs text-warning">
                     Jump into seeded accounts while working locally.
                   </p>
                 </div>
                 <span
-                  class="rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-800 dark:text-amber-200"
+                  class="rounded-full bg-warning/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-warning"
                 >
                   Dev only
                 </span>
@@ -472,7 +472,7 @@
                     type="button"
                     variant="ghost"
                     size="sm"
-                    class="justify-start rounded-xl border border-amber-300/60 bg-white/70 px-3 text-amber-950 hover:bg-white dark:border-amber-300/20 dark:bg-white/5 dark:text-amber-100 dark:hover:bg-white/10"
+                    class="justify-start rounded-xl border border-warning/40 bg-card/70 px-3 text-warning hover:bg-card dark:border-warning/20 dark:bg-white/5 dark:hover:bg-white/10"
                     onclick={() => handleDevQuickLogin(persona)}
                     {loading}
                     data-testid={`dev-quick-login-${persona.id}`}
@@ -487,10 +487,10 @@
           <div class="pt-2">
             <div class="relative">
               <div class="absolute inset-0 flex items-center">
-                <div class="w-full border-t border-slate-200 dark:border-white/10"></div>
+                <div class="w-full border-t border-border dark:border-white/10"></div>
               </div>
               <div class="relative flex justify-center text-sm">
-                <span class="bg-white px-3 text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+                <span class="bg-card px-3 text-muted-foreground">
                   Or
                 </span>
               </div>
@@ -510,17 +510,17 @@
         </form>
 
         <div
-          class="mt-6 flex items-center gap-2 text-xs leading-6 text-slate-500 dark:text-slate-400"
+          class="mt-6 flex items-center gap-2 text-xs leading-6 text-muted-foreground"
         >
           <div
-            class="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+            class="flex h-7 w-7 items-center justify-center rounded-full bg-success/10 text-success"
           >
             <Check class="h-4 w-4" />
           </div>
           Study versions, review notes, and export metadata remain connected after sign in.
         </div>
 
-        <p class="mt-8 text-center text-sm text-slate-500 dark:text-slate-400">
+        <p class="mt-8 text-center text-sm text-muted-foreground">
           By signing in, you agree to our Terms and Privacy Policy.
         </p>
       </div>

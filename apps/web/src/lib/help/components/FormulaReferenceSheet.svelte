@@ -157,7 +157,7 @@
         <input
           type="text"
           placeholder="Search functions..."
-          class="w-full rounded-md border border-border bg-[hsl(var(--layer-surface))] py-1.5 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          class="w-full rounded-md border border-border bg-layer-surface py-1.5 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           bind:value={searchQuery}
           data-testid="formula-search"
         />

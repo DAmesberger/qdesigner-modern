@@ -958,7 +958,7 @@
       <div class="p-4 space-y-4">
         <div class="flex items-center justify-between">
           <h4 class="text-sm font-medium text-foreground">Question Script</h4>
-          <span class="text-xs px-2 py-0.5 rounded-full {questionItem.settings?.script ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}">
+          <span class="text-xs px-2 py-0.5 rounded-full {questionItem.settings?.script ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}">
             {questionItem.settings?.script ? 'Has script' : 'No script'}
           </span>
         </div>
@@ -1009,7 +1009,7 @@
 
       {#if templateSaveSuccess}
         <div class="text-center py-8">
-          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-emerald-500/10 flex items-center justify-center">
+          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-success/10 flex items-center justify-center">
             <CheckCircle size={24} class="text-success" />
           </div>
           <p class="text-sm font-medium text-foreground">Template saved successfully</p>

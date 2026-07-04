@@ -312,7 +312,7 @@
     ></button>
 
     <div
-      class="relative mx-auto mt-20 w-[min(680px,92vw)] rounded-xl border border-[hsl(var(--glass-border))] bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-xl)]"
+      class="relative mx-auto mt-20 w-[min(680px,92vw)] rounded-xl border border-[hsl(var(--glass-border))] bg-layer-surface shadow-[var(--shadow-xl)]"
     >
       <div class="border-b border-border px-4 py-3 flex items-center gap-2">
         <Search class="w-4 h-4 text-muted-foreground shrink-0" />

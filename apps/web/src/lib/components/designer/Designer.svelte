@@ -158,7 +158,7 @@
 
         <button
           onclick={() => designerStore.togglePreview()}
-          class="px-4 py-1.5 bg-success text-white rounded-md hover:bg-success/90 transition-colors"
+          class="px-4 py-1.5 bg-success text-success-foreground rounded-md hover:bg-success/90 transition-colors"
         >
           {showPreview ? 'Edit' : 'Preview'}
         </button>

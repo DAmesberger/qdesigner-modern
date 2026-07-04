@@ -197,15 +197,15 @@
       href="/analytics"
       aria-label="Back to analytics overview"
       title="Back to analytics overview"
-      class="p-2 rounded-lg hover:bg-[hsl(var(--background))]/80 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
+      class="p-2 rounded-lg hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
     >
       <ChevronLeft size={20} />
     </a>
     <div class="flex-1">
-      <h1 class="text-2xl font-bold text-[hsl(var(--foreground))] tracking-tight">
+      <h1 class="text-2xl font-bold text-foreground tracking-tight">
         {summary?.name ?? 'Questionnaire Analytics'}
       </h1>
-      <p class="text-sm text-[hsl(var(--muted-foreground))]">
+      <p class="text-sm text-muted-foreground">
         Detailed analytics and response data
       </p>
     </div>
@@ -215,14 +215,14 @@
       <button
         onclick={() => exportData('csv')}
         disabled={exportLoading}
-        class="px-3 py-1.5 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--background))]/80 disabled:opacity-50 transition-colors"
+        class="px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-foreground hover:bg-background/80 disabled:opacity-50 transition-colors"
       >
         Export CSV
       </button>
       <button
         onclick={() => exportData('json')}
         disabled={exportLoading}
-        class="px-3 py-1.5 text-sm font-medium rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--background))]/80 disabled:opacity-50 transition-colors"
+        class="px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-foreground hover:bg-background/80 disabled:opacity-50 transition-colors"
       >
         Export JSON
       </button>
@@ -232,28 +232,28 @@
   <!-- Summary Cards -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
     <div class="glass-card p-4">
-      <div class="text-xs text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1">Total Sessions</div>
-      <div class="text-2xl font-bold text-[hsl(var(--foreground))]">{totalSessions}</div>
+      <div class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Sessions</div>
+      <div class="text-2xl font-bold text-foreground">{totalSessions}</div>
       {#if liveTotal > 0}
         <div class="text-xs text-success mt-1">+{liveTotal} live</div>
       {/if}
     </div>
 
     <div class="glass-card p-4">
-      <div class="text-xs text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1">Completed</div>
-      <div class="text-2xl font-bold text-[hsl(var(--foreground))]">{totalCompleted}</div>
-      <div class="text-xs text-[hsl(var(--muted-foreground))] mt-1">{completionRate.toFixed(1)}% rate</div>
+      <div class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Completed</div>
+      <div class="text-2xl font-bold text-foreground">{totalCompleted}</div>
+      <div class="text-xs text-muted-foreground mt-1">{completionRate.toFixed(1)}% rate</div>
     </div>
 
     <div class="glass-card p-4">
-      <div class="text-xs text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1">Avg Completion</div>
-      <div class="text-2xl font-bold text-[hsl(var(--foreground))]">{formatTime(avgCompletionMs)}</div>
+      <div class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Avg Completion</div>
+      <div class="text-2xl font-bold text-foreground">{formatTime(avgCompletionMs)}</div>
     </div>
 
     <div class="glass-card p-4">
-      <div class="text-xs text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1">Live Activity</div>
-      <div class="text-2xl font-bold text-[hsl(var(--foreground))]">{liveRpm.toFixed(1)}</div>
-      <div class="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+      <div class="text-xs text-muted-foreground uppercase tracking-wider mb-1">Live Activity</div>
+      <div class="text-2xl font-bold text-foreground">{liveRpm.toFixed(1)}</div>
+      <div class="text-xs text-muted-foreground mt-1">
         responses/min ({liveSessions} active)
       </div>
     </div>
@@ -262,15 +262,15 @@
   <!-- Time-Series Chart -->
   <div class="glass-card p-6">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold text-[hsl(var(--foreground))]">Response Timeline</h2>
+      <h2 class="text-lg font-semibold text-foreground">Response Timeline</h2>
       <div class="flex gap-1">
         {#each ['hour', 'day', 'week'] as opt}
           <button
             onclick={() => changeInterval(opt as 'hour' | 'day' | 'week')}
             class="px-3 py-1 text-xs font-medium rounded-md transition-colors
               {interval === opt
-                ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
-                : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--background))]/50'}"
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/50'}"
           >
             {opt.charAt(0).toUpperCase() + opt.slice(1)}
           </button>
@@ -279,9 +279,9 @@
     </div>
 
     {#if loading}
-      <div class="h-48 flex items-center justify-center text-[hsl(var(--muted-foreground))]">Loading...</div>
+      <div class="h-48 flex items-center justify-center text-muted-foreground">Loading...</div>
     {:else if timeseries.length === 0}
-      <div class="h-48 flex items-center justify-center text-[hsl(var(--muted-foreground))]">No data yet</div>
+      <div class="h-48 flex items-center justify-center text-muted-foreground">No data yet</div>
     {:else}
       <div class="flex flex-col">
         <svg viewBox="0 0 600 180" class="w-full h-48 block" preserveAspectRatio="none">
@@ -314,9 +314,9 @@
         </svg>
 
         <!-- Legend -->
-        <div class="flex items-center gap-4 mt-2 text-xs text-[hsl(var(--muted-foreground))]">
+        <div class="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
           <div class="flex items-center gap-1">
-            <div class="w-3 h-0.5 bg-[hsl(var(--primary))]"></div>
+            <div class="w-3 h-0.5 bg-primary"></div>
             Started
           </div>
           <div class="flex items-center gap-1">
@@ -332,7 +332,7 @@
 
       <!-- X-axis labels -->
       {#if timeseries.length > 0}
-        <div class="flex justify-between text-xs text-[hsl(var(--muted-foreground))] mt-1 px-1">
+        <div class="flex justify-between text-xs text-muted-foreground mt-1 px-1">
           <span>{formatDate(timeseries[0]?.timestamp ?? '')}</span>
           {#if timeseries.length > 2}
             <span>{formatDate(timeseries[Math.floor(timeseries.length / 2)]?.timestamp ?? '')}</span>
@@ -345,9 +345,9 @@
 
   <!-- Completion Funnel -->
   <div class="glass-card p-6">
-    <h2 class="text-lg font-semibold text-[hsl(var(--foreground))] mb-4">Completion Funnel</h2>
+    <h2 class="text-lg font-semibold text-foreground mb-4">Completion Funnel</h2>
     {#if totalSessions === 0}
-      <p class="text-[hsl(var(--muted-foreground))] text-sm">No session data available</p>
+      <p class="text-muted-foreground text-sm">No session data available</p>
     {:else}
       {@const stages = [
         { label: 'Started', count: totalSessions, color: 'bg-info' },
@@ -358,14 +358,14 @@
         {#each stages as stage}
           {@const pct = totalSessions > 0 ? (stage.count / totalSessions * 100) : 0}
           <div class="flex items-center gap-3">
-            <span class="w-24 text-sm text-[hsl(var(--muted-foreground))] text-right">{stage.label}</span>
-            <div class="flex-1 h-6 bg-[hsl(var(--background))]/50 rounded-md overflow-hidden">
+            <span class="w-24 text-sm text-muted-foreground text-right">{stage.label}</span>
+            <div class="flex-1 h-6 bg-background/50 rounded-md overflow-hidden">
               <div
                 class="{stage.color} h-full rounded-md transition-all duration-500"
                 style="width: {pct}%"
               ></div>
             </div>
-            <span class="w-20 text-sm font-medium text-[hsl(var(--foreground))] text-right">
+            <span class="w-20 text-sm font-medium text-foreground text-right">
               {stage.count} ({pct.toFixed(1)}%)
             </span>
           </div>
@@ -378,48 +378,48 @@
   {#if summary}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="glass-card p-6">
-        <h2 class="text-lg font-semibold text-[hsl(var(--foreground))] mb-4">Response Statistics</h2>
+        <h2 class="text-lg font-semibold text-foreground mb-4">Response Statistics</h2>
         <dl class="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
           <div>
-            <dt class="text-[hsl(var(--muted-foreground))]">Total Responses</dt>
-            <dd class="font-medium text-[hsl(var(--foreground))]">{summary.total_responses}</dd>
+            <dt class="text-muted-foreground">Total Responses</dt>
+            <dd class="font-medium text-foreground">{summary.total_responses}</dd>
           </div>
           <div>
-            <dt class="text-[hsl(var(--muted-foreground))]">Completed Sessions</dt>
-            <dd class="font-medium text-[hsl(var(--foreground))]">{summary.completed_sessions}</dd>
+            <dt class="text-muted-foreground">Completed Sessions</dt>
+            <dd class="font-medium text-foreground">{summary.completed_sessions}</dd>
           </div>
           <div>
-            <dt class="text-[hsl(var(--muted-foreground))]">Completion Rate</dt>
-            <dd class="font-medium text-[hsl(var(--foreground))]">
+            <dt class="text-muted-foreground">Completion Rate</dt>
+            <dd class="font-medium text-foreground">
               {summary.total_responses > 0
                 ? (summary.completed_sessions / summary.total_responses * 100).toFixed(1) + '%'
                 : '-'}
             </dd>
           </div>
           <div>
-            <dt class="text-[hsl(var(--muted-foreground))]">Avg Completion Time</dt>
-            <dd class="font-medium text-[hsl(var(--foreground))]">
+            <dt class="text-muted-foreground">Avg Completion Time</dt>
+            <dd class="font-medium text-foreground">
               {formatTime(summary.avg_completion_time_ms)}
             </dd>
           </div>
           <div>
-            <dt class="text-[hsl(var(--muted-foreground))]">Status</dt>
-            <dd class="font-medium text-[hsl(var(--foreground))] capitalize">{summary.status}</dd>
+            <dt class="text-muted-foreground">Status</dt>
+            <dd class="font-medium text-foreground capitalize">{summary.status}</dd>
           </div>
         </dl>
       </div>
 
       <!-- Histogram (completion time distribution) -->
       <div class="glass-card p-6">
-        <h2 class="text-lg font-semibold text-[hsl(var(--foreground))] mb-4">Time Distribution</h2>
+        <h2 class="text-lg font-semibold text-foreground mb-4">Time Distribution</h2>
         {#if timeseries.length === 0}
-          <p class="text-[hsl(var(--muted-foreground))] text-sm">Not enough data</p>
+          <p class="text-muted-foreground text-sm">Not enough data</p>
         {:else}
           {@const completionTimes = timeseries
             .filter(b => b.avg_completion_ms !== null)
             .map(b => b.avg_completion_ms as number)}
           {#if completionTimes.length < 2}
-            <p class="text-[hsl(var(--muted-foreground))] text-sm">Not enough data for histogram</p>
+            <p class="text-muted-foreground text-sm">Not enough data for histogram</p>
           {:else}
             {@const minTime = Math.min(...completionTimes)}
             {@const maxTime = Math.max(...completionTimes)}
@@ -436,14 +436,14 @@
                 {@const height = (count / maxBin) * 100}
                 <div class="flex-1 flex flex-col items-center">
                   <div
-                    class="w-full bg-[hsl(var(--primary))] rounded-t-sm transition-all duration-300"
+                    class="w-full bg-primary rounded-t-sm transition-all duration-300"
                     style="height: {height}%"
                     title="{formatTime(minTime + i * binWidth)} - {formatTime(minTime + (i + 1) * binWidth)}: {count}"
                   ></div>
                 </div>
               {/each}
             </div>
-            <div class="flex justify-between text-xs text-[hsl(var(--muted-foreground))] mt-1">
+            <div class="flex justify-between text-xs text-muted-foreground mt-1">
               <span>{formatTime(minTime)}</span>
               <span>{formatTime(maxTime)}</span>
             </div>
@@ -456,14 +456,14 @@
   <!-- Psychometrics -->
   <div class="space-y-4">
     <div>
-      <h2 class="text-lg font-semibold text-[hsl(var(--foreground))]">Psychometrics</h2>
-      <p class="text-sm text-[hsl(var(--muted-foreground))]">
+      <h2 class="text-lg font-semibold text-foreground">Psychometrics</h2>
+      <p class="text-sm text-muted-foreground">
         Reliability, item statistics and item-response modelling for numeric and scale responses.
       </p>
     </div>
 
     {#if psychometrics.descriptives.length === 0}
-      <div class="glass-card p-6 text-sm text-[hsl(var(--muted-foreground))]">
+      <div class="glass-card p-6 text-sm text-muted-foreground">
         {psychometrics.reason ??
           'No numeric or scale-type responses are available for psychometric analysis yet.'}
       </div>
@@ -509,7 +509,7 @@
           itemNames={psychometrics.itemNames}
         />
       {:else}
-        <div class="glass-card p-6 text-sm text-[hsl(var(--muted-foreground))]">
+        <div class="glass-card p-6 text-sm text-muted-foreground">
           {psychometrics.reason ??
             'Not enough complete data to compute a reliability coefficient.'}
         </div>
@@ -517,7 +517,7 @@
 
       <!-- Per-item descriptive statistics -->
       <div class="glass-card p-6">
-        <h3 class="text-base font-semibold text-[hsl(var(--foreground))] mb-4">
+        <h3 class="text-base font-semibold text-foreground mb-4">
           Item Descriptive Statistics
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -531,7 +531,7 @@
       {#if psychometrics.irtItems && psychometrics.irtItems.length > 0}
         <IRTPanel items={psychometrics.irtItems} />
       {:else}
-        <div class="glass-card p-6 text-sm text-[hsl(var(--muted-foreground))]">
+        <div class="glass-card p-6 text-sm text-muted-foreground">
           Item-response (IRT) analysis requires dichotomous (0/1) item responses. The current data
           is not dichotomous, so item-characteristic curves are unavailable.
         </div>

@@ -209,9 +209,9 @@
   function getStatusColor(status: string) {
     switch (status) {
       case 'published':
-        return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
+        return 'border-success/20 bg-success/10 text-success';
       case 'draft':
-        return 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300';
+        return 'border-warning/20 bg-warning/10 text-warning';
       case 'archived':
         return 'border-border bg-muted text-muted-foreground';
       default:
@@ -222,11 +222,11 @@
   function getActivityStatusColor(status: string) {
     switch (status) {
       case 'completed':
-        return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
+        return 'bg-success/10 text-success';
       case 'in_progress':
-        return 'bg-sky-500/10 text-sky-700 dark:text-sky-300';
+        return 'bg-info/10 text-info';
       case 'abandoned':
-        return 'bg-rose-500/10 text-rose-700 dark:text-rose-300';
+        return 'bg-destructive/10 text-destructive';
       default:
         return 'bg-muted text-muted-foreground';
     }
@@ -547,7 +547,7 @@
                     Updated {formatDistanceToNow(new Date(questionnaire.updated_at))} ago
                   </span>
                   {#if questionnaire.response_rate_7d > 0}
-                    <span class="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 font-medium text-emerald-700 dark:text-emerald-300">
+                    <span class="inline-flex items-center gap-2 rounded-full bg-success/10 px-3 py-1.5 font-medium text-success">
                       <TrendingUp class="h-4 w-4" />
                       +{questionnaire.response_rate_7d}% this week
                     </span>

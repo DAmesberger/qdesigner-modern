@@ -408,7 +408,7 @@
                   </span>
                 {/if}
                 {#if template.isShared || template.is_shared}
-                  <span class="text-xs px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full">
+                  <span class="text-xs px-2 py-0.5 bg-success/10 text-success rounded-full">
                     Shared
                   </span>
                 {/if}

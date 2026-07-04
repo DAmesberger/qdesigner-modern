@@ -539,7 +539,7 @@
 
 {#if contextMenuOpen}
   <div
-    class="fixed z-50 min-w-[160px] bg-[hsl(var(--popover))] text-[hsl(var(--popover-foreground))] shadow-[var(--shadow-lg)] rounded-[var(--radius)] border border-border py-1 context-menu-animate"
+    class="fixed z-50 min-w-[160px] bg-popover text-popover-foreground shadow-[var(--shadow-lg)] rounded-[var(--radius)] border border-border py-1 context-menu-animate"
     style="left: {contextMenuX}px; top: {contextMenuY}px;"
     role="menu"
     data-testid="question-context-menu"

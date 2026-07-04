@@ -337,7 +337,7 @@
 
     {#if showDatePicker && showCalendar && (inputMode === 'date' || inputMode === 'datetime')}
       <div
-        class="absolute top-full left-0 mt-2 bg-[hsl(var(--card))] border-2 border-border rounded-lg shadow-md z-10 p-4 max-sm:left-1/2 max-sm:-translate-x-1/2"
+        class="absolute top-full left-0 mt-2 bg-card border-2 border-border rounded-lg shadow-md z-10 p-4 max-sm:left-1/2 max-sm:-translate-x-1/2"
         onclick={(e) => e.stopPropagation()}
         role="dialog"
         tabindex="-1"

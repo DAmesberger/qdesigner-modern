@@ -92,7 +92,7 @@
 <div class="flex h-full" data-testid="designer-left-sidebar">
   <!-- Icon Rail — always visible on desktop -->
   <nav
-    class="hidden md:flex w-12 flex-col items-center bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-sm)] border-r border-[hsl(var(--glass-border))] z-20 py-2"
+    class="hidden md:flex w-12 flex-col items-center bg-layer-surface shadow-[var(--shadow-sm)] border-r border-[hsl(var(--glass-border))] z-20 py-2"
     data-testid="designer-icon-rail"
   >
     <!-- Top icons -->
@@ -207,7 +207,7 @@
   <!-- Mobile drawer — full-width overlay -->
   {#if isMobile && designerStore.isLeftDrawerOpen}
     <aside
-      class="fixed inset-y-0 left-0 z-40 w-[86vw] max-w-sm bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-lg)] flex flex-col animate-slide-in-left"
+      class="fixed inset-y-0 left-0 z-40 w-[86vw] max-w-sm bg-layer-surface shadow-[var(--shadow-lg)] flex flex-col animate-slide-in-left"
       data-testid="designer-mobile-left-drawer"
     >
       <div class="flex items-center justify-between px-3 py-2.5 border-b border-border">

@@ -151,7 +151,7 @@
   }
   
   .glass-input {
-    @apply bg-transparent border-[var(--glass-border)] focus:border-[hsl(var(--primary))] focus:ring-1 focus:ring-[hsl(var(--primary))];
+    @apply bg-transparent border-[var(--glass-border)] focus:border-primary focus:ring-1 focus:ring-primary;
     backdrop-filter: blur(4px);
   }
 }

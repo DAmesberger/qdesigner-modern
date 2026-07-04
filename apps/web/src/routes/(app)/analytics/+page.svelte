@@ -186,10 +186,10 @@
 <div class="min-h-screen">
   <!-- Header -->
   <div class="mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-    <h1 class="text-3xl font-bold text-[hsl(var(--foreground))] tracking-tight">
+    <h1 class="text-3xl font-bold text-foreground tracking-tight">
       Cross-Project Analytics
     </h1>
-    <p class="mt-2 text-[hsl(var(--muted-foreground))]">
+    <p class="mt-2 text-muted-foreground">
       Overview of all questionnaires across your organization.
     </p>
   </div>
@@ -197,7 +197,7 @@
   <!-- Filters -->
   <div class="flex flex-wrap items-center gap-4 mb-6">
     <div>
-      <label for="filter-project" class="text-xs text-[hsl(var(--muted-foreground))] block mb-1">Project</label>
+      <label for="filter-project" class="text-xs text-muted-foreground block mb-1">Project</label>
       <Select
         id="filter-project"
         bind:value={filterProject}
@@ -210,7 +210,7 @@
       </Select>
     </div>
     <div>
-      <label for="filter-status" class="text-xs text-[hsl(var(--muted-foreground))] block mb-1">Status</label>
+      <label for="filter-status" class="text-xs text-muted-foreground block mb-1">Status</label>
       <Select
         id="filter-status"
         bind:value={filterStatus}
@@ -223,7 +223,7 @@
       </Select>
     </div>
     <div>
-      <label for="filter-date" class="text-xs text-[hsl(var(--muted-foreground))] block mb-1">Date Range</label>
+      <label for="filter-date" class="text-xs text-muted-foreground block mb-1">Date Range</label>
       <Select
         id="filter-date"
         bind:value={filterDateRange}
@@ -235,7 +235,7 @@
         <option value="90d">Last 90 Days</option>
       </Select>
     </div>
-    <div class="ml-auto text-sm text-[hsl(var(--muted-foreground))]">
+    <div class="ml-auto text-sm text-muted-foreground">
       {filtered.length} questionnaire{filtered.length !== 1 ? 's' : ''}
     </div>
   </div>
@@ -243,7 +243,7 @@
   <!-- Table -->
   {#if filtered.length === 0}
     <div class="glass-card p-12 text-center">
-      <p class="text-[hsl(var(--muted-foreground))]">
+      <p class="text-muted-foreground">
         No questionnaires match the selected filters.
       </p>
     </div>
@@ -252,38 +252,38 @@
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="border-b border-[hsl(var(--border))] bg-[hsl(var(--background))]/50">
-              <th class="px-4 py-3 text-left font-medium text-[hsl(var(--muted-foreground))]">
-                <button onclick={() => toggleSort('name')} class="hover:text-[hsl(var(--foreground))]">
+            <tr class="border-b border-border bg-background/50">
+              <th class="px-4 py-3 text-left font-medium text-muted-foreground">
+                <button onclick={() => toggleSort('name')} class="hover:text-foreground">
                   Name{sortIndicator('name')}
                 </button>
               </th>
-              <th class="px-4 py-3 text-left font-medium text-[hsl(var(--muted-foreground))]">
-                <button onclick={() => toggleSort('project')} class="hover:text-[hsl(var(--foreground))]">
+              <th class="px-4 py-3 text-left font-medium text-muted-foreground">
+                <button onclick={() => toggleSort('project')} class="hover:text-foreground">
                   Project{sortIndicator('project')}
                 </button>
               </th>
-              <th class="px-4 py-3 text-left font-medium text-[hsl(var(--muted-foreground))]">
-                <button onclick={() => toggleSort('status')} class="hover:text-[hsl(var(--foreground))]">
+              <th class="px-4 py-3 text-left font-medium text-muted-foreground">
+                <button onclick={() => toggleSort('status')} class="hover:text-foreground">
                   Status{sortIndicator('status')}
                 </button>
               </th>
-              <th class="px-4 py-3 text-right font-medium text-[hsl(var(--muted-foreground))]">
-                <button onclick={() => toggleSort('sessions')} class="hover:text-[hsl(var(--foreground))]">
+              <th class="px-4 py-3 text-right font-medium text-muted-foreground">
+                <button onclick={() => toggleSort('sessions')} class="hover:text-foreground">
                   Sessions{sortIndicator('sessions')}
                 </button>
               </th>
-              <th class="px-4 py-3 text-right font-medium text-[hsl(var(--muted-foreground))]">
-                <button onclick={() => toggleSort('completion_rate')} class="hover:text-[hsl(var(--foreground))]">
+              <th class="px-4 py-3 text-right font-medium text-muted-foreground">
+                <button onclick={() => toggleSort('completion_rate')} class="hover:text-foreground">
                   Completion{sortIndicator('completion_rate')}
                 </button>
               </th>
-              <th class="px-4 py-3 text-right font-medium text-[hsl(var(--muted-foreground))]">
-                <button onclick={() => toggleSort('avg_time')} class="hover:text-[hsl(var(--foreground))]">
+              <th class="px-4 py-3 text-right font-medium text-muted-foreground">
+                <button onclick={() => toggleSort('avg_time')} class="hover:text-foreground">
                   Avg Time{sortIndicator('avg_time')}
                 </button>
               </th>
-              <th class="px-4 py-3 text-center font-medium text-[hsl(var(--muted-foreground))]">
+              <th class="px-4 py-3 text-center font-medium text-muted-foreground">
                 Trend
               </th>
             </tr>
@@ -291,13 +291,13 @@
           <tbody>
             {#each filtered as q}
               <tr
-                class="border-b border-[hsl(var(--border))]/50 hover:bg-[hsl(var(--background))]/30 cursor-pointer transition-colors"
+                class="border-b border-border/50 hover:bg-background/30 cursor-pointer transition-colors"
                 onclick={() => window.location.href = `/analytics/${q.id}`}
               >
-                <td class="px-4 py-3 font-medium text-[hsl(var(--foreground))]">
+                <td class="px-4 py-3 font-medium text-foreground">
                   <a href="/analytics/{q.id}" class="hover:underline">{q.name}</a>
                 </td>
-                <td class="px-4 py-3 text-[hsl(var(--muted-foreground))]">{q.project_name}</td>
+                <td class="px-4 py-3 text-muted-foreground">{q.project_name}</td>
                 <td class="px-4 py-3">
                   <span class={`px-2 py-0.5 text-xs font-semibold rounded-full border ${getStatusColor(q.status)}`}>
                     {q.status}
@@ -305,7 +305,7 @@
                 </td>
                 <td class="px-4 py-3 text-right font-medium">{q.total_responses}</td>
                 <td class="px-4 py-3 text-right font-medium">{completionRate(q)}</td>
-                <td class="px-4 py-3 text-right text-[hsl(var(--muted-foreground))]">
+                <td class="px-4 py-3 text-right text-muted-foreground">
                   {formatTime(q.avg_completion_time_ms)}
                 </td>
                 <td class="px-4 py-3">
@@ -321,7 +321,7 @@
                       />
                     </svg>
                   {:else}
-                    <span class="text-xs text-[hsl(var(--muted-foreground))] text-center block">-</span>
+                    <span class="text-xs text-muted-foreground text-center block">-</span>
                   {/if}
                 </td>
               </tr>

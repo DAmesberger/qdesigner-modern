@@ -113,7 +113,7 @@
 {#if open}
   <div
     bind:this={floating}
-    class="fixed z-[45] w-max max-w-xs rounded-lg border border-[hsl(var(--glass-border))] bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-lg)] p-3 text-sm text-foreground"
+    class="fixed z-[45] w-max max-w-xs rounded-lg border border-[hsl(var(--glass-border))] bg-layer-surface shadow-[var(--shadow-lg)] p-3 text-sm text-foreground"
     role="tooltip"
   >
     {#if children}
@@ -122,7 +122,7 @@
     {#if showArrow}
       <div
         bind:this={arrowEl}
-        class="absolute h-2 w-2 rotate-45 bg-[hsl(var(--layer-surface))] border border-[hsl(var(--glass-border))]"
+        class="absolute h-2 w-2 rotate-45 bg-layer-surface border border-[hsl(var(--glass-border))]"
       ></div>
     {/if}
   </div>
