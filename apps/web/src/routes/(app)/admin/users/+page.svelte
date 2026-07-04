@@ -8,12 +8,20 @@
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import type { OrganizationMember } from '$lib/shared/types/api';
 
+  const ROLE_OPTIONS = ['owner', 'admin', 'member', 'viewer'] as const;
+
   let members: OrganizationMember[] = [];
   let loading = true;
   let error: string | null = null;
   let removingUserId: string | null = null;
+  let updatingUserId: string | null = null;
+  let currentUserId: string | null = null;
 
   let currentOrg: any = null;
+
+  // The current user's own role in this org drives which controls are enabled.
+  $: currentUserRole = members.find((m) => m.userId === currentUserId)?.role ?? null;
+  $: canManageRoles = currentUserRole === 'owner' || currentUserRole === 'admin';
 
   onMount(async () => {
     await loadData();
@@ -23,6 +31,7 @@
     try {
       const user = await auth.getUser();
       if (!user) return;
+      currentUserId = user.id;
 
       const orgs = await api.organizations.list();
       if (!orgs || orgs.length === 0) {
@@ -68,6 +77,47 @@
       toast.error('Failed to remove member');
     } finally {
       removingUserId = null;
+    }
+  }
+
+  // Whether the current user may change this member's role.
+  function canEditRole(member: OrganizationMember): boolean {
+    if (!canManageRoles) return false;
+    if (member.userId === currentUserId) return false; // guard against self-lockout
+    // Only an owner may grant or revoke the owner role.
+    if (member.role === 'owner' && currentUserRole !== 'owner') return false;
+    return true;
+  }
+
+  function roleLabel(role: string): string {
+    return getRoleBadge(role).label;
+  }
+
+  async function changeRole(member: OrganizationMember, newRole: string) {
+    if (!currentOrg || newRole === member.role) return;
+
+    const name =
+      member.user?.fullName || member.user?.full_name || member.user?.email || 'this member';
+    if (!confirm(`Change ${name}'s role to ${roleLabel(newRole)}?`)) {
+      members = members; // revert the <select> back to the current role
+      return;
+    }
+
+    const prevRole = member.role;
+    updatingUserId = member.userId;
+    member.role = newRole as OrganizationMember['role'];
+    members = members; // optimistic update
+    try {
+      await api.organizations.members.changeRole(currentOrg.id, member.userId, newRole);
+      toast.success('Role updated');
+      await loadMembers(); // refetch the authoritative list
+    } catch (err) {
+      member.role = prevRole;
+      members = members; // roll back the optimistic change
+      console.error('Error changing role:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to update role');
+    } finally {
+      updatingUserId = null;
     }
   }
 
@@ -172,7 +222,23 @@
                   </div>
                 </td>
                 <td class="py-3">
-                  <Badge {...getRoleBadge(member.role)} />
+                  {#if canEditRole(member)}
+                    <select
+                      class="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                      value={member.role}
+                      disabled={updatingUserId === member.userId}
+                      aria-label="Change role for {member.user?.email || 'member'}"
+                      on:change={(e) => changeRole(member, e.currentTarget.value)}
+                    >
+                      {#each ROLE_OPTIONS as opt}
+                        <option value={opt} disabled={opt === 'owner' && currentUserRole !== 'owner'}>
+                          {roleLabel(opt)}
+                        </option>
+                      {/each}
+                    </select>
+                  {:else}
+                    <Badge {...getRoleBadge(member.role)} />
+                  {/if}
                 </td>
                 <td class="py-3 text-sm text-muted-foreground">
                   {formatDate(member.joinedAt)}

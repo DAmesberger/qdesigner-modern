@@ -1,6 +1,6 @@
 use axum::{
     middleware as axum_mw,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use tower_http::catch_panic::CatchPanicLayer;
@@ -68,6 +68,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/members/{user_id}",
             delete(organizations::remove_member),
+        )
+        .route(
+            "/{id}/members/{user_id}/role",
+            put(organizations::change_member_role),
         )
         .route(
             "/{id}/invitations",
