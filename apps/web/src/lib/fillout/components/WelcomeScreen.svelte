@@ -1,16 +1,39 @@
 <script lang="ts">
   import Button from '$lib/components/ui/Button.svelte';
   import Card from '$lib/components/ui/layout/Card.svelte';
+  import LanguagePicker from './LanguagePicker.svelte';
   import type { Questionnaire } from '$lib/shared/types/questionnaire';
+
+  interface LocaleOption {
+    code: string;
+    label: string;
+  }
 
   interface Props {
     questionnaire: Questionnaire;
     projectName?: string;
     onStart: () => void;
     estimatedDuration?: number;
+    /** Localized welcome message (MOD-04, ADR 0022); falls back to description. */
+    welcomeMessage?: string;
+    /** Available content locales; the picker shows only when there is more than one. */
+    languageOptions?: LocaleOption[];
+    activeLocale?: string;
+    onLocaleChange?: (code: string) => void;
   }
 
-  let { questionnaire, projectName, onStart, estimatedDuration }: Props = $props();
+  let {
+    questionnaire,
+    projectName,
+    onStart,
+    estimatedDuration,
+    welcomeMessage,
+    languageOptions = [],
+    activeLocale = '',
+    onLocaleChange,
+  }: Props = $props();
+
+  const welcomeText = $derived(welcomeMessage?.trim() ? welcomeMessage : questionnaire.description);
 
   // Calculate estimated duration from questions if not provided
   const calculatedDuration = $derived(() => {
@@ -30,6 +53,10 @@
 <div class="welcome-screen" data-testid="fillout-welcome-screen">
   <Card class="welcome-card">
     <div class="welcome-content">
+      {#if onLocaleChange}
+        <LanguagePicker options={languageOptions} active={activeLocale} onSelect={onLocaleChange} />
+      {/if}
+
       {#if projectName}
         <p class="project-name">{projectName}</p>
       {/if}
@@ -38,8 +65,8 @@
         {questionnaire.name || 'Welcome'}
       </h1>
 
-      {#if questionnaire.description}
-        <p class="welcome-description">{questionnaire.description}</p>
+      {#if welcomeText}
+        <p class="welcome-description">{welcomeText}</p>
       {/if}
 
       <div class="info-grid">

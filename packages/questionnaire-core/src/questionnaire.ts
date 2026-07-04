@@ -3,6 +3,13 @@
  * Comprehensive type-safe question system with proper configuration structure
  */
 
+import type { QuestionnaireTranslations } from './translation';
+
+// Per-questionnaire CONTENT translation (MOD-04, ADR 0022). Re-exported here so
+// consumers that import from the `/questionnaire` subpath (e.g. the app's
+// `$lib/shared`) get the translation helpers and types alongside the core model.
+export * from './translation';
+
 // ============================================================================
 // Core Questionnaire Types
 // ============================================================================
@@ -26,6 +33,15 @@ export interface Questionnaire {
   flow: FlowControl[];
   settings: QuestionnaireSettings;
   metadata?: Record<string, unknown>;
+  /**
+   * Optional per-locale participant-facing content translations (MOD-04,
+   * ADR 0022). Additive and back-compatible — absent means single-language.
+   * The designer persists the live copy under `settings.translations` so it
+   * rides the existing settings round-trip; this top-level field is the
+   * canonical shape for direct API / import authoring. Read both via
+   * `getTranslations()`.
+   */
+  translations?: QuestionnaireTranslations;
 }
 
 export function formatSemver(q: Pick<Questionnaire, 'versionMajor' | 'versionMinor' | 'versionPatch'>): string {
@@ -203,6 +219,13 @@ export interface QuestionnaireSettings {
   fraudPrevention?: FraudPreventionSettings;
   quotas?: QuotaGroup[];
   metadata?: Record<string, DynamicValue>;
+  /**
+   * Live storage location for per-locale content translations (MOD-04, ADR 0022).
+   * The designer writes here so translations round-trip through the existing
+   * settings persistence + collaboration paths (mirrors how `settings.theme` is
+   * stored). `getTranslations()` reads this first, then the top-level field.
+   */
+  translations?: QuestionnaireTranslations;
 }
 
 export interface QuestionSettings {

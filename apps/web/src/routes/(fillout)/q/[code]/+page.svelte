@@ -13,6 +13,13 @@
   import ModularRenderer from '$lib/runtime/ModularRenderer.svelte';
   import type { FormQuestionHost, FormHostPresentation } from '$lib/runtime/core/FormQuestionHost';
   import type { Questionnaire } from '$lib/shared/types/questionnaire';
+  import {
+    localizeQuestionnaire,
+    resolveText,
+    getBaseLocale,
+    getAvailableLocales,
+    getLocaleLabel,
+  } from '$lib/shared';
   import { QuestionnaireAccessService } from '$lib/fillout/services/QuestionnaireAccessService';
   import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
   import { FilloutSyncEngine } from '$lib/fillout/services/FilloutSyncEngine';
@@ -25,6 +32,62 @@
   }
 
   let { data }: Props = $props();
+
+  // --- Content translation (MOD-04, ADR 0022) -------------------------------
+  // The definition carries app-specific chrome fields beyond the core type.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawDefinition = $derived(data.questionnaire.definition as any);
+  const baseLocale = $derived(getBaseLocale(rawDefinition));
+  const availableLocales = $derived(getAvailableLocales(rawDefinition));
+  // The participant's explicit pick (null until they choose). ?lang= seeds it.
+  let pickedLocale = $state<string | null>(null);
+  const requestedLocale = $derived(data.urlParams?.lang ?? '');
+  const effectiveLocale = $derived(
+    pickedLocale && availableLocales.includes(pickedLocale)
+      ? pickedLocale
+      : requestedLocale && availableLocales.includes(requestedLocale)
+        ? requestedLocale
+        : baseLocale
+  );
+  // Definition with question prompts / option labels / page titles localized.
+  const definition = $derived(localizeQuestionnaire(rawDefinition as Questionnaire, effectiveLocale));
+  const languageOptions = $derived(
+    availableLocales.map((code) => ({ code, label: getLocaleLabel(rawDefinition, code) }))
+  );
+  // Chrome strings resolve at the screen boundary (fall back to base text).
+  const welcomeMessage = $derived(
+    resolveText(rawDefinition, effectiveLocale, { kind: 'chrome', slot: 'welcome' }, '')
+  );
+  const consentText = $derived(
+    resolveText(
+      rawDefinition,
+      effectiveLocale,
+      { kind: 'chrome', slot: 'consent' },
+      rawDefinition?.consent?.content || ''
+    )
+  );
+  const completionMessage = $derived(
+    resolveText(
+      rawDefinition,
+      effectiveLocale,
+      { kind: 'chrome', slot: 'completion' },
+      rawDefinition?.settings?.distribution?.completionMessage ||
+        rawDefinition?.completionMessage ||
+        ''
+    )
+  );
+
+  function handleLocaleChange(code: string) {
+    pickedLocale = code;
+    // Reflect the choice in the address bar (shareable) without re-running load.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('lang', code);
+      history.replaceState(history.state, '', url);
+    } catch {
+      // window/history unavailable — the in-memory pick still drives rendering.
+    }
+  }
 
   let container = $state<HTMLDivElement>();
   let canvas = $state<HTMLCanvasElement>();
@@ -312,7 +375,7 @@
 
       runtime = new FilloutRuntime({
         canvas,
-        questionnaire: data.questionnaire.definition,
+        questionnaire: definition,
         sessionId: session.id,
         participantId: data.participantId || undefined,
         conditionGroupCounts,
@@ -425,15 +488,19 @@
     </div>
   {:else if currentScreen === 'welcome'}
     <WelcomeScreen
-      questionnaire={data.questionnaire.definition}
+      questionnaire={definition}
       projectName={data.questionnaire.projectName}
       onStart={handleStart}
+      {welcomeMessage}
+      languageOptions={languageOptions}
+      activeLocale={effectiveLocale}
+      onLocaleChange={handleLocaleChange}
     />
   {:else if currentScreen === 'consent'}
     <ConsentScreen
-      content={data.questionnaire.definition.consent?.content || ''}
-      checkboxes={data.questionnaire.definition.consent?.checkboxes}
-      requireSignature={data.questionnaire.definition.consent?.requireSignature}
+      content={consentText}
+      checkboxes={rawDefinition.consent?.checkboxes}
+      requireSignature={rawDefinition.consent?.requireSignature}
       onAccept={handleConsent}
       onDecline={handleDeclineConsent}
     />
@@ -489,8 +556,8 @@
   {:else if currentScreen === 'complete'}
     <CompletionScreen
       session={completedSession}
-      customMessage={data.questionnaire.definition.settings?.distribution?.completionMessage || data.questionnaire.definition.completionMessage}
-      distributionSettings={data.questionnaire.definition.settings?.distribution}
+      customMessage={completionMessage}
+      distributionSettings={rawDefinition.settings?.distribution}
       urlParams={data.urlParams}
       showStatistics={true}
       onClose={() => goto('/')}
