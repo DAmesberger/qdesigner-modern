@@ -9,11 +9,19 @@
     title?: string;
     description?: string;
     size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+    /** Show the header close (X) button. Backdrop/Escape dismissal are controlled independently. */
     closable?: boolean;
     closeOnBackdrop?: boolean;
     closeOnEscape?: boolean;
+    /** Extra classes on the dialog box. */
     className?: string;
+    /** Override the content wrapper classes (padding/scroll). Defaults to a padded, scrollable body. */
+    bodyClass?: string;
+    /** Optional passthrough test id applied to the dialog box. */
+    ['data-testid']?: string;
     children?: Snippet;
+    /** Optional custom header snippet; replaces the default title/description layout. */
+    header?: Snippet;
     footer?: Snippet;
     onclose?: () => void;
   }
@@ -27,7 +35,10 @@
     closeOnBackdrop = true,
     closeOnEscape = true,
     className = '',
+    bodyClass = 'p-6 text-foreground max-h-[calc(100vh-16rem)] overflow-y-auto',
+    'data-testid': testId = undefined,
     children,
+    header,
     footer,
     onclose,
   }: Props = $props();
@@ -43,27 +54,58 @@
     full: 'max-w-[95vw]',
   };
 
-  function handleClose() {
-    if (closable) {
-      open = false;
-      onclose?.();
-    }
+  const FOCUSABLE_SELECTOR =
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function close() {
+    open = false;
+    onclose?.();
   }
 
   function handleBackdropClick(event: MouseEvent) {
     if (closeOnBackdrop && event.target === event.currentTarget) {
-      handleClose();
+      close();
     }
   }
 
   function handleEscape(event: KeyboardEvent) {
     if (closeOnEscape && event.key === 'Escape' && open) {
       event.preventDefault();
-      handleClose();
+      close();
     }
   }
 
-  // Focus management
+  // Tab / Shift+Tab focus trap — keep focus within the dialog while open.
+  function handleTrap(event: KeyboardEvent) {
+    if (event.key !== 'Tab' || !dialogElement) return;
+
+    const focusable = Array.from(
+      dialogElement.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+    ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialogElement.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    const active = document.activeElement as HTMLElement | null;
+
+    if (event.shiftKey) {
+      if (active === first || !dialogElement.contains(active)) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || !dialogElement.contains(active)) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  // Focus management: capture activeElement on open, restore on close,
+  // and focus the first focusable child on open.
   $effect(() => {
     if (open) {
       previousActiveElement = document.activeElement as HTMLElement;
@@ -71,10 +113,8 @@
       // Delay focus to ensure dialog is rendered
       setTimeout(() => {
         if (dialogElement) {
-          const focusableElements = dialogElement.querySelectorAll(
-            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          );
-          const firstFocusable = focusableElements[0] as HTMLElement;
+          const focusableElements = dialogElement.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+          const firstFocusable = focusableElements[0];
 
           if (firstFocusable) {
             firstFocusable.focus();
@@ -111,7 +151,12 @@
 <svelte:window onkeydown={handleEscape} />
 
 {#if open}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation">
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4"
+    role="presentation"
+    onkeydown={handleTrap}
+  >
     <!-- Backdrop -->
     <div
       class="fixed inset-0 bg-black/[var(--backdrop-opacity)] backdrop-blur-sm"
@@ -133,6 +178,7 @@
       aria-labelledby={title ? 'dialog-title' : undefined}
       aria-describedby={description ? 'dialog-description' : undefined}
       tabindex="-1"
+      data-testid={testId}
       class="relative w-full {sizeClasses[
         size
       ]} bg-layer-modal border border-border rounded-lg shadow-xl {className}"
@@ -144,7 +190,11 @@
       }}
     >
       <!-- Header -->
-      {#if title || closable}
+      {#if header}
+        <div class="p-6 pb-4 border-b border-border">
+          {@render header()}
+        </div>
+      {:else if title || closable}
         <div class="flex items-start justify-between p-6 pb-4 border-b border-border">
           <div class="flex-1">
             {#if title}
@@ -162,7 +212,7 @@
           {#if closable}
             <button
               type="button"
-              onclick={handleClose}
+              onclick={close}
               class="ml-4 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
               aria-label="Close dialog"
             >
@@ -179,7 +229,7 @@
       {/if}
 
       <!-- Content -->
-      <div class="p-6 text-foreground max-h-[calc(100vh-16rem)] overflow-y-auto">
+      <div class={bodyClass}>
         {#if children}
           {@render children()}
         {/if}

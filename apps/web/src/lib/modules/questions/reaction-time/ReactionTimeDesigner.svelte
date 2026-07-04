@@ -8,7 +8,7 @@
   import { createLegacyStarterPayload } from './model/starter-templates';
   import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
   import type { ReactionLegacyQuestionConfig, ReactionStudyConfig } from './model/reaction-schema';
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
   type ReactionTaskType = 'standard' | 'n-back' | 'stroop' | 'flanker' | 'iat' | 'dot-probe' | 'custom';

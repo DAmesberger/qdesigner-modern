@@ -5,7 +5,7 @@
   import { VariableEngine } from '@qdesigner/scripting-engine';
   import QuestionRenderer from '../questions/QuestionRenderer.svelte';
   import { writable } from 'svelte/store';
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import { Monitor, Tablet, Smartphone, RefreshCw, Info, AlertCircle, ClipboardList } from 'lucide-svelte';
 
   interface Props {

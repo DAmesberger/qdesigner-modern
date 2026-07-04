@@ -2,7 +2,7 @@
   import type { Question } from '$lib/shared';
   import { nanoid } from 'nanoid';
   import { ChevronUp, ChevronDown, Edit, Copy, Trash } from 'lucide-svelte';
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface RankingItem {

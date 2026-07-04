@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
   import {
     normalizeReactionExperimentConfig,

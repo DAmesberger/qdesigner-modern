@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';

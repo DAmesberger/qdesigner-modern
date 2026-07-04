@@ -4,7 +4,7 @@
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
   import Spinner from '$lib/components/ui/feedback/Spinner.svelte';
-  import EmptyState from '$lib/components/common/EmptyState.svelte';
+  import EmptyState from '$lib/components/ui/feedback/EmptyState.svelte';
   import WelcomeScreen from '$lib/fillout/components/WelcomeScreen.svelte';
   import ConsentScreen from '$lib/fillout/components/ConsentScreen.svelte';
   import CompletionScreen from '$lib/fillout/components/CompletionScreen.svelte';

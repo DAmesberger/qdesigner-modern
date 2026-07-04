@@ -2,7 +2,7 @@
   import { Plus, FolderOpen, Users, Calendar, ChevronRight, Search } from 'lucide-svelte';
   import { fly } from 'svelte/transition';
   import { api } from '$lib/services/api';
-  import { Modal } from '$lib/components/ui';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import { appPaths } from '$lib/routing/paths';
   import { toast } from '$lib/stores/toast';
   import Select from '$lib/components/ui/forms/Select.svelte';
@@ -221,7 +221,7 @@
 </div>
 
 <!-- Create Project Modal -->
-<Modal bind:open={showCreateModal} title="Create New Project" size="md">
+<Dialog bind:open={showCreateModal} title="Create New Project" size="md" closable={false}>
   <div class="space-y-4">
     <div>
       <label for="project-name" class="block text-sm font-medium text-foreground mb-1">
@@ -281,4 +281,4 @@
       </button>
     </div>
   {/snippet}
-</Modal>
+</Dialog>

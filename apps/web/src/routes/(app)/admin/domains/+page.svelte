@@ -8,8 +8,8 @@
     removeDomain,
     type DomainConfig,
   } from '$lib/services/domain-verification';
-  import Card from '$lib/components/common/Card.svelte';
-  import Button from '$lib/components/common/Button.svelte';
+  import Card from '$lib/components/ui/layout/Card.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';

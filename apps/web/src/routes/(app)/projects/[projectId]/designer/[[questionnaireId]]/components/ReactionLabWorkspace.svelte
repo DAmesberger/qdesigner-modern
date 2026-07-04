@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import MediaManagerModal from '$lib/components/designer/MediaManagerModal.svelte';
   import ScriptEditorOverlay from '$lib/components/designer/ScriptEditorOverlay.svelte';
   import type { MediaAsset } from '$lib/shared/types/media';

@@ -3,7 +3,7 @@
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
   import { toast } from '$lib/stores/toast';
-  import Card from '$lib/components/common/Card.svelte';
+  import Card from '$lib/components/ui/layout/Card.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import type { OrganizationMember } from '$lib/shared/types/api';

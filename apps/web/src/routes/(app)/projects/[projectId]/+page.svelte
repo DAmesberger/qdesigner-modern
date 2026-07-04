@@ -10,7 +10,7 @@
     BarChart3,
     Search,
   } from 'lucide-svelte';
-  import { Modal } from '$lib/components/ui';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import { appPaths } from '$lib/routing/paths';
   import Select from '$lib/components/ui/forms/Select.svelte';
   import type { PageData } from './$types';
@@ -312,7 +312,13 @@
 </div>
 
 <!-- Create Questionnaire Modal -->
-<Modal bind:open={showCreateModal} title="Create New Questionnaire" size="md">
+<Dialog
+  bind:open={showCreateModal}
+  title="Create New Questionnaire"
+  size="md"
+  closable={false}
+  data-testid="app-modal-content"
+>
   <div class="space-y-4">
     <div>
       <label for="questionnaire-name" class="block text-sm font-medium text-foreground mb-1">
@@ -364,4 +370,4 @@
       </button>
     </div>
   {/snippet}
-</Modal>
+</Dialog>

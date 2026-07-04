@@ -3,7 +3,7 @@
   import { marked } from 'marked';
   import DOMPurify from 'isomorphic-dompurify';
   import { Eye, Edit } from 'lucide-svelte';
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface TextDisplayConfig {

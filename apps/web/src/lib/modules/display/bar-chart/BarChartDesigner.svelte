@@ -2,7 +2,7 @@
   import type { Question } from '$lib/shared';
   import { moduleRegistry } from '$lib/modules/registry';
   import { designerStore } from '$lib/stores/designer.svelte';
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface BarChartConfig {

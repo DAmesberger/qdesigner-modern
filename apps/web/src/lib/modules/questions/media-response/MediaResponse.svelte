@@ -4,7 +4,7 @@
   import type { Question } from '$lib/shared';
   import { onMount } from 'svelte';
   import { api } from '$lib/services/api';
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
 
   type RecordingMode = 'audio' | 'video-audio' | 'video-only';
   type AudioQuality = 'low' | 'medium' | 'high';

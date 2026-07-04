@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from '../ui/feedback/Modal.svelte';
+  import Dialog from '../ui/overlays/Dialog.svelte';
   import RealtimePreview from './RealtimePreview.svelte';
   import { X } from 'lucide-svelte';
 
@@ -15,7 +15,14 @@
   }
 </script>
 
-<Modal open={isOpen} onclose={handleClose} size="xl">
+<Dialog
+  open={isOpen}
+  onclose={handleClose}
+  size="xl"
+  closable={false}
+  className="overflow-hidden"
+  bodyClass="px-4 py-3 sm:px-6 text-foreground"
+>
   <div class="h-[80vh] flex flex-col" data-testid="designer-preview-modal">
     <div class="flex items-center justify-between px-6 py-4 border-b">
       <h2 class="text-lg font-semibold">Preview</h2>
@@ -39,4 +46,4 @@
       />
     </div>
   </div>
-</Modal>
+</Dialog>

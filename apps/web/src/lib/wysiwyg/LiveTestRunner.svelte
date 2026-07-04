@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { VariableEngine } from '@qdesigner/scripting-engine';
   import QuestionVisualRenderer from './QuestionVisualRenderer.svelte';
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import { Monitor, Tablet, Smartphone, X } from 'lucide-svelte';
 
   interface Props {

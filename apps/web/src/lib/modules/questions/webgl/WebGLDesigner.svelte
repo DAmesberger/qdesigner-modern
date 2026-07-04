@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
   import type { WebGLContent, WebGLConfig } from './model/webgl-config';
   import { normalizeWebGLQuestionConfig } from './model/webgl-config';

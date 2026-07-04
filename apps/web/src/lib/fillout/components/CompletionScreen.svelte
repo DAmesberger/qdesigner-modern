@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Button from '$lib/components/common/Button.svelte';
-  import Card from '$lib/components/common/Card.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
+  import Card from '$lib/components/ui/layout/Card.svelte';
   import type { QuestionnaireSession } from '$lib/shared';
   import type { DistributionSettings } from '$lib/shared/types/questionnaire';
   import type { ScoreInterpreterConfig } from '$lib/runtime/feedback/ScoreInterpreter';

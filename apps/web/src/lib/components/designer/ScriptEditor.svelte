@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import type * as Monaco from 'monaco-editor';
   import type { Question } from '$lib/shared';
-  import Button from '$lib/components/common/Button.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
   import { AlignLeft, RotateCcw } from 'lucide-svelte';
 
   export let question: Question;
