@@ -22,7 +22,12 @@ export type LocaleCode = string;
 
 /** Translated strings for a single question. */
 export interface QuestionTranslation {
-  /** Localized prompt / body text (maps to `display.prompt` or `display.content`). */
+  /**
+   * Localized prompt / body text. Applied to whichever field the fillout runtime
+   * actually renders from, following the same resolution order as
+   * `BaseQuestion.svelte` (ADR 0018): `title → prompt → config.prompt →
+   * display.prompt → display.content → text`. See {@link getQuestionBasePrompt}.
+   */
   prompt?: string;
   /** Localized option labels keyed by {@link optionTranslationKey}. */
   options?: Record<string, string>;
@@ -201,12 +206,98 @@ function safeClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- question shapes vary per type
+type AnyQuestion = Record<string, any>;
+
+/**
+ * Read a question's participant-facing prompt using the SAME field resolution
+ * order the fillout runtime renders from (`BaseQuestion.svelte`, ADR 0018):
+ * `title → prompt → config.prompt → display.prompt → display.content → text`.
+ *
+ * Persisted questions store the prompt in different places by type: choice
+ * questions keep it under `display.prompt`, a bare text-input keeps it in the
+ * flat `text` field with no `display` object, instructions use `display.content`.
+ * The designer's translate panel and {@link localizeQuestionnaire} both use this
+ * so the base text shown, and the field written, match what the runtime shows.
+ */
+export function getQuestionBasePrompt(question: unknown): string {
+  const q = (question ?? {}) as AnyQuestion;
+  const display = (q.display ?? {}) as AnyQuestion;
+  const config = (q.config ?? {}) as AnyQuestion;
+  if (isNonEmptyString(q.title)) return q.title;
+  if (isNonEmptyString(q.prompt)) return q.prompt;
+  if (isNonEmptyString(config.prompt)) return config.prompt;
+  if (isNonEmptyString(display.prompt)) return display.prompt;
+  if (isNonEmptyString(display.content)) return display.content;
+  if (isNonEmptyString(q.text)) return q.text;
+  return '';
+}
+
+/**
+ * Write a localized prompt onto whichever field the runtime resolves first (see
+ * {@link getQuestionBasePrompt}), so the translation actually replaces the
+ * rendered text instead of being shadowed by an earlier field. When no base
+ * prompt field is present, defaults to `display.prompt` (the canonical authoring
+ * field for form questions).
+ */
+function applyQuestionPrompt(question: AnyQuestion, value: string): void {
+  const display = question.display as AnyQuestion | undefined;
+  const config = question.config as AnyQuestion | undefined;
+  if (isNonEmptyString(question.title)) {
+    question.title = value;
+  } else if (isNonEmptyString(question.prompt)) {
+    question.prompt = value;
+  } else if (config && isNonEmptyString(config.prompt)) {
+    config.prompt = value;
+  } else if (display && isNonEmptyString(display.prompt)) {
+    display.prompt = value;
+  } else if (display && isNonEmptyString(display.content)) {
+    display.content = value;
+  } else if (isNonEmptyString(question.text)) {
+    question.text = value;
+  } else {
+    question.display = display ?? {};
+    (question.display as AnyQuestion).prompt = value;
+  }
+}
+
+/**
+ * Apply localized option labels to every option list the runtime's module-config
+ * adapter may render from (`config.options`, `display.options`,
+ * `responseType.options`), keyed by {@link optionTranslationKey}.
+ */
+function applyOptionLabels(question: AnyQuestion, options: Record<string, string>): void {
+  const lists: unknown[] = [
+    question.config?.options,
+    question.display?.options,
+    question.responseType?.options,
+  ];
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    list.forEach((option: AnyQuestion, index: number) => {
+      if (!option || typeof option !== 'object') return;
+      const key = optionTranslationKey(option, index);
+      const translatedLabel = options[key];
+      if (isNonEmptyString(translatedLabel)) {
+        option.label = translatedLabel;
+      }
+    });
+  }
+}
+
 /**
  * Produce a copy of the questionnaire with question prompts, option labels and
  * page titles replaced by their `locale` translations (falling back to the base
- * text). Chrome (welcome/consent/completion) is resolved separately at the
- * fillout screen boundary via {@link resolveText}, because those strings live in
- * app-specific definition fields rather than the core content surface.
+ * text). Prompts are written to whichever field the fillout runtime renders from
+ * (see {@link getQuestionBasePrompt}) so the localized text actually replaces the
+ * displayed prompt rather than a field the runtime never reads. Chrome
+ * (welcome/consent/completion) is resolved separately at the fillout screen
+ * boundary via {@link resolveText}, because those strings live in app-specific
+ * definition fields rather than the core content surface.
  *
  * Returns the input unchanged (same reference, no clone) when there is nothing
  * to localize, keeping the common no-translation path allocation-free and
@@ -228,32 +319,14 @@ export function localizeQuestionnaire<T extends Questionnaire>(
     for (const question of clone.questions) {
       const qt = bundle.questions[question.id];
       if (!qt) continue;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- display shapes vary per question type
-      const display = (question as any).display;
+      const q = question as AnyQuestion;
 
-      if (qt.prompt && qt.prompt.trim() && display) {
-        if (typeof display.prompt === 'string') {
-          display.prompt = qt.prompt;
-        } else if (typeof display.content === 'string') {
-          display.content = qt.prompt;
-        } else {
-          display.prompt = qt.prompt;
-        }
+      if (isNonEmptyString(qt.prompt)) {
+        applyQuestionPrompt(q, qt.prompt);
       }
 
-      if (qt.options && display && Array.isArray(display.options)) {
-        display.options.forEach(
-          (
-            option: { id?: string | number; value?: string | number; label?: string },
-            index: number
-          ) => {
-            const key = optionTranslationKey(option, index);
-            const translatedLabel = qt.options?.[key];
-            if (translatedLabel && translatedLabel.trim()) {
-              option.label = translatedLabel;
-            }
-          }
-        );
+      if (qt.options) {
+        applyOptionLabels(q, qt.options);
       }
     }
   }

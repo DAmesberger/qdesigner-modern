@@ -2,8 +2,9 @@
   import { onMount } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
   import PropertiesPanel from '$lib/components/designer/PropertiesPanel.svelte';
+  import TranslationPanel from '$lib/components/designer/TranslationPanel.svelte';
   import CommentThread from '$lib/collaboration/components/CommentThread.svelte';
-  import { Pin, PinOff, X, MessageSquare } from 'lucide-svelte';
+  import { Pin, PinOff, X, MessageSquare, Languages } from 'lucide-svelte';
 
   interface Props {
     questionnaireId?: string;
@@ -12,7 +13,7 @@
   let { questionnaireId = '' }: Props = $props();
 
   let isMobile = $state(false);
-  let activeTab = $state<'properties' | 'comments'>('properties');
+  let activeTab = $state<'properties' | 'translate' | 'comments'>('properties');
 
   const commentAnchorType = $derived.by(() => {
     const kind = designerStore.selectedItemKind;
@@ -75,9 +76,9 @@
     class="w-72 lg:w-80 flex h-full flex-col bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-lg)] border-l border-[hsl(var(--glass-border))] animate-slide-in-right"
     data-testid="designer-right-sidebar"
   >
-    <div class="flex items-center justify-between px-3 py-2 border-b border-[hsl(var(--glass-border))]">
+    <div class="flex flex-wrap items-center justify-between gap-y-1 px-3 py-2 border-b border-[hsl(var(--glass-border))]">
       <!-- Tab switcher -->
-      <div class="flex items-center gap-1">
+      <div class="flex flex-wrap items-center gap-1 min-w-0">
         <button
           type="button"
           class="px-2 py-1 text-xs rounded-md transition-colors duration-150 {activeTab === 'properties' ? 'bg-accent text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}"
@@ -85,6 +86,15 @@
           data-testid="right-sidebar-tab-properties"
         >
           {panelLabel}
+        </button>
+        <button
+          type="button"
+          class="px-2 py-1 text-xs rounded-md transition-colors duration-150 flex items-center gap-1 {activeTab === 'translate' ? 'bg-accent text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}"
+          onclick={() => (activeTab = 'translate')}
+          data-testid="right-sidebar-tab-translate"
+        >
+          <Languages class="h-3 w-3" />
+          Translate
         </button>
         <button
           type="button"
@@ -138,6 +148,10 @@
           <p class="text-sm text-muted-foreground text-center">Select a question to edit its properties</p>
         </div>
       {/if}
+    {:else if activeTab === 'translate'}
+      <div class="min-h-0 flex-1 overflow-y-auto" data-testid="right-sidebar-translate">
+        <TranslationPanel />
+      </div>
     {:else}
       <div class="min-h-0 flex-1 overflow-y-auto" data-testid="right-sidebar-comments">
         {#if questionnaireId}

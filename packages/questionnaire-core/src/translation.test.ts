@@ -6,6 +6,7 @@ import {
   getAvailableLocales,
   getBaseLocale,
   getTranslations,
+  getQuestionBasePrompt,
   optionTranslationKey,
   type QuestionnaireTranslations,
 } from './translation';
@@ -159,5 +160,110 @@ describe('localizeQuestionnaire', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture access
     expect((q.questions[0] as any).display.prompt).toBe('What is your favourite colour?');
     expect(q.pages[0].name).toBe('Section One');
+  });
+});
+
+// A questionnaire carrying a single arbitrary-shaped question plus a `de` prompt
+// translation for it — used to prove the localizer writes to the SAME field the
+// runtime renders from, for every persisted prompt shape.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- exercising heterogeneous persisted question shapes
+function withQuestion(question: any, prompt = 'Übersetzt'): Questionnaire {
+  return makeQuestionnaire({
+    questions: [question],
+    translations: { de: { questions: { [question.id]: { prompt } } } },
+  });
+}
+
+describe('getQuestionBasePrompt', () => {
+  it('mirrors the runtime resolution order title → prompt → config.prompt → display.prompt → display.content → text', () => {
+    expect(getQuestionBasePrompt({ title: 'T', prompt: 'P', display: { prompt: 'D' } })).toBe('T');
+    expect(getQuestionBasePrompt({ prompt: 'P', display: { prompt: 'D' } })).toBe('P');
+    expect(getQuestionBasePrompt({ config: { prompt: 'C' }, display: { prompt: 'D' } })).toBe('C');
+    expect(getQuestionBasePrompt({ display: { prompt: 'D' } })).toBe('D');
+    expect(getQuestionBasePrompt({ display: { content: 'Content' } })).toBe('Content');
+    expect(getQuestionBasePrompt({ text: 'How are you feeling today?' })).toBe(
+      'How are you feeling today?'
+    );
+    expect(getQuestionBasePrompt({})).toBe('');
+    // an object-shaped `prompt` (reaction-time stimulus) is not a usable string
+    expect(getQuestionBasePrompt({ prompt: { text: 'x' }, text: 'flat' })).toBe('flat');
+  });
+});
+
+describe('localizeQuestionnaire — writes the field the runtime renders', () => {
+  it('localizes a bare text-input whose prompt lives in the flat `text` field (no display object)', () => {
+    const q = withQuestion({ id: 'q-text', type: 'text-input', order: 0, text: 'How are you?' });
+    const localized = localizeQuestionnaire(q, 'de');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture access
+    const question = localized.questions[0] as any;
+    expect(question.text).toBe('Übersetzt');
+    expect(question.display).toBeUndefined();
+    // original untouched
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture access
+    expect((q.questions[0] as any).text).toBe('How are you?');
+  });
+
+  it('localizes the flat `prompt` field when present', () => {
+    const q = withQuestion({ id: 'q-flat', type: 'text-input', order: 0, prompt: 'Base' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture access
+    expect((localizeQuestionnaire(q, 'de').questions[0] as any).prompt).toBe('Übersetzt');
+  });
+
+  it('localizes the flat `title` field first when present', () => {
+    const q = withQuestion({
+      id: 'q-title',
+      type: 'text-input',
+      order: 0,
+      title: 'Base title',
+      display: { prompt: 'ignored' },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture access
+    const question = localizeQuestionnaire(q, 'de').questions[0] as any;
+    expect(question.title).toBe('Übersetzt');
+    // the shadowed display.prompt is left as-is (runtime never reads it here)
+    expect(question.display.prompt).toBe('ignored');
+  });
+
+  it('localizes a flat `config.prompt` field', () => {
+    const q = withQuestion({
+      id: 'q-config',
+      type: 'text-input',
+      order: 0,
+      config: { prompt: 'Base config prompt' },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture access
+    expect((localizeQuestionnaire(q, 'de').questions[0] as any).config.prompt).toBe('Übersetzt');
+  });
+
+  it('defaults to display.prompt when the question carries no base prompt field', () => {
+    const q = withQuestion({ id: 'q-empty', type: 'text-input', order: 0 });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture access
+    expect((localizeQuestionnaire(q, 'de').questions[0] as any).display.prompt).toBe('Übersetzt');
+  });
+
+  it('localizes option labels from display.options, config.options and responseType.options', () => {
+    const q = makeQuestionnaire({
+      questions: [
+        {
+          id: 'q-opts',
+          type: 'single-choice',
+          order: 0,
+          text: 'Pick one',
+          display: { options: [{ id: 'a', label: 'Apple', value: 'apple' }] },
+          config: { options: [{ id: 'a', label: 'Apple', value: 'apple' }] },
+          responseType: { type: 'single', options: [{ value: 'apple', label: 'Apple' }] },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture
+        } as any,
+      ],
+      translations: {
+        de: { questions: { 'q-opts': { prompt: 'Wähle', options: { a: 'Apfel', apple: 'Apfel' } } } },
+      },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture access
+    const question = localizeQuestionnaire(q, 'de').questions[0] as any;
+    expect(question.text).toBe('Wähle');
+    expect(question.display.options[0].label).toBe('Apfel');
+    expect(question.config.options[0].label).toBe('Apfel');
+    expect(question.responseType.options[0].label).toBe('Apfel');
   });
 });
