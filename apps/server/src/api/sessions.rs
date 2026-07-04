@@ -1355,14 +1355,23 @@ pub async fn update_session(
         .map(normalize_session_status)
         .transpose()?;
 
-    if normalized_status.is_some() {
-        parts.push(format!("status = ${bind_idx}"));
-        bind_idx += 1;
-
-        // If completing, set completed_at
-        if normalized_status.as_deref() == Some("completed") {
+    if let Some(ref status) = normalized_status {
+        if status == "completed" {
+            // Completing is always allowed; stamp completed_at.
+            parts.push(format!("status = ${bind_idx}"));
             parts.push("completed_at = NOW()".into());
+        } else {
+            // Defense-in-depth: never let a non-terminal update ('active')
+            // regress an already-completed session. This guards against the
+            // fillout progress-update / completion write race (a trailing
+            // per-question 'in_progress' update landing after completion) and
+            // any out-of-order offline sync. A completed session stays
+            // completed.
+            parts.push(format!(
+                "status = CASE WHEN status = 'completed' THEN status ELSE ${bind_idx} END"
+            ));
         }
+        bind_idx += 1;
     }
     if body.metadata.is_some() {
         parts.push(format!("metadata = ${bind_idx}"));

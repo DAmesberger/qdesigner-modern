@@ -211,12 +211,19 @@ export class FilloutRuntime {
 		this.completedQuestions++;
 		const progressPercentage = Math.round((this.completedQuestions / this.totalQuestions) * 100);
 
-		// Update in database
+		// Update in database.
+		// NOTE: deliberately do NOT re-assert `status: 'in_progress'` here. The
+		// session is already marked active by startSession(); the backend session
+		// update only reads `status`/`metadata`, so re-sending 'in_progress' on
+		// every answer has no useful effect AND, on the final question, this
+		// fire-and-forget update can land after completeSession()'s
+		// `status: 'completed'` write and silently revert the session to
+		// 'active' — which analytics then counts as abandoned. Progress is a
+		// client-side/offline concern only.
 		await this.persistenceService.updateSessionProgress({
 			currentQuestionId: this.currentQuestion?.id,
 			currentPageId: this.currentPage?.id,
-			progressPercentage,
-			status: 'in_progress'
+			progressPercentage
 		});
 
 		// Notify UI

@@ -259,8 +259,8 @@
     {:else if timeseries.length === 0}
       <div class="h-48 flex items-center justify-center text-[hsl(var(--muted-foreground))]">No data yet</div>
     {:else}
-      <div class="relative h-48">
-        <svg viewBox="0 0 600 180" class="w-full h-full" preserveAspectRatio="none">
+      <div class="flex flex-col">
+        <svg viewBox="0 0 600 180" class="w-full h-48 block" preserveAspectRatio="none">
           <!-- Grid lines -->
           {#each [0, 0.25, 0.5, 0.75, 1] as frac}
             <line
