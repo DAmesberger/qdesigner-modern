@@ -26,6 +26,12 @@
 
   let { question = $bindable() }: Props = $props();
 
+  // Defensive read: config may be transiently absent (e.g. when the
+  // selection moves to another question) or lack `items` on a legacy
+  // question. Falling back keeps {#each} iteration and .length from
+  // throwing during render and freezing the entire designer.
+  const items = $derived(question.config?.items ?? []);
+
   let editingItem: RankingItem | null = $state(null);
   let newItemLabel = $state('');
 
@@ -37,25 +43,26 @@
       label: newItemLabel.trim(),
     };
 
-    question.config.items = [...question.config.items, newItem];
+    question.config.items = [...(question.config.items ?? []), newItem];
     newItemLabel = '';
   }
 
   function updateItem(item: RankingItem) {
-    const index = question.config.items.findIndex((i) => i.id === item.id);
+    const current = question.config.items ?? [];
+    const index = current.findIndex((i) => i.id === item.id);
     if (index !== -1) {
-      question.config.items[index] = item;
-      question.config.items = [...question.config.items];
+      current[index] = item;
+      question.config.items = [...current];
     }
     editingItem = null;
   }
 
   function deleteItem(item: RankingItem) {
-    question.config.items = question.config.items.filter((i) => i.id !== item.id);
+    question.config.items = (question.config.items ?? []).filter((i) => i.id !== item.id);
   }
 
   function moveItem(index: number, direction: 'up' | 'down') {
-    const newItems = [...question.config.items];
+    const newItems = [...(question.config.items ?? [])];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
 
     if (targetIndex >= 0 && targetIndex < newItems.length) {
@@ -75,8 +82,9 @@
       label: `${item.label} (copy)`,
     };
 
-    const index = question.config.items.findIndex((i) => i.id === item.id);
-    const newItems = [...question.config.items];
+    const current = question.config.items ?? [];
+    const index = current.findIndex((i) => i.id === item.id);
+    const newItems = [...current];
     newItems.splice(index + 1, 0, newItem);
     question.config.items = newItems;
   }
@@ -88,7 +96,7 @@
     <h4 class="section-title">Items to Rank</h4>
 
     <div class="items-list">
-      {#each question.config.items as item, index}
+      {#each items as item, index}
         {#if editingItem?.id === item.id}
           <div class="edit-item">
             <input
@@ -127,7 +135,7 @@
                 variant="ghost"
                 size="sm"
                 onclick={() => moveItem(index, 'down')}
-                disabled={index === question.config.items.length - 1}
+                disabled={index === items.length - 1}
                 aria-label="Move down"
               >
                 <ChevronDown size={16} />
@@ -171,7 +179,7 @@
       </Button>
     </div>
 
-    {#if question.config.items.length < 2}
+    {#if items.length < 2}
       <p class="help-text warning">Add at least 2 items for a valid ranking task</p>
     {/if}
   </div>
@@ -233,7 +241,7 @@
         <span>Unranked Items</span>
       </div>
       <div class="preview-items">
-        {#each question.config.items as item}
+        {#each items as item}
           <div class="preview-item">
             {item.label}
           </div>

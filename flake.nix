@@ -26,7 +26,18 @@
             pkgs.just
             pkgs.pkg-config
             pkgs.openssl
+            # Browser tooling for end-to-end / live UI QA (Playwright + agent-browser
+            # drive this chromium; declared here so the flake is self-contained).
+            pkgs.chromium
+            pkgs.playwright-driver.browsers
           ];
+          shellHook = ''
+            export CHROME="${pkgs.chromium}/bin/chromium"
+            export CHROME_PATH="${pkgs.chromium}/bin/chromium"
+            export PUPPETEER_EXECUTABLE_PATH="${pkgs.chromium}/bin/chromium"
+            export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+            export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
+          '';
         };
       });
 }

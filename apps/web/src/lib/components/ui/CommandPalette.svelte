@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { goto } from '$app/navigation';
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { theme } from '$lib/stores/theme';
+  import { auth } from '$lib/services/auth';
   import { toast } from '$lib/stores/toast';
   import { Search } from 'lucide-svelte';
 
@@ -49,9 +50,76 @@
 
   // Define all available commands
   const commands: Command[] = [
-    // ... (rest of commands kept same, will use original content via replace if safe or I need to span this region)
-    // Wait, I cannot easily "skip" the commands array if it is in the middle.
-    // I should probably target the top block and the bottom block separately.
+    {
+      id: 'nav-dashboard',
+      title: 'Go to Dashboard',
+      description: 'Overview of your research workspace',
+      category: 'Navigation',
+      icon: 'home',
+      shortcut: 'G D',
+      keywords: ['home', 'overview', 'start'],
+      action: () => goto('/dashboard'),
+    },
+    {
+      id: 'nav-projects',
+      title: 'Go to Projects',
+      description: 'Browse and manage your projects',
+      category: 'Navigation',
+      icon: 'book-open',
+      shortcut: 'G P',
+      keywords: ['studies', 'questionnaires', 'folders'],
+      action: () => goto('/projects'),
+    },
+    {
+      id: 'nav-admin',
+      title: 'Go to Admin',
+      description: 'Organization members and roles',
+      category: 'Navigation',
+      icon: 'eye',
+      shortcut: 'G A',
+      keywords: ['organization', 'members', 'roles', 'team'],
+      action: () => goto('/admin'),
+    },
+    {
+      id: 'nav-settings',
+      title: 'Go to Settings',
+      description: 'Your account and preferences',
+      category: 'Navigation',
+      icon: 'cog',
+      shortcut: 'G S',
+      keywords: ['account', 'profile', 'preferences'],
+      action: () => goto('/settings'),
+    },
+    {
+      id: 'create-questionnaire',
+      title: 'New Questionnaire',
+      description: 'Start a new questionnaire in a project',
+      category: 'Create',
+      icon: 'document-add',
+      keywords: ['add', 'new', 'create', 'survey', 'form'],
+      action: () => goto('/projects'),
+    },
+    {
+      id: 'toggle-theme',
+      title: 'Toggle Theme',
+      description: 'Switch between light and dark mode',
+      category: 'Appearance',
+      icon: 'arrows-expand',
+      keywords: ['dark', 'light', 'mode', 'appearance', 'color'],
+      action: () => theme.toggle(),
+    },
+    {
+      id: 'sign-out',
+      title: 'Sign Out',
+      description: 'End your session and return to login',
+      category: 'Account',
+      icon: 'arrow-uturn-left',
+      keywords: ['logout', 'log out', 'exit', 'leave'],
+      action: async () => {
+        await auth.signOut();
+        await goto('/login');
+      },
+    },
   ];
 
   // Group commands by category (Derived)
@@ -132,29 +200,14 @@
     }
   }
 
+  // onMount only runs on the client; its returned cleanup runs on unmount
+  // (also client-only). This keeps all window access off the SSR path —
+  // onDestroy, unlike onMount, executes during server render and would throw
+  // `ReferenceError: window is not defined`.
   onMount(() => {
     window.addEventListener('keydown', handleGlobalKeydown);
+    return () => window.removeEventListener('keydown', handleGlobalKeydown);
   });
-
-  onDestroy(() => {
-    window.removeEventListener('keydown', handleGlobalKeydown);
-  });
-
-  function createEmptyQuestionnaire() {
-    return {
-      id: `q_${Date.now()}`,
-      name: 'New Questionnaire',
-      description: '',
-      version: '1',
-      created: new Date(),
-      modified: new Date(),
-      pages: [],
-      questions: [],
-      variables: [],
-      flow: [],
-      settings: {},
-    };
-  }
 
   function getIcon(iconName: string) {
     // Map icon names to SVG paths
@@ -196,7 +249,7 @@
     class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl z-50"
     transition:fly={{ y: -20, duration: 200 }}
   >
-    <div class="bg-popover rounded-lg shadow-2xl overflow-hidden">
+    <div class="bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100 rounded-lg shadow-2xl overflow-hidden">
       <!-- Search Input -->
       <div class="border-b border-border">
         <div class="flex items-center px-4">

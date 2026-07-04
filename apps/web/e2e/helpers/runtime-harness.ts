@@ -1,96 +1,158 @@
 import { expect, type Page } from '@playwright/test';
-import {
-  serializeRuntimeFixture,
-  type RuntimeScenarioFixture,
-  type RuntimeScenarioName,
-} from './questionnaire-fixtures';
-import {
-  getRuntimeState,
-  pressKeySequence,
-  waitForQuestion,
-  waitForRuntimeBound,
-  waitForRuntimeStart,
-} from './runtime-assertions';
 
-export async function openRuntimeFixture(
+/**
+ * Playwright-side driver for the deterministic reaction harness exposed at the
+ * build-guarded `/test-runtime` route (see
+ * `apps/web/src/routes/test-runtime/harness.ts`). All timing is injected, never
+ * measured, so these helpers never wait on real reaction latency.
+ */
+
+export interface TrialView {
+  index: number;
+  id: string;
+  congruency?: string;
+  expectedResponse?: string;
+  isTarget?: boolean;
+  word?: string;
+  inkColor?: string;
+  displayString?: string;
+  stimulusOnsetTimestamp: number | null;
+  responseTimestamp: number | null;
+  reactionTimeMs: number | null;
+  responseValue: string | null;
+  correct: boolean | null;
+}
+
+export interface ControlFlowResult {
+  presentedPageIds: string[];
+  presentedQuestionIds: string[];
+  skippedPageIds: string[];
+}
+
+export interface RuntimeDebugSnapshot {
+  ready: boolean;
+  scenario: string;
+  seed: string;
+  trials: TrialView[];
+  trialCount: number;
+  currentTrialIndex: number;
+  currentTrial: TrialView | null;
+  stimulusOnsetTimestamp: number | null;
+  responseTimestamp: number | null;
+  reactionTimeMs: number | null;
+  controlFlow: ControlFlowResult | null;
+  completed: boolean;
+  errors: string[];
+}
+
+export type ScenarioName = 'stroop' | 'flanker' | 'nback' | 'control-flow';
+
+export interface ScenarioOptions {
+  seed?: string;
+  trialCount?: number;
+  answers?: Record<string, unknown>;
+}
+
+const HARNESS_PATH = '/test-runtime';
+
+/** Navigate to the harness and wait until the debug global is installed. */
+export async function openRuntimeHarness(
   page: Page,
-  fixture: RuntimeScenarioFixture,
-  options?: { autostart?: boolean }
+  options?: { scenario?: ScenarioName; seed?: string }
 ): Promise<void> {
-  const fixturePayload = serializeRuntimeFixture(fixture);
-  const params = new URLSearchParams({
-    scenario: fixture.name,
-    fixture: fixturePayload,
-  });
+  const params = new URLSearchParams();
+  if (options?.scenario) params.set('scenario', options.scenario);
+  if (options?.seed) params.set('seed', options.seed);
 
-  if (options?.autostart) {
-    params.set('autostart', '1');
-  }
+  const query = params.toString();
+  await page.goto(query ? `${HARNESS_PATH}?${query}` : HARNESS_PATH);
 
-  await page.goto(`/test-runtime?${params.toString()}`);
-  await waitForRuntimeBound(page, fixture.name);
+  await expect(page.getByTestId('test-runtime-ready')).toHaveText('ready', { timeout: 15000 });
+  await expect
+    .poll(async () => page.evaluate(() => Boolean(window.__QDESIGNER_RUNTIME_DEBUG__)), {
+      timeout: 15000,
+    })
+    .toBe(true);
 }
 
-async function focusRuntimeCanvas(page: Page): Promise<void> {
-  const canvas = page.getByTestId('test-runtime-canvas');
-
-  if (await canvas.isVisible().catch(() => false)) {
-    await canvas.click({ force: true });
-    return;
-  }
-
-  await page.mouse.click(10, 10);
+export async function getSnapshot(page: Page): Promise<RuntimeDebugSnapshot> {
+  return page.evaluate(() => window.__QDESIGNER_RUNTIME_DEBUG__!.snapshot());
 }
 
-async function dispatchKeySequenceWithRetry(page: Page, keys?: string[]): Promise<void> {
-  if (!keys || keys.length === 0) return;
-
-  const baseline = await getRuntimeState(page);
-  const baselineResponses = baseline?.responses.length ?? 0;
-  const baselineCompleted = Boolean(baseline?.completed);
-
-  await focusRuntimeCanvas(page);
-  await page.waitForTimeout(50);
-  await pressKeySequence(page, keys);
-  await page.waitForTimeout(120);
-
-  const afterFirstAttempt = await getRuntimeState(page);
-  const hasProgress =
-    (afterFirstAttempt?.responses.length ?? 0) > baselineResponses ||
-    (!baselineCompleted && Boolean(afterFirstAttempt?.completed));
-
-  if (hasProgress) return;
-
-  await focusRuntimeCanvas(page);
-  await page.waitForTimeout(50);
-  await pressKeySequence(page, keys);
-}
-
-export async function startRuntimeFixture(
+export async function loadScenario(
   page: Page,
-  fixture: RuntimeScenarioFixture
-): Promise<void> {
-  await openRuntimeFixture(page, fixture, { autostart: true });
-
-  try {
-    await waitForRuntimeStart(page);
-  } catch {
-    // Fallback for environments where autostart does not trigger reliably.
-    const startButton = page.getByTestId('test-runtime-start-button');
-    if (await startButton.isVisible().catch(() => false)) {
-      await expect(startButton).toBeVisible();
-      await startButton.click({ force: true });
-    }
-    await waitForRuntimeStart(page);
-  }
-
-  if (fixture.waitForQuestionId) {
-    await waitForQuestion(page, fixture.waitForQuestionId);
-  }
-
-  await dispatchKeySequenceWithRetry(page, fixture.keySequence);
+  scenario: ScenarioName,
+  options?: ScenarioOptions
+): Promise<RuntimeDebugSnapshot> {
+  return page.evaluate(
+    ([name, opts]) => window.__QDESIGNER_RUNTIME_DEBUG__!.loadScenario(name, opts),
+    [scenario, options ?? {}] as const
+  );
 }
 
-export function fixtureName(name: RuntimeScenarioName): string {
-  return name;
+export async function injectStimulusOnset(
+  page: Page,
+  index: number,
+  onsetTimestamp: number
+): Promise<void> {
+  await page.evaluate(
+    ([i, onset]) => window.__QDESIGNER_RUNTIME_DEBUG__!.injectStimulusOnset(i, onset),
+    [index, onsetTimestamp] as const
+  );
+}
+
+export async function injectResponse(
+  page: Page,
+  index: number,
+  responseTimestamp: number,
+  value?: string
+): Promise<TrialView> {
+  return page.evaluate(
+    ([i, response, val]) => window.__QDESIGNER_RUNTIME_DEBUG__!.injectResponse(i, response, val),
+    [index, responseTimestamp, value] as const
+  );
+}
+
+/** Inject a full trial (onset + response) and return the computed trial. */
+export async function injectTrial(
+  page: Page,
+  index: number,
+  onsetTimestamp: number,
+  responseTimestamp: number,
+  value?: string
+): Promise<TrialView> {
+  return page.evaluate(
+    ([i, onset, response, val]) =>
+      window.__QDESIGNER_RUNTIME_DEBUG__!.injectTrial(i, onset, response, val),
+    [index, onsetTimestamp, responseTimestamp, value] as const
+  );
+}
+
+export async function runControlFlow(
+  page: Page,
+  answers?: Record<string, unknown>
+): Promise<ControlFlowResult> {
+  return page.evaluate(
+    (a) => window.__QDESIGNER_RUNTIME_DEBUG__!.runControlFlow(a),
+    answers ?? { q_gate: 1 }
+  );
+}
+
+declare global {
+  interface Window {
+    __QDESIGNER_RUNTIME_DEBUG__?: {
+      snapshot(): RuntimeDebugSnapshot;
+      loadScenario(name: ScenarioName, options?: ScenarioOptions): RuntimeDebugSnapshot;
+      injectStimulusOnset(index: number, onsetTimestamp: number): void;
+      injectResponse(index: number, responseTimestamp: number, value?: string): TrialView;
+      injectTrial(
+        index: number,
+        onsetTimestamp: number,
+        responseTimestamp: number,
+        value?: string
+      ): TrialView;
+      advance(): number;
+      runControlFlow(answers?: Record<string, unknown>): ControlFlowResult;
+    };
+  }
 }

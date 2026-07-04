@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { onMount, tick } from 'svelte';
   import Button from '$lib/components/common/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
@@ -7,7 +8,7 @@
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
-  import { t } from '$lib/i18n/hooks';
+  import { m } from '$lib/paraglide/messages';
   import {
     sendVerificationCode,
     verifyCode,
@@ -36,6 +37,12 @@
   // Domain auto-join detection
   let domainAutoJoin: any = $state(null);
   let pendingInvitations: any[] = $state([]);
+
+  // Prefill the email field from a ?email= query param (e.g. from an invite link)
+  onMount(() => {
+    const prefill = $page.url.searchParams.get('email');
+    if (prefill) email = prefill;
+  });
 
   // Check for domain auto-join when email changes
   $effect(() => {
@@ -202,12 +209,12 @@
   <div class="sm:mx-auto sm:w-full sm:max-w-md">
     <div class="text-center">
       <h2 class="mt-6 text-3xl font-bold tracking-tight text-foreground">
-        {showVerification ? 'Verify Your Email' : $t('auth.signup.title')}
+        {showVerification ? 'Verify Your Email' : m.auth_signup_title()}
       </h2>
       <p class="mt-2 text-lg text-muted-foreground">
         {showVerification
           ? `We've sent a verification code to ${email}`
-          : $t('auth.signup.subtitle')}
+          : m.auth_signup_subtitle()}
       </p>
     </div>
   </div>
@@ -240,7 +247,7 @@
             </Alert>
           {/if}
 
-          <FormGroup label={$t('auth.signup.firstName')} id="full-name">
+          <FormGroup label={m.auth_signup_firstName()} id="full-name">
             <Input
               id="full-name"
               type="text"
@@ -250,7 +257,7 @@
             />
           </FormGroup>
 
-          <FormGroup label={$t('auth.signup.email')} id="email">
+          <FormGroup label={m.auth_signup_email()} id="email">
             <Input
               id="email"
               type="email"
@@ -260,7 +267,7 @@
             />
           </FormGroup>
 
-          <FormGroup label={$t('auth.signup.password')} id="password">
+          <FormGroup label={m.auth_signup_password()} id="password">
             <Input
               id="password"
               type="password"
@@ -309,14 +316,14 @@
           {/if}
 
           <Button type="submit" variant="primary" size="lg" class="w-full" {loading}>
-            {$t('auth.signup.submit')}
+            {m.auth_signup_submit()}
           </Button>
 
           <div class="text-center">
             <span class="text-sm text-muted-foreground">
-              {$t('auth.signup.hasAccount')}
+              {m.auth_signup_hasAccount()}
               <a href="/login" class="font-medium text-primary hover:text-primary/80 ml-1">
-                {$t('auth.signup.signIn')}
+                {m.auth_signup_signIn()}
               </a>
             </span>
           </div>

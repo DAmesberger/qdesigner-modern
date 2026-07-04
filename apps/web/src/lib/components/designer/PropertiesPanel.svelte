@@ -6,7 +6,6 @@
   import type { ComponentType } from 'svelte';
   import StyleEditor from './StyleEditor.svelte';
   import ScriptEditor from './ScriptEditor.svelte';
-  import { defaultTheme } from '$lib/shared/types/theme';
   import { getItemSettings } from '$lib/utils/itemSettings';
   import { api } from '$lib/services/api';
   import { Library, MousePointerClick, CheckCircle } from 'lucide-svelte';
@@ -18,7 +17,8 @@
   import Select from '$lib/components/ui/forms/Select.svelte';
 
   let activeTab = $state<'properties' | 'style' | 'script'>('properties');
-  let theme = $state(defaultTheme); // In real app, this would come from store
+  // Theme is persisted on the questionnaire via the designer store (autosaved).
+  let theme = $derived(designerStore.theme);
 
   // Use reactive declarations instead of manual subscription
   let item = $derived(designerStore.selectedItem);
@@ -260,21 +260,8 @@
   }
 
   function handleThemeUpdate(event: { path: string[]; value: any }) {
-    const { path, value } = event;
-    // Update theme in store
-    // For now, just update local theme
-    theme = JSON.parse(JSON.stringify(theme));
-    let obj = theme as any;
-    for (let i = 0; i < path.length - 1; i++) {
-      const key = path[i];
-      if (key !== undefined) {
-        obj = obj[key];
-      }
-    }
-    const lastKey = path[path.length - 1];
-    if (lastKey !== undefined) {
-      obj[lastKey] = value;
-    }
+    // Persist the theme edit through the designer store so it autosaves.
+    designerStore.updateTheme(event.path, event.value);
   }
 
   function handleScriptUpdate(script: string) {

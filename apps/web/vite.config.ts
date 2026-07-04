@@ -1,8 +1,15 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import tailwindcss from '@tailwindcss/vite';
+import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
+
+// Paraglide i18n (ADR 0019). Compiles messages/{locale}.json into
+// tree-shakeable m.*() calls at ./src/lib/paraglide. Keep `strategy` in sync
+// with the `paraglide:compile` script in package.json (which regenerates the
+// same output for `check`/`test`, where the Vite pipeline does not run).
+const PARAGLIDE_STRATEGY = ['cookie', 'preferredLanguage', 'baseLocale'] as const;
 
 function buildManifestPlugin(): Plugin {
   return {
@@ -43,15 +50,57 @@ export default defineConfig(({ mode }) => {
   const serverPort = Number(env.SERVER_PORT || '4100');
 
   return {
-    plugins: [tailwindcss(), sveltekit(), buildManifestPlugin()],
+    plugins: [
+      paraglideVitePlugin({
+        project: './project.inlang',
+        outdir: './src/lib/paraglide',
+        strategy: [...PARAGLIDE_STRATEGY],
+      }),
+      tailwindcss(),
+      sveltekit(),
+      buildManifestPlugin(),
+    ],
     envDir: workspaceRoot,
     clearScreen: false,
     build: {
-      sourcemap: true,
-      minify: false // Disable minification for better debugging
+      sourcemap: mode !== 'production',
+      minify: mode === 'production' ? 'esbuild' : false,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('monaco-editor')) return 'monaco';
+            if (id.includes('chart.js')) return 'charts';
+            if (id.includes('mathjs')) return 'mathjs';
+            if (id.includes('yjs')) return 'yjs';
+          }
+        }
+      }
     },
     optimizeDeps: {
-      include: ['svelte', '@sveltejs/kit']
+      // NB: never add '@sveltejs/kit' here. SvelteKit's own Vite plugin
+      // deliberately puts it in optimizeDeps.exclude — prebundling it produces
+      // a second copy of its control classes (Redirect/HttpError), so a
+      // `throw redirect()` from a universal load fails the runtime's
+      // `instanceof Redirect` check during hydration and surfaces as a 500
+      // error page instead of navigating. (sveltejs/kit#5952)
+      //
+      // The svelte/* submodules below are reachable ONLY through the
+      // lazily-loaded, ssr=false designer route (svelte/motion + svelte/easing
+      // via AppLoader; svelte/transition + svelte/animate via Dialog /
+      // MultipleChoice). Because they are not seen during the initial dep scan,
+      // Vite discovers them at navigation time and triggers a re-optimization;
+      // if the cache is invalidated in that window the browser 504s on the
+      // stale hash and the dynamic import of the designer node rejects with
+      // "Failed to fetch dynamically imported module" — a bare 500 on open.
+      // Pre-including them makes the optimize set deterministic so the designer
+      // route never depends on runtime re-optimization.
+      include: [
+        'svelte',
+        'svelte/motion',
+        'svelte/easing',
+        'svelte/transition',
+        'svelte/animate'
+      ]
     },
     server: {
       port: appPort,

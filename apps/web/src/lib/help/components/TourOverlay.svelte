@@ -29,6 +29,7 @@
 			tourEngine.highlightRect = el.getBoundingClientRect();
 			computePosition(el, tooltip, {
 				placement,
+				strategy: 'fixed',
 				middleware: [offset(12), flip(), shift({ padding: 8 })],
 			}).then(({ x, y }) => {
 				tooltipX = x;

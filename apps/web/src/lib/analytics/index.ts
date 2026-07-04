@@ -6,7 +6,6 @@
 
 import { StatisticalEngine } from './StatisticalEngine';
 import { DataVisualization } from './DataVisualization';
-import { ExportService } from './ExportService';
 import { ScoreInterpreter } from './ScoreInterpreter';
 import { MissingDataHandler } from './MissingDataHandler';
 import { PowerAnalysis } from './PowerAnalysis';
@@ -14,10 +13,9 @@ import { RealtimeAnalyticsClient } from './RealtimeAnalyticsClient.svelte';
 import { ScoringPipeline } from './ScoringPipeline';
 
 // Re-export Core Classes
-export { StatisticalEngine, DataVisualization, ExportService, ScoreInterpreter, MissingDataHandler, PowerAnalysis, RealtimeAnalyticsClient, ScoringPipeline };
+export { StatisticalEngine, DataVisualization, ScoreInterpreter, MissingDataHandler, PowerAnalysis, RealtimeAnalyticsClient, ScoringPipeline };
 
 // Svelte Components
-export { default as AnalyticsDashboard } from './components/AnalyticsDashboard.svelte';
 export { default as StatisticsCard } from './components/StatisticsCard.svelte';
 export { default as DashboardBuilder } from './components/DashboardBuilder.svelte';
 export { default as WidgetPalette } from './components/WidgetPalette.svelte';
@@ -202,7 +200,6 @@ export function initializeAnalytics(config?: {
   return {
     statistical: StatisticalEngine.getInstance(),
     visualization: DataVisualization.getInstance(),
-    export: ExportService.getInstance(),
     config: {
       realtime: realtimeConfig,
       dashboard: dashboardConfig
@@ -231,8 +228,7 @@ export async function generateAnalyticsReport(
   };
 
   const statistical = StatisticalEngine.getInstance();
-  const exportService = ExportService.getInstance();
-  
+
   // Basic metrics
   const totalSessions = data.length;
   const completedSessions = data.filter(session => session.endTime).length;
@@ -282,18 +278,6 @@ export async function generateAnalyticsReport(
     if (reactionTimes.length > 0 && responseTimes.length === reactionTimes.length) {
       report.statistics.correlation = statistical.calculateCorrelation(responseTimes, reactionTimes);
     }
-  }
-
-  // Add export if requested
-  if (opts.includeExport) {
-    const exportResult = await exportService.exportData(data, {
-      format: opts.exportFormat,
-      includeMetadata: true,
-      includeRawData: true,
-      includeStatistics: opts.includeStatistics
-    });
-    
-    report.export = exportResult;
   }
 
   return report;

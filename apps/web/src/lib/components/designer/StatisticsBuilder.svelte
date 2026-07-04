@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
-  import { Chart, registerables, type ChartType, type ChartConfiguration } from 'chart.js';
+  import type { Chart, ChartType, ChartConfiguration } from 'chart.js';
   import type { Variable } from '$lib/shared/types/questionnaire';
   import {
     ScientificChartBuilder,
@@ -10,7 +10,52 @@
   } from './ScientificChartConfig';
   import { Settings, BarChart2, LineChart, PieChart, Activity, BarChart } from 'lucide-svelte';
 
-  Chart.register(...registerables);
+  // Lazily load chart.js so it is excluded from the initial bundle, and
+  // register only the controllers/elements/scales this builder's chart types
+  // (bar, line, pie, radar, scatter → distribution/percentile/histogram/…) use.
+  let ChartClass: typeof Chart | null = null;
+  async function loadChart(): Promise<typeof Chart> {
+    if (ChartClass) return ChartClass;
+    const {
+      Chart: ChartCtor,
+      BarController,
+      LineController,
+      PieController,
+      RadarController,
+      ScatterController,
+      BarElement,
+      LineElement,
+      PointElement,
+      ArcElement,
+      CategoryScale,
+      LinearScale,
+      RadialLinearScale,
+      Filler,
+      Title,
+      Tooltip,
+      Legend,
+    } = await import('chart.js');
+    ChartCtor.register(
+      BarController,
+      LineController,
+      PieController,
+      RadarController,
+      ScatterController,
+      BarElement,
+      LineElement,
+      PointElement,
+      ArcElement,
+      CategoryScale,
+      LinearScale,
+      RadialLinearScale,
+      Filler,
+      Title,
+      Tooltip,
+      Legend
+    );
+    ChartClass = ChartCtor;
+    return ChartCtor;
+  }
 
   let {
     variableId = '',
@@ -61,7 +106,7 @@
   });
 
   // Create or update chart
-  function createChart() {
+  async function createChart() {
     if (chart) {
       chart.destroy();
     }
@@ -69,6 +114,8 @@
     if (!chartCanvas) return;
     const ctx = chartCanvas.getContext('2d');
     if (!ctx) return;
+
+    const Chart = await loadChart();
 
     const chartData = generateChartData();
 

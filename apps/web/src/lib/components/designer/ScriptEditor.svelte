@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import * as monaco from 'monaco-editor';
+  import type * as Monaco from 'monaco-editor';
   import type { Question } from '$lib/shared';
   import Button from '$lib/components/common/Button.svelte';
   import { AlignLeft, RotateCcw } from 'lucide-svelte';
@@ -9,7 +9,8 @@
   export let onUpdate: (script: string) => void;
 
   let editorContainer: HTMLDivElement;
-  let editor: monaco.editor.IStandaloneCodeEditor;
+  let editor: Monaco.editor.IStandaloneCodeEditor | undefined;
+  let monaco: typeof Monaco;
 
   // Script template
   const scriptTemplate = `// Question Script: ${question.name || question.id}
@@ -163,7 +164,17 @@ declare namespace QuestionAPI {
 }
 `;
 
-  onMount(() => {
+  onMount(async () => {
+    // Only load Monaco in browser environment
+    if (typeof window === 'undefined') return;
+
+    // Setup Monaco environment
+    const { setupMonacoEnvironment } = await import('$lib/utils/monacoConfig');
+    setupMonacoEnvironment();
+
+    // Dynamically import Monaco
+    monaco = await import('monaco-editor');
+
     // Configure Monaco
     monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
       noSemanticValidation: false,
@@ -182,7 +193,7 @@ declare namespace QuestionAPI {
     monaco.languages.typescript.javascriptDefaults.addExtraLib(typeDefinitions, 'questionapi.d.ts');
 
     // Create editor
-    editor = monaco.editor.create(editorContainer, {
+    const editorInstance = monaco.editor.create(editorContainer, {
       value: question.settings?.script || scriptTemplate,
       language: 'javascript',
       theme: 'vs-dark',
@@ -203,16 +214,18 @@ declare namespace QuestionAPI {
     });
 
     // Handle changes
-    editor.onDidChangeModelContent(() => {
-      const value = editor.getValue();
+    editorInstance.onDidChangeModelContent(() => {
+      const value = editorInstance.getValue();
       onUpdate(value);
     });
 
     // Add keyboard shortcuts
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+    editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       // Save shortcut - could trigger save
       console.log('Save triggered');
     });
+
+    editor = editorInstance;
   });
 
   onDestroy(() => {

@@ -22,7 +22,10 @@ import { ResourceManager } from '../resources/ResourceManager';
 import { MediaValidator } from '../validation/MediaValidator';
 import { QuestionPresenter } from './QuestionPresenter';
 import { ResponseCollector, type ResponseCaptureMetadata } from './ResponseCollector';
+import type { FormQuestionHost } from './FormQuestionHost';
+import { buildModuleRuntimeConfig } from './moduleConfigAdapter';
 import { BlockRandomizer } from './BlockRandomizer';
+import { computeReactionTimeMs } from './reactionTiming';
 import { ScriptExecutor } from './ScriptExecutor';
 import { ConditionAssigner, getBlockOrder } from '../experimental';
 import { QualityReport } from '../quality/QualityReport';
@@ -40,6 +43,13 @@ export interface RuntimeConfig {
   participantId?: string;
   participantNumber?: number;
   conditionGroupCounts?: number[];
+  /**
+   * Optional HTML-overlay host. When supplied, form-style questions (and
+   * instruction/display items) are rendered by mounting their per-module runtime
+   * Svelte component into the overlay rather than via WebGL text (ADR 0018).
+   * Reaction-time paradigms always stay on the WebGL path.
+   */
+  formHost?: FormQuestionHost;
   onComplete?: (session: QuestionnaireSession) => void;
   onProgress?: (pageIndex: number, totalPages: number) => void;
   onQuestionPresented?: (event: QuestionPresentedEvent) => void;
@@ -203,6 +213,7 @@ export class QuestionnaireRuntime {
     }
 
     this.responseCollector.stop();
+    this.config.formHost?.clear();
     this.renderer.stop();
     this.resourceManager.dispose();
 
@@ -651,6 +662,13 @@ export class QuestionnaireRuntime {
       return;
     }
 
+    // Hybrid render (ADR 0018): mount the module's runtime Svelte component into
+    // the HTML overlay for form-style questions instead of WebGL text.
+    if (this.config.formHost && this.isFormStyle(metadata)) {
+      this.presentFormQuestion(question, metadata, onsetTime);
+      return;
+    }
+
     await this.questionPresenter.present(question, this.variableEngine);
 
     const responseType = (question as DynamicValue).responseType;
@@ -683,10 +701,45 @@ export class QuestionnaireRuntime {
 
   private async presentNonInteractiveItem(
     question: Question,
-    _metadata: ModuleMetadata
+    metadata: ModuleMetadata
   ): Promise<void> {
     // Execute onMount hook for non-interactive items too (e.g. instructions with scripts)
     this.scriptExecutor.executeOnMount(question, this.variableEngine, this.getResponseMap());
+
+    const advance = async () => {
+      await this.clearPresentation();
+      this.currentItemIndex += 1;
+      await this.showCurrentItem();
+    };
+
+    // Hybrid render (ADR 0018): mount the module's runtime Svelte component into
+    // the HTML overlay so instruction / media-display items are actually visible
+    // (the WebGL text path never painted). Reconciles the MOD-05 enum-drop types.
+    // Scoped to the `instruction` category: `display`/`analytics` items (bar-chart,
+    // statistical-feedback) stay on the existing WebGL presenter path (MOD-07/STB-03).
+    if (this.config.formHost && metadata.category === 'instruction') {
+      const item = question as DynamicValue;
+      this.config.formHost.present({
+        item,
+        type: item.type,
+        category: metadata.category,
+        config: buildModuleRuntimeConfig(item),
+        variables: this.variableEngine.getAllVariables(),
+        interactive: false,
+        required: false,
+        onSubmit: () => {
+          void advance();
+        },
+      });
+
+      const timing = item.timing;
+      const duration = timing?.duration || item.displayDuration;
+      const autoAdvance = item.autoAdvance === true || item.navigation?.autoAdvance === true;
+      if (autoAdvance && duration) {
+        this.scheduleAutoAdvance(duration, advance);
+      }
+      return;
+    }
 
     await this.questionPresenter.presentModular(question as DynamicValue, this.variableEngine);
 
@@ -698,11 +751,60 @@ export class QuestionnaireRuntime {
       return;
     }
 
-    this.scheduleAutoAdvance(duration, async () => {
-      await this.questionPresenter.clear();
-      this.currentItemIndex += 1;
-      await this.showCurrentItem();
+    this.scheduleAutoAdvance(duration, advance);
+  }
+
+  /**
+   * A form-style question renders through the HTML overlay: category `question`
+   * without a registered reaction-time (v1) runtime.
+   */
+  private isFormStyle(metadata: ModuleMetadata): boolean {
+    if (metadata.category !== 'question') return false;
+    if (metadata.questionRuntime?.contract === 'v1') return false;
+    return true;
+  }
+
+  /**
+   * Present a form-style question by mounting its runtime component in the overlay
+   * and routing the confirmed answer back through the normal response pipeline.
+   */
+  private presentFormQuestion(
+    question: Question,
+    metadata: ModuleMetadata,
+    onsetTime: number
+  ): void {
+    if (!this.config.formHost) return;
+
+    const item = question as DynamicValue;
+    const cfInitialValue = item._carryForwardInitialValue;
+
+    this.config.formHost.present({
+      item,
+      type: item.type,
+      category: metadata.category,
+      config: buildModuleRuntimeConfig(item),
+      variables: this.variableEngine.getAllVariables(),
+      interactive: true,
+      required: Boolean(item.required),
+      initialValue: cfInitialValue,
+      onSubmit: (value, responseMetadata) => {
+        void this.handleCollectedResponse(
+          question,
+          onsetTime,
+          value,
+          responseMetadata ?? {
+            source: 'programmatic',
+            timestamp: performance.now(),
+            responseTimeMs: Math.max(0, performance.now() - onsetTime),
+          }
+        );
+      },
     });
+  }
+
+  private async clearPresentation(): Promise<void> {
+    this.config.formHost?.clear();
+    await this.questionPresenter.clear();
   }
 
   private createQuestionRuntimeContext(question: Question): QuestionRuntimeContext {
@@ -750,7 +852,7 @@ export class QuestionnaireRuntime {
     );
 
     const timestamp = performance.now();
-    const reactionTime = runtimeResult.reactionTimeMs ?? Math.max(0, timestamp - onsetTime);
+    const reactionTime = runtimeResult.reactionTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
 
     const response: Response = {
       id: nanoid(),
@@ -782,7 +884,7 @@ export class QuestionnaireRuntime {
       this.getResponseMap()
     );
 
-    await this.questionPresenter.clear();
+    await this.clearPresentation();
 
     this.currentItemIndex += 1;
     await this.showCurrentItem();
@@ -809,7 +911,7 @@ export class QuestionnaireRuntime {
     }
 
     const timestamp = responseMetadata?.timestamp ?? performance.now();
-    const reactionTime = responseMetadata?.responseTimeMs ?? Math.max(0, timestamp - onsetTime);
+    const reactionTime = responseMetadata?.responseTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
 
     const response: Response = {
       id: nanoid(),
@@ -844,7 +946,7 @@ export class QuestionnaireRuntime {
     );
 
     this.responseCollector.stop();
-    await this.questionPresenter.clear();
+    await this.clearPresentation();
 
     this.currentItemIndex += 1;
     await this.showCurrentItem();
@@ -867,7 +969,7 @@ export class QuestionnaireRuntime {
     this.session.responses.push(response);
     this.updateQuestionVariables(question, response, false);
 
-    await this.questionPresenter.clear();
+    await this.clearPresentation();
 
     this.currentItemIndex += 1;
     await this.showCurrentItem();
@@ -1060,6 +1162,7 @@ export class QuestionnaireRuntime {
 
     this.clearPageTimer();
     this.responseCollector.stop();
+    this.config.formHost?.clear();
     this.renderer.clearRenderables();
   }
 

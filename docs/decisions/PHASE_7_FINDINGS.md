@@ -1,0 +1,425 @@
+# Phase 7 — Findings Ledger
+
+Complete, trackable record of every actionable finding from the 2026-07-03 systematic audit
+(141-agent adversarial workflow; 123 findings, 4 refuted, 119 actionable below).
+Each row is one loop task. Check the box when the fix is committed AND its phase gate is green.
+
+**Verdict legend:** `confirmed` = adversarial verifier upheld the claim against the cited code; `partial` = real issue, claim corrected (see → Correction). Every row is still a **hypothesis to re-probe at action time** (audit cross-reference error rate ~30% per SUPERVISOR_PROTOCOL).
+
+**Code prefixes:** THM theme · HCS hardcoded-styles · CMP components · DSN designer · AUT auth · SHL app-shell · ANL analytics · ADM admin · A11 a11y · STB stubs · MOD modules · HLP help/onboarding · E2E tests · ERR error/session · PRF performance.
+
+
+## P7.1 — Correctness & Integrity  (24 tasks)
+
+- [x] **E2E-01** `critical/dead-code/confirmed` — Nine e2e tests target a /test-runtime route that was deleted from src — the entire deterministic runtime-engine coverage is dead
+  - **Evidence:** `apps/web/e2e/helpers/runtime-harness.ts:30 ; apps/web/e2e/helpers/runtime-assertions.ts:22`
+  - **Action:** Either restore a guarded test-only runtime harness route (e.g. behind an env flag / dev build) that re-exposes __QDESIGNER_RUNTIME_DEBUG__, or delete the 9 dependent specs and helpers (runtime-harness.ts, runtime-assertions.ts, questionnaire-fixtures.ts) and replace runtime-engine assertions with unit tests against the runtime module. Do not leave guaranteed-failing specs in the nightly/PR lanes.
+- [ ] **E2E-02** `critical/tech-debt/confirmed` — No CI Playwright job runs the backend, DB, or seeded users — every API/auth-dependent e2e test fails in CI
+  - **Evidence:** `apps/web/playwright.config.ts:74 ; .github/workflows/ci.yml:116`
+  - **Action:** Add postgres/redis/minio services + a backend build/run step (or docker compose up) and user seeding to the e2e-smoke and e2e-nightly jobs, and point the Playwright webServer at a stack that includes the backend. Until then the CI e2e gate should be considered non-functional, not passing.
+- [ ] **ERR-01** `critical/ux/partial` — Failed token refresh / session expiry leaves the user stranded with no redirect to login
+  - **Evidence:** `apps/web/src/lib/services/auth.ts:260 ; apps/web/src/lib/services/auth.ts:295`
+  - **Action:** Centralize session-death handling: in the SIGNED_OUT listener (or a single auth subscriber mounted at the app root) call goto('/login?redirect=<current>') and invalidateAll(). Have callSdk's terminal 401 branch route through the same handler instead of only throwing. Force a refresh (not just getSession) on 401 so revoked-but-unexpired tokens are detected.
+  - **Correction (verifier):** The technical gap is real (mid-page non-navigation actions after a background refresh failure or a revoked-but-unexpired token yield an opaque 'Request failed' toast with no proactive redirect, and callSdk never signs out revoked-unexpired tokens), but severity should be high/medium, not critical: the (app)/+layout.ts load guard redirects to /login on the next client-side navigation to any protected route, so the user is not stranded 'until they manually reload' — normal in-app navigation already recovers. The valid remaining fixes are (a) proactively route to /login on SIGNED_OUT and (b) force a refresh (not getSession) on 401 so revoked tokens sign out.
+- [x] **MOD-01** `critical/feature-gap/confirmed` — Rich per-module runtime Svelte components are never mounted in participant fillout — the runtime is WebGL-only and ModularRenderer is dead code
+  - **Evidence:** `apps/web/src/lib/runtime/core/QuestionPresenter.ts:336 ; apps/web/src/lib/runtime/core/QuestionPresenter.ts:159`
+  - **Action:** Decide the fillout rendering contract explicitly: either (a) mount module runtime Svelte components into the html-overlay for form-style questions and reserve WebGL for reaction-time paradigms, or (b) commit to WebGL and delete the unused runtime Svelte components + ModularRenderer to remove the false 'renderable' signal. Today the registry advertises a capability the participant runtime does not deliver.
+  - **Resolved (2026-07-03):** Adopted option (a) — ADR 0018 (hybrid). Added `FormQuestionHost` + `RuntimeConfig.formHost`; `QuestionnaireRuntime.presentFormQuestion`/`isFormStyle` route form-style questions to the overlay via `ModularRenderer`, reaction paradigms (v1 `questionRuntime`) stay WebGL. `moduleConfigAdapter.ts` bridges the `display`/`responseType`→`config` mismatch. Overlay + Continue button in `(fillout)/q/[code]/+page.svelte`. Verified by `fillout-form-capture.test.ts` (MultipleChoice + Matrix capture onResponse).
+- [ ] **E2E-03** `high/feature-gap/confirmed` — Golden path is not covered end-to-end — no e2e test ever reaches analytics/export
+  - **Evidence:** `apps/web/e2e/fullstack/designer-creation-fillout.fullstack.spec.ts:155 ; apps/web/e2e/helpers/fullstack-api.ts:184`
+  - **Action:** Extend the fullstack lane with an analytics assertion: after fillout, log in as the researcher and verify the submitted response/aggregate appears in the analytics UI and/or an export endpoint returns the row. This is the single most valuable missing golden-path segment.
+- [ ] **E2E-04** `high/tech-debt/partial` — Smoke PR gate has no authentication wiring — the create-questionnaire smoke test cannot pass even with a backend
+  - **Evidence:** `apps/web/playwright.config.ts:20 ; apps/web/e2e/smoke/questionnaire-creation-preview-fillout.smoke.spec.ts:13`
+  - **Action:** Give the smoke spec the same addInitScript auth seeding (or a wired storageState) used by the fullstack lane, using a provisioned workspace rather than the hardcoded test-project-1 UUID; then the smoke gate exercises a real, reachable project.
+  - **Correction (verifier):** The smoke PR gate is genuinely broken and has no auth wiring, but not because of a /login redirect. The /projects/[projectId] route is not in the (app) layout's protectedRoutes guard, so an unauthenticated visit does not redirect to /login; instead +page.ts throws a 403 'No organization found' error (organizationId is null with no session), and the CI e2e-smoke job starts no backend, so api.organizations.list()/projects.get() would fail regardless. Net effect matches the finding — create-questionnaire-button never appears and the smoke test fails independent of a backend — plus test-project-1 is a nonexistent hardcoded id and test #2's /test-runtime route is deleted. Fix is as recommended: seed auth like the fullstack lane and provision a real workspace instead of test-project-1.
+- [x] **ERR-02** `high/inconsistency/partial` — Client auth guard never matches the designer route and omits /projects, /analytics, /settings
+  - **Evidence:** `apps/web/src/routes/(app)/+layout.ts:47 ; apps/web/src/routes/(app)/+layout.svelte:62`
+  - **Action:** Guard the whole (app) group unconditionally (redirect when !session for any pathname under the group) instead of an enumerated prefix list, and delete the dead '/designer' string. Unify the single source of 'protected' so the auth guard and the onboarding guard cannot disagree.
+  - **Correction (verifier):** The (app)/+layout.ts guard is broken: the '/designer' prefix is dead (real path is under /projects), and it omits /projects, /analytics, /settings; a second divergent 'protected' list lives in +layout.svelte:62; and there is no SSR guard. But the concretely UNGUARDED surfaces are the designer editor and /settings only. /analytics, /analytics/[questionnaireId], and /dashboard each carry their own page-level `throw redirect(302,'/login')` when session/user is missing, and /projects throws error(403,'No organization found') instead of mounting and 401-ing. So the 'not redirected / stranded-session' behavior applies to designer and settings, not to analytics or dashboard.
+- [x] **MOD-02** `high/feature-gap/confirmed` — Six designable question types have no functional response capture in fillout (matrix, ranking, date-time, file-upload, media-response, drawing)
+  - **Evidence:** `apps/web/src/lib/stores/designer/DocumentStore.ts:841 ; apps/web/src/lib/runtime/core/ResponseCollector.ts:94`
+  - **Action:** Either implement fillout response capture for these six types (runtime widgets + ResponseCollector handlers + ensureResponseType mappings) or remove them from the palette until supported. Shipping designer editors for question types participants cannot answer produces silently-unanswerable studies and data loss.
+  - **Resolved (2026-07-03):** Under ADR 0018 all six are form-style types → they mount their real runtime component (Matrix/Ranking/DateTime/FileUpload/MediaResponse/Drawing.svelte) in the overlay and capture via `onResponse` → `handleCollectedResponse` → persistence. `ensureResponseType` now maps each to a non-`none` capturable type (matrix carries rows/columns). Matrix capture proven end-to-end in `fillout-form-capture.test.ts`; the other five read `config` defensively (per-field `$derived` defaults) so the adapter's merged config suffices — deeper per-type UX verification is noted in ADR 0018 as follow-up. Note: `ResponseCollector` handlers were intentionally not extended — the mounted component, not the keyboard collector, is the capture mechanism on the overlay path.
+- [x] **MOD-03** `high/tech-debt/confirmed` — Multiple-choice questions collapse to single-select at runtime (responseType forced to 'single')
+  - **Evidence:** `apps/web/src/lib/stores/designer/DocumentStore.ts:812 ; apps/web/src/lib/runtime/core/ResponseCollector.ts:154`
+  - **Action:** Map MULTIPLE_CHOICE to responseType 'multiple' (respecting the configured single/multiple flag), so multi-select is preserved end-to-end.
+  - **Resolved (2026-07-03):** `ensureResponseType` maps MULTIPLE_CHOICE → 'multiple' (wave-1). This wave preserves multi-select through the overlay path (`buildModuleRuntimeConfig` sets `responseType.type` from the stored flag) and adds a regression test (`DocumentStore.responseType.test.ts`).
+- [ ] **MOD-04** `high/feature-gap/confirmed` — Participant-facing fillout is not translatable; questionnaire content has a single-language model
+  - **Evidence:** `packages/questionnaire-core/src/questionnaire.ts:195 ; apps/web/src/lib/fillout/components/WelcomeScreen.svelte:1`
+  - **Action:** Introduce a per-questionnaire translations model (question/option text keyed by locale) and wire the fillout runtime + participant chrome to select strings by the participant's locale. This is the core i18n capability for a participant-facing research tool and is currently absent.
+- [x] **PRF-01** `high/performance/confirmed` — Production build ships unminified JavaScript with full sourcemaps
+  - **Evidence:** `apps/web/vite.config.ts:53`
+  - **Action:** Gate on mode: `minify: mode === 'production' ? 'esbuild' : false` and `sourcemap: mode !== 'production'` (or 'hidden'). Add rollupOptions.output.manualChunks to split monaco/chart.js/mathjs/yjs into separately-cached vendor chunks. Verify with `pnpm build` + a bundle visualizer.
+- [ ] **E2E-05** `medium/tech-debt/confirmed` — Fullstack and visual lanes — the only tests that exercise a real backend or catch visual regressions — run in no CI job
+  - **Evidence:** `apps/web/package.json:32 ; .github/workflows/ci.yml:141`
+  - **Action:** Add a fullstack CI job (with backend services) and wire the visual lane into nightly. Otherwise consider the fullstack/visual specs documentation, not gates.
+- [ ] **E2E-06** `medium/tech-debt/confirmed` — platform-gaps regression tests are largely non-failing no-ops, weakening their value as a documented-gap index
+  - **Evidence:** `apps/web/e2e/regression/platform-gaps.regression.spec.ts:42 ; apps/web/e2e/regression/platform-gaps.regression.spec.ts:105`
+  - **Action:** Convert the graceful-skip branches into deterministic setup (guarantee MailPit/backend present, assert language switcher exists) or move truly-optional checks out of the regression gate so remaining tests fail loudly when the gap regresses.
+- [x] **E2E-07** `medium/dead-code/confirmed` — Orphaned setup project references seeded users that no longer exist and is never wired into the config
+  - **Evidence:** `apps/web/playwright.config.ts:19 ; apps/web/e2e/setup/global-setup.ts:28`
+  - **Action:** Either delete the setup/ project + test-config seeded-user block, or wire a real setup project (dependencies) that provisions users via the register API (as fullstack-api.ts already does) rather than assuming seeds.
+- [ ] **ERR-03** `medium/ux/partial` — Manual Save in the designer shows no feedback on failure
+  - **Evidence:** `apps/web/src/lib/components/designer/SaveLoadToolbar.svelte:26 ; apps/web/src/lib/stores/designer.svelte.ts:713`
+  - **Action:** Add an else branch that surfaces designerStore.saveError via toast.error, mirroring loadSelectedQuestionnaire() which already does the success/failure split.
+  - **Correction (verifier):** handleSave() surfaces save failures via a persistent inline error message (SaveLoadToolbar.svelte:117-122, binding designerStore.saveError in text-destructive), not a toast. The real, lower-severity issue is a UX inconsistency: Save shows an inline error while Load uses toast.error(); adding a toast.error(designerStore.saveError) else branch would make feedback consistent and more noticeable. The user is not left with 'no indication' that their work did not persist.
+- [ ] **ERR-04** `medium/ux/confirmed` — Fillout error page mis-maps 403 (closed/ended) to a generic 'refresh the page' message
+  - **Evidence:** `apps/web/src/routes/(fillout)/q/[code]/+page.ts:52 ; apps/web/src/routes/(fillout)/+error.svelte:9`
+  - **Action:** Align the codes: either throw 410 for closed/ended (matching the existing 'Questionnaire Closed' copy) or add explicit 403 handling in (fillout)/+error.svelte with accurate messaging for closed/ended/not-yet-open, and remove the currently-unreachable branch.
+- [x] **MOD-05** `medium/feature-gap/confirmed` — Three enum question types have no registered module and are silently dropped at runtime (instruction, media-display, single-choice)
+  - **Evidence:** `packages/questionnaire-core/src/questionnaire.ts:242 ; apps/web/src/lib/modules/register-all.ts:50`
+  - **Action:** Reconcile the enum with the registry: alias INSTRUCTION to 'text-instruction' (or register 'instruction'), register or remove 'media-display', and make 'single-choice' resolve to the multiple-choice module. At minimum surface a designer-time validation error instead of a silent runtime skip.
+  - **Resolved (2026-07-03):** `register-all.ts` registers three aliases (ADR 0018): `single-choice` → multiple-choice (single-select), `instruction` and `media-display` → text-instruction (category `instruction`). They now resolve to a real handler and render via the overlay instead of the `showCurrentItem` "Unknown module type" skip. Verified by `register-all.test.ts`. A dedicated media-display component (vs. the text-instruction alias) is deferred.
+- [x] **MOD-06** `medium/feature-gap/confirmed` — RTL support is declared but non-functional; 5 of 8 advertised languages have no message files
+  - **Evidence:** `apps/web/src/lib/i18n/languages.ts:74 ; apps/web/src/lib/i18n/locales:1`
+  - **Action:** Trim the advertised language list to those with message files, and either wire rtl.css into the app shell or drop the RTL claim until a locale that needs it ships.
+  - **Resolved (2026-07-03):** i18next → Paraglide (ADR 0019). The 8-language `languages.ts` is deleted; the advertised set is now exactly the 3 with committed message files (`messages/{en,de,es}.json`), derived from Paraglide's `locales` single source of truth. `LanguageSwitcher`'s list mirrors it. RTL is not dropped as a *mechanism*: `applyDocumentLocale()` still sets `dir`/`.rtl` from `getTextDirection(locale)` (Arabic/Hebrew resolve to `rtl` automatically) — but no RTL locale is advertised until one ships with messages + styling.
+- [ ] **MOD-07** `medium/feature-gap/confirmed` — Display/analytics blocks render as placeholder text in fillout (bar-chart, generic analytics)
+  - **Evidence:** `apps/web/src/lib/runtime/core/QuestionPresenter.ts:470 ; apps/web/src/lib/modules/display/bar-chart/BarChart.svelte:1`
+  - **Action:** Render bar-chart and statistical display blocks with their real components in fillout (ties into finding #1), or mark them designer/preview-only so participants are not shown '[bar-chart visualization]'.
+- [ ] **PRF-02** `medium/performance/confirmed` — Fillout sync sends the entire session's responses/events/variables as one unbounded in-memory payload
+  - **Evidence:** `apps/web/src/lib/fillout/services/FilloutSyncEngine.ts:128 ; apps/web/src/lib/fillout/services/FilloutSyncEngine.ts:161`
+  - **Action:** Batch the sync in fixed-size chunks (e.g. 200–500 records) with per-chunk acks and mark-synced, so a large backlog streams incrementally and a failure only rolls back the current chunk. Keeps memory bounded and makes partial progress durable.
+- [ ] **PRF-03** `medium/performance/confirmed` — Designer question list is not virtualized; every question renders a full component and re-renders on edit
+  - **Evidence:** `apps/web/src/routes/(app)/projects/[projectId]/designer/[[questionnaireId]]/WYSIWYGCanvas.svelte:226 ; apps/web/src/lib/wysiwyg/QuestionVisualRenderer.svelte:66`
+  - **Action:** Keep block-pagination as the primary bound, but add a virtualized list (e.g. virtual scroller) or a soft cap with lazy mount for blocks beyond ~50 questions. Replace the JSON.stringify media diff with a cheap id/hash comparison.
+- [ ] **PRF-04** `medium/performance/partial` — chart.js imported statically with full `registerables` across fillout-facing and designer modules
+  - **Evidence:** `apps/web/src/lib/modules/display/bar-chart/BarChart.svelte:3 ; apps/web/src/lib/components/designer/StatisticsBuilder.svelte:4`
+  - **Action:** Register only the specific controllers/scales/elements each chart uses instead of `registerables`, and dynamic-import chart.js inside the components that render charts so it is excluded from the fillout runtime's critical path.
+  - **Correction (verifier):** Real but low-severity (not medium): two lazy-loaded components — apps/web/src/lib/modules/display/bar-chart/BarChart.svelte and apps/web/src/lib/components/designer/StatisticsBuilder.svelte — register the full chart.js `registerables` set, which disables tree-shaking within their already code-split chunks. This bloats those on-demand chunks, not the fillout main bundle or the service-worker precache (which only precaches '/' and '/offline.html'), and the chart components are already dynamic-imported via module metadata. DataVisualization.ts already uses selective registration and is not part of the problem. The valid remediation is to switch those two files to selective controller/scale/element registration; dynamic-importing chart.js is unnecessary since the enclosing components are already lazy chunks.
+- [ ] **E2E-08** `low/inconsistency/confirmed` — e2e documentation drift — references a nonexistent legacy directory and a hardcoded foreign machine path
+  - **Evidence:** `apps/web/e2e/README.md:9 ; apps/web/tests/e2e/README.md:5`
+  - **Action:** Remove the e2e/legacy/ references from e2e/README.md and replace the absolute path in tests/e2e/README.md with a repo-relative link.
+- [ ] **ERR-05** `low/ux/confirmed` — Native alert() used for error/validation feedback in designer and media manager
+  - **Evidence:** `apps/web/src/lib/components/designer/Designer.svelte:73 ; apps/web/src/lib/components/designer/MediaManager.svelte:254`
+  - **Action:** Replace alert() with toast.error to match the rest of the app's feedback pattern.
+
+## P7.2 — Wire-Up (built-but-not-mounted)  (51 tasks)
+
+- [ ] **ADM-01** `high/feature-gap/confirmed` — Admin "Manage Users" page is read-only — no remove, deactivate, or role change
+  - **→ partial at action time (wave 3):** Remove-member action landed (confirm + toast, owner rows protected). Role-change and deactivate deferred — no backend endpoint (see Deferred register: org-member role-change endpoint).
+  - **Evidence:** `apps/web/src/routes/(app)/admin/users/+page.svelte:142 ; apps/web/src/lib/services/api.ts:558`
+  - **Action:** Add a row action menu to /admin/users (Change role, Remove, Deactivate) gated on the caller's role; add a PATCH /organizations/{id}/members/{user_id} handler for role updates (mirror updateProjectMember), and wire removeMember with a confirm dialog. Show member.status so deactivated members are visible.
+- [ ] **ANL-01** `high/feature-gap/confirmed` — Deep psychometrics exist in the engine but have no UI entry point
+  - **Evidence:** `src/lib/analytics/StatisticalEngine.ts:567 ; src/routes/(app)/projects/[projectId]/analytics/+page.svelte:97`
+  - **Action:** Surface reliability (Cronbach alpha), factor structure, and IRT/item analysis on the questionnaire analytics route — the computation is already written and tested. This is the headline gap for the stated use case.
+- [x] **AUT-01** `high/feature-gap/confirmed` — Post-login redirect / deep-link is not preserved — invite-via-login flow is broken
+  - **Evidence:** `apps/web/src/routes/invite/[token]/+page.svelte:190 ; apps/web/src/routes/invite/[token]/+page.svelte:198`
+  - **Action:** Read `redirect` in login (both +page.svelte submit handler and +page.ts load) and honor a validated same-origin target; read `?email=` in signup to prefill. Add a shared safe-redirect helper so the invite round-trip actually returns the user to /invite/[token].
+- [x] **AUT-02** `high/duplication/confirmed` — Two divergent signup paths; login's secondary 'Sign Up' button is a misleading dead-end
+  - **Evidence:** `apps/web/src/routes/(auth)/login/+page.svelte:207 ; apps/web/src/lib/services/auth.ts:159`
+  - **Action:** Replace the login-page signup button with a plain link to /signup, and delete login's handleSignUp. Keep one canonical signup implementation.
+- [x] **DSN-01** `high/feature-gap/confirmed` — Style/Theme tab in the property editor is non-functional — edits are never persisted or applied
+  - **Evidence:** `apps/web/src/lib/components/designer/PropertiesPanel.svelte:262 ; apps/web/src/lib/components/designer/PropertiesPanel.svelte:21`
+  - **Action:** Wire StyleEditor through designerStore: persist per-question style into question.display/settings and global style into questionnaire.settings.theme, and initialize the editor from the selected item's stored style. Until then, either hide the Style tab or label it experimental so it does not read as a working feature.
+- [x] **DSN-02** `high/feature-gap/confirmed` — Version-bump UX is not reachable — VersionManager is orphaned, header has no version affordance
+  - **Evidence:** `apps/web/src/lib/components/designer/VersionManager.svelte:1 ; apps/web/src/routes/(app)/projects/[projectId]/designer/[[questionnaireId]]/components/DesignerHeader.svelte:276`
+  - **Action:** Mount VersionManager in a header popover or a right-panel tab, and surface current version + a bump prompt in the publish flow (the change→bump mapping is already specified in CLAUDE.md).
+- [ ] **HLP-01** `high/feature-gap/confirmed` — Dashboard 'Welcome' onboarding tour is unreachable in its intended context — no launcher on the dashboard
+  - **Evidence:** `apps/web/src/lib/help/tours/definitions/dashboardWelcome.ts:4 ; apps/web/src/routes/(app)/dashboard/+page.svelte:617`
+  - **Action:** Add a dashboard-side launcher for dashboard-welcome (help button or first-visit auto-start gated on triggerKey/localStorage), or surface a lightweight help entry point in AppShell so dashboard-scoped tours have a home. Alternatively filter HelpPanel's tour list by current surface so context-mismatched tours don't appear where they cannot resolve.
+- [x] **SHL-01** `high/feature-gap/confirmed` — (app)/fillout is a hardcoded mock stub promoted in primary navigation as "Test"
+  - **Evidence:** `apps/web/src/routes/(app)/fillout/+page.svelte:10 ; apps/web/src/routes/(app)/fillout/+page.svelte:132`
+  - **Action:** Remove /fillout from primary nav (and ideally delete the route) or replace it with a real "preview/test runtime" that loads actual questionnaires. Do not ship a mock screen in the top-level nav.
+- [ ] **SHL-02** `high/inconsistency/partial` — Toast system is globally mounted but unused by app-shell flows; CRUD errors are swallowed silently
+  - **→ partial at action time (wave 1):** project-create failure now surfaces via toast.error; the settings inline-`<Alert>` path is unchanged.
+  - **Evidence:** `apps/web/src/routes/(app)/projects/+page.svelte:66 ; apps/web/src/routes/(app)/settings/+page.svelte:62`
+  - **Action:** Standardize on the toast store for transient success/error feedback across all mutations (project/questionnaire create, profile save), and surface failed creates to the user instead of console.error.
+  - **Correction (verifier):** The toast store is NOT unused by app-shell flows — it is used within (app) via CommandPalette/OfflineIndicator shell components and extensively in the designer flow (SaveLoadToolbar, VersionManager, CrashRecovery). The real defect is inconsistency plus silent failures on two specific paths: (1) projects/+page.svelte createProject catches and only console.errors (no toast/inline message, modal stays open); (2) settings uses inline <Alert> instead of the toast store; and a dead CreateProjectModal.svelte that would have toasted is not the component actually wired into the projects page. Severity is better characterized as medium: a genuine silent-failure UX gap on project create, but confined to a couple of paths rather than a shell-wide 'feedback missing everywhere' problem.
+- [x] **STB-01** `high/feature-gap/confirmed` — Participant-facing "Test" page (/fillout) is 100% hardcoded mock data with dead action buttons, yet is wired into primary nav and dashboard
+  - **Evidence:** `apps/web/src/routes/(app)/fillout/+page.svelte:10 ; apps/web/src/routes/(app)/fillout/+page.svelte:136`
+  - **Action:** Either back this page with the real questionnaires API (api.questionnaires/list) and wire Start/Continue to goto(/q/[code]), or remove it and its nav/dashboard entry points until implemented. Shipping a fake catalog in the main nav is the most user-visible gap in scope.
+- [x] **ADM-02** `medium/a11y/confirmed` — No client-side role guard on /admin — Admin nav and pages exposed to every authenticated user
+  - **Evidence:** `apps/web/src/lib/components/ui/layout/AppShell.svelte:22 ; apps/web/src/routes/(app)/+layout.ts:47`
+  - **Action:** Hide the Admin nav for non-admins and redirect non-admins away from /admin in the layout load (fetch the caller's org role once). Decide whether the roster should be admin-only server-side; if members may see teammates, keep it but drop it from the "Admin" surface.
+- [x] **ADM-03** `medium/feature-gap/confirmed` — Domain verification is a stub that auto-verifies unconditionally; UI shows fake DNS/file instructions
+  - **Evidence:** `apps/server/src/api/organizations.rs:1404 ; apps/web/src/routes/(app)/admin/domains/+page.svelte:319`
+  - **Action:** Implement real verification (resolve the DNS TXT record or fetch the .well-known file and compare verification_token) before setting verified_at, or clearly label the flow as dev-only and block auto-join on unverified/dev-verified domains in production.
+- [x] **ADM-04** `medium/tech-debt/confirmed` — Org settings "Defaults" form is write-only — saved values never reload
+  - **Evidence:** `apps/web/src/routes/(app)/admin/settings/+page.svelte:35 ; apps/web/src/routes/(app)/admin/settings/+page.svelte:67`
+  - **Action:** Hydrate the Defaults form from currentOrg.settings.defaults on load, and confirm a consumer actually applies these defaults at questionnaire-creation time (or remove the fields if inert).
+- [ ] **ADM-05** `medium/ux/confirmed` — No pagination, search, sort, or filter on member and invitation lists
+  - **Evidence:** `apps/web/src/routes/(app)/admin/users/+page.svelte:132 ; apps/web/src/routes/(app)/admin/invitations/+page.svelte:277`
+  - **Action:** Add client- or server-side pagination plus a search field and role/status filter; consider a sortable table for invitations. Add server-side LIMIT/OFFSET to the list endpoints.
+- [ ] **ANL-02** `medium/inconsistency/partial` — Live analytics charts are hand-rolled inline SVG while the app ships chart.js used elsewhere
+  - **Evidence:** `src/routes/(app)/analytics/[questionnaireId]/+page.svelte:263 ; src/lib/analytics/components/HistogramWidget.svelte:29`
+  - **Action:** Standardize the live charts on chart.js (or a shared SVG chart component) to gain axes, tooltips, and accessibility, and to stop maintaining two charting approaches.
+  - **Correction (verifier):** The live analytics charts are hand-rolled inline SVG diverging from the app's chart.js standard and lack tooltips, hover, and keyboard/AT accessibility. They do include crude x-axis date labels, gridlines, a legend, and a max-Y value annotation, so 'no axis ticks/labels' should be softened to 'no proper axes/tooltips/hover/accessibility.'
+- [ ] **ANL-03** `medium/a11y/partial` — Chart colors hardcoded as hex, bypassing the HSL token theme (breaks in dark mode)
+  - **Evidence:** `src/routes/(app)/analytics/[questionnaireId]/+page.svelte:287 ; src/routes/(app)/analytics/+page.svelte:304`
+  - **Action:** Replace literal hex with hsl(var(--success))/hsl(var(--primary)) tokens so charts follow the theme; the legend even labels this line 'Completed' with a bg-success swatch, so the token already exists.
+  - **Correction (verifier):** Chart series colors are hardcoded as literal hex (#10b981 for the 'completed' line at analytics/[questionnaireId]/+page.svelte:287, #6366f1 for the sparkline at analytics/+page.svelte:304) instead of the project's HSL CSS-variable tokens, mixing raw hex with hsl(var(--primary)) inside the same chart. This is a theming single-source-of-truth/consistency violation, not a genuine a11y break — the hardcoded colors remain visible in both light and dark themes but do not follow a rebranded token set. The fix is trivial since hsl(var(--success)) already exists and is used by the adjacent legend swatch.
+- [x] **ANL-04** `medium/ux/confirmed` — Global analytics date-range filter is a no-op (all ranges behave identically)
+  - **Evidence:** `src/routes/(app)/analytics/+page.svelte:48`
+  - **Action:** Either drive the filter from real per-questionnaire last-activity timestamps (server-side or from timeseries) or remove the control until backed by real data.
+- [x] **ANL-05** `medium/performance/confirmed` — Sparkline trend column issues an N+1 sequential API call per questionnaire on mount
+  - **Evidence:** `src/routes/(app)/analytics/+page.svelte:149`
+  - **Action:** Batch trend data into the dashboard endpoint (return recent buckets per questionnaire) or at minimum Promise.all the requests; ideally fold sparkline data into the single dashboard() call already made in the loader.
+- [ ] **AUT-03** `medium/feature-gap/confirmed` — Email verification is cosmetic — never enforced by login or register
+  - **Evidence:** `apps/server/src/api/auth.rs:55 ; apps/server/src/api/auth.rs:133`
+  - **Action:** Either enforce email_verified at login (403 until verified) or drop the verification ceremony. If keeping it, don't set a usable session until the code is confirmed.
+- [ ] **AUT-04** `medium/inconsistency/confirmed` — Styling has no single source of truth across the auth surface
+  - **Evidence:** `apps/web/src/routes/(auth)/login/+page.svelte:227 ; apps/web/src/routes/(auth)/login/+page.svelte:309`
+  - **Action:** Refactor login + auth layout onto the same semantic tokens the other pages use (bg-card, bg-background, border-border, primary/muted). Promote any genuinely new surface colors into tailwind.config token variables rather than inlining slate/sky literals.
+- [x] **AUT-05** `medium/inconsistency/confirmed` — i18n applied inconsistently; signup translation keys likely resolve to raw key strings
+  - **Evidence:** `apps/web/src/routes/(auth)/login/+page.svelte:344 ; apps/web/src/routes/(auth)/signup/+page.svelte:205`
+  - **Action:** Standardize on the colon-namespace form ('auth:signup.title') everywhere, and either translate the four hardcoded auth pages or drop $t from the two that use it so the surface is consistent.
+  - **Superseded (2026-07-03, ADR 0019):** the colon-namespace fix is moot — i18next is replaced by Paraglide compile-time i18n. login/signup call typed `m.auth_login_*()`/`m.auth_signup_*()`; a missing/renamed key is now a build error and there is no async-init window that rendered the raw key. Verified real strings in en/de/es.
+- [ ] **AUT-06** `medium/duplication/confirmed` — Duplicated password-strength and error-normalization logic
+  - **Evidence:** `apps/web/src/routes/(auth)/signup/+page.svelte:172 ; apps/web/src/routes/(auth)/reset-password/+page.svelte:23`
+  - **Action:** Extract a shared passwordStrength() util and a single error-message normalizer used by both the service layer and the pages.
+- [ ] **ERR-06** `medium/duplication/confirmed` — Central API/Postgres error mapper is used in exactly one place; ~80 catch blocks console.error instead
+  - **Evidence:** `apps/web/src/lib/utils/errorHandler.ts:11 ; apps/web/src/lib/components/projects/CreateProjectModal.svelte:87`
+  - **Action:** Route API catch blocks through handleAPIError + toast (or a shared withErrorHandling wrapper) so error surfacing is consistent; audit the ~80 console.error-only catches for ones that leave the user with no feedback.
+- [ ] **HLP-02** `medium/feature-gap/confirmed` — No first-run / auto-start onboarding — guided tours never fire proactively despite the machinery to gate them
+  - **Evidence:** `apps/web/src/lib/help/tours/TourEngine.svelte.ts:52 ; apps/web/src/lib/help/stores/helpStore.svelte.ts:1`
+  - **Action:** Add first-visit auto-start: on dashboard mount, if !localStorage[dashboardWelcome.triggerKey] then start it; likewise auto-start designerIntro on first designer load. A few lines of glue realizes the already-built triggerKey/helpStore machinery.
+- [ ] **SHL-03** `medium/performance/confirmed` — Internal navigation uses window.location.href (full page reloads) across the shell, defeating SPA routing
+  - **Evidence:** `apps/web/src/routes/(app)/projects/+page.svelte:167 ; apps/web/src/routes/(app)/projects/[projectId]/+page.svelte:263`
+  - **Action:** Replace window.location.href with goto() for all internal navigation to keep transitions, avoid re-bootstrapping, and unify the navigation pattern.
+- [ ] **SHL-04** `medium/duplication/confirmed` — Shared PageHeader/Container components are orphaned; every real page hand-rolls its own header and breadcrumbs
+  - **Evidence:** `apps/web/src/lib/components/ui/layout/PageHeader.svelte:19 ; apps/web/src/routes/(app)/projects/[projectId]/+page.svelte:92`
+  - **Action:** Adopt PageHeader/Container across the real pages (or delete them if intentionally abandoned). Standardize page chrome to one component.
+- [ ] **SHL-05** `medium/feature-gap/confirmed` — Settings page: password change and account deletion are disabled "Coming soon" stubs
+  - **Evidence:** `apps/web/src/routes/(app)/settings/+page.svelte:130 ; apps/web/src/routes/(app)/settings/+page.svelte:167`
+  - **Action:** Wire the password-change form to the backend (or hide the section until ready — collecting current/new password into a no-op is worse than omitting it). Decide whether org management belongs in settings or is intentionally admin-only, and cross-link it.
+- [ ] **SHL-06** `medium/ux/confirmed` — Primary navigation is not role-aware — Admin and Test shown to all users
+  - **Evidence:** `apps/web/src/lib/components/ui/layout/AppShell.svelte:19`
+  - **Action:** Filter nav items by the user's org role (pass role into AppShell) so Admin only appears for admins/owners.
+- [ ] **SHL-07** `medium/ux/partial` — No loading/skeleton states on primary data pages; only Settings has a skeleton
+  - **Evidence:** `apps/web/src/routes/(app)/projects/+page.ts:5 ; apps/web/src/routes/(app)/dashboard/+page.ts:48`
+  - **Action:** Add skeletons for dashboard cards and the projects/questionnaires lists (reuse the settings skeleton pattern) so navigation shows immediate structure.
+  - **Correction (verifier):** Dashboard, projects, and project-detail use ssr=false blocking `load` functions and provide no skeleton/loading UI, and no global navigation indicator exists. This is inconsistent with the surfaces that DO fetch client-side in onMount and show animate-pulse skeletons — not just Settings, but also admin/users, admin/domains, admin/invitations, and the admin index. The reusable skeleton pattern already exists in several places; extend it to the blocking-load data pages (which would require moving their fetch client-side or adding streamed/deferred data).
+- [ ] **STB-02** `medium/feature-gap/confirmed` — Settings: password change and account deletion are permanently-disabled "Coming soon" stubs
+  - **Evidence:** `apps/web/src/routes/(app)/settings/+page.svelte:131 ; apps/web/src/routes/(app)/settings/+page.svelte:116`
+  - **Action:** Wire the password form to an authenticated change-password endpoint (or hide the section) and implement/remove account deletion. Presenting fully-styled but inert forms with "Coming soon" is a mid UX smell.
+- [ ] **STB-03** `medium/feature-gap/partial` — Statistical-feedback / chart analytics render as literal placeholder text in the live WebGL fillout runtime
+  - **Evidence:** `apps/web/src/lib/runtime/core/QuestionPresenter.ts:466 ; apps/web/src/lib/runtime/core/QuestionnaireRuntime.ts:120`
+  - **Action:** Confirm whether analytics feedback questions actually route through the WebGL presenter in production fillout; if so, render a real chart (reuse the Svelte chart modules via a DOM overlay) instead of placeholder text. If the WebGL presenter path is dead, delete it to remove the second, divergent rendering system.
+  - **Correction (verifier):** On the live WebGL fillout path, non-statistical-feedback analytics/display chart types — concretely the registered `bar-chart` display module — render to the participant as literal placeholder text (`[bar-chart visualization]`, QuestionPresenter.ts:470) instead of an actual chart. This is a genuine feature gap versus the real Svelte BarChart.svelte used in the designer. Note that `statistical-feedback` is NOT affected: it is branched at line 446 into buildStatisticalFeedbackRenderer, which produces a real HTMLRenderer with rendered feedback (not placeholder text). So the defect is scoped to chart-type display modules other than statistical-feedback.
+- [ ] **STB-04** `medium/tech-debt/partial` — WebGL HTMLRenderer.drawTexture is an empty placeholder - HTML stimuli are never actually drawn
+  - **Evidence:** `apps/web/src/lib/runtime/renderers/HTMLRenderer.ts:140 ; apps/web/src/lib/runtime/core/QuestionPresenter.ts:523`
+  - **Action:** Implement the texture-blit shader path in drawTexture, or verify HTML stimuli are unused and remove the renderer. Verify against a questionnaire that uses an HTML stimulus to confirm user impact before prioritizing.
+  - **Correction (verifier):** The defect is not specific to HTMLRenderer. The whole QuestionPresenter WebGL presentation pipeline never paints: TextRenderer, ImageRenderer, and HTMLRenderer all implement renderContent by uploading a texture and then stopping (their draw/blit is a placeholder comment). So on the live fillout path no stimulus type (text, image, or HTML) is actually drawn to the WebGL canvas, not just HTML content. Consequently the recommendation to 'implement drawTexture or remove HTMLRenderer' is insufficient — the missing texture-blit shader path is systemic across all these renderers; either the whole WebGL presenter needs the blit implemented, or the entire pipeline is a not-yet-active prototype and should be assessed as one unit.
+- [ ] **STB-05** `medium/feature-gap/confirmed` — Onboarding silently skips the pending-organization-invitation check due to unresolved RLS
+  - **Evidence:** `apps/web/src/routes/(auth)/onboarding/organization/+page.svelte:41`
+  - **Action:** Fix the organization_invitations RLS read path so onboarding can surface pending invitations, then restore the invitation-acceptance branch. This intersects the backend Known-TODO set (RLS work).
+- [ ] **ADM-06** `low/inconsistency/confirmed` — Admin dashboard "System Settings" quick action points at user settings, not org settings
+  - **Evidence:** `apps/web/src/routes/(app)/admin/+page.svelte:207 ; apps/web/src/routes/(app)/settings/+page.svelte:1`
+  - **Action:** Point "System Settings" (or rename to "Organization Settings") at /admin/settings.
+- [ ] **ADM-07** `low/tech-debt/partial` — Members-list rendering hedges on API field casing, hinting at contract drift
+  - **Evidence:** `apps/web/src/routes/(app)/admin/users/+page.svelte:147`
+  - **Action:** Pin the generated contract type for OrganizationMember.user and use the single correct field; remove the fallback.
+  - **Correction (verifier):** There is a genuine but trivial (low) redundant-code issue: the `|| member.user?.full_name` fallback at line 147 is dead, because the frontend already normalizes every member via `mapOrganizationMember`, which always sets `user.fullName`. This is not evidence of API contract drift or a latent blank-name bug (a terminal `|| 'Unnamed user'` guarantees a value). The real cleanup is to (a) stop `mapOrganizationMember` from emitting the duplicate `full_name` key, (b) drop the optional `full_name` from the hand-maintained `OrganizationMember.user` type in lib/shared/types/api.ts, and (c) simplify the component to `member.user?.fullName || 'Unnamed user'`.
+- [ ] **ANL-06** `low/feature-gap/confirmed` — No per-version (semver) analytics despite version-stamped sessions
+  - **Evidence:** `src/routes/(app)/projects/[projectId]/analytics/+page.svelte:643`
+  - **Action:** Add a version filter / per-version comparison so responses collected against different definition versions are not silently pooled.
+- [ ] **ANL-07** `low/performance/confirmed` — Realtime metrics use 2s setInterval polling of already-reactive client state
+  - **Evidence:** `src/routes/(app)/analytics/[questionnaireId]/+page.svelte:151`
+  - **Action:** Bind directly to realtimeClient.metrics / uniqueSessionCount ($derived) and drop the polling interval.
+- [ ] **AUT-07** `low/inconsistency/confirmed` — signup verification redirects a brand-new (org-less) user straight to /dashboard
+  - **Evidence:** `apps/web/src/routes/(auth)/signup/+page.svelte:126 ; apps/web/src/routes/(auth)/login/+page.svelte:176`
+  - **Action:** Mirror the login org-count check (or centralize post-auth routing in one helper) so newly-verified users land on onboarding.
+- [ ] **AUT-08** `low/a11y/confirmed` — Inline form errors are not wired to assistive tech (aria-invalid / aria-describedby)
+  - **Evidence:** `apps/web/src/lib/components/ui/forms/Input.svelte:64 ; apps/web/src/lib/components/ui/forms/FormGroup.svelte:46`
+  - **Action:** Pass an `error`/`describedBy` prop into Input and set aria-invalid + aria-describedby to the FormGroup error/hint id.
+- [ ] **AUT-09** `low/performance/confirmed` — signup fires two network requests on every email keystroke (no debounce)
+  - **Evidence:** `apps/web/src/routes/(auth)/signup/+page.svelte:41 ; apps/web/src/routes/(auth)/signup/+page.svelte:47`
+  - **Action:** Debounce the email effect (e.g. 300-500ms trailing) and/or gate on a valid email shape before probing.
+- [ ] **DSN-03** `low/feature-gap/confirmed` — Question type cannot be changed after creation
+  - **Evidence:** `apps/web/src/lib/components/designer/PropertiesPanel.svelte:474`
+  - **Action:** Offer a type-conversion action for compatible families (choice/scale/rating) that migrates prompt and options.
+- [ ] **DSN-04** `low/inconsistency/confirmed` — ScriptEditorOverlay is not theme-aware (always dark)
+  - **Evidence:** `apps/web/src/lib/components/designer/ScriptEditorOverlay.svelte:134`
+  - **Action:** Read the app theme store and pass qdesigner-light/qdesigner-dark accordingly, matching FormulaEditor's behavior.
+- [ ] **DSN-05** `low/a11y/confirmed` — FormulaEditor chrome uses hardcoded hex instead of theme tokens
+  - **Evidence:** `apps/web/src/lib/components/designer/FormulaEditor.svelte:201 ; apps/web/src/lib/wysiwyg/MonacoEditor.svelte:217`
+  - **Action:** Replace the hardcoded hex with theme tokens so the formula editor frame is dark-mode correct.
+- [ ] **HLP-03** `low/tech-debt/confirmed` — reactionTimeTour anchors on fragile structural CSS selectors instead of data-testid, risking silent step-skips
+  - **Evidence:** `apps/web/src/lib/help/tours/definitions/reactionTimeTour.ts:10 ; apps/web/src/lib/help/tours/definitions/variablesTour.ts:21`
+  - **Action:** Add explicit data-tour/data-testid anchors to the reaction-time and variable designer controls and point these tours at them, matching the convention the other tours already follow.
+- [ ] **SHL-08** `low/inconsistency/partial` — Breadcrumbs are inconsistent and IA is shallow
+  - **Evidence:** `apps/web/src/routes/(app)/projects/[projectId]/+page.svelte:92 ; apps/web/src/lib/components/ui/layout/PageHeader.svelte:22`
+  - **Action:** Adopt a single breadcrumb source (PageHeader) and show breadcrumbs consistently on nested pages.
+  - **Correction (verifier):** Three pages/components render hand-rolled breadcrumbs, not one: projects/[projectId]/+page.svelte (line 92), projects/[projectId]/analytics/+page.svelte (line 294), and the designer's DesignerHeader.svelte (line 111). PageHeader.svelte supports a breadcrumbs prop and is used by fillout/+page.svelte, but none of the breadcrumb-bearing pages route through it — so the defect is duplicated/divergent breadcrumb implementations plus an unused PageHeader.breadcrumbs prop, not a near-total absence of breadcrumbs.
+- [ ] **SHL-09** `low/a11y/confirmed` — User-menu dropdown lacks proper menu semantics and focus management
+  - **Evidence:** `apps/web/src/lib/components/ui/layout/AppShell.svelte:162 ; apps/web/src/lib/components/ui/layout/AppShell.svelte:45`
+  - **Action:** Use a proper menu pattern (roles, Escape-to-close, focus trap/return, arrow-key nav) or an existing accessible dropdown primitive.
+- [ ] **SHL-10** `low/tech-debt/confirmed` — Debug console logging left in navigation and layout code
+  - **Evidence:** `apps/web/src/routes/(app)/projects/+page.svelte:165 ; apps/web/src/routes/(app)/+layout.ts:58`
+  - **Action:** Remove debug console.log statements (especially the user-ID log) from shell/layout code.
+- [ ] **STB-06** `low/ux/confirmed` — Systemic use of raw browser confirm()/alert() dialogs for destructive designer/admin actions instead of the app's own dialog/toast system
+  - **Evidence:** `apps/web/src/lib/fillout/components/ConsentScreen.svelte:83 ; apps/web/src/lib/components/designer/QuestionCard.svelte:22`
+  - **Action:** Introduce a single confirm-dialog component (backed by existing UI primitives) and route destructive confirmations + error alerts through it / the toast store for consistent theming and testability.
+- [ ] **STB-07** `low/feature-gap/partial` — Unsupported question types degrade to a raw-JSON "not yet implemented" editor in the designer
+  - **Evidence:** `apps/web/src/lib/components/designer/QuestionDesigner.svelte:53`
+  - **Action:** Audit moduleRegistry coverage so every creatable question type has a designer component; keep the fallback only as a defensive path, not a reachable authoring surface.
+  - **Correction (verifier):** The 'not yet implemented' raw-JSON fallback exists in QuestionDesigner.svelte (lines 53, 108) exactly as described, but that component is dead/orphaned code — it is imported nowhere in the repo and never renders. The actual live designer property panel is PropertiesPanel.svelte, whose missing-designer fallback is a brief warning message, not a raw JSON editor. Every registered/creatable question type already has a designer component, so no author-facing raw-JSON fallback is reachable. The real (low-severity) issue is unused-component cruft, not a user-visible feature gap.
+- [ ] **STB-08** `low/tech-debt/partial` — Widespread @typescript-eslint/no-explicit-any suppressions across runtime, services, and shared code
+  - **Evidence:** `apps/web/src/lib/fillout/services/SessionManagementService.ts:101 ; apps/web/src/lib/shared/migration/question-migration.ts:6`
+  - **Action:** Where a stable schema exists (session update payload, questionnaire JSON), introduce typed interfaces to shrink the `any` boundary; leave genuinely dynamic boundaries (i18n, WebGL) documented as-is.
+  - **Correction (verifier):** The claim "No @ts-ignore/@ts-expect-error were found" is wrong. There are 3: apps/web/src/lib/modules/questions/drawing/Drawing.svelte:356 and :359 use `@ts-ignore` (the lazier, silent form), and apps/web/src/lib/i18n/utils/formatting.ts:347 uses `@ts-expect-error`. The two `@ts-ignore` in Drawing.svelte slightly undercut the "disciplined rather than lazy" characterization since `@ts-ignore` suppresses without justification enforcement. Everything else in the finding stands.
+- [ ] **STB-09** `low/feature-gap/confirmed` — CLAUDE.md Known-TODO "check_duplicate anonymous regression" still open on the frontend side
+  - **Evidence:** `apps/web/src/routes/(fillout)/q/[code]/+page.svelte:126 ; apps/web/src/lib/fillout/services/FraudDetectionService.ts:312`
+  - **Action:** Track with the backend fix (server-side fingerprint-hash dedup at create time); until then the anonymous duplicate guard should be treated as non-functional, not merely degraded.
+
+## P7.3 — Theming — Single Source of Truth  (15 tasks)
+
+- [ ] **A11-01** `high/duplication/partial` — Theming has no single source of truth: three parallel theme systems with mismatched localStorage keys
+  - **→ partial at action time (wave 1):** dead shared token fork deleted; ThemeProvider.svelte deletion refuted — it has a live importer (StyleGuide, /style-guide route). Canonical store remains lib/stores/theme.ts.
+  - **Evidence:** `apps/web/src/lib/stores/theme.ts:20 ; apps/web/src/lib/theme/ThemeProvider.svelte:16`
+  - **Action:** Pick src/lib/stores/theme.ts as the canonical theme store, delete or fold lib/theme/ (ThemeProvider, index.ts, theme.ts) into it, and standardize on the single 'theme' storage key. If StyleGuide is kept, point it at the canonical store.
+  - **Correction (verifier):** Theming has one live theme-mode store (src/lib/stores/theme.ts, key 'theme', used by ThemeToggle.svelte, +layout.svelte, app.html) plus one genuinely-dead duplicate theme-mode subsystem (src/lib/theme/ThemeProvider.svelte with its own themeMode store and mismatched 'qdesigner-theme-mode' key) that is imported only by the dev-only StyleGuide page. src/lib/theme/index.ts is NOT dead — it is a shared design-token module used by ~10 live designer components and should be kept; only its uninvoked toggleDarkMode util and the ThemeProvider/themeMode duplicate are dead code. There is no runtime 'fight' because the duplicate path is only reachable from the style-guide demo. Recommendation stands (delete ThemeProvider/themeMode or point StyleGuide at stores/theme.ts), but severity should be medium/low given no user-facing conflict, and index.ts must not be deleted. There is no theme.ts file.
+- [x] **A11-02** `high/duplication/confirmed` — Duplicate, divergent theme-token CSS files; the orphan is a maintenance trap
+  - **Evidence:** `apps/web/src/lib/styles/themes/variables.css:1 ; apps/web/src/lib/shared/styles/themes/variables.css:1`
+  - **Action:** Delete src/lib/shared/styles/themes/variables.css (and the empty lib/shared/styles/themes tree) so the token file has exactly one location.
+- [x] **A11-03** `high/duplication/partial` — Two overlapping modal components; Modal (used 14x) lacks the focus-restore that Dialog/Sheet have
+  - **Evidence:** `apps/web/src/lib/components/ui/feedback/Modal.svelte:56 ; apps/web/src/lib/components/ui/overlays/Dialog.svelte:86`
+  - **Action:** Consolidate on one dialog primitive (Dialog + Sheet share the fuller implementation) and migrate the 14 Modal call sites, or at minimum port focus-restore into Modal. Delete the dead onMount stub.
+  - **Correction (verifier):** Modal.svelte and Dialog.svelte are overlapping accessible-dialog implementations, and Modal.svelte lacks the previousActiveElement capture/restore that Dialog.svelte (67-90) and Sheet.svelte (102-124) have, so closing a Modal drops keyboard focus to <body> (WCAG 2.4.3). Modal.svelte also carries a dead onMount stub (lines 51-54). But the usage counts are reversed: the Dialog primitive is rendered in ~10 files while the incomplete Modal is rendered in only 3 (designer/PreviewModal.svelte, routes/(app)/projects/+page.svelte, routes/(app)/projects/[projectId]/+page.svelte). The more-used component is the more-complete one, so the defect's blast radius and severity are smaller than stated (medium, not high).
+- [ ] **HCS-01** `high/duplication/partial` — Theme source-of-truth is fragmented across 4 overlapping definitions (2 of them orphaned and divergent)
+  - **→ partial at action time (wave 1):** the two orphaned files (shared/styles/themes/variables.css, shared/styles/theme.ts) deleted; lib/theme/index.ts kept (live, ~13 importers) and ThemeProvider retained (live StyleGuide importer).
+  - **Evidence:** `apps/web/src/app.css:2 ; apps/web/src/lib/shared/styles/themes/variables.css:1`
+  - **Action:** Pick lib/styles/themes/variables.css as the sole token file, delete lib/shared/styles/themes/variables.css and lib/shared/styles/theme.ts (both orphaned), and either delete lib/theme/index.ts or reduce it to a thin re-export referencing the CSS vars (its cssVariables map duplicates token names a fourth time). Document the winner in the StyleGuide.
+  - **Correction (verifier):** Theme tokens are fragmented across 4 definitions. Two are genuinely orphaned with zero importers and must be deleted: lib/shared/styles/themes/variables.css (divergent token values; contains both a .dark class block AND an @media prefers-color-scheme block) and lib/shared/styles/theme.ts (raw-hex scales). The live token file is lib/styles/themes/variables.css. lib/theme/index.ts is a separate live TS abstraction consumed by 11 designer components (default `theme` export); its sibling ThemeProvider.svelte is NOT dead — it is imported by StyleGuide.svelte, which is rendered by the live /style-guide route, so the lib/theme/ directory is a genuinely-consumed cluster rather than dead code.
+- [x] **THM-01** `high/duplication/confirmed` — Two divergent variables.css files; the shared/ copy is a dead trap that would break Tailwind tokens if wired
+  - **Evidence:** `apps/web/src/lib/styles/themes/variables.css:19 ; apps/web/src/lib/shared/styles/themes/variables.css:18`
+  - **Action:** Delete src/lib/shared/styles/themes/variables.css (and the whole src/lib/shared/styles/ theming stub) so there is exactly one variables.css. If any historical route needs it, repoint to the live file first.
+- [x] **THM-02** `high/dead-code/confirmed` — Dead competing hex-based design-token system in shared/styles/theme.ts
+  - **Evidence:** `apps/web/src/lib/shared/styles/theme.ts:6 ; apps/web/src/lib/shared/styles/theme.ts:1`
+  - **Action:** Delete src/lib/shared/styles/theme.ts. If the numeric hex scales are ever wanted, express them as CSS vars in the single variables.css or as Tailwind theme.extend keys — not a detached TS object.
+- [x] **THM-03** `high/feature-gap/confirmed` — RTL stylesheet (570 lines) is orphaned though dir="rtl" and .rtl class are applied at runtime
+  - **Evidence:** `apps/web/src/lib/i18n/config.ts:150 ; apps/web/src/lib/i18n/styles/rtl.css:5`
+  - **Action:** Either import rtl.css from app.css / i18n config (activating it) or delete it and the dir/.rtl toggling if RTL is out of scope. Do not ship the attribute toggle without the stylesheet — it's a silent half-feature.
+  - **Resolved (2026-07-03, ADR 0019):** taken the "delete + keep the toggle" branch. `styles/rtl.css` (and its `app.css` `@import`, which was actually live, not orphaned) are deleted; the `dir`/`.rtl` mechanism is retained via `applyDocumentLocale()` → `getTextDirection(locale)`. No RTL locale is shipped, so no RTL styling is needed yet, but the attribute toggle is no longer a sheet-less half-feature — it is a lightweight hook for a future RTL locale.
+- [ ] **HCS-02** `medium/duplication/partial` — Two competing dark-mode mechanisms with different localStorage keys; one is dead
+  - **→ partial at action time (wave 1):** live store lib/stores/theme.ts confirmed canonical; ThemeProvider.svelte NOT deleted — its themeMode store has a live importer (StyleGuide, /style-guide route).
+  - **Evidence:** `apps/web/src/lib/stores/theme.ts:1 ; apps/web/src/routes/+layout.svelte:39`
+  - **Action:** Delete lib/theme/ThemeProvider.svelte (and its themeMode/customTheme stores) or consolidate onto lib/stores/theme.ts and delete the store in ThemeProvider. Standardize on one localStorage key.
+  - **Correction (verifier):** Dark mode is implemented twice and the two use different localStorage keys ('theme' vs 'qdesigner-theme-mode'), which is confusing and a latent conflict. The LIVE mechanism is lib/stores/theme.ts. In ThemeProvider.svelte only the *component/provider* code path is dead — it is never mounted, so its onMount logic, DOM class toggling, and the 'qdesigner-theme-mode' localStorage write never run (hence no actual runtime .dark-class fight today). But the file is NOT entirely dead: its exported `themeMode` store is imported by lib/theme/StyleGuide.svelte, which is rendered by the live route routes/(app)/style-guide/+page.svelte. Remediation must therefore either migrate StyleGuide onto lib/stores/theme.ts before deleting ThemeProvider.svelte, or keep the store, rather than deleting the file wholesale as the original recommendation states.
+- [x] **HCS-03** `medium/inconsistency/confirmed` — Designer flow editor hardcodes hex node/edge colors that are not dark-mode-safe
+  - **Evidence:** `apps/web/src/lib/components/designer/flow/nodes/BlockNode.svelte:16 ; apps/web/src/lib/components/designer/flow/edges/ConditionalEdge.svelte:69`
+  - **Action:** Move the category palette to CSS variables (--node-conditional etc. with .dark overrides) or a token-referencing map, and drop the inline-style hex in favor of classes or var() so the flow editor tracks the app theme.
+- [ ] **HCS-04** `medium/inconsistency/confirmed` — Raw Tailwind palette classes used instead of existing semantic status/muted tokens in app chrome
+  - **Evidence:** `apps/web/src/routes/(auth)/login/+page.svelte:227 ; apps/web/src/routes/(app)/dashboard/+page.svelte:59`
+  - **Action:** Replace emerald/amber status classes with text-success/bg-success etc.; for the login hero, either accept it as a deliberate always-dark marketing panel (document it) or move its slate palette to tokens. Consider an ESLint rule banning bg-/text-/border-<palette>-<n> outside participant-facing modules.
+- [ ] **HCS-05** `medium/tech-debt/confirmed` — Tailwind v4 runtime paired with a legacy v3-style JS config and no @theme block
+  - **Evidence:** `apps/web/package.json:1 ; apps/web/src/app.css:1`
+  - **Action:** Migrate the color/radius/shadow mapping into a v4 @theme block in CSS (colocated with token values), or add an explicit @config directive so the JS bridge is intentional. This collapses the token layer to one CSS location.
+- [ ] **THM-04** `medium/inconsistency/confirmed` — Three parallel theme-MODE toggling mechanisms with different storage keys and class semantics
+  - **Evidence:** `apps/web/src/lib/stores/theme.ts:22 ; apps/web/src/app.html:16`
+  - **Action:** Make src/lib/stores/theme.ts the single owner of theme mode. Delete ThemeProvider.svelte's mode logic (or have it delegate to the store) and drop the toggleDarkMode/isDarkMode utils. Standardize on one localStorage key ('theme').
+- [x] **THM-05** `medium/tech-debt/confirmed` — Fillout container applies var(--background)/var(--foreground) without hsl() wrapper — invalid, no-op declarations
+  - **Evidence:** `apps/web/src/routes/(fillout)/+layout.svelte:33 ; apps/web/src/lib/styles/themes/variables.css:3`
+  - **Action:** Change to `background: hsl(var(--background)); color: hsl(var(--foreground));` in the fillout layout to match the shadcn HSL-triplet convention used everywhere else.
+- [ ] **THM-06** `medium/duplication/confirmed` — theme/index.ts re-encodes Tailwind class conventions and a partial CSS-var map as a parallel TS layer
+  - **Evidence:** `apps/web/src/lib/theme/index.ts:5 ; apps/web/src/lib/theme/index.ts:70`
+  - **Action:** Keep it if the class-string presets earn their keep, but drop the redundant cssVariables map (Tailwind tokens already are the API) and add a comment that variables.css + tailwind.config.js are canonical so this stays a convenience layer, not a second truth.
+- [ ] **HCS-06** `low/inconsistency/confirmed` — ScriptEditor chrome is hardcoded VS-Code-dark regardless of app theme
+  - **Evidence:** `apps/web/src/lib/components/designer/ScriptEditor.svelte:263 ; apps/web/src/lib/components/designer/ScriptEditor.svelte:280`
+  - **Action:** If intentionally always-dark, source the shell colors from Monaco theme tokens or dedicated --editor-* variables; otherwise map to app tokens so it follows light/dark.
+
+## P7.4 — Dead-Code & Duplication Sweep  (24 tasks)
+
+- [ ] **ANL-08** `high/dead-code/confirmed` — Entire dashboard-builder + widget suite is orphaned (reachable only through an unused barrel)
+  - **Evidence:** `src/lib/analytics/index.ts:20 ; src/lib/components/analytics/IRTPanel.svelte:1`
+  - **Action:** Decide per-feature: either wire the dashboard-builder/widget suite into a route (it is arguably the richest analytics UI in the repo) or delete it and the barrel. Ship one analytics implementation, not a live-but-thin one plus a rich-but-dead one.
+- [x] **ANL-09** `high/duplication/confirmed` — Two complete, overlapping export services — one entirely dead
+  - **Evidence:** `src/lib/analytics/ExportService.ts:15 ; src/lib/analytics/ResponseExportService.ts:183`
+  - **Action:** Delete ExportService.ts (and drop papaparse if nothing else uses it) or consolidate onto one export module. Maintaining two divergent SPSS/R/Stata/SAS syntax generators is a correctness liability for a research export feature.
+- [ ] **CMP-01** `high/duplication/partial` — Two divergent token files + a 254-line dead theme object + two parallel theme subsystems fragment the theming source of truth
+  - **→ partial at action time (wave 1):** shared/styles/themes/variables.css + shared/styles/theme.ts deleted; lib/theme/index.ts kept (live) and ThemeProvider.svelte retained (live StyleGuide importer).
+  - **Evidence:** `apps/web/src/lib/styles/themes/variables.css:3 ; apps/web/src/lib/shared/styles/themes/variables.css:18`
+  - **Action:** Delete lib/shared/styles/themes/variables.css and lib/theme/ (index.ts + ThemeProvider.svelte) or fold the style-guide onto stores/theme.ts. Keep exactly one token file and one theme store. If a TS-side token map is wanted, generate it from the CSS variables rather than hand-maintaining a divergent copy.
+  - **Correction (verifier):** There is genuine theming fragmentation, but scoped smaller than claimed. Actually-dead code: (a) lib/shared/styles/themes/variables.css — a 137-line divergent token fork with zero importers; (b) lib/theme/ThemeProvider.svelte — a second theme store/dark-mode implementation (key 'qdesigner-theme-mode') used only by the style-guide showcase, duplicating stores/theme.ts (key 'theme', the live store). NOT dead: lib/theme/index.ts (componentTheme/semanticColors/typography/spacing, exported as the default `theme`) is live design-system infrastructure consumed by ~13 product components in the designer and wysiwyg surfaces — it must be kept. Correct remediation: delete the stale shared token fork, and either delete ThemeProvider.svelte or fold the style-guide onto stores/theme.ts; keep lib/theme/index.ts. Severity medium, not high.
+- [x] **CMP-02** `high/dead-code/partial` — 19 components have zero importers (dead inventory across analytics, shared/questions, ui/skeletons, fillout, projects)
+  - **Evidence:** `apps/web/src/lib/components/shared/questions/OptionList.svelte:1 ; apps/web/src/lib/components/ui/skeletons/TableSkeleton.svelte:1`
+  - **Action:** Delete the dead components (or, for skeletons, actually wire them into the load states they were built for). Prioritize removing the whole shared/questions/ tree and the fillout FeedbackPanel/FilloutNavigation to prevent future edits landing in unreachable code.
+  - **Correction (verifier):** 18 components (not 19) have zero importers; the enumerated set is accurate and each is confirmed dead. Count breakdown: 2 analytics + 2 common + 1 CreateProjectModal + 5 shared/questions + 1 CrashRecovery + 1 MediaUploadDialog + 1 Sheet + 3 skeletons + 2 fillout = 18.
+- [x] **SHL-11** `high/dead-code/confirmed` — Global command palette / search exists as a component but is never mounted — no global search in the app shell
+  - **Evidence:** `apps/web/src/lib/components/ui/CommandPalette.svelte:129 ; apps/web/src/lib/components/ui/layout/AppShell.svelte:19`
+  - **Action:** Mount the CommandPalette in the root or (app) layout and register navigation/action commands, or remove the orphaned component. Add a visible search affordance in the header.
+- [ ] **A11-04** `medium/a11y/partial` — No true focus trap in modal/sheet overlays; Tab escapes to background content
+  - **→ partial at action time (wave 2):** Tab/Shift+Tab focus trap + activeElement restore added to Modal.svelte only; Dialog and the shared-primitive consolidation are not done (Sheet.svelte was deleted separately).
+  - **Evidence:** `apps/web/src/lib/components/ui/overlays/Dialog.svelte:74 ; apps/web/src/lib/components/ui/feedback/Modal.svelte:61`
+  - **Action:** Add a shared onkeydown Tab/Shift+Tab handler (or a use:trapFocus action) to the dialog primitive that cycles focus between first/last focusable elements while open, then reuse it everywhere aria-modal is set.
+  - **Correction (verifier):** Dialog, Modal, and Sheet primitives lack a Tab focus trap (confirmed). The claim that a real Tab-cycling focus trap exists in TranslationManager.svelte is incorrect — that file's 'Tab' handler is an inline-edit save-and-advance shortcut, not a focus trap. In fact NO focus-trap implementation exists anywhere in the codebase, which strengthens the 'missing' aspect but means the recommendation cannot 'reuse' an existing pattern; a trap must be written from scratch.
+- [ ] **A11-05** `medium/a11y/confirmed` — prefers-reduced-motion honored in only 2 of ~70 animating components
+  - **Evidence:** `apps/web/src/lib/components/ui/feedback/Modal.svelte:93 ; apps/web/src/lib/components/ui/overlays/Dialog.svelte:139`
+  - **Action:** Add a global @media (prefers-reduced-motion: reduce) rule in app.css that neutralizes transition/animation utilities, and gate the shared overlay transitions on it.
+- [ ] **ANL-10** `medium/duplication/partial` — Four independent CSV serializers across the analytics surface
+  - **Evidence:** `src/routes/(app)/projects/[projectId]/analytics/+page.svelte:214 ; src/routes/(app)/analytics/[questionnaireId]/+page.svelte:130`
+  - **Action:** Route both pages through a single CSV serializer (ResponseExportService) so exported column sets and escaping are identical.
+  - **Correction (verifier):** Four hand-rolled/library CSV serializers coexist across the analytics surface (two route copies plus ResponseExportService's COLUMNS-based rowsToCsv and ExportService's Papa.unparse), which is genuine duplication worth consolidating. The two route copies do NOT yield different column sets — both consume the same fixed 10-key ExportRow from the same export endpoint, so headers match. They do produce divergent cell content: the project route's convertToCSV JSON-stringifies object values and escapes newlines, while the questionnaire route's rowsToCsv emits '[object Object]' for object values and fails to quote fields containing newlines, so the same data exports with different (and in the questionnaire route, subtly broken) values depending on the page.
+- [ ] **ANL-11** `medium/duplication/confirmed` — Two parallel questionnaire-detail analytics surfaces with no shared components or cross-linking
+  - **Evidence:** `src/routes/(app)/analytics/[questionnaireId]/+page.svelte:209 ; src/routes/(app)/projects/[projectId]/analytics/+page.svelte:610`
+  - **Action:** Unify the two detail views (shared metric components + tabs) or clearly divide responsibilities and cross-link them; today they are redundant, inconsistent, and disconnected.
+- [ ] **AUT-10** `medium/dead-code/partial` — Onboarding forces org creation and ships a dead invitation-acceptance branch
+  - **Evidence:** `apps/web/src/routes/(auth)/onboarding/organization/+page.svelte:40 ; apps/web/src/routes/(auth)/onboarding/organization/+page.svelte:100`
+  - **Action:** Either restore the invitation lookup (fix the RLS policy) so onboarding can surface pending invites, or delete the dead branch. Consider allowing a user with a pending invite to accept it instead of being forced to create an org.
+  - **Correction (verifier):** The dead onboarding invitation branch (unreachable UI at lines 100-154 and 187-197, always-empty pendingInvitations, always-true showCreateForm) is real and confirmed. But invitation acceptance is NOT unavailable to the user: a dedicated /invite/[token] route plus api.organizations.invitations.accept/getPending provide the working accept flow via the email link. Onboarding's disabled invitation lookup is a missing convenience/cleanup issue, not a blocker that leaves invited users unable to join an org.
+- [x] **CMP-03** `medium/duplication/confirmed` — Two Badge implementations — the ui barrel exports the DEAD one while every consumer imports the other directly
+  - **Evidence:** `apps/web/src/lib/components/ui/index.ts:15 ; apps/web/src/lib/components/ui/data/Badge.svelte:1`
+  - **Action:** Pick one Badge (feedback/ is the used one), delete the other, and point ui/index.ts at the survivor so the barrel and direct-import paths resolve to the same component.
+- [ ] **CMP-04** `medium/duplication/partial` — Three overlapping overlay primitives (Dialog / Modal / Sheet) with no clear boundary; Dialog is canonical, Modal is near-dead, Sheet is dead
+  - **→ partial at action time (wave 1):** dead Sheet.svelte deleted (0 importers); Modal→Dialog consolidation and Modal-consumer migration deferred (overlay consolidation in Deferred register).
+  - **Evidence:** `apps/web/src/lib/components/ui/overlays/Dialog.svelte:1 ; apps/web/src/lib/components/ui/feedback/Modal.svelte:1`
+  - **Action:** Consolidate on Dialog; migrate the ~3 Modal consumers and delete Modal + Sheet (or keep Sheet only if a side-drawer is actually planned and wire it). Refactor the hand-rolled designer overlays onto Dialog for consistent focus-trap/escape/scroll-lock behavior.
+  - **Correction (verifier):** The three-overlay duplication (Dialog canonical, Modal near-dead ~3 importers, Sheet dead/zero importers) and the recommendation to consolidate on Dialog are correct. But the "hand-rolled overlay" offenders are only ScriptEditorOverlay.svelte and PropertiesPanel.svelte. MediaManager.svelte is NOT hand-rolled — it is a plain content component rendered inside MediaManagerModal.svelte's <Dialog>, so it already uses the primitive. Evidence item 5 should be removed.
+- [ ] **CMP-05** `medium/duplication/confirmed` — Routes hand-roll ~96 raw <button> elements instead of the Button primitive, and reimplement a dead modal component inline
+  - **Evidence:** `apps/web/src/routes/(app)/projects/+page.svelte:93 ; apps/web/src/lib/components/projects/CreateProjectModal.svelte:1`
+  - **Action:** Adopt Button for standard actions in routes (start with the projects page: use CreateProjectModal or delete it and keep the inline version, but not both). Icon-only toolbar buttons in the designer can stay raw but should share a small helper class to stop class-string drift.
+- [ ] **DSN-06** `medium/dead-code/confirmed` — Six of the 35 designer components are dead code (0 importers), plus one dead import
+  - **Evidence:** `apps/web/src/lib/components/designer/Designer.svelte:1 ; apps/web/src/lib/components/designer/FeedbackTemplateBuilder.svelte:1`
+  - **Action:** Delete the orphaned components and the dead ScriptEditor import, or if intentionally staged, move them out of the active designer directory so the authoritative editor path is unambiguous.
+- [ ] **DSN-07** `medium/duplication/confirmed` — Three separate Monaco editor integrations with divergent config and theming
+  - **Evidence:** `apps/web/src/lib/components/designer/FormulaEditor.svelte:92 ; apps/web/src/lib/wysiwyg/MonacoEditor.svelte:66`
+  - **Action:** Consolidate onto one Monaco wrapper (the scripting-engine-backed FormulaEditor) parameterized by language/mode, and drive its theme from the app theme store.
+- [x] **DSN-08** `medium/duplication/confirmed` — Duplicate design-token file with divergent values undermines single-source-of-truth theming
+  - **Evidence:** `apps/web/src/lib/styles/themes/variables.css:19 ; apps/web/src/lib/shared/styles/themes/variables.css:18`
+  - **Action:** Delete the orphaned src/lib/shared/styles/themes/variables.css so there is exactly one token definition.
+- [ ] **ERR-07** `medium/dead-code/confirmed` — Unsaved-changes navigation guard is built but never wired up
+  - **Evidence:** `apps/web/src/lib/services/autoSave.svelte.ts:207 ; apps/web/src/routes/(app)/projects/[projectId]/designer/[[questionnaireId]]/+page.svelte:261`
+  - **Action:** Wire hasUnsavedChanges() into SvelteKit's beforeNavigate plus a window beforeunload listener on the designer page to warn before discarding unsaved edits.
+- [ ] **A11-06** `low/a11y/confirmed` — Backdrop <div> mislabeled as role="button" with an Enter handler in both modals
+  - **Evidence:** `apps/web/src/lib/components/ui/overlays/Dialog.svelte:122 ; apps/web/src/lib/components/ui/feedback/Modal.svelte:96`
+  - **Action:** Make the backdrop a plain non-interactive div (role=presentation) that only handles click-to-close, and rely on the existing Escape handler for keyboard dismissal, removing the fake button role/keydown.
+- [ ] **A11-07** `low/a11y/confirmed` — No skip-to-content link in the authenticated app shell
+  - **Evidence:** `apps/web/src/routes/(app)/+layout.svelte:36`
+  - **Action:** Add a visually-hidden 'Skip to main content' anchor as the first focusable element in the app layout, targeting a #main-content landmark on the primary <main>.
+- [ ] **A11-08** `low/tech-debt/partial` — Fully-legacy Svelte 4 holdout components in core designer surfaces
+  - **Evidence:** `apps/web/src/lib/components/designer/QuestionCard.svelte:167 ; apps/web/src/lib/components/designer/ScriptEditor.svelte:1`
+  - **Action:** Port QuestionCard and ScriptEditor to $props/$state/$derived to match the rest of the tree; retire ThemeProvider as part of the theme-system consolidation above.
+  - **Correction (verifier):** Only QuestionCard.svelte is a live core designer component still on the legacy idiom (5 export let, 0 runes, rendered by PageCanvas). ScriptEditor.svelte (2 export let, 0 runes) is a dead import — imported but never rendered in PropertiesPanel, superseded by ScriptEditorOverlay — so it should be deleted rather than ported. ThemeProvider.svelte's component body (props, onMount, instance-script subscribe with no unsubscribe) is never executed because the component is never rendered; only its themeMode store is imported by StyleGuide.svelte (reachable only via /style-guide), so it too is a retirement/deletion candidate, not a live-surface concern.
+- [ ] **ANL-12** `low/duplication/confirmed` — StatisticsCard reimplements an inline-SVG icon set duplicating lucide-svelte
+  - **Evidence:** `src/lib/analytics/components/StatisticsCard.svelte:30 ; src/routes/(app)/projects/[projectId]/analytics/+page.svelte:14`
+  - **Action:** Accept a lucide component as the icon prop and drop the inline SVG string map.
+- [ ] **CMP-06** `low/tech-debt/confirmed` — Both UI docs are aspirational — they describe routes, files, and APIs that do not exist and contradict the actual token system
+  - **Evidence:** `apps/web/src/lib/components/ui/README.md:138 ; apps/web/src/lib/components/ui/README.md:153`
+  - **Action:** Either build the /ui-components showcase (there is already a lib/theme/StyleGuide.svelte at /style-guide that could serve) and fix the doc paths/APIs, or delete both markdown files. Do not leave palette snippets that push contributors toward hardcoded indigo/gray.
+- [x] **ERR-08** `low/dead-code/confirmed` — CrashRecovery component is dead code
+  - **Evidence:** `apps/web/src/lib/components/ui/CrashRecovery.svelte:1`
+  - **Action:** Either mount CrashRecovery in the root layout (alongside Toast/OfflineIndicator) if its recovery flow is desired, or delete it.
+- [ ] **HLP-04** `low/dead-code/confirmed` — BeaconPulse.svelte is orphaned dead code and uses a localStorage key disconnected from helpStore
+  - **Evidence:** `apps/web/src/lib/help/components/BeaconPulse.svelte:13`
+  - **Action:** Either mount BeaconPulse on genuinely-new features (switching it to helpStore.hasSeenFeature/markFeatureSeen for consistency) or delete it. As-is it is latent, state-inconsistent dead code.
+
+## P7.5 — Polish & Performance  (5 tasks)
+
+- [ ] **MOD-08** `high/inconsistency/confirmed` — i18n adoption is ~2 of 204 components; designer/analytics/admin are hardcoded English despite a full translation system
+  - **Evidence:** `apps/web/src/routes/+layout.svelte:10 ; apps/web/src/lib/i18n/locales/en/index.ts:1`
+  - **Action:** Either drive a real localization pass (route designer/analytics strings through the translation function) or scope the LanguageSwitcher to the surfaces that are actually translated, so the advertised locale set matches reality.
+  - **Note (2026-07-03, ADR 0019):** the i18n *engine* was migrated i18next → Paraglide; the 486-key message set is ported at parity to `messages/{en,de,es}.json` as typed `m.*()`. Adoption *breadth* is unchanged (still login/signup only), so this row stays open — but a future sweep is now cheap (add `m.*` ids + swap hardcoded strings) and type-checked. Scoping the switcher vs. a full pass remains the open decision.
+- [x] **PRF-05** `high/inconsistency/confirmed` — Monaco editor is statically bundled into the designer route, defeating the dynamic-import lazy loading used elsewhere
+  - **Evidence:** `apps/web/src/lib/components/designer/ScriptEditor.svelte:3 ; apps/web/src/lib/components/designer/PropertiesPanel.svelte:8`
+  - **Action:** Convert ScriptEditor.svelte to the same dynamic-import pattern as the other three wrappers (load monaco in onMount/$effect), and/or lazy-mount PropertiesPanel's script section behind `{#await import(...)}`. Consolidate the four wrappers onto one shared bootstrap to remove the duplicated Monaco setup.
+- [ ] **MOD-09** `low/ux/partial` — reaction-time and webgl are designable but hidden from the palette, discoverable only via reaction-experiment
+  - **Evidence:** `apps/web/src/lib/components/designer/QuestionPalette.svelte:9 ; apps/web/src/lib/modules/questions/reaction-time/metadata.ts:10`
+  - **Action:** Confirm reaction-experiment fully supersedes these; if so, remove the legacy modules/designers, otherwise surface them behind an 'advanced' palette section. Keeping built-but-hidden types invites drift.
+  - **Correction (verifier):** 'reaction-time' and 'webgl' are fully-built, registered question types (full Designer.svelte editors + questionRuntime v1) that are hidden from QuestionPalette via HIDDEN_LEGACY_TYPES and have no discoverable palette entry point for adding new instances — presumably superseded by the newer 'reaction-experiment' type. They remain reachable only for pre-existing content (via migration mapping and render paths), not through reaction-experiment. Note reaction-time's schema (reaction-schema.ts) is still a live dependency of ReactionExperimentRuntime, so removing the module wholesale is not clean.
+- [ ] **PRF-06** `low/performance/confirmed` — WebGL render loop computes rolling stats and allocates fresh objects every animation frame on the timing-critical thread
+  - **Evidence:** `apps/web/src/lib/renderer/WebGLRenderer.ts:214 ; apps/web/src/lib/renderer/WebGLRenderer.ts:550`
+  - **Action:** Compute stats lazily (only when a consumer reads them) or with a running-sum accumulator; reuse a single mutable context/sample object; pre-allocate and reuse a Float32Array buffer for geometry uploads.
+- [ ] **PRF-07** `low/tech-debt/confirmed` — Sync marks ALL session variables synced regardless of what was actually sent
+  - **Evidence:** `apps/web/src/lib/fillout/services/FilloutSyncEngine.ts:169 ; apps/web/src/lib/fillout/services/OfflineResponsePersistence.ts:160`
+  - **Action:** Mark only the specific variable records included in the payload (by id/name+value snapshot), mirroring the response/event mark-synced approach.

@@ -6,12 +6,16 @@
   import OfflineIndicator from '$lib/components/ui/OfflineIndicator.svelte';
   import { theme } from '$lib/stores/theme';
   import { offline, requestPersistentStorage } from '$lib/services/offline';
-  // i18n — importing config triggers i18next initialization
-  import '$lib/i18n/config';
+  // i18n — Paraglide (ADR 0019). Locale is resolved at load via the
+  // cookie/preferredLanguage strategy; reflect it onto <html> (lang/dir/rtl).
+  import { applyDocumentLocale } from '$lib/i18n/locale';
 
   let { children } = $props();
 
   onMount(() => {
+    // Reflect the active locale onto <html> (lang + dir + rtl/ltr class).
+    applyDocumentLocale();
+
     // Import modules on client-side only (Async, fire-and-forget)
     (async () => {
       console.log('[Layout] Starting module registration...');

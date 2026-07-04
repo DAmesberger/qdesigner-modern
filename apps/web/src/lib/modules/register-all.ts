@@ -87,6 +87,20 @@ export async function registerAllModules() {
   registerModule(reactionExperimentMetadata);
   registerModule(webglMetadata);
 
+  // MOD-05: reconcile enum question types that have no dedicated module so they
+  // resolve to an existing runtime component instead of being silently dropped
+  // at runtime (see ADR 0018). Aliases reuse a compatible component:
+  //  - single-choice -> multiple-choice (rendered in single-select mode)
+  //  - instruction / media-display -> text-instruction (display content + media)
+  registerModule({ ...multipleChoiceMetadata, type: 'single-choice', name: 'Single Choice' });
+  registerModule({ ...textInstructionMetadata, type: 'instruction', category: 'instruction' });
+  registerModule({
+    ...textInstructionMetadata,
+    type: 'media-display',
+    category: 'instruction',
+    name: 'Media Display',
+  });
+
   modulesRegistered = true;
   console.log('[Module Registration] All modules registered');
   })().catch((error) => {

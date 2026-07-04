@@ -47,6 +47,18 @@
       currentOrg = orgs[0];
       orgName = currentOrg.name || '';
       orgSlug = currentOrg.slug || '';
+
+      // Hydrate the Defaults form from the organization's saved settings so
+      // it reflects the persisted state instead of always showing hard-coded
+      // initial values (write-only regression).
+      const defaults = currentOrg.settings?.defaults;
+      if (defaults) {
+        defaultTimeLimit = String(defaults.timeLimit ?? 30);
+        defaultRandomization = !!defaults.randomization;
+        defaultRandomSeed = defaults.randomSeed ?? '';
+        emailNotifications = defaults.emailNotifications ?? true;
+        digestFrequency = defaults.digestFrequency ?? 'weekly';
+      }
     } catch (err) {
       console.error('Error loading settings:', err);
       error = 'Failed to load settings';

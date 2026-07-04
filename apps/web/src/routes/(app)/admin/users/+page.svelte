@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
+  import { toast } from '$lib/stores/toast';
   import Card from '$lib/components/common/Card.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
@@ -10,6 +11,7 @@
   let members: OrganizationMember[] = [];
   let loading = true;
   let error: string | null = null;
+  let removingUserId: string | null = null;
 
   let currentOrg: any = null;
 
@@ -47,6 +49,25 @@
     } catch (err) {
       console.error('Error loading members:', err);
       error = 'Failed to load members';
+    }
+  }
+
+  async function removeMember(member: OrganizationMember) {
+    if (!currentOrg) return;
+
+    const name = member.user?.fullName || member.user?.full_name || member.user?.email || 'this member';
+    if (!confirm(`Remove ${name} from ${currentOrg.name || 'the organization'}?`)) return;
+
+    removingUserId = member.userId;
+    try {
+      await api.organizations.members.remove(currentOrg.id, member.userId);
+      members = members.filter((m) => m.userId !== member.userId);
+      toast.success('Member removed');
+    } catch (err) {
+      console.error('Error removing member:', err);
+      toast.error('Failed to remove member');
+    } finally {
+      removingUserId = null;
     }
   }
 
@@ -136,6 +157,7 @@
               <th class="pb-3 text-sm font-medium text-muted-foreground">User</th>
               <th class="pb-3 text-sm font-medium text-muted-foreground">Role</th>
               <th class="pb-3 text-sm font-medium text-muted-foreground">Joined</th>
+              <th class="pb-3 text-sm font-medium text-muted-foreground text-right">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-border">
@@ -154,6 +176,20 @@
                 </td>
                 <td class="py-3 text-sm text-muted-foreground">
                   {formatDate(member.joinedAt)}
+                </td>
+                <td class="py-3 text-right">
+                  {#if member.role === 'owner'}
+                    <span class="text-sm text-muted-foreground">—</span>
+                  {:else}
+                    <button
+                      type="button"
+                      class="inline-flex items-center px-3 py-1.5 rounded-md border border-border text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={removingUserId === member.userId}
+                      on:click={() => removeMember(member)}
+                    >
+                      {removingUserId === member.userId ? 'Removing…' : 'Remove'}
+                    </button>
+                  {/if}
                 </td>
               </tr>
             {/each}

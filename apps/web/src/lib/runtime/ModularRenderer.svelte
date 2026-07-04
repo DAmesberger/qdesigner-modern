@@ -35,7 +35,7 @@
   let {
     item,
     mode = 'runtime',
-    value = $bindable(null),
+    value = $bindable(),
     variables = {},
     disabled = false,
     organizationId = '',

@@ -35,12 +35,14 @@
   let {
     question,
     mode = 'runtime',
-    value = $bindable(question.config.responseType.type === 'multiple' ? [] : null),
+    value = $bindable(),
     disabled = false,
     onResponse,
     onValidation,
     onInteraction,
   }: Props = $props();
+
+  if (value === undefined) value = question.config.responseType.type === 'multiple' ? [] : null;
 
   let otherValue = $state('');
   let showOtherInput = $state(false);

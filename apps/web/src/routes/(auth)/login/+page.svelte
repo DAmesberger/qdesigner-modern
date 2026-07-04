@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import {
     ArrowRight,
     BarChart3,
@@ -17,13 +18,25 @@
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
-  import { t } from '$lib/i18n/hooks';
+  import { m } from '$lib/paraglide/messages';
 
   let email = '';
   let password = '';
   let loading = false;
   let error: string | null = null;
   let successMessage: string | null = null;
+
+  // Same-origin relative redirect target (must start with a single '/').
+  function safeRedirect(raw: string | null): string | null {
+    if (!raw) return null;
+    if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return null;
+    return raw;
+  }
+
+  $: redirectParam = safeRedirect($page.url.searchParams.get('redirect'));
+  $: signupHref = redirectParam
+    ? `/signup?redirect=${encodeURIComponent(redirectParam)}`
+    : '/signup';
 
   interface DevQuickLoginPersona {
     id: string;
@@ -172,6 +185,11 @@
       if (signedInUser) {
         console.log('Login successful, user:', signedInUser.email);
 
+        if (redirectParam) {
+          await goto(redirectParam);
+          return;
+        }
+
         const orgs = await api.organizations.list();
         if (orgs.length === 0) {
           console.log('No organizations, redirecting to onboarding');
@@ -204,21 +222,6 @@
     await signInAndRedirect(persona.email, persona.password);
   }
 
-  async function handleSignUp() {
-    loading = true;
-    error = null;
-
-    const { error: signUpError } = await auth.signUp(email, password, '');
-
-    if (signUpError) {
-      error = normalizeErrorMessage(signUpError, 'Sign up failed');
-      loading = false;
-    } else {
-      successMessage = 'Check your email for the confirmation link!';
-      error = null;
-      loading = false;
-    }
-  }
 </script>
 
 <div class="flex min-h-screen items-center px-4 py-6 sm:px-6 lg:px-8">
@@ -306,7 +309,7 @@
 
     <section class="flex items-center justify-center">
       <div
-        class="w-full max-w-xl rounded-[32px] border border-white/80 bg-white/88 p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/75 dark:shadow-black/50 sm:p-8"
+        class="w-full max-w-xl rounded-[32px] border border-slate-200/80 bg-white/95 p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/90 dark:shadow-black/50 sm:p-8"
       >
         <div class="mb-8 flex items-center justify-between gap-4">
           <a href="/" class="inline-flex items-center gap-3 lg:hidden">
@@ -341,7 +344,7 @@
           <h2
             class="mt-4 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-4xl"
           >
-            {$t('auth:login.title')}
+            {m.auth_login_title()}
           </h2>
           <p class="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
             Continue to active studies, quota monitoring, and version-aware exports from one place.
@@ -349,7 +352,7 @@
         </div>
 
         <form class="mt-8 space-y-5" onsubmit={handleSignIn}>
-          <FormGroup label={$t('auth:login.email')} id="email">
+          <FormGroup label={m.auth_login_email()} id="email">
             <Input
               id="email"
               name="email"
@@ -366,12 +369,12 @@
             <FormGroup id="password">
               {#snippet labelSnippet()}
                 <div class="flex w-full items-center justify-between">
-                  <span>{$t('auth:login.password')}</span>
+                  <span>{m.auth_login_password()}</span>
                   <a
                     href="/forgot-password"
                     class="text-sm font-semibold text-primary hover:text-primary/80"
                   >
-                    {$t('auth:login.forgot')}
+                    {m.auth_login_forgot()}
                   </a>
                 </div>
               {/snippet}
@@ -436,7 +439,7 @@
             class="h-12 w-full rounded-xl text-base font-semibold shadow-lg shadow-primary/20"
             {loading}
           >
-            {$t('auth:login.submit')}
+            {m.auth_login_submit()}
             <ArrowRight class="ml-2 h-4 w-4" />
           </Button>
 
@@ -495,14 +498,12 @@
 
             <div class="mt-5">
               <Button
-                type="button"
+                href={signupHref}
                 variant="secondary"
                 size="lg"
                 class="h-12 w-full rounded-xl text-base font-semibold"
-                onclick={handleSignUp}
-                {loading}
               >
-                {$t('auth:signup.submit')}
+                {m.auth_signup_submit()}
               </Button>
             </div>
           </div>

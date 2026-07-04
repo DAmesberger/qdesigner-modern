@@ -65,6 +65,66 @@
     designerStore.selectedItemType === 'question' ? designerStore.selectedItem?.id : null
   );
 
+  // --- List windowing (soft cap + lazy mount) -----------------------------
+  // svelte-dnd-action requires a 1:1 DOM child <-> items mapping, so we keep
+  // every wrapper <div> mounted (dnd stays intact) but only mount the heavy
+  // question renderer once its wrapper scrolls near the viewport. Below the
+  // threshold the behaviour is identical to eager rendering (zero risk).
+  const VIRTUALIZE_THRESHOLD = 50;
+  let virtualize = $derived(items.length > VIRTUALIZE_THRESHOLD);
+  let scrollRoot = $state<HTMLElement | null>(null);
+  let mountedIds = $state<Set<string>>(new Set());
+
+  // Reset the lazy-mount set when the active block changes; the {#key} block
+  // already remounts the list, so stale ids would only waste memory.
+  $effect(() => {
+    designerStore.currentBlock?.id;
+    mountedIds = new Set();
+  });
+
+  // Svelte action: mounts the item (adds its id to mountedIds) the first time
+  // its wrapper intersects the scroll container, then disconnects.
+  function lazyMount(
+    node: HTMLElement,
+    params: { id: string; enabled: boolean; root: HTMLElement | null }
+  ) {
+    let observer: IntersectionObserver | null = null;
+
+    function setup(p: { id: string; enabled: boolean; root: HTMLElement | null }) {
+      observer?.disconnect();
+      observer = null;
+      if (!p.enabled || mountedIds.has(p.id)) return;
+      if (typeof IntersectionObserver === 'undefined') {
+        // No IO support: mount eagerly rather than hide content.
+        mountedIds.add(p.id);
+        mountedIds = new Set(mountedIds);
+        return;
+      }
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            mountedIds.add(p.id);
+            mountedIds = new Set(mountedIds);
+            observer?.disconnect();
+            observer = null;
+          }
+        },
+        { root: p.root ?? null, rootMargin: '600px 0px' }
+      );
+      observer.observe(node);
+    }
+
+    setup(params);
+    return {
+      update(p: { id: string; enabled: boolean; root: HTMLElement | null }) {
+        setup(p);
+      },
+      destroy() {
+        observer?.disconnect();
+      },
+    };
+  }
+
   function handleDndConsider(e: CustomEvent) {
     if (!e.detail?.items || !designerStore.currentBlock) return;
     const newItems = e.detail.items;
@@ -125,6 +185,7 @@
 </script>
 
 <div
+  bind:this={scrollRoot}
   class="relative h-full overflow-auto canvas-bg"
   data-testid="designer-wysiwyg-canvas"
 >
@@ -225,14 +286,23 @@
               >
                 {#each items as item (item.id)}
                   {@const isSelected = selectedQuestionId === item.id}
+                  {@const shouldMount = !virtualize || mountedIds.has(item.id)}
                   <div
                     animate:flip={{ duration: 300 }}
+                    use:lazyMount={{ id: item.id, enabled: virtualize, root: scrollRoot }}
                     class="relative rounded-xl transition-all duration-200 {isSelected
                       ? 'ring-2 ring-primary shadow-[var(--shadow-glow)]'
                       : 'hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5'}"
                     data-testid={`designer-question-${item.id}`}
                   >
-                    {#if item && item.question}
+                    {#if !shouldMount}
+                      <!-- Lazy placeholder: keeps the dnd child slot + approximate height -->
+                      <div
+                        class="rounded-xl bg-muted/20 animate-pulse"
+                        style="min-height: 180px"
+                        aria-hidden="true"
+                      ></div>
+                    {:else if item && item.question}
                       {@const isDisplay = [
                         'text-display',
                         'instruction',

@@ -30,8 +30,8 @@
 <style>
 	.fillout-container {
 		min-height: 100vh;
-		background: var(--background);
-		color: var(--foreground);
+		background: hsl(var(--background));
+		color: hsl(var(--foreground));
 		overflow: hidden;
 		position: relative;
 		user-select: none;
