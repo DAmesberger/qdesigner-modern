@@ -5,9 +5,10 @@
   import PageCanvas from './PageCanvas.svelte';
   import VariableManager from './VariableManager.svelte';
   import PropertiesPanel from './PropertiesPanel.svelte';
+  import TranslationPanel from './TranslationPanel.svelte';
   import SaveLoadToolbar from './SaveLoadToolbar.svelte';
 
-  let activeTab = $state<'questions' | 'variables' | 'flow'>('questions');
+  let activeTab = $state<'questions' | 'variables' | 'flow' | 'translate'>('questions');
 
   let questionnaireName = $derived(designerStore.questionnaire.name);
   let pages = $derived(designerStore.questionnaire.pages);
@@ -173,7 +174,7 @@
       <div class="flex border-b border-border bg-card">
         <button
           onclick={() => (activeTab = 'questions')}
-          class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'questions'
+          class="flex-1 px-3 py-2.5 text-sm font-medium transition-colors {activeTab ==='questions'
             ? 'text-primary border-b-2 border-primary'
             : 'text-muted-foreground hover:text-foreground'}"
         >
@@ -181,7 +182,7 @@
         </button>
         <button
           onclick={() => (activeTab = 'variables')}
-          class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'variables'
+          class="flex-1 px-3 py-2.5 text-sm font-medium transition-colors {activeTab ==='variables'
             ? 'text-primary border-b-2 border-primary'
             : 'text-muted-foreground hover:text-foreground'}"
         >
@@ -189,11 +190,19 @@
         </button>
         <button
           onclick={() => (activeTab = 'flow')}
-          class="flex-1 px-4 py-3 text-sm font-medium transition-colors {activeTab === 'flow'
+          class="flex-1 px-3 py-2.5 text-sm font-medium transition-colors {activeTab ==='flow'
             ? 'text-primary border-b-2 border-primary'
             : 'text-muted-foreground hover:text-foreground'}"
         >
           Flow
+        </button>
+        <button
+          onclick={() => (activeTab = 'translate')}
+          class="flex-1 px-3 py-2.5 text-sm font-medium transition-colors {activeTab ==='translate'
+            ? 'text-primary border-b-2 border-primary'
+            : 'text-muted-foreground hover:text-foreground'}"
+        >
+          Translate
         </button>
       </div>
 
@@ -252,6 +261,10 @@
                 <strong>Tip:</strong> Use variables in conditions to create dynamic page flow
               </p>
             </div>
+          </div>
+        {:else if activeTab === 'translate'}
+          <div class="-m-4">
+            <TranslationPanel />
           </div>
         {/if}
       </div>

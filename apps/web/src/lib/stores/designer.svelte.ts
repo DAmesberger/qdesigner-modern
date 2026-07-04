@@ -1,5 +1,13 @@
 import type { Block, FlowControl, Page, Question, Questionnaire, Variable } from '$lib/shared';
 import { defaultTheme, type QuestionnaireTheme } from '$lib/shared';
+import {
+  getTranslations,
+  getBaseLocale,
+  getAvailableLocales,
+  type LocaleCode,
+  type QuestionnaireTranslations,
+  type TranslationPath,
+} from '$lib/shared';
 import { DocumentStore, type DocumentValidationResult } from './designer/DocumentStore';
 import {
   UiStore,
@@ -24,6 +32,75 @@ interface CommitOptions {
 }
 
 const MAX_HISTORY = 100;
+
+/** Plain deep clone of the translation map (strips any $state proxy). */
+function cloneTranslations(
+  source: QuestionnaireTranslations | undefined
+): QuestionnaireTranslations {
+  if (!source) return {};
+  try {
+    return JSON.parse(JSON.stringify(source)) as QuestionnaireTranslations;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Write one translated string into a plain translations map at `path`, pruning
+ * empty leaves so a cleared field never leaves dangling `{}` scaffolding. An
+ * empty (whitespace-only) value clears the entry. The locale bundle itself is
+ * kept even when empty so a just-added language stays visible in the picker.
+ */
+function writeTranslationEntry(
+  translations: QuestionnaireTranslations,
+  locale: LocaleCode,
+  path: TranslationPath,
+  value: string
+): void {
+  const keep = value.trim() !== '';
+  const bundle = translations[locale] ?? (translations[locale] = {});
+
+  switch (path.kind) {
+    case 'question-prompt': {
+      const questions = bundle.questions ?? (bundle.questions = {});
+      const q = questions[path.questionId] ?? (questions[path.questionId] = {});
+      if (keep) q.prompt = value;
+      else delete q.prompt;
+      if (q.prompt === undefined && (!q.options || Object.keys(q.options).length === 0)) {
+        delete questions[path.questionId];
+      }
+      if (Object.keys(questions).length === 0) delete bundle.questions;
+      break;
+    }
+    case 'question-option': {
+      const questions = bundle.questions ?? (bundle.questions = {});
+      const q = questions[path.questionId] ?? (questions[path.questionId] = {});
+      const options = q.options ?? (q.options = {});
+      if (keep) options[path.optionKey] = value;
+      else delete options[path.optionKey];
+      if (Object.keys(options).length === 0) delete q.options;
+      if (q.prompt === undefined && !q.options) delete questions[path.questionId];
+      if (Object.keys(questions).length === 0) delete bundle.questions;
+      break;
+    }
+    case 'page-title': {
+      const pages = bundle.pages ?? (bundle.pages = {});
+      const p = pages[path.pageId] ?? (pages[path.pageId] = {});
+      if (keep) p.title = value;
+      else delete p.title;
+      if (p.title === undefined) delete pages[path.pageId];
+      if (Object.keys(pages).length === 0) delete bundle.pages;
+      break;
+    }
+    case 'chrome': {
+      const chrome = bundle.chrome ?? (bundle.chrome = {});
+      if (keep) chrome[path.slot] = value;
+      else delete chrome[path.slot];
+      if (Object.keys(chrome).length === 0) delete bundle.chrome;
+      break;
+    }
+  }
+}
 
 class DesignerStore {
   private readonly documentStore = new DocumentStore();
@@ -351,6 +428,62 @@ class DesignerStore {
 
     this.updateQuestionnaire({
       settings: { ...this.questionnaire.settings, theme: nextTheme } as Questionnaire['settings'],
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Per-locale content translations (MOD-04, ADR 0022)
+  //
+  // Persisted under settings.translations so edits ride the same settings
+  // round-trip as the theme (collaboration meta + JSONB persistence), needing no
+  // new endpoint and no schema change.
+  // ---------------------------------------------------------------------------
+
+  /** The current per-locale content translation map (empty when none). */
+  get contentTranslations(): QuestionnaireTranslations {
+    return getTranslations(this.questionnaire) ?? {};
+  }
+
+  /** The base authoring locale (from settings.language, default `en`). */
+  get baseLocale(): LocaleCode {
+    return getBaseLocale(this.questionnaire);
+  }
+
+  /** Base locale first, then every locale with a translation bundle. */
+  get translationLocales(): LocaleCode[] {
+    return getAvailableLocales(this.questionnaire);
+  }
+
+  /** Set (or clear, when blank) one translated string and persist. */
+  setTranslation(locale: LocaleCode, path: TranslationPath, value: string) {
+    const code = locale.trim();
+    if (!code || code === this.baseLocale) return;
+    const translations = cloneTranslations(getTranslations(this.questionnaire));
+    writeTranslationEntry(translations, code, path, value);
+    this.persistTranslations(translations);
+  }
+
+  /** Add a translation locale so it becomes available for editing / picking. */
+  addTranslationLocale(locale: LocaleCode, label?: string) {
+    const code = locale.trim();
+    if (!code || code === this.baseLocale) return;
+    const translations = cloneTranslations(getTranslations(this.questionnaire));
+    const bundle = translations[code] ?? (translations[code] = {});
+    if (label && label.trim()) bundle.label = label.trim();
+    this.persistTranslations(translations);
+  }
+
+  /** Remove a translation locale and all its strings. */
+  removeTranslationLocale(locale: LocaleCode) {
+    const translations = cloneTranslations(getTranslations(this.questionnaire));
+    if (!(locale in translations)) return;
+    delete translations[locale];
+    this.persistTranslations(translations);
+  }
+
+  private persistTranslations(translations: QuestionnaireTranslations) {
+    this.updateQuestionnaire({
+      settings: { ...this.questionnaire.settings, translations } as Questionnaire['settings'],
     });
   }
 

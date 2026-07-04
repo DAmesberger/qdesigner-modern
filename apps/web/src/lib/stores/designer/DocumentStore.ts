@@ -145,6 +145,14 @@ export class DocumentStore {
       ...(source?.settings || {}),
     };
 
+    // Per-locale content translations (MOD-04, ADR 0022) live under
+    // settings.translations so they ride the existing settings round-trip
+    // (persistence + collaboration). Migrate a top-level `translations`
+    // (direct API / import authoring) into that canonical location.
+    if (!normalized.settings.translations && source?.translations) {
+      normalized.settings.translations = deepClone(source.translations);
+    }
+
     normalized.variables = Array.isArray(source?.variables) ? deepClone(source.variables) : [];
     normalized.questions = Array.isArray(source?.questions) ? deepClone(source.questions) : [];
     normalized.flow = Array.isArray(source?.flow) ? deepClone(source.flow) : [];
