@@ -562,6 +562,21 @@ class ApiClient {
             path: { id: orgId, user_id: userId },
           })
         ).then(() => undefined),
+      // No generated SDK helper yet (contracts regenerate from the openapi that
+      // now registers this route); call the underlying client directly, matching
+      // the SDK's own `(client).put({ url, path, body })` shape.
+      changeRole: (orgId: string, userId: string, role: string) =>
+        this.callSdk(() =>
+          apiClient.put<{ 200: { message: string } }, unknown, true, 'data'>({
+            security: [{ scheme: 'bearer', type: 'http' }],
+            url: '/api/organizations/{id}/members/{user_id}/role',
+            responseStyle: 'data',
+            throwOnError: true,
+            path: { id: orgId, user_id: userId },
+            body: { role },
+            headers: { 'Content-Type': 'application/json' },
+          })
+        ) as Promise<{ message: string }>,
     },
 
     // Invitations

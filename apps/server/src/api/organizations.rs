@@ -77,6 +77,11 @@ pub struct AddMemberRequest {
     pub role: String,
 }
 
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct ChangeMemberRoleRequest {
+    pub role: String,
+}
+
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct Invitation {
     pub id: Uuid,
@@ -710,6 +715,110 @@ pub async fn remove_member(
         .await?;
 
     Ok(Json(serde_json::json!({ "message": "Member removed" })))
+}
+
+/// PUT /api/organizations/:id/members/:user_id/role
+#[utoipa::path(
+    put,
+    path = "/api/organizations/{id}/members/{user_id}/role",
+    request_body = ChangeMemberRoleRequest,
+    params(
+        ("id" = Uuid, Path, description = "Organization id"),
+        ("user_id" = Uuid, Path, description = "User id whose role is changing")
+    ),
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Member role updated", body = crate::openapi::MessageResponse),
+        (status = 400, description = "Invalid role or last-owner guard tripped", body = crate::openapi::ErrorEnvelope),
+        (status = 403, description = "Access denied", body = crate::openapi::ErrorEnvelope),
+        (status = 404, description = "Member not found", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["organizations"]
+)]
+pub async fn change_member_role(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    tx: Tx,
+    Path((org_id, target_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<ChangeMemberRoleRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut guard = tx.lock().await;
+    let tx = guard
+        .as_mut()
+        .expect("rls_context middleware placed a transaction");
+
+    // Validate the requested role value.
+    if !matches!(body.role.as_str(), "owner" | "admin" | "member" | "viewer") {
+        return Err(ApiError::BadRequest(
+            "Invalid role. Must be one of: owner, admin, member, viewer".into(),
+        ));
+    }
+
+    // Caller must be at least an admin of this org.
+    if !state
+        .rbac
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .await?
+    {
+        return Err(ApiError::Forbidden("Requires admin role".into()));
+    }
+
+    // Look up the target member's current role (must be an active member).
+    let current_role = sqlx::query_scalar::<_, String>(
+        "SELECT role FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active'",
+    )
+    .bind(org_id)
+    .bind(target_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Member not found".into()))?;
+
+    // Only an owner may grant or revoke the owner role.
+    let touches_owner = body.role == "owner" || current_role == "owner";
+    if touches_owner
+        && !state
+            .rbac
+            .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
+            .await?
+    {
+        return Err(ApiError::Forbidden(
+            "Only an owner can grant or revoke the owner role".into(),
+        ));
+    }
+
+    // Prevent demoting the last remaining owner.
+    if current_role == "owner" && body.role != "owner" {
+        let owner_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM organization_members WHERE organization_id = $1 AND role = 'owner' AND status = 'active'",
+        )
+        .bind(org_id)
+        .fetch_one(&mut **tx)
+        .await?;
+
+        if owner_count <= 1 {
+            return Err(ApiError::BadRequest(
+                "Cannot demote the last remaining owner".into(),
+            ));
+        }
+    }
+
+    // No-op fast path: role unchanged.
+    if current_role == body.role {
+        return Ok(Json(serde_json::json!({ "message": "Member role updated" })));
+    }
+
+    sqlx::query(
+        "UPDATE organization_members SET role = $3 WHERE organization_id = $1 AND user_id = $2 AND status = 'active'",
+    )
+    .bind(org_id)
+    .bind(target_id)
+    .bind(&body.role)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(Json(serde_json::json!({ "message": "Member role updated" })))
 }
 
 // ── Invitations ──────────────────────────────────────────────────────
