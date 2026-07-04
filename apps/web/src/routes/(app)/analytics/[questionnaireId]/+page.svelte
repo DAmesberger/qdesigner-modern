@@ -5,6 +5,11 @@
   import { api } from '$lib/services/api';
   import { RealtimeAnalyticsClient } from '$lib/analytics/RealtimeAnalyticsClient.svelte';
   import { ChevronLeft } from 'lucide-svelte';
+  import { buildPsychometrics } from '$lib/analytics/psychometrics';
+  import StatisticsCard from '$lib/analytics/components/StatisticsCard.svelte';
+  import DescriptiveStatsWidget from '$lib/analytics/components/DescriptiveStatsWidget.svelte';
+  import ReliabilityPanel from '$lib/components/analytics/ReliabilityPanel.svelte';
+  import IRTPanel from '$lib/components/analytics/IRTPanel.svelte';
 
   interface Props {
     data: QuestionnaireAnalyticsData;
@@ -40,6 +45,25 @@
 
   // Time-series chart
   let chartMaxY = $derived(Math.max(...timeseries.map(b => b.sessions_started), 1));
+
+  // Psychometrics (reliability / item stats / IRT) derived from raw response rows
+  let psychometrics = $derived(buildPsychometrics(data.exportRows ?? []));
+
+  function alphaColorName(alpha: number): 'green' | 'blue' | 'yellow' | 'red' {
+    if (alpha >= 0.9) return 'green';
+    if (alpha >= 0.8) return 'blue';
+    if (alpha >= 0.7) return 'yellow';
+    return 'red';
+  }
+
+  function alphaLabel(alpha: number): string {
+    if (alpha >= 0.9) return 'Excellent';
+    if (alpha >= 0.8) return 'Good';
+    if (alpha >= 0.7) return 'Acceptable';
+    if (alpha >= 0.6) return 'Questionable';
+    if (alpha >= 0.5) return 'Poor';
+    return 'Unacceptable';
+  }
 
   function chartPath(values: number[], width: number, height: number): string {
     if (values.length < 2) return '';
@@ -428,4 +452,90 @@
       </div>
     </div>
   {/if}
+
+  <!-- Psychometrics -->
+  <div class="space-y-4">
+    <div>
+      <h2 class="text-lg font-semibold text-[hsl(var(--foreground))]">Psychometrics</h2>
+      <p class="text-sm text-[hsl(var(--muted-foreground))]">
+        Reliability, item statistics and item-response modelling for numeric and scale responses.
+      </p>
+    </div>
+
+    {#if psychometrics.descriptives.length === 0}
+      <div class="glass-card p-6 text-sm text-[hsl(var(--muted-foreground))]">
+        {psychometrics.reason ??
+          'No numeric or scale-type responses are available for psychometric analysis yet.'}
+      </div>
+    {:else}
+      <!-- KPI summary cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatisticsCard
+          title="Participants"
+          value={psychometrics.nParticipants}
+          subtitle="complete cases"
+          icon="users"
+          color="blue"
+        />
+        <StatisticsCard
+          title="Scale Items"
+          value={psychometrics.nScaleItems}
+          subtitle="numeric questions"
+          icon="chart-bar"
+          color="indigo"
+        />
+        {#if psychometrics.reliability}
+          <StatisticsCard
+            title="Cronbach's α"
+            value={psychometrics.reliability.cronbachAlpha.toFixed(3)}
+            subtitle={alphaLabel(psychometrics.reliability.cronbachAlpha)}
+            icon="check-circle"
+            color={alphaColorName(psychometrics.reliability.cronbachAlpha)}
+          />
+          <StatisticsCard
+            title="Mean inter-item r"
+            value={psychometrics.reliability.meanInterItemCorrelation.toFixed(3)}
+            subtitle="average correlation"
+            icon="chart-bar"
+            color="gray"
+          />
+        {/if}
+      </div>
+
+      <!-- Reliability panel -->
+      {#if psychometrics.sufficient}
+        <ReliabilityPanel
+          items={psychometrics.participantMatrix}
+          itemNames={psychometrics.itemNames}
+        />
+      {:else}
+        <div class="glass-card p-6 text-sm text-[hsl(var(--muted-foreground))]">
+          {psychometrics.reason ??
+            'Not enough complete data to compute a reliability coefficient.'}
+        </div>
+      {/if}
+
+      <!-- Per-item descriptive statistics -->
+      <div class="glass-card p-6">
+        <h3 class="text-base font-semibold text-[hsl(var(--foreground))] mb-4">
+          Item Descriptive Statistics
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {#each psychometrics.descriptives as item (item.questionId)}
+            <DescriptiveStatsWidget stats={item.stats} label={item.label} />
+          {/each}
+        </div>
+      </div>
+
+      <!-- IRT (gated on dichotomous response data) -->
+      {#if psychometrics.irtItems && psychometrics.irtItems.length > 0}
+        <IRTPanel items={psychometrics.irtItems} />
+      {:else}
+        <div class="glass-card p-6 text-sm text-[hsl(var(--muted-foreground))]">
+          Item-response (IRT) analysis requires dichotomous (0/1) item responses. The current data
+          is not dichotomous, so item-characteristic curves are unavailable.
+        </div>
+      {/if}
+    {/if}
+  </div>
 </div>

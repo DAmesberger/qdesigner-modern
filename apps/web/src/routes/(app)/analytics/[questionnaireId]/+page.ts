@@ -5,6 +5,7 @@ import type {
   QuestionnaireSummary,
   TimeSeriesBucket,
   SessionAggregateData,
+  ExportRow,
 } from '$lib/shared/types/api';
 
 export interface QuestionnaireAnalyticsData {
@@ -12,6 +13,8 @@ export interface QuestionnaireAnalyticsData {
   summary: QuestionnaireSummary | null;
   timeseries: TimeSeriesBucket[];
   aggregate: SessionAggregateData | null;
+  /** Raw per-session/question responses used to derive psychometrics (client-loaded). */
+  exportRows: ExportRow[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- parent layout data shape
@@ -24,6 +27,7 @@ export const load = async ({ params, parent }: { params: { questionnaireId: stri
       summary: null,
       timeseries: [],
       aggregate: null,
+      exportRows: [],
     } satisfies QuestionnaireAnalyticsData;
   }
 
@@ -40,6 +44,7 @@ export const load = async ({ params, parent }: { params: { questionnaireId: stri
   let summary: QuestionnaireSummary | null = null;
   let timeseries: TimeSeriesBucket[] = [];
   let aggregate: SessionAggregateData | null = null;
+  let exportRows: ExportRow[] = [];
 
   try {
     // Load dashboard to find this questionnaire's summary
@@ -51,6 +56,16 @@ export const load = async ({ params, parent }: { params: { questionnaireId: stri
       questionnaireId,
       interval: 'day',
     });
+
+    // Load raw responses for psychometrics (needs the owning project id from summary).
+    if (summary?.project_id) {
+      try {
+        exportRows = await api.questionnaires.export(summary.project_id, questionnaireId, 'json');
+      } catch (exportErr) {
+        // Psychometrics is best-effort; the rest of the page still renders.
+        console.error('Error loading responses for psychometrics:', exportErr);
+      }
+    }
   } catch (err) {
     console.error('Error loading questionnaire analytics:', err);
   }
@@ -60,5 +75,6 @@ export const load = async ({ params, parent }: { params: { questionnaireId: stri
     summary,
     timeseries,
     aggregate,
+    exportRows,
   } satisfies QuestionnaireAnalyticsData;
 };
