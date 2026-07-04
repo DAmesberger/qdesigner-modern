@@ -196,7 +196,7 @@
               {/if}
             </p>
             {#if fullCounterbalancingWarning}
-              <p class="text-xs text-amber-600 mt-1">
+              <p class="text-xs text-warning mt-1">
                 Full counterbalancing with {conditionCount} conditions creates {conditionCount}! = {factorial(conditionCount)} orderings. Consider Latin Square instead.
               </p>
             {/if}

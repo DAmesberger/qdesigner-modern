@@ -155,9 +155,9 @@
   <div class="relative group" data-testid="designer-save-indicator">
     <div
       class="w-2 h-2 rounded-full transition-colors duration-200 {saveStatus === 'saved'
-        ? 'bg-emerald-500'
+        ? 'bg-success'
         : saveStatus === 'unsaved'
-          ? 'bg-amber-500 animate-pulse'
+          ? 'bg-warning animate-pulse'
           : saveStatus === 'saving'
             ? 'bg-primary animate-spin'
             : 'bg-destructive'}"

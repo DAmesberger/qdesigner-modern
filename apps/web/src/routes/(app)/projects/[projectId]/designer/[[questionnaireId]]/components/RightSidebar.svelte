@@ -73,7 +73,7 @@
 <!-- Desktop panel — auto show/hide based on selection -->
 {#if !isMobile && isVisible}
   <aside
-    class="w-72 lg:w-80 flex h-full flex-col bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-lg)] border-l border-[hsl(var(--glass-border))] animate-slide-in-right"
+    class="w-72 lg:w-80 flex h-full flex-col bg-layer-surface shadow-[var(--shadow-lg)] border-l border-[hsl(var(--glass-border))] animate-slide-in-right"
     data-testid="designer-right-sidebar"
   >
     <div class="flex flex-wrap items-center justify-between gap-y-1 px-3 py-2 border-b border-[hsl(var(--glass-border))]">
@@ -174,7 +174,7 @@
 <!-- Mobile drawer -->
 {#if isMobile && designerStore.isRightDrawerOpen}
   <aside
-    class="fixed inset-y-0 right-0 z-40 w-[86vw] max-w-md flex flex-col bg-[hsl(var(--layer-surface))] shadow-[var(--shadow-lg)] animate-slide-in-right"
+    class="fixed inset-y-0 right-0 z-40 w-[86vw] max-w-md flex flex-col bg-layer-surface shadow-[var(--shadow-lg)] animate-slide-in-right"
     data-testid="designer-right-sidebar"
   >
     <div class="flex items-center justify-between px-3 py-2 border-b border-border">

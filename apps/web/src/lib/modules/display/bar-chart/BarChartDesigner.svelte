@@ -274,20 +274,20 @@
                     checked={item.dataSource?.variables?.includes(variable.id)}
                     onchange={() => toggleVariable(variable.id)}
                   />
-                  <span class="flex-1 text-sm font-medium text-[hsl(var(--foreground))]">{variable.name}</span>
+                  <span class="flex-1 text-sm font-medium text-foreground">{variable.name}</span>
                   <span class="variable-type">{variable.type}</span>
                 </label>
               {/each}
             </div>
             {#if availableVariables.length === 0}
-              <p class="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+              <p class="mt-1 text-xs text-muted-foreground">
                 No variables available. Create variables in your questionnaire to display them here.
               </p>
             {/if}
           </div>
 
           <div class="mb-4">
-            <label for="aggregation" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Aggregation</label>
+            <label for="aggregation" class="block mb-1.5 text-sm font-medium text-foreground">Aggregation</label>
             <Select
               id="aggregation"
               value={item.dataSource?.aggregation || 'none'}
@@ -311,7 +311,7 @@
           </div>
 
           <div class="mb-4">
-            <label for="value" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Value Expression</label>
+            <label for="value" class="block mb-1.5 text-sm font-medium text-foreground">Value Expression</label>
             <input
               id="value"
               type="text"
@@ -328,11 +328,11 @@
               placeholder="e.g., variableName or IF(condition, value1, value2)"
               class="input-field"
             />
-            <p class="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Enter a variable name or formula to display</p>
+            <p class="mt-1 text-xs text-muted-foreground">Enter a variable name or formula to display</p>
           </div>
 
           <div class="mb-4">
-            <label for="referenceValue" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Reference Value (Optional)</label>
+            <label for="referenceValue" class="block mb-1.5 text-sm font-medium text-foreground">Reference Value (Optional)</label>
             <input
               id="referenceValue"
               type="text"
@@ -349,7 +349,7 @@
               placeholder="e.g., baseline or 100"
               class="input-field"
             />
-            <p class="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Enter a reference value or variable for comparison</p>
+            <p class="mt-1 text-xs text-muted-foreground">Enter a reference value or variable for comparison</p>
           </div>
         </div>
       {:else if activeTab === 'appearance'}
@@ -358,7 +358,7 @@
           <h4 class="section-title">Chart Appearance</h4>
 
           <div class="mb-4">
-            <label for="orientation" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Orientation</label>
+            <label for="orientation" class="block mb-1.5 text-sm font-medium text-foreground">Orientation</label>
             <div class="flex gap-4">
               <label class="flex items-center gap-2 cursor-pointer">
                 <input
@@ -483,7 +483,7 @@
 
           {#if item.config?.showErrorBars}
             <div class="mb-4 pl-6">
-              <label for="error-type" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Error Type</label>
+              <label for="error-type" class="block mb-1.5 text-sm font-medium text-foreground">Error Type</label>
               <Select
                 id="error-type"
                 value={item.config?.errorType || 'standardError'}
@@ -507,7 +507,7 @@
 
           <div class="grid grid-cols-2 gap-4">
             <div class="mb-4">
-              <label for="bar-width" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Bar Width</label>
+              <label for="bar-width" class="block mb-1.5 text-sm font-medium text-foreground">Bar Width</label>
               <input
                 id="bar-width"
                 type="range"
@@ -527,11 +527,11 @@
                 step="0.1"
                 class="w-full mb-1"
               />
-              <span class="inline-block ml-2 text-sm font-mono text-[hsl(var(--muted-foreground))]">{item?.config?.barWidth || 0.8}</span>
+              <span class="inline-block ml-2 text-sm font-mono text-muted-foreground">{item?.config?.barWidth || 0.8}</span>
             </div>
 
             <div class="mb-4">
-              <label for="bar-spacing" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Bar Spacing</label>
+              <label for="bar-spacing" class="block mb-1.5 text-sm font-medium text-foreground">Bar Spacing</label>
               <input
                 id="bar-spacing"
                 type="range"
@@ -551,12 +551,12 @@
                 step="0.1"
                 class="w-full mb-1"
               />
-              <span class="inline-block ml-2 text-sm font-mono text-[hsl(var(--muted-foreground))]">{item?.config?.barSpacing || 0.2}</span>
+              <span class="inline-block ml-2 text-sm font-mono text-muted-foreground">{item?.config?.barSpacing || 0.2}</span>
             </div>
           </div>
 
           <div class="mb-4">
-            <label for="color-scheme" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Color Scheme</label>
+            <label for="color-scheme" class="block mb-1.5 text-sm font-medium text-foreground">Color Scheme</label>
             <div class="flex flex-col gap-3">
               {#each colorSchemes as scheme}
                 <label class="color-scheme-option">
@@ -579,10 +579,10 @@
                       });
                     }}
                   />
-                  <span class="text-sm font-medium text-[hsl(var(--foreground))] w-24">{scheme.label}</span>
+                  <span class="text-sm font-medium text-foreground w-24">{scheme.label}</span>
                   <div class="flex gap-1 flex-1">
                     {#each scheme.preview as color}
-                      <div class="w-8 h-6 rounded border border-[hsl(var(--border))]" style="background-color: {color}"></div>
+                      <div class="w-8 h-6 rounded border border-border" style="background-color: {color}"></div>
                     {/each}
                   </div>
                 </label>
@@ -596,9 +596,9 @@
             >
             <div class="flex flex-col gap-2">
               {#each item.config?.colors?.customColors || [] as color, index}
-                <div class="flex items-center gap-2 p-2 bg-[hsl(var(--muted))] rounded-md">
-                  <div class="w-8 h-8 rounded border border-[hsl(var(--border))]" style="background-color: {color}"></div>
-                  <span class="flex-1 font-mono text-sm text-[hsl(var(--foreground))]">{color}</span>
+                <div class="flex items-center gap-2 p-2 bg-muted rounded-md">
+                  <div class="w-8 h-8 rounded border border-border" style="background-color: {color}"></div>
+                  <span class="flex-1 font-mono text-sm text-foreground">{color}</span>
                   <div class="flex gap-1">
                     <Button
                       variant="ghost"
@@ -644,10 +644,10 @@
           <h4 class="section-title">Axes Configuration</h4>
 
           <div class="mt-6 pl-2">
-            <h5 class="text-sm font-semibold text-gray-600 mb-3">X-Axis</h5>
+            <h5 class="text-sm font-semibold text-muted-foreground mb-3">X-Axis</h5>
 
             <div class="mb-4">
-              <label for="x-label" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Label</label>
+              <label for="x-label" class="block mb-1.5 text-sm font-medium text-foreground">Label</label>
               <input
                 id="x-label"
                 type="text"
@@ -727,10 +727,10 @@
           </div>
 
           <div class="mt-6 pl-2">
-            <h5 class="text-sm font-semibold text-gray-600 mb-3">Y-Axis</h5>
+            <h5 class="text-sm font-semibold text-muted-foreground mb-3">Y-Axis</h5>
 
             <div class="mb-4">
-              <label for="y-label" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Label</label>
+              <label for="y-label" class="block mb-1.5 text-sm font-medium text-foreground">Label</label>
               <input
                 id="y-label"
                 type="text"
@@ -758,7 +758,7 @@
 
             <div class="grid grid-cols-2 gap-4">
               <div class="mb-4">
-                <label for="y-min" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Minimum</label>
+                <label for="y-min" class="block mb-1.5 text-sm font-medium text-foreground">Minimum</label>
                 <input
                   id="y-min"
                   type="text"
@@ -769,7 +769,7 @@
               </div>
 
               <div class="mb-4">
-                <label for="y-max" class="block mb-1.5 text-sm font-medium text-[hsl(var(--foreground))]">Maximum</label>
+                <label for="y-max" class="block mb-1.5 text-sm font-medium text-foreground">Maximum</label>
                 <input
                   id="y-max"
                   type="text"

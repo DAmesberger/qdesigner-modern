@@ -489,15 +489,15 @@
   <div class="w-full">
     <!-- Error state -->
     {#if phase === 'error'}
-      <div class="flex flex-col items-center gap-3 px-6 py-8 border-2 border-red-300 rounded-xl bg-red-50 text-center">
-        <div class="text-red-600">
+      <div class="flex flex-col items-center gap-3 px-6 py-8 border-2 border-destructive/30 rounded-xl bg-destructive/10 text-center">
+        <div class="text-destructive">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
         </div>
-        <p class="m-0 text-[0.9375rem] text-red-900">{errorMessage}</p>
+        <p class="m-0 text-[0.9375rem] text-destructive">{errorMessage}</p>
         <Button variant="secondary" size="sm" onclick={() => { phase = 'idle'; errorMessage = ''; }}>
           Try Again
         </Button>
@@ -623,7 +623,7 @@
 
     <!-- Recorded / Playback state -->
     {#if phase === 'recorded'}
-      <div class="playback-panel flex flex-col gap-4 border border-border rounded-xl overflow-hidden bg-[hsl(var(--card))]">
+      <div class="playback-panel flex flex-col gap-4 border border-border rounded-xl overflow-hidden bg-card">
         {#if hasVideo}
           <!-- svelte-ignore a11y_media_has_caption -->
           <video
@@ -634,8 +634,8 @@
             playsinline
           ></video>
         {:else}
-          <div class="flex flex-col items-center gap-4 px-6 pt-8 pb-4 bg-[hsl(var(--muted))]">
-            <div class="text-[hsl(var(--muted-foreground))]">
+          <div class="flex flex-col items-center gap-4 px-6 pt-8 pb-4 bg-muted">
+            <div class="text-muted-foreground">
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -659,8 +659,8 @@
         </div>
 
         {#if blobSizeWarning}
-          <div class="flex items-start gap-2 mx-4 px-3.5 py-2.5 bg-[hsl(var(--warning)/0.1)] border border-[hsl(var(--warning)/0.5)] rounded-md text-[0.8125rem] text-[hsl(var(--warning))] leading-relaxed">
-            <svg class="shrink-0 mt-0.5 text-[hsl(var(--warning))]" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <div class="flex items-start gap-2 mx-4 px-3.5 py-2.5 bg-warning/10 border border-warning/50 rounded-md text-[0.8125rem] text-warning leading-relaxed">
+            <svg class="shrink-0 mt-0.5 text-warning" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
               <line x1="12" y1="9" x2="12" y2="13"></line>
               <line x1="12" y1="17" x2="12.01" y2="17"></line>

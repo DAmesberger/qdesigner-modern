@@ -4,7 +4,7 @@
   let { children } = $props();
 </script>
 
-<div class="relative min-h-screen overflow-hidden bg-slate-100 text-foreground dark:bg-slate-950">
+<div class="relative min-h-screen overflow-hidden bg-background text-foreground">
   <div
     class="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.14)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.14)_1px,transparent_1px)] bg-[size:72px_72px] opacity-50 [mask-image:radial-gradient(circle_at_center,black,transparent_76%)]"
   ></div>
@@ -19,7 +19,7 @@
   ></div>
 
   <div
-    class="fixed right-4 top-4 z-20 rounded-full border border-white/70 bg-white/75 p-1 shadow-lg shadow-slate-900/10 backdrop-blur dark:border-white/10 dark:bg-slate-900/70 dark:shadow-black/30"
+    class="fixed right-4 top-4 z-20 rounded-full border border-white/70 bg-card/75 p-1 shadow-lg shadow-slate-900/10 backdrop-blur dark:border-white/10 dark:bg-card/70 dark:shadow-black/30"
   >
     <ThemeToggle />
   </div>

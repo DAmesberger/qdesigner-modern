@@ -355,7 +355,7 @@
                           <div class="w-full h-2 bg-accent rounded-full overflow-hidden">
                             <div
                               class="h-full transition-all duration-300 rounded-full {quota.current >= quota.target
-                                ? 'bg-emerald-500'
+                                ? 'bg-success'
                                 : 'bg-primary'}"
                               style="width: {Math.min(100, (quota.current / quota.target) * 100)}%"
                             ></div>

@@ -506,12 +506,12 @@
             <div class="flex items-center gap-2.5">
               <h2 id="distribution-title" class="text-base font-semibold text-foreground">Share Questionnaire</h2>
               {#if isPublished}
-                <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600">
+                <span class="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
                   <Globe class="w-3 h-3" />
                   Published
                 </span>
               {:else}
-                <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600">
+                <span class="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
                   <Lock class="w-3 h-3" />
                   Draft
                 </span>
@@ -532,7 +532,7 @@
           <div class="px-5 py-4 space-y-5">
             <!-- Publish prompt if draft -->
             {#if !isPublished}
-              <div class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3.5">
+              <div class="rounded-lg border border-warning/20 bg-warning/5 p-3.5">
                 <p class="text-sm text-foreground font-medium mb-1">Questionnaire not published</p>
                 <p class="text-xs text-muted-foreground mb-3">
                   Publish to make it accessible via the share link. Respondents cannot access draft questionnaires.
@@ -565,8 +565,8 @@
                     title="Copy URL"
                   >
                     {#if copiedField === 'url'}
-                      <Check class="w-3.5 h-3.5 text-emerald-500" />
-                      <span class="text-emerald-500">Copied</span>
+                      <Check class="w-3.5 h-3.5 text-success" />
+                      <span class="text-success">Copied</span>
                     {:else}
                       <Copy class="w-3.5 h-3.5" />
                       <span>Copy</span>
@@ -622,8 +622,8 @@
                     title="Copy embed code"
                   >
                     {#if copiedField === 'embed'}
-                      <Check class="w-3 h-3 text-emerald-500" />
-                      <span class="text-emerald-500">Copied</span>
+                      <Check class="w-3 h-3 text-success" />
+                      <span class="text-success">Copied</span>
                     {:else}
                       <Copy class="w-3 h-3" />
                       <span>Copy</span>

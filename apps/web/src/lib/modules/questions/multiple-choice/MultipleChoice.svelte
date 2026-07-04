@@ -375,7 +375,7 @@
         </label>
 
         {#if option.exclusive}
-          <span class="absolute -top-2 right-2 py-0.5 px-2 bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))] text-xs font-medium rounded border border-[hsl(var(--warning)/0.3)]">Exclusive</span>
+          <span class="absolute -top-2 right-2 py-0.5 px-2 bg-warning/15 text-warning text-xs font-medium rounded border border-warning/30">Exclusive</span>
         {/if}
       </div>
     {/each}

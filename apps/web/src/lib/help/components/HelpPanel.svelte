@@ -126,7 +126,7 @@
       <input
         type="text"
         placeholder="Search help..."
-        class="w-full rounded-md border border-border bg-[hsl(var(--layer-surface))] py-1.5 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+        class="w-full rounded-md border border-border bg-layer-surface py-1.5 pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         bind:value={searchQuery}
         data-testid="help-search"
       />
@@ -165,7 +165,7 @@
         {#each filteredTours as tour (tour.id)}
           {@const completed = helpStore.hasTourCompleted(tour.id)}
           <div
-            class="rounded-lg border border-border bg-[hsl(var(--layer-surface))] p-3 transition-colors hover:bg-muted/50"
+            class="rounded-lg border border-border bg-layer-surface p-3 transition-colors hover:bg-muted/50"
             data-testid={`tour-item-${tour.id}`}
           >
             <div class="flex items-start gap-2">
@@ -208,7 +208,7 @@
       <div class="flex flex-col gap-1 p-2">
         <button
           type="button"
-          class="flex items-center gap-3 rounded-lg border border-border bg-[hsl(var(--layer-surface))] p-3 text-left transition-colors hover:bg-muted/50"
+          class="flex items-center gap-3 rounded-lg border border-border bg-layer-surface p-3 text-left transition-colors hover:bg-muted/50"
           onclick={() => (showFormulaRef = true)}
           data-testid="help-formula-ref"
         >
@@ -223,7 +223,7 @@
 
         <button
           type="button"
-          class="flex items-center gap-3 rounded-lg border border-border bg-[hsl(var(--layer-surface))] p-3 text-left transition-colors hover:bg-muted/50"
+          class="flex items-center gap-3 rounded-lg border border-border bg-layer-surface p-3 text-left transition-colors hover:bg-muted/50"
           onclick={() => (showShortcuts = true)}
           data-testid="help-keyboard-shortcuts"
         >
@@ -246,11 +246,11 @@
         {/if}
         {#each filteredTips as tip (tip.key)}
           <details
-            class="group rounded-lg border border-border bg-[hsl(var(--layer-surface))] transition-colors hover:bg-muted/50"
+            class="group rounded-lg border border-border bg-layer-surface transition-colors hover:bg-muted/50"
             data-testid={`tip-${tip.key}`}
           >
             <summary class="flex cursor-pointer items-start gap-2 p-3 [&::-webkit-details-marker]:hidden">
-              <Lightbulb class="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
+              <Lightbulb class="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" />
               <div class="min-w-0 flex-1">
                 <h3 class="text-sm font-medium text-foreground">{tip.title}</h3>
                 <span class="mt-0.5 inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">

@@ -24,7 +24,7 @@
 	}
 </script>
 
-<div class="w-72 rounded-xl bg-[hsl(var(--layer-surface))] border border-[hsl(var(--glass-border))] shadow-xl">
+<div class="w-72 rounded-xl bg-layer-surface border border-[hsl(var(--glass-border))] shadow-xl">
 	<!-- Header -->
 	<div class="flex items-start justify-between p-4 pb-2">
 		<h3 class="text-sm font-semibold text-foreground pr-4">{step.title}</h3>
