@@ -104,10 +104,12 @@ pub struct InteractionEventRecord {
 
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct SessionVariableRecord {
-    pub id: Uuid,
+    // session_variables has a composite primary key (session_id, variable_name)
+    // and NO surrogate `id` column — the row is keyed by these two fields.
     pub session_id: Uuid,
     pub variable_name: String,
     pub variable_value: Option<serde_json::Value>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -782,7 +784,7 @@ pub async fn dashboard_summary(
                 CASE WHEN s.completed_at IS NOT NULL AND s.started_at IS NOT NULL
                      THEN EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) * 1000.0
                 END
-            ) AS avg_completion_time_ms
+            )::float8 AS avg_completion_time_ms
         FROM questionnaire_definitions q
         JOIN projects p ON p.id = q.project_id
         LEFT JOIN sessions s ON s.questionnaire_id = q.id
@@ -986,7 +988,7 @@ pub async fn cross_project_analytics(
                     CASE WHEN s.completed_at IS NOT NULL AND s.started_at IS NOT NULL
                          THEN EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) * 1000.0
                     END
-                ) AS avg_completion_time_ms
+                )::float8 AS avg_completion_time_ms
             FROM questionnaire_definitions q
             LEFT JOIN sessions s ON s.questionnaire_id = q.id
             LEFT JOIN responses r ON r.session_id = s.id
@@ -1006,7 +1008,7 @@ pub async fn cross_project_analytics(
         // Gather timing values
         let timing_rows = sqlx::query_scalar::<_, f64>(
             r#"
-            SELECT EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) * 1000.0
+            SELECT (EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) * 1000.0)::float8
             FROM sessions s
             WHERE s.questionnaire_id = $1
               AND s.completed_at IS NOT NULL
@@ -1307,7 +1309,7 @@ pub async fn get_variables(
 
     let variables = sqlx::query_as::<_, SessionVariableRecord>(
         r#"
-        SELECT id, session_id, variable_name, variable_value, updated_at
+        SELECT session_id, variable_name, variable_value, created_at, updated_at
         FROM session_variables
         WHERE session_id = $1
         ORDER BY variable_name ASC
@@ -2088,7 +2090,7 @@ async fn refresh_session_variable_projection(
     let context = fetch_session_variable_context(&mut *conn, session_id).await?;
     let rows = sqlx::query_as::<_, SessionVariableRecord>(
         r#"
-        SELECT id, session_id, variable_name, variable_value, updated_at
+        SELECT session_id, variable_name, variable_value, created_at, updated_at
         FROM session_variables
         WHERE session_id = $1
         ORDER BY variable_name ASC
@@ -3342,7 +3344,7 @@ pub async fn timeseries(
                 CASE WHEN s.completed_at IS NOT NULL AND s.started_at IS NOT NULL
                      THEN EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) * 1000.0
                 END
-            ) AS avg_completion_ms
+            )::float8 AS avg_completion_ms
         FROM sessions s
         WHERE s.questionnaire_id = $1
           AND s.started_at IS NOT NULL
