@@ -52,6 +52,75 @@ pub struct MediaUploadRequest {
     pub file: String,
 }
 
+// ── Upload validation ────────────────────────────────────────────────
+
+/// Maximum accepted upload size (bytes). Kept just under the per-route
+/// `DefaultBodyLimit` so the body layer rejects gross oversends before we
+/// buffer, and this check catches anything that slips through.
+pub const MAX_UPLOAD_BYTES: usize = 25 * 1024 * 1024; // 25 MiB
+
+/// Validate an uploaded blob before it reaches S3.
+///
+/// Enforces (in order): a hard size cap; a magic-byte sniff via `infer`;
+/// membership of the sniffed type in the image/audio/video allowlist; and
+/// consistency between the sniffed type and the client-declared
+/// `content_type`. Returns the canonical `(mime, extension)` derived from
+/// the sniffed bytes — never from the untrusted filename or declared header.
+///
+/// This is the ONLY content gate on the anonymous `upload_session_media`
+/// path (no JWT), so it must be self-contained.
+pub fn validate_upload(
+    bytes: &[u8],
+    declared_content_type: &str,
+) -> Result<(String, String), ApiError> {
+    if bytes.is_empty() {
+        return Err(ApiError::BadRequest("Uploaded file is empty".into()));
+    }
+    if bytes.len() > MAX_UPLOAD_BYTES {
+        return Err(ApiError::BadRequest(format!(
+            "File too large: {} bytes exceeds the {} byte limit",
+            bytes.len(),
+            MAX_UPLOAD_BYTES
+        )));
+    }
+
+    let kind = infer::get(bytes)
+        .ok_or_else(|| ApiError::BadRequest("Unrecognized file type".into()))?;
+
+    let sniffed_mime = kind.mime_type();
+    let matcher = kind.matcher_type();
+    let is_allowed = matches!(
+        matcher,
+        infer::MatcherType::Image | infer::MatcherType::Audio | infer::MatcherType::Video
+    );
+    if !is_allowed {
+        return Err(ApiError::BadRequest(format!(
+            "File type not allowed: {sniffed_mime}"
+        )));
+    }
+
+    // The declared header must agree with the sniffed content. Compare on the
+    // essence (ignore parameters like "; charset=") and accept the common
+    // `application/octet-stream` default as "unspecified" only when it is the
+    // literal generic value — a mismatched concrete type is rejected.
+    let declared_essence = declared_content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    let declared_ok = declared_essence == sniffed_mime
+        || declared_essence == "application/octet-stream"
+        || declared_essence.is_empty();
+    if !declared_ok {
+        return Err(ApiError::BadRequest(format!(
+            "Declared content type '{declared_essence}' does not match sniffed type '{sniffed_mime}'"
+        )));
+    }
+
+    Ok((sniffed_mime.to_string(), kind.extension().to_string()))
+}
+
 // ── Handlers ─────────────────────────────────────────────────────────
 
 /// GET /api/media
@@ -179,6 +248,11 @@ pub async fn upload_media(
         .ok_or_else(|| ApiError::BadRequest("organization_id is required".into()))?;
     let (filename, bytes, content_type) =
         file_data.ok_or_else(|| ApiError::BadRequest("file is required".into()))?;
+
+    // Same content gate as the anonymous path: size cap + magic-byte
+    // allowlist. Use the canonical sniffed mime for storage/DB.
+    let (canonical_mime, _ext) = validate_upload(&bytes, &content_type)?;
+    let content_type = canonical_mime;
 
     let mut guard = tx.lock().await;
     let tx = guard
@@ -566,12 +640,19 @@ pub async fn upload_session_media(
     let (filename, bytes, content_type) =
         file_data.ok_or_else(|| ApiError::BadRequest("file is required".into()))?;
 
+    // Content gate: size cap + magic-byte allowlist. This is the only
+    // validation on the anonymous path, so it runs before we touch S3. The
+    // returned mime/ext come from the sniffed bytes, never the client input.
+    let (canonical_mime, ext) = validate_upload(&bytes, &content_type)?;
+
     let size_bytes = bytes.len() as i64;
     let file_id = Uuid::new_v4();
-    let s3_key = format!("sessions/{session_id}/media/{file_id}_{filename}");
+    // Drop the untrusted client filename from the S3 key entirely; it is kept
+    // only in the DB `filename` column for display.
+    let s3_key = format!("sessions/{session_id}/media/{file_id}.{ext}");
 
     // Upload to S3
-    state.storage.upload(&s3_key, bytes, &content_type).await?;
+    state.storage.upload(&s3_key, bytes, &canonical_mime).await?;
 
     // Store metadata in DB
     let asset = sqlx::query_as::<_, SessionMediaAsset>(
@@ -584,7 +665,7 @@ pub async fn upload_session_media(
     .bind(session_id)
     .bind(&filename)
     .bind(&s3_key)
-    .bind(&content_type)
+    .bind(&canonical_mime)
     .bind(size_bytes)
     .fetch_one(&state.pool)
     .await?;
@@ -598,4 +679,89 @@ pub async fn upload_session_media(
         axum::http::StatusCode::CREATED,
         Json(SessionMediaWithUrl { asset, url }),
     ))
+}
+
+#[cfg(test)]
+mod validate_upload_tests {
+    use super::*;
+
+    // 8-byte PNG signature followed by a minimal IHDR chunk header so the
+    // sniffer has enough to work with.
+    fn png_bytes() -> Vec<u8> {
+        let mut b = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        b.extend_from_slice(&[0x00, 0x00, 0x00, 0x0D, b'I', b'H', b'D', b'R']);
+        b.extend_from_slice(&[0u8; 32]);
+        b
+    }
+
+    // MP3 with an ID3v2 tag header — infer recognizes this as audio/mpeg.
+    fn mp3_bytes() -> Vec<u8> {
+        let mut b = vec![b'I', b'D', b'3', 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        b.extend_from_slice(&[0u8; 32]);
+        b
+    }
+
+    #[test]
+    fn accepts_real_png_with_matching_declared_type() {
+        let (mime, ext) = validate_upload(&png_bytes(), "image/png").expect("png should pass");
+        assert_eq!(mime, "image/png");
+        assert_eq!(ext, "png");
+    }
+
+    #[test]
+    fn accepts_png_with_generic_octet_stream_declared() {
+        let (mime, ext) =
+            validate_upload(&png_bytes(), "application/octet-stream").expect("png should pass");
+        assert_eq!(mime, "image/png");
+        assert_eq!(ext, "png");
+    }
+
+    #[test]
+    fn accepts_real_mp3() {
+        let (mime, ext) = validate_upload(&mp3_bytes(), "audio/mpeg").expect("mp3 should pass");
+        assert_eq!(mime, "audio/mpeg");
+        assert_eq!(ext, "mp3");
+    }
+
+    #[test]
+    fn rejects_text_renamed_as_png() {
+        // Plain text has no magic signature — the sniffer returns None even
+        // though the client called it a .png / image/png.
+        let err = validate_upload(b"just some plain text, not an image", "image/png")
+            .expect_err("text must be rejected");
+        assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_declared_type_mismatch() {
+        // Real PNG bytes but the client lies about the type.
+        let err = validate_upload(&png_bytes(), "audio/mpeg")
+            .expect_err("declared/sniffed mismatch must be rejected");
+        assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_disallowed_type() {
+        // A PDF sniffs as application/pdf — not in the image/audio/video
+        // allowlist.
+        let pdf = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
+        let err = validate_upload(pdf, "application/pdf")
+            .expect_err("pdf must be rejected");
+        assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_oversize() {
+        let mut big = png_bytes();
+        big.resize(MAX_UPLOAD_BYTES + 1, 0);
+        let err =
+            validate_upload(&big, "image/png").expect_err("oversize must be rejected");
+        assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_empty() {
+        let err = validate_upload(&[], "image/png").expect_err("empty must be rejected");
+        assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
+    }
 }

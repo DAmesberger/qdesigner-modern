@@ -1,4 +1,5 @@
 use axum::{
+    extract::DefaultBodyLimit,
     middleware as axum_mw,
     routing::{delete, get, patch, post, put},
     Router,
@@ -219,7 +220,15 @@ pub fn router(state: AppState) -> Router {
             "/{id}/variables",
             get(sessions::get_variables).post(sessions::upsert_variable),
         )
-        .route("/{id}/media", post(media::upload_session_media))
+        .route(
+            "/{id}/media",
+            post(media::upload_session_media)
+                // Bound the multipart body before `field.bytes()` buffers it.
+                // Sits just above the 25 MiB `validate_upload` cap so the
+                // transport layer rejects gross oversends early. Overrides
+                // axum's implicit 2 MiB default for this route only.
+                .layer(DefaultBodyLimit::max(26 * 1024 * 1024)),
+        )
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(
             state.clone(),
