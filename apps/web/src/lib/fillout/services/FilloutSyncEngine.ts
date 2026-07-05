@@ -2,7 +2,7 @@ import { browser } from '$app/environment';
 import { api } from '$lib/services/api';
 import { OfflineSessionService } from './OfflineSessionService';
 import { OfflineResponsePersistence, type StoredFilloutResponse } from './OfflineResponsePersistence';
-import type { FilloutSession } from '$lib/services/db/indexeddb';
+import { db, type FilloutSession } from '$lib/services/db/indexeddb';
 
 export interface SyncResult {
 	sessionsSynced: number;
@@ -238,6 +238,16 @@ export class FilloutSyncEngine {
 
 		// Mark session as synced if all data is sent
 		await OfflineSessionService.markSynced(session.id);
+
+		// Purge the now-synced participant data from IndexedDB (F005): once the
+		// server holds it, sensitive response/event/variable data must not linger
+		// on the device. GATED on a COMPLETED session — an in-progress/resumable
+		// session keeps its synced responses locally so resume/carry-forward can
+		// rehydrate prior answers. purgeSyncedSessionData deletes only synced===1
+		// rows, so anything that arrived after this drain (still unsynced) is safe.
+		if (session.status === 'completed') {
+			await db.purgeSyncedSessionData(session.id);
+		}
 
 		return {
 			responsesSynced: result.responses_synced ?? 0,

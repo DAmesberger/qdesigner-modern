@@ -25,6 +25,7 @@
   import { QuotaService } from '$lib/fillout/services/QuotaService';
   import { FraudDetectionService } from '$lib/fillout/services/FraudDetectionService';
   import { api } from '$lib/services/api';
+  import { db } from '$lib/services/db/indexeddb';
   import { ensureModulesRegistered } from '$lib/modules/register-all';
   import { TimingGatekeeper } from '$lib/runtime/timing';
   import type { GatekeeperResult } from '$lib/runtime/timing';
@@ -574,6 +575,53 @@
     // renderer is lazily created — form-only questionnaires never allocate one.
     runtime?.resize(window.innerWidth, window.innerHeight);
   }
+
+  // --- Shared-device "End session / clear this device" (F005) ---------------
+  // On a shared/kiosk device the completed participant must be able to wipe all
+  // fillout data from IndexedDB so the next person can't read it. We probe for
+  // still-unsynced rows first: if any exist, clearing them is unrecoverable data
+  // loss, so the action requires an explicit confirmation showing the warning.
+  let clearConfirmOpen = $state(false);
+  let clearUnsyncedCount = $state(0);
+  let clearing = $state(false);
+  let clearDone = $state(false);
+
+  async function countUnsyncedFilloutRows(): Promise<number> {
+    try {
+      const [r, e, v] = await Promise.all([
+        db.filloutResponses.where('synced').equals(0).count(),
+        db.filloutEvents.where('synced').equals(0).count(),
+        db.filloutVariables.where('synced').equals(0).count(),
+      ]);
+      return r + e + v;
+    } catch {
+      return 0;
+    }
+  }
+
+  async function requestClearDevice() {
+    clearUnsyncedCount = await countUnsyncedFilloutRows();
+    clearConfirmOpen = true;
+  }
+
+  async function confirmClearDevice() {
+    clearing = true;
+    try {
+      await db.clearAllFilloutData();
+      // Drop the API session pointer so a stale id can't be reused on this device.
+      try { sessionStorage.removeItem('qd_api_session_id'); } catch { /* no-op */ }
+      clearDone = true;
+      clearConfirmOpen = false;
+    } catch (err) {
+      console.error('Failed to clear device data:', err);
+    } finally {
+      clearing = false;
+    }
+  }
+
+  function cancelClearDevice() {
+    clearConfirmOpen = false;
+  }
 </script>
 
 <svelte:window on:keydown={handleKeyDown} on:resize={handleResize} />
@@ -726,6 +774,60 @@
       showStatistics={true}
       onClose={() => goto('/')}
     />
+
+    <!-- Shared-device data hygiene (F005): let the participant wipe every
+         fillout record from this browser before handing it back. -->
+    <div class="shared-device-panel" data-testid="fillout-clear-device">
+      {#if clearDone}
+        <p class="shared-device-done" data-testid="fillout-clear-device-done">
+          This device has been cleared. It is safe to hand back.
+        </p>
+      {:else if clearConfirmOpen}
+        <div class="shared-device-confirm" data-testid="fillout-clear-device-confirm">
+          {#if clearUnsyncedCount > 0}
+            <p class="shared-device-warning" data-testid="fillout-clear-device-warning">
+              Warning: {clearUnsyncedCount} response{clearUnsyncedCount === 1 ? '' : 's'} on this
+              device {clearUnsyncedCount === 1 ? 'has' : 'have'} not been sent to the server yet.
+              Clearing now will permanently discard {clearUnsyncedCount === 1 ? 'it' : 'them'}.
+            </p>
+          {:else}
+            <p class="shared-device-note">
+              All data on this device has been sent to the server. Clear it to remove your
+              answers from this browser?
+            </p>
+          {/if}
+          <div class="shared-device-actions">
+            <button
+              type="button"
+              class="shared-device-btn danger"
+              data-testid="fillout-clear-device-confirm-btn"
+              disabled={clearing}
+              onclick={confirmClearDevice}
+            >
+              {clearing ? 'Clearing…' : 'Clear this device'}
+            </button>
+            <button
+              type="button"
+              class="shared-device-btn"
+              data-testid="fillout-clear-device-cancel-btn"
+              disabled={clearing}
+              onclick={cancelClearDevice}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      {:else}
+        <button
+          type="button"
+          class="shared-device-btn"
+          data-testid="fillout-clear-device-btn"
+          onclick={requestClearDevice}
+        >
+          End session / clear this device
+        </button>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -902,6 +1004,81 @@
   .form-continue:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .shared-device-panel {
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    width: min(560px, calc(100vw - 1.5rem));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    text-align: center;
+  }
+
+  .shared-device-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
+    border-radius: 0.5rem;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 6px 24px rgb(0 0 0 / 0.12);
+  }
+
+  .shared-device-warning {
+    color: hsl(var(--destructive));
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .shared-device-note {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .shared-device-done {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+  }
+
+  .shared-device-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .shared-device-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  .shared-device-btn:hover {
+    opacity: 0.85;
+  }
+
+  .shared-device-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .shared-device-btn.danger {
+    background: hsl(var(--destructive));
+    color: hsl(var(--destructive-foreground));
+    border-color: hsl(var(--destructive));
   }
 
   :global(.dark) .status-badge.offline {

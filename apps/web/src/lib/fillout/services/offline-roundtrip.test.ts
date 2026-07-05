@@ -266,11 +266,18 @@ describe('offline completion round-trip: reconciles exactly once on reconnect', 
 		expect(firstResult.variablesSynced).toBe(2);
 		expect(firstResult.errors).toEqual([]);
 
-		// Every queued record is now flagged synced, and so is the session row.
+		// F005: this session was COMPLETED before its final sync, so after the
+		// server ack its now-synced participant data is PURGED from IndexedDB —
+		// no sensitive response/event/variable data lingers on the device, and
+		// the session row itself (synced===1) is removed too. Nothing unsynced
+		// remains anywhere either.
+		expect(await db.filloutResponses.where('sessionId').equals(session.id).count()).toBe(0);
+		expect(await db.filloutEvents.where('sessionId').equals(session.id).count()).toBe(0);
+		expect(await db.filloutVariables.where('sessionId').equals(session.id).count()).toBe(0);
 		expect(await db.filloutResponses.where('synced').equals(0).count()).toBe(0);
 		expect(await db.filloutEvents.where('synced').equals(0).count()).toBe(0);
 		expect(await db.filloutVariables.where('synced').equals(0).count()).toBe(0);
-		expect((await OfflineSessionService.getSession(session.id))?.synced).toBe(1);
+		expect(await OfflineSessionService.getSession(session.id)).toBeUndefined();
 
 		// Idempotency contract: every response carried a distinct client_id.
 		const firstIds = payload.responses.map((r) => r.client_id);

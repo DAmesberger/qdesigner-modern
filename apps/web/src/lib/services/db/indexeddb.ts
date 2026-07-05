@@ -434,17 +434,93 @@ class QDesignerDatabase extends Dexie {
   }
 
   async clearAllData(): Promise<void> {
-    await this.transaction('rw', 
-      this.questionnaires, 
-      this.syncQueue, 
-      this.resources, 
-      this.drafts, 
+    await this.transaction('rw',
+      this.questionnaires,
+      this.syncQueue,
+      this.resources,
+      this.drafts,
       async () => {
         await Promise.all([
           this.questionnaires.clear(),
           this.syncQueue.clear(),
           this.resources.clear(),
           this.drafts.clear()
+        ]);
+      }
+    );
+  }
+
+  /**
+   * Purge SYNCED participant data (responses, events, variables, and the
+   * session row itself) for one session from IndexedDB after a successful
+   * final sync (F005 — sensitive fillout data must not linger on the device
+   * once the server holds it).
+   *
+   * Safety contract:
+   *  - Deletes ONLY rows with `synced === 1`. Any record still awaiting sync
+   *    (offline queue) survives, so this can never drop unsynced participant
+   *    data. Callers MUST invoke this strictly AFTER the sync ack + markSynced.
+   *  - The `filloutSessions` row is removed only when its own `synced === 1`;
+   *    if any child record failed to sync (still 0) the session row would have
+   *    been re-armed, so it stays.
+   *  - Uses the `[sessionId+synced]` compound index for responses/events; the
+   *    `filloutVariables` table has no compound index, so it filters on `synced`.
+   */
+  async purgeSyncedSessionData(sessionId: string): Promise<void> {
+    await this.transaction('rw',
+      this.filloutSessions,
+      this.filloutResponses,
+      this.filloutEvents,
+      this.filloutVariables,
+      async () => {
+        await this.filloutResponses
+          .where('[sessionId+synced]')
+          .equals([sessionId, 1])
+          .delete();
+        await this.filloutEvents
+          .where('[sessionId+synced]')
+          .equals([sessionId, 1])
+          .delete();
+        await this.filloutVariables
+          .where('sessionId')
+          .equals(sessionId)
+          .filter((v) => v.synced === 1)
+          .delete();
+
+        const sessionRow = await this.filloutSessions.get(sessionId);
+        if (sessionRow && sessionRow.synced === 1) {
+          await this.filloutSessions.delete(sessionId);
+        }
+      }
+    );
+  }
+
+  /**
+   * Wipe ALL fillout participant data from this device — the shared-device
+   * "End session / clear this device" action (F005). Clears sessions,
+   * responses, events, and variables regardless of `synced` flag, so the
+   * caller MUST warn about (and confirm past) any unsynced records first;
+   * losing an unsynced record here is intentional user-driven data loss.
+   *
+   * The cached questionnaire DEFINITIONS (`filloutQuestionnaires`) and media
+   * accounting (`filloutMedia`) are intentionally left: they hold only public,
+   * non-participant content (the survey itself), are keyed by public access
+   * code, and re-download on next use. Clearing them here would evict another
+   * participant's in-flight definition pin without cleaning the paired Cache-API
+   * store, so definition/media GC stays owned by FilloutOfflineSyncService.
+   */
+  async clearAllFilloutData(): Promise<void> {
+    await this.transaction('rw',
+      this.filloutSessions,
+      this.filloutResponses,
+      this.filloutEvents,
+      this.filloutVariables,
+      async () => {
+        await Promise.all([
+          this.filloutSessions.clear(),
+          this.filloutResponses.clear(),
+          this.filloutEvents.clear(),
+          this.filloutVariables.clear()
         ]);
       }
     );
