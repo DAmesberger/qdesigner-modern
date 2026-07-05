@@ -173,6 +173,7 @@ pub fn router(state: AppState) -> Router {
         .route("/{id}/versions", get(questionnaires::list_versions))
         .route("/{id}/condition-counts", get(sessions::condition_counts))
         .route("/{id}/quota-status", get(sessions::quota_status))
+        .route("/{id}/cohort-stats", get(sessions::public_cohort_stats))
         .route(
             "/{id}/comments",
             get(comments::list_comments).post(comments::create_comment),

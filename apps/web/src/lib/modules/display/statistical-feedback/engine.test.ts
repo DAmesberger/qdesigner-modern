@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   defaultStatisticalFeedbackConfig,
   normalizeStatisticalFeedbackConfig,
@@ -101,7 +101,7 @@ describe('statistical feedback engine', () => {
     ]);
   });
 
-  it('uses analytics API for cohort mode', async () => {
+  it('uses the authenticated analytics API for cohort mode in the designer (edit)', async () => {
     const aggregateSpy = vi.spyOn(sessionAnalyticsService, 'aggregate').mockResolvedValueOnce({
       questionnaireId: 'q1',
       source: 'variable',
@@ -135,10 +135,135 @@ describe('statistical feedback engine', () => {
           key: 'score',
         },
       },
-      {}
+      {},
+      'edit'
     );
 
     expect(aggregateSpy).toHaveBeenCalledTimes(1);
     expect(series.points[0]).toEqual({ label: 'Cohort', value: 75 });
+  });
+
+  describe('F060 anonymous-safe cohort path (runtime)', () => {
+    const cohortStatsPayload = {
+      questionnaire_id: 'q1',
+      source: 'variable',
+      key: 'score',
+      participant_count: 6,
+      stats: {
+        sample_count: 6,
+        mean: 35,
+        median: 35,
+        std_dev: 10,
+        min: 10,
+        max: 60,
+        p90: 55,
+        p95: 58,
+        p99: 60,
+      },
+    };
+
+    function mockCohortFetch() {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => cohortStatsPayload,
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it('cohort mode hits the public endpoint with NO Authorization header', async () => {
+      const fetchMock = mockCohortFetch();
+      const aggregateSpy = vi.spyOn(sessionAnalyticsService, 'aggregate');
+
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'cohort',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            questionnaireId: 'q1',
+            key: 'score',
+          },
+        },
+        {},
+        'runtime'
+      );
+
+      // Public endpoint, not the authenticated aggregate service.
+      expect(aggregateSpy).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const call = fetchMock.mock.calls[0] ?? [];
+      const url = call[0];
+      const init = call[1] as RequestInit | undefined;
+      expect(String(url)).toContain('/api/questionnaires/q1/cohort-stats');
+      expect(String(url)).toContain('key=score');
+      // No init (or no headers) means no Authorization header is sent.
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers.Authorization ?? headers.authorization).toBeUndefined();
+      expect(series.mode).toBe('cohort');
+      expect(series.points[0]).toEqual({ label: 'Cohort', value: 35 });
+    });
+
+    it('participant-vs-cohort builds the participant point from LOCAL variables + public cohort', async () => {
+      const fetchMock = mockCohortFetch();
+
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'participant-vs-cohort',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            questionnaireId: 'q1',
+            key: 'score',
+            currentVariable: 'score',
+          },
+        },
+        { score: 45 },
+        'runtime'
+      );
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(series.mode).toBe('participant-vs-cohort');
+      // Participant point is the participant's own local score (45), NOT a
+      // server read-back; Cohort is the public mean (35).
+      expect(series.points).toEqual([
+        { label: 'Participant', value: 45 },
+        { label: 'Cohort', value: 35 },
+      ]);
+      // zScore = (45 - 35) / 10 = 1.
+      expect(series.summary?.zScore).toBe(1);
+    });
+
+    it('participant-vs-participant is refused at runtime with the researcher-only message', async () => {
+      const compareSpy = vi.spyOn(sessionAnalyticsService, 'compare');
+
+      await expect(
+        resolveStatisticalFeedbackSeries(
+          {
+            ...defaultStatisticalFeedbackConfig,
+            sourceMode: 'participant-vs-participant',
+            metric: 'mean',
+            dataSource: {
+              ...defaultStatisticalFeedbackConfig.dataSource,
+              questionnaireId: 'q1',
+              key: 'score',
+              participantId: 'a',
+              comparisonParticipantId: 'b',
+            },
+          },
+          {},
+          'runtime'
+        )
+      ).rejects.toThrow(/signed-in researcher/i);
+
+      expect(compareSpy).not.toHaveBeenCalled();
+    });
   });
 });

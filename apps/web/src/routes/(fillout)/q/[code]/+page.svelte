@@ -330,6 +330,42 @@
         }
       }
 
+      // Quota gate — runs BEFORE session creation so an over-quota respondent
+      // never leaves an orphan session, and so the (un)verified state can be
+      // recorded into the create metadata. Evaluated even offline: checkQuotas
+      // falls back to the last cached snapshot (dropping the old `navigator.onLine`
+      // gate). When neither live nor cached data exists it returns `unchecked`,
+      // and we record `quotaUnchecked` on the session instead of silently allowing.
+      let quotaUnchecked = false;
+      const quotaGroups = data.questionnaire.definition?.settings?.quotas;
+      if (quotaGroups && quotaGroups.length > 0) {
+        const urlParams = new Map(Object.entries(data.urlParams ?? {}));
+        let quotaResult = await QuotaService.checkQuotas(
+          data.questionnaire.id,
+          quotaGroups,
+          urlParams
+        );
+        // A swallowed fetch failure surfaces as `unchecked`; while online, retry once.
+        if (quotaResult.unchecked && navigator.onLine) {
+          quotaResult = await QuotaService.checkQuotas(
+            data.questionnaire.id,
+            quotaGroups,
+            urlParams
+          );
+        }
+        if (!quotaResult.allowed) {
+          if (quotaResult.action === 'redirect' && quotaResult.redirectUrl) {
+            window.location.href = quotaResult.redirectUrl;
+            return;
+          }
+          overQuotaMessage = quotaResult.message || 'This study has reached its target number of participants.';
+          currentScreen = 'over-quota';
+          loading = false;
+          return;
+        }
+        quotaUnchecked = quotaResult.unchecked === true;
+      }
+
       if (navigator.onLine) {
         if (data.existingSession) {
           // Resume the in-flight server session addressed by ?sid= (already non-completed).
@@ -349,6 +385,9 @@
           }
           if (fraudFingerprint) {
             metadata.fingerprint = fraudFingerprint;
+          }
+          if (quotaUnchecked) {
+            metadata.quotaUnchecked = true;
           }
 
           const created = await api.sessions.create({
@@ -394,13 +433,20 @@
         }
       } else {
         // Offline: create session locally, pinning the version it started against.
+        const offlineMetadata: Record<string, unknown> = {};
+        if (consentData) {
+          offlineMetadata.consent = { ...consentData, timestamp: new Date().toISOString() };
+        }
+        if (quotaUnchecked) {
+          offlineMetadata.quotaUnchecked = true;
+        }
         const offlineSession = await OfflineSessionService.createSession(
           data.questionnaire.id,
           data.questionnaire.versionMajor ?? 1,
           data.questionnaire.versionMinor ?? 0,
           data.questionnaire.versionPatch ?? 0,
           data.participantId || undefined,
-          consentData ? { consent: { ...consentData, timestamp: new Date().toISOString() } } : undefined,
+          Object.keys(offlineMetadata).length > 0 ? offlineMetadata : undefined,
           OfflineSessionService.getDeviceInfo(),
         );
         session = {
@@ -411,31 +457,6 @@
       }
 
       sessionStorage.setItem('qd_api_session_id', session.id);
-
-      // Check quotas before starting runtime (online only)
-      const quotaGroups = data.questionnaire.definition?.settings?.quotas;
-      if (navigator.onLine && quotaGroups && quotaGroups.length > 0) {
-        try {
-          const urlParams = new Map(Object.entries(data.urlParams ?? {}));
-          const quotaResult = await QuotaService.checkQuotas(
-            data.questionnaire.id,
-            quotaGroups,
-            urlParams
-          );
-          if (!quotaResult.allowed) {
-            if (quotaResult.action === 'redirect' && quotaResult.redirectUrl) {
-              window.location.href = quotaResult.redirectUrl;
-              return;
-            }
-            overQuotaMessage = quotaResult.message || 'This study has reached its target number of participants.';
-            currentScreen = 'over-quota';
-            loading = false;
-            return;
-          }
-        } catch {
-          // Non-critical: allow participation if quota check fails
-        }
-      }
 
       currentScreen = 'runtime';
       loading = false;

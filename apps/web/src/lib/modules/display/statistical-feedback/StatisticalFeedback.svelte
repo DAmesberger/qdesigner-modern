@@ -47,7 +47,7 @@
     loadError = null;
 
     try {
-      series = await resolveStatisticalFeedbackSeries(config, variables);
+      series = await resolveStatisticalFeedbackSeries(config, variables, mode);
     } catch (error) {
       loadError =
         error instanceof Error ? error.message : 'Unable to load statistical feedback data';

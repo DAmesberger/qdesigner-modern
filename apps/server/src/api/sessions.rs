@@ -2632,6 +2632,117 @@ pub struct QuotaStatusResponse {
     pub total_completed: i64,
 }
 
+/// A parsed quota `condition`. Kept in lockstep with the client parser
+/// `QuotaService.evaluateQuotaCondition` so a cell the client believes is
+/// full is counted identically by the server.
+#[derive(Debug, PartialEq)]
+enum QuotaCond {
+    /// Empty / `true` / `1` — matches every completed session (catch-all).
+    All,
+    /// `false` / `0` — matches no session.
+    Never,
+    /// `var op value`, e.g. `gender == male` or `age > 18`.
+    Cmp {
+        var_name: String,
+        op: String,
+        value: String,
+    },
+    /// Non-empty but not a recognised grammar — caller falls back to the
+    /// total completed count (mirrors the client's allow-by-default).
+    Unparseable,
+}
+
+/// Parse a quota `condition` using the same grammar as the client
+/// (`QuotaService.evaluateQuotaCondition`):
+/// - trim; empty / `true` / `1` → catch-all; `false` / `0` → never;
+/// - `^[A-Za-z_][A-Za-z0-9_]*\s*(==|!=|>=|<=|>|<)\s*.+$`, with surrounding
+///   double-quotes stripped from the comparison value.
+///
+/// No `regex` crate is available in this workspace, so the operator scan is
+/// hand-rolled: two-char operators are matched before single-char ones at
+/// each position so `>=`/`<=` win over `>`/`<`.
+fn parse_quota_condition(condition: &str) -> QuotaCond {
+    let trimmed = condition.trim();
+    if trimmed.is_empty() || trimmed == "true" || trimmed == "1" {
+        return QuotaCond::All;
+    }
+    if trimmed == "false" || trimmed == "0" {
+        return QuotaCond::Never;
+    }
+
+    // Locate the first comparison operator, preferring two-char forms.
+    let bytes = trimmed.as_bytes();
+    let mut split: Option<(usize, &'static str)> = None;
+    let mut i = 0;
+    while i < bytes.len() {
+        match trimmed.get(i..i + 2) {
+            Some("==") => {
+                split = Some((i, "=="));
+                break;
+            }
+            Some("!=") => {
+                split = Some((i, "!="));
+                break;
+            }
+            Some(">=") => {
+                split = Some((i, ">="));
+                break;
+            }
+            Some("<=") => {
+                split = Some((i, "<="));
+                break;
+            }
+            _ => {}
+        }
+        match &bytes[i] {
+            b'>' => {
+                split = Some((i, ">"));
+                break;
+            }
+            b'<' => {
+                split = Some((i, "<"));
+                break;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let Some((pos, op)) = split else {
+        return QuotaCond::Unparseable;
+    };
+
+    let var_name = trimmed[..pos].trim();
+    let raw_value = trimmed[pos + op.len()..].trim();
+
+    // Variable name must be a valid identifier ([A-Za-z_][A-Za-z0-9_]*).
+    let valid_ident = {
+        let mut chars = var_name.chars();
+        match chars.next() {
+            Some(c) if c.is_ascii_alphabetic() || c == '_' => {
+                chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+            }
+            _ => false,
+        }
+    };
+    if !valid_ident || raw_value.is_empty() {
+        return QuotaCond::Unparseable;
+    }
+
+    // Strip surrounding double quotes (client only strips `"`).
+    let value = if raw_value.len() >= 2 && raw_value.starts_with('"') && raw_value.ends_with('"') {
+        &raw_value[1..raw_value.len() - 1]
+    } else {
+        raw_value
+    };
+
+    QuotaCond::Cmp {
+        var_name: var_name.to_string(),
+        op: op.to_string(),
+        value: value.to_string(),
+    }
+}
+
 /// GET /api/questionnaires/{id}/quota-status
 ///
 /// Returns the current completion counts for quota management.
@@ -2661,13 +2772,15 @@ pub async fn quota_status(
     .await?
     .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
 
-    // Count completed sessions
-    let total_completed = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*)::bigint FROM sessions WHERE questionnaire_id = $1 AND status = 'completed'",
-    )
-    .bind(questionnaire_id)
-    .fetch_one(&state.pool)
-    .await?;
+    // Count completed sessions via the SECURITY DEFINER aggregate (00027).
+    // The bare app pool has no RLS GUC set here, so a direct COUNT under
+    // `qdesigner_app` would be hidden by the 00021 dual-path SELECT policy
+    // and always return 0 (the pre-00027 always-inert-quota bug). The
+    // owner-definer function bypasses RLS and returns an aggregate only.
+    let total_completed = sqlx::query_scalar::<_, i64>("SELECT public.fillout_completed_count($1)")
+        .bind(questionnaire_id)
+        .fetch_one(&state.pool)
+        .await?;
 
     // Extract quota groups from settings
     let quota_groups = settings_row
@@ -2703,15 +2816,47 @@ pub async fn quota_status(
                 continue;
             }
 
-            // For now, return total_completed as the current count.
-            // The client evaluates quota conditions against respondent values
-            // and uses these totals to determine if quotas are met.
+            // Evaluate this quota's own condition against completed sessions,
+            // in lockstep with the client grammar (QuotaService.evaluateQuotaCondition).
+            // A catch-all / unparseable condition falls back to the total
+            // completed count (mirrors the client's allow-by-default). A
+            // 'false' / '0' condition matches no one. Real comparisons run
+            // through the SECURITY DEFINER per-condition counter.
+            let condition = q.get("condition").and_then(|v| v.as_str()).unwrap_or("");
+            let current = match parse_quota_condition(condition) {
+                QuotaCond::All => total_completed,
+                QuotaCond::Never => 0,
+                QuotaCond::Cmp {
+                    var_name,
+                    op,
+                    value,
+                } => {
+                    sqlx::query_scalar::<_, i64>(
+                        "SELECT public.fillout_quota_condition_count($1, $2, $3, $4)",
+                    )
+                    .bind(questionnaire_id)
+                    .bind(&var_name)
+                    .bind(&op)
+                    .bind(&value)
+                    .fetch_one(&state.pool)
+                    .await?
+                }
+                QuotaCond::Unparseable => {
+                    tracing::warn!(
+                        quota_id = %quota_id,
+                        condition = %condition,
+                        "quota_status: unparseable quota condition; falling back to total completed count"
+                    );
+                    total_completed
+                }
+            };
+
             quotas.push(QuotaStatusItem {
                 quota_id,
                 name,
                 target,
-                current: total_completed,
-                is_full: total_completed >= target,
+                current,
+                is_full: current >= target,
             });
         }
     }
@@ -2719,6 +2864,150 @@ pub async fn quota_status(
     Ok(Json(QuotaStatusResponse {
         quotas,
         total_completed,
+    }))
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct CohortStatsQuery {
+    /// Aggregate source: 'variable' (default) or 'response'.
+    pub source: Option<String>,
+    /// Variable name (source='variable') or question id (source='response').
+    pub key: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct CohortStatsRow {
+    n: i64,
+    mean: Option<f64>,
+    std_dev: Option<f64>,
+    min: Option<f64>,
+    max: Option<f64>,
+    median: Option<f64>,
+    p90: Option<f64>,
+    p95: Option<f64>,
+    p99: Option<f64>,
+}
+
+/// Minimum cohort size before aggregates are published. Below this floor the
+/// response carries the count with null stats so a small cohort can't be used
+/// to deanonymize an individual participant's value.
+const MIN_COHORT_N: i64 = 5;
+
+/// GET /api/questionnaires/{id}/cohort-stats
+///
+/// Public, aggregate-only cohort statistics for a PUBLISHED questionnaire.
+/// This is the anonymous-safe cohort feedback path (F060): the
+/// statistical-feedback module's `cohort` / `participant-vs-cohort` modes call
+/// it from the fillout runtime, where the caller is an anonymous participant
+/// who can never reach the `AuthenticatedUser`-gated `/api/sessions/aggregate`.
+///
+/// Only aggregates cross the wire — the underlying `fillout_cohort_stats`
+/// SECURITY DEFINER function computes moments/percentiles over COMPLETED
+/// sessions and never returns a per-session value. A min-N floor is applied
+/// here: when `n < 5` the response reports the count with ALL stats null,
+/// blocking small-cohort deanonymization. Unpublished / missing questionnaire
+/// → 404.
+#[utoipa::path(
+    get,
+    path = "/api/questionnaires/{id}/cohort-stats",
+    params(
+        ("id" = Uuid, Path, description = "Questionnaire id"),
+        CohortStatsQuery
+    ),
+    responses(
+        (status = 200, description = "Aggregate-only cohort stats (null stats when n < 5)", body = SessionAggregateResponse),
+        (status = 400, description = "Invalid request", body = crate::openapi::ErrorEnvelope),
+        (status = 404, description = "Questionnaire not found or not published", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["analytics"]
+)]
+pub async fn public_cohort_stats(
+    State(state): State<AppState>,
+    Path(questionnaire_id): Path<Uuid>,
+    Query(query): Query<CohortStatsQuery>,
+) -> Result<Json<SessionAggregateResponse>, ApiError> {
+    let source = parse_aggregate_source(query.source.as_deref())?;
+    let key = query.key.trim();
+    if key.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Aggregation key is required (variable name or question id)".into(),
+        ));
+    }
+
+    // Published-questionnaire gate (mirrors sync_session): the cohort feedback
+    // path is public, so only a published questionnaire exposes aggregates.
+    // Missing OR non-published both surface as 404 so an unpublished id can't
+    // be probed for existence.
+    let status = sqlx::query_scalar::<_, String>(
+        "SELECT status FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(questionnaire_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+
+    if status != "published" {
+        return Err(ApiError::NotFound("Questionnaire not found".into()));
+    }
+
+    // Aggregate over COMPLETED sessions via the SECURITY DEFINER function. The
+    // bare app pool has no RLS GUC set here, so a direct read under
+    // `qdesigner_app` would be hidden by the 00021 dual-path SELECT policy.
+    // The owner-definer function bypasses RLS and returns aggregates only.
+    let row = sqlx::query_as::<_, CohortStatsRow>(
+        "SELECT n, mean, std_dev, min, max, median, p90, p95, p99 \
+         FROM public.fillout_cohort_stats($1, $2, $3)",
+    )
+    .bind(questionnaire_id)
+    .bind(source.as_str())
+    .bind(key)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let n = row.n.max(0) as usize;
+    let stats = if row.n < MIN_COHORT_N {
+        // Below the anonymity floor: report the count, withhold every stat.
+        NumericStatsSummary {
+            sample_count: n,
+            mean: None,
+            median: None,
+            std_dev: None,
+            min: None,
+            max: None,
+            p10: None,
+            p25: None,
+            p50: None,
+            p75: None,
+            p90: None,
+            p95: None,
+            p99: None,
+        }
+    } else {
+        // The SQL function only returns median/p90/p95/p99 (the percentiles the
+        // client consumes); p10/p25/p75 are intentionally left null.
+        NumericStatsSummary {
+            sample_count: n,
+            mean: row.mean,
+            median: row.median,
+            std_dev: row.std_dev,
+            min: row.min,
+            max: row.max,
+            p10: None,
+            p25: None,
+            p50: row.median,
+            p75: None,
+            p90: row.p90,
+            p95: row.p95,
+            p99: row.p99,
+        }
+    };
+
+    Ok(Json(SessionAggregateResponse {
+        questionnaire_id,
+        source: source.as_str().to_string(),
+        key: key.to_string(),
+        participant_count: n,
+        stats,
     }))
 }
 

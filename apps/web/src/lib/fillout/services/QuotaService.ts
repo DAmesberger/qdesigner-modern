@@ -6,7 +6,21 @@ export interface QuotaCheckResult {
 	action?: 'terminate' | 'redirect' | 'skip-to-end' | 'continue';
 	redirectUrl?: string;
 	message?: string;
+	/**
+	 * True when the quota state could not be verified against the server AND
+	 * no cached snapshot was available (e.g. first-ever offline start). The
+	 * caller proceeds but records `quotaUnchecked` on the session so unverified
+	 * completions can be filtered later.
+	 */
+	unchecked?: boolean;
 }
+
+interface CachedQuotaSnapshot {
+	fetchedAt: string;
+	statuses: QuotaStatus[];
+}
+
+const QUOTA_CACHE_PREFIX = 'qd-quota-status:';
 
 export interface QuotaStatus {
 	quotaId: string;
@@ -30,23 +44,59 @@ export interface QuotaStatusResponse {
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export class QuotaService {
+	/**
+	 * Fetch the live quota snapshot from the server. On success the snapshot is
+	 * cached to localStorage so an offline start can still enforce quotas.
+	 *
+	 * THROWS on a non-OK response or a network error (previously it swallowed
+	 * both and returned `[]`, which silently allowed participation past a full
+	 * quota). Callers must catch and decide the fallback.
+	 */
 	static async fetchQuotaStatus(questionnaireId: string): Promise<QuotaStatus[]> {
-		try {
-			const res = await fetch(
-				`${API_BASE}/api/questionnaires/${questionnaireId}/quota-status`
-			);
-			if (!res.ok) return [];
+		const res = await fetch(
+			`${API_BASE}/api/questionnaires/${questionnaireId}/quota-status`
+		);
+		if (!res.ok) {
+			throw new Error(`Quota status request failed: ${res.status}`);
+		}
 
-			const data: QuotaStatusResponse = await res.json();
-			return data.quotas.map((q) => ({
-				quotaId: q.quota_id,
-				name: q.name,
-				target: q.target,
-				current: q.current,
-				isFull: q.is_full,
-			}));
+		const data: QuotaStatusResponse = await res.json();
+		const statuses = data.quotas.map((q) => ({
+			quotaId: q.quota_id,
+			name: q.name,
+			target: q.target,
+			current: q.current,
+			isFull: q.is_full,
+		}));
+
+		this.cacheQuotaStatus(questionnaireId, statuses);
+		return statuses;
+	}
+
+	/** Persist the last good snapshot for offline-start enforcement. */
+	private static cacheQuotaStatus(questionnaireId: string, statuses: QuotaStatus[]): void {
+		if (typeof localStorage === 'undefined') return;
+		try {
+			const snapshot: CachedQuotaSnapshot = {
+				fetchedAt: new Date().toISOString(),
+				statuses,
+			};
+			localStorage.setItem(QUOTA_CACHE_PREFIX + questionnaireId, JSON.stringify(snapshot));
 		} catch {
-			return [];
+			// Storage full / disabled — non-fatal, we just lose the cache.
+		}
+	}
+
+	/** Read the last cached snapshot, or `null` if none exists / is unreadable. */
+	static readCachedQuotaStatus(questionnaireId: string): QuotaStatus[] | null {
+		if (typeof localStorage === 'undefined') return null;
+		try {
+			const raw = localStorage.getItem(QUOTA_CACHE_PREFIX + questionnaireId);
+			if (!raw) return null;
+			const snapshot = JSON.parse(raw) as CachedQuotaSnapshot;
+			return Array.isArray(snapshot.statuses) ? snapshot.statuses : null;
+		} catch {
+			return null;
 		}
 	}
 
@@ -55,7 +105,19 @@ export class QuotaService {
 		quotaGroups: QuotaGroup[],
 		currentValues: Map<string, unknown>
 	): Promise<QuotaCheckResult> {
-		const statuses = await this.fetchQuotaStatus(questionnaireId);
+		// Prefer a live snapshot; on failure fall back to the last cached one.
+		// If neither exists we proceed but flag the result as unchecked so the
+		// caller can mark the session for later filtering.
+		let statuses: QuotaStatus[];
+		try {
+			statuses = await this.fetchQuotaStatus(questionnaireId);
+		} catch {
+			const cached = this.readCachedQuotaStatus(questionnaireId);
+			if (cached === null) {
+				return { allowed: true, unchecked: true, fullQuotas: [] };
+			}
+			statuses = cached;
+		}
 		const statusMap = new Map(statuses.map((s) => [s.quotaId, s]));
 
 		const fullQuotas: QuotaDefinition[] = [];

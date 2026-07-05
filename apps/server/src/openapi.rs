@@ -151,6 +151,7 @@ impl Modify for SecurityAddon {
         api::sessions::update_session,
         api::sessions::condition_counts,
         api::sessions::quota_status,
+        api::sessions::public_cohort_stats,
         api::sessions::submit_response,
         api::sessions::submit_events,
         api::sessions::upsert_variable,

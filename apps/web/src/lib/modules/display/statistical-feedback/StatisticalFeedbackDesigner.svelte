@@ -278,6 +278,15 @@
             <option value={option.value}>{option.label}</option>
           {/each}
         </Select>
+        {#if config.sourceMode === 'participant-vs-participant'}
+          <div class="behavior-warning" data-testid="stats-source-mode-warning">
+            Participant vs Participant compares two named participants and reads
+            other participants' per-session values. It requires a signed-in
+            researcher, so it will NOT render for anonymous participants during
+            fillout — they see an explanatory message instead. Use Participant vs
+            Cohort for participant-facing feedback.
+          </div>
+        {/if}
       </div>
 
       <div class="row">

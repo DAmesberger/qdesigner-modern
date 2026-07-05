@@ -239,9 +239,20 @@ export function validateStatisticalFeedbackConfig(config: StatisticalFeedbackCon
   return errors;
 }
 
+/**
+ * Where the panel is rendering. `runtime` is the anonymous participant fillout
+ * path (F060): it can never reach the `AuthenticatedUser`-gated
+ * `/api/sessions/aggregate|compare`, so cohort modes route through the public
+ * `aggregatePublic` endpoint and participant-vs-participant is refused. `edit`
+ * / `preview` are the authenticated designer, which keeps the richer
+ * authenticated services.
+ */
+export type FeedbackRenderMode = 'edit' | 'preview' | 'runtime';
+
 export async function resolveStatisticalFeedbackSeries(
   config: StatisticalFeedbackConfig,
-  variables: Record<string, unknown>
+  variables: Record<string, unknown>,
+  renderMode: FeedbackRenderMode = 'runtime'
 ): Promise<ChartSeriesContract> {
   if (config.sourceMode === 'current-session') {
     const variableName = config.dataSource.currentVariable || config.dataSource.key;
@@ -264,12 +275,22 @@ export async function resolveStatisticalFeedbackSeries(
     throw new Error('Missing questionnaireId/key for analytics query.');
   }
 
+  const isRuntime = renderMode === 'runtime';
+
   if (config.sourceMode === 'cohort') {
-    const aggregate = await sessionAnalyticsService.aggregate({
-      questionnaireId: config.dataSource.questionnaireId,
-      source: config.dataSource.source,
-      key: config.dataSource.key,
-    });
+    // Anonymous participant path uses the public cohort endpoint (no auth);
+    // the authenticated designer keeps the richer authenticated aggregate.
+    const aggregate = isRuntime
+      ? await sessionAnalyticsService.aggregatePublic({
+          questionnaireId: config.dataSource.questionnaireId,
+          source: config.dataSource.source,
+          key: config.dataSource.key,
+        })
+      : await sessionAnalyticsService.aggregate({
+          questionnaireId: config.dataSource.questionnaireId,
+          source: config.dataSource.source,
+          key: config.dataSource.key,
+        });
 
     return sessionAnalyticsService.buildCohortSeries({
       metric: config.metric,
@@ -278,6 +299,40 @@ export async function resolveStatisticalFeedbackSeries(
   }
 
   if (config.sourceMode === 'participant-vs-cohort') {
+    if (isRuntime) {
+      // The participant point is the participant's OWN locally-computed score
+      // (already client-side); cohort stats come from the public endpoint. An
+      // anonymous caller could never read their per-session value back via
+      // /aggregate anyway (AuthenticatedUser + RLS).
+      const variableName = config.dataSource.currentVariable || config.dataSource.key;
+      const rawValue = resolveVariableValue(variableName, variables);
+      const participantValue =
+        rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)
+          ? metricValueFromObject(config.metric, rawValue as Record<string, unknown>)
+          : parseNumeric(rawValue);
+
+      const cohort = await sessionAnalyticsService.aggregatePublic({
+        questionnaireId: config.dataSource.questionnaireId,
+        source: config.dataSource.source,
+        key: config.dataSource.key,
+      });
+
+      const series = sessionAnalyticsService.buildParticipantVsCohortSeriesLocal({
+        participantValue,
+        cohort,
+        metric: config.metric,
+      });
+
+      if (config.metric === 'z_score') {
+        return {
+          ...series,
+          points: [{ label: 'Z-Score', value: series.summary?.zScore ?? null }],
+        };
+      }
+
+      return series;
+    }
+
     const participantId =
       resolveParticipantId(config.dataSource.participantId, variables) ||
       resolveParticipantId('{{participantId}}', variables) ||
@@ -303,6 +358,16 @@ export async function resolveStatisticalFeedbackSeries(
     }
 
     return series;
+  }
+
+  // participant-vs-participant — researcher-only. It reads OTHER participants'
+  // per-session values, which the dual-path RLS hides from anonymous callers,
+  // so it is refused at runtime with an honest message (surfaced by
+  // StatisticalFeedback.svelte's loadError) instead of a null 'No data' point.
+  if (isRuntime) {
+    throw new Error(
+      'Participant comparison requires a signed-in researcher and is not shown to participants'
+    );
   }
 
   const leftParticipantId = resolveParticipantId(config.dataSource.participantId, variables);

@@ -36,6 +36,39 @@ export interface ChartSeriesContract {
   };
 }
 
+const PUBLIC_API_BASE = import.meta.env.VITE_API_URL || '';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response with snake_case/camelCase fields
+function mapPublicStats(raw: any): SessionStatsSummary {
+  const stats = raw || {};
+  return {
+    sampleCount: Number(stats.sample_count ?? stats.sampleCount ?? 0),
+    mean: stats.mean ?? null,
+    median: stats.median ?? null,
+    stdDev: stats.std_dev ?? stats.stdDev ?? null,
+    min: stats.min ?? null,
+    max: stats.max ?? null,
+    p10: stats.p10 ?? null,
+    p25: stats.p25 ?? null,
+    p50: stats.p50 ?? null,
+    p75: stats.p75 ?? null,
+    p90: stats.p90 ?? null,
+    p95: stats.p95 ?? null,
+    p99: stats.p99 ?? null,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response with snake_case/camelCase fields
+function mapPublicAggregate(raw: any): SessionAggregateData {
+  return {
+    questionnaireId: String(raw.questionnaire_id ?? raw.questionnaireId ?? ''),
+    source: (raw.source ?? 'variable') as 'variable' | 'response',
+    key: String(raw.key ?? ''),
+    participantCount: Number(raw.participant_count ?? raw.participantCount ?? 0),
+    stats: mapPublicStats(raw.stats),
+  };
+}
+
 function metricFromStats(stats: SessionStatsSummary, metric: AnalyticsMetric): number | null {
   switch (metric) {
     case 'count':
@@ -75,6 +108,34 @@ export const sessionAnalyticsService = {
     participantId?: string;
   }): Promise<SessionAggregateData> {
     return api.sessions.aggregate(params);
+  },
+
+  /**
+   * Public, anonymous-safe cohort aggregate (F060). Raw fetch with NO
+   * Authorization header against the public `/cohort-stats` endpoint — the
+   * participant fillout runtime is never authenticated, so it can't use the
+   * `AuthenticatedUser`-gated `aggregate()` above. Raw fetch (like
+   * QuotaService) avoids an OpenAPI contract regen. The server floors the
+   * cohort at n < 5 → null stats, so a small cohort returns a count with no
+   * moments.
+   */
+  async aggregatePublic(params: {
+    questionnaireId: string;
+    source?: AggregateSourceType;
+    key: string;
+  }): Promise<SessionAggregateData> {
+    const qs = new URLSearchParams();
+    qs.set('key', params.key);
+    if (params.source) {
+      qs.set('source', params.source);
+    }
+    const res = await fetch(
+      `${PUBLIC_API_BASE}/api/questionnaires/${params.questionnaireId}/cohort-stats?${qs.toString()}`
+    );
+    if (!res.ok) {
+      throw new Error(`Cohort stats request failed: ${res.status}`);
+    }
+    return mapPublicAggregate(await res.json());
   },
 
   compare(params: {
@@ -139,6 +200,56 @@ export const sessionAnalyticsService = {
               mean: cohort.stats.mean,
               stdDev: cohort.stats.stdDev,
               n: cohort.stats.sampleCount ?? 0,
+            }
+          : undefined,
+    };
+  },
+
+  /**
+   * Anonymous-safe participant-vs-cohort series (F060). The participant point
+   * is the participant's OWN locally-computed score (a scalar from the runtime
+   * `variables`), NOT a server read-back — an anonymous caller could never read
+   * their per-session value via `/aggregate`. Cohort stats come from
+   * `aggregatePublic`. zScore is computed exactly as
+   * `buildParticipantVsCohortSeries` does, against the participant scalar.
+   */
+  buildParticipantVsCohortSeriesLocal(params: {
+    participantValue: number | null;
+    cohort: SessionAggregateData;
+    metric: AnalyticsMetric;
+  }): ChartSeriesContract {
+    const cohortValue = metricFromStats(params.cohort.stats, params.metric);
+
+    const zScore =
+      params.participantValue !== null &&
+      params.cohort.stats.mean !== null &&
+      params.cohort.stats.stdDev !== null &&
+      params.cohort.stats.stdDev > 0
+        ? (params.participantValue - params.cohort.stats.mean) / params.cohort.stats.stdDev
+        : null;
+
+    return {
+      mode: 'participant-vs-cohort',
+      metric: params.metric,
+      points: [
+        { label: 'Participant', value: params.participantValue },
+        { label: 'Cohort', value: cohortValue },
+      ],
+      summary: {
+        participantValue: params.participantValue,
+        cohortMean: params.cohort.stats.mean,
+        cohortStdDev: params.cohort.stats.stdDev,
+        cohortN: params.cohort.stats.sampleCount,
+        zScore,
+      },
+      distribution:
+        params.cohort.stats.mean !== null &&
+        params.cohort.stats.stdDev !== null &&
+        params.cohort.stats.stdDev > 0
+          ? {
+              mean: params.cohort.stats.mean,
+              stdDev: params.cohort.stats.stdDev,
+              n: params.cohort.stats.sampleCount ?? 0,
             }
           : undefined,
     };
