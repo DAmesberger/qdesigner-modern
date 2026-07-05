@@ -6,6 +6,8 @@
  * subscales of a psychological instrument like anxiety, depression, etc.).
  */
 
+import { parseNumeric } from '$lib/shared/utils/statistics';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -105,7 +107,7 @@ export function interpretMultipleScales(
 ): MultiScaleInterpretation {
   const interpretations = configs.map((config) => {
     const rawValue = variables[config.variableId];
-    const score = parseNumericValue(rawValue);
+    const score = parseNumeric(rawValue);
     if (score === null) {
       return {
         score: NaN,
@@ -218,18 +220,4 @@ export function createDefaultScoreConfig(
     scaleName,
     ranges,
   };
-}
-
-// ---------------------------------------------------------------------------
-// Internal Helpers
-// ---------------------------------------------------------------------------
-
-function parseNumericValue(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  if (typeof value === 'boolean') return value ? 1 : 0;
-  return null;
 }

@@ -1,4 +1,5 @@
 import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import { mean } from '$lib/shared/utils/statistics';
 
 export interface DotProbeStimulusPair {
   /** The "threat" or "salient" stimulus text/label */
@@ -164,11 +165,6 @@ export function computeAttentionalBias(
 }
 
 // --- Internal helpers ---
-
-function mean(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((sum, v) => sum + v, 0) / values.length;
-}
 
 function shuffle<T>(array: T[], rng: () => number): void {
   for (let index = array.length - 1; index > 0; index--) {

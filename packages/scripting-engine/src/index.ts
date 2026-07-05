@@ -11,6 +11,8 @@ export * from './parser';
 export * from './ast-evaluator';
 export * from './policies';
 
+export { BUILTIN_FUNCTIONS, createSandboxedMath } from './sandbox-math';
+
 export { VariableEngine } from './VariableEngine';
 export type { VariableValue, VariableContext, EvaluationResult } from './VariableEngine';
 

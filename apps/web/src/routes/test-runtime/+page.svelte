@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { installReactionHarness, type ScenarioName } from './harness';
+  import type { ScenarioName } from './harness';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -16,9 +16,14 @@
 
   onMount(() => {
     if (!HARNESS_ENABLED) return;
-    const dispose = installReactionHarness(scenario, { seed: data.seed });
-    ready = true;
-    return dispose;
+    // Dynamic import so Rollup drops the harness chunk from prod builds
+    // (import.meta.env guards are statically replaced at build time).
+    let dispose: (() => void) | undefined;
+    import('./harness').then((m) => {
+      dispose = m.installReactionHarness(scenario, { seed: data.seed });
+      ready = true;
+    });
+    return () => dispose?.();
   });
 </script>
 

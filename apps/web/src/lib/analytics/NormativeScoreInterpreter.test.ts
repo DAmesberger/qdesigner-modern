@@ -1,14 +1,14 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
-  ScoreInterpreter,
+  NormativeScoreInterpreter,
   normalCDF,
   type ScoreRange,
   type NormData,
   type SubscaleConfig,
-} from './ScoreInterpreter';
+} from './NormativeScoreInterpreter';
 
-describe('ScoreInterpreter', () => {
-  let interpreter: ScoreInterpreter;
+describe('NormativeScoreInterpreter', () => {
+  let interpreter: NormativeScoreInterpreter;
 
   const ranges: ScoreRange[] = [
     { min: 0, max: 10, label: 'Low', description: 'Score is low', color: '#22c55e' },
@@ -19,7 +19,7 @@ describe('ScoreInterpreter', () => {
   const normData: NormData = { mean: 50, sd: 10, n: 500 };
 
   beforeEach(() => {
-    interpreter = new ScoreInterpreter();
+    interpreter = new NormativeScoreInterpreter();
   });
 
   // ========================================================================

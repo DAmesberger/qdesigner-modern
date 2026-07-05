@@ -8,6 +8,7 @@ import type {
   ScoreInterpreterConfig,
   ScoreInterpretationRange,
 } from '$lib/runtime/feedback/ScoreInterpreter';
+import { parseNumeric } from '$lib/shared/utils/statistics';
 
 export type StatisticalSourceMode =
   | 'current-session'
@@ -65,23 +66,6 @@ export const defaultStatisticalFeedbackConfig: StatisticalFeedbackConfig = {
 };
 
 export type { ScoreInterpreterConfig, ScoreInterpretationRange };
-
-function parseNumeric(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  if (typeof value === 'boolean') {
-    return value ? 1 : 0;
-  }
-
-  return null;
-}
 
 function resolveVariableValue(path: string, variables: Record<string, unknown>): unknown {
   const trimmed = path.trim();

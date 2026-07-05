@@ -4,6 +4,8 @@
  * for common statistical tests used in psychological/behavioral research.
  */
 
+import { normalCDF } from '$lib/shared/utils/statistics';
+
 export type TestType = 't-test' | 'anova' | 'chi-square' | 'correlation';
 
 export interface PowerParams {
@@ -333,7 +335,7 @@ export class PowerAnalysis {
     }
 
     // Power = P(Z > z_alpha - ncp) + P(Z < -z_alpha - ncp)
-    const power = 1 - this.normalCDF(zAlpha - ncp) + this.normalCDF(-zAlpha - ncp);
+    const power = 1 - normalCDF(zAlpha - ncp) + normalCDF(-zAlpha - ncp);
     return Math.max(0, Math.min(1, power));
   }
 
@@ -372,7 +374,7 @@ export class PowerAnalysis {
     // Power = P(X > chiCrit | X ~ chi-square(df, lambda))
     // Approximate: shift the distribution
     const shiftedCrit = (chiCrit - df - lambda) / Math.sqrt(2 * (df + 2 * lambda));
-    const power = 1 - this.normalCDF(shiftedCrit);
+    const power = 1 - normalCDF(shiftedCrit);
     return Math.max(0, Math.min(1, power));
   }
 
@@ -386,27 +388,13 @@ export class PowerAnalysis {
     const se = 1 / Math.sqrt(n - 3);
     const ncp = zr / se;
 
-    const power = 1 - this.normalCDF(zAlpha - ncp) + this.normalCDF(-zAlpha - ncp);
+    const power = 1 - normalCDF(zAlpha - ncp) + normalCDF(-zAlpha - ncp);
     return Math.max(0, Math.min(1, power));
   }
 
   // ============================================================================
   // Distribution Functions
   // ============================================================================
-
-  private normalCDF(z: number): number {
-    const sign = z >= 0 ? 1 : -1;
-    const x = Math.abs(z) / Math.sqrt(2);
-    const a1 = 0.254829592;
-    const a2 = -0.284496736;
-    const a3 = 1.421413741;
-    const a4 = -1.453152027;
-    const a5 = 1.061405429;
-    const p = 0.3275911;
-    const t = 1.0 / (1.0 + p * x);
-    const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
-    return 0.5 * (1.0 + sign * y);
-  }
 
   private zInverse(p: number): number {
     // Beasley-Springer-Moro approximation
@@ -455,7 +443,7 @@ export class PowerAnalysis {
     if (df2 <= 4 || variance <= 0) {
       // Fallback: rough normal approximation
       const z = (x - mean) / Math.sqrt(Math.max(variance, 0.001));
-      return this.normalCDF(z);
+      return normalCDF(z);
     }
 
     // Match first two moments to central F(df1', df2')

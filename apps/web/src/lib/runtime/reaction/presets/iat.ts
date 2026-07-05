@@ -1,4 +1,5 @@
 import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import { mean } from '$lib/shared/utils/statistics';
 
 export interface IATCategory {
   name: string;
@@ -303,11 +304,6 @@ function buildBlockPool(
         ],
       };
   }
-}
-
-function mean(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
 function computePooledSD(a: number[], b: number[]): number {

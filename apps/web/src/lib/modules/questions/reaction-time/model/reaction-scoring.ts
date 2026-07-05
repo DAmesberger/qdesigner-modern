@@ -1,3 +1,5 @@
+import { mean } from '$lib/shared/utils/statistics';
+
 export interface ReactionTrialLike {
   reactionTime: number | null;
   isCorrect: boolean | null;
@@ -124,11 +126,6 @@ export function computeDerivedReactionMetrics(trials: ReactionTrialLike[]): Deri
     dotProbeBiasMs,
     iatDScore,
   };
-}
-
-function mean(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function meanRTForCondition(

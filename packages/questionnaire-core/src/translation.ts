@@ -15,8 +15,6 @@
  * missing falls back to the base text via {@link resolveText}.
  */
 
-import type { Questionnaire } from './questionnaire';
-
 /** BCP-47-ish locale code, e.g. `en`, `de`, `fr`, `pt-BR`. */
 export type LocaleCode = string;
 
@@ -74,16 +72,27 @@ export type TranslationPath =
 /** Fallback locale used when a questionnaire declares no base language. */
 export const DEFAULT_BASE_LOCALE: LocaleCode = 'en';
 
+/**
+ * Minimal structural view of a questionnaire covering exactly the fields this
+ * module touches. `Questionnaire` (from `./questionnaire`) is structurally
+ * assignable, so callers keep passing full questionnaire objects — the leaf
+ * shape exists only to keep this module import-free of `./questionnaire` and
+ * the dependency edge one-way (questionnaire.ts → translation.ts).
+ */
+export interface LocalizableQuestionnaire {
+  settings?: unknown;
+  translations?: QuestionnaireTranslations;
+  questions?: Array<{ id: string }>;
+  pages?: Array<{ id: string; name?: string }>;
+}
+
 // A questionnaire definition may carry the translation map either at the top
 // level (direct API / import authoring — see the `translations?` field on
 // Questionnaire) or nested under `settings.translations` (where the designer
 // persists it so it rides the existing settings round-trip through collaboration
 // and JSONB persistence, mirroring how `settings.theme` is stored). Reads accept
 // both; the settings location wins because it is the designer's live location.
-type TranslatableDefinition =
-  | (Pick<Questionnaire, 'settings'> & { translations?: QuestionnaireTranslations })
-  | null
-  | undefined;
+type TranslatableDefinition = LocalizableQuestionnaire | null | undefined;
 
 /** Resolve the translation map from either storage location (settings wins). */
 export function getTranslations(def: TranslatableDefinition): QuestionnaireTranslations | undefined {
@@ -303,7 +312,7 @@ function applyOptionLabels(question: AnyQuestion, options: Record<string, string
  * to localize, keeping the common no-translation path allocation-free and
  * fully back-compatible.
  */
-export function localizeQuestionnaire<T extends Questionnaire>(
+export function localizeQuestionnaire<T extends LocalizableQuestionnaire>(
   def: T,
   locale: LocaleCode | undefined
 ): T {

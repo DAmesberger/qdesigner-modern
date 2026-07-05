@@ -6,14 +6,14 @@
 
 import { StatisticalEngine } from './StatisticalEngine';
 import { DataVisualization } from './DataVisualization';
-import { ScoreInterpreter } from './ScoreInterpreter';
+import { NormativeScoreInterpreter } from './NormativeScoreInterpreter';
 import { MissingDataHandler } from './MissingDataHandler';
 import { PowerAnalysis } from './PowerAnalysis';
 import { RealtimeAnalyticsClient } from './RealtimeAnalyticsClient.svelte';
 import { ScoringPipeline } from './ScoringPipeline';
 
 // Re-export Core Classes
-export { StatisticalEngine, DataVisualization, ScoreInterpreter, MissingDataHandler, PowerAnalysis, RealtimeAnalyticsClient, ScoringPipeline };
+export { StatisticalEngine, DataVisualization, NormativeScoreInterpreter, MissingDataHandler, PowerAnalysis, RealtimeAnalyticsClient, ScoringPipeline };
 
 // Svelte Components
 export { default as StatisticsCard } from './components/StatisticsCard.svelte';
@@ -521,9 +521,9 @@ export class AnalyticsErrorHandler {
 // Export singleton error handler instance
 export const analyticsErrorHandler = AnalyticsErrorHandler.getInstance();
 
-// Re-export ScoreInterpreter types
+// Re-export NormativeScoreInterpreter types
 export type {
-  ScoreInterpretation as AnalyticsScoreInterpretation,
+  NormativeScoreInterpretation as AnalyticsScoreInterpretation,
   NormativeComparison,
   ConfidenceInterval,
   FeedbackConfig,
@@ -531,9 +531,9 @@ export type {
   NormData,
   SubscaleScore,
   SubscaleConfig,
-} from './ScoreInterpreter';
+} from './NormativeScoreInterpreter';
 
-export { normalCDF } from './ScoreInterpreter';
+export { normalCDF } from './NormativeScoreInterpreter';
 
 // Re-export MissingDataHandler types
 export type {
