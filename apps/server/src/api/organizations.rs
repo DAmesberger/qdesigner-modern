@@ -1498,33 +1498,113 @@ pub async fn verify_domain(
     tx: Tx,
     Path((org_id, domain_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
-    if !state
-        .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
-        .await?
-    {
-        return Err(ApiError::Forbidden("Requires admin role".into()));
+    // Phase 1 (inside the RLS tx): authorize and read the per-domain challenge
+    // token. The guard is dropped at the end of this block so the pooled DB
+    // connection is not held under the mutex across the DNS network I/O below.
+    let (domain, token) = {
+        let mut guard = tx.lock().await;
+        let tx = guard
+            .as_mut()
+            .expect("rls_context middleware placed a transaction");
+        if !state
+            .rbac
+            .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+            .await?
+        {
+            return Err(ApiError::Forbidden("Requires admin role".into()));
+        }
+
+        let row = sqlx::query_as::<_, (String, Option<String>)>(
+            "SELECT domain, verification_token FROM organization_domains \
+             WHERE id = $1 AND organization_id = $2",
+        )
+        .bind(domain_id)
+        .bind(org_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+
+        match row {
+            Some(row) => row,
+            None => return Err(ApiError::NotFound("Domain not found".into())),
+        }
+    };
+
+    let token = token.ok_or_else(|| {
+        ApiError::Conflict("Domain has no verification token; recreate the domain".into())
+    })?;
+
+    // Phase 2 (outside the tx guard): prove ownership via a DNS TXT record at
+    // `_qdesigner-verify.<domain>` whose value matches the per-domain token.
+    // No unconditional auto-verify — `verify_domain_ownership` returns false
+    // unless a live TXT lookup (feature `dns-verify`) confirms the record.
+    if !verify_domain_ownership(&domain, &token).await? {
+        return Err(ApiError::Validation(format!(
+            "Domain ownership not verified. Create a DNS TXT record at \
+             _qdesigner-verify.{domain} with the value \"{token}\", then retry."
+        )));
     }
 
-    // In development, auto-verify the domain
-    let rows_affected = sqlx::query(
-        "UPDATE organization_domains SET verified_at = NOW() WHERE id = $1 AND organization_id = $2",
-    )
-    .bind(domain_id)
-    .bind(org_id)
-    .execute(&mut **tx)
-    .await?
-    .rows_affected();
+    // Phase 3 (re-enter the tx): record the successful verification.
+    let rows_affected = {
+        let mut guard = tx.lock().await;
+        let tx = guard
+            .as_mut()
+            .expect("rls_context middleware placed a transaction");
+        sqlx::query(
+            "UPDATE organization_domains SET verified_at = NOW(), last_verified_at = NOW() \
+             WHERE id = $1 AND organization_id = $2",
+        )
+        .bind(domain_id)
+        .bind(org_id)
+        .execute(&mut **tx)
+        .await?
+        .rows_affected()
+    };
 
     if rows_affected == 0 {
         return Err(ApiError::NotFound("Domain not found".into()));
     }
 
-    Ok(Json(serde_json::json!({ "message": "Domain verified" })))
+    Ok(Json(serde_json::json!({
+        "verified": true,
+        "message": "Domain verified"
+    })))
+}
+
+/// Prove domain ownership by resolving a DNS TXT record at
+/// `_qdesigner-verify.<domain>` and matching it against the per-domain
+/// verification token. Enabled by the `dns-verify` cargo feature.
+#[cfg(feature = "dns-verify")]
+async fn verify_domain_ownership(domain: &str, token: &str) -> Result<bool, ApiError> {
+    use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+    use hickory_resolver::TokioAsyncResolver;
+
+    let resolver = TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default());
+    let fqdn = format!("_qdesigner-verify.{domain}");
+
+    let lookup = match resolver.txt_lookup(fqdn).await {
+        Ok(lookup) => lookup,
+        // NXDOMAIN / no records / transient failure — treat as "not yet
+        // verified" rather than a hard error so the caller can retry.
+        Err(err) => {
+            tracing::debug!("TXT lookup for {domain} ownership failed: {err}");
+            return Ok(false);
+        }
+    };
+
+    let expected = token.as_bytes();
+    let matched = lookup
+        .iter()
+        .any(|txt| txt.iter().any(|data| **data == *expected));
+    Ok(matched)
+}
+
+/// Default build: the DNS resolver is compiled out, so ownership can never be
+/// auto-proven. Returns false and the caller responds with a 422 telling the
+/// operator which TXT record to publish (and to enable `dns-verify`).
+#[cfg(not(feature = "dns-verify"))]
+async fn verify_domain_ownership(_domain: &str, _token: &str) -> Result<bool, ApiError> {
+    Ok(false)
 }
 
 /// PATCH /api/organizations/:id/domains/:did

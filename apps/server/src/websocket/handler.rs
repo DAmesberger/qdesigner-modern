@@ -1,12 +1,12 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        Query, State, WebSocketUpgrade,
+        State, WebSocketUpgrade,
     },
+    http::HeaderMap,
     response::Response,
 };
 use futures_util::{SinkExt, StreamExt};
-use serde::Deserialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -15,22 +15,44 @@ use crate::state::AppState;
 use crate::websocket::manager::WsMessage;
 use crate::websocket::yjs_relay;
 
-#[derive(Deserialize)]
-pub struct WsQuery {
-    /// JWT access token passed as a query parameter for the upgrade request.
-    pub token: String,
-}
+/// Control subprotocol marker echoed back to complete the handshake. The JWT
+/// travels as a *second* requested subprotocol alongside this marker.
+const WS_AUTH_PROTOCOL: &str = "qde-auth";
 
-/// GET /api/ws?token=<jwt> — upgrade to WebSocket.
+/// GET /api/ws — upgrade to WebSocket.
+///
+/// Authentication rides the WebSocket subprotocol handshake rather than a URL
+/// query parameter, so the JWT never lands in access logs, proxy logs, the
+/// browser history, or `Referer` headers. The client requests two
+/// subprotocols: `["qde-auth", "<jwt>"]`. We read the JWT from the
+/// `Sec-WebSocket-Protocol` request header, verify it, and echo back only the
+/// accepted `qde-auth` marker (never the token) so the browser completes the
+/// handshake.
 pub async fn ws_upgrade(
     State(state): State<AppState>,
-    Query(query): Query<WsQuery>,
+    headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
-    // Validate the JWT before upgrading.
-    let claims = state.jwt_manager.verify_access_token(&query.token)?;
+    let token = extract_ws_token(&headers)
+        .ok_or_else(|| ApiError::Unauthorized("Missing WebSocket auth subprotocol".into()))?;
 
-    Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, claims.sub)))
+    // Validate the JWT before upgrading.
+    let claims = state.jwt_manager.verify_access_token(token)?;
+
+    Ok(ws
+        .protocols([WS_AUTH_PROTOCOL])
+        .on_upgrade(move |socket| handle_socket(socket, state, claims.sub)))
+}
+
+/// Extract the JWT from the `Sec-WebSocket-Protocol` header. The client sends
+/// `qde-auth, <jwt>`; return the first entry that is not the control marker.
+fn extract_ws_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(axum::http::header::SEC_WEBSOCKET_PROTOCOL)
+        .and_then(|value| value.to_str().ok())?
+        .split(',')
+        .map(str::trim)
+        .find(|part| !part.is_empty() && *part != WS_AUTH_PROTOCOL)
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {

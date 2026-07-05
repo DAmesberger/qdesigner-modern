@@ -33,3 +33,15 @@ futures-util = "0.3"
 yrs = "0.25.0"
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid", "preserve_order", "preserve_path_order"] }
 infer = "0.16"
+# Optional DNS resolver, compiled only under the `dns-verify` feature. It backs
+# the domain-ownership TXT challenge in `api::organizations::verify_domain`
+# (F012). The default build deliberately cannot auto-verify a domain — it
+# returns a 422 "pending" until an operator opts into real DNS proof by
+# building with `--features dns-verify`.
+hickory-resolver = { version = "0.24", optional = true }
+
+[features]
+# Enable a live DNS TXT lookup at `_qdesigner-verify.<domain>` for domain
+# ownership verification. Off by default so the standard build stays lean and
+# never performs outbound DNS during a request.
+dns-verify = ["dep:hickory-resolver"]

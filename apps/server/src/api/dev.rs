@@ -42,15 +42,10 @@ fn env_optional_nullable(key: &str) -> Option<String> {
 }
 
 fn dev_helpers_enabled() -> bool {
+    // Debug builds only. The `/api/dev` router is also compiled out of release
+    // builds in `api::router` (F012); this runtime guard is defense in depth
+    // and no longer honours the removed `DEV_HELPERS_ENABLED` env escape.
     cfg!(debug_assertions)
-        || matches!(
-            std::env::var("DEV_HELPERS_ENABLED")
-                .ok()
-                .as_deref()
-                .map(str::to_ascii_lowercase)
-                .as_deref(),
-            Some("1" | "true" | "yes" | "on")
-        )
 }
 
 /// POST /api/dev/bootstrap-personas

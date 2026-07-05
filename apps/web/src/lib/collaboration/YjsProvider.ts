@@ -116,8 +116,9 @@ export class YjsProvider {
     if (this.destroyed) return;
     if (typeof WebSocket === 'undefined') return; // SSR guard
 
-    const url = `${this.wsUrl}?token=${encodeURIComponent(this.token)}`;
-    this.ws = new WebSocket(url);
+    // Auth rides the subprotocol handshake, not the URL, so the JWT never
+    // leaks into logs/history. Server echoes back the 'qde-auth' marker.
+    this.ws = new WebSocket(this.wsUrl, ['qde-auth', this.token]);
     this.ws.binaryType = 'arraybuffer';
 
     this.ws.onopen = () => {

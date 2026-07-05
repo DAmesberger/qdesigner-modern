@@ -83,7 +83,9 @@ class WebSocketClient {
 
 		const wsUrl =
 			import.meta.env.VITE_WS_URL || `ws://${window.location.host}/api/ws`;
-		this.ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(this.token)}`);
+		// Auth rides the subprotocol handshake, not the URL, so the JWT never
+		// leaks into logs/history. Server echoes back the 'qde-auth' marker.
+		this.ws = new WebSocket(wsUrl, ['qde-auth', this.token]);
 
 		this.ws.onopen = () => {
 			this.reconnectAttempts = 0;

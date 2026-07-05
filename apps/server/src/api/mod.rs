@@ -44,7 +44,10 @@ pub fn router(state: AppState) -> Router {
         .layer(axum_mw::from_fn_with_state(
             state.clone(),
             rate_limit_middleware,
-        ));
+        ))
+        // Outermost: contain any panic in a handler or the rate-limit layer
+        // as a 500 instead of aborting the connection task.
+        .layer(CatchPanicLayer::new());
 
     let user_routes = Router::new()
         .route("/me", get(users::get_profile).patch(users::update_profile))
@@ -257,7 +260,12 @@ pub fn router(state: AppState) -> Router {
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context))
         .merge(media_content_routes);
 
-    let ws_route = Router::new().route("/ws", get(crate::websocket::handler::ws_upgrade));
+    let ws_route = Router::new()
+        .route("/ws", get(crate::websocket::handler::ws_upgrade))
+        // Contain a panic in the synchronous upgrade handler as a 500.
+        // (Panics inside the spawned socket task are already isolated by
+        // tokio::spawn; this guards the pre-upgrade path.)
+        .layer(CatchPanicLayer::new());
 
     let base = Router::new()
         .route("/health", get(health::health))
@@ -277,29 +285,22 @@ pub fn router(state: AppState) -> Router {
             get(organizations::check_auto_join),
         );
 
-    let dev_helpers_enabled = cfg!(debug_assertions)
-        || matches!(
-            std::env::var("DEV_HELPERS_ENABLED")
-                .ok()
-                .as_deref()
-                .map(str::to_ascii_lowercase)
-                .as_deref(),
-            Some("1" | "true" | "yes" | "on")
-        );
-
-    let app = if dev_helpers_enabled {
-        base.nest(
-            "/api/dev",
-            Router::new()
-                .route("/bootstrap-personas", post(dev::bootstrap_personas))
-                .layer(axum_mw::from_fn_with_state(
-                    state.clone(),
-                    rate_limit_middleware,
-                )),
-        )
-    } else {
-        base
-    };
+    // Dev bootstrap helpers are compiled out of release builds entirely
+    // (F012): `#[cfg(debug_assertions)]` removes the `/api/dev` nest from the
+    // binary rather than gating it on a runtime env var that a release
+    // deployment could accidentally flip on.
+    #[cfg(debug_assertions)]
+    let app = base.nest(
+        "/api/dev",
+        Router::new()
+            .route("/bootstrap-personas", post(dev::bootstrap_personas))
+            .layer(axum_mw::from_fn_with_state(
+                state.clone(),
+                rate_limit_middleware,
+            )),
+    );
+    #[cfg(not(debug_assertions))]
+    let app = base;
 
     app.with_state(state)
 }
