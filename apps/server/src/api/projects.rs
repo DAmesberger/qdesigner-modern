@@ -91,10 +91,7 @@ pub async fn list_projects(
     tx: Tx,
     Query(q): Query<ProjectListQuery>,
 ) -> Result<Json<Vec<Project>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -168,10 +165,7 @@ pub async fn create_project(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Require at least member role in the org
     if !state
@@ -238,10 +232,7 @@ pub async fn get_project(
     tx: Tx,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Project>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     let project = sqlx::query_as::<_, Project>(
         r#"
@@ -293,10 +284,7 @@ pub async fn update_project(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Check project-level permission
     if !state
@@ -412,10 +400,7 @@ pub async fn delete_project(
     tx: Tx,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Require project owner or org admin
     let org_id =
@@ -497,10 +482,7 @@ pub async fn list_project_members(
     tx: Tx,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Vec<ProjectMember>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     access::verify_project_access(&mut **tx, user.user_id, project_id).await?;
 
@@ -557,10 +539,7 @@ pub async fn add_project_member(
         ));
     }
 
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Require project admin+ or org admin+
     let has_project_admin = state
@@ -662,10 +641,7 @@ pub async fn update_project_member(
         ));
     }
 
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Require project admin+ or org admin+
     let has_project_admin = state
@@ -736,10 +712,7 @@ pub async fn remove_project_member(
     tx: Tx,
     Path((project_id, target_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Require project admin+ or org admin+
     let has_project_admin = state

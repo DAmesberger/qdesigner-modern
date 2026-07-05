@@ -204,8 +204,7 @@ pub async fn login(
     )
     .bind(user.id)
     .fetch_all(&state.pool)
-    .await
-    .unwrap_or_default();
+    .await?;
 
     let roles = if roles.is_empty() {
         vec!["user".to_string()]
@@ -322,8 +321,7 @@ pub async fn refresh(
     )
     .bind(user.id)
     .fetch_all(&state.pool)
-    .await
-    .unwrap_or_default();
+    .await?;
 
     let roles = if roles.is_empty() {
         vec!["user".to_string()]

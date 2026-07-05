@@ -143,10 +143,7 @@ pub async fn list_media(
     tx: Tx,
     Query(q): Query<MediaListQuery>,
 ) -> Result<Json<Vec<MediaAsset>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Verify org membership
     if !state
@@ -254,10 +251,7 @@ pub async fn upload_media(
     let (canonical_mime, _ext) = validate_upload(&bytes, &content_type)?;
     let content_type = canonical_mime;
 
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Verify write access
     if !state
@@ -330,10 +324,7 @@ pub async fn get_media(
     tx: Tx,
     Path(media_id): Path<Uuid>,
 ) -> Result<Json<MediaAssetWithUrl>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     let asset = sqlx::query_as::<_, MediaAsset>(
         r#"
@@ -415,10 +406,7 @@ pub async fn stream_media_content(
     // want. The guard is scoped so the tx lock is released before the S3
     // stream is set up (and before the middleware commits the read-only tx).
     let asset = {
-        let mut guard = tx.lock().await;
-        let tx = guard
-            .as_mut()
-            .expect("fillout_rls_context middleware placed a transaction");
+        let mut tx = tx.tx().await?;
 
         sqlx::query_as::<_, MediaAsset>(
             r#"
@@ -509,10 +497,7 @@ pub async fn delete_media(
     tx: Tx,
     Path(media_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     let asset = sqlx::query_as::<_, MediaAsset>(
         r#"

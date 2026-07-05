@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO session_variable_index (\n            session_id,\n            questionnaire_id,\n            questionnaire_version_major,\n            questionnaire_version_minor,\n            questionnaire_version_patch,\n            variable_name,\n            value_type,\n            source_kind,\n            numeric_value,\n            text_value,\n            boolean_value,\n            timestamp_value,\n            raw_value\n        )\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)\n        ON CONFLICT (session_id, variable_name)\n        DO UPDATE SET\n            questionnaire_id = EXCLUDED.questionnaire_id,\n            questionnaire_version_major = EXCLUDED.questionnaire_version_major,\n            questionnaire_version_minor = EXCLUDED.questionnaire_version_minor,\n            questionnaire_version_patch = EXCLUDED.questionnaire_version_patch,\n            value_type = EXCLUDED.value_type,\n            source_kind = EXCLUDED.source_kind,\n            numeric_value = EXCLUDED.numeric_value,\n            text_value = EXCLUDED.text_value,\n            boolean_value = EXCLUDED.boolean_value,\n            timestamp_value = EXCLUDED.timestamp_value,\n            raw_value = EXCLUDED.raw_value,\n            updated_at = NOW()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Float8",
+        "Text",
+        "Bool",
+        "Timestamptz",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ea301eecf84098d2c70d210c025738db135ee641019b8dbc366276b5076672d1"
+}

@@ -27,7 +27,10 @@ fn test_jwt() -> JwtManager {
 #[test]
 fn password_hash_roundtrip_happy() {
     let hash = hash_password("correct horse battery staple").expect("hash");
-    assert!(hash.starts_with("$argon2"), "expected argon2 hash, got {hash}");
+    assert!(
+        hash.starts_with("$argon2"),
+        "expected argon2 hash, got {hash}"
+    );
     let verified = verify_password("correct horse battery staple", &hash).expect("verify");
     assert!(verified, "correct password must verify");
 }
@@ -96,7 +99,10 @@ fn access_token_rejects_wrong_secret() {
     );
 
     let result = jwt_b.verify_access_token(&token);
-    assert!(result.is_err(), "token signed by jwt_a must fail under jwt_b");
+    assert!(
+        result.is_err(),
+        "token signed by jwt_a must fail under jwt_b"
+    );
 }
 
 // ── JWT refresh tokens ───────────────────────────────────────────────
@@ -108,7 +114,10 @@ fn refresh_token_roundtrip_happy() {
     let (token, claims) = jwt.create_refresh_token(user_id).expect("create");
     let verified = jwt.verify_refresh_token(&token).expect("verify");
     assert_eq!(verified.sub, user_id);
-    assert_eq!(verified.jti, claims.jti, "jti must match between create and verify");
+    assert_eq!(
+        verified.jti, claims.jti,
+        "jti must match between create and verify"
+    );
 }
 
 #[test]
@@ -121,7 +130,10 @@ fn refresh_token_rejects_access_token() {
         .expect("create access");
 
     let result = jwt.verify_refresh_token(&access);
-    assert!(result.is_err(), "access token must not pass refresh verification");
+    assert!(
+        result.is_err(),
+        "access token must not pass refresh verification"
+    );
 }
 
 // ── P2-T5: auth endpoint hardening ───────────────────────────────────
@@ -140,19 +152,28 @@ fn password_validator_rejects_over_128_chars() {
         password: long.clone(),
         full_name: None,
     };
-    assert!(reg.validate().is_err(), "129-char register password must be rejected");
+    assert!(
+        reg.validate().is_err(),
+        "129-char register password must be rejected"
+    );
 
     let login = LoginRequest {
         email: "user@example.test".into(),
         password: long.clone(),
     };
-    assert!(login.validate().is_err(), "129-char login password must be rejected");
+    assert!(
+        login.validate().is_err(),
+        "129-char login password must be rejected"
+    );
 
     let confirm = PasswordResetConfirm {
         token: "t".into(),
         new_password: long,
     };
-    assert!(confirm.validate().is_err(), "129-char reset password must be rejected");
+    assert!(
+        confirm.validate().is_err(),
+        "129-char reset password must be rejected"
+    );
 }
 
 /// F007 — the boundary values (8 and 128) are accepted.
@@ -205,22 +226,26 @@ async fn from_db_error_unique_violation_maps_to_conflict() {
     let id2 = Uuid::new_v4();
 
     // First insert succeeds.
-    sqlx::query("INSERT INTO users (id, email, full_name, email_verified) VALUES ($1, $2, $3, false)")
-        .bind(id1)
-        .bind(&email)
-        .bind("dup one")
-        .execute(&pool)
-        .await
-        .expect("first insert should succeed");
+    sqlx::query(
+        "INSERT INTO users (id, email, full_name, email_verified) VALUES ($1, $2, $3, false)",
+    )
+    .bind(id1)
+    .bind(&email)
+    .bind("dup one")
+    .execute(&pool)
+    .await
+    .expect("first insert should succeed");
 
     // Second insert on the same email violates the unique index → 23505.
-    let dup = sqlx::query("INSERT INTO users (id, email, full_name, email_verified) VALUES ($1, $2, $3, false)")
-        .bind(id2)
-        .bind(&email)
-        .bind("dup two")
-        .execute(&pool)
-        .await
-        .expect_err("duplicate email must error");
+    let dup = sqlx::query(
+        "INSERT INTO users (id, email, full_name, email_verified) VALUES ($1, $2, $3, false)",
+    )
+    .bind(id2)
+    .bind(&email)
+    .bind("dup two")
+    .execute(&pool)
+    .await
+    .expect_err("duplicate email must error");
 
     let mapped = ApiError::from_db_error(dup);
     assert!(

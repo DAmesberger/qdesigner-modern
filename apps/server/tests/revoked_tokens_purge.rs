@@ -64,7 +64,10 @@ async fn purge_deletes_old_keeps_recent() {
         .await
         .expect("purge")
         .rows_affected();
-    assert!(deleted >= 1, "expected at least the old row to be deleted, got {deleted}");
+    assert!(
+        deleted >= 1,
+        "expected at least the old row to be deleted, got {deleted}"
+    );
 
     let old_exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM revoked_tokens WHERE jti = $1)")

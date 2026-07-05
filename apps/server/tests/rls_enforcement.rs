@@ -159,13 +159,12 @@ async fn build_fixture(pool: &PgPool) -> Fixture {
     .expect("auth session a");
 
     // Anonymous session: user_id NULL
-    let anon_session: Uuid = sqlx::query_scalar(
-        "INSERT INTO sessions (questionnaire_id) VALUES ($1) RETURNING id",
-    )
-    .bind(qd_a)
-    .fetch_one(pool)
-    .await
-    .expect("anon session");
+    let anon_session: Uuid =
+        sqlx::query_scalar("INSERT INTO sessions (questionnaire_id) VALUES ($1) RETURNING id")
+            .bind(qd_a)
+            .fetch_one(pool)
+            .await
+            .expect("anon session");
 
     let anon_response_id: Uuid = sqlx::query_scalar(
         "INSERT INTO responses (session_id, question_id, value)
@@ -205,20 +204,24 @@ async fn pin_as_app_role(
         .execute(&mut *tx)
         .await
         .expect("grant read");
-    sqlx::query(&format!("GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {role_name}"))
-        .execute(&mut *tx)
-        .await
-        .expect("grant writes");
+    sqlx::query(&format!(
+        "GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {role_name}"
+    ))
+    .execute(&mut *tx)
+    .await
+    .expect("grant writes");
     sqlx::query(&format!("SET LOCAL ROLE {role_name}"))
         .execute(&mut *tx)
         .await
         .expect("set role");
-    sqlx::query("SELECT set_config('app.user_id', $1, true), set_config('app.session_id', $2, true)")
-        .bind(user_id.map(|u| u.to_string()).unwrap_or_default())
-        .bind(session_id.map(|s| s.to_string()).unwrap_or_default())
-        .execute(&mut *tx)
-        .await
-        .expect("set GUCs");
+    sqlx::query(
+        "SELECT set_config('app.user_id', $1, true), set_config('app.session_id', $2, true)",
+    )
+    .bind(user_id.map(|u| u.to_string()).unwrap_or_default())
+    .bind(session_id.map(|s| s.to_string()).unwrap_or_default())
+    .execute(&mut *tx)
+    .await
+    .expect("set GUCs");
 }
 
 #[tokio::test]
@@ -231,13 +234,12 @@ async fn user_a_cannot_select_user_bs_projects() {
 
     let mut tx = pool.begin().await.expect("begin");
     pin_as_app_role(&mut tx, Some(f.user_a), None).await;
-    let visible: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM projects WHERE id = ANY($1) ORDER BY id",
-    )
-    .bind(&[f.project_a, f.project_b][..])
-    .fetch_all(&mut *tx)
-    .await
-    .expect("select projects");
+    let visible: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM projects WHERE id = ANY($1) ORDER BY id")
+            .bind(&[f.project_a, f.project_b][..])
+            .fetch_all(&mut *tx)
+            .await
+            .expect("select projects");
     tx.rollback().await.ok();
 
     assert_eq!(
@@ -263,22 +265,20 @@ async fn user_a_can_insert_project_with_org_bs_id_at_rls_layer() {
     // Resolve org B's id on the bypass connection — once we pin to
     // user A's role, the projects_select policy filters out project B
     // (which is the cross-tenant denial the other test asserts).
-    let org_b_id: Uuid =
-        sqlx::query_scalar("SELECT organization_id FROM projects WHERE id = $1")
-            .bind(f.project_b)
-            .fetch_one(&pool)
-            .await
-            .expect("fetch org b id");
+    let org_b_id: Uuid = sqlx::query_scalar("SELECT organization_id FROM projects WHERE id = $1")
+        .bind(f.project_b)
+        .fetch_one(&pool)
+        .await
+        .expect("fetch org b id");
 
     let mut tx = pool.begin().await.expect("begin");
     pin_as_app_role(&mut tx, Some(f.user_a), None).await;
-    let result = sqlx::query(
-        "INSERT INTO projects (organization_id, name, code) VALUES ($1, 'A-in-B', $2)",
-    )
-    .bind(org_b_id)
-    .bind(format!("rls-{}", &Uuid::new_v4().to_string()[..8]))
-    .execute(&mut *tx)
-    .await;
+    let result =
+        sqlx::query("INSERT INTO projects (organization_id, name, code) VALUES ($1, 'A-in-B', $2)")
+            .bind(org_b_id)
+            .bind(format!("rls-{}", &Uuid::new_v4().to_string()[..8]))
+            .execute(&mut *tx)
+            .await;
     tx.rollback().await.ok();
 
     assert!(
@@ -365,14 +365,13 @@ async fn anon_session_insert_cannot_forge_user_id() {
     let own = Uuid::new_v4();
     let mut tx = pool.begin().await.expect("begin");
     pin_as_app_role(&mut tx, None, Some(own)).await;
-    let denied = sqlx::query(
-        "INSERT INTO sessions (id, questionnaire_id, user_id) VALUES ($1, $2, $3)",
-    )
-    .bind(own)
-    .bind(qid)
-    .bind(f.user_b)
-    .execute(&mut *tx)
-    .await;
+    let denied =
+        sqlx::query("INSERT INTO sessions (id, questionnaire_id, user_id) VALUES ($1, $2, $3)")
+            .bind(own)
+            .bind(qid)
+            .bind(f.user_b)
+            .execute(&mut *tx)
+            .await;
     tx.rollback().await.ok();
     assert!(
         denied.is_err(),
@@ -407,12 +406,11 @@ async fn anon_fillout_can_select_its_own_responses() {
     let mut tx = pool.begin().await.expect("begin");
     // No user_id GUC; session_id bound to the anonymous session.
     pin_as_app_role(&mut tx, None, Some(f.anon_session)).await;
-    let count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM responses WHERE id = $1")
-            .bind(f.anon_response_id)
-            .fetch_one(&mut *tx)
-            .await
-            .expect("count");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM responses WHERE id = $1")
+        .bind(f.anon_response_id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("count");
     tx.rollback().await.ok();
 
     assert_eq!(
@@ -436,12 +434,11 @@ async fn anon_fillout_cannot_select_other_sessions_responses() {
 
     let mut tx = pool.begin().await.expect("begin");
     pin_as_app_role(&mut tx, None, Some(other_session_id)).await;
-    let count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM responses WHERE id = $1")
-            .bind(f.anon_response_id)
-            .fetch_one(&mut *tx)
-            .await
-            .expect("count");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM responses WHERE id = $1")
+        .bind(f.anon_response_id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("count");
     tx.rollback().await.ok();
 
     assert_eq!(
@@ -462,14 +459,13 @@ async fn authenticated_fillout_can_select_all_of_its_sessions() {
     // user_id = A bound; session_id NULL. Dual-path admits via
     // sessions.user_id = current_app_user_id().
     pin_as_app_role(&mut tx, Some(f.user_a), None).await;
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM sessions WHERE id = $1 AND user_id = $2",
-    )
-    .bind(f.auth_session_a)
-    .bind(f.user_a)
-    .fetch_one(&mut *tx)
-    .await
-    .expect("count");
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id = $1 AND user_id = $2")
+            .bind(f.auth_session_a)
+            .bind(f.user_a)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("count");
     tx.rollback().await.ok();
 
     assert_eq!(
@@ -504,12 +500,11 @@ async fn authenticated_fillout_cannot_select_user_bs_sessions() {
     // not org B; questionnaire_b doesn't exist yet so no admission
     // via that path either).
     pin_as_app_role(&mut tx, Some(f.user_a), None).await;
-    let count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id = $1")
-            .bind(auth_session_b)
-            .fetch_one(&mut *tx)
-            .await
-            .expect("count");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id = $1")
+        .bind(auth_session_b)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("count");
     tx.rollback().await.ok();
 
     assert_eq!(

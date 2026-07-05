@@ -183,7 +183,10 @@ async fn bump_does_not_touch_soft_deleted_rows() {
     let (project_id, q_id) = make_questionnaire(&pool).await.expect("setup");
     // Soft-delete the row.
     sqlx::query("UPDATE questionnaire_definitions SET deleted_at = NOW() WHERE id = $1")
-        .bind(q_id).execute(&pool).await.expect("soft-delete");
+        .bind(q_id)
+        .execute(&pool)
+        .await
+        .expect("soft-delete");
 
     // Bump must NOT match this row.
     let bumped: Option<(i32, i32, i32)> = sqlx::query_as(

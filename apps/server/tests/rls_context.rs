@@ -81,13 +81,12 @@ async fn rls_context_guc_is_set_inside_transaction_and_cleared_outside() {
     // Rolling back drops the transaction-local GUC.
     tx.rollback().await.expect("rollback");
 
-    let outside: Option<String> = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT current_setting('app.user_id', true)",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("read GUC outside tx")
-    .filter(|s| !s.is_empty());
+    let outside: Option<String> =
+        sqlx::query_scalar::<_, Option<String>>("SELECT current_setting('app.user_id', true)")
+            .fetch_one(&pool)
+            .await
+            .expect("read GUC outside tx")
+            .filter(|s| !s.is_empty());
     assert!(
         outside.is_none(),
         "app.user_id must not leak past the per-request transaction; got {outside:?}"

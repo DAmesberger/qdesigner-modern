@@ -182,7 +182,10 @@ async fn cohort_stats_returns_correct_moments_over_completed_sessions() {
     assert_eq!(row.n, 6, "6 completed sessions; the active one is excluded");
 
     let mean = row.mean.expect("mean");
-    assert!((mean - 35.0).abs() < 1e-9, "population mean of 10..60 step 10 = 35, got {mean}");
+    assert!(
+        (mean - 35.0).abs() < 1e-9,
+        "population mean of 10..60 step 10 = 35, got {mean}"
+    );
 
     // Population std_dev: sqrt( mean((x-35)^2) ) over {10,20,30,40,50,60}.
     let std_dev = row.std_dev.expect("std_dev");
@@ -210,7 +213,11 @@ async fn cohort_stats_excludes_non_completed() {
     let row = cohort_stats(&pool, qid, "variable", "score").await;
     // If the active score=999 leaked in, max would be 999 and n would be 7.
     assert_eq!(row.n, 6);
-    assert_eq!(row.max, Some(60.0), "the active outlier (999) must be excluded");
+    assert_eq!(
+        row.max,
+        Some(60.0),
+        "the active outlier (999) must be excluded"
+    );
 }
 
 #[tokio::test]
@@ -276,7 +283,10 @@ async fn cohort_stats_small_cohort_reports_raw_n_for_handler_floor() {
     }
 
     let row = cohort_stats(&pool, qid, "variable", "score").await;
-    assert_eq!(row.n, 3, "the SQL returns the raw n; the handler floors n < 5 to null stats");
+    assert_eq!(
+        row.n, 3,
+        "the SQL returns the raw n; the handler floors n < 5 to null stats"
+    );
 }
 
 #[tokio::test]
@@ -296,12 +306,16 @@ async fn cohort_stats_definer_is_the_only_window_under_the_app_role() {
         .await
         .expect("set role");
 
-    let visible: i64 = sqlx::query_scalar("SELECT count(*) FROM sessions WHERE questionnaire_id = $1")
-        .bind(qid)
-        .fetch_one(&mut *tx)
-        .await
-        .expect("direct count");
-    assert_eq!(visible, 0, "dual-path RLS hides every session from the anonymous app role");
+    let visible: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM sessions WHERE questionnaire_id = $1")
+            .bind(qid)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("direct count");
+    assert_eq!(
+        visible, 0,
+        "dual-path RLS hides every session from the anonymous app role"
+    );
 
     let row = sqlx::query_as::<_, StatsRow>(
         "SELECT n, mean, std_dev, min, max, median, p90, p95, p99 \
@@ -311,7 +325,10 @@ async fn cohort_stats_definer_is_the_only_window_under_the_app_role() {
     .fetch_one(&mut *tx)
     .await
     .expect("definer stats under app role");
-    assert_eq!(row.n, 6, "the owner-definer aggregate still sees all completed sessions");
+    assert_eq!(
+        row.n, 6,
+        "the owner-definer aggregate still sees all completed sessions"
+    );
 
     tx.rollback().await.ok();
 }

@@ -207,10 +207,7 @@ pub async fn list_organizations(
     tx: Tx,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<Vec<Organization>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
 
@@ -253,10 +250,7 @@ pub async fn create_organization(
     tx: Tx,
     Json(body): Json<CreateOrgRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Organization>), ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -329,10 +323,7 @@ pub async fn get_organization(
     tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<Organization>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     // Verify membership
     let is_member = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active')",
@@ -389,10 +380,7 @@ pub async fn update_organization(
     Path(org_id): Path<Uuid>,
     Json(body): Json<UpdateOrgRequest>,
 ) -> Result<Json<Organization>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -480,10 +468,7 @@ pub async fn delete_organization(
     tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     if !state
         .rbac
         .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
@@ -527,10 +512,7 @@ pub async fn list_members(
     tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<Vec<OrgMember>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     // Verify membership
     let is_member = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active')",
@@ -587,10 +569,7 @@ pub async fn add_member(
     Path(org_id): Path<Uuid>,
     Json(body): Json<AddMemberRequest>,
 ) -> Result<(axum::http::StatusCode, Json<serde_json::Value>), ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -672,10 +651,7 @@ pub async fn remove_member(
     tx: Tx,
     Path((org_id, target_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     if !state
         .rbac
         .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
@@ -744,10 +720,7 @@ pub async fn change_member_role(
     Path((org_id, target_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<ChangeMemberRoleRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Validate the requested role value.
     if !matches!(body.role.as_str(), "owner" | "admin" | "member" | "viewer") {
@@ -845,10 +818,7 @@ pub async fn list_invitations(
     tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<Vec<Invitation>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     if !state
         .rbac
         .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
@@ -898,10 +868,7 @@ pub async fn create_invitation(
     Path(org_id): Path<Uuid>,
     Json(body): Json<CreateInvitationRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Invitation>), ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -1051,10 +1018,7 @@ pub async fn list_pending_invitations(
     user: AuthenticatedUser,
     tx: Tx,
 ) -> Result<Json<Vec<PendingInvitation>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     // Look up the user's email
     let email = sqlx::query_scalar::<_, String>(
         "SELECT email FROM users WHERE id = $1 AND deleted_at IS NULL",
@@ -1194,10 +1158,7 @@ pub async fn accept_invitation(
     tx: Tx,
     Path(invitation_token): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     // Look up the user's email
     let email = sqlx::query_scalar::<_, String>(
         "SELECT email FROM users WHERE id = $1 AND deleted_at IS NULL",
@@ -1271,10 +1232,7 @@ pub async fn decline_invitation(
     tx: Tx,
     Path(invitation_token): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     let email = sqlx::query_scalar::<_, String>(
         "SELECT email FROM users WHERE id = $1 AND deleted_at IS NULL",
     )
@@ -1331,10 +1289,7 @@ pub async fn revoke_invitation(
     tx: Tx,
     Path((org_id, invitation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     if !state
         .rbac
         .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
@@ -1389,10 +1344,7 @@ pub async fn list_domains(
     tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<Vec<DomainRecord>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     if !state
         .rbac
         .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
@@ -1442,10 +1394,7 @@ pub async fn create_domain(
     Path(org_id): Path<Uuid>,
     Json(body): Json<CreateDomainRequest>,
 ) -> Result<(axum::http::StatusCode, Json<DomainRecord>), ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     if !state
         .rbac
         .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
@@ -1502,10 +1451,7 @@ pub async fn verify_domain(
     // token. The guard is dropped at the end of this block so the pooled DB
     // connection is not held under the mutex across the DNS network I/O below.
     let (domain, token) = {
-        let mut guard = tx.lock().await;
-        let tx = guard
-            .as_mut()
-            .expect("rls_context middleware placed a transaction");
+        let mut tx = tx.tx().await?;
         if !state
             .rbac
             .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
@@ -1546,10 +1492,7 @@ pub async fn verify_domain(
 
     // Phase 3 (re-enter the tx): record the successful verification.
     let rows_affected = {
-        let mut guard = tx.lock().await;
-        let tx = guard
-            .as_mut()
-            .expect("rls_context middleware placed a transaction");
+        let mut tx = tx.tx().await?;
         sqlx::query(
             "UPDATE organization_domains SET verified_at = NOW(), last_verified_at = NOW() \
              WHERE id = $1 AND organization_id = $2",
@@ -1634,10 +1577,7 @@ pub async fn update_domain(
     Path((org_id, domain_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateDomainRequest>,
 ) -> Result<Json<DomainRecord>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     if !state
         .rbac
         .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
@@ -1727,10 +1667,7 @@ pub async fn delete_domain(
     tx: Tx,
     Path((org_id, domain_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
     if !state
         .rbac
         .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)

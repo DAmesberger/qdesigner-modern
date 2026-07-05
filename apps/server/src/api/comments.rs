@@ -76,10 +76,7 @@ pub async fn create_comment(
     tx: Tx,
     Json(body): Json<CreateCommentRequest>,
 ) -> Result<Json<CommentResponse>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 
@@ -127,10 +124,7 @@ pub async fn list_comments(
     tx: Tx,
     Query(query): Query<ListCommentsQuery>,
 ) -> Result<Json<Vec<CommentResponse>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 
@@ -181,10 +175,7 @@ pub async fn update_comment(
     tx: Tx,
     Json(body): Json<UpdateCommentRequest>,
 ) -> Result<Json<CommentResponse>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 
@@ -259,10 +250,7 @@ pub async fn delete_comment(
     user: AuthenticatedUser,
     tx: Tx,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 

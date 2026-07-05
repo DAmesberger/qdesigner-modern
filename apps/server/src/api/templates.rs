@@ -101,10 +101,7 @@ pub async fn list_templates(
     Path(org_id): Path<Uuid>,
     Query(q): Query<TemplateListQuery>,
 ) -> Result<Json<Vec<QuestionTemplate>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     access::verify_org_membership(&mut **tx, user.user_id, org_id).await?;
 
@@ -172,10 +169,7 @@ pub async fn create_template(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     access::verify_org_membership(&mut **tx, user.user_id, org_id).await?;
 
@@ -230,10 +224,7 @@ pub async fn get_template(
     tx: Tx,
     Path(path): Path<OrgTemplatePath>,
 ) -> Result<Json<QuestionTemplate>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     access::verify_org_membership(&mut **tx, user.user_id, path.id).await?;
 
@@ -294,10 +285,7 @@ pub async fn update_template(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     access::verify_org_membership(&mut **tx, user.user_id, path.id).await?;
 
@@ -399,10 +387,7 @@ pub async fn delete_template(
     tx: Tx,
     Path(path): Path<OrgTemplatePath>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     access::verify_org_membership(&mut **tx, user.user_id, path.id).await?;
     verify_template_write_access(&mut **tx, user.user_id, path.id, path.tid).await?;

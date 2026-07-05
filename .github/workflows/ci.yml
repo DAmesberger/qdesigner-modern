@@ -24,6 +24,13 @@ jobs:
   # Backend checks
   backend:
     runs-on: ubuntu-latest
+    # Force the sqlx query!/query_as! macros to expand from the committed
+    # apps/server/.sqlx cache instead of the live DB (ADR 0024). The global
+    # DATABASE_URL above points at a bare postgres whose schema is only
+    # created once migrations run, so it must not be consulted at
+    # macro-expansion time.
+    env:
+      SQLX_OFFLINE: "true"
     services:
       postgres:
         image: postgres:18-alpine

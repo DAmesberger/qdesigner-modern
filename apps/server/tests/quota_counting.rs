@@ -148,7 +148,10 @@ async fn completed_count_ignores_non_completed_sessions() {
         .await
         .expect("completed count");
 
-    assert_eq!(total, 3, "3 completed (2 male + 1 female); the active one is excluded");
+    assert_eq!(
+        total, 3,
+        "3 completed (2 male + 1 female); the active one is excluded"
+    );
 }
 
 #[tokio::test]
@@ -159,12 +162,13 @@ async fn condition_count_is_per_cell_not_grand_total() {
     };
     let qid = seed(&pool).await;
 
-    let male: i64 =
-        sqlx::query_scalar("SELECT public.fillout_quota_condition_count($1, 'gender', '==', 'male')")
-            .bind(qid)
-            .fetch_one(&pool)
-            .await
-            .expect("male count");
+    let male: i64 = sqlx::query_scalar(
+        "SELECT public.fillout_quota_condition_count($1, 'gender', '==', 'male')",
+    )
+    .bind(qid)
+    .fetch_one(&pool)
+    .await
+    .expect("male count");
     let female: i64 = sqlx::query_scalar(
         "SELECT public.fillout_quota_condition_count($1, 'gender', '==', 'female')",
     )
@@ -173,7 +177,10 @@ async fn condition_count_is_per_cell_not_grand_total() {
     .await
     .expect("female count");
 
-    assert_eq!(male, 2, "gender == male should count exactly the two male completions");
+    assert_eq!(
+        male, 2,
+        "gender == male should count exactly the two male completions"
+    );
     assert_eq!(
         female, 1,
         "gender == female should count the one female completion (resolved via session_variables)"
@@ -211,7 +218,10 @@ async fn numeric_comparisons_are_guarded_and_correct() {
             .fetch_one(&pool)
             .await
             .expect("gender > 1");
-    assert_eq!(gender_gt_1, 0, "non-numeric 'male'/'female' > 1 must be a non-match, not an error");
+    assert_eq!(
+        gender_gt_1, 0,
+        "non-numeric 'male'/'female' > 1 must be a non-match, not an error"
+    );
 
     // != counts the complement (males are 'not female').
     let not_female: i64 = sqlx::query_scalar(
@@ -262,13 +272,17 @@ async fn definer_is_the_only_aggregate_window_under_the_app_role() {
         "the SECURITY DEFINER function must see the true total across all sessions"
     );
 
-    let male_via_definer: i64 =
-        sqlx::query_scalar("SELECT public.fillout_quota_condition_count($1, 'gender', '==', 'male')")
-            .bind(qid)
-            .fetch_one(&mut *tx)
-            .await
-            .expect("definer condition count under app role");
-    assert_eq!(male_via_definer, 2, "per-cell definer count also works under the app role");
+    let male_via_definer: i64 = sqlx::query_scalar(
+        "SELECT public.fillout_quota_condition_count($1, 'gender', '==', 'male')",
+    )
+    .bind(qid)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("definer condition count under app role");
+    assert_eq!(
+        male_via_definer, 2,
+        "per-cell definer count also works under the app role"
+    );
 
     tx.rollback().await.ok();
 }

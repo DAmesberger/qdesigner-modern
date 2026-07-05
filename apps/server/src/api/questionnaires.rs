@@ -177,10 +177,7 @@ pub async fn list_questionnaires(
     Path(project_id): Path<Uuid>,
     Query(q): Query<QuestionnaireListQuery>,
 ) -> Result<Json<Vec<Questionnaire>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Verify access to the project
     verify_project_access(&mut **tx, user.user_id, project_id).await?;
@@ -255,10 +252,7 @@ pub async fn create_questionnaire(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Verify write access
     verify_project_write_access(&mut **tx, user.user_id, project_id).await?;
@@ -285,7 +279,7 @@ pub async fn create_questionnaire(
     .fetch_one(&mut **tx)
     .await?;
 
-    sync_questionnaire_variable_definitions(&mut **tx, &q).await?;
+    sync_questionnaire_variable_definitions(&mut tx, &q).await?;
 
     Ok((axum::http::StatusCode::CREATED, Json(q)))
 }
@@ -312,10 +306,7 @@ pub async fn get_questionnaire(
     tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<Questionnaire>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     verify_project_access(&mut **tx, user.user_id, path.id).await?;
 
@@ -365,15 +356,12 @@ pub async fn update_questionnaire(
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
 
     // Snapshot current state into questionnaire_versions before updating
-    snapshot_questionnaire_version(&mut **tx, path.qid, user.user_id).await?;
+    snapshot_questionnaire_version(&mut tx, path.qid, user.user_id).await?;
 
     // Handle publish action
     if body.status.as_deref() == Some("published") {
@@ -394,7 +382,7 @@ pub async fn update_questionnaire(
         .await?
         .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
-        sync_questionnaire_variable_definitions(&mut **tx, &q).await?;
+        sync_questionnaire_variable_definitions(&mut tx, &q).await?;
 
         return Ok(Json(q));
     }
@@ -463,7 +451,7 @@ pub async fn update_questionnaire(
         .await?
         .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
-    sync_questionnaire_variable_definitions(&mut **tx, &q).await?;
+    sync_questionnaire_variable_definitions(&mut tx, &q).await?;
 
     Ok(Json(q))
 }
@@ -490,14 +478,11 @@ pub async fn publish_questionnaire(
     tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<Questionnaire>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
 
-    snapshot_questionnaire_version(&mut **tx, path.qid, user.user_id).await?;
+    snapshot_questionnaire_version(&mut tx, path.qid, user.user_id).await?;
 
     let questionnaire = sqlx::query_as::<_, Questionnaire>(
         r#"
@@ -515,7 +500,7 @@ pub async fn publish_questionnaire(
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
-    sync_questionnaire_variable_definitions(&mut **tx, &questionnaire).await?;
+    sync_questionnaire_variable_definitions(&mut tx, &questionnaire).await?;
 
     Ok(Json(questionnaire))
 }
@@ -550,15 +535,12 @@ pub async fn bump_version(
     Path(path): Path<ProjectQuestionnairePath>,
     Json(body): Json<BumpVersionRequest>,
 ) -> Result<Json<Questionnaire>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
 
     // Snapshot current version first
-    snapshot_questionnaire_version(&mut **tx, path.qid, user.user_id).await?;
+    snapshot_questionnaire_version(&mut tx, path.qid, user.user_id).await?;
 
     let q = match body.bump_type.as_str() {
         "major" => {
@@ -626,7 +608,7 @@ pub async fn bump_version(
     };
 
     let questionnaire = q.ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
-    sync_questionnaire_variable_definitions(&mut **tx, &questionnaire).await?;
+    sync_questionnaire_variable_definitions(&mut tx, &questionnaire).await?;
 
     Ok(Json(questionnaire))
 }
@@ -653,10 +635,7 @@ pub async fn delete_questionnaire(
     tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
 
@@ -749,10 +728,7 @@ pub async fn export_responses(
     Path(path): Path<ProjectQuestionnairePath>,
     Query(query): Query<ExportQuery>,
 ) -> Result<Response, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     verify_project_access(&mut **tx, user.user_id, path.id).await?;
 
@@ -1004,10 +980,7 @@ pub async fn list_versions(
     Path(questionnaire_id): Path<Uuid>,
     Query(q): Query<VersionListQuery>,
 ) -> Result<Json<Vec<QuestionnaireVersion>>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     // Verify access via the questionnaire's project
     let project_id = sqlx::query_scalar::<_, Uuid>(

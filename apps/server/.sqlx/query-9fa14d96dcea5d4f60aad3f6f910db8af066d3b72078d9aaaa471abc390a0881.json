@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO session_variables (session_id, variable_name, variable_value)\n        VALUES ($1, $2, $3)\n        ON CONFLICT (session_id, variable_name)\n        DO UPDATE SET variable_value = EXCLUDED.variable_value, updated_at = NOW()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9fa14d96dcea5d4f60aad3f6f910db8af066d3b72078d9aaaa471abc390a0881"
+}

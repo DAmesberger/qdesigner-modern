@@ -23,6 +23,10 @@
             pkgs.rustfmt
             pkgs.clippy
             pkgs.cargo-watch
+            # sqlx offline-macro tooling: `cargo sqlx prepare` regenerates the
+            # committed apps/server/.sqlx/ query cache that lets the query!/
+            # query_as! macros expand with the database down (ADR 0024).
+            pkgs.sqlx-cli
             pkgs.just
             pkgs.pkg-config
             pkgs.openssl

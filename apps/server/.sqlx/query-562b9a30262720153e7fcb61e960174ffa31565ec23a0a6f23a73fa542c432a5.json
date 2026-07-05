@@ -1,0 +1,103 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO sessions (id, questionnaire_id, participant_id, status, started_at,\n                              browser_info, metadata,\n                              questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch,\n                              user_id, fingerprint)\n        VALUES ($1, $2, $3, 'active', NOW(), $4, $5, $6, $7, $8, $9, $10)\n        RETURNING id, questionnaire_id, participant_id, status as \"status!\",\n                  started_at, completed_at, last_activity_at, metadata as \"metadata!\",\n                  browser_info, created_at,\n                  questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "questionnaire_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "participant_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "status!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "completed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_activity_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "metadata!",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "browser_info",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "questionnaire_version_major",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "questionnaire_version_minor",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "questionnaire_version_patch",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Varchar",
+        "Jsonb",
+        "Jsonb",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "562b9a30262720153e7fcb61e960174ffa31565ec23a0a6f23a73fa542c432a5"
+}

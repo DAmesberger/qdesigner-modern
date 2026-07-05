@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT session_id, variable_name, variable_value as \"variable_value?\",\n               created_at as \"created_at?\", updated_at as \"updated_at?\"\n        FROM session_variables\n        WHERE session_id = $1\n        ORDER BY variable_name ASC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "variable_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "variable_value?",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at?",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b07188c9f4815425dde47d67a034c374acea868096670897e1ff755384ef1596"
+}

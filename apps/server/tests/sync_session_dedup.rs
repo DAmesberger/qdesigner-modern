@@ -134,22 +134,19 @@ async fn responses_dedup_on_client_id() {
 
     // Confirm there's still exactly ONE row for this client_id and that
     // its value is the ORIGINAL (not overwritten by the retry).
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM responses WHERE client_id = $1",
-    )
-    .bind(client_id)
-    .fetch_one(&pool)
-    .await
-    .expect("count");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM responses WHERE client_id = $1")
+        .bind(client_id)
+        .fetch_one(&pool)
+        .await
+        .expect("count");
     assert_eq!(count, 1);
 
-    let value: serde_json::Value = sqlx::query_scalar(
-        "SELECT value FROM responses WHERE client_id = $1",
-    )
-    .bind(client_id)
-    .fetch_one(&pool)
-    .await
-    .expect("value");
+    let value: serde_json::Value =
+        sqlx::query_scalar("SELECT value FROM responses WHERE client_id = $1")
+            .bind(client_id)
+            .fetch_one(&pool)
+            .await
+            .expect("value");
     assert_eq!(value, first_value);
 }
 
@@ -187,13 +184,12 @@ async fn interaction_events_dedup_on_client_id() {
     .rows_affected();
     assert_eq!(retry, 0);
 
-    let ts: i64 = sqlx::query_scalar(
-        "SELECT timestamp_us FROM interaction_events WHERE client_id = $1",
-    )
-    .bind(client_id)
-    .fetch_one(&pool)
-    .await
-    .expect("ts");
+    let ts: i64 =
+        sqlx::query_scalar("SELECT timestamp_us FROM interaction_events WHERE client_id = $1")
+            .bind(client_id)
+            .fetch_one(&pool)
+            .await
+            .expect("ts");
     assert_eq!(ts, 1000, "original value must survive retry");
 }
 
@@ -256,7 +252,10 @@ async fn sync_metadata_merge_preserves_prior_keys_and_is_idempotent() {
             .fetch_one(&pool)
             .await
             .expect("read merged again");
-    assert_eq!(merged_again, merged, "second identical merge must be a no-op");
+    assert_eq!(
+        merged_again, merged,
+        "second identical merge must be a no-op"
+    );
 }
 
 #[tokio::test]
@@ -270,14 +269,24 @@ async fn distinct_client_ids_each_create_a_row() {
     let cid_a = Uuid::new_v4();
     let cid_b = Uuid::new_v4();
 
-    sqlx::query("INSERT INTO responses (session_id, client_id, question_id, value) \
-                 VALUES ($1, $2, 'q-1', '1'::jsonb) ON CONFLICT (client_id) DO NOTHING")
-        .bind(session_id).bind(cid_a)
-        .execute(&pool).await.expect("a");
-    sqlx::query("INSERT INTO responses (session_id, client_id, question_id, value) \
-                 VALUES ($1, $2, 'q-1', '2'::jsonb) ON CONFLICT (client_id) DO NOTHING")
-        .bind(session_id).bind(cid_b)
-        .execute(&pool).await.expect("b");
+    sqlx::query(
+        "INSERT INTO responses (session_id, client_id, question_id, value) \
+                 VALUES ($1, $2, 'q-1', '1'::jsonb) ON CONFLICT (client_id) DO NOTHING",
+    )
+    .bind(session_id)
+    .bind(cid_a)
+    .execute(&pool)
+    .await
+    .expect("a");
+    sqlx::query(
+        "INSERT INTO responses (session_id, client_id, question_id, value) \
+                 VALUES ($1, $2, 'q-1', '2'::jsonb) ON CONFLICT (client_id) DO NOTHING",
+    )
+    .bind(session_id)
+    .bind(cid_b)
+    .execute(&pool)
+    .await
+    .expect("b");
 
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM responses WHERE session_id = $1 AND client_id IN ($2, $3)",

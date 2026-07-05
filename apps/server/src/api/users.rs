@@ -46,10 +46,7 @@ pub async fn get_profile(
     user: AuthenticatedUser,
     tx: Tx,
 ) -> Result<Json<UserProfile>, ApiError> {
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     let profile = sqlx::query_as::<_, UserProfile>(
         r#"
@@ -135,10 +132,7 @@ pub async fn update_profile(
         query = query.bind(v);
     }
 
-    let mut guard = tx.lock().await;
-    let tx = guard
-        .as_mut()
-        .expect("rls_context middleware placed a transaction");
+    let mut tx = tx.tx().await?;
 
     let profile = query
         .fetch_one(&mut **tx)

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO responses (session_id, question_id, value, reaction_time_us, presented_at, answered_at, metadata, client_id, timing_provenance)\n            VALUES ($1, $2, $3, $4, $5::text::timestamptz, $6::text::timestamptz, COALESCE($7, '{}'::jsonb), $8, $9)\n            ON CONFLICT (client_id) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Jsonb",
+        "Int8",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d6304a48185e329c94a4b62466f8558de2a9d16d5140890bd7a96596a599277f"
+}

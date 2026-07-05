@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, session_id, event_type, question_id, timestamp_us,\n               metadata as \"metadata?\", created_at, client_id\n        FROM interaction_events\n        WHERE session_id = $1\n        ORDER BY timestamp_us ASC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "event_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "question_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "timestamp_us",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "metadata?",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "client_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "048819ae4553dffb70b6cd6fb1cea5b1f3205ea103369e660713c83b1e8bed6a"
+}

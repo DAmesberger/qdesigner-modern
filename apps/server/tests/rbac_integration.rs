@@ -67,7 +67,11 @@ async fn create_test_user(pool: &PgPool, email: &str) -> sqlx::Result<Uuid> {
 }
 
 async fn create_test_org(pool: &PgPool, name: &str, owner: Uuid) -> sqlx::Result<Uuid> {
-    let slug = format!("{}-{}", name.to_lowercase().replace(' ', "-"), &Uuid::new_v4().to_string()[..8]);
+    let slug = format!(
+        "{}-{}",
+        name.to_lowercase().replace(' ', "-"),
+        &Uuid::new_v4().to_string()[..8]
+    );
     let org_id: Uuid = sqlx::query_scalar(
         "INSERT INTO organizations (name, slug, created_by) VALUES ($1, $2, $3) RETURNING id",
     )
@@ -115,12 +119,11 @@ async fn rls_helper_functions_exist() {
     .expect("query");
     assert!(exists, "current_app_user_id() should exist");
 
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM pg_proc WHERE proname = 'is_super_admin')",
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("query");
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_proc WHERE proname = 'is_super_admin')")
+            .fetch_one(&pool)
+            .await
+            .expect("query");
     assert!(exists, "is_super_admin() should exist");
 }
 
@@ -165,7 +168,10 @@ async fn project_member_trigger_exists() {
     .fetch_one(&pool)
     .await
     .expect("query");
-    assert!(exists, "trg_project_members_org_check trigger should exist on project_members");
+    assert!(
+        exists,
+        "trg_project_members_org_check trigger should exist on project_members"
+    );
 }
 
 #[tokio::test]
@@ -175,10 +181,16 @@ async fn project_member_must_be_org_member() {
         return;
     };
 
-    let user_a = create_test_user(&pool, &format!("a-{}@test.local", Uuid::new_v4())).await.expect("user a");
-    let user_b = create_test_user(&pool, &format!("b-{}@test.local", Uuid::new_v4())).await.expect("user b");
+    let user_a = create_test_user(&pool, &format!("a-{}@test.local", Uuid::new_v4()))
+        .await
+        .expect("user a");
+    let user_b = create_test_user(&pool, &format!("b-{}@test.local", Uuid::new_v4()))
+        .await
+        .expect("user b");
     let org_a = create_test_org(&pool, "Org A", user_a).await.expect("org");
-    let project_a = create_test_project(&pool, org_a, "Project A").await.expect("project");
+    let project_a = create_test_project(&pool, org_a, "Project A")
+        .await
+        .expect("project");
 
     // user_b is not a member of org_a; the trigger should block adding them
     // as a project member of org_a's project.
@@ -190,7 +202,10 @@ async fn project_member_must_be_org_member() {
     .execute(&pool)
     .await;
 
-    assert!(result.is_err(), "expected trigger to reject non-org-member, got: {result:?}");
+    assert!(
+        result.is_err(),
+        "expected trigger to reject non-org-member, got: {result:?}"
+    );
 }
 
 #[tokio::test]
@@ -200,11 +215,21 @@ async fn cross_tenant_project_member_insertion_denied() {
         return;
     };
 
-    let user_org1 = create_test_user(&pool, &format!("u1-{}@test.local", Uuid::new_v4())).await.expect("user");
-    let user_org2 = create_test_user(&pool, &format!("u2-{}@test.local", Uuid::new_v4())).await.expect("user");
-    let org1 = create_test_org(&pool, "Org One", user_org1).await.expect("org1");
-    let _org2 = create_test_org(&pool, "Org Two", user_org2).await.expect("org2");
-    let project_in_org1 = create_test_project(&pool, org1, "P1").await.expect("project");
+    let user_org1 = create_test_user(&pool, &format!("u1-{}@test.local", Uuid::new_v4()))
+        .await
+        .expect("user");
+    let user_org2 = create_test_user(&pool, &format!("u2-{}@test.local", Uuid::new_v4()))
+        .await
+        .expect("user");
+    let org1 = create_test_org(&pool, "Org One", user_org1)
+        .await
+        .expect("org1");
+    let _org2 = create_test_org(&pool, "Org Two", user_org2)
+        .await
+        .expect("org2");
+    let project_in_org1 = create_test_project(&pool, org1, "P1")
+        .await
+        .expect("project");
 
     // user_org2 belongs to org2 only; cannot be added to a project in org1.
     let result = sqlx::query(
@@ -215,7 +240,10 @@ async fn cross_tenant_project_member_insertion_denied() {
     .execute(&pool)
     .await;
 
-    assert!(result.is_err(), "expected cross-tenant insert to be denied, got: {result:?}");
+    assert!(
+        result.is_err(),
+        "expected cross-tenant insert to be denied, got: {result:?}"
+    );
 }
 
 // ── RLS policy tests (allow + adversarial deny) ──────────────────────
@@ -252,9 +280,13 @@ async fn sessions_policy_allows_org_member() {
     };
 
     // Setup as owner: user A in org A with project, questionnaire, session.
-    let user_a = create_test_user(&pool, &format!("a-{}@test.local", Uuid::new_v4())).await.expect("user");
+    let user_a = create_test_user(&pool, &format!("a-{}@test.local", Uuid::new_v4()))
+        .await
+        .expect("user");
     let org_a = create_test_org(&pool, "Org A", user_a).await.expect("org");
-    let project = create_test_project(&pool, org_a, "P").await.expect("project");
+    let project = create_test_project(&pool, org_a, "P")
+        .await
+        .expect("project");
 
     let q_id: Uuid = sqlx::query_scalar(
         "INSERT INTO questionnaire_definitions (project_id, name, content, status, created_by) \
@@ -267,13 +299,12 @@ async fn sessions_policy_allows_org_member() {
     .await
     .expect("questionnaire");
 
-    let session_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO sessions (questionnaire_id) VALUES ($1) RETURNING id",
-    )
-    .bind(q_id)
-    .fetch_one(&pool)
-    .await
-    .expect("session");
+    let session_id: Uuid =
+        sqlx::query_scalar("INSERT INTO sessions (questionnaire_id) VALUES ($1) RETURNING id")
+            .bind(q_id)
+            .fetch_one(&pool)
+            .await
+            .expect("session");
 
     let mut tx = pool.begin().await.expect("begin");
     pin_as(&mut tx, user_a).await;
@@ -295,11 +326,21 @@ async fn sessions_policy_denies_non_member() {
     };
 
     // Setup: user A in org A creates a session. user B is in a DIFFERENT org.
-    let user_a = create_test_user(&pool, &format!("a-{}@test.local", Uuid::new_v4())).await.expect("user a");
-    let user_b = create_test_user(&pool, &format!("b-{}@test.local", Uuid::new_v4())).await.expect("user b");
-    let org_a = create_test_org(&pool, "Org A", user_a).await.expect("org a");
-    let _org_b = create_test_org(&pool, "Org B", user_b).await.expect("org b");
-    let project = create_test_project(&pool, org_a, "P").await.expect("project");
+    let user_a = create_test_user(&pool, &format!("a-{}@test.local", Uuid::new_v4()))
+        .await
+        .expect("user a");
+    let user_b = create_test_user(&pool, &format!("b-{}@test.local", Uuid::new_v4()))
+        .await
+        .expect("user b");
+    let org_a = create_test_org(&pool, "Org A", user_a)
+        .await
+        .expect("org a");
+    let _org_b = create_test_org(&pool, "Org B", user_b)
+        .await
+        .expect("org b");
+    let project = create_test_project(&pool, org_a, "P")
+        .await
+        .expect("project");
 
     let q_id: Uuid = sqlx::query_scalar(
         "INSERT INTO questionnaire_definitions (project_id, name, content, status, created_by) \
@@ -312,13 +353,12 @@ async fn sessions_policy_denies_non_member() {
     .await
     .expect("questionnaire");
 
-    let session_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO sessions (questionnaire_id) VALUES ($1) RETURNING id",
-    )
-    .bind(q_id)
-    .fetch_one(&pool)
-    .await
-    .expect("session");
+    let session_id: Uuid =
+        sqlx::query_scalar("INSERT INTO sessions (questionnaire_id) VALUES ($1) RETURNING id")
+            .bind(q_id)
+            .fetch_one(&pool)
+            .await
+            .expect("session");
 
     // user_b queries with policy active — should NOT see org_a's session.
     let mut tx = pool.begin().await.expect("begin");
@@ -330,7 +370,10 @@ async fn sessions_policy_denies_non_member() {
         .expect("count");
     tx.rollback().await.ok();
 
-    assert_eq!(count, 0, "cross-org user must not see another org's session");
+    assert_eq!(
+        count, 0,
+        "cross-org user must not see another org's session"
+    );
 }
 
 // `organizations_policy_denies_non_member` was deleted in P6.2 with
@@ -362,8 +405,12 @@ async fn cross_tenant_org_membership_check_denies_non_member() {
     let user_b = create_test_user(&pool, &format!("b-{}@test.local", Uuid::new_v4()))
         .await
         .expect("user b");
-    let org_a = create_test_org(&pool, "Org A", user_a).await.expect("org a");
-    let _org_b = create_test_org(&pool, "Org B", user_b).await.expect("org b");
+    let org_a = create_test_org(&pool, "Org A", user_a)
+        .await
+        .expect("org a");
+    let _org_b = create_test_org(&pool, "Org B", user_b)
+        .await
+        .expect("org b");
 
     // Replicate the SQL the get_organization handler runs
     // (apps/server/src/api/organizations.rs §322). User B should not
