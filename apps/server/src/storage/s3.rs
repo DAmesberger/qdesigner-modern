@@ -54,6 +54,31 @@ impl S3StorageService {
         })
     }
 
+    /// Test-support: constructs the client without the network bucket probe.
+    ///
+    /// Mirrors [`new`](Self::new) up to `Client::from_conf`, but skips the
+    /// `head_bucket`/`create_bucket` round-trip so an `S3StorageService` can be
+    /// built with no reachable MinIO/S3 — the HTTP handler harness needs only
+    /// Postgres up and never touches storage.
+    pub fn new_unchecked(endpoint: &str, access_key: &str, secret_key: &str, bucket: &str) -> Self {
+        let creds = Credentials::new(access_key, secret_key, None, None, "static");
+
+        let config = S3ConfigBuilder::new()
+            .behavior_version(BehaviorVersion::latest())
+            .endpoint_url(endpoint)
+            .region(Region::new("us-east-1"))
+            .credentials_provider(creds)
+            .force_path_style(true) // required for MinIO
+            .build();
+
+        let client = Client::from_conf(config);
+
+        Self {
+            client,
+            bucket: bucket.to_string(),
+        }
+    }
+
     /// Upload a file and return the storage key.
     pub async fn upload(
         &self,

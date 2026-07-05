@@ -50,3 +50,15 @@ hickory-resolver = { version = "0.24", optional = true }
 # ownership verification. Off by default so the standard build stays lean and
 # never performs outbound DNS during a request.
 dns-verify = ["dep:hickory-resolver"]
+
+[dev-dependencies]
+# HTTP handler round-trip harness (P3-T2): drive `api::router` via
+# `tower::ServiceExt::oneshot` and collect response bodies without binding a
+# TCP socket. `tower` is already a runtime dep at "0.5"; the `util` feature is
+# additive and only pulled in for tests.
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+# MailPit HTTP API probe (P3-T3): confirm a verification email actually
+# landed after the SMTP send path. `rustls-tls` so it links without system
+# OpenSSL; `default-features = false` drops the native-tls default.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

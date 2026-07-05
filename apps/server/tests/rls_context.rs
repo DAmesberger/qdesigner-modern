@@ -12,36 +12,14 @@
 //! UUID the middleware bound; outside that transaction (after commit /
 //! rollback / connection return-to-pool) the value goes back to NULL.
 
-use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Same `.env.development`-or-process-env discovery as
-/// `tests/rbac_integration.rs`; returns None so the test cleanly skips
-/// when no DB is reachable.
-async fn get_test_pool() -> Option<PgPool> {
-    let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join(".env.development"));
-    if let Some(path) = env_path.as_ref() {
-        if path.exists() {
-            if let Ok(contents) = std::fs::read_to_string(path) {
-                for line in contents.lines() {
-                    if let Some(val) = line.strip_prefix("DATABASE_URL=") {
-                        std::env::set_var("DATABASE_URL", val.trim());
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    let url = std::env::var("DATABASE_URL").ok()?;
-    PgPool::connect(&url).await.ok()
-}
+mod common;
+use common::app_pool;
 
 #[tokio::test]
 async fn rls_context_guc_is_set_inside_transaction_and_cleared_outside() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = app_pool().await else {
         eprintln!("skipping: no DATABASE_URL / DB not reachable");
         return;
     };
@@ -90,5 +68,27 @@ async fn rls_context_guc_is_set_inside_transaction_and_cleared_outside() {
     assert!(
         outside.is_none(),
         "app.user_id must not leak past the per-request transaction; got {outside:?}"
+    );
+}
+
+/// P3-T1 — `app_pool()` connects as the non-BYPASSRLS production role.
+/// In the CI/prod posture `DATABASE_URL` is `qdesigner_app`; assert the
+/// connection actually runs as that role so a mis-pointed DSN can't
+/// silently exercise RLS as a superuser. Locally (`.env.development`)
+/// `DATABASE_URL` is also `qdesigner_app`, so this holds there too.
+#[tokio::test]
+async fn app_pool_connects_as_qdesigner_app_role() {
+    let Some(pool) = app_pool().await else {
+        eprintln!("skipping: no DATABASE_URL / DB not reachable");
+        return;
+    };
+
+    let current_user: String = sqlx::query_scalar("SELECT current_user")
+        .fetch_one(&pool)
+        .await
+        .expect("read current_user");
+    assert_eq!(
+        current_user, "qdesigner_app",
+        "app_pool() must connect as the non-BYPASSRLS qdesigner_app role, got {current_user:?}"
     );
 }

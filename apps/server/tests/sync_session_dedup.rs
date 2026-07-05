@@ -14,34 +14,8 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-async fn get_test_pool() -> Option<PgPool> {
-    let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join(".env.development"));
-    // P6.2: tests `ON CONFLICT (client_id) DO NOTHING` dedup SQL
-    // semantics on RLS-bound tables (sessions, responses,
-    // interaction_events). Fixture INSERTs run as the migration role
-    // (qdesigner — SUPERUSER, BYPASSRLS) so RLS doesn't deny them.
-    // Falls back to DATABASE_URL for envs without the split.
-    if let Some(path) = env_path.as_ref() {
-        if path.exists() {
-            if let Ok(contents) = std::fs::read_to_string(path) {
-                for line in contents.lines() {
-                    if let Some(val) = line.strip_prefix("DATABASE_URL_MIGRATIONS=") {
-                        std::env::set_var("DATABASE_URL_MIGRATIONS", val.trim());
-                    } else if let Some(val) = line.strip_prefix("DATABASE_URL=") {
-                        std::env::set_var("DATABASE_URL", val.trim());
-                    }
-                }
-            }
-        }
-    }
-    let url = std::env::var("DATABASE_URL_MIGRATIONS")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .ok()?;
-    PgPool::connect(&url).await.ok()
-}
+mod common;
+use common::fixture_pool;
 
 /// Create a minimal session row that responses/events can reference.
 async fn make_session(pool: &PgPool) -> sqlx::Result<Uuid> {
@@ -93,7 +67,7 @@ async fn make_session(pool: &PgPool) -> sqlx::Result<Uuid> {
 
 #[tokio::test]
 async fn responses_dedup_on_client_id() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
@@ -152,7 +126,7 @@ async fn responses_dedup_on_client_id() {
 
 #[tokio::test]
 async fn interaction_events_dedup_on_client_id() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
@@ -199,7 +173,7 @@ async fn sync_metadata_merge_preserves_prior_keys_and_is_idempotent() {
     // (online-created): the INSERT branch is skipped, so the final-snapshot
     // metadata (e.g. `qualityReport`) lands only via
     //   UPDATE sessions SET metadata = COALESCE(metadata,'{}'::jsonb) || $2 WHERE id = $1
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
@@ -260,7 +234,7 @@ async fn sync_metadata_merge_preserves_prior_keys_and_is_idempotent() {
 
 #[tokio::test]
 async fn distinct_client_ids_each_create_a_row() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };

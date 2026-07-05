@@ -26,29 +26,8 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-async fn get_test_pool() -> Option<PgPool> {
-    let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join(".env.development"));
-    if let Some(path) = env_path.as_ref() {
-        if path.exists() {
-            if let Ok(contents) = std::fs::read_to_string(path) {
-                for line in contents.lines() {
-                    if let Some(val) = line.strip_prefix("DATABASE_URL_MIGRATIONS=") {
-                        std::env::set_var("DATABASE_URL_MIGRATIONS", val.trim());
-                    } else if let Some(val) = line.strip_prefix("DATABASE_URL=") {
-                        std::env::set_var("DATABASE_URL", val.trim());
-                    }
-                }
-            }
-        }
-    }
-    let url = std::env::var("DATABASE_URL_MIGRATIONS")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .ok()?;
-    PgPool::connect(&url).await.ok()
-}
+mod common;
+use common::fixture_pool;
 
 #[derive(sqlx::FromRow, Debug)]
 struct StatsRow {
@@ -171,7 +150,7 @@ async fn seed(pool: &PgPool) -> (Uuid, Uuid) {
 
 #[tokio::test]
 async fn cohort_stats_returns_correct_moments_over_completed_sessions() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("skipping: DATABASE_URL_MIGRATIONS not set / db unreachable");
         return;
     };
@@ -204,7 +183,7 @@ async fn cohort_stats_returns_correct_moments_over_completed_sessions() {
 
 #[tokio::test]
 async fn cohort_stats_excludes_non_completed() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("skipping");
         return;
     };
@@ -222,7 +201,7 @@ async fn cohort_stats_excludes_non_completed() {
 
 #[tokio::test]
 async fn cohort_stats_small_cohort_reports_raw_n_for_handler_floor() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("skipping");
         return;
     };
@@ -291,7 +270,7 @@ async fn cohort_stats_small_cohort_reports_raw_n_for_handler_floor() {
 
 #[tokio::test]
 async fn cohort_stats_definer_is_the_only_window_under_the_app_role() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("skipping");
         return;
     };

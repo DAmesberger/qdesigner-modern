@@ -21,41 +21,8 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Load DATABASE_URL from the repo-root `.env.development` if present, else
-/// from the process env. Returns None if no DB is reachable so the test
-/// suite skips cleanly in environments without docker compose up.
-async fn get_test_pool() -> Option<PgPool> {
-    // CARGO_MANIFEST_DIR is `apps/server`; the .env.development lives at
-    // the repo root, two levels up. Earlier code used a single .parent()
-    // which pointed at the non-existent `apps/.env.development`.
-    let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join(".env.development"));
-    // P6.2: prefer DATABASE_URL_MIGRATIONS (qdesigner — SUPERUSER,
-    // BYPASSRLS, CREATEROLE) so fixture INSERTs aren't denied by the
-    // RLS policies and pin_as() can CREATE ROLE inside its tx. The
-    // actual policy-under-test queries happen after SET LOCAL ROLE
-    // inside a transaction, so we don't need to start on the app role.
-    // Falls back to DATABASE_URL for environments without the split.
-    if let Some(path) = env_path.as_ref() {
-        if path.exists() {
-            if let Ok(contents) = std::fs::read_to_string(path) {
-                for line in contents.lines() {
-                    if let Some(val) = line.strip_prefix("DATABASE_URL_MIGRATIONS=") {
-                        std::env::set_var("DATABASE_URL_MIGRATIONS", val.trim());
-                    } else if let Some(val) = line.strip_prefix("DATABASE_URL=") {
-                        std::env::set_var("DATABASE_URL", val.trim());
-                    }
-                }
-            }
-        }
-    }
-    let url = std::env::var("DATABASE_URL_MIGRATIONS")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .ok()?;
-    PgPool::connect(&url).await.ok()
-}
+mod common;
+use common::fixture_pool;
 
 async fn create_test_user(pool: &PgPool, email: &str) -> sqlx::Result<Uuid> {
     sqlx::query_scalar::<_, Uuid>(
@@ -106,7 +73,7 @@ async fn create_test_project(pool: &PgPool, org: Uuid, name: &str) -> sqlx::Resu
 
 #[tokio::test]
 async fn rls_helper_functions_exist() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
@@ -129,7 +96,7 @@ async fn rls_helper_functions_exist() {
 
 #[tokio::test]
 async fn rls_context_set_and_reset() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
@@ -157,7 +124,7 @@ async fn rls_context_set_and_reset() {
 
 #[tokio::test]
 async fn project_member_trigger_exists() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
@@ -176,7 +143,7 @@ async fn project_member_trigger_exists() {
 
 #[tokio::test]
 async fn project_member_must_be_org_member() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
@@ -210,7 +177,7 @@ async fn project_member_must_be_org_member() {
 
 #[tokio::test]
 async fn cross_tenant_project_member_insertion_denied() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
@@ -274,7 +241,7 @@ async fn pin_as(tx: &mut sqlx::PgConnection, as_user: Uuid) {
 
 #[tokio::test]
 async fn sessions_policy_allows_org_member() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
@@ -320,7 +287,7 @@ async fn sessions_policy_allows_org_member() {
 
 #[tokio::test]
 async fn sessions_policy_denies_non_member() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
@@ -395,7 +362,7 @@ async fn cross_tenant_org_membership_check_denies_non_member() {
     // not in the target org, so the handler short-circuits to 403
     // before SELECTing from `organizations` (which is now RLS-exempt
     // per ADR 0015 and would otherwise leak the row).
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };

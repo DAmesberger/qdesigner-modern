@@ -9,31 +9,14 @@
 //! Requires a running PostgreSQL with migrations applied.
 
 use chrono::{Duration as ChronoDuration, Utc};
-use sqlx::PgPool;
 use uuid::Uuid;
 
-async fn get_test_pool() -> Option<PgPool> {
-    let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .join(".env.development");
-    if env_path.exists() {
-        if let Ok(contents) = std::fs::read_to_string(&env_path) {
-            for line in contents.lines() {
-                if let Some(val) = line.strip_prefix("DATABASE_URL=") {
-                    std::env::set_var("DATABASE_URL", val.trim());
-                    break;
-                }
-            }
-        }
-    }
-    let url = std::env::var("DATABASE_URL").ok()?;
-    PgPool::connect(&url).await.ok()
-}
+mod common;
+use common::app_pool;
 
 #[tokio::test]
 async fn purge_deletes_old_keeps_recent() {
-    let Some(pool) = get_test_pool().await else {
+    let Some(pool) = app_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };

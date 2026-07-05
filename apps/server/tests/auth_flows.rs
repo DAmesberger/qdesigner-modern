@@ -13,6 +13,9 @@ use qdesigner_server::auth::jwt::JwtManager;
 use qdesigner_server::auth::password::{hash_password, verify_password};
 use uuid::Uuid;
 
+mod common;
+use common::fixture_pool;
+
 fn test_jwt() -> JwtManager {
     JwtManager::new(
         "test-secret-32-chars-minimum-padding-padding",
@@ -216,7 +219,7 @@ fn from_db_error_non_unique_maps_to_database() {
 /// Requires the docker test stack; skips cleanly when no DB is reachable.
 #[tokio::test]
 async fn from_db_error_unique_violation_maps_to_conflict() {
-    let Some(pool) = auth_test_pool().await else {
+    let Some(pool) = fixture_pool().await else {
         eprintln!("skipping: no DATABASE_URL reachable");
         return;
     };
@@ -258,28 +261,4 @@ async fn from_db_error_unique_violation_maps_to_conflict() {
         .bind(id1)
         .execute(&pool)
         .await;
-}
-
-async fn auth_test_pool() -> Option<sqlx::PgPool> {
-    let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join(".env.development"));
-    if let Some(path) = env_path.as_ref() {
-        if path.exists() {
-            if let Ok(contents) = std::fs::read_to_string(path) {
-                for line in contents.lines() {
-                    if let Some(val) = line.strip_prefix("DATABASE_URL_MIGRATIONS=") {
-                        std::env::set_var("DATABASE_URL_MIGRATIONS", val.trim());
-                    } else if let Some(val) = line.strip_prefix("DATABASE_URL=") {
-                        std::env::set_var("DATABASE_URL", val.trim());
-                    }
-                }
-            }
-        }
-    }
-    let url = std::env::var("DATABASE_URL_MIGRATIONS")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .ok()?;
-    sqlx::PgPool::connect(&url).await.ok()
 }
