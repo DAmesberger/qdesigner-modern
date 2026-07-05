@@ -7,9 +7,22 @@ type DynamicValue = any;
 /**
  * Static pattern check: reject scripts that attempt prototype-chain escapes
  * before they ever reach `new Function()`.
+ *
+ * Matches both dotted (`x.constructor`) AND computed/quoted access
+ * (`x['constructor']`, `[]["constructor"]`, `x[ "prototype" ]`). The quoted
+ * form is what defeats a dot-only guard — the confirmed PoC
+ * `[]['constructor']['constructor']('return this')()` reaches the real
+ * `Function` constructor through bracket notation. `prototype` is included so
+ * the static guard matches the Proxy `get` trap below.
+ *
+ * Residual risk: a purely static regex cannot catch string-concatenation
+ * obfuscation such as `x['con'+'structor']`. On the main thread there is no
+ * hard timeout to fall back on (only the ScriptWorker has Worker.terminate()),
+ * so this guard is defense-in-depth layered on the Proxy `has`/`get` traps,
+ * not a complete boundary. See the F004 note at the `new Function` sink below.
  */
 const BANNED_PROPERTY_ACCESS =
-  /\.(constructor|__proto__|__defineGetter__|__defineSetter__|__lookupGetter__|__lookupSetter__)\b/;
+  /(?:\.\s*|\[\s*["'])(constructor|prototype|__proto__|__define[GS]etter__|__lookup[GS]etter__)\b/;
 
 /**
  * Deep-freeze an object graph so user scripts cannot mutate context values.
@@ -215,8 +228,25 @@ export class ScriptExecutor {
         },
       });
 
+      // NOTE (F004): no `"use strict"` directive is prepended here. A directive
+      // placed inside a `with(...)` body is INERT — `with` forces sloppy mode,
+      // and a *real* strict directive would make `with` itself a SyntaxError.
+      // Sloppy mode is actually relied upon: assignments to the frozen context
+      // objects fail silently instead of throwing (see the
+      // "prevents context mutation" case in ScriptExecutor.security.test.ts).
+      // The isolation guard is the Proxy `has: () => true` / `get` trap on
+      // `sandbox`, NOT strict mode.
+      //
+      // Residual limit (F002): these hooks run on the MAIN THREAD, so there is
+      // no Worker.terminate() hard timeout to bound a runaway/escaped script.
+      // Fully isolating them would mean running hook bodies in the ScriptWorker,
+      // which is blocked by the SYNCHRONOUS hook contract — executeOnMount,
+      // executeOnValidate, executeOnResponse and executeOnNavigate results are
+      // consumed synchronously by QuestionnaireRuntime (see executeOnMount at
+      // :748/:789, executeOnValidate at :942/:995, executeOnResponse at
+      // :975/:1036, executeOnNavigate at :523). Moving them behind the async
+      // worker message API is recommended as a follow-up, out of scope here.
       const wrappedCode = `
-        "use strict";
         ${cleaned}
         return typeof hooks !== 'undefined' ? hooks : {};
       `;

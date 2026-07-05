@@ -2,7 +2,7 @@
 // AST-first evaluation for formula expressions, Worker fallback for
 // general scripts.
 
-import { ScriptWorker, type WorkerResponse } from './ScriptWorker';
+import { ScriptWorker, isBannedScript, type WorkerResponse } from './ScriptWorker';
 import { FormulaParser } from './parser';
 import { ASTEvaluator, type ASTEvaluatorOptions } from './ast-evaluator';
 
@@ -210,11 +210,22 @@ ${script}`;
       }
     }
 
+    // Surface prototype-chain escapes as invalid at design time, mirroring the
+    // ScriptWorker runtime guard (shared BANNED_ACCESS_PATTERN). This whole
+    // branch is SYNTAX validation only: the `new Function(...)` below is built
+    // to catch parse errors and is NEVER invoked, so it is not an execution
+    // sink. The live sink is the ScriptWorker (ScriptEngine.execute delegates
+    // to worker.execute); `validate()` here has no runtime execution path.
+    if (isBannedScript(script)) {
+      return { valid: false, error: 'Script rejected: banned property access pattern' };
+    }
+
     try {
       const sandbox = new Proxy(Object.freeze({}), { has: () => true });
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- syntax validation only
       sandbox;
-      new Function('sandbox', `with(sandbox) { "use strict"; ${script} }`);
+      // Never executed — constructed solely to raise a SyntaxError for bad input.
+      new Function('sandbox', `with(sandbox) { ${script} }`);
       return { valid: true };
     } catch (error: DynamicValue) {
       return { valid: false, error: error.message };

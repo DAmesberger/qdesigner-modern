@@ -25,9 +25,9 @@ describe('ScriptExecutor — Security', () => {
 
   it('bare __proto__ access on sandbox scope is blocked', () => {
     const executor = new ScriptExecutor();
-    // Bare `__proto__` is blocked by the Proxy get trap.
-    // Property-chain access like `({}).__proto__` bypasses the Proxy —
-    // the ScriptWorker provides full isolation for that attack vector.
+    // Bare `__proto__` is blocked by the Proxy get trap (resolves to undefined).
+    // Property-chain forms — `({}).__proto__` and `x["__proto__"]` — are now
+    // caught earlier by the broadened static guard (see rejection tests below).
     const script = `
       const hooks = {
         onMount: (ctx) => {
@@ -44,19 +44,17 @@ describe('ScriptExecutor — Security', () => {
     expect(engine.setVariable).toHaveBeenCalledWith('hasProto', false, 'script');
   });
 
-  it('sandbox Object does not expose prototype mutation', () => {
+  it('sandbox Object is a safe facade (keys/assign work)', () => {
     const executor = new ScriptExecutor();
-    // In the sandbox, `Object` is a safe facade. Verify that `Object.assign`
-    // on a regular target still works, but `Object.prototype` is not directly
-    // accessible via the sandbox's `Object`.
+    // In the sandbox, `Object` is a safe facade built from Object.create(null).
+    // Verify the allowed helpers still work. (`Object.prototype` access is no
+    // longer expressible: `.prototype` is statically rejected — see the
+    // dedicated rejection test below.)
     const script = `
       const hooks = {
         onMount: (ctx) => {
-          // Object in sandbox is a facade — check it has keys/assign
           ctx.setVariable('hasKeys', typeof Object.keys === 'function');
           ctx.setVariable('hasAssign', typeof Object.assign === 'function');
-          // Object.prototype should not be accessible from the facade
-          ctx.setVariable('hasPrototype', Object.prototype !== undefined);
         }
       };
     `;
@@ -66,8 +64,25 @@ describe('ScriptExecutor — Security', () => {
 
     expect(engine.setVariable).toHaveBeenCalledWith('hasKeys', true, 'script');
     expect(engine.setVariable).toHaveBeenCalledWith('hasAssign', true, 'script');
-    // The facade Object does not have `.prototype` since it's a plain frozen object
-    expect(engine.setVariable).toHaveBeenCalledWith('hasPrototype', false, 'script');
+  });
+
+  it('blocks dotted .prototype access via the static guard', () => {
+    const executor = new ScriptExecutor();
+    // Any script that names `.prototype` is rejected before it is ever parsed
+    // into hooks, mirroring the Proxy get-trap on bare `prototype`.
+    const script = `
+      const hooks = {
+        onMount: (ctx) => {
+          ctx.setVariable('proto', Object.prototype);
+        }
+      };
+    `;
+    const question = mockQuestion(script);
+    const engine = createMockVariableEngine();
+    executor.executeOnMount(question, engine as any, {});
+
+    // Rejected -> hooks = {} -> onMount never runs.
+    expect(engine.setVariable).not.toHaveBeenCalled();
   });
 
   // ── constructor.constructor escape ──────────────────────────────
@@ -75,10 +90,10 @@ describe('ScriptExecutor — Security', () => {
   it('blocks direct constructor access on the sandbox scope', () => {
     const executor = new ScriptExecutor();
 
-    // Bare `constructor` resolves to undefined in the sandbox due to the
-    // Proxy get trap. Object literal prototype chains (({}).constructor)
-    // bypass the Proxy — the Worker (ScriptWorker) provides full isolation
-    // for general scripts. Hooks use the Proxy sandbox as defense-in-depth.
+    // Bare `constructor` resolves to undefined in the sandbox due to the Proxy
+    // get trap. Dotted/quoted prototype chains — `({}).constructor` and the
+    // confirmed PoC `[]['constructor']['constructor'](...)` — are now caught by
+    // the broadened static guard (see the bracket-notation rejection tests).
     const script = `
       const hooks = {
         onMount: (ctx) => {
@@ -286,6 +301,44 @@ describe('ScriptExecutor — Security', () => {
     executor.executeOnMount(question, engine as any, {});
 
     // Static check rejects the script before execution — no hooks parsed
+    expect(engine.setVariable).not.toHaveBeenCalled();
+  });
+
+  it("blocks the bracket-notation constructor escape []['constructor']['constructor'](...)", () => {
+    const executor = new ScriptExecutor();
+    // Confirmed PoC (F002): the real Function constructor is reachable via
+    // quoted/computed access, which the previous dot-only guard missed. The
+    // broadened static check now rejects it, so parseHooks returns {} and the
+    // onMount hook never runs — setVariable is never called.
+    const script = `
+      const hooks = {
+        onMount: (ctx) => {
+          const g = []['constructor']['constructor']('return this')();
+          ctx.setVariable('escaped', typeof g);
+        }
+      };
+    `;
+    const engine = createMockVariableEngine();
+    const question = mockQuestion(script);
+    executor.executeOnMount(question, engine as any, {});
+
+    // parseHooks -> {} (rejected) -> onMount absent -> no setVariable call.
+    expect(engine.setVariable).not.toHaveBeenCalled();
+  });
+
+  it('blocks quoted __proto__ access via computed member access', () => {
+    const executor = new ScriptExecutor();
+    const script = `
+      const hooks = {
+        onMount: (ctx) => {
+          ctx.setVariable('proto', ({})["__proto__"]);
+        }
+      };
+    `;
+    const engine = createMockVariableEngine();
+    const question = mockQuestion(script);
+    executor.executeOnMount(question, engine as any, {});
+
     expect(engine.setVariable).not.toHaveBeenCalled();
   });
 

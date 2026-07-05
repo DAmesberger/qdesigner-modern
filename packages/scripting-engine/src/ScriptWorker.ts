@@ -29,20 +29,57 @@ export interface WorkerResponse {
 }
 
 /**
+ * Static guard shared by the main thread and (via `.source` interpolation) the
+ * inline worker. Rejects both dotted (`x.constructor`) AND computed/quoted
+ * (`x['constructor']`, `[]["constructor"]`, `x["__proto__"]`) access to the
+ * prototype-chain escape hatches — the quoted form is the confirmed PoC
+ * `[]['constructor']['constructor']('return this')()` that defeats a dot-only
+ * guard. Exported so tests can assert the exact pattern the worker runs;
+ * kept as the single source of truth (interpolated into WORKER_SOURCE below).
+ *
+ * Residual risk: a static regex cannot catch string-concatenation obfuscation
+ * (`x['con'+'structor']`). In the worker that residual is bounded by the hard
+ * Worker.terminate() timeout and thread isolation; the real exfiltration
+ * concern is worker egress (see the CSP note on WORKER_SOURCE).
+ */
+export const BANNED_ACCESS_PATTERN =
+  /(?:\.\s*|\[\s*["'])(constructor|prototype|__proto__|__define[GS]etter__|__lookup[GS]etter__)\b/;
+
+/** True if a script statically trips the banned-access guard. */
+export function isBannedScript(script: string): boolean {
+  return BANNED_ACCESS_PATTERN.test(script);
+}
+
+/**
  * Inline worker source. We embed it as a Blob URL to avoid a separate file.
  *
  * Security measures inside the worker:
- * - `with(sandbox)` + Proxy `has: () => true` traps scope-chain escape
- * - `get` trap blocks `constructor`, `__proto__`, Symbol.unscopables
+ * - `with(sandbox)` + Proxy `has: () => true` traps every free-variable lookup,
+ *   including real worker globals (self, fetch, importScripts, XMLHttpRequest).
+ *   This scope trap — NOT a `"use strict"` directive — is the isolation guard.
+ * - `get` trap blocks `constructor`, `prototype`, `__proto__`, Symbol.unscopables
+ * - Static BANNED_PATTERN rejects computed/quoted prototype-escape access
  * - Only safe built-ins are exposed (Math, JSON, etc.)
- * - `"use strict"` prevents implicit globals
  * - Internal timeout via setTimeout (soft), main thread Worker.terminate() (hard)
+ *
+ * NOTE (F004): a `"use strict"` directive is deliberately NOT prepended to the
+ * user script. Inside a `with(...)` body it is inert (a genuine strict prologue
+ * makes `with` a SyntaxError), so prepending it only implied a guarantee the
+ * sandbox never provided. The `with` scope trap is the guard instead.
+ *
+ * EGRESS / CSP: the stated impact of any residual worker escape is exfiltrating
+ * the passed `context` via fetch / XMLHttpRequest / WebSocket / importScripts.
+ * There is currently no Content-Security-Policy constraining the worker. Adding
+ * `connect-src 'none'` (and ideally `default-src 'none'; script-src 'unsafe-inline'`
+ * for the blob worker) to the app's response CSP would neutralise that egress
+ * path and is the recommended hardening follow-up.
  */
 const WORKER_SOURCE = `
 "use strict";
 
-// Static pattern check for prototype-chain escapes
-var BANNED_PATTERN = /\\.(constructor|__proto__|__defineGetter__|__defineSetter__|__lookupGetter__|__lookupSetter__)\\b/;
+// Static pattern check for prototype-chain escapes. Reconstructed from the
+// module's BANNED_ACCESS_PATTERN.source so main thread and worker never drift.
+var BANNED_PATTERN = new RegExp(${JSON.stringify(BANNED_ACCESS_PATTERN.source)});
 
 // Safe facades — built from Object.create(null), no .constructor chain
 var safeNumber = Object.freeze(Object.assign(Object.create(null), {
@@ -169,8 +206,9 @@ self.onmessage = function(e) {
       }
     });
 
-    var wrappedCode = '"use strict";\\n' + script;
-    var factory = new Function("sandbox", "with(sandbox){" + wrappedCode + "}");
+    // F004: no '"use strict";' prefix — a strict directive is inert inside a
+    // with() body (see WORKER_SOURCE header). The Proxy has-trap is the guard.
+    var factory = new Function("sandbox", "with(sandbox){" + script + "}");
 
     var startTime = performance.now();
     var result = factory(sandbox);
