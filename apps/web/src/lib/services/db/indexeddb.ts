@@ -108,6 +108,15 @@ export interface FilloutSession {
   browserInfo?: Record<string, unknown>;
   createdAt: number;
   completedAt?: number;
+  // ── Durable resume cursor (E-OFF-1) ──────────────────────────────
+  // Written on every answered item so a reload/offline resume has an
+  // authoritative pointer even before any child record has synced. These are
+  // HINTS for progress display; the runtime recomputes the true first-unanswered
+  // item from `answeredQuestionIds` on hydrate (defends against a partial write).
+  lastItemIndex?: number;
+  lastPageId?: string;
+  answeredQuestionIds?: string[];
+  updatedAt?: number;
   synced: 0 | 1;
 }
 
@@ -226,6 +235,26 @@ class QDesignerDatabase extends Dexie {
           });
         }
       });
+
+    // v4: resumable sessions (E-OFF-1).
+    //  - filloutResponses gains a `questionId` index so a resume can look up the last
+    //    answer for a question without a full-table scan. Non-destructive (Dexie reindexes
+    //    the existing rows automatically); every other store is carried over unchanged.
+    //  - The new FilloutSession resume-cursor fields (lastItemIndex/lastPageId/
+    //    answeredQuestionIds/updatedAt) are plain stored columns, not indexes, so they need
+    //    no schema entry — structured-clone round-trips them.
+    this.version(4).stores({
+      questionnaires: 'id, userId, syncStatus, lastModified, [id+userId]',
+      syncQueue: '++id, userId, status, timestamp, [userId+status]',
+      resources: 'id, url, lastAccessed, expiresAt',
+      drafts: 'id, userId, questionnaireId, timestamp, [userId+questionnaireId]',
+      filloutQuestionnaires: 'id, questionnaireId, accessCode, syncedAt',
+      filloutSessions: 'id, questionnaireId, status, createdAt, synced, [questionnaireId+status]',
+      filloutResponses: '++id, sessionId, clientId, questionId, synced, [sessionId+synced]',
+      filloutEvents: '++id, sessionId, clientId, synced, [sessionId+synced]',
+      filloutVariables: '[sessionId+name], sessionId, synced',
+      filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt'
+    });
   }
 
   // Helper methods

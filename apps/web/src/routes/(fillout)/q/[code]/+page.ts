@@ -2,6 +2,17 @@ import type { PageLoad } from './$types';
 import { error } from '@sveltejs/kit';
 import { FilloutContentCache } from '$lib/fillout/services/FilloutContentCache';
 import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
+import { OfflineResponsePersistence } from '$lib/fillout/services/OfflineResponsePersistence';
+import {
+	storedResponseToRuntime,
+	serverResponseToRuntime,
+	storedVariablesToRecord,
+	serverVariablesToRecord,
+	type ResumeSnapshot,
+} from '$lib/fillout/runtime/responseMapping';
+import { api } from '$lib/services/api';
+import type { FilloutSession } from '$lib/services/db/indexeddb';
+import type { Response as RuntimeResponse } from '$lib/shared';
 import type { QuestionnaireByCode, Session } from '$lib/api/generated/types.gen';
 import type { FilloutDefinition, FilloutQuestionnairePayload } from '$lib/fillout/types';
 
@@ -118,6 +129,9 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	// active session (offline), then hand the runtime that pinned snapshot. Fresh sessions
 	// pin the latest (resolved at create time in +page.svelte).
 	let existingSession: Session | null = null;
+	// The fetched server session regardless of status — a `completed` one is not an
+	// `existingSession` (we don't re-run it) but still drives the completion short-circuit.
+	let fetchedSession: Session | null = null;
 	let pin: { major: number; minor: number; patch: number } | null = null;
 
 	if (sessionId && navigator.onLine) {
@@ -125,13 +139,16 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 			const sessionResponse = await fetch(`/api/sessions/${sessionId}`);
 			if (sessionResponse.ok) {
 				const session = await sessionResponse.json();
-				if (session.questionnaire_id === latest.id && session.status !== 'completed') {
-					existingSession = session;
-					pin = {
-						major: session.questionnaire_version_major ?? latest.version_major ?? 1,
-						minor: session.questionnaire_version_minor ?? latest.version_minor ?? 0,
-						patch: session.questionnaire_version_patch ?? latest.version_patch ?? 0,
-					};
+				if (session.questionnaire_id === latest.id) {
+					fetchedSession = session;
+					if (session.status !== 'completed') {
+						existingSession = session;
+						pin = {
+							major: session.questionnaire_version_major ?? latest.version_major ?? 1,
+							minor: session.questionnaire_version_minor ?? latest.version_minor ?? 0,
+							patch: session.questionnaire_version_patch ?? latest.version_patch ?? 0,
+						};
+					}
 				}
 			}
 		} catch {
@@ -140,15 +157,21 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	}
 
 	// Offline resume: adopt a local active session's pin (no server round-trip available).
-	if (!pin && latest.id) {
+	// Hoisted so the resume-snapshot assembly below can reuse it (id + durable cursor).
+	let localActive: FilloutSession | null = null;
+	if (latest.id) {
 		try {
-			const local = await OfflineSessionService.findActiveSession(latest.id as string);
-			if (local) {
-				pin = { major: local.versionMajor, minor: local.versionMinor, patch: local.versionPatch };
-			}
+			localActive = await OfflineSessionService.findActiveSession(latest.id as string);
 		} catch {
 			// No local session — proceed as a new session against the latest.
 		}
+	}
+	if (!pin && localActive) {
+		pin = {
+			major: localActive.versionMajor,
+			minor: localActive.versionMinor,
+			patch: localActive.versionPatch,
+		};
 	}
 
 	// Resolve which definition the runtime consumes.
@@ -178,6 +201,76 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		}
 	}
 
+	// ── Resumable session hydration (E-OFF-1) ─────────────────────────────
+	// Assemble the snapshot the runtime rehydrates from so an interrupted session
+	// continues exactly where it left off. Prefer the local IndexedDB copy (same-device
+	// reload / offline — zero network); fall back to the server's copy for a true
+	// cross-device resume. A completed session short-circuits straight to the completion
+	// screen (see +page.svelte) instead of re-running.
+	let resumeSnapshot: ResumeSnapshot | null = null;
+	let resumeCompleted = false;
+	let resumeFromDevice = false;
+
+	const resumeSessionId = fetchedSession?.id ?? localActive?.id ?? null;
+	if (resumeSessionId) {
+		let localRow: FilloutSession | undefined =
+			localActive && localActive.id === resumeSessionId ? localActive : undefined;
+		if (!localRow) {
+			try {
+				localRow = await OfflineSessionService.getSession(resumeSessionId);
+			} catch {
+				localRow = undefined;
+			}
+		}
+		if (fetchedSession?.status === 'completed' || localRow?.status === 'completed') {
+			resumeCompleted = true;
+		}
+
+		if (!resumeCompleted) {
+			// 1. Same-device / offline: rehydrate from IndexedDB with zero network.
+			let responses: RuntimeResponse[] = [];
+			let variables: Record<string, unknown> = {};
+			try {
+				const [storedResponses, storedVariables] = await Promise.all([
+					OfflineResponsePersistence.getSessionResponses(resumeSessionId),
+					OfflineResponsePersistence.getSessionVariables(resumeSessionId),
+				]);
+				responses = storedResponses.map(storedResponseToRuntime);
+				variables = storedVariablesToRecord(storedVariables);
+			} catch {
+				// IndexedDB unavailable — fall through to the server path when online.
+			}
+
+			// 2. Cross-device: nothing local but the server holds this session's answers.
+			//    Reuses the existing get responses/variables handlers (auth-gated, so this
+			//    path is available to authenticated resumers; anonymous participants stay
+			//    limited to same-device IndexedDB resume).
+			if (responses.length === 0 && navigator.onLine && existingSession) {
+				try {
+					const [serverResponses, serverVariables] = await Promise.all([
+						api.sessions.getResponses(resumeSessionId),
+						api.sessions.getVariables(resumeSessionId),
+					]);
+					responses = serverResponses.map(serverResponseToRuntime);
+					variables = serverVariablesToRecord(serverVariables);
+					resumeFromDevice = responses.length > 0;
+				} catch {
+					// Not readable over the API (anonymous / RLS) — same-device resume only.
+				}
+			}
+
+			if (responses.length > 0) {
+				resumeSnapshot = {
+					responses,
+					variables,
+					itemIndex:
+						typeof localRow?.lastItemIndex === 'number' ? localRow.lastItemIndex : undefined,
+					pageId: typeof localRow?.lastPageId === 'string' ? localRow.lastPageId : undefined,
+				};
+			}
+		}
+	}
+
 	return {
 		questionnaire: shapeQuestionnaire(effective, projectName),
 		existingSession,
@@ -187,5 +280,13 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		preview: url.searchParams.get('preview') === 'true',
 		isOffline: !navigator.onLine,
 		pinnedFallback,
+		resumeSnapshot,
+		resumeCompleted,
+		resumeFromDevice,
+		// The session id to continue when resuming without a server `existingSession`
+		// (offline reload, or an anonymous same-device reload the API won't return).
+		// Only set when there is progress to restore, so a fresh start still creates
+		// a new session rather than adopting an empty local one.
+		resumeSessionId: resumeSnapshot ? resumeSessionId : null,
 	};
 };

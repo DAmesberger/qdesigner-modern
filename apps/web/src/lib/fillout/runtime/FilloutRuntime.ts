@@ -4,6 +4,7 @@ import { OfflineResponsePersistence } from '../services/OfflineResponsePersisten
 import { OfflineSessionService } from '../services/OfflineSessionService';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
 import { RuntimeEventBus } from './RuntimeEventBus';
+import type { ResumeSnapshot } from './responseMapping';
 import type { FormQuestionHost } from '$lib/runtime/core/FormQuestionHost';
 import type { Questionnaire, Question, Response, Page, QuestionnaireSession } from '$lib/shared';
 
@@ -16,6 +17,13 @@ export interface FilloutRuntimeConfig {
 	formHost?: FormQuestionHost;
 	enableOfflineSync?: boolean;
 	syncInterval?: number;
+	/**
+	 * Prior-session answers + variable state to rehydrate from (E-OFF-1). When present
+	 * the runtime is hydrated before start() so it resumes at the first unanswered item.
+	 */
+	resumeSnapshot?: ResumeSnapshot;
+	/** True when {@link resumeSnapshot} was fetched from the server (cross-device resume). */
+	resumeFromDevice?: boolean;
 	onComplete?: (session: QuestionnaireSession) => void;
 	onProgress?: (pageIndex: number, totalPages: number) => void;
 	onSessionUpdate?: (progress: number) => void;
@@ -68,6 +76,27 @@ export class FilloutRuntime {
 
 		// Initialize the base runtime
 		this.runtime = new QuestionnaireRuntime(wrappedConfig);
+
+		// Resumable sessions (E-OFF-1): rehydrate BEFORE wrapping the response array in
+		// the event proxy, so restored answers seed the runtime WITHOUT re-emitting
+		// 'response:added' (which would re-persist them under fresh clientIds). New
+		// answers during the resumed run still emit + persist normally.
+		if (config.resumeSnapshot && config.resumeSnapshot.responses.length > 0) {
+			this.runtime.hydrate(config.resumeSnapshot);
+			// Seed the completed counter so progress % continues from the resume point.
+			this.completedQuestions = config.resumeSnapshot.responses.length;
+			// Audit trail (fire-and-forget): who resumed, from where, how much restored.
+			void OfflineResponsePersistence.saveEvent(this.sessionId, {
+				eventType: 'session_resumed',
+				timestampUs: Math.floor(
+					(typeof performance !== 'undefined' ? performance.now() : 0) * 1000
+				),
+				metadata: {
+					fromDevice: config.resumeFromDevice === true,
+					restoredCount: config.resumeSnapshot.responses.length,
+				},
+			}).catch(() => {});
+		}
 
 		// Hook into the runtime's response collection via array proxy
 		this.setupResponseProxy();
@@ -229,6 +258,26 @@ export class FilloutRuntime {
 			currentPageId: this.currentPage?.id,
 			progressPercentage
 		});
+
+		// Durable resume cursor (E-OFF-1): write the authoritative progress pointer to
+		// the LOCAL session row on every answer, so a reload / offline resume can position
+		// itself even before any child record has synced to the server. answeredQuestionIds
+		// is authoritative; lastItemIndex/lastPageId are display hints. No-op when the
+		// session has no local row yet (updateProgress short-circuits on a missing row).
+		try {
+			const cursor = this.runtime.getResumeCursor();
+			await OfflineSessionService.updateProgress(
+				this.sessionId,
+				{ progressPercentage },
+				{
+					lastItemIndex: cursor.itemIndex,
+					lastPageId: cursor.pageId,
+					answeredQuestionIds: cursor.answeredQuestionIds
+				}
+			);
+		} catch (error) {
+			console.error('Failed to persist resume cursor:', error as Error);
+		}
 
 		// Notify UI
 		if (this.onSessionUpdate) {

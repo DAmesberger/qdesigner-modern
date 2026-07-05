@@ -94,16 +94,38 @@ export class OfflineSessionService {
 	}
 
 	/**
-	 * Update session progress metadata.
+	 * Update session progress metadata and, optionally, the durable resume cursor
+	 * (E-OFF-1). `progress` keeps its historical home under `metadata.progress`; the
+	 * typed `cursor` fields (authoritative `answeredQuestionIds` + `lastItemIndex` /
+	 * `lastPageId` hints) are written as top-level columns so a reload / offline resume
+	 * has a durable pointer even before any child record syncs. Bumps `updatedAt` and
+	 * re-arms `synced:0`. No-op when the row is absent (online session with no local pin).
 	 */
-	static async updateProgress(sessionId: string, progress: Record<string, unknown>): Promise<void> {
+	static async updateProgress(
+		sessionId: string,
+		progress: Record<string, unknown>,
+		cursor?: {
+			lastItemIndex?: number;
+			lastPageId?: string;
+			answeredQuestionIds?: string[];
+		},
+	): Promise<void> {
 		const session = await db.filloutSessions.get(sessionId);
 		if (!session) return;
 
-		await db.filloutSessions.update(sessionId, {
+		const patch: Partial<FilloutSession> = {
 			metadata: { ...session.metadata, progress },
+			updatedAt: Date.now(),
 			synced: 0,
-		});
+		};
+		if (cursor) {
+			if (cursor.lastItemIndex !== undefined) patch.lastItemIndex = cursor.lastItemIndex;
+			if (cursor.lastPageId !== undefined) patch.lastPageId = cursor.lastPageId;
+			if (cursor.answeredQuestionIds !== undefined)
+				patch.answeredQuestionIds = cursor.answeredQuestionIds;
+		}
+
+		await db.filloutSessions.update(sessionId, patch);
 	}
 
 	/**

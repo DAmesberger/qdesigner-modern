@@ -108,6 +108,14 @@ export class QuestionnaireRuntime {
   private assignedCondition: string | null = null;
   private conditionBlockOrder: number[] | null = null;
 
+  // Resumable sessions (E-OFF-1): the set of question ids already answered in a
+  // prior session, seeded by hydrate(). While non-null, showCurrentItem
+  // fast-forwards past these items so start() lands on the first UNANSWERED item
+  // without re-presenting answered ones. Recomputed from the restored responses
+  // (not a stored counter), so a partial progress write can never drop or
+  // duplicate an item.
+  private resumeAnsweredIds: Set<string> | null = null;
+
   constructor(config: RuntimeConfig) {
     this.config = config;
 
@@ -154,6 +162,89 @@ export class QuestionnaireRuntime {
 
     this.initializeVariables();
     this.initializeExperimentalDesign();
+  }
+
+  /**
+   * Rehydrate the runtime from a prior session's persisted answers + variable state
+   * (E-OFF-1). MUST be called after construction and before start(): it seeds
+   * `session.responses`, replays each answer into the response/variable pipeline so
+   * carry-forward and {{var}} interpolation resolve exactly as they did live, restores
+   * any user-declared/computed variables, and records which items are already answered
+   * so start() fast-forwards to the first unanswered one.
+   *
+   * The answered-item skip is authoritative over the stored `itemIndex`/`pageId` cursor
+   * (which is only a progress hint): the true resume position is recomputed from the
+   * restored answers, so a torn/partial cursor write can never re-present an answered
+   * item or drop an unanswered one.
+   */
+  public hydrate(snapshot: {
+    responses: Response[];
+    variables?: Record<string, unknown>;
+    itemIndex?: number;
+    pageId?: string;
+  }): void {
+    const answered = new Set<string>();
+
+    for (const response of snapshot.responses) {
+      this.session.responses.push(response);
+      answered.add(response.questionId);
+
+      // Replay the answer into the variable engine exactly as the live path does so
+      // ${qid}_value / _time / _rt / _correct (and thus {{qid}} interpolation and any
+      // dependent conditions) are correct on resume. Skip answers whose question is
+      // gone from this (possibly newer/pinned-fallback) definition.
+      const question = this.config.questionnaire.questions.find((q) => q.id === response.questionId);
+      if (question) {
+        const isCorrect = this.evaluateCustomCorrectness(question, response.value);
+        this.updateQuestionVariables(question, response, isCorrect);
+      }
+    }
+
+    // Restore user-declared / computed variables (best-effort). Answer variables are
+    // already restored by the replay above (keyed by id); this covers globals whose
+    // name is addressable as an id. Values that don't resolve to a registered variable
+    // are ignored — interpolation of answers does not depend on them.
+    if (snapshot.variables) {
+      for (const [name, value] of Object.entries(snapshot.variables)) {
+        try {
+          this.variableEngine.setVariable(name, value, 'resume');
+        } catch {
+          // Not addressable by this name/id — safe to ignore (answer vars restored above).
+        }
+      }
+    }
+
+    this.resumeAnsweredIds = answered.size > 0 ? answered : null;
+
+    // Non-authoritative cursor hints: keep getProgress() coherent before start()
+    // re-drives navigation from page 0 (which the skip then fast-forwards).
+    if (typeof snapshot.itemIndex === 'number' && snapshot.itemIndex >= 0) {
+      this.currentItemIndex = snapshot.itemIndex;
+    }
+    if (snapshot.pageId) {
+      const idx = this.config.questionnaire.pages.findIndex((p) => p.id === snapshot.pageId);
+      if (idx >= 0) {
+        this.currentPageIndex = idx;
+        this.currentPage = this.config.questionnaire.pages[idx] || null;
+      }
+    }
+  }
+
+  /**
+   * A durable progress cursor for the fillout layer to persist on every answer
+   * (E-OFF-1). `answeredQuestionIds` is the authoritative resume driver; itemIndex/
+   * pageId are display hints.
+   */
+  public getResumeCursor(): {
+    itemIndex: number;
+    pageId?: string;
+    answeredQuestionIds: string[];
+  } {
+    return {
+      itemIndex: this.currentItemIndex,
+      pageId: this.currentPage?.id,
+      answeredQuestionIds: this.session.responses.map((r) => r.questionId),
+    };
   }
 
   /**
@@ -688,6 +779,16 @@ export class QuestionnaireRuntime {
     let item = this.currentPageItems[this.currentItemIndex];
     if (!item) {
       await this.handleFlowControl();
+      return;
+    }
+
+    // Resume fast-forward (E-OFF-1): silently advance past items answered in a prior
+    // session so a rehydrated run lands on the first unanswered item without
+    // re-presenting (which would create a duplicate response). Driven by the restored
+    // answer set, so it is robust to a partial progress-cursor write.
+    if (this.resumeAnsweredIds?.has(item.id)) {
+      this.currentItemIndex += 1;
+      await this.showCurrentItem();
       return;
     }
 

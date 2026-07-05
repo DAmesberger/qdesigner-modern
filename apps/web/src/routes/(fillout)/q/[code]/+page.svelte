@@ -123,6 +123,11 @@
   let syncStatus = $state<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   let savedLocally = $state(false);
 
+  // Resume state (E-OFF-1): a non-blocking toast confirming the runtime rehydrated at
+  // the right question, and a dismiss flag for the pinned-version-unavailable notice.
+  let resumeNotice = $state<string | null>(null);
+  let pinnedFallbackDismissed = $state(false);
+
   // --- Timing qualification (Slice 3.4) -------------------------------------
   // Reaction paradigms depend on frame-exact stimulus onset. The session-wide
   // TimingGatekeeper runs device calibration once; the ReactionEngine reuses
@@ -257,6 +262,17 @@
     syncEngine.start();
 
     const init = async () => {
+      // Resume short-circuit (E-OFF-1): a session that already completed routes straight
+      // to the completion screen instead of re-running the questionnaire.
+      if (data.resumeCompleted) {
+        if (data.existingSession) {
+          session = data.existingSession;
+          sessionStorage.setItem('qd_api_session_id', session.id);
+        }
+        currentScreen = 'complete';
+        return;
+      }
+
       if (data.existingSession) {
         session = data.existingSession;
         sessionStorage.setItem('qd_api_session_id', session.id);
@@ -264,6 +280,19 @@
           currentScreen = 'runtime';
           await initializeRuntime();
         }
+      } else if (data.resumeSnapshot && data.resumeSessionId) {
+        // Offline / anonymous same-device resume (E-OFF-1): the server did not return an
+        // `existingSession` (no network, or the API won't hand an anonymous participant
+        // their session), but IndexedDB holds this session's answers. Continue the SAME
+        // session id — not a fresh one — so restored + new responses stay coherent.
+        session = {
+          id: data.resumeSessionId,
+          questionnaire_id: data.questionnaire.id,
+          status: 'active',
+        };
+        sessionStorage.setItem('qd_api_session_id', session.id);
+        currentScreen = 'runtime';
+        await initializeRuntime();
       } else if (data.questionnaire.definition.settings?.requireConsent === false) {
         currentScreen = 'welcome';
       }
@@ -524,6 +553,10 @@
         conditionGroupCounts,
         formHost,
         enableOfflineSync: true,
+        // Resumable sessions (E-OFF-1): rehydrate prior answers + variable state so the
+        // runtime resumes at the first unanswered item rather than restarting at zero.
+        resumeSnapshot: data.resumeSnapshot ?? undefined,
+        resumeFromDevice: data.resumeFromDevice,
         onComplete: async (completed) => {
           completedSession = completed;
           currentScreen = 'complete';
@@ -555,6 +588,17 @@
       loadingMessage = 'Starting questionnaire...';
       await runtime.start();
       loading = false;
+
+      // Resume toast (E-OFF-1): confirm we rehydrated at the right spot. N is the first
+      // unanswered question (restored count + 1) of the total.
+      if (data.resumeSnapshot) {
+        const restored = data.resumeSnapshot.responses.length;
+        const total = questionList.length || restored;
+        resumeNotice = `Resuming where you left off (question ${Math.min(restored + 1, total)} of ${total})`;
+        setTimeout(() => {
+          resumeNotice = null;
+        }, 6000);
+      }
     } catch (err) {
       console.error('Failed to initialize runtime:', err);
       loading = false;
@@ -715,6 +759,29 @@
             recorded times may be less accurate than the study requires.
           </p>
         {/if}
+      </div>
+    {/if}
+
+    {#if resumeNotice}
+      <div class="resume-toast" data-testid="fillout-resume-toast" role="status">
+        {resumeNotice}
+      </div>
+    {/if}
+
+    {#if data.pinnedFallback && !pinnedFallbackDismissed}
+      <div class="pinned-fallback-note" data-testid="fillout-pinned-fallback-note" role="status">
+        <span>
+          The exact version this session started on isn't stored on this device, so it's
+          continuing on the latest version. Your prior answers were restored.
+        </span>
+        <button
+          type="button"
+          class="pinned-fallback-dismiss"
+          data-testid="fillout-pinned-fallback-dismiss"
+          onclick={() => (pinnedFallbackDismissed = true)}
+        >
+          Dismiss
+        </button>
       </div>
     {/if}
 
@@ -947,6 +1014,56 @@
     color: hsl(var(--destructive));
     font-size: 0.8125rem;
     line-height: 1.4;
+  }
+
+  .resume-toast {
+    position: fixed;
+    top: 0.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 95;
+    max-width: min(560px, calc(100vw - 1.5rem));
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    background: hsl(var(--primary) / 0.1);
+    border: 1px solid hsl(var(--primary) / 0.3);
+    color: hsl(var(--primary));
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .pinned-fallback-note {
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 95;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: min(560px, calc(100vw - 1.5rem));
+    padding: 0.625rem 1rem;
+    border-radius: 0.5rem;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 6px 24px rgb(0 0 0 / 0.12);
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .pinned-fallback-dismiss {
+    flex-shrink: 0;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
   }
 
   .html-overlay {
