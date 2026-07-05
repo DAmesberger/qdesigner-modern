@@ -133,7 +133,7 @@
     align-items: center;
     justify-content: center;
     padding: 1rem;
-    background: var(--background);
+    background: hsl(var(--background));
   }
 
   :global(.welcome-card) {
@@ -148,7 +148,7 @@
 
   .project-name {
     font-size: 0.875rem;
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
     margin-bottom: 0.5rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -158,12 +158,12 @@
     font-size: 2rem;
     font-weight: 700;
     margin-bottom: 1rem;
-    color: var(--foreground);
+    color: hsl(var(--foreground));
   }
 
   .welcome-description {
     font-size: 1.125rem;
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
     margin-bottom: 2rem;
     line-height: 1.6;
   }
@@ -179,7 +179,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
   }
 
@@ -190,7 +190,7 @@
   }
 
   .instructions {
-    background: var(--muted);
+    background: hsl(var(--muted));
     border-radius: 0.5rem;
     padding: 1.5rem;
     margin-bottom: 2rem;
@@ -201,13 +201,13 @@
     font-size: 1rem;
     font-weight: 600;
     margin-bottom: 0.75rem;
-    color: var(--foreground);
+    color: hsl(var(--foreground));
   }
 
   .instructions-content {
     font-size: 0.875rem;
     line-height: 1.6;
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
   }
 
   .instructions-content :global(ul) {
@@ -230,7 +230,7 @@
 
   .privacy-notice {
     font-size: 0.75rem;
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
     opacity: 0.8;
   }
 

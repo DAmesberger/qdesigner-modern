@@ -714,7 +714,7 @@
     height: 100vh;
     position: relative;
     overflow: hidden;
-    background: var(--background);
+    background: hsl(var(--background));
   }
 
   .status-bar {
@@ -776,14 +776,14 @@
   }
 
   .loading-text {
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
   }
 
   .loading-progress {
     width: 200px;
     height: 4px;
-    background: var(--muted);
+    background: hsl(var(--muted));
     border-radius: 2px;
     overflow: hidden;
     margin-top: 0.5rem;
@@ -791,7 +791,7 @@
 
   .progress-bar {
     height: 100%;
-    background: var(--primary);
+    background: hsl(var(--primary));
     transition: width 0.3s ease;
   }
 
@@ -820,7 +820,7 @@
     border-radius: 0.5rem;
     background: hsl(var(--destructive) / 0.1);
     border: 1px solid hsl(var(--destructive) / 0.3);
-    color: var(--destructive);
+    color: hsl(var(--destructive));
     font-size: 0.8125rem;
     line-height: 1.4;
   }
@@ -853,8 +853,8 @@
     max-width: 720px;
     max-height: calc(100vh - 3rem);
     overflow-y: auto;
-    background: var(--card, #ffffff);
-    color: var(--card-foreground, #0f172a);
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
     border-radius: 0.75rem;
     box-shadow: 0 10px 40px rgb(0 0 0 / 0.15);
     padding: 2rem;
@@ -870,8 +870,8 @@
     padding: 0.625rem 1.5rem;
     border-radius: 0.5rem;
     border: none;
-    background: var(--primary, #2563eb);
-    color: var(--primary-foreground, #ffffff);
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
     font-size: 0.9375rem;
     font-weight: 600;
     cursor: pointer;

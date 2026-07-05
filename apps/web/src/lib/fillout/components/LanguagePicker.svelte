@@ -45,7 +45,7 @@
   :global(.language-picker .picker-icon) {
     width: 1rem;
     height: 1rem;
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
   }
 
   .picker-options {
@@ -53,7 +53,7 @@
     flex-wrap: wrap;
     gap: 0.25rem;
     padding: 0.25rem;
-    background: var(--muted);
+    background: hsl(var(--muted));
     border-radius: 9999px;
   }
 
@@ -62,7 +62,7 @@
     border: none;
     border-radius: 9999px;
     background: transparent;
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
     font-size: 0.8125rem;
     font-weight: 500;
     cursor: pointer;
@@ -72,12 +72,12 @@
   }
 
   .picker-option:hover {
-    color: var(--foreground);
+    color: hsl(var(--foreground));
   }
 
   .picker-option.active {
-    background: var(--background);
-    color: var(--foreground);
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
   }
 </style>

@@ -186,7 +186,7 @@
     align-items: center;
     justify-content: center;
     padding: 1rem;
-    background: var(--background);
+    background: hsl(var(--background));
   }
 
   :global(.consent-card) {
@@ -205,13 +205,13 @@
     font-weight: 700;
     margin-bottom: 1.5rem;
     text-align: center;
-    color: var(--foreground);
+    color: hsl(var(--foreground));
   }
 
   .consent-text {
     margin-bottom: 2rem;
     line-height: 1.6;
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
   }
 
   .consent-text :global(h2) {
@@ -219,7 +219,7 @@
     font-weight: 600;
     margin-top: 1.5rem;
     margin-bottom: 0.75rem;
-    color: var(--foreground);
+    color: hsl(var(--foreground));
   }
 
   .consent-text :global(h3) {
@@ -227,7 +227,7 @@
     font-weight: 600;
     margin-top: 1.25rem;
     margin-bottom: 0.5rem;
-    color: var(--foreground);
+    color: hsl(var(--foreground));
   }
 
   .consent-text :global(p) {
@@ -250,7 +250,7 @@
     gap: 1rem;
     margin-bottom: 2rem;
     padding: 1.5rem;
-    background: var(--muted);
+    background: hsl(var(--muted));
     border-radius: 0.5rem;
   }
 
@@ -264,18 +264,18 @@
   .checkbox-text {
     font-size: 0.875rem;
     line-height: 1.5;
-    color: var(--foreground);
+    color: hsl(var(--foreground));
   }
 
   .required {
-    color: var(--destructive);
+    color: hsl(var(--destructive));
     margin-left: 0.25rem;
   }
 
   .signature-section {
     margin-bottom: 2rem;
     padding: 1.5rem;
-    background: var(--muted);
+    background: hsl(var(--muted));
     border-radius: 0.5rem;
   }
 
@@ -284,29 +284,29 @@
     font-size: 0.875rem;
     font-weight: 500;
     margin-bottom: 0.5rem;
-    color: var(--foreground);
+    color: hsl(var(--foreground));
   }
 
   .signature-input {
     width: 100%;
     padding: 0.5rem 0.75rem;
     font-size: 1rem;
-    background: var(--background);
-    border: 1px solid var(--border);
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
-    color: var(--foreground);
+    color: hsl(var(--foreground));
     transition: border-color 0.2s;
   }
 
   .signature-input:focus {
     outline: none;
-    border-color: var(--primary);
+    border-color: hsl(var(--primary));
   }
 
   .signature-note {
     margin-top: 0.5rem;
     font-size: 0.75rem;
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
   }
 
   .error-message {
@@ -315,7 +315,7 @@
     background: hsl(var(--destructive) / 0.1);
     border: 1px solid hsl(var(--destructive) / 0.2);
     border-radius: 0.375rem;
-    color: var(--destructive);
+    color: hsl(var(--destructive));
     font-size: 0.875rem;
   }
 
@@ -329,7 +329,7 @@
   .consent-footer {
     text-align: center;
     font-size: 0.75rem;
-    color: var(--muted-foreground);
+    color: hsl(var(--muted-foreground));
     opacity: 0.8;
   }
 
