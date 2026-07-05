@@ -1,4 +1,5 @@
 import { marked } from 'marked';
+import DOMPurify from 'isomorphic-dompurify';
 import { mediaService } from './mediaService';
 import { interpolateVariables } from './variableInterpolation';
 import type { MediaConfig } from '$lib/modules/types';
@@ -10,6 +11,61 @@ marked.use({
   pedantic: false,
 
 });
+
+/**
+ * Sanitize researcher-authored HTML before it reaches an {@html} sink.
+ *
+ * Centralized so every markdown/HTML rendering path is covered by construction.
+ * The allowlist mirrors TextDisplay.svelte's config and additionally permits the
+ * media/link/table attributes that this processor's markdown output relies on
+ * (img width/height/loading, anchor target/rel, full table markup).
+ */
+export function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'p',
+      'br',
+      'strong',
+      'em',
+      'u',
+      's',
+      'ul',
+      'ol',
+      'li',
+      'blockquote',
+      'code',
+      'pre',
+      'a',
+      'img',
+      'hr',
+      'table',
+      'thead',
+      'tbody',
+      'tr',
+      'th',
+      'td',
+    ],
+    ALLOWED_ATTR: [
+      'href',
+      'src',
+      'alt',
+      'title',
+      'class',
+      'id',
+      'target',
+      'rel',
+      'width',
+      'height',
+      'loading',
+    ],
+  });
+}
 
 export interface MarkdownProcessorOptions {
   media?: MediaConfig[];
@@ -46,12 +102,13 @@ export async function processMarkdownContent(
 
   // If format is plain text, return as-is
   if (format === 'text') {
-    return content;
+    // Callers inject the result via {@html}, so even 'text' must be neutralized.
+    return sanitizeHtml(content);
   }
 
   // If format is HTML and doesn't contain markdown, return as-is
   if (format === 'html' && !containsMarkdown(content)) {
-    return content;
+    return sanitizeHtml(content);
   }
 
   try {
@@ -67,8 +124,11 @@ export async function processMarkdownContent(
       processedContent = await replaceMediaReferences(processedContent, media, mediaUrls, preview);
     }
     
-    // Parse markdown to HTML
-    return marked.parse(processedContent) as Promise<string>;
+    // Parse markdown to HTML, then sanitize before it reaches an {@html} sink.
+    // marked.parse may return either a string or a Promise depending on config;
+    // awaiting handles both.
+    const html = await marked.parse(processedContent);
+    return sanitizeHtml(html as string);
   } catch (error) {
     console.error('Error processing markdown:', error);
     return content;
@@ -94,12 +154,13 @@ export function processMarkdownContentSync(
   
   // If format is plain text, return as-is
   if (format === 'text') {
-    return content;
+    // Callers inject the result via {@html}, so even 'text' must be neutralized.
+    return sanitizeHtml(content);
   }
   
   // If format is HTML and doesn't contain markdown, return as-is
   if (format === 'html' && !containsMarkdown(content)) {
-    return content;
+    return sanitizeHtml(content);
   }
   
   try {
@@ -113,8 +174,8 @@ export function processMarkdownContentSync(
     // Replace media references with cached URLs only
     processedContent = replaceMediaReferencesSync(processedContent, media, mediaUrls);
     
-    // Parse markdown to HTML
-    return marked.parse(processedContent) as string;
+    // Parse markdown to HTML, then sanitize before it reaches an {@html} sink
+    return sanitizeHtml(marked.parse(processedContent) as string);
   } catch (error) {
     console.error('Error processing markdown:', error);
     return content;
@@ -167,36 +228,23 @@ function replaceMediaReferencesSync(
   mediaUrls: Record<string, string> = {}
 ): string {
   let processedContent = content;
-  
-  console.log('[replaceMediaReferencesSync] Starting replacement');
-  console.log('[replaceMediaReferencesSync] Media array:', media);
-  console.log('[replaceMediaReferencesSync] Media URLs:', mediaUrls);
-  console.log('[replaceMediaReferencesSync] Content to process:', content);
-  
+
   media.forEach((mediaItem, index) => {
     if (mediaItem.mediaId && mediaUrls[mediaItem.mediaId]) {
       const url = mediaUrls[mediaItem.mediaId]!;
-      
-      console.log(`[replaceMediaReferencesSync] Processing media ${index}:`, {
-        mediaId: mediaItem.mediaId,
-        refId: mediaItem.refId,
-        url: url.substring(0, 100) + '...'
-      });
-      
+
       // Replace by refId if available
       if (mediaItem.refId) {
         const pattern = `media:${escapeRegExp(mediaItem.refId!)}`;
         const regex = new RegExp(pattern, 'g');
-        const matches = processedContent.match(regex);
-        console.log(`[replaceMediaReferencesSync] Looking for pattern: ${pattern}, found: ${matches?.length || 0} matches`);
-        
+
         // Handle both markdown image syntax: ![alt](media:refId)
         processedContent = processedContent.replace(
           regex,
           url
         );
       }
-      
+
       // Also replace by index for backward compatibility
       processedContent = processedContent.replace(
         new RegExp(`media:${index}`, 'g'),
@@ -204,9 +252,7 @@ function replaceMediaReferencesSync(
       );
     }
   });
-  
-  console.log('[replaceMediaReferencesSync] Final processed content:', processedContent);
-  
+
   return processedContent;
 }
 

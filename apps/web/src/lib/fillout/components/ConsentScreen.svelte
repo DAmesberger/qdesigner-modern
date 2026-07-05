@@ -2,6 +2,7 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
+  import { sanitizeHtml } from '$lib/services/markdownProcessor';
 
   interface Props {
     title?: string;
@@ -107,7 +108,7 @@
       <h1 class="consent-title" data-testid="fillout-consent-title">{title}</h1>
 
       <div class="consent-text">
-        {@html content}
+        {@html sanitizeHtml(content)}
       </div>
 
       {#if checkboxes.length > 0}
