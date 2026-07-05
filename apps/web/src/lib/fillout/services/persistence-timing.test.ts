@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '$lib/services/db/indexeddb';
 
-// Mock the api module before importing FilloutSyncEngine so the engine's
+// Mock the api module before importing FilloutUploadSync so the engine's
 // captured reference points at our mock. Vitest hoists vi.mock so this runs
-// before any module evaluation (same pattern as FilloutSyncEngine.test.ts).
+// before any module evaluation (same pattern as FilloutUploadSync.test.ts).
 vi.mock('$lib/services/api', () => ({
 	api: {
 		sessions: {
@@ -14,7 +14,7 @@ vi.mock('$lib/services/api', () => ({
 	},
 }));
 
-const { FilloutSyncEngine } = await import('./FilloutSyncEngine');
+const { FilloutUploadSync } = await import('./FilloutUploadSync');
 const { OfflineSessionService } = await import('./OfflineSessionService');
 const { OfflineResponsePersistence } = await import('./OfflineResponsePersistence');
 const { api } = await import('$lib/services/api');
@@ -77,7 +77,7 @@ describe('timing provenance round-trip', () => {
 		expect((record as { timingProvenance?: unknown })?.timingProvenance).toEqual(PROVENANCE);
 	});
 
-	it('FilloutSyncEngine builds a snake_case payload carrying reaction_time_us, presented_at, answered_at and timing_provenance', async () => {
+	it('FilloutUploadSync builds a snake_case payload carrying reaction_time_us, presented_at, answered_at and timing_provenance', async () => {
 		setOnline(true);
 		const session = await OfflineSessionService.createSession('q-1', 1, 0, 0);
 		await OfflineResponsePersistence.saveResponse(session.id, {
@@ -96,7 +96,7 @@ describe('timing provenance round-trip', () => {
 			variables_synced: 0,
 		});
 
-		const engine = new FilloutSyncEngine();
+		const engine = new FilloutUploadSync();
 		await engine.syncNow();
 
 		expect(apiMock.sessions.sync).toHaveBeenCalledTimes(1);
@@ -132,7 +132,7 @@ describe('timing provenance round-trip', () => {
 			variables_synced: 0,
 		});
 
-		const engine = new FilloutSyncEngine();
+		const engine = new FilloutUploadSync();
 		await engine.syncNow();
 
 		expect(apiMock.sessions.sync).toHaveBeenCalledTimes(1);
@@ -168,7 +168,7 @@ describe('timing provenance round-trip', () => {
 			variables_synced: 0,
 		});
 
-		const engine = new FilloutSyncEngine();
+		const engine = new FilloutUploadSync();
 		await engine.syncNow();
 
 		expect(apiMock.sessions.sync).toHaveBeenCalledTimes(1);

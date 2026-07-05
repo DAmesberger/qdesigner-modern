@@ -1,6 +1,6 @@
 import { api } from '$lib/services/api';
 import { OfflineResponsePersistence, type TimingProvenance } from './OfflineResponsePersistence';
-import { FilloutSyncEngine } from './FilloutSyncEngine';
+import { FilloutUploadSync } from './FilloutUploadSync';
 import type { ResponseData, InteractionEvent } from '$lib/shared/types/response';
 
 /**
@@ -29,7 +29,7 @@ export class ResponsePersistenceService {
 	private eventQueue: InteractionEvent[] = [];
 	private syncTimer?: number;
 	private isSyncing = false;
-	private syncEngine: FilloutSyncEngine;
+	private syncEngine: FilloutUploadSync;
 
 	constructor(options: PersistenceOptions) {
 		this.sessionId = options.sessionId;
@@ -38,7 +38,7 @@ export class ResponsePersistenceService {
 		this.enableOffline = options.enableOffline ?? true;
 
 		// Drains the IndexedDB response/event/variable queue to the server.
-		this.syncEngine = new FilloutSyncEngine();
+		this.syncEngine = new FilloutUploadSync();
 
 		// Start periodic sync
 		this.startPeriodicSync();
@@ -133,7 +133,7 @@ export class ResponsePersistenceService {
 		status?: string;
 	}): Promise<void> {
 		// Redundant server round-trip on every answer: progress is a client-side/
-		// offline concern and FilloutSyncEngine materializes sessions at sync time.
+		// offline concern and FilloutUploadSync materializes sessions at sync time.
 		// Only ping the server when online.
 		if (!navigator.onLine) return;
 		try {
@@ -171,7 +171,7 @@ export class ResponsePersistenceService {
 	 *
 	 * Offline-first (contract D2): the value is written to IndexedDB keyed by
 	 * `[sessionId+name]` (an upsert that re-arms synced:0), then a sync is
-	 * triggered when online. FilloutSyncEngine drains the unsynced variables to
+	 * triggered when online. FilloutUploadSync drains the unsynced variables to
 	 * the server — there is no direct online-upsert branch. `type` is accepted
 	 * for call-site compatibility but is not persisted (the Dexie row stores the
 	 * raw value).
@@ -216,7 +216,7 @@ export class ResponsePersistenceService {
 			}
 
 			// Responses/variables persist to IndexedDB and are drained to the
-			// server by FilloutSyncEngine (the single response pipeline, D2).
+			// server by FilloutUploadSync (the single response pipeline, D2).
 			if (navigator.onLine) {
 				await this.syncEngine.syncNow();
 			}
@@ -245,7 +245,7 @@ export class ResponsePersistenceService {
 
 	/**
 	 * Persist queued events to IndexedDB (via OfflineResponsePersistence).
-	 * This ensures the FilloutSyncEngine can pick it up for later sync.
+	 * This ensures the FilloutUploadSync can pick it up for later sync.
 	 * Responses take the offline-first path directly in {@link saveResponse}.
 	 */
 	private async saveToOfflineStore(): Promise<void> {

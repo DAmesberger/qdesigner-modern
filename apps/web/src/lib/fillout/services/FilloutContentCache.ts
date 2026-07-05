@@ -14,7 +14,7 @@ import {
  * `enforceMediaQuota()` bounds the `fillout-media-v*` Cache-API store — both never discard
  * anything a session with unsynced data still needs.
  */
-export class FilloutOfflineSyncService {
+export class FilloutContentCache {
 	// Must match FILLOUT_MEDIA_CACHE in static/sw.js — the service worker serves and
 	// GC-cleans this exact cache, so a mismatch orphans everything the eager prefetcher writes.
 	private static MEDIA_CACHE_NAME = 'fillout-media-v2';

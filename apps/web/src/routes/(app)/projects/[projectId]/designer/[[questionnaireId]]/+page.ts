@@ -20,9 +20,9 @@ export const load: PageLoad = async ({ params, parent, url }) => {
   let questionnaire = null;
   const questionnaireId = params.questionnaireId;
   const isOnline = offlineData.isOnline();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- project data may have snake_case or camelCase org ID
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- project data may be a raw wire object or a mapped Project
   const resolveProjectOrganizationId = (input: any): string | null =>
-    parentData.organizationId || input?.organizationId || input?.organization_id || null;
+    parentData.organizationId || input?.organizationId || null;
 
   // Try to load project data
   if (isOnline) {

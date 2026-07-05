@@ -507,7 +507,7 @@ class QDesignerDatabase extends Dexie {
    * non-participant content (the survey itself), are keyed by public access
    * code, and re-download on next use. Clearing them here would evict another
    * participant's in-flight definition pin without cleaning the paired Cache-API
-   * store, so definition/media GC stays owned by FilloutOfflineSyncService.
+   * store, so definition/media GC stays owned by FilloutContentCache.
    */
   async clearAllFilloutData(): Promise<void> {
     await this.transaction('rw',

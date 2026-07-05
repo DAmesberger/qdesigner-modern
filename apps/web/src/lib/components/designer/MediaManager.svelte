@@ -119,9 +119,9 @@
           if (projectId) {
             try {
               const project = await api.projects.get(projectId);
-              const projectOrganizationId =
-                normalizeId((project as { organizationId?: string }).organizationId) ||
-                normalizeId((project as { organization_id?: string }).organization_id);
+              const projectOrganizationId = normalizeId(
+                (project as { organizationId?: string }).organizationId
+              );
 
               if (projectOrganizationId) {
                 resolvedOrganizationId = projectOrganizationId;

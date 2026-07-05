@@ -108,7 +108,7 @@ export class OfflineSessionService {
 
 	/**
 	 * Shallow-merge a metadata patch into an existing session row, preserving
-	 * prior keys, and re-arm synced:0 so FilloutSyncEngine.collectSessionsToSync
+	 * prior keys, and re-arm synced:0 so FilloutUploadSync.collectSessionsToSync
 	 * ships the merged metadata (its payload carries session.metadata). No-op when
 	 * the row is absent (online-created session with no local pin yet). Undefined
 	 * patch values are dropped so they don't clobber existing keys.

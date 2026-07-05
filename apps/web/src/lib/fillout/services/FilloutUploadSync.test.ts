@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '$lib/services/db/indexeddb';
 
-// Mock the api module before importing FilloutSyncEngine so the engine's
+// Mock the api module before importing FilloutUploadSync so the engine's
 // captured reference points at our mock. Vitest hoists vi.mock so this
 // runs before any module evaluation.
 vi.mock('$lib/services/api', () => ({
@@ -14,7 +14,7 @@ vi.mock('$lib/services/api', () => ({
 	},
 }));
 
-const { FilloutSyncEngine } = await import('./FilloutSyncEngine');
+const { FilloutUploadSync } = await import('./FilloutUploadSync');
 const { OfflineSessionService } = await import('./OfflineSessionService');
 const { OfflineResponsePersistence } = await import('./OfflineResponsePersistence');
 const { api } = await import('$lib/services/api');
@@ -45,10 +45,10 @@ function setOnline(value: boolean) {
 	vi.stubGlobal('navigator', { ...navigator, onLine: value });
 }
 
-describe('FilloutSyncEngine.syncNow', () => {
+describe('FilloutUploadSync.syncNow', () => {
 	it('returns an empty result when offline (no api calls)', async () => {
 		setOnline(false);
-		const engine = new FilloutSyncEngine();
+		const engine = new FilloutUploadSync();
 		const result = await engine.syncNow();
 		expect(result.sessionsSynced).toBe(0);
 		expect(result.errors).toEqual([]);
@@ -77,7 +77,7 @@ describe('FilloutSyncEngine.syncNow', () => {
 			variables_synced: 0,
 		});
 
-		const engine = new FilloutSyncEngine();
+		const engine = new FilloutUploadSync();
 		const result = await engine.syncNow();
 
 		expect(apiMock.sessions.sync).toHaveBeenCalledTimes(1);
@@ -105,7 +105,7 @@ describe('FilloutSyncEngine.syncNow', () => {
 			variables_synced: 0,
 		});
 
-		const engine = new FilloutSyncEngine();
+		const engine = new FilloutUploadSync();
 		await engine.syncNow();
 
 		const [, payload] = apiMock.sessions.sync.mock.calls[0]!;
@@ -131,7 +131,7 @@ describe('FilloutSyncEngine.syncNow', () => {
 			variables_synced: 0,
 		});
 
-		const engine = new FilloutSyncEngine();
+		const engine = new FilloutUploadSync();
 		await engine.syncNow();
 
 		expect(apiMock.sessions.sync).toHaveBeenCalledTimes(1);

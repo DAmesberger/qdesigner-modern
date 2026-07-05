@@ -146,24 +146,24 @@
   function normalizeTemplates(raw: QuestionTemplate[]): QuestionTemplate[] {
     return raw.map((t) => ({
       id: t.id,
-      organizationId: t.organizationId || t.organization_id || '',
-      createdBy: t.createdBy || t.created_by || '',
+      organizationId: t.organizationId || '',
+      createdBy: t.createdBy || '',
       name: t.name,
       description: t.description,
       category: t.category,
       tags: t.tags,
-      questionType: t.questionType || t.question_type || '',
-      questionConfig: t.questionConfig || t.question_config || {},
-      isShared: t.isShared ?? t.is_shared ?? false,
-      usageCount: t.usageCount ?? t.usage_count ?? 0,
-      createdAt: t.createdAt || t.created_at || '',
-      updatedAt: t.updatedAt || t.updated_at || '',
+      questionType: t.questionType || '',
+      questionConfig: t.questionConfig || {},
+      isShared: t.isShared ?? false,
+      usageCount: t.usageCount ?? 0,
+      createdAt: t.createdAt || '',
+      updatedAt: t.updatedAt || '',
     }));
   }
 
   function useTemplate(template: QuestionTemplate) {
-    const config = template.questionConfig || template.question_config || {};
-    const questionType = template.questionType || template.question_type || 'text-input';
+    const config = template.questionConfig || {};
+    const questionType = template.questionType || 'text-input';
 
     // Create a new question from the template config with a fresh ID
     const newQuestion: Partial<Question> = {
@@ -400,14 +400,14 @@
 
               <div class="flex flex-wrap items-center gap-1.5 mt-2">
                 <span class="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
-                  {getTypeLabel(template.questionType || template.question_type || '')}
+                  {getTypeLabel(template.questionType || '')}
                 </span>
                 {#if template.category}
                   <span class="text-xs px-2 py-0.5 bg-muted text-muted-foreground rounded-full">
                     {getCategoryLabel(template.category)}
                   </span>
                 {/if}
-                {#if template.isShared || template.is_shared}
+                {#if template.isShared}
                   <span class="text-xs px-2 py-0.5 bg-success/10 text-success rounded-full">
                     Shared
                   </span>
@@ -464,7 +464,7 @@
           {#if previewTemplate?.id === template.id}
             <div class="mt-3 pt-3 border-t border-border">
               <h5 class="text-xs font-medium text-muted-foreground mb-2">Configuration Preview</h5>
-              <pre class="text-xs font-mono bg-background rounded-md p-2 overflow-auto max-h-48 text-muted-foreground whitespace-pre-wrap break-words">{JSON.stringify(template.questionConfig || template.question_config || {}, null, 2)}</pre>
+              <pre class="text-xs font-mono bg-background rounded-md p-2 overflow-auto max-h-48 text-muted-foreground whitespace-pre-wrap break-words">{JSON.stringify(template.questionConfig || {}, null, 2)}</pre>
 
               <div class="flex items-center gap-2 mt-3">
                 <button

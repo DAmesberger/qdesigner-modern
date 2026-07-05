@@ -17,7 +17,7 @@ export interface SyncResult {
  * Watches online/offline status and syncs fillout data when connectivity returns.
  * Uses exponential backoff on failure.
  */
-export class FilloutSyncEngine {
+export class FilloutUploadSync {
 	private onlineHandler: (() => void) | null = null;
 	private isSyncing = false;
 	private retryTimeout: ReturnType<typeof setTimeout> | null = null;

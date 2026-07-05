@@ -11,9 +11,6 @@ export interface Organization {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
-  organization_id?: string;
-  created_at?: string;
-  updated_at?: string;
 }
 
 export interface OrganizationMember {
@@ -61,10 +58,6 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   questionnaireCount?: number;
-  organization_id?: string;
-  created_at?: string;
-  updated_at?: string;
-  questionnaire_count?: number;
 }
 
 // Questionnaire types
@@ -272,14 +265,6 @@ export interface QuestionTemplate {
   usageCount: number;
   createdAt: string;
   updatedAt: string;
-  organization_id?: string;
-  created_by?: string;
-  question_type?: string;
-  question_config?: Record<string, unknown>;
-  is_shared?: boolean;
-  usage_count?: number;
-  created_at?: string;
-  updated_at?: string;
 }
 
 // Session media upload response

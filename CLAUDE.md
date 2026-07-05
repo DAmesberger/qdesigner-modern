@@ -86,7 +86,7 @@ apps/web/src/
   lib/
     runtime/         QuestionnaireRuntime, FormQuestionHost + moduleConfigAdapter (DOM overlay), reaction/ReactionEngine + presets
     renderer/        WebGL rendering pipeline — the ONLY drawing path (v1 reaction stimuli only)
-    fillout/         FilloutRuntime, OfflineSessionService, OfflineResponsePersistence, FilloutSyncEngine
+    fillout/         FilloutRuntime, OfflineSessionService, OfflineResponsePersistence, FilloutUploadSync
     services/        api client, auth, offline, persistence; db/indexeddb.ts (Dexie)
     shared/          types, factories, utils, validators (the canonical type root post-P2.2)
     modules/         question modules (reaction-time, statistical-feedback, instructions, …)
@@ -97,7 +97,7 @@ apps/web/src/
 
 The fillout route (`/q/[code]`) runs entirely client-side. Online-first load with IndexedDB fallback; sessions are client-generated UUIDs; responses carry a `client_id UUID UNIQUE` for server-side dedup via `ON CONFLICT (client_id) DO NOTHING`.
 
-**Hybrid rendering contract (ADR 0023).** The runtime has exactly one WebGL path and one DOM path. WebGL (`renderer/WebGLRenderer` driven by `runtime/reaction/ReactionEngine`) draws **only** stimuli for modules that register a `questionRuntime` v1 contract (reaction-time, reaction-experiment, webgl) — frame-exact onset is their reason to exist. **Everything else** — form questions *and* display/analytics/instruction items — renders as Svelte DOM mounted into `(fillout)/q/[code]/+page.svelte` via the `FormQuestionHost` overlay (`runtime/core/FormQuestionHost.ts` + `moduleConfigAdapter.ts`, ADR 0018). The fork is the single predicate `isFormStyle()` in `QuestionnaireRuntime`. Phase 8 deleted the parallel hollow stack that never drew — `runtime/QuestionPresenter`, `runtime/renderers/*`, `runtime/stimuli/*` (its `RenderContext` type was inlined into `WebGLRenderer`) — keeping only the loader/cache half of `ResourceManager`. Fillout media resolves through a same-origin streaming proxy (`GET /api/media/{id}/content`, ADR 0023 D1: stable cache key, `immutable`, Range support — fixes cross-origin texture taint, COEP, offline cache expiry); the designer keeps presigned URLs. Results take one offline-first write path (ADR 0023 D2): IndexedDB first with a `clientId` UUID, then `FilloutSyncEngine.syncNow()`, idempotent on `ON CONFLICT (client_id) DO NOTHING`. Sessions pin an exact `(questionnaireId, major.minor.patch)` + definition snapshot; resumed/offline sessions load the pinned snapshot, never the latest cached one. Reaction timing is **frame-accurate onset with sub-ms relative precision** (display/output-latency corrected, COOP/COEP required for full timer resolution) — not microsecond-absolute; each trial persists a `timing_provenance` blob.
+**Hybrid rendering contract (ADR 0023).** The runtime has exactly one WebGL path and one DOM path. WebGL (`renderer/WebGLRenderer` driven by `runtime/reaction/ReactionEngine`) draws **only** stimuli for modules that register a `questionRuntime` v1 contract (reaction-time, reaction-experiment, webgl) — frame-exact onset is their reason to exist. **Everything else** — form questions *and* display/analytics/instruction items — renders as Svelte DOM mounted into `(fillout)/q/[code]/+page.svelte` via the `FormQuestionHost` overlay (`runtime/core/FormQuestionHost.ts` + `moduleConfigAdapter.ts`, ADR 0018). The fork is the single predicate `isFormStyle()` in `QuestionnaireRuntime`. Phase 8 deleted the parallel hollow stack that never drew — `runtime/QuestionPresenter`, `runtime/renderers/*`, `runtime/stimuli/*` (its `RenderContext` type was inlined into `WebGLRenderer`) — keeping only the loader/cache half of `ResourceManager`. Fillout media resolves through a same-origin streaming proxy (`GET /api/media/{id}/content`, ADR 0023 D1: stable cache key, `immutable`, Range support — fixes cross-origin texture taint, COEP, offline cache expiry); the designer keeps presigned URLs. Results take one offline-first write path (ADR 0023 D2): IndexedDB first with a `clientId` UUID, then `FilloutUploadSync.syncNow()`, idempotent on `ON CONFLICT (client_id) DO NOTHING`. Sessions pin an exact `(questionnaireId, major.minor.patch)` + definition snapshot; resumed/offline sessions load the pinned snapshot, never the latest cached one. Reaction timing is **frame-accurate onset with sub-ms relative precision** (display/output-latency corrected, COOP/COEP required for full timer resolution) — not microsecond-absolute; each trial persists a `timing_provenance` blob.
 
 ## Backend architecture
 
@@ -138,7 +138,7 @@ The crate is bin+lib hybrid: `tests/` integration tests import via `qdesigner_se
 
 - `OfflineSessionService` — client-generated session UUIDs (no server round-trip needed).
 - `OfflineResponsePersistence` — IndexedDB writes carry a per-record `clientId` (used by server's `ON CONFLICT (client_id) DO NOTHING`).
-- `FilloutSyncEngine` — watches `online` events, retries with exponential backoff, marks records synced after server ack.
+- `FilloutUploadSync` — watches `online` events, retries with exponential backoff, marks records synced after server ack.
 - Cache API caches media (`fillout-media-v1`).
 - Service worker `static/sw.js` precaches `/offline.html` (manifest.json removed in Phase 1.0.6).
 

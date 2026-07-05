@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '$lib/services/db/indexeddb';
 
-// Mock the api module BEFORE importing FilloutSyncEngine so the engine's
+// Mock the api module BEFORE importing FilloutUploadSync so the engine's
 // captured `api` reference points at our mock. Vitest hoists vi.mock so this
-// runs before any module evaluation (same pattern as FilloutSyncEngine.test.ts
+// runs before any module evaluation (same pattern as FilloutUploadSync.test.ts
 // and persistence-timing.test.ts).
 vi.mock('$lib/services/api', () => ({
 	api: {
@@ -15,7 +15,7 @@ vi.mock('$lib/services/api', () => ({
 	},
 }));
 
-const { FilloutSyncEngine } = await import('./FilloutSyncEngine');
+const { FilloutUploadSync } = await import('./FilloutUploadSync');
 const { OfflineSessionService } = await import('./OfflineSessionService');
 const { OfflineResponsePersistence } = await import('./OfflineResponsePersistence');
 const { api } = await import('$lib/services/api');
@@ -28,7 +28,7 @@ const apiMock = api as unknown as {
 	};
 };
 
-// ── Shape of the sync payload the engine builds (see FilloutSyncEngine.syncSession).
+// ── Shape of the sync payload the engine builds (see FilloutUploadSync.syncSession).
 // Typing the mock-call tuple keeps the assertions strict instead of `any`.
 interface SyncResponse {
 	client_id: string;
@@ -170,7 +170,7 @@ describe('offline completion round-trip: reconciles exactly once on reconnect', 
 
 		// Attempting a sync while offline must be a pure no-op: nothing leaves the
 		// device, and nothing is marked synced.
-		const engine = new FilloutSyncEngine();
+		const engine = new FilloutUploadSync();
 		const offlineResult = await engine.syncNow();
 
 		expect(apiMock.sessions.sync).not.toHaveBeenCalled();
@@ -332,7 +332,7 @@ describe('offline completion round-trip: reconciles exactly once on reconnect', 
 			variables_synced: 1,
 		});
 
-		const engine = new FilloutSyncEngine();
+		const engine = new FilloutUploadSync();
 		await engine.syncNow();
 
 		expect(apiMock.sessions.sync).toHaveBeenCalledTimes(1);

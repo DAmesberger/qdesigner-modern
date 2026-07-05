@@ -21,8 +21,8 @@
     getLocaleLabel,
   } from '$lib/shared';
   import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
-  import { FilloutOfflineSyncService } from '$lib/fillout/services/FilloutOfflineSyncService';
-  import { FilloutSyncEngine } from '$lib/fillout/services/FilloutSyncEngine';
+  import { FilloutContentCache } from '$lib/fillout/services/FilloutContentCache';
+  import { FilloutUploadSync } from '$lib/fillout/services/FilloutUploadSync';
   import { QuotaService } from '$lib/fillout/services/QuotaService';
   import { FraudDetectionService } from '$lib/fillout/services/FraudDetectionService';
   import { api } from '$lib/services/api';
@@ -100,7 +100,7 @@
   // ONE renderer, owned + lazily created by the runtime; the page keeps only the canvas
   // (bound below) and delegates resize to runtime.resize().
   let runtime: FilloutRuntime | null = null;
-  let syncEngine: FilloutSyncEngine | null = null;
+  let syncEngine: FilloutUploadSync | null = null;
   let loading = $state(false);
   let loadingMessage = $state('Loading questionnaire...');
   let loadingProgress = $state(0);
@@ -246,7 +246,7 @@
     window.addEventListener('offline', handleOffline);
 
     // Start sync engine
-    syncEngine = new FilloutSyncEngine({
+    syncEngine = new FilloutUploadSync({
       onSyncStart: () => { syncStatus = 'syncing'; },
       onSyncComplete: (result) => {
         syncStatus = result.errors.length > 0 ? 'error' : 'synced';
@@ -541,8 +541,8 @@
           // Opportunistic GC now that a session finished. The just-completed session's
           // definition + media stay protected until its records sync (protectedVersionKeys
           // covers unsynced sessions), so this only reclaims already-synced stale versions.
-          FilloutOfflineSyncService.pruneDefinitions().catch(() => {});
-          FilloutOfflineSyncService.enforceMediaQuota().catch(() => {});
+          FilloutContentCache.pruneDefinitions().catch(() => {});
+          FilloutContentCache.enforceMediaQuota().catch(() => {});
         },
         onSessionUpdate: (progress) => {
           if (loading) {

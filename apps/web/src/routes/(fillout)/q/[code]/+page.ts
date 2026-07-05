@@ -1,6 +1,6 @@
 import type { PageLoad } from './$types';
 import { error } from '@sveltejs/kit';
-import { FilloutOfflineSyncService } from '$lib/fillout/services/FilloutOfflineSyncService';
+import { FilloutContentCache } from '$lib/fillout/services/FilloutContentCache';
 import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
 import type { QuestionnaireByCode, Session } from '$lib/api/generated/types.gen';
 import type { FilloutDefinition, FilloutQuestionnairePayload } from '$lib/fillout/types';
@@ -49,9 +49,9 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 				// Cache the latest as a VERSIONED row — this adds a new (id, version) snapshot and
 				// never overwrites the version an in-flight session pinned. Then opportunistically
 				// GC unreferenced versions and bound the media cache (both fire-and-forget).
-				await FilloutOfflineSyncService.cacheQuestionnaire(payload, code);
-				void FilloutOfflineSyncService.pruneDefinitions().catch(() => {});
-				void FilloutOfflineSyncService.enforceMediaQuota().catch(() => {});
+				await FilloutContentCache.cacheQuestionnaire(payload, code);
+				void FilloutContentCache.pruneDefinitions().catch(() => {});
+				void FilloutContentCache.enforceMediaQuota().catch(() => {});
 			} else if (response.status === 404) {
 				throw error(404, 'Questionnaire not found');
 			} else {
@@ -69,7 +69,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 
 	// Offline fallback: load the latest cached version from IndexedDB.
 	if (!latest) {
-		const cached = await FilloutOfflineSyncService.getLatestOfflineQuestionnaire(code);
+		const cached = await FilloutContentCache.getLatestOfflineQuestionnaire(code);
 		if (!cached) {
 			throw error(404, 'Questionnaire not available offline');
 		}
@@ -155,7 +155,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	let effective: QuestionnaireByCode = latest;
 	let pinnedFallback = false;
 	if (pin) {
-		const pinned = await FilloutOfflineSyncService.getPinnedOfflineQuestionnaire(
+		const pinned = await FilloutContentCache.getPinnedOfflineQuestionnaire(
 			latest.id as string,
 			pin.major,
 			pin.minor,

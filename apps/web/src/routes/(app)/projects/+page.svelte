@@ -34,13 +34,13 @@
           return a.name.localeCompare(b.name);
         case 'date':
           return (
-            new Date(b.createdAt || b.created_at || 0).getTime() -
-            new Date(a.createdAt || a.created_at || 0).getTime()
+            new Date(b.createdAt || 0).getTime() -
+            new Date(a.createdAt || 0).getTime()
           );
         case 'questionnaires':
           return (
-            (b.questionnaireCount || b.questionnaire_count || 0) -
-            (a.questionnaireCount || a.questionnaire_count || 0)
+            (b.questionnaireCount || 0) -
+            (a.questionnaireCount || 0)
           );
         default:
           return 0;
@@ -198,14 +198,14 @@
                   <div class="flex items-center">
                     <Users class="h-4 w-4 mr-1" />
                     <span
-                      >{project.questionnaireCount || project.questionnaire_count || 0} questionnaires</span
+                      >{project.questionnaireCount || 0} questionnaires</span
                     >
                   </div>
                   <div class="flex items-center">
                     <Calendar class="h-4 w-4 mr-1" />
                     <span
                       >{formatDate(
-                        project.createdAt || project.created_at || new Date().toISOString()
+                        project.createdAt || new Date().toISOString()
                       )}</span
                     >
                   </div>

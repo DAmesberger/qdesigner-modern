@@ -83,7 +83,7 @@ export class FilloutRuntime {
 	 * Start the session in database
 	 */
 	private async startSession(): Promise<void> {
-		// Redundant server round-trip: FilloutSyncEngine materializes sessions
+		// Redundant server round-trip: FilloutUploadSync materializes sessions
 		// idempotently at sync time, so nothing is lost offline. Only ping the
 		// server when online.
 		if (!navigator.onLine) return;
@@ -267,7 +267,7 @@ export class FilloutRuntime {
 			}
 
 			// Merge the quality report (and any custom metadata) into the local
-			// session row and re-arm synced:0 so FilloutSyncEngine ships it. Must
+			// session row and re-arm synced:0 so FilloutUploadSync ships it. Must
 			// run before config.onComplete (which may trigger a syncNow()).
 			await OfflineSessionService.mergeMetadata(session.id, {
 				qualityReport: session.metadata?.qualityReport,
