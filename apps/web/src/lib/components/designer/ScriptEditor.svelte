@@ -194,7 +194,7 @@ declare namespace QuestionAPI {
 
     // Create editor
     const editorInstance = monaco.editor.create(editorContainer, {
-      value: question.settings?.script || scriptTemplate,
+      value: typeof question.settings?.script === 'string' ? question.settings.script : scriptTemplate,
       language: 'javascript',
       theme: 'vs-dark',
       minimap: { enabled: false },

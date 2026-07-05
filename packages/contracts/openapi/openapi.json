@@ -1074,6 +1074,94 @@
         ]
       }
     },
+    "/api/organizations/{id}/members/{user_id}/role": {
+      "put": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "PUT /api/organizations/:id/members/:user_id/role",
+        "operationId": "change_member_role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User id whose role is changing",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMemberRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Member role updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid role or last-owner guard tripped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Member not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/organizations/{id}/invitations": {
       "get": {
         "tags": [
@@ -3931,7 +4019,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Session"
+                  "$ref": "#/components/schemas/CreateSessionResponse"
                 }
               }
             }
@@ -4873,6 +4961,81 @@
         }
       }
     },
+    "/api/questionnaires/{id}/cohort-stats": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "GET /api/questionnaires/{id}/cohort-stats",
+        "description": "Public, aggregate-only cohort statistics for a PUBLISHED questionnaire.\nThis is the anonymous-safe cohort feedback path (F060): the\nstatistical-feedback module's `cohort` / `participant-vs-cohort` modes call\nit from the fillout runtime, where the caller is an anonymous participant\nwho can never reach the `AuthenticatedUser`-gated `/api/sessions/aggregate`.\n\nOnly aggregates cross the wire — the underlying `fillout_cohort_stats`\nSECURITY DEFINER function computes moments/percentiles over COMPLETED\nsessions and never returns a per-session value. A min-N floor is applied\nhere: when `n < 5` the response reports the count with ALL stats null,\nblocking small-cohort deanonymization. Unpublished / missing questionnaire\n→ 404.",
+        "operationId": "public_cohort_stats",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Questionnaire id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "description": "Aggregate source: 'variable' (default) or 'response'.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "description": "Variable name (source='variable') or question id (source='response').",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregate-only cohort stats (null stats when n < 5)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionAggregateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Questionnaire not found or not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/{id}/sync": {
       "post": {
         "tags": [
@@ -4941,8 +5104,6 @@
         "tags": [
           "analytics"
         ],
-        "summary": "POST /api/sessions/filter",
-        "description": "Accepts a structured filter query and returns matching sessions\nwith optional aggregated statistics on a key field.",
         "operationId": "filter_sessions",
         "requestBody": {
           "content": {
@@ -5306,6 +5467,52 @@
         ]
       }
     },
+    "/api/media/{id}/content": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "GET /api/media/:id/content — same-origin streaming proxy (contract D1).",
+        "description": "Streams the S3 object bytes on the API origin instead of redirecting to\nan expiring presigned MinIO URL. This is what fixes cross-origin WebGL\ntexture taint, COEP `require-corp` on the fillout route, and the\nCache-API keying problem (a presigned URL expires and re-issues, so it\ncan't be a durable cache key).\n\nAuthorization is by RLS admission, mirroring the by-code anonymous-read\nposture (ADR 0012/0015): this route runs under `set_fillout_rls_context`\n(optional JWT), and the `SELECT` below is admitted either by the 00014\n`media_assets_select` org-member policy (authenticated project member)\nor by the 00025 `media_assets_select_via_published_questionnaire` policy\n(asset referenced by a published questionnaire — anonymous fillout). A\nnon-admitted row simply isn't returned → 404.\n\nHonors a single `Range` (`bytes=start-end`) by passing it through to S3\nand replying `206` with `Content-Range`; otherwise `200` full body.\nThe response carries `Content-Type` (from the stored mime), an `ETag`\n(the immutable storage key), `Accept-Ranges: bytes`, and\n`Cache-Control: public, max-age=31536000, immutable`.",
+        "operationId": "stream_media_content",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Media asset id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Media object bytes",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "206": {
+            "description": "Partial media object bytes (range request)",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "404": {
+            "description": "Media asset not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/{id}/media": {
       "post": {
         "tags": [
@@ -5555,6 +5762,17 @@
         ],
         "properties": {
           "bump_type": {
+            "type": "string"
+          }
+        }
+      },
+      "ChangeMemberRoleRequest": {
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
             "type": "string"
           }
         }
@@ -5923,8 +6141,34 @@
               "null"
             ],
             "format": "int32"
+          },
+          "fingerprint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Client-generated browser fingerprint hash used for create-time\nduplicate-participation detection. Optional; when omitted we fall\nback to `metadata->>'fingerprint'` for backward compatibility."
           }
         }
+      },
+      "CreateSessionResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Session"
+          },
+          {
+            "type": "object",
+            "required": [
+              "duplicate"
+            ],
+            "properties": {
+              "duplicate": {
+                "type": "boolean"
+              }
+            }
+          }
+        ],
+        "description": "Response for `POST /api/sessions`. Flattens the created [`Session`] and\nadds `duplicate` — true when a prior COMPLETED session for the same\nquestionnaire shares the caller-provided fingerprint. The session is\ncreated regardless; the client decides whether to warn or block per the\nquestionnaire's fraud-prevention settings (repeat participation may be\nallowed, so the server does not hard-block here)."
       },
       "CreateTemplateRequest": {
         "type": "object",
@@ -7919,15 +8163,10 @@
       "SessionVariableRecord": {
         "type": "object",
         "required": [
-          "id",
           "session_id",
           "variable_name"
         ],
         "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
           "session_id": {
             "type": "string",
             "format": "uuid"
@@ -7936,6 +8175,13 @@
             "type": "string"
           },
           "variable_value": {},
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
           "updated_at": {
             "type": [
               "string",
@@ -8097,6 +8343,17 @@
               "string",
               "null"
             ]
+          },
+          "session": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SyncSessionInit",
+                "description": "Present when the session may not yet exist on the server (offline-created)."
+              }
+            ]
           }
         }
       },
@@ -8135,7 +8392,10 @@
               "null"
             ]
           },
-          "metadata": {}
+          "metadata": {},
+          "timing_provenance": {
+            "description": "Per-response timing-provenance blob (contract C-PROVENANCE). Sent\nsnake_case as `timing_provenance`; `timingProvenance` accepted as an\nalias. Optional so older clients that omit it still deserialize."
+          }
         }
       },
       "SyncResult": {
@@ -8158,6 +8418,48 @@
             "type": "integer",
             "format": "int32"
           }
+        }
+      },
+      "SyncSessionInit": {
+        "type": "object",
+        "description": "Session-creation fields carried by the sync payload so a session that was\ncreated while OFFLINE (exists only on the client) can be materialized on the\nserver at sync time. Optional: online sessions already exist and omit this.",
+        "required": [
+          "questionnaire_id"
+        ],
+        "properties": {
+          "questionnaire_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "participant_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version_major": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "version_minor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "version_patch": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "metadata": {},
+          "browser_info": {}
         }
       },
       "SyncVariableItem": {

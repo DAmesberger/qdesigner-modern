@@ -45,7 +45,7 @@
   function handleAddVariable() {
     if (!newVariable.name) return;
 
-    const defaultValue = parseDefaultValue(newVariable.defaultValue, newVariable.type);
+    const defaultValue = parseDefaultValue(newVariable.defaultValue?.toString() || '', newVariable.type);
 
     designerStore.addVariable({
       id: crypto.randomUUID(),

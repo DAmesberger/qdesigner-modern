@@ -51,6 +51,10 @@ export type BumpVersionRequest = {
     bump_type: string;
 };
 
+export type ChangeMemberRoleRequest = {
+    role: string;
+};
+
 export type CheckDuplicateRequest = {
     questionnaire_id: string;
     fingerprint: string;
@@ -142,6 +146,24 @@ export type CreateSessionRequest = {
     version_major?: number | null;
     version_minor?: number | null;
     version_patch?: number | null;
+    /**
+     * Client-generated browser fingerprint hash used for create-time
+     * duplicate-participation detection. Optional; when omitted we fall
+     * back to `metadata->>'fingerprint'` for backward compatibility.
+     */
+    fingerprint?: string | null;
+};
+
+/**
+ * Response for `POST /api/sessions`. Flattens the created [`Session`] and
+ * adds `duplicate` — true when a prior COMPLETED session for the same
+ * questionnaire shares the caller-provided fingerprint. The session is
+ * created regardless; the client decides whether to warn or block per the
+ * questionnaire's fraud-prevention settings (repeat participation may be
+ * allowed, so the server does not hard-block here).
+ */
+export type CreateSessionResponse = Session & {
+    duplicate: boolean;
 };
 
 export type CreateTemplateRequest = {
@@ -632,10 +654,10 @@ export type SessionMediaWithUrl = SessionMediaAsset & {
 };
 
 export type SessionVariableRecord = {
-    id: string;
     session_id: string;
     variable_name: string;
     variable_value?: unknown;
+    created_at?: string | null;
     updated_at?: string | null;
 };
 
@@ -679,6 +701,7 @@ export type SyncPayload = {
     events: Array<SyncEventItem>;
     variables: Array<SyncVariableItem>;
     status?: string | null;
+    session?: null | SyncSessionInit;
 };
 
 export type SyncResponseItem = {
@@ -689,12 +712,33 @@ export type SyncResponseItem = {
     presented_at?: string | null;
     answered_at?: string | null;
     metadata?: unknown;
+    /**
+     * Per-response timing-provenance blob (contract C-PROVENANCE). Sent
+     * snake_case as `timing_provenance`; `timingProvenance` accepted as an
+     * alias. Optional so older clients that omit it still deserialize.
+     */
+    timing_provenance?: unknown;
 };
 
 export type SyncResult = {
     responses_synced: number;
     events_synced: number;
     variables_synced: number;
+};
+
+/**
+ * Session-creation fields carried by the sync payload so a session that was
+ * created while OFFLINE (exists only on the client) can be materialized on the
+ * server at sync time. Optional: online sessions already exist and omit this.
+ */
+export type SyncSessionInit = {
+    questionnaire_id: string;
+    participant_id?: string | null;
+    version_major?: number | null;
+    version_minor?: number | null;
+    version_patch?: number | null;
+    metadata?: unknown;
+    browser_info?: unknown;
 };
 
 export type SyncVariableItem = {
@@ -1412,6 +1456,48 @@ export type RemoveMemberResponses = {
 };
 
 export type RemoveMemberResponse = RemoveMemberResponses[keyof RemoveMemberResponses];
+
+export type ChangeMemberRoleData = {
+    body: ChangeMemberRoleRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+        /**
+         * User id whose role is changing
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/members/{user_id}/role';
+};
+
+export type ChangeMemberRoleErrors = {
+    /**
+     * Invalid role or last-owner guard tripped
+     */
+    400: ErrorEnvelope;
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * Member not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type ChangeMemberRoleError = ChangeMemberRoleErrors[keyof ChangeMemberRoleErrors];
+
+export type ChangeMemberRoleResponses = {
+    /**
+     * Member role updated
+     */
+    200: MessageResponse;
+};
+
+export type ChangeMemberRoleResponse = ChangeMemberRoleResponses[keyof ChangeMemberRoleResponses];
 
 export type ListInvitationsData = {
     body?: never;
@@ -2895,10 +2981,10 @@ export type CreateSessionResponses = {
     /**
      * Session created
      */
-    201: Session;
+    201: CreateSessionResponse;
 };
 
-export type CreateSessionResponse = CreateSessionResponses[keyof CreateSessionResponses];
+export type CreateSessionResponse2 = CreateSessionResponses[keyof CreateSessionResponses];
 
 export type CheckDuplicateData = {
     body: CheckDuplicateRequest;
@@ -3363,6 +3449,49 @@ export type QuotaStatusResponses = {
 
 export type QuotaStatusResponse2 = QuotaStatusResponses[keyof QuotaStatusResponses];
 
+export type PublicCohortStatsData = {
+    body?: never;
+    path: {
+        /**
+         * Questionnaire id
+         */
+        id: string;
+    };
+    query: {
+        /**
+         * Aggregate source: 'variable' (default) or 'response'.
+         */
+        source?: string | null;
+        /**
+         * Variable name (source='variable') or question id (source='response').
+         */
+        key: string;
+    };
+    url: '/api/questionnaires/{id}/cohort-stats';
+};
+
+export type PublicCohortStatsErrors = {
+    /**
+     * Invalid request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Questionnaire not found or not published
+     */
+    404: ErrorEnvelope;
+};
+
+export type PublicCohortStatsError = PublicCohortStatsErrors[keyof PublicCohortStatsErrors];
+
+export type PublicCohortStatsResponses = {
+    /**
+     * Aggregate-only cohort stats (null stats when n < 5)
+     */
+    200: SessionAggregateResponse;
+};
+
+export type PublicCohortStatsResponse = PublicCohortStatsResponses[keyof PublicCohortStatsResponses];
+
 export type SyncSessionData = {
     body: SyncPayload;
     path: {
@@ -3583,6 +3712,40 @@ export type GetMediaResponses = {
 };
 
 export type GetMediaResponse = GetMediaResponses[keyof GetMediaResponses];
+
+export type StreamMediaContentData = {
+    body?: never;
+    path: {
+        /**
+         * Media asset id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/media/{id}/content';
+};
+
+export type StreamMediaContentErrors = {
+    /**
+     * Media asset not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type StreamMediaContentError = StreamMediaContentErrors[keyof StreamMediaContentErrors];
+
+export type StreamMediaContentResponses = {
+    /**
+     * Media object bytes
+     */
+    200: Blob | File;
+    /**
+     * Partial media object bytes (range request)
+     */
+    206: Blob | File;
+};
+
+export type StreamMediaContentResponse = StreamMediaContentResponses[keyof StreamMediaContentResponses];
 
 export type UploadSessionMediaData = {
     body: SessionMediaUploadRequest;

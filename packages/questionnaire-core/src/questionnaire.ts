@@ -48,8 +48,10 @@ export function formatSemver(q: Pick<Questionnaire, 'versionMajor' | 'versionMin
   return `${q.versionMajor}.${q.versionMinor}.${q.versionPatch}`;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic data surfaces are required for extensible questionnaire schemas
-type DynamicValue = any;
+// Dynamic data surfaces on the extensible questionnaire schema. `unknown` (not
+// `any`) forces every read site to narrow via type guards / `typeof` / concrete
+// union-member config types before use — the compiler enumerates unguarded reads.
+type DynamicValue = unknown;
 
 export interface Variable {
   id: string;
@@ -783,6 +785,26 @@ export interface FileValidation {
 // Base Question Interface
 // ============================================================================
 
+/**
+ * Legacy dual-schema `responseType` object carried by live questionnaire data
+ * (pre-union authoring path). Read by `moduleConfigAdapter` and `PropertiesPanel`
+ * to derive the participant-facing input config when a question was persisted
+ * under the old flat shape. The concrete `response`/`display` config on each
+ * `Question` union member remains the authoritative typed source; this is only
+ * the compatibility view for the base hole.
+ */
+export interface LegacyResponseTypeConfig {
+  type?: string;
+  options?: ResponseOption[];
+  min?: number;
+  max?: number;
+  minLabel?: string;
+  maxLabel?: string;
+  minLength?: number;
+  maxLength?: number;
+  [key: string]: unknown;
+}
+
 export interface BaseQuestion {
   id: string;
   type: QuestionType;
@@ -816,6 +838,19 @@ export interface BaseQuestion {
   media?: MediaConfig[]; // Legacy access
   stimulus?: DynamicValue;
   responseOptions?: DynamicValue;
+
+  /**
+   * Legacy dual-schema field carried by live data authored before the typed
+   * `Question` union. `moduleConfigAdapter` / `PropertiesPanel` read it to
+   * reconstruct the input config; the union member's concrete `response`/
+   * `display` stays authoritative. See {@link LegacyResponseTypeConfig}.
+   */
+  responseType?: LegacyResponseTypeConfig;
+
+  /** Legacy non-interactive display: auto-dismiss delay in ms (statistical-feedback metadata). */
+  displayDuration?: number;
+  /** Legacy non-interactive display: advance without a participant action. */
+  autoAdvance?: boolean;
 }
 
 // ============================================================================
@@ -1153,7 +1188,11 @@ export function requiresUserInput(q: Question): boolean {
 
 export function getQuestionVariable(q: Question): string | undefined {
   if (hasResponseConfig(q) && 'response' in q) {
-    return q.response?.saveAs;
+    const response = q.response;
+    if (response && typeof response === 'object' && 'saveAs' in response) {
+      const saveAs = (response as { saveAs?: unknown }).saveAs;
+      return typeof saveAs === 'string' ? saveAs : undefined;
+    }
   }
   return undefined;
 }

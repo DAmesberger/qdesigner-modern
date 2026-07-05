@@ -975,10 +975,11 @@
           Open Script Editor
         </button>
 
-        {#if questionItem.settings?.script}
+        {#if typeof questionItem.settings?.script === 'string' && questionItem.settings.script}
+          {@const script = questionItem.settings.script}
           <div>
             <p class="text-xs text-muted-foreground mb-1.5">Preview</p>
-            <pre class="text-xs font-mono bg-muted rounded-md p-3 overflow-hidden max-h-32 text-muted-foreground leading-relaxed">{questionItem.settings.script.split('\n').slice(0, 8).join('\n')}{questionItem.settings.script.split('\n').length > 8 ? '\n...' : ''}</pre>
+            <pre class="text-xs font-mono bg-muted rounded-md p-3 overflow-hidden max-h-32 text-muted-foreground leading-relaxed">{script.split('\n').slice(0, 8).join('\n')}{script.split('\n').length > 8 ? '\n...' : ''}</pre>
           </div>
         {/if}
       </div>

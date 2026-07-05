@@ -95,12 +95,10 @@
 
     // Update variables based on response
     const question = questionnaire.questions.find((q) => q.id === questionId);
-    if (question?.settings?.variableMapping) {
-      const varName = question.settings.variableMapping;
-      if (variableEngine && Object.hasOwn(variableValues, varName)) {
-        variableValues[varName] = value;
-        variableEngine.setValue(varName, value);
-      }
+    const varName = question?.settings?.variableMapping;
+    if (typeof varName === 'string' && variableEngine && Object.hasOwn(variableValues, varName)) {
+      variableValues[varName] = value;
+      variableEngine.setValue(varName, value);
     }
 
     // Dispatch response event

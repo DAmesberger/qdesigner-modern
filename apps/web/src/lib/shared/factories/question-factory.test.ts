@@ -179,11 +179,11 @@ describe('QuestionFactory', () => {
     });
     
     it('should create unique IDs for each question', () => {
-      const q1 = QuestionFactory.create(QuestionTypes.TEXT_INPUT);
-      const q2 = QuestionFactory.create(QuestionTypes.TEXT_INPUT);
-      
+      const q1 = QuestionFactory.create(QuestionTypes.TEXT_INPUT) as TextInputQuestion;
+      const q2 = QuestionFactory.create(QuestionTypes.TEXT_INPUT) as TextInputQuestion;
+
       expect(q1.id).not.toBe(q2.id);
-      expect(q1.response!.saveAs).not.toBe(q2.response!.saveAs);
+      expect(q1.response.saveAs).not.toBe(q2.response.saveAs);
     });
     
     it('should create unique option IDs for choice questions', () => {

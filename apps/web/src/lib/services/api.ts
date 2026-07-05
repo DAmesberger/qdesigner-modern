@@ -35,6 +35,23 @@ import type {
   QuestionnaireVersion as GeneratedQuestionnaireVersion,
   SyncPayload as GeneratedSyncPayload,
   UserProfile as GeneratedUserProfile,
+  NumericStatsSummary,
+  SessionAggregateResponse,
+  SessionCompareResponse,
+  CrossProjectAnalyticsResponse,
+  Organization as GeneratedOrganization,
+  OrgMember,
+  Invitation as GeneratedInvitation,
+  InvitationDetail,
+  PendingInvitation,
+  Project as GeneratedProject,
+  QuestionTemplate as GeneratedQuestionTemplate,
+  MediaAsset as GeneratedMediaAsset,
+  MediaAssetWithUrl,
+  DomainRecord,
+  VerificationResult as GeneratedVerificationResult,
+  ConditionCount,
+  Session as GeneratedSession,
 } from '$lib/api/generated/types.gen';
 import * as sdk from '$lib/api/generated/sdk.gen';
 import { auth } from './auth';
@@ -132,81 +149,73 @@ function parseApiErrorMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response with snake_case/camelCase fields
-function mapStatsSummary(raw: any): SessionStatsSummary {
-  const stats = raw || {};
+function mapStatsSummary(raw: NumericStatsSummary): SessionStatsSummary {
   return {
-    sampleCount: Number(stats.sample_count ?? stats.sampleCount ?? 0),
-    mean: stats.mean ?? null,
-    median: stats.median ?? null,
-    stdDev: stats.std_dev ?? stats.stdDev ?? null,
-    min: stats.min ?? null,
-    max: stats.max ?? null,
-    p10: stats.p10 ?? null,
-    p25: stats.p25 ?? null,
-    p50: stats.p50 ?? null,
-    p75: stats.p75 ?? null,
-    p90: stats.p90 ?? null,
-    p95: stats.p95 ?? null,
-    p99: stats.p99 ?? null,
+    sampleCount: Number(raw.sample_count ?? 0),
+    mean: raw.mean ?? null,
+    median: raw.median ?? null,
+    stdDev: raw.std_dev ?? null,
+    min: raw.min ?? null,
+    max: raw.max ?? null,
+    p10: raw.p10 ?? null,
+    p25: raw.p25 ?? null,
+    p50: raw.p50 ?? null,
+    p75: raw.p75 ?? null,
+    p90: raw.p90 ?? null,
+    p95: raw.p95 ?? null,
+    p99: raw.p99 ?? null,
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response with snake_case/camelCase fields
-function mapAggregateData(raw: any): SessionAggregateData {
+function mapAggregateData(raw: SessionAggregateResponse): SessionAggregateData {
   return {
-    questionnaireId: String(raw.questionnaire_id ?? raw.questionnaireId ?? ''),
+    questionnaireId: String(raw.questionnaire_id ?? ''),
     source: (raw.source ?? 'variable') as 'variable' | 'response',
     key: String(raw.key ?? ''),
-    participantCount: Number(raw.participant_count ?? raw.participantCount ?? 0),
+    participantCount: Number(raw.participant_count ?? 0),
     stats: mapStatsSummary(raw.stats),
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response with snake_case/camelCase fields
-function mapCompareData(raw: any): SessionCompareData {
-  const left = raw.left || {};
-  const right = raw.right || {};
-  const delta = raw.delta || {};
+function mapCompareData(raw: SessionCompareResponse): SessionCompareData {
+  const { left, right, delta } = raw;
 
   return {
-    questionnaireId: String(raw.questionnaire_id ?? raw.questionnaireId ?? ''),
+    questionnaireId: String(raw.questionnaire_id ?? ''),
     source: (raw.source ?? 'variable') as 'variable' | 'response',
     key: String(raw.key ?? ''),
     left: {
-      participantId: String(left.participant_id ?? left.participantId ?? ''),
+      participantId: String(left.participant_id ?? ''),
       stats: mapStatsSummary(left.stats),
     },
     right: {
-      participantId: String(right.participant_id ?? right.participantId ?? ''),
+      participantId: String(right.participant_id ?? ''),
       stats: mapStatsSummary(right.stats),
     },
     delta: {
-      meanDelta: delta.mean_delta ?? delta.meanDelta ?? null,
-      medianDelta: delta.median_delta ?? delta.medianDelta ?? null,
-      zScore: delta.z_score ?? delta.zScore ?? null,
+      meanDelta: delta.mean_delta ?? null,
+      medianDelta: delta.median_delta ?? null,
+      zScore: delta.z_score ?? null,
     },
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response with snake_case/camelCase fields
-function mapCrossProjectAnalytics(raw: any): CrossProjectAnalyticsData {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response item
-  const questionnaires = (raw.questionnaires || []).map((q: any) => ({
-    questionnaireId: String(q.questionnaire_id ?? q.questionnaireId ?? ''),
+function mapCrossProjectAnalytics(raw: CrossProjectAnalyticsResponse): CrossProjectAnalyticsData {
+  const questionnaires = (raw.questionnaires ?? []).map((q) => ({
+    questionnaireId: String(q.questionnaire_id ?? ''),
     name: String(q.name ?? ''),
-    responseCount: Number(q.response_count ?? q.responseCount ?? 0),
-    completedSessions: Number(q.completed_sessions ?? q.completedSessions ?? 0),
-    completionRate: Number(q.completion_rate ?? q.completionRate ?? 0),
+    responseCount: Number(q.response_count ?? 0),
+    completedSessions: Number(q.completed_sessions ?? 0),
+    completionRate: Number(q.completion_rate ?? 0),
     timingStats: q.timing_stats ? mapStatsSummary(q.timing_stats) : null,
     variableStats: q.variable_stats ? mapStatsSummary(q.variable_stats) : null,
   }));
 
-  const agg = raw.aggregate || {};
+  const agg = raw.aggregate;
   const aggregate = {
-    totalResponses: Number(agg.total_responses ?? agg.totalResponses ?? 0),
-    totalCompletedSessions: Number(agg.total_completed_sessions ?? agg.totalCompletedSessions ?? 0),
-    overallCompletionRate: Number(agg.overall_completion_rate ?? agg.overallCompletionRate ?? 0),
+    totalResponses: Number(agg.total_responses ?? 0),
+    totalCompletedSessions: Number(agg.total_completed_sessions ?? 0),
+    overallCompletionRate: Number(agg.overall_completion_rate ?? 0),
     overallTimingStats: agg.overall_timing_stats ? mapStatsSummary(agg.overall_timing_stats) : null,
     overallVariableStats: agg.overall_variable_stats
       ? mapStatsSummary(agg.overall_variable_stats)
@@ -214,12 +223,11 @@ function mapCrossProjectAnalytics(raw: any): CrossProjectAnalyticsData {
   };
 
   const crossComparisons = raw.cross_comparisons
-    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw API response items
-      (raw.cross_comparisons as any[]).map((c: any) => ({
-        questionnaireA: String(c.questionnaire_a ?? c.questionnaireA ?? ''),
-        questionnaireB: String(c.questionnaire_b ?? c.questionnaireB ?? ''),
-        meanDelta: c.mean_delta ?? c.meanDelta ?? null,
-        medianDelta: c.median_delta ?? c.medianDelta ?? null,
+    ? raw.cross_comparisons.map((c) => ({
+        questionnaireA: String(c.questionnaire_a ?? ''),
+        questionnaireB: String(c.questionnaire_b ?? ''),
+        meanDelta: c.mean_delta ?? null,
+        medianDelta: c.median_delta ?? null,
         correlation: c.correlation ?? null,
       }))
     : null;
@@ -227,69 +235,72 @@ function mapCrossProjectAnalytics(raw: any): CrossProjectAnalyticsData {
   return { questionnaires, aggregate, crossComparisons };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated REST payloads use snake_case
-function mapOrganization(raw: any): Organization {
-  const createdAt = raw.created_at ?? raw.createdAt ?? new Date().toISOString();
-  const updatedAt = raw.updated_at ?? raw.updatedAt ?? createdAt;
+function mapOrganization(raw: GeneratedOrganization): Organization {
+  const createdAt = raw.created_at ?? new Date().toISOString();
+  const updatedAt = raw.updated_at ?? createdAt;
 
   return {
     id: String(raw.id ?? ''),
     name: String(raw.name ?? ''),
     slug: String(raw.slug ?? ''),
     domain: raw.domain ?? null,
-    logoUrl: raw.logo_url ?? raw.logoUrl ?? null,
-    settings: raw.settings ?? {},
-    subscriptionTier: raw.subscription_tier ?? raw.subscriptionTier ?? 'free',
-    subscriptionStatus: raw.subscription_status ?? raw.subscriptionStatus ?? 'active',
-    createdBy: raw.created_by ?? raw.createdBy ?? null,
+    logoUrl: raw.logo_url ?? null,
+    settings: (raw.settings as Record<string, unknown>) ?? {},
+    subscriptionTier: 'free',
+    subscriptionStatus: 'active',
+    createdBy: null,
     createdAt,
     updatedAt,
-    organization_id: raw.organization_id,
     created_at: raw.created_at ?? createdAt,
     updated_at: raw.updated_at ?? updatedAt,
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated REST payloads use snake_case
-function mapOrganizationMember(raw: any, organizationId: string): OrganizationMember {
+function mapOrganizationMember(raw: OrgMember, organizationId: string): OrganizationMember {
   return {
     organizationId,
-    userId: String(raw.user_id ?? raw.userId ?? ''),
-    role: raw.role ?? 'member',
-    status: raw.status ?? 'active',
-    joinedAt: raw.joined_at ?? raw.joinedAt ?? new Date().toISOString(),
+    userId: String(raw.user_id ?? ''),
+    role: (raw.role ?? 'member') as OrganizationMember['role'],
+    status: (raw.status ?? 'active') as OrganizationMember['status'],
+    joinedAt: raw.joined_at ?? new Date().toISOString(),
     user: {
-      id: String(raw.user_id ?? raw.userId ?? ''),
+      id: String(raw.user_id ?? ''),
       email: String(raw.email ?? ''),
-      fullName: raw.full_name ?? raw.fullName ?? null,
-      full_name: raw.full_name ?? raw.fullName ?? null,
+      fullName: raw.full_name ?? null,
+      full_name: raw.full_name ?? null,
     },
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated REST payloads use snake_case
-function mapInvitation(raw: any): Invitation {
-  const inviterId = raw.invited_by?.id ?? raw.invited_by_id ?? raw.invitedBy?.id;
-  const inviterEmail = raw.invited_by?.email ?? raw.invited_by_email ?? raw.invitedBy?.email;
-  const inviterFullName =
-    raw.invited_by?.full_name ?? raw.invited_by?.fullName ?? raw.invitedBy?.fullName ?? null;
+function mapInvitation(
+  raw: GeneratedInvitation | InvitationDetail | PendingInvitation
+): Invitation {
+  const invitedByRaw = raw.invited_by ?? null;
+  const inviterSummary = invitedByRaw && typeof invitedByRaw === 'object' ? invitedByRaw : null;
+  const inviterId =
+    inviterSummary?.id ?? (typeof invitedByRaw === 'string' ? invitedByRaw : undefined);
+  const inviterEmail = inviterSummary?.email;
+  const inviterFullName = inviterSummary?.full_name ?? null;
+
+  const organization = 'organization' in raw ? raw.organization : undefined;
+  const acceptedAt = 'accepted_at' in raw ? (raw.accepted_at ?? null) : null;
 
   return {
     id: String(raw.id ?? ''),
-    organizationId: String(raw.organization_id ?? raw.organizationId ?? raw.organization?.id ?? ''),
+    organizationId: String(raw.organization_id ?? organization?.id ?? ''),
     email: String(raw.email ?? ''),
     role: String(raw.role ?? ''),
     token: String(raw.token ?? raw.id ?? ''),
-    status: raw.status ?? 'pending',
-    expiresAt: raw.expires_at ?? raw.expiresAt ?? new Date().toISOString(),
-    createdAt: raw.created_at ?? raw.createdAt ?? new Date().toISOString(),
-    acceptedAt: raw.accepted_at ?? raw.acceptedAt ?? null,
-    customMessage: raw.custom_message ?? raw.customMessage ?? null,
-    organization: raw.organization
+    status: (raw.status ?? 'pending') as Invitation['status'],
+    expiresAt: raw.expires_at ?? new Date().toISOString(),
+    createdAt: raw.created_at ?? new Date().toISOString(),
+    acceptedAt,
+    customMessage: raw.custom_message ?? null,
+    organization: organization
       ? {
-          id: String(raw.organization.id ?? ''),
-          name: String(raw.organization.name ?? ''),
-          slug: String(raw.organization.slug ?? ''),
+          id: String(organization.id ?? ''),
+          name: String(organization.name ?? ''),
+          slug: String(organization.slug ?? ''),
         }
       : undefined,
     invitedBy:
@@ -301,121 +312,114 @@ function mapInvitation(raw: any): Invitation {
             full_name: inviterFullName,
           }
         : undefined,
-    created_at: raw.created_at,
-    accepted_at: raw.accepted_at ?? null,
-    expires_at: raw.expires_at,
+    created_at: raw.created_at ?? undefined,
+    accepted_at: acceptedAt,
+    expires_at: raw.expires_at ?? undefined,
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated REST payloads use snake_case
-function mapProject(raw: any): Project {
-  const createdAt = raw.created_at ?? raw.createdAt ?? new Date().toISOString();
-  const updatedAt = raw.updated_at ?? raw.updatedAt ?? createdAt;
+function mapProject(raw: GeneratedProject): Project {
+  const createdAt = raw.created_at ?? new Date().toISOString();
+  const updatedAt = raw.updated_at ?? createdAt;
 
   return {
     id: String(raw.id ?? ''),
-    organizationId: String(raw.organization_id ?? raw.organizationId ?? ''),
+    organizationId: String(raw.organization_id ?? ''),
     name: String(raw.name ?? ''),
     code: String(raw.code ?? ''),
     description: raw.description ?? null,
-    isPublic: Boolean(raw.is_public ?? raw.isPublic ?? false),
-    status: raw.status ?? 'active',
-    maxParticipants: raw.max_participants ?? raw.maxParticipants ?? null,
-    irbNumber: raw.irb_number ?? raw.irbNumber ?? null,
-    startDate: raw.start_date ?? raw.startDate ?? null,
-    endDate: raw.end_date ?? raw.endDate ?? null,
-    settings: raw.settings ?? {},
-    createdBy: raw.created_by ?? raw.createdBy ?? null,
+    isPublic: Boolean(raw.is_public ?? false),
+    status: (raw.status ?? 'active') as Project['status'],
+    maxParticipants: raw.max_participants ?? null,
+    irbNumber: raw.irb_number ?? null,
+    startDate: raw.start_date ?? null,
+    endDate: raw.end_date ?? null,
+    settings: (raw.settings as Record<string, unknown>) ?? {},
+    createdBy: null,
     createdAt,
     updatedAt,
-    questionnaireCount: raw.questionnaire_count ?? raw.questionnaireCount,
     organization_id: raw.organization_id,
     created_at: raw.created_at ?? createdAt,
     updated_at: raw.updated_at ?? updatedAt,
-    questionnaire_count: raw.questionnaire_count,
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated REST payloads use snake_case
-function mapQuestionTemplate(raw: any): QuestionTemplate {
-  const createdAt = raw.created_at ?? raw.createdAt ?? new Date().toISOString();
-  const updatedAt = raw.updated_at ?? raw.updatedAt ?? createdAt;
+function mapQuestionTemplate(raw: GeneratedQuestionTemplate): QuestionTemplate {
+  const createdAt = raw.created_at ?? new Date().toISOString();
+  const updatedAt = raw.updated_at ?? createdAt;
+  const questionConfig = (raw.question_config as Record<string, unknown>) ?? {};
 
   return {
     id: String(raw.id ?? ''),
-    organizationId: String(raw.organization_id ?? raw.organizationId ?? ''),
-    createdBy: String(raw.created_by ?? raw.createdBy ?? ''),
+    organizationId: String(raw.organization_id ?? ''),
+    createdBy: String(raw.created_by ?? ''),
     name: String(raw.name ?? ''),
     description: raw.description ?? null,
     category: raw.category ?? null,
     tags: raw.tags ?? null,
-    questionType: String(raw.question_type ?? raw.questionType ?? ''),
-    questionConfig: raw.question_config ?? raw.questionConfig ?? {},
-    isShared: Boolean(raw.is_shared ?? raw.isShared ?? false),
-    usageCount: Number(raw.usage_count ?? raw.usageCount ?? 0),
+    questionType: String(raw.question_type ?? ''),
+    questionConfig,
+    isShared: Boolean(raw.is_shared ?? false),
+    usageCount: Number(raw.usage_count ?? 0),
     createdAt,
     updatedAt,
     organization_id: raw.organization_id,
-    created_by: raw.created_by,
+    created_by: raw.created_by ?? undefined,
     question_type: raw.question_type,
-    question_config: raw.question_config,
-    is_shared: raw.is_shared,
-    usage_count: raw.usage_count,
+    question_config: questionConfig,
+    is_shared: raw.is_shared ?? undefined,
+    usage_count: raw.usage_count ?? undefined,
     created_at: raw.created_at ?? createdAt,
     updated_at: raw.updated_at ?? updatedAt,
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated REST payloads use snake_case
-function mapMediaAsset(raw: any): MediaAsset {
-  const createdAt = raw.created_at ?? raw.createdAt ?? new Date().toISOString();
-  const updatedAt = raw.updated_at ?? raw.updatedAt ?? createdAt;
-  const filename = raw.filename ?? raw.original_filename ?? raw.originalFilename ?? 'upload.bin';
-  const mimeType = raw.mime_type ?? raw.mimeType ?? raw.content_type ?? 'application/octet-stream';
-  const storagePath = raw.storage_path ?? raw.storagePath ?? raw.storage_key ?? '';
+function mapMediaAsset(raw: GeneratedMediaAsset | MediaAssetWithUrl): MediaAsset {
+  const createdAt = raw.created_at ?? new Date().toISOString();
+  const filename = raw.filename ?? 'upload.bin';
+  const mimeType = raw.content_type ?? 'application/octet-stream';
+  const storagePath = raw.storage_key ?? '';
 
   return {
     id: String(raw.id ?? ''),
-    organizationId: String(raw.organization_id ?? raw.organizationId ?? ''),
-    uploadedBy: String(raw.uploaded_by ?? raw.uploadedBy ?? ''),
+    organizationId: String(raw.organization_id ?? ''),
+    uploadedBy: String(raw.uploaded_by ?? ''),
     filename,
-    originalFilename: raw.original_filename ?? raw.originalFilename ?? filename,
+    originalFilename: filename,
     mimeType,
-    sizeBytes: Number(raw.size_bytes ?? raw.sizeBytes ?? 0),
+    sizeBytes: Number(raw.size_bytes ?? 0),
     storagePath,
-    width: raw.width ?? null,
-    height: raw.height ?? null,
-    durationSeconds: raw.duration_seconds ?? raw.durationSeconds ?? null,
-    thumbnailPath: raw.thumbnail_path ?? raw.thumbnailPath ?? null,
-    metadata: raw.metadata ?? {},
-    accessLevel: raw.access_level ?? raw.accessLevel ?? 'organization',
+    width: null,
+    height: null,
+    durationSeconds: null,
+    thumbnailPath: null,
+    metadata: {},
+    accessLevel: 'organization',
     createdAt,
-    updatedAt,
+    updatedAt: createdAt,
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated REST payloads use snake_case
-function mapDomainConfig(raw: any): DomainConfig {
+function mapDomainConfig(raw: DomainRecord): DomainConfig {
   return {
     id: String(raw.id ?? ''),
-    organizationId: String(raw.organization_id ?? raw.organizationId ?? ''),
+    organizationId: String(raw.organization_id ?? ''),
     domain: String(raw.domain ?? ''),
-    verificationToken: String(raw.verification_token ?? raw.verificationToken ?? ''),
-    verificationMethod: raw.verification_method ?? raw.verificationMethod ?? null,
-    verifiedAt: raw.verified_at ?? raw.verifiedAt ?? null,
-    autoJoinEnabled: Boolean(raw.auto_join_enabled ?? raw.autoJoinEnabled ?? false),
-    includeSubdomains: Boolean(raw.include_subdomains ?? raw.includeSubdomains ?? false),
-    defaultRole: String(raw.default_role ?? raw.defaultRole ?? 'member'),
-    emailWhitelist: raw.email_whitelist ?? raw.emailWhitelist ?? [],
-    emailBlacklist: raw.email_blacklist ?? raw.emailBlacklist ?? [],
-    welcomeMessage: raw.welcome_message ?? raw.welcomeMessage ?? null,
-    createdAt: raw.created_at ?? raw.createdAt ?? new Date().toISOString(),
-    created_at: raw.created_at,
+    verificationToken: String(raw.verification_token ?? ''),
+    verificationMethod: raw.verification_method ?? null,
+    verifiedAt: raw.verified_at ?? null,
+    autoJoinEnabled: Boolean(raw.auto_join_enabled ?? false),
+    includeSubdomains: Boolean(raw.include_subdomains ?? false),
+    defaultRole: String(raw.default_role ?? 'member'),
+    emailWhitelist: raw.email_whitelist ?? [],
+    emailBlacklist: raw.email_blacklist ?? [],
+    welcomeMessage: raw.welcome_message ?? null,
+    createdAt: raw.created_at ?? new Date().toISOString(),
+    created_at: raw.created_at ?? undefined,
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated REST payloads use snake_case
-function mapVerificationResult(raw: any): VerificationResult {
+function mapVerificationResult(raw: GeneratedVerificationResult): VerificationResult {
   return {
     success: Boolean(raw.success ?? false),
     message: raw.message ?? undefined,
@@ -423,16 +427,30 @@ function mapVerificationResult(raw: any): VerificationResult {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generated REST payloads use snake_case
-function mapConditionCounts(raw: any[]): ConditionGroupCounts {
+function mapConditionCounts(raw: ConditionCount[]): ConditionGroupCounts {
   const counts: ConditionGroupCounts = {};
 
   for (const item of raw) {
-    const conditionName = String(item.condition_name ?? item.conditionName ?? 'unassigned');
+    const conditionName = String(item.condition_name ?? 'unassigned');
     counts[conditionName] = Number(item.count ?? 0);
   }
 
   return counts;
+}
+
+function mapSession(raw: GeneratedSession): SessionData {
+  const status: SessionData['status'] =
+    raw.status === 'completed' || raw.status === 'abandoned' ? raw.status : 'active';
+
+  return {
+    id: String(raw.id ?? ''),
+    questionnaireId: String(raw.questionnaire_id ?? ''),
+    participantId: raw.participant_id ?? null,
+    status,
+    startedAt: raw.started_at ?? new Date().toISOString(),
+    completedAt: raw.completed_at ?? null,
+    metadata: (raw.metadata as Record<string, unknown>) ?? {},
+  };
 }
 
 class ApiClient {
@@ -1061,7 +1079,7 @@ class ApiClient {
           throwOnError: true,
           query: Object.fromEntries(query.entries()),
         })
-      ) as unknown as Promise<SessionData[]>;
+      ).then((rows) => rows.map(mapSession));
     },
     create: (data: {
       questionnaireId: string;
@@ -1087,7 +1105,7 @@ class ApiClient {
             version_patch: data.versionPatch,
           },
         })
-      ) as unknown as Promise<SessionData>,
+      ).then((raw) => ({ ...mapSession(raw), duplicate: Boolean(raw.duplicate) })),
     checkDuplicate: (questionnaireId: string, fingerprint: string) =>
       this.callSdk(() =>
         sdk.checkDuplicate<true>({
@@ -1108,8 +1126,8 @@ class ApiClient {
           throwOnError: true,
           path: { id },
         })
-      ) as unknown as Promise<SessionData>,
-    update: (id: string, data: Partial<SessionData>) =>
+      ).then(mapSession),
+    update: (id: string, data: { status?: string; metadata?: Record<string, unknown> }) =>
       this.callSdk(() =>
         updateSessionRequest<true>({
           client: apiClient,
@@ -1118,7 +1136,7 @@ class ApiClient {
           path: { id },
           body: data,
         })
-      ) as unknown as Promise<SessionData>,
+      ).then(mapSession),
     submitResponses: (sessionId: string, responses: ResponseSubmission[]) =>
       this.callSdk(() =>
         submitResponseRequest<true>({
@@ -1290,14 +1308,14 @@ class ApiClient {
           body,
         })
       ) as Promise<FilterResponse>,
-    sync: (sessionId: string, body: Record<string, unknown>) =>
+    sync: (sessionId: string, body: GeneratedSyncPayload) =>
       this.callSdk(() =>
         syncSessionRequest<true>({
           client: apiClient,
           responseStyle: 'data',
           throwOnError: true,
           path: { id: sessionId },
-          body: body as GeneratedSyncPayload,
+          body,
         })
       ) as Promise<{ responses_synced: number; events_synced: number; variables_synced: number }>,
     uploadMedia: (

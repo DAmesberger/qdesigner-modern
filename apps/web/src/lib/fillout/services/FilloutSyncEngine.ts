@@ -3,6 +3,7 @@ import { api } from '$lib/services/api';
 import { OfflineSessionService } from './OfflineSessionService';
 import { OfflineResponsePersistence, type StoredFilloutResponse } from './OfflineResponsePersistence';
 import { db, type FilloutSession } from '$lib/services/db/indexeddb';
+import type { SyncPayload } from '$lib/api/generated/types.gen';
 
 export interface SyncResult {
 	sessionsSynced: number;
@@ -176,7 +177,7 @@ export class FilloutSyncEngine {
 		const variables = await OfflineResponsePersistence.getUnsyncedVariables(session.id);
 
 		// Build sync payload
-		const payload = {
+		const payload: SyncPayload = {
 			responses: responses.map((r) => {
 				// `timingProvenance` is a widened field on the stored row (not on
 				// the base FilloutResponse type); read it via the widened alias.

@@ -129,7 +129,7 @@ export const hooks = {
 
     if (editorContainer) {
       editor = m.editor.create(editorContainer, {
-        value: question.settings?.script || scriptTemplate,
+        value: typeof question.settings?.script === 'string' ? question.settings.script : scriptTemplate,
         language: 'javascript',
         theme: 'vs-dark',
         minimap: { enabled: true, maxColumn: 80 },

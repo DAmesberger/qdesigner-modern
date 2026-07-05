@@ -1,4 +1,4 @@
-import type { Questionnaire, Question, StimulusConfig as Stimulus } from '$lib/shared';
+import type { Questionnaire, Question, ResponseOption, StimulusConfig as Stimulus } from '$lib/shared';
 import { mediaContentUrl } from '$lib/services/mediaService';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- resource manager caches heterogeneous decoded assets
@@ -65,8 +65,8 @@ export class ResourceManager {
     this.scanReactionAssets(question);
 
     // Scan response options for images
-    if (question.responseOptions) {
-      for (const option of question.responseOptions) {
+    if (Array.isArray(question.responseOptions)) {
+      for (const option of question.responseOptions as ResponseOption[]) {
         if (option.label?.includes('http') || option.label?.includes('.png') || option.label?.includes('.jpg')) {
           this.registerResource(option.label, 'image', option.label);
         }

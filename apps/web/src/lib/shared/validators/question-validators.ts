@@ -626,6 +626,19 @@ export class DisplayValidators {
 // Main Question Validator
 // ============================================================================
 
+/**
+ * Read the `saveAs` variable name off a loosely-typed `question.response`.
+ * `BaseQuestion.response` is `unknown` (legacy dual-schema hole); concrete
+ * union members carry a `BaseResponseConfig` with a string `saveAs`.
+ */
+function readResponseSaveAs(response: unknown): string | undefined {
+  if (response && typeof response === 'object' && 'saveAs' in response) {
+    const saveAs = (response as { saveAs?: unknown }).saveAs;
+    return typeof saveAs === 'string' ? saveAs : undefined;
+  }
+  return undefined;
+}
+
 export class QuestionValidator {
   static validateQuestion(question: Question): ValidationResult {
     const errors: ValidationError[] = [];
@@ -711,7 +724,7 @@ export class QuestionValidator {
     }
     
     // Validate response config for questions that require it
-    if ('response' in question && question.response && !question.response.saveAs) {
+    if ('response' in question && question.response && !readResponseSaveAs(question.response)) {
       errors.push({
         field: 'response.saveAs',
         message: 'Variable name is required for questions that collect responses',
@@ -763,8 +776,8 @@ export class QuestionValidator {
     
     // Check for duplicate variable names
     const variables = questions
-      .filter(q => 'response' in q && q.response?.saveAs)
-      .map(q => ('response' in q ? q.response?.saveAs : ''))
+      .filter(q => 'response' in q && readResponseSaveAs(q.response))
+      .map(q => ('response' in q ? readResponseSaveAs(q.response) : ''))
       .filter(Boolean);
     
     const dupVars = variables.filter((v, index) => variables.indexOf(v) !== index);

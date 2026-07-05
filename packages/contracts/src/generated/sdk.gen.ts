@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AddMemberData, AddMemberErrors, AddMemberResponses, AddProjectMemberData, AddProjectMemberErrors, AddProjectMemberResponses, AggregateSessionsData, AggregateSessionsErrors, AggregateSessionsResponses, BumpVersionData, BumpVersionErrors, BumpVersionResponses, CheckAutoJoinData, CheckAutoJoinErrors, CheckAutoJoinResponses, CheckDuplicateData, CheckDuplicateResponses, CompareSessionsData, CompareSessionsErrors, CompareSessionsResponses, ConditionCountsData, ConditionCountsErrors, ConditionCountsResponses, ConfirmPasswordResetData, ConfirmPasswordResetErrors, ConfirmPasswordResetResponses, CreateCommentData, CreateCommentErrors, CreateCommentResponses, CreateDomainData, CreateDomainErrors, CreateDomainResponses, CreateInvitationData, CreateInvitationErrors, CreateInvitationResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateQuestionnaireData, CreateQuestionnaireErrors, CreateQuestionnaireResponses, CreateSessionData, CreateSessionErrors, CreateSessionResponses, CreateTemplateData, CreateTemplateErrors, CreateTemplateResponses, CrossProjectAnalyticsData, CrossProjectAnalyticsErrors, CrossProjectAnalyticsResponses, DashboardSummaryData, DashboardSummaryErrors, DashboardSummaryResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteCommentData, DeleteCommentErrors, DeleteCommentResponses, DeleteDomainData, DeleteDomainErrors, DeleteDomainResponses, DeleteMediaData, DeleteMediaErrors, DeleteMediaResponses, DeleteOrganizationData, DeleteOrganizationErrors, DeleteOrganizationResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, DeleteQuestionnaireData, DeleteQuestionnaireErrors, DeleteQuestionnaireResponses, DeleteTemplateData, DeleteTemplateErrors, DeleteTemplateResponses, ExportResponsesData, ExportResponsesErrors, ExportResponsesResponses, FilterSessionsData, FilterSessionsErrors, FilterSessionsResponses, GetEventsData, GetEventsErrors, GetEventsResponses, GetInvitationData, GetInvitationErrors, GetInvitationResponses, GetMediaData, GetMediaErrors, GetMediaResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetProfileData, GetProfileErrors, GetProfileResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetQuestionnaireByCodeData, GetQuestionnaireByCodeErrors, GetQuestionnaireByCodeResponses, GetQuestionnaireData, GetQuestionnaireErrors, GetQuestionnaireResponses, GetResponsesData, GetResponsesErrors, GetResponsesResponses, GetSessionData, GetSessionErrors, GetSessionResponses, GetTemplateData, GetTemplateErrors, GetTemplateResponses, GetVariablesData, GetVariablesErrors, GetVariablesResponses, HealthData, HealthResponses, ListCommentsData, ListCommentsErrors, ListCommentsResponses, ListDomainsData, ListDomainsErrors, ListDomainsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMediaData, ListMediaErrors, ListMediaResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsResponses, ListPendingInvitationsData, ListPendingInvitationsErrors, ListPendingInvitationsResponses, ListProjectMembersData, ListProjectMembersErrors, ListProjectMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListQuestionnairesData, ListQuestionnairesErrors, ListQuestionnairesResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListTemplatesData, ListTemplatesErrors, ListTemplatesResponses, ListVersionsData, ListVersionsErrors, ListVersionsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, MeData, MeErrors, MeResponses, PasswordResetData, PasswordResetErrors, PasswordResetResponses, PublishQuestionnaireData, PublishQuestionnaireErrors, PublishQuestionnaireResponses, QuotaStatusData, QuotaStatusErrors, QuotaStatusResponses, ReadyData, ReadyErrors, ReadyResponses, RefreshData, RefreshErrors, RefreshResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemoveProjectMemberData, RemoveProjectMemberErrors, RemoveProjectMemberResponses, ResendVerificationCodeData, ResendVerificationCodeResponses, RevokeInvitationData, RevokeInvitationErrors, RevokeInvitationResponses, SendVerificationCodeData, SendVerificationCodeResponses, SubmitEventsData, SubmitEventsErrors, SubmitEventsResponses, SubmitResponseData, SubmitResponseErrors, SubmitResponseResponses, SyncSessionData, SyncSessionErrors, SyncSessionResponses, TimeseriesData, TimeseriesErrors, TimeseriesResponses, UpdateCommentData, UpdateCommentErrors, UpdateCommentResponses, UpdateDomainData, UpdateDomainErrors, UpdateDomainResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectMemberData, UpdateProjectMemberErrors, UpdateProjectMemberResponses, UpdateProjectResponses, UpdateQuestionnaireData, UpdateQuestionnaireErrors, UpdateQuestionnaireResponses, UpdateSessionData, UpdateSessionErrors, UpdateSessionResponses, UpdateTemplateData, UpdateTemplateErrors, UpdateTemplateResponses, UploadMediaData, UploadMediaErrors, UploadMediaResponses, UploadSessionMediaData, UploadSessionMediaErrors, UploadSessionMediaResponses, UpsertVariableData, UpsertVariableErrors, UpsertVariableResponses, VerifyCodeData, VerifyCodeResponses, VerifyDomainData, VerifyDomainErrors, VerifyDomainResponses, VerifyEmailData, VerifyEmailErrors, VerifyEmailResponses } from './types.gen';
+import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AddMemberData, AddMemberErrors, AddMemberResponses, AddProjectMemberData, AddProjectMemberErrors, AddProjectMemberResponses, AggregateSessionsData, AggregateSessionsErrors, AggregateSessionsResponses, BumpVersionData, BumpVersionErrors, BumpVersionResponses, ChangeMemberRoleData, ChangeMemberRoleErrors, ChangeMemberRoleResponses, CheckAutoJoinData, CheckAutoJoinErrors, CheckAutoJoinResponses, CheckDuplicateData, CheckDuplicateResponses, CompareSessionsData, CompareSessionsErrors, CompareSessionsResponses, ConditionCountsData, ConditionCountsErrors, ConditionCountsResponses, ConfirmPasswordResetData, ConfirmPasswordResetErrors, ConfirmPasswordResetResponses, CreateCommentData, CreateCommentErrors, CreateCommentResponses, CreateDomainData, CreateDomainErrors, CreateDomainResponses, CreateInvitationData, CreateInvitationErrors, CreateInvitationResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateQuestionnaireData, CreateQuestionnaireErrors, CreateQuestionnaireResponses, CreateSessionData, CreateSessionErrors, CreateSessionResponses, CreateTemplateData, CreateTemplateErrors, CreateTemplateResponses, CrossProjectAnalyticsData, CrossProjectAnalyticsErrors, CrossProjectAnalyticsResponses, DashboardSummaryData, DashboardSummaryErrors, DashboardSummaryResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteCommentData, DeleteCommentErrors, DeleteCommentResponses, DeleteDomainData, DeleteDomainErrors, DeleteDomainResponses, DeleteMediaData, DeleteMediaErrors, DeleteMediaResponses, DeleteOrganizationData, DeleteOrganizationErrors, DeleteOrganizationResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, DeleteQuestionnaireData, DeleteQuestionnaireErrors, DeleteQuestionnaireResponses, DeleteTemplateData, DeleteTemplateErrors, DeleteTemplateResponses, ExportResponsesData, ExportResponsesErrors, ExportResponsesResponses, FilterSessionsData, FilterSessionsErrors, FilterSessionsResponses, GetEventsData, GetEventsErrors, GetEventsResponses, GetInvitationData, GetInvitationErrors, GetInvitationResponses, GetMediaData, GetMediaErrors, GetMediaResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetProfileData, GetProfileErrors, GetProfileResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetQuestionnaireByCodeData, GetQuestionnaireByCodeErrors, GetQuestionnaireByCodeResponses, GetQuestionnaireData, GetQuestionnaireErrors, GetQuestionnaireResponses, GetResponsesData, GetResponsesErrors, GetResponsesResponses, GetSessionData, GetSessionErrors, GetSessionResponses, GetTemplateData, GetTemplateErrors, GetTemplateResponses, GetVariablesData, GetVariablesErrors, GetVariablesResponses, HealthData, HealthResponses, ListCommentsData, ListCommentsErrors, ListCommentsResponses, ListDomainsData, ListDomainsErrors, ListDomainsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMediaData, ListMediaErrors, ListMediaResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsResponses, ListPendingInvitationsData, ListPendingInvitationsErrors, ListPendingInvitationsResponses, ListProjectMembersData, ListProjectMembersErrors, ListProjectMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListQuestionnairesData, ListQuestionnairesErrors, ListQuestionnairesResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListTemplatesData, ListTemplatesErrors, ListTemplatesResponses, ListVersionsData, ListVersionsErrors, ListVersionsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, MeData, MeErrors, MeResponses, PasswordResetData, PasswordResetErrors, PasswordResetResponses, PublicCohortStatsData, PublicCohortStatsErrors, PublicCohortStatsResponses, PublishQuestionnaireData, PublishQuestionnaireErrors, PublishQuestionnaireResponses, QuotaStatusData, QuotaStatusErrors, QuotaStatusResponses, ReadyData, ReadyErrors, ReadyResponses, RefreshData, RefreshErrors, RefreshResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemoveProjectMemberData, RemoveProjectMemberErrors, RemoveProjectMemberResponses, ResendVerificationCodeData, ResendVerificationCodeResponses, RevokeInvitationData, RevokeInvitationErrors, RevokeInvitationResponses, SendVerificationCodeData, SendVerificationCodeResponses, StreamMediaContentData, StreamMediaContentErrors, StreamMediaContentResponses, SubmitEventsData, SubmitEventsErrors, SubmitEventsResponses, SubmitResponseData, SubmitResponseErrors, SubmitResponseResponses, SyncSessionData, SyncSessionErrors, SyncSessionResponses, TimeseriesData, TimeseriesErrors, TimeseriesResponses, UpdateCommentData, UpdateCommentErrors, UpdateCommentResponses, UpdateDomainData, UpdateDomainErrors, UpdateDomainResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectMemberData, UpdateProjectMemberErrors, UpdateProjectMemberResponses, UpdateProjectResponses, UpdateQuestionnaireData, UpdateQuestionnaireErrors, UpdateQuestionnaireResponses, UpdateSessionData, UpdateSessionErrors, UpdateSessionResponses, UpdateTemplateData, UpdateTemplateErrors, UpdateTemplateResponses, UploadMediaData, UploadMediaErrors, UploadMediaResponses, UploadSessionMediaData, UploadSessionMediaErrors, UploadSessionMediaResponses, UpsertVariableData, UpsertVariableErrors, UpsertVariableResponses, VerifyCodeData, VerifyCodeResponses, VerifyDomainData, VerifyDomainErrors, VerifyDomainResponses, VerifyEmailData, VerifyEmailErrors, VerifyEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -258,6 +258,19 @@ export const removeMember = <ThrowOnError extends boolean = false>(options: Opti
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/organizations/{id}/members/{user_id}',
     ...options
+});
+
+/**
+ * PUT /api/organizations/:id/members/:user_id/role
+ */
+export const changeMemberRole = <ThrowOnError extends boolean = false>(options: Options<ChangeMemberRoleData, ThrowOnError>) => (options.client ?? client).put<ChangeMemberRoleResponses, ChangeMemberRoleErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/organizations/{id}/members/{user_id}/role',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
 
 /**
@@ -845,6 +858,24 @@ export const conditionCounts = <ThrowOnError extends boolean = false>(options: O
 export const quotaStatus = <ThrowOnError extends boolean = false>(options: Options<QuotaStatusData, ThrowOnError>) => (options.client ?? client).get<QuotaStatusResponses, QuotaStatusErrors, ThrowOnError>({ url: '/api/questionnaires/{id}/quota-status', ...options });
 
 /**
+ * GET /api/questionnaires/{id}/cohort-stats
+ *
+ * Public, aggregate-only cohort statistics for a PUBLISHED questionnaire.
+ * This is the anonymous-safe cohort feedback path (F060): the
+ * statistical-feedback module's `cohort` / `participant-vs-cohort` modes call
+ * it from the fillout runtime, where the caller is an anonymous participant
+ * who can never reach the `AuthenticatedUser`-gated `/api/sessions/aggregate`.
+ *
+ * Only aggregates cross the wire — the underlying `fillout_cohort_stats`
+ * SECURITY DEFINER function computes moments/percentiles over COMPLETED
+ * sessions and never returns a per-session value. A min-N floor is applied
+ * here: when `n < 5` the response reports the count with ALL stats null,
+ * blocking small-cohort deanonymization. Unpublished / missing questionnaire
+ * → 404.
+ */
+export const publicCohortStats = <ThrowOnError extends boolean = false>(options: Options<PublicCohortStatsData, ThrowOnError>) => (options.client ?? client).get<PublicCohortStatsResponses, PublicCohortStatsErrors, ThrowOnError>({ url: '/api/questionnaires/{id}/cohort-stats', ...options });
+
+/**
  * POST /api/sessions/{id}/sync
  */
 export const syncSession = <ThrowOnError extends boolean = false>(options: Options<SyncSessionData, ThrowOnError>) => (options.client ?? client).post<SyncSessionResponses, SyncSessionErrors, ThrowOnError>({
@@ -856,12 +887,6 @@ export const syncSession = <ThrowOnError extends boolean = false>(options: Optio
     }
 });
 
-/**
- * POST /api/sessions/filter
- *
- * Accepts a structured filter query and returns matching sessions
- * with optional aggregated statistics on a key field.
- */
 export const filterSessions = <ThrowOnError extends boolean = false>(options: Options<FilterSessionsData, ThrowOnError>) => (options.client ?? client).post<FilterSessionsResponses, FilterSessionsErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/sessions/filter',
@@ -921,6 +946,31 @@ export const getMedia = <ThrowOnError extends boolean = false>(options: Options<
     url: '/api/media/{id}',
     ...options
 });
+
+/**
+ * GET /api/media/:id/content — same-origin streaming proxy (contract D1).
+ *
+ * Streams the S3 object bytes on the API origin instead of redirecting to
+ * an expiring presigned MinIO URL. This is what fixes cross-origin WebGL
+ * texture taint, COEP `require-corp` on the fillout route, and the
+ * Cache-API keying problem (a presigned URL expires and re-issues, so it
+ * can't be a durable cache key).
+ *
+ * Authorization is by RLS admission, mirroring the by-code anonymous-read
+ * posture (ADR 0012/0015): this route runs under `set_fillout_rls_context`
+ * (optional JWT), and the `SELECT` below is admitted either by the 00014
+ * `media_assets_select` org-member policy (authenticated project member)
+ * or by the 00025 `media_assets_select_via_published_questionnaire` policy
+ * (asset referenced by a published questionnaire — anonymous fillout). A
+ * non-admitted row simply isn't returned → 404.
+ *
+ * Honors a single `Range` (`bytes=start-end`) by passing it through to S3
+ * and replying `206` with `Content-Range`; otherwise `200` full body.
+ * The response carries `Content-Type` (from the stored mime), an `ETag`
+ * (the immutable storage key), `Accept-Ranges: bytes`, and
+ * `Cache-Control: public, max-age=31536000, immutable`.
+ */
+export const streamMediaContent = <ThrowOnError extends boolean = false>(options: Options<StreamMediaContentData, ThrowOnError>) => (options.client ?? client).get<StreamMediaContentResponses, StreamMediaContentErrors, ThrowOnError>({ url: '/api/media/{id}/content', ...options });
 
 /**
  * POST /api/sessions/:id/media — anonymous multipart upload scoped to a session.
