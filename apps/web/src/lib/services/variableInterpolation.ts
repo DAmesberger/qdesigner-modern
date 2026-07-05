@@ -7,33 +7,43 @@ import { ASTEvaluator } from '@qdesigner/scripting-engine';
 type DynamicValue = any;
 
 /**
- * Interpolate variables in a string using {{variable}} syntax
+ * Interpolate variables in a string. Supports both `{{variable}}` and
+ * `${variable}` syntaxes — the two run through the identical lookup.
  */
 export function interpolateVariables(
-  template: string, 
+  template: string,
   variables: Record<string, DynamicValue> = {}
 ): string {
   if (!template) return '';
-  
-  // Match {{variable}} or {{expression}}
-  return template.replace(/\{\{([^}]+)\}\}/g, (match, expression) => {
+
+  // Shared substitution: simple variable reference, else evaluated expression,
+  // else leave the original matched text untouched.
+  const substitute = (match: string, rawExpression: string): string => {
+    const expression = rawExpression.trim();
     try {
-      // Trim whitespace
-      expression = expression.trim();
-      
       // Check if it's a simple variable reference
       if (expression in variables) {
         return formatValue(variables[expression]);
       }
-      
-      // Try to evaluate as an expression
+
+      // Try to evaluate as an expression. The AST evaluator returns `undefined`
+      // for an unknown identifier rather than throwing, so treat an unresolved
+      // result as "leave the original text" (e.g. `${nope}` stays literal).
       const result = evaluateExpression(expression, variables);
+      if (result === undefined) {
+        return match;
+      }
       return formatValue(result);
     } catch (error) {
       console.warn(`Failed to interpolate expression: ${expression}`, error);
       return match; // Return original if interpolation fails
     }
-  });
+  };
+
+  // Match {{variable}} / {{expression}}, then ${variable} / ${expression}.
+  return template
+    .replace(/\{\{([^}]+)\}\}/g, substitute)
+    .replace(/\$\{([^}]+)\}/g, substitute);
 }
 
 /**
@@ -70,23 +80,27 @@ export function interpolateObject<T extends Record<string, DynamicValue>>(
  * Check if a string contains variable interpolation syntax
  */
 export function hasInterpolation(str: string): boolean {
-  return /\{\{[^}]+\}\}/.test(str);
+  return /\{\{[^}]+\}\}/.test(str) || /\$\{[^}]+\}/.test(str);
 }
 
 /**
  * Extract variable names from a template
  */
 export function extractVariables(template: string): string[] {
-  const matches = template.match(/\{\{([^}]+)\}\}/g) || [];
   const variables = new Set<string>();
-  
-  matches.forEach(match => {
-    const expression = match.slice(2, -2).trim();
-    // Extract simple variable names (not expressions)
-    const varMatches = expression.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g) || [];
-    varMatches.forEach(v => variables.add(v));
+
+  // Scan both {{…}} and ${…} syntaxes; capture the inner expression in group 1.
+  const patterns = [/\{\{([^}]+)\}\}/g, /\$\{([^}]+)\}/g];
+  patterns.forEach(pattern => {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(template)) !== null) {
+      const expression = match[1]!.trim();
+      // Extract simple variable names (not expressions)
+      const varMatches = expression.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g) || [];
+      varMatches.forEach(v => variables.add(v));
+    }
   });
-  
+
   return Array.from(variables);
 }
 

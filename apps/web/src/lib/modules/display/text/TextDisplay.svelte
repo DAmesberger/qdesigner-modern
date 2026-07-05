@@ -4,7 +4,7 @@
   import type { InstructionConfig } from '$lib/modules/types';
   import { marked } from 'marked';
   import DOMPurify from 'isomorphic-dompurify';
-  import { scriptingEngine } from '$lib/services/scriptingEngine';
+  import { interpolateVariables } from '$lib/services/variableInterpolation';
 
   interface TextDisplayConfig {
     content: string;
@@ -31,7 +31,13 @@
     onContinue?: () => void;
   }
 
-  let { instruction, mode = 'runtime', onContinue, onInteraction }: Props = $props();
+  let {
+    instruction,
+    mode = 'runtime',
+    variables = {},
+    onContinue,
+    onInteraction,
+  }: Props = $props();
 
   let processedContent = $state('');
   let autoAdvanceTimer: number | null = null;
@@ -47,13 +53,16 @@
     processContent();
   });
 
-  async function processContent() {
+  function processContent() {
     let content = instruction.config.content || '';
 
-    // Variable interpolation
+    // Variable interpolation (supports both {{var}} and ${var} syntaxes).
+    // ModularRenderer already interpolates with the live runtime variables before
+    // mounting; re-running here is a no-op for plain values and also covers
+    // directly-mounted designer previews.
     if (instruction.config.variables) {
       try {
-        content = await scriptingEngine.interpolateVariables(content);
+        content = interpolateVariables(content, variables);
       } catch (error) {
         console.error('Error interpolating variables:', error);
       }

@@ -5,7 +5,6 @@
   import type { MediaConfig } from '$lib/modules/types';
   import { processMarkdownContent } from '$lib/services/markdownProcessor';
   import { mediaService } from '$lib/services/mediaService';
-  import { scriptingEngine } from '$lib/services/scriptingEngine';
   import { onMount } from 'svelte';
 
   interface TextInstructionConfig extends InstructionModuleConfig {
@@ -27,7 +26,7 @@
     instruction: TextInstructionConfig;
   }
 
-  let { instruction, mode = 'runtime', onUpdate, onInteraction }: Props = $props();
+  let { instruction, mode = 'runtime', variables = {}, onUpdate, onInteraction }: Props = $props();
 
   let parsedContent = $state('');
   let contentLoading = $state(true);
@@ -106,7 +105,7 @@
         mediaUrls: mediaUrls,
         format: (instruction.display?.enableMarkdown ?? true) ? 'markdown' : 'text',
         processVariables: instruction.display?.variables ?? true,
-        variables: mode === 'runtime' ? scriptingEngine.getAllVariables() : {},
+        variables: mode === 'runtime' ? variables : {},
         preview: mode !== 'runtime',
       });
 

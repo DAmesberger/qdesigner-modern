@@ -312,7 +312,10 @@
   {#if question.config.variables}
     <div class="help-section">
       <h5 class="help-title">Variable Usage</h5>
-      <p class="help-text">Use <code>${'${variableName}'}</code> to insert variable values</p>
+      <p class="help-text">
+        Use <code>{'{{variableName}}'}</code> to insert variable values. The
+        <code>${'${variableName}'}</code> syntax is also accepted.
+      </p>
     </div>
   {/if}
 </div>

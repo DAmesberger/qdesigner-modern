@@ -92,6 +92,7 @@ export interface ValidationResult {
 export interface InstructionProps {
   instruction: InstructionConfig;
   mode: 'edit' | 'preview' | 'runtime';
+  variables?: Record<string, unknown>;
   onUpdate?: (updates: Partial<InstructionConfig>) => void;
   onInteraction?: (event: InteractionEvent) => void;
 }
