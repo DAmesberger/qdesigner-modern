@@ -722,8 +722,14 @@ export class QuestionnaireRuntime {
     const responseType = (question as DynamicValue).responseType;
     const responseTypeKind = responseType?.type;
 
+    // Modern questions (designer- or API-created) carry no legacy `responseType`; the
+    // union base only has the concrete `type`/`response`/`display`. Infer from the module
+    // `type` instead of defaulting to 'object' — a scalar answer written into an
+    // 'object'-typed variable throws in VariableEngine.validateType, and because that write
+    // happens inside the fire-and-forget response handler the throw becomes a silent
+    // unhandled rejection that freezes the fillout on the first question (FIX-fillout-freeze).
     if (!responseTypeKind) {
-      return 'object';
+      return this.inferModernVariableType(question);
     }
 
     if (responseTypeKind === 'number' || responseTypeKind === 'scale') return 'number';
@@ -752,6 +758,50 @@ export class QuestionnaireRuntime {
     if (responseTypeKind === 'click') return 'object';
 
     return 'object';
+  }
+
+  /**
+   * Infer the `${id}_value` variable type for a modern question that has no legacy
+   * `responseType`, keyed on its module `type`. The overriding constraint: NEVER return
+   * a type that can throw on the answer write. VariableEngine.validateType coerces 'string'
+   * via `String(value)` (never throws) and 'number' via `Number(value)`; 'array'/'object'
+   * throw on a shape mismatch. So numeric widgets map to 'number', collection widgets to
+   * their real container type, and everything else to the always-safe 'string' default —
+   * no modern question's value variable can be typed 'object' by accident (FIX-fillout-freeze).
+   */
+  private inferModernVariableType(question: Question): Variable['type'] {
+    switch (question.type) {
+      case 'number-input':
+      case 'rating':
+      case 'scale':
+        // (scale covers slider-style widgets; its value is the numeric position)
+        return 'number';
+      case 'ranking':
+        return 'array';
+      case 'multiple-choice':
+        return this.isMultiSelectQuestion(question) ? 'array' : 'string';
+      case 'matrix':
+        return 'object';
+      default:
+        // text-input, single-choice, date-time, media-response, drawing, file-upload,
+        // webgl and every other form widget record a scalar answer -> safe 'string'.
+        return 'string';
+    }
+  }
+
+  /**
+   * Whether a modern multiple-choice question emits an array (multi-select) rather than a
+   * scalar. Mirrors moduleConfigAdapter's `isMultiple` detection so the variable container
+   * type matches the value the mounted component actually produces.
+   */
+  private isMultiSelectQuestion(question: Question): boolean {
+    const q = question as DynamicValue;
+    const legacyResponse = q.responseType ?? q.response;
+    return (
+      legacyResponse?.type === 'multiple' ||
+      q.config?.responseType?.type === 'multiple' ||
+      q.display?.responseType === 'multiple'
+    );
   }
 
   private async navigateToPage(pageIndex: number): Promise<void> {
@@ -1361,7 +1411,22 @@ export class QuestionnaireRuntime {
     response: Response,
     isCorrect: boolean | null
   ): void {
-    this.variableEngine.setVariable(`${question.id}_value`, response.value, 'response');
+    // Defense-in-depth (FIX-fillout-freeze): a variable-type mismatch on the answer value
+    // must NEVER prevent the response from being recorded or the runtime from advancing.
+    // inferVariableType now types `${id}_value` so a scalar answer coerces safely, but a
+    // mis-typed value variable (e.g. an 'array'/'object' var receiving a scalar) would throw
+    // in VariableEngine.validateType and — since this runs inside the fire-and-forget response
+    // handler — surface as a silent unhandled rejection that halts navigation. Swallow only the
+    // value write; timing/correctness variables below are always numeric/boolean and safe.
+    try {
+      this.variableEngine.setVariable(`${question.id}_value`, response.value, 'response');
+    } catch (error) {
+      console.warn(
+        `[runtime] value variable write failed for ${question.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
     this.variableEngine.setVariable(`${question.id}_time`, response.timestamp, 'response');
     this.variableEngine.setVariable(`${question.id}_rt`, response.reactionTime ?? null, 'response');
     this.variableEngine.setVariable(`${question.id}_correct`, isCorrect, 'response');
