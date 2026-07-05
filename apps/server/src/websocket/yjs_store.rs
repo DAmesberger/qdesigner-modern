@@ -23,6 +23,7 @@ pub struct YjsRoom {
     pub last_persisted: std::time::Instant,
 }
 
+#[allow(clippy::new_without_default)]
 impl YjsRoom {
     pub fn new() -> Self {
         Self {
@@ -72,6 +73,7 @@ pub struct YjsStore {
     rooms: Arc<RwLock<HashMap<Uuid, Arc<Mutex<YjsRoom>>>>>,
 }
 
+#[allow(clippy::new_without_default)]
 impl YjsStore {
     pub fn new() -> Self {
         Self {

@@ -43,6 +43,7 @@ pub struct WebSocketState {
     redis_bridge: Option<Arc<RedisBridge>>,
 }
 
+#[allow(clippy::new_without_default)]
 impl WebSocketState {
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel::<WsMessage>(1024);
