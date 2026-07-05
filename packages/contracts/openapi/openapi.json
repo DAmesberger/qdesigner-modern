@@ -7605,12 +7605,13 @@
       },
       "RefreshRequest": {
         "type": "object",
-        "required": [
-          "refresh_token"
-        ],
         "properties": {
           "refresh_token": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional during the cookie transition: the refresh token normally\narrives in the httpOnly `refresh_token` cookie, so the body may be\nempty. Kept as a fallback for callers that still POST it explicitly."
           }
         }
       },

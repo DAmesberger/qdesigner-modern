@@ -11,7 +11,12 @@ export interface User {
 
 export interface Session {
 	accessToken: string;
-	refreshToken: string;
+	/**
+	 * @deprecated The refresh token now lives in a server-set httpOnly cookie
+	 * and is never exposed to JS (F003). Kept optional for backward-compat with
+	 * any persisted shape; new sessions leave it undefined.
+	 */
+	refreshToken?: string;
 	expiresAt: number; // Unix timestamp
 	user: User;
 }

@@ -88,7 +88,11 @@ pub struct RegisterRequest {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RefreshRequest {
-    pub refresh_token: String,
+    /// Optional during the cookie transition: the refresh token normally
+    /// arrives in the httpOnly `refresh_token` cookie, so the body may be
+    /// empty. Kept as a fallback for callers that still POST it explicitly.
+    #[serde(default)]
+    pub refresh_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

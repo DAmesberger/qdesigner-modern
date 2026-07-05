@@ -1,4 +1,5 @@
-use axum::{extract::State, Json};
+use axum::{body::Bytes, extract::State, Json};
+use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::{DateTime, Utc};
 use lettre::message::header::ContentType;
 use lettre::transport::smtp::client::Tls;
@@ -11,6 +12,35 @@ use crate::auth::password;
 use crate::auth::session;
 use crate::error::ApiError;
 use crate::state::AppState;
+
+/// Name of the httpOnly refresh-token cookie.
+const REFRESH_COOKIE: &str = "refresh_token";
+/// Path the refresh cookie is scoped to. Keeping it off non-auth routes means
+/// the browser only attaches the secret to `/api/auth/*` requests.
+const REFRESH_COOKIE_PATH: &str = "/api/auth";
+
+/// Build the `Set-Cookie` for the refresh token: `HttpOnly; Secure;
+/// SameSite=Strict; Path=/api/auth; Max-Age=<refresh exp>`. The token lives
+/// only in this cookie — it is never returned in the JSON body — so JS (and any
+/// XSS payload) can't read it. `secure` is gated by config so non-localhost
+/// plain-http dev can opt out.
+fn refresh_cookie(token: String, max_age_secs: i64, secure: bool) -> Cookie<'static> {
+    Cookie::build((REFRESH_COOKIE, token))
+        .http_only(true)
+        .secure(secure)
+        .same_site(SameSite::Strict)
+        .path(REFRESH_COOKIE_PATH)
+        .max_age(time::Duration::seconds(max_age_secs))
+        .build()
+}
+
+/// A removal cookie matching the refresh cookie's name + path so the browser
+/// clears it on logout.
+fn clear_refresh_cookie() -> Cookie<'static> {
+    Cookie::build((REFRESH_COOKIE, ""))
+        .path(REFRESH_COOKIE_PATH)
+        .build()
+}
 
 /// POST /api/auth/register
 #[utoipa::path(
@@ -26,8 +56,9 @@ use crate::state::AppState;
 )]
 pub async fn register(
     State(state): State<AppState>,
+    jar: CookieJar,
     Json(body): Json<RegisterRequest>,
-) -> Result<Json<AuthResponse>, ApiError> {
+) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -82,19 +113,30 @@ pub async fn register(
     )
     .await?;
 
-    Ok(Json(AuthResponse {
-        access_token,
+    let jar = jar.add(refresh_cookie(
         refresh_token,
-        token_type: "Bearer".into(),
-        expires_in: state.jwt_manager.access_expiry_secs(),
-        user: UserInfo {
-            id: user_id,
-            email: body.email,
-            full_name: Some(full_name),
-            avatar_url: None,
-            roles,
-        },
-    }))
+        state.jwt_manager.refresh_expiry_secs(),
+        state.config.cookie_secure,
+    ));
+
+    Ok((
+        jar,
+        Json(AuthResponse {
+            access_token,
+            // The refresh token is delivered via the httpOnly cookie above and
+            // deliberately omitted from the JSON body so JS never sees it.
+            refresh_token: String::new(),
+            token_type: "Bearer".into(),
+            expires_in: state.jwt_manager.access_expiry_secs(),
+            user: UserInfo {
+                id: user_id,
+                email: body.email,
+                full_name: Some(full_name),
+                avatar_url: None,
+                roles,
+            },
+        }),
+    ))
 }
 
 /// POST /api/auth/login
@@ -111,8 +153,9 @@ pub async fn register(
 )]
 pub async fn login(
     State(state): State<AppState>,
+    jar: CookieJar,
     Json(body): Json<LoginRequest>,
-) -> Result<Json<AuthResponse>, ApiError> {
+) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -190,19 +233,29 @@ pub async fn login(
     )
     .await?;
 
-    Ok(Json(AuthResponse {
-        access_token,
+    let jar = jar.add(refresh_cookie(
         refresh_token,
-        token_type: "Bearer".into(),
-        expires_in: state.jwt_manager.access_expiry_secs(),
-        user: UserInfo {
-            id: user.id,
-            email: user.email,
-            full_name: user.full_name,
-            avatar_url: user.avatar_url,
-            roles,
-        },
-    }))
+        state.jwt_manager.refresh_expiry_secs(),
+        state.config.cookie_secure,
+    ));
+
+    Ok((
+        jar,
+        Json(AuthResponse {
+            access_token,
+            // Delivered via the httpOnly cookie above; omitted from the body.
+            refresh_token: String::new(),
+            token_type: "Bearer".into(),
+            expires_in: state.jwt_manager.access_expiry_secs(),
+            user: UserInfo {
+                id: user.id,
+                email: user.email,
+                full_name: user.full_name,
+                avatar_url: user.avatar_url,
+                roles,
+            },
+        }),
+    ))
 }
 
 /// POST /api/auth/refresh
@@ -218,11 +271,30 @@ pub async fn login(
 )]
 pub async fn refresh(
     State(state): State<AppState>,
-    Json(body): Json<RefreshRequest>,
-) -> Result<Json<AuthResponse>, ApiError> {
-    let claims = state
-        .jwt_manager
-        .verify_refresh_token(&body.refresh_token)?;
+    jar: CookieJar,
+    bytes: Bytes,
+) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
+    // Prefer the httpOnly refresh cookie. Fall back to a JSON body
+    // `{ "refresh_token": ... }` during the transition (older clients / explicit
+    // callers). The body is parsed leniently so an empty/absent body — the
+    // normal cookie-only case — is not an error.
+    let cookie_token = jar
+        .get(REFRESH_COOKIE)
+        .map(|c| c.value().to_string())
+        .filter(|v| !v.is_empty());
+    let body_token = if bytes.is_empty() {
+        None
+    } else {
+        serde_json::from_slice::<RefreshRequest>(&bytes)
+            .ok()
+            .and_then(|r| r.refresh_token)
+            .filter(|v| !v.is_empty())
+    };
+    let token = cookie_token
+        .or(body_token)
+        .ok_or_else(|| ApiError::Unauthorized("Missing refresh token".into()))?;
+
+    let claims = state.jwt_manager.verify_refresh_token(&token)?;
 
     // Check if the refresh token is still valid
     if !session::is_refresh_token_valid(&state.pool, claims.jti).await? {
@@ -273,19 +345,30 @@ pub async fn refresh(
     )
     .await?;
 
-    Ok(Json(AuthResponse {
-        access_token,
+    // Rotate the cookie to the freshly-minted refresh token.
+    let jar = jar.add(refresh_cookie(
         refresh_token,
-        token_type: "Bearer".into(),
-        expires_in: state.jwt_manager.access_expiry_secs(),
-        user: UserInfo {
-            id: user.id,
-            email: user.email,
-            full_name: user.full_name,
-            avatar_url: user.avatar_url,
-            roles,
-        },
-    }))
+        state.jwt_manager.refresh_expiry_secs(),
+        state.config.cookie_secure,
+    ));
+
+    Ok((
+        jar,
+        Json(AuthResponse {
+            access_token,
+            // Delivered via the rotated httpOnly cookie above; omitted from body.
+            refresh_token: String::new(),
+            token_type: "Bearer".into(),
+            expires_in: state.jwt_manager.access_expiry_secs(),
+            user: UserInfo {
+                id: user.id,
+                email: user.email,
+                full_name: user.full_name,
+                avatar_url: user.avatar_url,
+                roles,
+            },
+        }),
+    ))
 }
 
 /// POST /api/auth/logout
@@ -302,15 +385,19 @@ pub async fn refresh(
 )]
 pub async fn logout(
     State(state): State<AppState>,
+    jar: CookieJar,
     user: AuthenticatedUser,
-) -> Result<Json<serde_json::Value>, ApiError> {
+) -> Result<(CookieJar, Json<serde_json::Value>), ApiError> {
     // Revoke the access token JTI
     session::revoke_access_token(&state.pool, user.jti).await?;
 
     // Revoke all refresh tokens for this user
     session::revoke_all_user_tokens(&state.pool, user.user_id).await?;
 
-    Ok(Json(serde_json::json!({ "message": "Logged out" })))
+    // Clear the httpOnly refresh cookie so the browser stops sending it.
+    let jar = jar.remove(clear_refresh_cookie());
+
+    Ok((jar, Json(serde_json::json!({ "message": "Logged out" }))))
 }
 
 /// GET /api/auth/me

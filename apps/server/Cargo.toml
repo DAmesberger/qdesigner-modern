@@ -6,7 +6,7 @@ description = "QDesigner Modern - Rust/Axum backend server"
 
 [dependencies]
 axum = { version = "0.8", features = ["ws", "macros", "multipart"] }
-axum-extra = { version = "0.10", features = ["typed-header"] }
+axum-extra = { version = "0.10", features = ["typed-header", "cookie"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["catch-panic", "cors", "trace"] }
 tokio = { version = "1", features = ["full"] }
@@ -17,6 +17,11 @@ jsonwebtoken = "9"
 argon2 = "0.5"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+# Needed to express the refresh-cookie Max-Age (`time::Duration`) when building
+# the httpOnly refresh_token cookie in `api::auth`. Same `time` the axum-extra
+# `cookie` feature already pulls in transitively; declared directly so it can be
+# named here.
+time = "0.3"
 aws-sdk-s3 = "1"
 aws-config = "1"
 redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }

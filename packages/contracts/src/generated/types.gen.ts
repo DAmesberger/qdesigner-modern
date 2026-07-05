@@ -549,7 +549,12 @@ export type ReadyStatus = {
 };
 
 export type RefreshRequest = {
-    refresh_token: string;
+    /**
+     * Optional during the cookie transition: the refresh token normally
+     * arrives in the httpOnly `refresh_token` cookie, so the body may be
+     * empty. Kept as a fallback for callers that still POST it explicitly.
+     */
+    refresh_token?: string | null;
 };
 
 export type RegisterRequest = {

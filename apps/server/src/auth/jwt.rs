@@ -83,4 +83,10 @@ impl JwtManager {
     pub fn access_expiry_secs(&self) -> i64 {
         self.access_expiry.as_secs() as i64
     }
+
+    /// Return the refresh token lifetime in seconds (used for the refresh
+    /// cookie Max-Age so the browser drops it exactly when the token expires).
+    pub fn refresh_expiry_secs(&self) -> i64 {
+        self.refresh_expiry.as_secs() as i64
+    }
 }

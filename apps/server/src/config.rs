@@ -36,6 +36,13 @@ pub struct Config {
     // Server
     pub server_host: String,
     pub server_port: u16,
+
+    // Whether the refresh_token cookie carries the `Secure` attribute. Defaults
+    // to true (production posture). Browsers accept Secure cookies over
+    // http://localhost, so the default is fine for the standard dev setup; set
+    // COOKIE_SECURE=false only for non-localhost plain-http dev where the
+    // browser would otherwise drop the cookie.
+    pub cookie_secure: bool,
 }
 
 impl Config {
@@ -90,6 +97,10 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(4100),
+            cookie_secure: std::env::var("COOKIE_SECURE")
+                .ok()
+                .map(|v| !matches!(v.trim().to_ascii_lowercase().as_str(), "false" | "0" | "no"))
+                .unwrap_or(true),
         }
     }
 }

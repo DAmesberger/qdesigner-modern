@@ -14,6 +14,9 @@ const authApiClient = createClient({
   baseUrl: API_BASE,
   responseStyle: 'data',
   throwOnError: true,
+  // Carry the httpOnly refresh_token cookie so login/refresh/logout can set,
+  // rotate, and clear it (F003 — the refresh token is never exposed to JS).
+  credentials: 'include',
   headers: {
     'X-Requested-With': 'XMLHttpRequest',
   },
@@ -91,6 +94,7 @@ class AuthService {
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private listeners: Set<AuthChangeCallback> = new Set();
   private initialized = false;
+  private initPromise: Promise<void> | null = null;
 
   private unwrapSdkResult<T>(result: T | SdkFieldResponse<T>): T {
     if (
@@ -106,22 +110,25 @@ class AuthService {
     return result as T;
   }
 
-  /** Initialize from stored tokens. Call once on app mount. */
+  /**
+   * Bootstrap the in-memory session on app mount. There are no persisted
+   * tokens anymore: the access token lives only in memory and the refresh
+   * token in an httpOnly cookie. So we ask the server for a fresh access token
+   * via a silent refresh — it succeeds only if a valid refresh cookie exists.
+   * Idempotent and concurrency-safe (a single in-flight promise is shared).
+   */
   async init(): Promise<void> {
     if (this.initialized) return;
-    this.initialized = true;
-
-    const stored = this.getStoredSession();
-    if (stored) {
-      // Check if access token is still valid
-      if (stored.expiresAt > Date.now() / 1000) {
-        this.session = stored;
-        this.scheduleRefresh();
-      } else if (stored.refreshToken) {
-        // Try to refresh
-        await this.refreshSession(stored.refreshToken);
-      }
+    if (!this.initPromise) {
+      this.initPromise = (async () => {
+        try {
+          await this.refreshSession();
+        } finally {
+          this.initialized = true;
+        }
+      })();
     }
+    return this.initPromise;
   }
 
   async signIn(email: string, password: string): Promise<AuthResult> {
@@ -202,9 +209,10 @@ class AuthService {
   async getSession(): Promise<Session | null> {
     if (!this.initialized) await this.init();
 
-    // If session expired but we have refresh token, try refresh
-    if (this.session && this.session.expiresAt <= Date.now() / 1000 && this.session.refreshToken) {
-      await this.refreshSession(this.session.refreshToken);
+    // If the in-memory access token expired, mint a new one from the refresh
+    // cookie (the server reads it; no token is passed from JS).
+    if (this.session && this.session.expiresAt <= Date.now() / 1000) {
+      await this.refreshSession();
     }
 
     return this.session;
@@ -257,14 +265,17 @@ class AuthService {
 
   // Private methods
 
-  private async refreshSession(refreshToken: string): Promise<boolean> {
+  private async refreshSession(): Promise<boolean> {
     try {
+      // No token in the body: the refresh token rides in the httpOnly cookie,
+      // which the browser attaches because authApiClient sets credentials:
+      // 'include'. Send an empty object so the request still carries a JSON body.
       const data = this.unwrapSdkResult<AuthResponse>(
         await refreshRequest({
           responseStyle: 'data',
           throwOnError: true,
           client: authApiClient,
-          body: { refresh_token: refreshToken },
+          body: {},
         }) as unknown as AuthResponse | SdkFieldResponse<AuthResponse>
       );
       const session = this.createSession(data);
@@ -277,9 +288,11 @@ class AuthService {
   }
 
   private createSession(data: AuthResponse): Session {
+    // The refresh token is intentionally not read from the body — it arrives
+    // as an httpOnly cookie the server set. Only the access token is kept, in
+    // memory.
     return {
       accessToken: data.access_token,
-      refreshToken: data.refresh_token,
       expiresAt: Math.floor(Date.now() / 1000) + data.expires_in,
       user: normalizeUser(data.user),
     };
@@ -312,8 +325,8 @@ class AuthService {
     const msUntilExpiry = (this.session.expiresAt - Math.floor(Date.now() / 1000) - 60) * 1000;
     if (msUntilExpiry > 0) {
       this.refreshTimer = setTimeout(() => {
-        if (this.session?.refreshToken) {
-          this.refreshSession(this.session.refreshToken);
+        if (this.session) {
+          this.refreshSession();
         }
       }, msUntilExpiry);
     }
@@ -321,26 +334,16 @@ class AuthService {
 
   private storeSession(session: Session): void {
     if (typeof localStorage !== 'undefined') {
+      // Persist only non-secret profile data for fast UI hydration. Tokens are
+      // never written to storage (F003): the access token stays in memory and
+      // the refresh token lives in an httpOnly cookie.
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
-          accessToken: session.accessToken,
-          refreshToken: session.refreshToken,
           expiresAt: session.expiresAt,
           user: session.user,
         })
       );
-    }
-  }
-
-  private getStoredSession(): Session | null {
-    if (typeof localStorage === 'undefined') return null;
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (!stored) return null;
-      return JSON.parse(stored) as Session;
-    } catch {
-      return null;
     }
   }
 
