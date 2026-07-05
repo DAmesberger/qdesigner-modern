@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/svelte';
 import MultipleChoice from '$lib/modules/questions/multiple-choice/MultipleChoice.svelte';
 import Matrix from '$lib/modules/questions/matrix/Matrix.svelte';
+import type { Question } from '@qdesigner/questionnaire-core';
 import { buildModuleRuntimeConfig } from './moduleConfigAdapter';
 
 // jsdom lacks the Web Animations API used by Svelte's `animate:flip`.
@@ -44,7 +45,7 @@ describe('fillout form-question response capture', () => {
     render(MultipleChoice, {
       props: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture question shape
-        question: { ...question, config: buildModuleRuntimeConfig(question) } as any,
+        question: { ...question, config: buildModuleRuntimeConfig(question as Question) } as any,
         mode: 'runtime',
         onResponse,
       },
@@ -77,7 +78,7 @@ describe('fillout form-question response capture', () => {
     render(Matrix, {
       props: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test fixture question shape
-        question: { ...question, config: buildModuleRuntimeConfig(question) } as any,
+        question: { ...question, config: buildModuleRuntimeConfig(question as Question) } as any,
         mode: 'runtime',
         onResponse,
       },

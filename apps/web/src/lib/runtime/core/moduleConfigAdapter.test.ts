@@ -1,15 +1,21 @@
 import { describe, it, expect } from 'vitest';
+import type { Question } from '@qdesigner/questionnaire-core';
 import { buildModuleRuntimeConfig, FORM_STYLE_QUESTION_TYPES } from './moduleConfigAdapter';
+
+// The adapter takes the typed `Question` union, but these cases deliberately feed
+// partial / nullish / legacy-shaped payloads to exercise its runtime defensiveness,
+// so each argument is cast through `unknown`.
+const build = (q: unknown) => buildModuleRuntimeConfig(q as Question);
 
 describe('buildModuleRuntimeConfig', () => {
   it('always returns a plain object (never undefined) so components never deref undefined config', () => {
-    expect(buildModuleRuntimeConfig(undefined)).toEqual({});
-    expect(buildModuleRuntimeConfig(null)).toEqual({});
-    expect(typeof buildModuleRuntimeConfig({ type: 'drawing' })).toBe('object');
+    expect(build(undefined)).toEqual({});
+    expect(build(null)).toEqual({});
+    expect(typeof build({ type: 'drawing' })).toBe('object');
   });
 
   it('maps a single-choice question to the multiple-choice component config shape', () => {
-    const config = buildModuleRuntimeConfig({
+    const config = build({
       id: 'q1',
       type: 'single-choice',
       display: {
@@ -24,30 +30,30 @@ describe('buildModuleRuntimeConfig', () => {
 
     expect(config.responseType).toEqual({ type: 'single' });
     expect(config.options).toHaveLength(2);
-    expect(config.options[0]).toMatchObject({ id: 'a', label: 'Apple', value: 'apple' });
+    expect(config.options![0]).toMatchObject({ id: 'a', label: 'Apple', value: 'apple' });
     expect(config.layout).toBe('vertical');
   });
 
   it('preserves multi-select for multiple-choice questions', () => {
-    const config = buildModuleRuntimeConfig({
+    const config = build({
       type: 'multiple-choice',
       responseType: { type: 'multiple' },
       display: { options: [{ value: 1, label: 'One' }] },
     });
     expect(config.responseType).toEqual({ type: 'multiple' });
-    expect(config.options[0]).toMatchObject({ value: 1, label: 'One' });
+    expect(config.options![0]).toMatchObject({ value: 1, label: 'One' });
   });
 
   it('normalizes choice options from responseType.options when display has none', () => {
-    const config = buildModuleRuntimeConfig({
+    const config = build({
       type: 'multiple-choice',
       responseType: { type: 'single', options: [{ value: 'x', label: 'X', key: '1' }] },
     });
-    expect(config.options[0]).toMatchObject({ value: 'x', label: 'X' });
+    expect(config.options![0]).toMatchObject({ value: 'x', label: 'X' });
   });
 
   it('maps matrix rows/columns and converts the stored responseType to a widget kind', () => {
-    const config = buildModuleRuntimeConfig({
+    const config = build({
       type: 'matrix',
       display: {
         rows: [{ id: 'r1', label: 'Row 1' }],
@@ -61,7 +67,7 @@ describe('buildModuleRuntimeConfig', () => {
   });
 
   it('maps matrix multiple -> checkbox', () => {
-    const config = buildModuleRuntimeConfig({
+    const config = build({
       type: 'matrix',
       display: { rows: [], columns: [], responseType: 'multiple' },
     });
@@ -69,7 +75,7 @@ describe('buildModuleRuntimeConfig', () => {
   });
 
   it('provides scale defaults from responseType', () => {
-    const config = buildModuleRuntimeConfig({
+    const config = build({
       type: 'scale',
       responseType: { type: 'scale', min: 0, max: 10, minLabel: 'Low', maxLabel: 'High' },
     });

@@ -1,3 +1,4 @@
+import type { Question } from '@qdesigner/questionnaire-core';
 import type {
   IQuestionRuntime,
   QuestionRuntimeContext,
@@ -70,8 +71,7 @@ export class WebGLRuntime implements IQuestionRuntime {
     this.engine = null;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
-  private toTrialConfig(question: any): ReactionTrialConfig {
+  private toTrialConfig(question: Question): ReactionTrialConfig {
     const config = normalizeWebGLQuestionConfig(question);
     const normalizeColor = (
       input: unknown

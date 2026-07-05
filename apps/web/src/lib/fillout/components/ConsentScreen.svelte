@@ -3,6 +3,7 @@
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
   import { sanitizeHtml } from '$lib/services/markdownProcessor';
+  import type { ConsentCheckbox, ConsentData } from '$lib/fillout/types';
 
   interface Props {
     title?: string;
@@ -17,19 +18,6 @@
      * the first reaction trial, which may run after async session creation.
      */
     onPrimeAudio?: () => void | Promise<void>;
-  }
-
-  interface ConsentCheckbox {
-    id: string;
-    label: string;
-    required: boolean;
-  }
-
-  interface ConsentData {
-    accepted: boolean;
-    timestamp: string;
-    checkboxes: Record<string, boolean>;
-    signature?: string;
   }
 
   let {

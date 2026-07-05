@@ -1,8 +1,7 @@
+import type { Question } from '@qdesigner/questionnaire-core';
 import type { ResponseCaptureMetadata } from './ResponseCollector';
 import type { ModuleCategory } from '$lib/modules/types';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- form host bridges heterogeneous module payloads
-type DynamicValue = any;
+import type { ModuleRuntimeConfig } from './moduleConfigAdapter';
 
 /**
  * A single item presented through the HTML overlay (form-style rendering path).
@@ -13,27 +12,27 @@ type DynamicValue = any;
  */
 export interface FormHostPresentation {
   /** The (carry-forward-resolved) question / instruction / display item. */
-  item: DynamicValue;
+  item: Question;
   /** Registry type, e.g. `multiple-choice`, `matrix`, `instruction`. */
   type: string;
   /** Registry category, drives which runtime component props ModularRenderer supplies. */
   category: ModuleCategory;
   /** Flat module config the runtime component reads via `question.config` / `instruction`. */
-  config: DynamicValue;
+  config: ModuleRuntimeConfig;
   /** Interpolation variables (name -> value). */
-  variables: Record<string, DynamicValue>;
+  variables: Record<string, unknown>;
   /** True for interactive question categories; false for instruction / display. */
   interactive: boolean;
   /** Whether the participant must supply a value before advancing. */
   required: boolean;
-  /** Carry-forward / resumed initial value, if any. */
-  initialValue?: DynamicValue;
+  /** Carry-forward / resumed initial value, when present. */
+  initialValue?: unknown;
   /** Called when the participant confirms their answer (or advances a non-interactive item). */
-  onSubmit: (value: DynamicValue, metadata?: ResponseCaptureMetadata) => void;
+  onSubmit: (value: unknown, metadata?: ResponseCaptureMetadata) => void;
   /** Live validation feedback from the mounted component. */
   onValidation?: (result: { valid: boolean; errors: string[] }) => void;
   /** Raw interaction events from the mounted component. */
-  onInteraction?: (event: DynamicValue) => void;
+  onInteraction?: (event: unknown) => void;
 }
 
 /**

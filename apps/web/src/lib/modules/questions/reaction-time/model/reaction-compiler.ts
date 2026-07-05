@@ -12,7 +12,6 @@ import type {
   ReactionTrialConfig,
   ScheduledPhase,
 } from '$lib/runtime/reaction';
-import type { QuestionRuntimeContext } from '$lib/runtime/core/question-runtime';
 import type { PlannedReactionTrial } from './reaction-plan-types';
 import type {
   NormalizedReactionConfig,
@@ -21,9 +20,21 @@ import type {
   ReactionStudyTrialTemplate,
 } from './reaction-schema';
 
+/**
+ * Minimal context the reaction compilers read for deterministic seeding. Design-time
+ * callers (starter templates, designer previews, mid-experiment re-compiles) legitimately
+ * supply only a partial questionnaire / question, so this narrows to the two
+ * optional-chained fields the planner needs rather than requiring a full runtime
+ * `QuestionRuntimeContext` (whose `question`/`questionnaire` are now strictly typed).
+ */
+export interface ReactionCompileContext {
+  questionnaire?: { settings?: { randomizationSeed?: string } };
+  question?: { id?: string };
+}
+
 export function compileReactionPlan(
   config: NormalizedReactionConfig,
-  context: Pick<QuestionRuntimeContext, 'questionnaire' | 'question'>
+  context: ReactionCompileContext
 ): PlannedReactionTrial[] {
   const seedRoot =
     context.questionnaire?.settings?.randomizationSeed ||

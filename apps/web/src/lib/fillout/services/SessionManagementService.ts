@@ -1,5 +1,6 @@
 import { api } from '$lib/services/api';
 import type { Session } from '$lib/shared/types/session';
+import type { SessionData } from '$lib/shared/types/api';
 import { browser } from '$app/environment';
 
 export interface SessionConfig {
@@ -67,7 +68,7 @@ export class SessionManagementService {
 			}
 		});
 
-		const session = data as unknown as Session;
+		const session = this.toFilloutSession(data);
 
 		// Store in local storage
 		this.saveLocalSession(session);
@@ -87,19 +88,17 @@ export class SessionManagementService {
 
 			if (!data) return null;
 
-			const session = data as unknown as Session;
+			const session = this.toFilloutSession(data);
 
 			// Can't resume completed sessions
 			if (session.status === 'completed') {
 				return null;
 			}
 
-			// Update last activity
+			// Update last activity (server always stamps last_activity_at = NOW())
 			await api.sessions.update(sessionId, {
-				last_activity_at: new Date().toISOString(),
 				status: session.status === 'not_started' ? 'in_progress' : session.status
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
-			} as any);
+			});
 
 			// Update local storage
 			this.saveLocalSession(session);
@@ -115,36 +114,34 @@ export class SessionManagementService {
 	 * Start a session (mark as in progress)
 	 */
 	static async startSession(sessionId: string): Promise<void> {
+		// Server stamps last_activity_at = NOW() itself; UpdateSessionRequest only accepts {status, metadata}.
 		await api.sessions.update(sessionId, {
-			status: 'in_progress',
-			started_at: new Date().toISOString(),
-			last_activity_at: new Date().toISOString()
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
-		} as any);
+			status: 'in_progress'
+		});
 	}
 
 	/**
 	 * Pause a session
 	 */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session state snapshot
-	static async pauseSession(sessionId: string, currentState?: any): Promise<void> {
+	static async pauseSession(sessionId: string, currentState?: unknown): Promise<void> {
+		// currentState is intentionally NOT persisted: UpdateSessionRequest replaces (not merges)
+		// metadata, so folding a resume snapshot into metadata would clobber the create-time
+		// metadata (access_code/device_info/browser_info). Persisting a resume snapshot needs a
+		// server-side metadata-merge or a dedicated column first.
+		void currentState;
 		await api.sessions.update(sessionId, {
-			status: 'paused',
-			last_activity_at: new Date().toISOString(),
-			state_snapshot: currentState || {}
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
-		} as any);
+			status: 'paused'
+		});
 	}
 
 	/**
 	 * Complete a session
 	 */
 	static async completeSession(sessionId: string): Promise<void> {
+		// Server stamps completed_at on status='completed'.
 		await api.sessions.update(sessionId, {
-			status: 'completed',
-			completed_at: new Date().toISOString()
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
-		} as any);
+			status: 'completed'
+		});
 
 		// Clear local storage
 		this.clearLocalSession();
@@ -154,14 +151,13 @@ export class SessionManagementService {
 	 * Abandon a session
 	 */
 	static async abandonSession(sessionId: string, reason?: string): Promise<void> {
+		// abandon is terminal, so replacing metadata here matches prior behavior.
 		await api.sessions.update(sessionId, {
 			status: 'abandoned',
-			last_activity_at: new Date().toISOString(),
 			metadata: {
 				abandon_reason: reason || 'user_exit'
 			}
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic session update payload
-		} as any);
+		});
 
 		// Clear local storage
 		this.clearLocalSession();
@@ -255,6 +251,22 @@ export class SessionManagementService {
 	}
 
 	/**
+	 * Convert the api client's SessionData (camelCase, narrow status) into the
+	 * wider fillout Session shape (snake_case) the runtime consumes.
+	 */
+	private static toFilloutSession(data: SessionData): Session {
+		return {
+			id: data.id,
+			questionnaire_id: data.questionnaireId,
+			participant_id: data.participantId ?? undefined,
+			status: data.status,
+			started_at: data.startedAt,
+			completed_at: data.completedAt ?? undefined,
+			metadata: data.metadata ?? {}
+		};
+	}
+
+	/**
 	 * Local storage management
 	 */
 	private static saveLocalSession(session: Session): void {
@@ -273,8 +285,13 @@ export class SessionManagementService {
 		}
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- JSON parse result
-	private static getLocalSession(): any {
+	private static getLocalSession(): {
+		id: string;
+		questionnaire_id: string;
+		access_code?: string;
+		status: string;
+		saved_at: number;
+	} | null {
 		if (!browser) return null;
 
 		try {

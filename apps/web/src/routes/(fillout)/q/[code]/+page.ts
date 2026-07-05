@@ -2,18 +2,25 @@ import type { PageLoad } from './$types';
 import { error } from '@sveltejs/kit';
 import { FilloutOfflineSyncService } from '$lib/fillout/services/FilloutOfflineSyncService';
 import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
+import type { QuestionnaireByCode, Session } from '$lib/api/generated/types.gen';
+import type { FilloutDefinition, FilloutQuestionnairePayload } from '$lib/fillout/types';
 
 export const ssr = false;
 
 // Normalize a raw by-code / cached questionnaire JSON into the runtime-facing shape.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function shapeQuestionnaire(raw: any, projectName?: string) {
+// The by-code payload types `definition` / `variables` / `global_scripts` as `unknown`
+// (the JSONB columns are open-schema); we narrow `definition` to the concrete
+// FilloutDefinition the page reads, and coerce the two script/variable maps.
+function shapeQuestionnaire(
+	raw: QuestionnaireByCode,
+	projectName?: string
+): FilloutQuestionnairePayload {
 	return {
 		id: raw.id,
 		name: raw.name,
-		definition: raw.definition,
-		variables: raw.variables || {},
-		globalScripts: raw.global_scripts || {},
+		definition: raw.definition as FilloutDefinition,
+		variables: (raw.variables as Record<string, unknown>) || {},
+		globalScripts: (raw.global_scripts as Record<string, unknown>) || {},
 		projectName,
 		versionMajor: raw.version_major ?? 1,
 		versionMinor: raw.version_minor ?? 0,
@@ -30,19 +37,19 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	}
 
 	// The latest published version (drives new sessions and validity gates).
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	let latest: any = null;
+	let latest: QuestionnaireByCode | null = null;
 
 	// Try online first
 	if (navigator.onLine) {
 		try {
 			const response = await fetch(`/api/questionnaires/by-code/${code}`);
 			if (response.ok) {
-				latest = await response.json();
+				const payload = (await response.json()) as QuestionnaireByCode;
+				latest = payload;
 				// Cache the latest as a VERSIONED row — this adds a new (id, version) snapshot and
 				// never overwrites the version an in-flight session pinned. Then opportunistically
 				// GC unreferenced versions and bound the media cache (both fire-and-forget).
-				await FilloutOfflineSyncService.cacheQuestionnaire(latest, code);
+				await FilloutOfflineSyncService.cacheQuestionnaire(payload, code);
 				void FilloutOfflineSyncService.pruneDefinitions().catch(() => {});
 				void FilloutOfflineSyncService.enforceMediaQuota().catch(() => {});
 			} else if (response.status === 404) {
@@ -66,7 +73,9 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		if (!cached) {
 			throw error(404, 'Questionnaire not available offline');
 		}
-		latest = cached;
+		// The cached Dexie row stores the same by-code JSON, typed loosely as
+		// Record<string, unknown>; it carries the QuestionnaireByCode shape.
+		latest = cached as unknown as QuestionnaireByCode;
 	}
 
 	// Validate questionnaire is active (version-agnostic gate — checked against latest metadata)
@@ -108,8 +117,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	// latest. Resolve the pin from the server session addressed by ?sid= (online) or a local
 	// active session (offline), then hand the runtime that pinned snapshot. Fresh sessions
 	// pin the latest (resolved at create time in +page.svelte).
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	let existingSession: any = null;
+	let existingSession: Session | null = null;
 	let pin: { major: number; minor: number; patch: number } | null = null;
 
 	if (sessionId && navigator.onLine) {
@@ -144,8 +152,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	}
 
 	// Resolve which definition the runtime consumes.
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	let effective: any = latest;
+	let effective: QuestionnaireByCode = latest;
 	let pinnedFallback = false;
 	if (pin) {
 		const pinned = await FilloutOfflineSyncService.getPinnedOfflineQuestionnaire(
@@ -155,7 +162,8 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 			pin.patch
 		);
 		if (pinned) {
-			effective = pinned;
+			// Same cached-row shape as the offline fallback above.
+			effective = pinned as unknown as QuestionnaireByCode;
 		} else {
 			// The session pinned a version this device never cached (started elsewhere or the
 			// version was GC'd). We cannot reconstruct it — fall back to the latest snapshot but

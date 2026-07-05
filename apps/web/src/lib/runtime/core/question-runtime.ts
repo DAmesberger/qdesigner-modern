@@ -1,3 +1,4 @@
+import type { Question, Questionnaire } from '@qdesigner/questionnaire-core';
 import type { WebGLRenderer } from '$lib/renderer';
 import type { VariableEngine } from '@qdesigner/scripting-engine';
 import type { ResourceManager } from '../resources/ResourceManager';
@@ -11,10 +12,8 @@ export interface QuestionRuntimeCapabilities {
 }
 
 export interface QuestionRuntimeContext {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
-  question: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
-  questionnaire?: any;
+  question: Question;
+  questionnaire?: Questionnaire;
   canvas: HTMLCanvasElement;
   renderer: WebGLRenderer;
   variableEngine: VariableEngine;
@@ -24,13 +23,11 @@ export interface QuestionRuntimeContext {
 }
 
 export interface QuestionRuntimeResult {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- response value can be any user input type
-  value: any;
+  value: unknown;
   reactionTimeMs?: number | null;
   isCorrect?: boolean | null;
   timedOut?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- extensible runtime metadata
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface IQuestionRuntime {

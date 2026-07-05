@@ -5,28 +5,33 @@
   import { moduleRegistry } from '$lib/modules/registry';
   import { interpolateVariables } from '$lib/services/variableInterpolation';
   import { resolveQuestionPrompt, resolveQuestionDescription } from '$lib/runtime/core/moduleConfigAdapter';
+  import type { ModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
 
   interface ModularItem {
     id: string;
     type: string;
     category: ModuleCategory;
     order: number;
-    config?: any;
+    config?: ModuleRuntimeConfig;
     conditions?: any;
-    [key: string]: any; // For type-specific properties
+    // Per-module dynamic properties (text, instruction, display.*, …). Kept `any`
+    // because the interpolate helpers and per-module prop spread read heterogeneous
+    // legacy fields off this index; a typed restructure is deferred to the P6
+    // reactivity pass (ModularRenderer is outside the P4-T4 grep gate).
+    [key: string]: any;
   }
 
   interface Props {
     item: ModularItem;
     mode?: 'edit' | 'preview' | 'runtime';
-    value?: any;
+    value?: unknown;
     variables?: Record<string, any>;
     disabled?: boolean;
     organizationId?: string;
     userId?: string;
-    onResponse?: (value: any) => void;
+    onResponse?: (value: unknown) => void;
     onValidation?: (result: { valid: boolean; errors: string[] }) => void;
-    onInteraction?: (event: any) => void;
+    onInteraction?: (event: unknown) => void;
     onUpdate?: (updates: Partial<ModularItem>) => void;
     onedit?: () => void;
     ondelete?: () => void;

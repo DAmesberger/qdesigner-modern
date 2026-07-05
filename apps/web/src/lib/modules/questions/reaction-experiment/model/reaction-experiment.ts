@@ -4,7 +4,10 @@ import type {
   ScheduledPhase,
 } from '$lib/runtime/reaction';
 import type { ReactionResponseMode } from '$lib/runtime/reaction/types';
-import { compileReactionPlan } from '$lib/modules/questions/reaction-time/model/reaction-compiler';
+import {
+  compileReactionPlan,
+  type ReactionCompileContext,
+} from '$lib/modules/questions/reaction-time/model/reaction-compiler';
 import { normalizeReactionQuestionConfig } from '$lib/modules/questions/reaction-time/model/reaction-normalize';
 import { createReactionStudyStarter } from '$lib/modules/questions/reaction-time/model/starter-templates';
 import type {
@@ -338,7 +341,7 @@ export function summarizeReactionExperiment(config: ReactionExperimentConfig) {
 
 export function compileReactionExperimentPlan(
   config: ReactionExperimentConfig,
-  context: Pick<QuestionRuntimeContext, 'questionnaire' | 'question' | 'variableEngine'>,
+  context: ReactionCompileContext & Pick<QuestionRuntimeContext, 'variableEngine'>,
   options?: {
     previewParticipantId?: string;
     /**

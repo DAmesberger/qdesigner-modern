@@ -37,6 +37,15 @@ import { nanoid } from 'nanoid';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime state handles heterogeneous question data
 type DynamicValue = any;
 
+/**
+ * A question as presented through the overlay: the typed `Question` union plus the
+ * runtime-attached carry-forward seed the engine parks on the item before handing it
+ * to the {@link FormQuestionHost}. Typed (not `any`) so the present paths keep their
+ * `item.type` / `item.timing` / `item.displayDuration` / `item.autoAdvance` /
+ * `item.navigation` reads checked against the union base.
+ */
+type PresentedQuestion = Question & { _carryForwardInitialValue?: unknown };
+
 export interface RuntimeConfig {
   canvas: HTMLCanvasElement;
   questionnaire: Questionnaire;
@@ -750,7 +759,7 @@ export class QuestionnaireRuntime {
     this.variableEngine.setVariable(`${question.id}_onset`, onsetTime, 'system');
 
     // Apply carry-forward default value if resolved
-    const cfInitialValue = (question as DynamicValue)._carryForwardInitialValue;
+    const cfInitialValue = (question as PresentedQuestion)._carryForwardInitialValue;
     if (cfInitialValue !== undefined) {
       this.variableEngine.setVariable(`${question.id}_value`, cfInitialValue, 'carry-forward');
     }
@@ -822,7 +831,7 @@ export class QuestionnaireRuntime {
     // Slice 5.1 extended this from the `instruction` category alone to also cover
     // `display` / `analytics` items (bar-chart, statistical-feedback) — previously the
     // WebGL presenter rasterized them into a texture nothing drew, so they were invisible.
-    const item = question as DynamicValue;
+    const item = question as PresentedQuestion;
     formHost.present({
       item,
       type: item.type,
@@ -839,7 +848,10 @@ export class QuestionnaireRuntime {
     // Auto-advance / timing. Instruction items opt IN to auto-advance; display /
     // analytics items auto-advance by default — preserving the prior WebGL presenter
     // semantics (autoAdvance !== false, with a 2500ms fallback duration).
-    const timing = item.timing;
+    // `timing.duration` is a legacy off-contract field (TimingConfig models
+    // min/max/warning, not a single auto-advance duration); read it through the
+    // module's DynamicValue escape hatch alongside the typed `displayDuration`.
+    const timing = item.timing as DynamicValue;
     if (metadata.category === 'instruction') {
       const duration = timing?.duration || item.displayDuration;
       const autoAdvance = item.autoAdvance === true || item.navigation?.autoAdvance === true;
@@ -886,7 +898,7 @@ export class QuestionnaireRuntime {
   ): void {
     if (!this.config.formHost) return;
 
-    const item = question as DynamicValue;
+    const item = question as PresentedQuestion;
     const cfInitialValue = item._carryForwardInitialValue;
 
     this.config.formHost.present({

@@ -11,7 +11,8 @@
   import { FilloutRuntime } from '$lib/fillout/runtime/FilloutRuntime';
   import ModularRenderer from '$lib/runtime/ModularRenderer.svelte';
   import type { FormQuestionHost, FormHostPresentation } from '$lib/runtime/core/FormQuestionHost';
-  import type { Questionnaire } from '$lib/shared/types/questionnaire';
+  import type { ConsentData } from '$lib/fillout/types';
+  import type { QuestionnaireSession } from '$lib/shared';
   import {
     localizeQuestionnaire,
     resolveText,
@@ -38,9 +39,9 @@
   let { data }: Props = $props();
 
   // --- Content translation (MOD-04, ADR 0022) -------------------------------
-  // The definition carries app-specific chrome fields beyond the core type.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rawDefinition = $derived(data.questionnaire.definition as any);
+  // The definition is a FilloutDefinition (core Questionnaire + the top-level
+  // `consent` / `completionMessage` chrome fields the screens below read).
+  const rawDefinition = $derived(data.questionnaire.definition);
   const baseLocale = $derived(getBaseLocale(rawDefinition));
   const availableLocales = $derived(getAvailableLocales(rawDefinition));
   // The participant's explicit pick (null until they choose). ?lang= seeds it.
@@ -54,7 +55,7 @@
         : baseLocale
   );
   // Definition with question prompts / option labels / page titles localized.
-  const definition = $derived(localizeQuestionnaire(rawDefinition as Questionnaire, effectiveLocale));
+  const definition = $derived(localizeQuestionnaire(rawDefinition, effectiveLocale));
   const languageOptions = $derived(
     availableLocales.map((code) => ({ code, label: getLocaleLabel(rawDefinition, code) }))
   );
@@ -106,8 +107,12 @@
   let error = $state<string | null>(null);
   let currentScreen = $state<'welcome' | 'consent' | 'runtime' | 'complete' | 'over-quota'>('welcome');
   let overQuotaMessage = $state<string>('');
+  // `session` spans three assignment shapes across create / resume / offline paths
+  // (camelCase SessionData, snake_case Session DTO, a locally-built offline stub), so
+  // it stays loosely typed; normalizing it is runtime-wiring work (F040), out of scope.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let session = $state<any>(null);
-  let completedSession = $state<any>(null);
+  let completedSession = $state<QuestionnaireSession | undefined>(undefined);
   let conditionGroupCounts = $state<number[] | undefined>(undefined);
 
   // Fraud prevention state
@@ -127,8 +132,7 @@
   let qualification = $state<GatekeeperResult | null>(null);
   let bannerDismissed = $state(false);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
-  const questionList = $derived((definition?.questions ?? []) as any[]);
+  const questionList = $derived(definition?.questions ?? []);
   const hasReactionQuestion = $derived(
     questionList.some((q) => REACTION_QUESTION_TYPES.has(q?.type))
   );
@@ -221,8 +225,7 @@
     },
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- module answer payloads are heterogeneous
-  function handleOverlayResponse(value: any) {
+  function handleOverlayResponse(value: unknown) {
     currentValue = value;
     hasAnswered = value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0);
   }
@@ -293,7 +296,7 @@
     }
   }
 
-  async function handleConsent(consentData: any) {
+  async function handleConsent(consentData: ConsentData) {
     await createSessionAndStart(consentData);
   }
 
@@ -301,7 +304,7 @@
     goto('/');
   }
 
-  async function createSessionAndStart(consentData?: any) {
+  async function createSessionAndStart(consentData?: ConsentData) {
     try {
       loading = true;
 
@@ -401,11 +404,9 @@
           });
           session = created;
 
-          // Server-side fingerprint dedup (slice 2.5): react to the response flag.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const createdAny = created as any;
-          const isDuplicate = createdAny.duplicate === true || createdAny.is_duplicate === true;
-          if (fpSettings?.preventDuplicates && isDuplicate) {
+          // Server-side fingerprint dedup (slice 2.5): react to the typed `duplicate`
+          // flag api.sessions.create() surfaces from the create response.
+          if (fpSettings?.preventDuplicates && created.duplicate === true) {
             if (fpSettings.fraudAction === 'terminate') {
               error = fpSettings.fraudMessage || 'This survey is not available for your submission.';
               loading = false;

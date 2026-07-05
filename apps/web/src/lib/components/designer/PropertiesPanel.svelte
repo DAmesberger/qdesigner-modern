@@ -1,6 +1,15 @@
 <script lang="ts">
   import { designerStore } from '$lib/stores/designer.svelte';
-  import type { Question, Page, Variable, CarryForwardMode, CarryForwardTargetField, CarryForwardConfig } from '$lib/shared';
+  import type {
+    Question,
+    Page,
+    Variable,
+    CarryForwardMode,
+    CarryForwardTargetField,
+    CarryForwardConfig,
+    LegacyResponseTypeConfig,
+  } from '$lib/shared';
+  import { isSingleChoiceQuestion, isMultipleChoiceQuestion } from '$lib/shared';
   import { moduleRegistry } from '$lib/modules/registry';
   import { slide } from 'svelte/transition';
   import type { ComponentType } from 'svelte';
@@ -134,7 +143,7 @@
     questionItem ? getAvailableModes(questionItem.type) : []
   );
   let carryForwardTargetFields = $derived.by(() => {
-    const cf = (questionItem as any)?.carryForward as CarryForwardConfig | undefined;
+    const cf: CarryForwardConfig | undefined = questionItem?.carryForward;
     if (!cf?.mode) return ['value'] as CarryForwardTargetField[];
     return getAvailableTargetFields(cf.mode);
   });
@@ -149,7 +158,56 @@
   // });
 
   // Update handlers
-  function updateQuestion(updates: Partial<Question> & { config?: any }) {
+
+  /**
+   * Loose per-option shape carried by the designer's dual-schema questionnaire data.
+   * The persisted option objects include `key` (keyboard key), `icon`, `color` and
+   * `description` fields that are absent from the strict `ChoiceOption`/`ResponseOption`
+   * types in questionnaire-core, so the designer's option updates are typed against this
+   * widened shape rather than the union display config.
+   */
+  type DesignerChoiceOption = {
+    id?: string;
+    label: string;
+    value: string | number;
+    key?: string;
+    description?: string;
+    icon?: string;
+    image?: string;
+    color?: string;
+  };
+
+  /** Config payload the module designer components pass through `onUpdate`. */
+  type DesignerConfigUpdate = {
+    options?: DesignerChoiceOption[];
+    prompt?: string;
+    [key: string]: unknown;
+  };
+
+  /**
+   * Legacy dual-schema display / response(-type) views the designer writes alongside the
+   * typed union member. Display is only ever spread from / merged into the existing config
+   * and passed straight to the store, so it stays an open record — it carries both the
+   * strict `ChoiceOption` (image: MediaConfig) and the loose bulk-editor option shapes.
+   */
+  type DesignerDisplayUpdate = Record<string, unknown>;
+  type DesignerResponseTypeUpdate = {
+    type?: string;
+    options?: DesignerChoiceOption[];
+    [key: string]: unknown;
+  };
+
+  type DesignerQuestionUpdate = Omit<
+    Partial<Question>,
+    'config' | 'display' | 'response' | 'responseType'
+  > & {
+    config?: DesignerConfigUpdate;
+    display?: DesignerDisplayUpdate;
+    response?: Record<string, unknown>;
+    responseType?: DesignerResponseTypeUpdate;
+  };
+
+  function updateQuestion(updates: DesignerQuestionUpdate) {
     if (questionItem) {
       const q = questionItem;
       // Sync config with display for questions that have options
@@ -161,27 +219,16 @@
           if (updates.config.options) {
             updates.display = {
               ...q.display,
-              options: (updates.config.options as any[]).map(
-                (opt: {
-                  id: string;
-                  label: string;
-                  value: string;
-                  description?: string;
-                  icon?: string;
-                  image?: string;
-                  color?: string;
-                }) =>
-                  ({
-                    id: opt.id,
-                    label: opt.label,
-                    value: opt.value,
-                    description: opt.description,
-                    icon: opt.icon,
-                    image: opt.image,
-                    color: opt.color,
-                  }) as any
-              ),
-            } as any;
+              options: updates.config.options.map((opt) => ({
+                id: opt.id,
+                label: opt.label,
+                value: opt.value,
+                description: opt.description,
+                icon: opt.icon,
+                image: opt.image,
+                color: opt.color,
+              })),
+            };
           }
 
           // Sync other display properties
@@ -203,19 +250,21 @@
         };
       }
 
-      designerStore.updateQuestion(questionItem.id, updates);
+      // The designer edits the legacy dual-schema (loose option) view; assert to the
+      // strict union at the store boundary.
+      designerStore.updateQuestion(questionItem.id, updates as Partial<Question>);
     }
   }
 
-  function updatePageProperty(property: string, value: any) {
+  function updatePageProperty(property: string, value: unknown) {
     if (pageItem) {
-      designerStore.updatePage(pageItem.id, { [property]: value });
+      designerStore.updatePage(pageItem.id, { [property]: value } as Partial<Page>);
     }
   }
 
-  function updateVariableProperty(property: string, value: any) {
+  function updateVariableProperty(property: string, value: unknown) {
     if (variableItem) {
-      designerStore.updateVariable(variableItem.id, { [property]: value });
+      designerStore.updateVariable(variableItem.id, { [property]: value } as Partial<Variable>);
     }
   }
 
@@ -276,11 +325,20 @@
   }
 
   function extractChoiceOptions(question: Question): Array<{ value: string; label: string; key?: string }> {
-    const fromResponseType = (question as any).responseType?.options;
-    const fromResponse = (question as any).response?.options;
-    const fromDisplay = (question as any).display?.options;
+    const fromResponseType = question.responseType?.options;
+    const responseObj = question.response;
+    const fromResponse =
+      responseObj && typeof responseObj === 'object' && 'options' in responseObj
+        ? (responseObj as { options?: unknown }).options
+        : undefined;
+    // `display` is a per-union-member field (absent from BaseQuestion), so reaching
+    // `display.options` requires narrowing to a choice member first.
+    const fromDisplay =
+      isSingleChoiceQuestion(question) || isMultipleChoiceQuestion(question)
+        ? question.display.options
+        : undefined;
 
-    const source = Array.isArray(fromResponseType)
+    const source: unknown[] = Array.isArray(fromResponseType)
       ? fromResponseType
       : Array.isArray(fromResponse)
         ? fromResponse
@@ -289,16 +347,17 @@
           : [];
 
     return source
-      .map((option: any) => {
-        if (!option) return null;
-        const value = option.value ?? option.id ?? option.label;
+      .map((option) => {
+        if (!option || typeof option !== 'object') return null;
+        const opt = option as { value?: unknown; id?: unknown; label?: unknown; key?: unknown };
+        const value = opt.value ?? opt.id ?? opt.label;
         if (value === undefined || value === null) return null;
         const normalized: { value: string; label: string; key?: string } = {
           value: String(value),
-          label: String(option.label ?? value),
+          label: String(opt.label ?? value),
         };
-        if (option.key !== undefined && option.key !== null && option.key !== '') {
-          normalized.key = String(option.key);
+        if (opt.key !== undefined && opt.key !== null && opt.key !== '') {
+          normalized.key = String(opt.key);
         }
         return normalized;
       })
@@ -337,30 +396,41 @@
     if (!questionItem || !isChoiceQuestion) return;
 
     const options = parseChoiceOptionsInput(raw);
-    const responseType = (questionItem as any).responseType || { type: 'single' };
-    const response = (questionItem as any).response || { type: responseType.type || 'single' };
+    const existingResponseType: LegacyResponseTypeConfig = questionItem.responseType || {
+      type: 'single',
+    };
+    const existingResponse: Record<string, unknown> =
+      questionItem.response && typeof questionItem.response === 'object'
+        ? { ...(questionItem.response as Record<string, unknown>) }
+        : { type: existingResponseType.type || 'single' };
+    // `responseType.type` and `response.type` resolve to the same value under the original
+    // `||` fallbacks, so a single resolved type feeds both dual-schema views.
+    const resolvedType =
+      existingResponseType.type ||
+      (typeof existingResponse.type === 'string' ? existingResponse.type : undefined) ||
+      'single';
 
     updateQuestion({
       responseType: {
-        ...responseType,
-        type: responseType.type || response.type || 'single',
+        ...existingResponseType,
+        type: resolvedType,
         options,
-      } as any,
+      },
       response: {
-        ...response,
-        type: response.type || responseType.type || 'single',
+        ...existingResponse,
+        type: resolvedType,
         options,
-      } as any,
+      },
       display: {
-        ...(questionItem.display || {}),
+        ...questionItem.display,
         options: options.map((option, index) => ({
           id: `opt_${index + 1}`,
           label: option.label,
           value: option.value,
           key: option.key,
         })),
-      } as any,
-    } as any);
+      },
+    });
   }
 
   $effect(() => {
@@ -598,7 +668,7 @@
                             attentionCheck: enabled
                               ? { enabled: true, correctAnswer: '', type: 'instructed' as const }
                               : { enabled: false, correctAnswer: '', type: 'instructed' as const },
-                          } as any);
+                          });
                         }}
                         class="rounded border-input text-primary focus:ring-primary"
                         data-testid="attention-check-toggle"
@@ -622,7 +692,7 @@
                                   ...questionItem.attentionCheck!,
                                   type: e.currentTarget.value as 'instructed' | 'trap',
                                 },
-                              } as any)}
+                              })}
                             placeholder=""
                           >
                             <option value="instructed">Instructed (explicit)</option>
@@ -645,7 +715,7 @@
                                   ...questionItem.attentionCheck!,
                                   correctAnswer: e.currentTarget.value,
                                 },
-                              } as any)}
+                              })}
                             class="w-full px-2 py-1.5 text-sm border border-input rounded-md bg-background text-foreground"
                             placeholder="Expected answer value"
                             data-testid="attention-check-answer"
@@ -664,7 +734,7 @@
                     <label class="flex items-center space-x-2">
                       <input
                         type="checkbox"
-                        checked={!!(questionItem as any).carryForward}
+                        checked={!!questionItem.carryForward}
                         onchange={(e: Event & { currentTarget: HTMLInputElement }) => {
                           if (e.currentTarget.checked) {
                             const firstSource = carryForwardSourceQuestions[0];
@@ -676,9 +746,9 @@
                                 mode: defaultMode,
                                 targetField: defaultTarget,
                               },
-                            } as any);
+                            });
                           } else {
-                            updateQuestion({ carryForward: undefined } as any);
+                            updateQuestion({ carryForward: undefined });
                           }
                         }}
                         class="rounded border-input text-primary focus:ring-primary"
@@ -690,8 +760,8 @@
                       Use answers from a prior question as defaults, options, or context
                     </p>
 
-                    {#if (questionItem as any).carryForward}
-                      {@const cfConfig = (questionItem as any).carryForward as CarryForwardConfig}
+                    {#if questionItem.carryForward}
+                      {@const cfConfig = questionItem.carryForward}
                       <div class="mt-2 space-y-2 pl-6">
                         <div>
                           <label
@@ -707,7 +777,7 @@
                                   ...cfConfig,
                                   sourceQuestionId: e.currentTarget.value,
                                 },
-                              } as any)}
+                              })}
                             placeholder=""
                           >
                             {#each carryForwardSourceQuestions as sourceQ (sourceQ.id)}
@@ -737,7 +807,7 @@
                                     ? cfConfig.targetField
                                     : newTargets[0] || 'value',
                                 },
-                              } as any);
+                              });
                             }}
                             placeholder=""
                           >
@@ -771,7 +841,7 @@
                                   ...cfConfig,
                                   targetField: e.currentTarget.value as CarryForwardTargetField,
                                 },
-                              } as any)}
+                              })}
                             placeholder=""
                           >
                             {#each carryForwardTargetFields as field (field)}
@@ -949,7 +1019,7 @@
     {:else if activeTab === 'style'}
       <StyleEditor
         {theme}
-        selectedElement={(['question', 'page', 'global'] as const).includes(itemType as any)
+        selectedElement={(['question', 'page', 'global'] as readonly string[]).includes(itemType ?? '')
           ? (itemType as 'question' | 'page' | 'global')
           : 'global'}
         onupdate={handleThemeUpdate}

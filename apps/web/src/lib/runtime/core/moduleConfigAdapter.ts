@@ -9,26 +9,82 @@
  * shape because the components had zero importers before Phase 7.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- adapter bridges heterogeneous question schemas
-type DynamicValue = any;
+import type { Question } from '@qdesigner/questionnaire-core';
 
-interface NormalizedChoiceOption {
-  id: string;
-  label: string;
-  value: DynamicValue;
-  [key: string]: DynamicValue;
+/**
+ * Loosely-typed view over a stored question and its nested `display` / `config` /
+ * `responseType` sub-objects. The typed `Question` union carries the authoritative
+ * per-member config, but live/legacy data also parks the participant-facing input
+ * shape under off-union fields (`text`, `instruction`, `display.*`, flat `config`,
+ * a dual-schema `responseType`) that the union base intentionally omits. The adapter
+ * reads through this named view (index-signatured `unknown`, not `any`) so the
+ * off-union reads stay typed without widening the whole module to `any`.
+ */
+export interface LegacyQuestionView {
+  type?: string;
+  title?: unknown;
+  prompt?: unknown;
+  text?: unknown;
+  instruction?: unknown;
+  description?: unknown;
+  content?: unknown;
+  config?: LegacyQuestionView;
+  display?: LegacyQuestionView;
+  response?: LegacyQuestionView;
+  responseType?: unknown;
+  options?: unknown;
+  rows?: unknown[];
+  columns?: unknown[];
+  min?: number;
+  max?: number;
+  minLabel?: string;
+  maxLabel?: string;
+  minLength?: number;
+  maxLength?: number;
+  placeholder?: string;
+  layout?: string;
+  [key: string]: unknown;
 }
 
-function normalizeChoiceOptions(options: DynamicValue): NormalizedChoiceOption[] {
+/** The flat `config` shape a runtime module Svelte component reads. */
+export interface ModuleRuntimeConfig {
+  title?: string;
+  prompt?: string;
+  description?: string;
+  options?: NormalizedChoiceOption[];
+  responseType?: { type: 'single' | 'multiple' } | string;
+  rows?: unknown[];
+  columns?: unknown[];
+  min?: number;
+  max?: number;
+  levels?: number;
+  labels?: { min?: string; max?: string };
+  inputType?: string;
+  minLength?: number;
+  maxLength?: number;
+  placeholder?: string;
+  layout?: string;
+  [key: string]: unknown;
+}
+
+export interface NormalizedChoiceOption {
+  id: string;
+  label: string;
+  value: unknown;
+  [key: string]: unknown;
+}
+
+function normalizeChoiceOptions(options: unknown): NormalizedChoiceOption[] {
   if (!Array.isArray(options)) return [];
   return options
-    .map((option: DynamicValue, index: number): NormalizedChoiceOption | null => {
+    .map((option: unknown, index: number): NormalizedChoiceOption | null => {
       if (option === null || option === undefined) return null;
-      const value = option.value ?? option.id ?? option.label;
+      const o = option as Record<string, unknown>;
+      const value = o.value ?? o.id ?? o.label;
       return {
-        ...option,
-        id: String(option.id ?? option.value ?? index),
-        label: String(option.label ?? option.value ?? ''),
+        ...o,
+        id: String(o.id ?? o.value ?? index),
+        label: String(o.label ?? o.value ?? ''),
         value,
       };
     })
@@ -36,7 +92,7 @@ function normalizeChoiceOptions(options: DynamicValue): NormalizedChoiceOption[]
 }
 
 /** Matrix module component expects a widget kind, not the stored `single`/`multiple`. */
-function normalizeMatrixResponseType(raw: DynamicValue): string {
+function normalizeMatrixResponseType(raw: unknown): string {
   if (raw === 'single' || raw === 'radio') return 'radio';
   if (raw === 'multiple' || raw === 'checkbox') return 'checkbox';
   if (typeof raw === 'string' && raw.length > 0) return raw;
@@ -57,17 +113,17 @@ function firstNonEmptyString(...values: unknown[]): string | undefined {
  * config.prompt → display.prompt → display.content → text`. Only non-empty
  * strings qualify, so a WebGL stimulus's object-shaped `prompt` is skipped.
  */
-export function resolveQuestionPrompt(question: DynamicValue): string | undefined {
-  const q = question ?? {};
-  const display = q.display ?? {};
-  const config = q.config ?? {};
+export function resolveQuestionPrompt(question: Question): string | undefined {
+  const q = (question ?? {}) as unknown as LegacyQuestionView;
+  const display: LegacyQuestionView = q.display ?? {};
+  const config: LegacyQuestionView = q.config ?? {};
   return firstNonEmptyString(q.title, q.prompt, config.prompt, display.prompt, display.content, q.text);
 }
 
 /** Canonical description precedence: `description → display.description → instruction`. */
-export function resolveQuestionDescription(question: DynamicValue): string | undefined {
-  const q = question ?? {};
-  const display = q.display ?? {};
+export function resolveQuestionDescription(question: Question): string | undefined {
+  const q = (question ?? {}) as unknown as LegacyQuestionView;
+  const display: LegacyQuestionView = q.display ?? {};
   return firstNonEmptyString(q.description, display.description, q.instruction);
 }
 
@@ -76,14 +132,16 @@ export function resolveQuestionDescription(question: DynamicValue): string | und
  * Always returns a plain object so components that read `question.config.<field>`
  * never dereference `undefined`.
  */
-export function buildModuleRuntimeConfig(question: DynamicValue): DynamicValue {
-  const q = question ?? {};
-  const display = q.display ?? {};
-  const existing = q.config ?? {};
-  const responseType = q.responseType ?? q.response ?? {};
+export function buildModuleRuntimeConfig(question: Question): ModuleRuntimeConfig {
+  const q = (question ?? {}) as unknown as LegacyQuestionView;
+  const display: LegacyQuestionView = q.display ?? {};
+  const existing: LegacyQuestionView = q.config ?? {};
+  const responseType: LegacyQuestionView = (q.responseType ?? q.response ?? {}) as LegacyQuestionView;
 
-  // Start from display, then let any already-present flat config win.
-  const base: DynamicValue = { ...display, ...existing };
+  // Start from display, then let an already-present flat config win. Both are
+  // loosely-typed legacy views (unknown-valued fields), so the merged base is cast
+  // through `unknown` into the typed config shape the components consume.
+  const base = { ...display, ...existing } as unknown as ModuleRuntimeConfig;
 
   // Canonical prompt / description. BaseQuestion renders the prompt from
   // `question.title` (with a `config.prompt` fallback) and the description from
@@ -92,12 +150,12 @@ export function buildModuleRuntimeConfig(question: DynamicValue): DynamicValue {
   // `instruction`; surface both on the config so a form-style question never
   // renders its widget with no visible question text (Slice 1.1, ADR 0018).
   // Guarded so an empty/unauthored question still yields a bare `{}` config.
-  const canonicalPrompt = resolveQuestionPrompt(q);
+  const canonicalPrompt = resolveQuestionPrompt(question);
   if (canonicalPrompt !== undefined) {
     base.title = base.title ?? canonicalPrompt;
     base.prompt = base.prompt ?? canonicalPrompt;
   }
-  const canonicalDescription = resolveQuestionDescription(q);
+  const canonicalDescription = resolveQuestionDescription(question);
   if (canonicalDescription !== undefined) {
     base.description = base.description ?? canonicalDescription;
   }
@@ -106,7 +164,7 @@ export function buildModuleRuntimeConfig(question: DynamicValue): DynamicValue {
     case 'multiple-choice': {
       const isMultiple =
         responseType.type === 'multiple' ||
-        existing.responseType?.type === 'multiple' ||
+        (existing.responseType as LegacyQuestionView | undefined)?.type === 'multiple' ||
         display.responseType === 'multiple';
       base.responseType = { type: isMultiple ? 'multiple' : 'single' };
       base.options = normalizeChoiceOptions(

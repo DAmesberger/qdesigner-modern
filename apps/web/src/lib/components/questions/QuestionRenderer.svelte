@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ExtendedQuestion } from './types';
+  import type { Question } from '@qdesigner/questionnaire-core';
   import { untrack, type ComponentType } from 'svelte';
   import { moduleRegistry } from '$lib/modules/registry';
   import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
@@ -124,7 +125,10 @@
   // identical body instead of an empty one. See ADR 0018 / moduleConfigAdapter.
   const fullQuestion = $derived({
     ...question,
-    config: buildModuleRuntimeConfig(question),
+    // ExtendedQuestion is the flat designer-side view (no discriminated
+    // `display`/`response`); the adapter reads it through its legacy view, so cast
+    // across the union boundary.
+    config: buildModuleRuntimeConfig(question as unknown as Question),
   });
 
   // Transform question to analytics format for display modules
