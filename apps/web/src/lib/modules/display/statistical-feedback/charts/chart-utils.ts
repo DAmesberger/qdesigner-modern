@@ -2,48 +2,9 @@
  * Chart utilities: Chart.js registration, color palette, and statistical math helpers.
  */
 
-import {
-	Chart,
-	CategoryScale,
-	LinearScale,
-	BarElement,
-	BarController,
-	LineElement,
-	LineController,
-	PointElement,
-	ArcElement,
-	DoughnutController,
-	RadarController,
-	RadialLinearScale,
-	ScatterController,
-	Title,
-	Tooltip,
-	Legend,
-	Filler,
-} from 'chart.js';
 import { normalCDF } from '$lib/shared/utils/statistics';
 
-// Register all components we need (idempotent)
-Chart.register(
-	CategoryScale,
-	LinearScale,
-	BarElement,
-	BarController,
-	LineElement,
-	LineController,
-	PointElement,
-	ArcElement,
-	DoughnutController,
-	RadarController,
-	RadialLinearScale,
-	ScatterController,
-	Title,
-	Tooltip,
-	Legend,
-	Filler,
-);
-
-export { Chart };
+export { Chart } from '$lib/shared/charts';
 
 // ---------------------------------------------------------------------------
 // Color Palette

@@ -9,11 +9,8 @@ import {
   type TranslationPath,
 } from '$lib/shared';
 import { DocumentStore, type DocumentValidationResult } from './designer/DocumentStore';
-import {
-  UiStore,
-  type DesignerPanel,
-  type DesignerViewMode,
-} from './designer/UiStore';
+import type { DesignerPanel, DesignerViewMode } from './designer/ui';
+import { readRightPanelPinned, persistRightPanelPinned } from './designer/ui';
 import { DesignerPersistenceService } from './designer/PersistenceService';
 import { VariableEngine } from '@qdesigner/scripting-engine';
 import type { CollaborativeDesigner } from '$lib/collaboration/CollaborativeDesigner';
@@ -104,7 +101,6 @@ function writeTranslationEntry(
 
 class DesignerStore {
   private readonly documentStore = new DocumentStore();
-  private readonly uiStore = new UiStore();
   private readonly persistenceService = new DesignerPersistenceService();
 
   questionnaire = $state<Questionnaire>(this.documentStore.createEmptyQuestionnaire());
@@ -155,7 +151,9 @@ class DesignerStore {
   private isApplyingRemote = false;
 
   constructor() {
-    this.syncUiState(this.uiStore.getState());
+    this.rightPanelPinned = readRightPanelPinned(
+      typeof localStorage !== 'undefined' ? localStorage : null
+    );
   }
 
   get canUndo() {
@@ -299,25 +297,23 @@ class DesignerStore {
   }
 
   setViewMode(mode: DesignerViewMode) {
-    this.syncUiState(this.uiStore.setViewMode(mode));
+    this.viewMode = mode;
   }
 
   setPanel(panel: DesignerPanel) {
-    this.syncUiState(this.uiStore.setPanel(panel));
+    this.activePanel = panel;
   }
 
   togglePanel(panel: Exclude<DesignerPanel, null>) {
-    this.syncUiState(this.uiStore.togglePanel(panel));
+    this.activePanel = this.activePanel === panel ? null : panel;
   }
 
   togglePreview(force?: boolean) {
-    const state = this.uiStore.togglePreview(force);
-    this.syncUiState(state);
-    this.previewMode = state.showPreview;
+    this.previewMode = typeof force === 'boolean' ? force : !this.previewMode;
   }
 
   toggleCommandPalette(force?: boolean) {
-    this.syncUiState(this.uiStore.toggleCommandPalette(force));
+    this.showCommandPalette = typeof force === 'boolean' ? force : !this.showCommandPalette;
   }
 
   toggleDrawer(side: 'left' | 'right', force?: boolean) {
@@ -329,15 +325,15 @@ class DesignerStore {
   }
 
   setRightPanelPinned(pinned: boolean) {
-    this.syncUiState(this.uiStore.setRightPanelPinned(pinned));
+    this.rightPanelPinned = pinned;
     if (typeof localStorage !== 'undefined') {
-      this.uiStore.persistToStorage(localStorage);
+      persistRightPanelPinned(localStorage, pinned);
     }
   }
 
   restoreUiFromStorage() {
     if (typeof localStorage === 'undefined') return;
-    this.syncUiState(this.uiStore.syncFromStorage(localStorage));
+    this.rightPanelPinned = readRightPanelPinned(localStorage);
   }
 
   async createNewQuestionnaire(data: {
@@ -1118,14 +1114,6 @@ class DesignerStore {
       }
     }
     return null;
-  }
-
-  private syncUiState(state: ReturnType<UiStore['getState']>) {
-    this.viewMode = state.viewMode;
-    this.activePanel = state.activePanel;
-    this.previewMode = state.showPreview;
-    this.showCommandPalette = state.showCommandPalette;
-    this.rightPanelPinned = state.rightPanelPinned;
   }
 }
 

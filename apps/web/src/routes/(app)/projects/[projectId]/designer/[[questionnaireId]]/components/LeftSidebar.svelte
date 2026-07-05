@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
-  import type { DesignerPanel } from '$lib/stores/designer/UiStore';
+  import type { DesignerPanel } from '$lib/stores/designer/ui';
   import QuestionPalette from '$lib/components/designer/QuestionPalette.svelte';
   import TemplateLibrary from '$lib/components/designer/TemplateLibrary.svelte';
   import BlockManager from '$lib/components/designer/BlockManager.svelte';

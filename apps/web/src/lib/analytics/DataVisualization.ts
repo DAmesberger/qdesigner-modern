@@ -3,21 +3,7 @@
  * Chart.js wrappers and custom visualization components for analytics
  */
 
-import {
-  Chart,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  TimeScale,
-  TimeSeriesScale
-} from 'chart.js';
+import { Chart, CATEGORICAL_PALETTE } from '$lib/shared/charts';
 import 'chartjs-adapter-date-fns';
 import type {
   ChartConfig,
@@ -32,29 +18,10 @@ import type {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- visualization callbacks accept dynamic chart payloads
 type DynamicValue = any;
 
-// Register Chart.js components
-Chart.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  TimeScale,
-  TimeSeriesScale
-);
-
 export class DataVisualization {
   private static instance: DataVisualization;
   private charts: Map<string, Chart> = new Map();
-  private colorPalette: string[] = [
-    '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6',
-    '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'
-  ];
+  private colorPalette: string[] = [...CATEGORICAL_PALETTE];
 
   private constructor() {}
 

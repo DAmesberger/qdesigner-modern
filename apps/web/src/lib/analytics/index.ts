@@ -11,6 +11,7 @@ import { MissingDataHandler } from './MissingDataHandler';
 import { PowerAnalysis } from './PowerAnalysis';
 import { RealtimeAnalyticsClient } from './RealtimeAnalyticsClient.svelte';
 import { ScoringPipeline } from './ScoringPipeline';
+import { CATEGORICAL_PALETTE } from '$lib/shared/charts';
 
 // Re-export Core Classes
 export { StatisticalEngine, DataVisualization, NormativeScoreInterpreter, MissingDataHandler, PowerAnalysis, RealtimeAnalyticsClient, ScoringPipeline };
@@ -439,10 +440,7 @@ export const TimeRangePresets = {
  * Color palette for charts and visualizations
  */
 export const ColorPalettes = {
-  default: [
-    '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6',
-    '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'
-  ],
+  default: [...CATEGORICAL_PALETTE],
   
   accessibility: [
     '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',

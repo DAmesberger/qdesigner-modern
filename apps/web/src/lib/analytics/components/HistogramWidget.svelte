@@ -1,23 +1,5 @@
 <script lang="ts">
-  import {
-    Chart,
-    CategoryScale,
-    LinearScale,
-    BarElement,
-    BarController,
-    LineElement,
-    LineController,
-    PointElement,
-    Title,
-    Tooltip,
-    Legend,
-    Filler,
-  } from 'chart.js';
-
-  Chart.register(
-    CategoryScale, LinearScale, BarElement, BarController,
-    LineElement, LineController, PointElement, Title, Tooltip, Legend, Filler,
-  );
+  import { Chart } from '$lib/shared/charts';
 
   interface Props {
     data: number[];

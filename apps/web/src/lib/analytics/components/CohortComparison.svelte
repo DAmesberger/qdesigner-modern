@@ -1,18 +1,7 @@
 <script lang="ts">
   import type { StatisticalSummary } from '../types';
   import DescriptiveStatsWidget from './DescriptiveStatsWidget.svelte';
-  import {
-    Chart,
-    CategoryScale,
-    LinearScale,
-    BarElement,
-    BarController,
-    Title,
-    Tooltip,
-    Legend,
-  } from 'chart.js';
-
-  Chart.register(CategoryScale, LinearScale, BarElement, BarController, Title, Tooltip, Legend);
+  import { Chart } from '$lib/shared/charts';
 
   interface CohortData {
     label: string;
