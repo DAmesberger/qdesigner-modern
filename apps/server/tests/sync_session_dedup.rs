@@ -198,6 +198,68 @@ async fn interaction_events_dedup_on_client_id() {
 }
 
 #[tokio::test]
+async fn sync_metadata_merge_preserves_prior_keys_and_is_idempotent() {
+    // Mirrors the metadata-merge sync_session runs for a PRE-EXISTING session
+    // (online-created): the INSERT branch is skipped, so the final-snapshot
+    // metadata (e.g. `qualityReport`) lands only via
+    //   UPDATE sessions SET metadata = COALESCE(metadata,'{}'::jsonb) || $2 WHERE id = $1
+    let Some(pool) = get_test_pool().await else {
+        eprintln!("Skipping: DATABASE_URL not set");
+        return;
+    };
+
+    let session_id = make_session(&pool).await.expect("session");
+
+    // Seed prior metadata (as an online-created session would already carry).
+    let prior = serde_json::json!({ "fingerprint": "abc123", "kept": true });
+    sqlx::query("UPDATE sessions SET metadata = $2 WHERE id = $1")
+        .bind(session_id)
+        .bind(&prior)
+        .execute(&pool)
+        .await
+        .expect("seed prior metadata");
+
+    // Apply the exact merge statement sync_session runs.
+    let patch = serde_json::json!({ "qualityReport": { "flatlines": 0, "speeder": false } });
+    let merge_sql =
+        "UPDATE sessions SET metadata = COALESCE(metadata, '{}'::jsonb) || $2 WHERE id = $1";
+    sqlx::query(merge_sql)
+        .bind(session_id)
+        .bind(&patch)
+        .execute(&pool)
+        .await
+        .expect("merge 1");
+
+    let merged: serde_json::Value =
+        sqlx::query_scalar("SELECT metadata FROM sessions WHERE id = $1")
+            .bind(session_id)
+            .fetch_one(&pool)
+            .await
+            .expect("read merged");
+
+    // Prior keys survive AND the new key is present.
+    assert_eq!(merged["fingerprint"], serde_json::json!("abc123"));
+    assert_eq!(merged["kept"], serde_json::json!(true));
+    assert_eq!(merged["qualityReport"], patch["qualityReport"]);
+
+    // A second identical sync is idempotent — the object is unchanged.
+    sqlx::query(merge_sql)
+        .bind(session_id)
+        .bind(&patch)
+        .execute(&pool)
+        .await
+        .expect("merge 2");
+
+    let merged_again: serde_json::Value =
+        sqlx::query_scalar("SELECT metadata FROM sessions WHERE id = $1")
+            .bind(session_id)
+            .fetch_one(&pool)
+            .await
+            .expect("read merged again");
+    assert_eq!(merged_again, merged, "second identical merge must be a no-op");
+}
+
+#[tokio::test]
 async fn distinct_client_ids_each_create_a_row() {
     let Some(pool) = get_test_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");

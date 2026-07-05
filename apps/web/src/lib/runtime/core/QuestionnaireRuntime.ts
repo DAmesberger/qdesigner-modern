@@ -333,6 +333,16 @@ export class QuestionnaireRuntime {
     };
   }
 
+  /**
+   * The single VariableEngine the runtime computes into (populated by
+   * initializeVariables and updateQuestionVariables). Exposed so the fillout
+   * layer persists the values interpolation actually resolves against —
+   * eliminating a second, never-fed engine that returned {} at persist time.
+   */
+  public getVariableEngine(): VariableEngine {
+    return this.variableEngine;
+  }
+
   private initializeVariables(): void {
     for (const variable of this.config.questionnaire.variables || []) {
       this.variableEngine.registerVariable(variable);

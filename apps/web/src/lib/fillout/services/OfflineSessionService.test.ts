@@ -86,6 +86,56 @@ describe('OfflineSessionService.completeSession', () => {
 	});
 });
 
+describe('OfflineSessionService.mergeMetadata', () => {
+	it('merges a patch into existing metadata, preserving prior keys, and resets synced→0', async () => {
+		const session = await OfflineSessionService.createSession(
+			'q-m1',
+			1,
+			0,
+			0,
+			undefined,
+			{ prior: 'kept' },
+		);
+		await OfflineSessionService.markSynced(session.id);
+
+		await OfflineSessionService.mergeMetadata(session.id, {
+			qualityReport: { flatlines: 0 },
+		});
+
+		const stored = await db.filloutSessions.get(session.id);
+		expect(stored?.synced).toBe(0);
+		const meta = stored?.metadata as { prior?: string; qualityReport?: { flatlines: number } };
+		expect(meta.prior).toBe('kept');
+		expect(meta.qualityReport).toEqual({ flatlines: 0 });
+	});
+
+	it('drops undefined patch values so existing keys are not clobbered', async () => {
+		const session = await OfflineSessionService.createSession(
+			'q-m2',
+			1,
+			0,
+			0,
+			undefined,
+			{ custom: { keep: true } },
+		);
+
+		await OfflineSessionService.mergeMetadata(session.id, {
+			qualityReport: { flatlines: 1 },
+			custom: undefined,
+		});
+
+		const stored = await db.filloutSessions.get(session.id);
+		const meta = stored?.metadata as { custom?: { keep: boolean }; qualityReport?: unknown };
+		expect(meta.custom).toEqual({ keep: true });
+		expect(meta.qualityReport).toEqual({ flatlines: 1 });
+	});
+
+	it('is a no-op when the session row is absent', async () => {
+		await OfflineSessionService.mergeMetadata('does-not-exist', { qualityReport: {} });
+		expect(await db.filloutSessions.get('does-not-exist')).toBeUndefined();
+	});
+});
+
 describe('OfflineSessionService sync tracking', () => {
 	it('getUnsyncedSessions returns sessions with synced=0', async () => {
 		await OfflineSessionService.createSession('q-u1', 1, 0, 0);

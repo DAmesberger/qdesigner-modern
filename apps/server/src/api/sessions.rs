@@ -2908,6 +2908,27 @@ pub async fn sync_session(
     // Verify session exists and user is authorized
     ensure_session_participant_or_member(&mut **tx, user.as_ref(), session_id).await?;
 
+    // Merge the payload's session metadata into the (possibly pre-existing) row.
+    // The INSERT above only lands metadata for OFFLINE-created sessions; an
+    // ONLINE-created session already exists (`already == true`), so its INSERT is
+    // skipped and the final-snapshot metadata (e.g. `qualityReport`) would
+    // otherwise be dropped. `COALESCE(metadata,'{}'::jsonb) || $2` is an
+    // idempotent shallow merge that preserves prior keys, so running it on both
+    // the freshly-inserted and pre-existing paths is safe. Runs under the fillout
+    // GUC (`app.session_id` from the URL path), so the 00021 dual UPDATE policy
+    // admits anonymous sync.
+    if let Some(init) = &body.session {
+        if let Some(meta) = &init.metadata {
+            sqlx::query(
+                "UPDATE sessions SET metadata = COALESCE(metadata, '{}'::jsonb) || $2 WHERE id = $1",
+            )
+            .bind(session_id)
+            .bind(meta)
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+
     let mut responses_synced = 0i32;
     let mut events_synced = 0i32;
     let mut variables_synced = 0i32;

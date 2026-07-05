@@ -132,6 +132,10 @@ export class ResponsePersistenceService {
 		progressPercentage?: number;
 		status?: string;
 	}): Promise<void> {
+		// Redundant server round-trip on every answer: progress is a client-side/
+		// offline concern and FilloutSyncEngine materializes sessions at sync time.
+		// Only ping the server when online.
+		if (!navigator.onLine) return;
 		try {
 			await api.sessions.update(this.sessionId, {
 				...data,
@@ -163,17 +167,25 @@ export class ResponsePersistenceService {
 	}
 
 	/**
-	 * Save a session variable
+	 * Save a session variable.
+	 *
+	 * Offline-first (contract D2): the value is written to IndexedDB keyed by
+	 * `[sessionId+name]` (an upsert that re-arms synced:0), then a sync is
+	 * triggered when online. FilloutSyncEngine drains the unsynced variables to
+	 * the server — there is no direct online-upsert branch. `type` is accepted
+	 * for call-site compatibility but is not persisted (the Dexie row stores the
+	 * raw value).
 	 */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- scripting context accepts arbitrary values
-	async saveVariable(name: string, value: any, type: string = 'string'): Promise<void> {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars -- scripting context accepts arbitrary values; type kept for call-site compat
+	async saveVariable(name: string, value: any, _type: string = 'string'): Promise<void> {
 		try {
-			await api.sessions.upsertVariable(this.sessionId, {
-				name,
-				value,
-				valueType: type,
-				source: 'script'
-			});
+			await OfflineResponsePersistence.saveVariable(this.sessionId, name, value);
+
+			// Fire-and-forget flush; syncNow() is a no-op while offline and the
+			// server dedups on retry, so double-triggering is safe.
+			if (navigator.onLine) {
+				void this.syncEngine.syncNow();
+			}
 		} catch (error) {
 			console.error('Error saving variable:', error as Error);
 		}

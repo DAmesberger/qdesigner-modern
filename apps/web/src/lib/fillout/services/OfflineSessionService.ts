@@ -107,6 +107,28 @@ export class OfflineSessionService {
 	}
 
 	/**
+	 * Shallow-merge a metadata patch into an existing session row, preserving
+	 * prior keys, and re-arm synced:0 so FilloutSyncEngine.collectSessionsToSync
+	 * ships the merged metadata (its payload carries session.metadata). No-op when
+	 * the row is absent (online-created session with no local pin yet). Undefined
+	 * patch values are dropped so they don't clobber existing keys.
+	 */
+	static async mergeMetadata(sessionId: string, patch: Record<string, unknown>): Promise<void> {
+		const s = await db.filloutSessions.get(sessionId);
+		if (!s) return;
+
+		const cleaned: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(patch)) {
+			if (v !== undefined) cleaned[k] = v;
+		}
+
+		await db.filloutSessions.update(sessionId, {
+			metadata: { ...(s.metadata ?? {}), ...cleaned },
+			synced: 0,
+		});
+	}
+
+	/**
 	 * Mark session as completed.
 	 */
 	static async completeSession(sessionId: string): Promise<void> {

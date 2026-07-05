@@ -1,7 +1,8 @@
 import { ResponsePersistenceService } from '../services/ResponsePersistenceService';
 import { SessionManagementService } from '../services/SessionManagementService';
+import { OfflineResponsePersistence } from '../services/OfflineResponsePersistence';
+import { OfflineSessionService } from '../services/OfflineSessionService';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
-import { VariableEngine } from '@qdesigner/scripting-engine';
 import { RuntimeEventBus } from './RuntimeEventBus';
 import type { FormQuestionHost } from '$lib/runtime/core/FormQuestionHost';
 import type { Questionnaire, Question, Response, Page, QuestionnaireSession } from '$lib/shared';
@@ -28,7 +29,6 @@ export class FilloutRuntime {
 	private onSessionUpdate?: (progress: number) => void;
 
 	private runtime: QuestionnaireRuntime;
-	private variableEngine: VariableEngine;
 	private responses: Response[] = [];
 	private currentQuestion: Question | null = null;
 	private currentPage: Page | null = null;
@@ -49,9 +49,6 @@ export class FilloutRuntime {
 			enableOffline: config.enableOfflineSync !== false,
 			syncInterval: config.syncInterval || 5000
 		});
-
-		// Initialize variable engine
-		this.variableEngine = new VariableEngine();
 
 		// Create wrapped config with our response handlers
 		const wrappedConfig = {
@@ -86,6 +83,10 @@ export class FilloutRuntime {
 	 * Start the session in database
 	 */
 	private async startSession(): Promise<void> {
+		// Redundant server round-trip: FilloutSyncEngine materializes sessions
+		// idempotently at sync time, so nothing is lost offline. Only ping the
+		// server when online.
+		if (!navigator.onLine) return;
 		try {
 			await SessionManagementService.startSession(this.sessionId);
 		} catch (error) {
@@ -258,6 +259,21 @@ export class FilloutRuntime {
 	 */
 	private async handleComplete(session: QuestionnaireSession): Promise<void> {
 		try {
+			// Persist the final computed variable snapshot offline-first. Entries
+			// pushed by QuestionnaireRuntime.complete() are shaped
+			// { variableId, value, timestamp } — variableId IS the variable name.
+			for (const v of session.variables) {
+				await OfflineResponsePersistence.saveVariable(this.sessionId, v.variableId, v.value);
+			}
+
+			// Merge the quality report (and any custom metadata) into the local
+			// session row and re-arm synced:0 so FilloutSyncEngine ships it. Must
+			// run before config.onComplete (which may trigger a syncNow()).
+			await OfflineSessionService.mergeMetadata(session.id, {
+				qualityReport: session.metadata?.qualityReport,
+				custom: session.metadata?.custom,
+			});
+
 			// Persist completion
 			await this.persistenceService.completeSession();
 
@@ -322,7 +338,7 @@ export class FilloutRuntime {
 	}
 
 	getVariables(): Record<string, unknown> {
-		return this.variableEngine.getAllVariables();
+		return this.runtime.getVariableEngine().getAllVariables();
 	}
 
 	/**

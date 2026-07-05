@@ -357,3 +357,36 @@ describe('offline completion round-trip: reconciles exactly once on reconnect', 
 		expect(new Set(sentIds).size).toBe(1);
 	});
 });
+
+describe('offline variable persistence: keyed upsert + sync flag', () => {
+	it('saveVariable writes a [sessionId+name]-keyed row with synced:0 and upserts on repeat', async () => {
+		const sessionId = 'var-session-1';
+
+		await OfflineResponsePersistence.saveVariable(sessionId, 'mean_rt', 404.85);
+		await OfflineResponsePersistence.saveVariable(sessionId, 'accuracy', 1);
+
+		// Rows are keyed by the compound [sessionId+name] PK and start unsynced.
+		expect(await db.filloutVariables.where('sessionId').equals(sessionId).count()).toBe(2);
+		const meanRt = await db.filloutVariables.get([sessionId, 'mean_rt']);
+		expect(meanRt).toMatchObject({ sessionId, name: 'mean_rt', value: 404.85, synced: 0 });
+
+		// getUnsyncedVariables surfaces both.
+		const unsynced = await OfflineResponsePersistence.getUnsyncedVariables(sessionId);
+		expect(unsynced.map((v) => v.name).sort()).toEqual(['accuracy', 'mean_rt']);
+
+		// A second save of the SAME name upserts in place — no duplicate row.
+		await OfflineResponsePersistence.saveVariable(sessionId, 'mean_rt', 500);
+		expect(await db.filloutVariables.where('sessionId').equals(sessionId).count()).toBe(2);
+		expect((await db.filloutVariables.get([sessionId, 'mean_rt']))?.value).toBe(500);
+
+		// markVariablesSynced flips every row for the session to synced:1.
+		await OfflineResponsePersistence.markVariablesSynced(sessionId);
+		expect((await OfflineResponsePersistence.getUnsyncedVariables(sessionId)).length).toBe(0);
+		expect((await db.filloutVariables.get([sessionId, 'mean_rt']))?.synced).toBe(1);
+
+		// Re-saving an already-synced name re-arms synced:0 (needs re-sync).
+		await OfflineResponsePersistence.saveVariable(sessionId, 'mean_rt', 501);
+		expect((await db.filloutVariables.get([sessionId, 'mean_rt']))?.synced).toBe(0);
+		expect(await db.filloutVariables.where('sessionId').equals(sessionId).count()).toBe(2);
+	});
+});
