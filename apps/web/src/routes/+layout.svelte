@@ -21,11 +21,9 @@
     // fillout runtime awaits the very same promise before starting a resumed
     // session rather than racing this onMount (Slice 1.8).
     (async () => {
-      console.log('[Layout] Starting module registration...');
       try {
         const { ensureModulesRegistered } = await import('$lib/modules/register-all');
         await ensureModulesRegistered();
-        console.log('[Layout] Modules registered successfully');
       } catch (err) {
         console.error('[Layout] Failed to load modules:', err);
       }

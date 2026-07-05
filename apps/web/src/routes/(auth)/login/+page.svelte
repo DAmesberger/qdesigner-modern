@@ -183,8 +183,6 @@
       }
 
       if (signedInUser) {
-        console.log('Login successful, user:', signedInUser.email);
-
         if (redirectParam) {
           await goto(redirectParam);
           return;
@@ -192,10 +190,8 @@
 
         const orgs = await api.organizations.list();
         if (orgs.length === 0) {
-          console.log('No organizations, redirecting to onboarding');
           await goto('/onboarding/organization');
         } else {
-          console.log('Has organizations, redirecting to dashboard');
           await goto('/dashboard');
         }
       }

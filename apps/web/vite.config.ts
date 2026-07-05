@@ -62,6 +62,7 @@ export default defineConfig(({ mode }) => {
     ],
     envDir: workspaceRoot,
     clearScreen: false,
+    esbuild: mode === 'production' ? { drop: ['console', 'debugger'] } : {},
     build: {
       sourcemap: mode !== 'production',
       minify: mode === 'production' ? 'esbuild' : false,

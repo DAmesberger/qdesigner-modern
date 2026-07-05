@@ -166,7 +166,6 @@
               <button
                 onclick={() => {
                   const url = appPaths.project(project.id);
-                  console.log('Navigating to:', url, 'project.id:', project.id);
                   if (project.id) {
                     window.location.href = url;
                   } else {
