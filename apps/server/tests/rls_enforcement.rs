@@ -341,6 +341,62 @@ async fn session_insert_admitted_only_for_matching_app_session_id() {
 }
 
 #[tokio::test]
+async fn anon_session_insert_cannot_forge_user_id() {
+    // F011 — 00029 tightens `sessions_insert_dual` so the anonymous
+    // (session-GUC-bound) branch requires `sessions.user_id IS NULL`. An
+    // anonymous caller must never be able to materialize a session that
+    // claims a victim's user_id (which the authenticated dual-path SELECT
+    // branch would then admit as that user's own session).
+    let Some(pool) = get_test_pool().await else {
+        eprintln!("skipping: DATABASE_URL_MIGRATIONS not set / db unreachable");
+        return;
+    };
+    let f = build_fixture(&pool).await;
+    let qid: Uuid = sqlx::query_scalar(
+        "SELECT id FROM questionnaire_definitions WHERE project_id = $1 LIMIT 1",
+    )
+    .bind(f.project_a)
+    .fetch_one(&pool)
+    .await
+    .expect("fixture questionnaire id");
+
+    // Case 1: bound to session X, INSERT session id = X with a NON-NULL
+    // (forged victim) user_id → DENIED by the new WITH CHECK.
+    let own = Uuid::new_v4();
+    let mut tx = pool.begin().await.expect("begin");
+    pin_as_app_role(&mut tx, None, Some(own)).await;
+    let denied = sqlx::query(
+        "INSERT INTO sessions (id, questionnaire_id, user_id) VALUES ($1, $2, $3)",
+    )
+    .bind(own)
+    .bind(qid)
+    .bind(f.user_b)
+    .execute(&mut *tx)
+    .await;
+    tx.rollback().await.ok();
+    assert!(
+        denied.is_err(),
+        "anonymous INSERT with a forged non-null user_id must be DENIED. Got: {denied:?}"
+    );
+
+    // Case 2: bound to session X, INSERT session id = X with user_id NULL
+    // → still ADMITTED (the live anonymous-create path).
+    let own2 = Uuid::new_v4();
+    let mut tx2 = pool.begin().await.expect("begin");
+    pin_as_app_role(&mut tx2, None, Some(own2)).await;
+    let admitted = sqlx::query("INSERT INTO sessions (id, questionnaire_id) VALUES ($1, $2)")
+        .bind(own2)
+        .bind(qid)
+        .execute(&mut *tx2)
+        .await;
+    tx2.rollback().await.ok();
+    assert!(
+        admitted.is_ok(),
+        "anonymous INSERT with NULL user_id must still be admitted. Got: {admitted:?}"
+    );
+}
+
+#[tokio::test]
 async fn anon_fillout_can_select_its_own_responses() {
     let Some(pool) = get_test_pool().await else {
         eprintln!("skipping");
