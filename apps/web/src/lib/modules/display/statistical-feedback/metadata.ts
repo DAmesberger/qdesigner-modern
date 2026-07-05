@@ -62,7 +62,7 @@ export const metadata: ModuleMetadata = {
       showTooltips: true,
       colorScheme: 'default',
     },
-    autoAdvance: true,
+    autoAdvance: false,
     displayDuration: 3500,
   },
 };

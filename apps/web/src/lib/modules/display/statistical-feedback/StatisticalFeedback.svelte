@@ -278,7 +278,9 @@
             <div class="interp-badge inline-block rounded-full font-semibold w-fit" style="padding: 0.15rem 0.6rem; font-size: 0.72rem; background-color: {interp.range.color}; color: white;">
               {interp.range.label}
             </div>
-            <p class="text-muted-foreground m-0" style="font-size: 0.78rem">{interp.range.description}</p>
+            {#if interp.range.description}
+              <p class="text-muted-foreground m-0" style="font-size: 0.78rem">{interp.range.description}</p>
+            {/if}
           {:else}
             <div class="interp-badge inline-block rounded-full font-semibold w-fit bg-border text-muted-foreground" style="padding: 0.15rem 0.6rem; font-size: 0.72rem">No classification</div>
           {/if}
@@ -319,9 +321,9 @@
         onclick={handleDownloadReport}
       >
         {#if generatingReport}
-          Generating...
+          Preparing…
         {:else}
-          Download Report (PDF)
+          Print report (PDF)
         {/if}
       </button>
     </div>

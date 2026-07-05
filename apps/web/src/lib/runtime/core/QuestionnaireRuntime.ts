@@ -25,6 +25,7 @@ import type { FormQuestionHost } from './FormQuestionHost';
 import { buildModuleRuntimeConfig } from './moduleConfigAdapter';
 import { BlockRandomizer } from './BlockRandomizer';
 import { computeReactionTimeMs } from './reactionTiming';
+import { resolveFlowTargetPageIndex } from './flowTarget';
 import { ScriptExecutor } from './ScriptExecutor';
 import { ConditionAssigner, getBlockOrder } from '../experimental';
 import { QualityReport } from '../quality/QualityReport';
@@ -847,7 +848,18 @@ export class QuestionnaireRuntime {
       }
     } else {
       const duration = timing?.duration || item.displayDuration || 2500;
-      if (item.autoAdvance !== false) {
+      // Statistical-feedback panels require an explicit opt-in to auto-dismiss
+      // (F062): participants otherwise lose the chart, interpretation and report
+      // button mid-read. New panels have no top-level `autoAdvance`, so they wait
+      // for the overlay Continue button until a designer turns auto-dismiss on
+      // (StatisticalFeedbackDesigner writes item-level `autoAdvance: true`). Other
+      // display / analytics items keep the historical auto-advance-by-default
+      // semantics (`autoAdvance !== false`).
+      const shouldAutoAdvance =
+        item.type === 'statistical-feedback'
+          ? item.autoAdvance === true
+          : item.autoAdvance !== false;
+      if (shouldAutoAdvance) {
         this.scheduleAutoAdvance(duration, advance);
       }
     }
@@ -1151,31 +1163,43 @@ export class QuestionnaireRuntime {
         if (executed < allowed) {
           this.loopIterations.set(matchingRule.id, executed + 1);
           if (matchingRule.target) {
-            const targetIndex = this.config.questionnaire.pages.findIndex(
-              (page) => page.id === matchingRule.target
+            const targetIndex = resolveFlowTargetPageIndex(
+              this.config.questionnaire.pages,
+              matchingRule.target
             );
             if (targetIndex >= 0) {
               await this.navigateToPage(targetIndex);
               return;
             }
+            this.warnUnresolvedFlowTarget(matchingRule);
           }
         }
       }
 
       if (matchingRule.type === 'skip' || matchingRule.type === 'branch') {
         if (matchingRule.target) {
-          const targetIndex = this.config.questionnaire.pages.findIndex(
-            (page) => page.id === matchingRule.target
+          const targetIndex = resolveFlowTargetPageIndex(
+            this.config.questionnaire.pages,
+            matchingRule.target
           );
           if (targetIndex >= 0) {
             await this.navigateToPage(targetIndex);
             return;
           }
+          this.warnUnresolvedFlowTarget(matchingRule);
         }
       }
     }
 
     await this.navigateToPage(this.currentPageIndex + 1);
+  }
+
+  private warnUnresolvedFlowTarget(rule: FlowControl): void {
+    console.warn(
+      '[flow] rule %s target %s matches no page or question — falling through to next page',
+      rule.id,
+      rule.target
+    );
   }
 
   private findMatchingFlowRule(): FlowControl | null {

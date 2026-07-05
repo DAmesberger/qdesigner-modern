@@ -27,18 +27,6 @@
     ...restProps
   }: Props = $props();
 
-  // Debug what we're receiving
-  $effect(() => {
-    console.log('[BaseAnalytics] Props received:', {
-      analyticsId: analytics?.id,
-      mode,
-      hasDataSource: !!analytics?.dataSource,
-      selectedVariables: analytics?.dataSource?.variables,
-      variablesReceived: variables,
-      variableKeys: Object.keys(variables),
-    });
-  });
-
   let isVisible = $state(true);
   let computedData = $state<any[]>([]);
   let element = $state<HTMLDivElement | undefined>();
@@ -75,21 +63,14 @@
 
   async function computeData() {
     try {
-      console.log('[BaseAnalytics] computeData called');
-      console.log('[BaseAnalytics] dataSource.variables:', analytics.dataSource?.variables);
-      console.log('[BaseAnalytics] variables object:', variables);
-
       // Get data for each variable
       const variableData = analytics.dataSource.variables.map((varId: string) => {
         const value = variables[varId];
-        console.log(`[BaseAnalytics] Mapping variable ${varId}, value: ${value}`);
         return {
           id: varId,
           value: value !== undefined ? value : 0, // Default to 0 if undefined
         };
       });
-
-      console.log('[BaseAnalytics] variableData result:', variableData);
 
       // Apply aggregation if needed
       if (analytics.dataSource.aggregation && analytics.dataSource.aggregation !== 'none') {
@@ -98,8 +79,6 @@
       } else {
         computedData = variableData;
       }
-
-      console.log('[BaseAnalytics] Final computedData:', computedData);
 
       handleInteraction({
         type: 'view',

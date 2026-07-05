@@ -147,10 +147,6 @@
 
   // Prepare chart data
   async function prepareChartData(data: any[]) {
-    console.log('[BarChart] prepareChartData called with data:', data);
-    console.log('[BarChart] config:', config);
-    console.log('[BarChart] analytics.dataSource:', analytics.dataSource);
-    console.log('[BarChart] variables passed to component:', variables);
     const datasets: any[] = [];
     const labels: string[] = [];
 
@@ -160,8 +156,6 @@
       const refValue = config.referenceValue
         ? await evaluateExpression(config.referenceValue)
         : null;
-
-      console.log('[BarChart] Using expression values:', { value, refValue });
 
       if (value !== null) {
         if (isHorizontal) {
@@ -212,8 +206,6 @@
 
     // Process data from variables
     if (data && data.length > 0) {
-      console.log('[BarChart] Processing variable data, first item:', data[0]);
-
       // For horizontal bar chart with single variable
       if (isHorizontal && data.length === 1) {
         const item = data[0];
@@ -303,7 +295,6 @@
 
     // If no data at all, return placeholder
     if (datasets.length === 0) {
-      console.log('[BarChart] No data available, showing placeholder');
       labels.push('No Data');
       datasets.push({
         label: 'No Data',
@@ -314,7 +305,6 @@
       });
     }
 
-    console.log('[BarChart] Final chart data:', { labels, datasets });
     return { labels, datasets };
   }
 
@@ -348,15 +338,6 @@
 
   // Effect to handle chart lifecycle and data updates
   $effect(() => {
-    console.log('[BarChart] Effect triggered', {
-      hasCanvas: !!chartCanvas,
-      mode,
-      hasChart: !!chart,
-      dataSourceVariables: analytics.dataSource?.variables,
-      configValue: config.value,
-      variables,
-    });
-
     // Only proceed if canvas is available and in the right mode
     if (!chartCanvas || (mode !== 'runtime' && mode !== 'preview' && mode !== 'edit')) {
       return;
@@ -499,7 +480,6 @@
   // Action to handle chart data updates from snippet
   function chartDataAction(node: HTMLElement, data: any[]) {
     $effect(() => {
-      console.log('[BarChart Snippet] Received data from BaseAnalytics:', data);
       // Handle data updates
       if (chartCanvas && data !== lastChartData) {
         lastChartData = data;

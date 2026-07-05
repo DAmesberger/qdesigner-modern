@@ -98,6 +98,36 @@
     updateConfig({ sourceMode: mode });
   }
 
+  // --- Panel behavior (item-level: autoAdvance / displayDuration) ---
+  // autoAdvance === false (the default) means the panel waits for the
+  // fillout overlay's Continue button; autoAdvance === true auto-dismisses
+  // after displayDuration ms.
+  const autoDismiss = $derived(item?.autoAdvance === true);
+  const displayDuration = $derived(
+    typeof item?.displayDuration === 'number' ? item.displayDuration : 3500
+  );
+
+  function setAutoDismiss(enabled: boolean): void {
+    if (!item) return;
+    onUpdate?.({
+      ...item,
+      autoAdvance: enabled,
+      displayDuration: typeof item.displayDuration === 'number' ? item.displayDuration : 3500,
+      config,
+      dataSource: config.dataSource,
+    });
+  }
+
+  function setDisplayDuration(ms: number): void {
+    if (!item) return;
+    onUpdate?.({
+      ...item,
+      displayDuration: Number.isFinite(ms) && ms > 0 ? ms : 3500,
+      config,
+      dataSource: config.dataSource,
+    });
+  }
+
   function applyDefaults(): void {
     updateConfig(defaultStatisticalFeedbackConfig);
   }
@@ -480,41 +510,52 @@
         </div>
 
         {#each scale.ranges as range, rangeIdx}
-          <div class="range-row" data-testid={`range-${scaleIdx}-${rangeIdx}`}>
+          <div class="range-block" data-testid={`range-${scaleIdx}-${rangeIdx}`}>
+            <div class="range-row">
+              <input
+                class="input range-input"
+                type="number"
+                value={range.min}
+                title="Min"
+                oninput={(event) =>
+                  updateRangeInScale(scaleIdx, rangeIdx, { min: Number((event.currentTarget as HTMLInputElement).value) })}
+              />
+              <span class="range-sep">-</span>
+              <input
+                class="input range-input"
+                type="number"
+                value={range.max}
+                title="Max"
+                oninput={(event) =>
+                  updateRangeInScale(scaleIdx, rangeIdx, { max: Number((event.currentTarget as HTMLInputElement).value) })}
+              />
+              <input
+                class="input range-label-input"
+                type="text"
+                value={range.label}
+                placeholder="Label"
+                oninput={(event) =>
+                  updateRangeInScale(scaleIdx, rangeIdx, { label: (event.currentTarget as HTMLInputElement).value })}
+              />
+              <input
+                class="color-picker"
+                type="color"
+                value={range.color}
+                title="Color"
+                oninput={(event) =>
+                  updateRangeInScale(scaleIdx, rangeIdx, { color: (event.currentTarget as HTMLInputElement).value })}
+              />
+              <button type="button" class="link danger range-remove" onclick={() => removeRangeFromScale(scaleIdx, rangeIdx)}>x</button>
+            </div>
             <input
-              class="input range-input"
-              type="number"
-              value={range.min}
-              title="Min"
-              oninput={(event) =>
-                updateRangeInScale(scaleIdx, rangeIdx, { min: Number((event.currentTarget as HTMLInputElement).value) })}
-            />
-            <span class="range-sep">-</span>
-            <input
-              class="input range-input"
-              type="number"
-              value={range.max}
-              title="Max"
-              oninput={(event) =>
-                updateRangeInScale(scaleIdx, rangeIdx, { max: Number((event.currentTarget as HTMLInputElement).value) })}
-            />
-            <input
-              class="input range-label-input"
+              class="input range-description-input"
               type="text"
-              value={range.label}
-              placeholder="Label"
+              value={range.description}
+              placeholder="Description shown to participant (optional)"
+              title="Description"
               oninput={(event) =>
-                updateRangeInScale(scaleIdx, rangeIdx, { label: (event.currentTarget as HTMLInputElement).value })}
+                updateRangeInScale(scaleIdx, rangeIdx, { description: (event.currentTarget as HTMLInputElement).value })}
             />
-            <input
-              class="color-picker"
-              type="color"
-              value={range.color}
-              title="Color"
-              oninput={(event) =>
-                updateRangeInScale(scaleIdx, rangeIdx, { color: (event.currentTarget as HTMLInputElement).value })}
-            />
-            <button type="button" class="link danger range-remove" onclick={() => removeRangeFromScale(scaleIdx, rangeIdx)}>x</button>
           </div>
         {/each}
 
@@ -555,6 +596,48 @@
         />
       </div>
     {/if}
+
+    <!-- Panel Behavior -->
+    <div class="section-header">
+      <strong>Panel behavior</strong>
+    </div>
+
+    <div class="behavior" data-testid="stats-feedback-behavior">
+      <label class="toggle">
+        <input
+          type="checkbox"
+          data-testid="stats-require-continue"
+          checked={!autoDismiss}
+          onchange={(event) =>
+            setAutoDismiss(!(event.currentTarget as HTMLInputElement).checked)}
+        />
+        Require participant to press Continue
+      </label>
+
+      <div class="row">
+        <label for="stats-display-duration">Auto-dismiss after (ms)</label>
+        <input
+          id="stats-display-duration"
+          class="input"
+          data-testid="stats-display-duration"
+          type="number"
+          min="500"
+          step="500"
+          value={displayDuration}
+          disabled={!autoDismiss}
+          oninput={(event) =>
+            setDisplayDuration(Number((event.currentTarget as HTMLInputElement).value))}
+        />
+      </div>
+
+      {#if autoDismiss && config.enableReportDownload}
+        <div class="behavior-warning" data-testid="stats-behavior-warning">
+          Auto-dismiss is on together with the report button — the panel will
+          advance on a timer and participants may lose the report before they can
+          print it. Consider requiring Continue instead.
+        </div>
+      {/if}
+    </div>
 
     {#if validationErrors.length > 0}
       <div class="validation" data-testid="stats-feedback-validation">
@@ -708,10 +791,34 @@
     font-weight: 600;
   }
 
+  .range-block {
+    display: grid;
+    gap: 0.3rem;
+  }
+
   .range-row {
     display: flex;
     align-items: center;
     gap: 0.35rem;
+  }
+
+  .range-description-input {
+    font-size: 0.78rem;
+  }
+
+  .behavior {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .behavior-warning {
+    border-radius: 0.5rem;
+    border: 1px solid hsl(var(--warning, var(--destructive)) / 0.4);
+    background: hsl(var(--warning, var(--destructive)) / 0.12);
+    color: hsl(var(--foreground));
+    padding: 0.55rem 0.7rem;
+    font-size: 0.75rem;
+    line-height: 1.35;
   }
 
   .range-input {

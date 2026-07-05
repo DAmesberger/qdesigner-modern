@@ -1,18 +1,18 @@
 /**
- * PDF Report Generator
+ * Participant Feedback Report Generator
  *
- * Generates participant feedback reports as downloadable PDFs using a
- * browser-native approach: render styled HTML into an invisible iframe
- * and invoke the browser print-to-PDF flow via canvas rendering.
+ * Builds a self-contained, print-optimised HTML document for a participant's
+ * feedback report and hands it to the browser's native print flow. There is
+ * no PDF encoder here and no external PDF library: the participant gets a PDF
+ * by choosing "Save as PDF" (or a physical printer) in the print dialog.
  *
- * No external PDF libraries are required.  The strategy is:
- * 1. Build a self-contained HTML document with inline styles.
- * 2. Render it into an offscreen container.
- * 3. Use canvas 2D to paint each element and produce page images.
- * 4. Assemble the images into a multi-page PDF using a minimal
- *    PDF byte-stream builder (no dependencies).
+ * The strategy is:
+ * 1. Build a single HTML string with inline styles (`buildReportHTML`).
+ * 2. Write it into a hidden, offscreen iframe.
+ * 3. Call `iframe.contentWindow.print()` so the browser renders the print
+ *    dialog against that document, then remove the iframe.
  *
- * Falls back to window.print() when canvas rendering is unavailable.
+ * `generateReportHTML` exposes step 1 on its own for preview and testing.
  */
 
 import type {
@@ -183,7 +183,7 @@ function buildScoreSection(
         <span class="score-value">${scoreDisplay}</span>
         ${range ? `<span class="score-label" style="background-color: ${escapeAttr(range.color)}; color: #fff;">${escape(range.label)}</span>` : '<span class="score-label no-match">No classification</span>'}
       </div>
-      ${range ? `<p class="score-description">${escape(range.description)}</p>` : ''}
+      ${range && range.description ? `<p class="score-description">${escape(range.description)}</p>` : ''}
       ${rangeBar}
       ${normComparison}
     </div>
