@@ -36,6 +36,26 @@ pub enum ApiError {
     Jwt(#[from] jsonwebtoken::errors::Error),
 }
 
+impl ApiError {
+    /// Map a `sqlx::Error` to an `ApiError`, translating a Postgres
+    /// unique-violation (SQLSTATE 23505) into a `Conflict` (409) rather
+    /// than a generic `Database` (500). Used at INSERT call sites where a
+    /// TOCTOU race between a SELECT-EXISTS gate and the INSERT can surface
+    /// a duplicate-key error that is semantically a conflict, not a bug.
+    pub fn from_db_error(err: sqlx::Error) -> ApiError {
+        if err
+            .as_database_error()
+            .and_then(|e| e.code())
+            .as_deref()
+            == Some("23505")
+        {
+            ApiError::Conflict("Resource already exists".into())
+        } else {
+            ApiError::Database(err)
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {

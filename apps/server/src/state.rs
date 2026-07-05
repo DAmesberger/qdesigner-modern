@@ -22,5 +22,9 @@ pub struct AppState {
     pub yjs_store: YjsStore,
     pub redis: Option<Arc<redis::Client>>,
     pub rate_limiter: RateLimiter,
+    /// Per-email cap on verification-code sends (`authsend:{email}`).
+    pub verify_send_limiter: RateLimiter,
+    /// Per-email cap on verify-code attempts (`authverify:{email}`).
+    pub verify_attempt_limiter: RateLimiter,
     pub config: Arc<Config>,
 }

@@ -123,3 +123,138 @@ fn refresh_token_rejects_access_token() {
     let result = jwt.verify_refresh_token(&access);
     assert!(result.is_err(), "access token must not pass refresh verification");
 }
+
+// ── P2-T5: auth endpoint hardening ───────────────────────────────────
+
+use qdesigner_server::auth::models::{LoginRequest, PasswordResetConfirm, RegisterRequest};
+use qdesigner_server::error::ApiError;
+use validator::Validate;
+
+/// F007 — password length is bounded at 128 so a pathological input can't
+/// force an unbounded Argon2 hash. min stays at 8.
+#[test]
+fn password_validator_rejects_over_128_chars() {
+    let long = "a".repeat(129);
+    let reg = RegisterRequest {
+        email: "user@example.test".into(),
+        password: long.clone(),
+        full_name: None,
+    };
+    assert!(reg.validate().is_err(), "129-char register password must be rejected");
+
+    let login = LoginRequest {
+        email: "user@example.test".into(),
+        password: long.clone(),
+    };
+    assert!(login.validate().is_err(), "129-char login password must be rejected");
+
+    let confirm = PasswordResetConfirm {
+        token: "t".into(),
+        new_password: long,
+    };
+    assert!(confirm.validate().is_err(), "129-char reset password must be rejected");
+}
+
+/// F007 — the boundary values (8 and 128) are accepted.
+#[test]
+fn password_validator_accepts_boundary_lengths() {
+    let reg8 = RegisterRequest {
+        email: "user@example.test".into(),
+        password: "a".repeat(8),
+        full_name: None,
+    };
+    assert!(reg8.validate().is_ok(), "8-char password must pass");
+
+    let reg128 = RegisterRequest {
+        email: "user@example.test".into(),
+        password: "a".repeat(128),
+        full_name: None,
+    };
+    assert!(reg128.validate().is_ok(), "128-char password must pass");
+
+    let reg7 = RegisterRequest {
+        email: "user@example.test".into(),
+        password: "a".repeat(7),
+        full_name: None,
+    };
+    assert!(reg7.validate().is_err(), "7-char password must be rejected");
+}
+
+/// F082 — a non-database sqlx error maps to Database (500), not Conflict.
+#[test]
+fn from_db_error_non_unique_maps_to_database() {
+    let err = ApiError::from_db_error(sqlx::Error::RowNotFound);
+    assert!(
+        matches!(err, ApiError::Database(_)),
+        "non-23505 sqlx error must map to Database, got {err:?}"
+    );
+}
+
+/// F082 (integration) — a real Postgres unique-violation (23505) maps to
+/// Conflict, so the register SELECT-EXISTS→INSERT TOCTOU race returns 409.
+/// Requires the docker test stack; skips cleanly when no DB is reachable.
+#[tokio::test]
+async fn from_db_error_unique_violation_maps_to_conflict() {
+    let Some(pool) = auth_test_pool().await else {
+        eprintln!("skipping: no DATABASE_URL reachable");
+        return;
+    };
+
+    let email = format!("t5-dup-{}@example.test", Uuid::new_v4());
+    let id1 = Uuid::new_v4();
+    let id2 = Uuid::new_v4();
+
+    // First insert succeeds.
+    sqlx::query("INSERT INTO users (id, email, full_name, email_verified) VALUES ($1, $2, $3, false)")
+        .bind(id1)
+        .bind(&email)
+        .bind("dup one")
+        .execute(&pool)
+        .await
+        .expect("first insert should succeed");
+
+    // Second insert on the same email violates the unique index → 23505.
+    let dup = sqlx::query("INSERT INTO users (id, email, full_name, email_verified) VALUES ($1, $2, $3, false)")
+        .bind(id2)
+        .bind(&email)
+        .bind("dup two")
+        .execute(&pool)
+        .await
+        .expect_err("duplicate email must error");
+
+    let mapped = ApiError::from_db_error(dup);
+    assert!(
+        matches!(mapped, ApiError::Conflict(_)),
+        "23505 must map to Conflict, got {mapped:?}"
+    );
+
+    // Cleanup.
+    let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(id1)
+        .execute(&pool)
+        .await;
+}
+
+async fn auth_test_pool() -> Option<sqlx::PgPool> {
+    let env_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join(".env.development"));
+    if let Some(path) = env_path.as_ref() {
+        if path.exists() {
+            if let Ok(contents) = std::fs::read_to_string(path) {
+                for line in contents.lines() {
+                    if let Some(val) = line.strip_prefix("DATABASE_URL_MIGRATIONS=") {
+                        std::env::set_var("DATABASE_URL_MIGRATIONS", val.trim());
+                    } else if let Some(val) = line.strip_prefix("DATABASE_URL=") {
+                        std::env::set_var("DATABASE_URL", val.trim());
+                    }
+                }
+            }
+        }
+    }
+    let url = std::env::var("DATABASE_URL_MIGRATIONS")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .ok()?;
+    sqlx::PgPool::connect(&url).await.ok()
+}

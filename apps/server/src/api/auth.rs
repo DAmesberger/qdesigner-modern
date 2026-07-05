@@ -60,7 +60,11 @@ pub async fn register(
     .bind(&full_name)
     .bind(&hash)
     .execute(&state.pool)
-    .await?;
+    .await
+    // The SELECT-EXISTS gate above races concurrent registrations for the
+    // same email; the unique index is the real arbiter. Map its 23505 to a
+    // 409 Conflict rather than leaking a 500 on a benign duplicate race.
+    .map_err(ApiError::from_db_error)?;
 
     // Issue tokens
     let roles = vec!["user".to_string()];
@@ -122,13 +126,27 @@ pub async fn login(
     )
     .bind(&body.email)
     .fetch_optional(&state.pool)
-    .await?
-    .ok_or_else(|| ApiError::Unauthorized("Invalid email or password".into()))?;
+    .await?;
 
-    let hash = user
-        .password_hash
-        .as_deref()
-        .ok_or_else(|| ApiError::Unauthorized("Invalid email or password".into()))?;
+    // Run Argon2 on every path — including the misses — so response time does
+    // not reveal whether the email exists or has a password set (timing
+    // oracle). On a miss we verify the supplied password against a fixed decoy
+    // hash and discard the result before returning Unauthorized.
+    let user = match user {
+        Some(u) => u,
+        None => {
+            let _ = password::verify_password(&body.password, password::DUMMY_HASH);
+            return Err(ApiError::Unauthorized("Invalid email or password".into()));
+        }
+    };
+
+    let hash = match user.password_hash.as_deref() {
+        Some(h) => h,
+        None => {
+            let _ = password::verify_password(&body.password, password::DUMMY_HASH);
+            return Err(ApiError::Unauthorized("Invalid email or password".into()));
+        }
+    };
 
     if !password::verify_password(&body.password, hash)? {
         return Err(ApiError::Unauthorized("Invalid email or password".into()));
@@ -391,8 +409,33 @@ pub async fn send_verification_code(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     use rand::Rng;
 
+    // Enumeration + mail-bomb guard: only proceed if a user row exists for this
+    // email. Return the same success envelope regardless so a caller can't
+    // distinguish a real address from an unknown one by the response.
+    let user_exists =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
+            .bind(&body.email)
+            .fetch_one(&state.pool)
+            .await?;
+
+    if !user_exists {
+        return Ok(Json(serde_json::json!({
+            "success": true,
+            "message": "Verification code sent"
+        })));
+    }
+
+    // Per-email send cap (~3 / 15 min). Enforced in-memory when Redis is down.
+    if !state
+        .verify_send_limiter
+        .check(&format!("authsend:{}", body.email))
+        .await
+    {
+        return Err(ApiError::RateLimited);
+    }
+
     let code: String = format!("{:06}", rand::thread_rng().gen_range(100_000..1_000_000u32));
-    let expires_at = Utc::now() + chrono::Duration::minutes(10);
+    let expires_at = Utc::now() + chrono::Duration::minutes(5);
 
     // Store the code (upsert on email)
     sqlx::query(
@@ -415,7 +458,7 @@ pub async fn send_verification_code(
         "Hello,\n\n\
          Your QDesigner verification code is:\n\n\
          {}\n\n\
-         This code expires in 10 minutes.\n\n\
+         This code expires in 5 minutes.\n\n\
          If you didn't request this, you can safely ignore this email.\n\n\
          - QDesigner Team",
         code
@@ -493,6 +536,22 @@ pub async fn verify_code(
     State(state): State<AppState>,
     Json(body): Json<VerifyCodeRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    // Per-email verify-attempt limiter (~5 / 15 min). Consume one slot on every
+    // attempt (before checking the code) so brute force is bounded. On lockout
+    // invalidate any stored code so a subsequent lucky guess can't land, then
+    // signal 429 so the caller must wait out the window.
+    if !state
+        .verify_attempt_limiter
+        .check(&format!("authverify:{}", body.email))
+        .await
+    {
+        sqlx::query("UPDATE email_verification_codes SET used_at = NOW() WHERE email = $1")
+            .bind(&body.email)
+            .execute(&state.pool)
+            .await?;
+        return Err(ApiError::RateLimited);
+    }
+
     let valid = sqlx::query_scalar::<_, bool>(
         r#"
         SELECT EXISTS(

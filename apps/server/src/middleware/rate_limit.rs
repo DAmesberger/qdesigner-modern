@@ -77,24 +77,37 @@ impl RateLimiter {
     }
 }
 
+/// Derive the rate-limit bucket key for a request: the authenticated user id
+/// when present, else the socket peer IP.
+///
+/// The fallback keys off the socket peer IP (`ConnectInfo`), **not** a
+/// client-controlled `X-Forwarded-For` header. XFF is trivially spoofable, so
+/// keying on it lets an attacker rotate the header to dodge the limiter (or
+/// lump every real client into one bucket). `ConnectInfo` is populated by
+/// `into_make_service_with_connect_info::<SocketAddr>()` at serve time; without
+/// it the key falls to "unknown" (one shared bucket) — a wiring bug, not a
+/// spoofing surface.
+fn rate_limit_key(request: &Request) -> String {
+    if let Some(user) = request
+        .extensions()
+        .get::<crate::auth::models::AuthenticatedUser>()
+    {
+        return user.user_id.to_string();
+    }
+    request
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|ci| ci.0.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
 /// Middleware that rate-limits based on the authenticated user ID or remote IP.
 pub async fn rate_limit_middleware(
     State(state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    let key = request
-        .extensions()
-        .get::<crate::auth::models::AuthenticatedUser>()
-        .map(|u| u.user_id.to_string())
-        .unwrap_or_else(|| {
-            request
-                .headers()
-                .get("x-forwarded-for")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("unknown")
-                .to_string()
-        });
+    let key = rate_limit_key(&request);
 
     if !state.rate_limiter.check(&key).await {
         return Err(ApiError::RateLimited);
@@ -125,5 +138,33 @@ mod tests {
         assert!(!limiter.check("alice").await);
         // Different key has its own bucket
         assert!(limiter.check("bob").await);
+    }
+
+    #[test]
+    fn key_uses_peer_ip_not_forwarded_for() {
+        use axum::extract::ConnectInfo;
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        // A spoofed X-Forwarded-For must NOT influence the bucket; the socket
+        // peer IP governs. Distinct peer IPs must yield distinct keys.
+        let peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7)), 54321);
+        let mut req = Request::new(axum::body::Body::empty());
+        req.headers_mut()
+            .insert("x-forwarded-for", "1.2.3.4".parse().unwrap());
+        req.extensions_mut().insert(ConnectInfo(peer));
+
+        assert_eq!(rate_limit_key(&req), "203.0.113.7");
+
+        let peer2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(198, 51, 100, 9)), 1);
+        let mut req2 = Request::new(axum::body::Body::empty());
+        req2.extensions_mut().insert(ConnectInfo(peer2));
+        assert_eq!(rate_limit_key(&req2), "198.51.100.9");
+        assert_ne!(rate_limit_key(&req), rate_limit_key(&req2));
+    }
+
+    #[test]
+    fn key_falls_back_to_unknown_without_connect_info() {
+        let req = Request::new(axum::body::Body::empty());
+        assert_eq!(rate_limit_key(&req), "unknown");
     }
 }

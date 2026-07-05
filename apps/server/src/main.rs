@@ -128,6 +128,11 @@ async fn main() {
     // ── Rate Limiter ─────────────────────────────────────────────────
     // 10 req / 60s, Redis-backed when available (per-process in-memory fallback).
     let rate_limiter = RateLimiter::new(10, 60, redis.clone());
+    // Per-email verification-code send cap (~3 / 15 min) and verify-attempt
+    // limiter (~5 / 15 min). Both reuse the same Redis+in-memory RateLimiter so
+    // the in-memory fallback still enforces per-process when Redis is down.
+    let verify_send_limiter = RateLimiter::new(3, 900, redis.clone());
+    let verify_attempt_limiter = RateLimiter::new(5, 900, redis.clone());
 
     // ── WebSocket ────────────────────────────────────────────────────
     let mut websocket_state = WebSocketState::new();
@@ -184,6 +189,8 @@ async fn main() {
         yjs_store,
         redis,
         rate_limiter,
+        verify_send_limiter,
+        verify_attempt_limiter,
         config: Arc::new(config.clone()),
     };
 
@@ -203,5 +210,10 @@ async fn main() {
         .expect("Failed to bind");
 
     tracing::info!("Listening on {addr}");
-    axum::serve(listener, app).await.expect("Server error");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .expect("Server error");
 }
