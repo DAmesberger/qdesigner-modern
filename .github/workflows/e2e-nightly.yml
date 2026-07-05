@@ -9,6 +9,29 @@ jobs:
   regression:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      # Backend stack DSNs + app/server ports for the appended fullstack +
+      # visual lanes (they need the live Rust server + compose stack). main.rs
+      # runs sqlx::migrate! via DATABASE_URL_MIGRATIONS at startup, creating the
+      # non-superuser qdesigner_app role the app pool (DATABASE_URL) connects as.
+      DATABASE_URL: postgresql://qdesigner_app:qdesigner_app@localhost:15435/qdesigner_test
+      DATABASE_URL_MIGRATIONS: postgresql://qdesigner:qdesigner@localhost:15435/qdesigner_test
+      REDIS_URL: redis://localhost:16382
+      MINIO_ENDPOINT: http://localhost:19005
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: qdesigner-media
+      SMTP_HOST: localhost
+      SMTP_PORT: 11027
+      JWT_SECRET: test-secret-jwt-token-with-at-least-32-characters-long
+      JWT_REFRESH_SECRET: test-refresh-secret-token-for-refresh-tokens
+      SERVER_PORT: 4100
+      APP_HOST: localhost
+      APP_PORT: 4173
+      CORS_ORIGINS: http://localhost:4173
+      # release build expands sqlx macros from the committed apps/server/.sqlx
+      # cache; the compose DB has no schema until the server migrates on boot.
+      SQLX_OFFLINE: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -40,5 +63,76 @@ jobs:
         if: always()
         with:
           name: playwright-report-nightly
-          path: playwright-report/
+          path: apps/web/playwright-report/
+          retention-days: 30
+
+      # ── Fullstack + visual lanes (live backend) ───────────────────────────
+      # These run even when the regression run above fails: that lane has
+      # pre-existing gaps (the :121/:165 provisionWorkspace tests need a backend
+      # it doesn't start), and default step gating would silently skip the whole
+      # mirror — the exact "orphaned lane never runs" failure this wiring fixes.
+      - name: Start test infrastructure
+        if: ${{ !cancelled() }}
+        # postgres :15435, redis :16382, minio :19005 (+ minio-init bucket),
+        # mailpit :11027 — all defined in docker-compose.test.yml.
+        run: docker compose -f docker-compose.test.yml up -d --wait
+
+      - name: Install Rust toolchain
+        if: ${{ !cancelled() }}
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        if: ${{ !cancelled() }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            apps/server/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/server/Cargo.lock') }}
+
+      - name: Build server (release)
+        if: ${{ !cancelled() }}
+        run: cargo build --manifest-path apps/server/Cargo.toml --release
+
+      - name: Start server
+        if: ${{ !cancelled() }}
+        run: |
+          nohup ./apps/server/target/release/qdesigner-server > server.log 2>&1 &
+          echo "server started (pid $!)"
+
+      - name: Wait for server health
+        if: ${{ !cancelled() }}
+        run: >-
+          curl --retry 30 --retry-delay 2 --retry-connrefused --fail
+          http://localhost:4100/health
+
+      - name: Run fullstack E2E tests
+        if: ${{ !cancelled() }}
+        run: pnpm test:e2e:fullstack
+
+      - name: Run visual regression tests
+        if: ${{ !cancelled() }}
+        run: pnpm test:e2e:visual
+
+      - name: Dump server log on failure
+        if: failure()
+        run: cat server.log || true
+
+      - name: Upload fullstack + visual report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-nightly-fullstack
+          path: apps/web/playwright-report/
+          retention-days: 30
+
+      - name: Upload test results (visual diffs)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-test-results-nightly
+          path: apps/web/test-results/
           retention-days: 30

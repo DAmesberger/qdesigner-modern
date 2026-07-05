@@ -51,6 +51,10 @@ export default defineConfig({
     alias: {
       $lib: path.resolve('./src/lib'),
       $app: path.resolve('./src/app'),
+      // Monaco's package entry does not resolve under vitest's vite transform and
+      // the editor is never mounted in jsdom component tests; stub it so designer
+      // component graphs (ScriptEditor / ScriptEditorOverlay) stay resolvable.
+      'monaco-editor': path.resolve('./tests/setup/monaco-editor-stub.ts'),
       '@qdesigner/contracts/generated': path.resolve('../../packages/contracts/src/generated'),
       '@qdesigner/contracts': path.resolve('../../packages/contracts/src/index.ts'),
       '@qdesigner/questionnaire-core/questionnaire': path.resolve('../../packages/questionnaire-core/src/questionnaire.ts'),

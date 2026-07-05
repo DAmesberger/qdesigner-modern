@@ -35,15 +35,14 @@ test.describe('@regression platform-gaps', () => {
   test('language switcher changes UI language on login page', async ({ page }) => {
     await page.goto('/login');
 
-    // The LanguageSwitcher uses aria-label="Select language" on its button
+    // The LanguageSwitcher uses aria-label="Select language" on its button.
+    // Hard-assert it is present: a silent test.skip() here let the whole
+    // language-switcher lane under-report as "passed" when the widget failed to
+    // render. This test targets the login page (no backend/provisionWorkspace),
+    // so the switcher must always be there.
     // eslint-disable-next-line no-restricted-syntax -- selecting by aria-label, no testid on third-party widget
     const langButton = page.locator('button[aria-label="Select language"]');
-    const buttonVisible = await langButton.isVisible({ timeout: 3000 }).catch(() => false);
-    if (!buttonVisible) {
-      // Language switcher may not be rendered on the login page; skip gracefully
-      test.skip();
-      return;
-    }
+    await expect(langButton).toBeVisible({ timeout: 10000 });
 
     // Record the current submit button text before switching
     // eslint-disable-next-line no-restricted-syntax -- selecting by type attribute, no testid on generic submit button

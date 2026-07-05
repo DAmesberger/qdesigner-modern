@@ -180,9 +180,12 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run E2E smoke tests
+        # No VITE_APP_URL override: dev-urls.ts then derives the frontend URL as
+        # http://localhost:4173 (APP_PORT default), which is exactly the port the
+        # playwright webServer (`pnpm dev` = vite) binds. A stale
+        # VITE_APP_URL=http://localhost:5173 pointed baseURL at a port nothing
+        # listens on.
         run: pnpm test:e2e:smoke
-        env:
-          VITE_APP_URL: http://localhost:5173
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -190,4 +193,115 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report/
+          retention-days: 30
+
+  # E2E fullstack + visual tests (PR gate) — real browser against a live backend.
+  # Both the @fullstack specs and the @visual spec call provisionWorkspace(), so
+  # they need the Rust server + postgres/redis/minio/mailpit. This job also
+  # enforces the committed *-linux.png visual baselines on every PR (CI is
+  # ubuntu-latest, so the -linux snapshot suffix matches).
+  e2e-fullstack:
+    runs-on: ubuntu-latest
+    needs: [frontend]
+    timeout-minutes: 45
+    env:
+      # Override the workflow-level DSNs (which target the backend job's :5432
+      # GH service) with the docker-compose.test.yml stack ports. main.rs runs
+      # sqlx::migrate! via DATABASE_URL_MIGRATIONS at startup, which creates the
+      # non-superuser qdesigner_app role the app pool (DATABASE_URL) connects as.
+      DATABASE_URL: postgresql://qdesigner_app:qdesigner_app@localhost:15435/qdesigner_test
+      DATABASE_URL_MIGRATIONS: postgresql://qdesigner:qdesigner@localhost:15435/qdesigner_test
+      REDIS_URL: redis://localhost:16382
+      MINIO_ENDPOINT: http://localhost:19005
+      SMTP_HOST: localhost
+      SMTP_PORT: 11027
+      SERVER_PORT: 4100
+      APP_HOST: localhost
+      APP_PORT: 4173
+      CORS_ORIGINS: http://localhost:4173
+      # cargo build --release expands the sqlx query macros from the committed
+      # apps/server/.sqlx cache; the compose DB has no schema until the server
+      # runs migrations at startup, so it must not be consulted at build time.
+      SQLX_OFFLINE: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start test infrastructure
+        # postgres :15435, redis :16382, minio :19005 (+ minio-init bucket),
+        # mailpit :11027 — all defined in docker-compose.test.yml.
+        run: docker compose -f docker-compose.test.yml up -d --wait
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            apps/server/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/server/Cargo.lock') }}
+
+      - name: Build server (release)
+        run: cargo build --manifest-path apps/server/Cargo.toml --release
+
+      - name: Start server
+        # Detached; migrations + qdesigner_app creation happen on boot. Env is
+        # inherited from the job-level env block above.
+        run: |
+          nohup ./apps/server/target/release/qdesigner-server > server.log 2>&1 &
+          echo "server started (pid $!)"
+
+      - name: Wait for server health
+        run: >-
+          curl --retry 30 --retry-delay 2 --retry-connrefused --fail
+          http://localhost:4100/health
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run fullstack E2E tests
+        # playwright webServer boots `pnpm dev` (vite on APP_PORT=4173), whose
+        # /api proxy targets SERVER_PORT=4100.
+        run: pnpm test:e2e:fullstack
+
+      - name: Run visual regression tests
+        run: pnpm test:e2e:visual
+
+      - name: Dump server log on failure
+        if: failure()
+        run: cat server.log || true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-fullstack
+          path: apps/web/playwright-report/
+          retention-days: 30
+
+      - name: Upload test results (visual diffs)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-test-results-fullstack
+          path: apps/web/test-results/
           retention-days: 30
