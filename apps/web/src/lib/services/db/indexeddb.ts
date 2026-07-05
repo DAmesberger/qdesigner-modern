@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { Questionnaire } from '$lib/shared';
+import type { ResumeState } from '$lib/runtime/core/ResumeState';
 
 export interface SyncQueueItem {
   id?: string;
@@ -116,6 +117,12 @@ export interface FilloutSession {
   lastItemIndex?: number;
   lastPageId?: string;
   answeredQuestionIds?: string[];
+  // ── True save-and-continue snapshot (E-FLOW-3) ───────────────────
+  // The full runtime ResumeState (cursor + loop counters + variable context +
+  // presented-item set) captured on each answer boundary. A plain stored column
+  // (not an index), so it round-trips without a Dexie schema bump. Mirrored to
+  // `sessions.state_snapshot` on the server for cross-device resume.
+  resumeState?: ResumeState;
   updatedAt?: number;
   synced: 0 | 1;
 }

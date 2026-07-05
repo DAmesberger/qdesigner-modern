@@ -3,6 +3,7 @@ import { SessionManagementService } from '../services/SessionManagementService';
 import { OfflineResponsePersistence } from '../services/OfflineResponsePersistence';
 import { OfflineSessionService } from '../services/OfflineSessionService';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
+import type { ResumeState } from '$lib/runtime/core/ResumeState';
 import { RuntimeEventBus } from './RuntimeEventBus';
 import type { ResumeSnapshot } from './responseMapping';
 import type { FormQuestionHost } from '$lib/runtime/core/FormQuestionHost';
@@ -24,6 +25,13 @@ export interface FilloutRuntimeConfig {
 	resumeSnapshot?: ResumeSnapshot;
 	/** True when {@link resumeSnapshot} was fetched from the server (cross-device resume). */
 	resumeFromDevice?: boolean;
+	/**
+	 * A true save-and-continue snapshot (E-FLOW-3) loaded from the local session row (or
+	 * server `state_snapshot`) before construction. When present and version-compatible,
+	 * the runtime restores the exact cursor / loop counters / variable context from it —
+	 * complementary to {@link resumeSnapshot}, which seeds the response pipeline.
+	 */
+	resumeFrom?: ResumeState;
 	onComplete?: (session: QuestionnaireSession) => void;
 	onProgress?: (pageIndex: number, totalPages: number) => void;
 	onSessionUpdate?: (progress: number) => void;
@@ -71,6 +79,15 @@ export class FilloutRuntime {
 					config.onProgress(pageIndex, totalPages);
 				}
 				this.updatePageProgress(pageIndex, totalPages);
+			},
+			// True save-and-continue (E-FLOW-3): persist the full ResumeState offline-first
+			// on every answer boundary so a reload / cross-device resume can restore the
+			// exact cursor, loop counters, and variable context. Fire-and-forget: a failed
+			// write must not interrupt the run (the E-OFF-1 answer cursor still covers resume).
+			onResumeStateCaptured: (state: ResumeState) => {
+				void OfflineSessionService.updateResumeState(this.sessionId, state).catch((error) => {
+					console.error('Failed to persist resume state:', error as Error);
+				});
 			}
 		};
 

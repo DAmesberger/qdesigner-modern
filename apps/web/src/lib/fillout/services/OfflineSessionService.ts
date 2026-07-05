@@ -1,5 +1,6 @@
 import { db, type FilloutSession } from '$lib/services/db/indexeddb';
 import { browser } from '$app/environment';
+import type { ResumeState } from '$lib/runtime/core/ResumeState';
 
 /**
  * Manages fillout sessions offline-first using IndexedDB.
@@ -126,6 +127,32 @@ export class OfflineSessionService {
 		}
 
 		await db.filloutSessions.update(sessionId, patch);
+	}
+
+	/**
+	 * Persist the full true save-and-continue snapshot (E-FLOW-3) on the local session
+	 * row and re-arm synced:0 so FilloutUploadSync mirrors it to `sessions.state_snapshot`.
+	 * No-op when the row is absent (online-created session with no local pin yet) — the
+	 * offline-first response/cursor write path (updateProgress) still covers resume then.
+	 */
+	static async updateResumeState(sessionId: string, resumeState: ResumeState): Promise<void> {
+		const session = await db.filloutSessions.get(sessionId);
+		if (!session) return;
+
+		await db.filloutSessions.update(sessionId, {
+			resumeState,
+			updatedAt: Date.now(),
+			synced: 0,
+		});
+	}
+
+	/**
+	 * Read the persisted {@link ResumeState} for a session, if any. Undefined when the
+	 * row is missing or predates E-FLOW-3 (only the E-OFF-1 answer cursor was stored).
+	 */
+	static async getResumeState(sessionId: string): Promise<ResumeState | undefined> {
+		const session = await db.filloutSessions.get(sessionId);
+		return session?.resumeState;
 	}
 
 	/**

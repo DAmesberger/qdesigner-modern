@@ -32,6 +32,7 @@ import { QualityReport } from '../quality/QualityReport';
 import type { AttentionCheckConfig } from '../quality/AttentionCheck';
 import { resolveCarryForward, applyCarryForward } from './CarryForward';
 import type { CarryForwardConfig } from '$lib/shared';
+import { type ResumeState, RESUME_STATE_VERSION, isResumeStateCompatible } from './ResumeState';
 import { nanoid } from 'nanoid';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime state handles heterogeneous question data
@@ -59,9 +60,22 @@ export interface RuntimeConfig {
    * Reaction-time paradigms always stay on the WebGL path.
    */
   formHost?: FormQuestionHost;
+  /**
+   * A true save-and-continue snapshot to restore from (E-FLOW-3). When present and
+   * compatible with this definition's version, start() reconstructs the exact cursor,
+   * loop counters, and variable state instead of beginning at page 0. Incompatible
+   * (drift / stale-schema) states are discarded and logged to session metadata.
+   */
+  resumeFrom?: ResumeState;
   onComplete?: (session: QuestionnaireSession) => void;
   onProgress?: (pageIndex: number, totalPages: number) => void;
   onQuestionPresented?: (event: QuestionPresentedEvent) => void;
+  /**
+   * Fired after every committed response with a fresh {@link ResumeState} capture, so
+   * the fillout layer can persist the save-and-continue cursor offline-first on each
+   * answer boundary (E-FLOW-3, reusing P1-T1's write path).
+   */
+  onResumeStateCaptured?: (state: ResumeState) => void;
 }
 
 export interface QuestionPresentedEvent {
@@ -116,6 +130,17 @@ export class QuestionnaireRuntime {
   // duplicate an item.
   private resumeAnsweredIds: Set<string> | null = null;
 
+  // True save-and-continue (E-FLOW-3): a compatible ResumeState parked in the
+  // constructor and consumed once by start(), which restores the cursor / loop map /
+  // variable context from it instead of navigating from page 0. Null when there is
+  // nothing to resume or the state was discarded for version drift.
+  private pendingResume: ResumeState | null = null;
+  // The item index start() must seed on the resume landing page. navigateToPage resets
+  // currentItemIndex to 0 on every page entry; this re-applies the captured cursor to
+  // the FIRST landing page only (consumed on apply), so a mid-page resume does not
+  // re-present items shown before the participant left.
+  private pendingResumeItemIndex: number | null = null;
+
   constructor(config: RuntimeConfig) {
     this.config = config;
 
@@ -162,6 +187,47 @@ export class QuestionnaireRuntime {
 
     this.initializeVariables();
     this.initializeExperimentalDesign();
+
+    this.acceptResumeState(config.resumeFrom);
+  }
+
+  /**
+   * Validate an optional save-and-continue snapshot (E-FLOW-3, step 5). A state that
+   * matches this definition's version + envelope schema is parked for start() to
+   * restore. A drifted / stale-schema state is DISCARDED — restoring a cursor against a
+   * definition whose question ids or page order moved would land on the wrong item — and
+   * the discard is recorded in session metadata so the reason is auditable rather than
+   * silent.
+   */
+  private acceptResumeState(resumeFrom: ResumeState | undefined): void {
+    if (!resumeFrom) return;
+
+    // Explicit boolean so the type-predicate does not narrow `resumeFrom` to `never`
+    // in the else branch (we still read its captured version/schema there for the log).
+    const compatible: boolean = isResumeStateCompatible(
+      resumeFrom,
+      this.config.questionnaire.version
+    );
+    if (compatible) {
+      this.pendingResume = resumeFrom;
+      return;
+    }
+
+    if (this.session.metadata) {
+      this.session.metadata.custom = {
+        ...this.session.metadata.custom,
+        resumeDiscarded: {
+          reason:
+            resumeFrom.schemaVersion !== RESUME_STATE_VERSION
+              ? 'schema_version_mismatch'
+              : 'questionnaire_version_drift',
+          capturedVersion: resumeFrom.questionnaireVersion,
+          capturedSchema: resumeFrom.schemaVersion,
+          currentVersion: this.config.questionnaire.version,
+          currentSchema: RESUME_STATE_VERSION,
+        },
+      };
+    }
   }
 
   /**
@@ -245,6 +311,40 @@ export class QuestionnaireRuntime {
       pageId: this.currentPage?.id,
       answeredQuestionIds: this.session.responses.map((r) => r.questionId),
     };
+  }
+
+  /**
+   * Capture a true save-and-continue snapshot of the live runtime (E-FLOW-3): the
+   * current cursor, loop-iteration counters, the whole VariableEngine context (lossless
+   * by id), and the set of already-presented item ids. Serializable — persisted to the
+   * offline session row and, when online, mirrored to `sessions.state_snapshot`.
+   */
+  public captureResumeState(): ResumeState {
+    return {
+      schemaVersion: RESUME_STATE_VERSION,
+      questionnaireVersion: this.config.questionnaire.version,
+      currentPageIndex: this.currentPageIndex,
+      currentItemIndex: this.currentItemIndex,
+      loopIterationState: Object.fromEntries(this.loopIterations),
+      variableSnapshot: this.variableEngine.exportState(),
+      presentedItemIds: this.session.responses.map((r) => r.questionId),
+      capturedAt: Date.now(),
+    };
+  }
+
+  /**
+   * Fire the onResumeStateCaptured callback (if any) with a fresh capture. Called at
+   * every response-commit boundary so the fillout layer persists the resume cursor
+   * offline-first on each answer. Never throws into the response pipeline.
+   */
+  private emitResumeState(): void {
+    const callback = this.config.onResumeStateCaptured;
+    if (!callback) return;
+    try {
+      callback(this.captureResumeState());
+    } catch (error) {
+      console.error('[resume] onResumeStateCaptured failed:', error as Error);
+    }
   }
 
   /**
@@ -361,7 +461,41 @@ export class QuestionnaireRuntime {
     this.isRunning = true;
     this.renderer?.start();
 
+    // True save-and-continue (E-FLOW-3): if a compatible ResumeState was supplied,
+    // restore the variable context / loop counters / skip-set and jump straight to the
+    // captured page + item instead of navigating from page 0. This avoids re-running
+    // the onPageEnter side effects of every page before the resume point.
+    const resume = this.pendingResume;
+    if (resume) {
+      this.pendingResume = null;
+      this.restoreFromResumeState(resume);
+      await this.navigateToPage(resume.currentPageIndex);
+      return;
+    }
+
     await this.navigateToPage(0);
+  }
+
+  /**
+   * Restore live runtime state from a validated {@link ResumeState} (E-FLOW-3). Called
+   * once by start() before navigating to the captured page. Importing the whole
+   * VariableEngine context is lossless (answer vars + globals + computed), so {{var}}
+   * interpolation, carry-forward and flow conditions resolve exactly as they did live.
+   */
+  private restoreFromResumeState(resume: ResumeState): void {
+    this.variableEngine.importState(resume.variableSnapshot);
+
+    this.loopIterations.clear();
+    for (const [ruleId, count] of Object.entries(resume.loopIterationState)) {
+      this.loopIterations.set(ruleId, count);
+    }
+
+    // Skip-set + cursor seed: already-presented items are fast-forwarded in
+    // showCurrentItem, and the captured item index positions the landing page so
+    // non-interactive items already shown (which leave no response) are not re-shown.
+    this.resumeAnsweredIds =
+      resume.presentedItemIds.length > 0 ? new Set(resume.presentedItemIds) : null;
+    this.pendingResumeItemIndex = Math.max(0, resume.currentItemIndex);
   }
 
   public pause(): void {
@@ -662,6 +796,13 @@ export class QuestionnaireRuntime {
     this.currentPageIndex = pageIndex;
     this.currentPage = this.config.questionnaire.pages[pageIndex] || null;
     this.currentItemIndex = 0;
+
+    // Save-and-continue (E-FLOW-3): seed the captured item index on the FIRST landing
+    // page of a resumed run only. Consumed here so subsequent page entries reset to 0.
+    if (this.pendingResumeItemIndex !== null) {
+      this.currentItemIndex = this.pendingResumeItemIndex;
+      this.pendingResumeItemIndex = null;
+    }
 
     this.variableEngine.setVariable('_currentPage', pageIndex + 1, 'system');
 
@@ -1116,6 +1257,10 @@ export class QuestionnaireRuntime {
 
     await this.clearPresentation();
 
+    // Save-and-continue boundary (E-FLOW-3): persist the resume cursor now that the
+    // response is committed but before advancing, so a crash mid-advance still resumes here.
+    this.emitResumeState();
+
     this.currentItemIndex += 1;
     await this.showCurrentItem();
   }
@@ -1178,6 +1323,9 @@ export class QuestionnaireRuntime {
     this.responseCollector.stop();
     await this.clearPresentation();
 
+    // Save-and-continue boundary (E-FLOW-3): persist the resume cursor before advancing.
+    this.emitResumeState();
+
     this.currentItemIndex += 1;
     await this.showCurrentItem();
   }
@@ -1200,6 +1348,9 @@ export class QuestionnaireRuntime {
     this.updateQuestionVariables(question, response, false);
 
     await this.clearPresentation();
+
+    // Save-and-continue boundary (E-FLOW-3): a timeout is a committed outcome too.
+    this.emitResumeState();
 
     this.currentItemIndex += 1;
     await this.showCurrentItem();
