@@ -216,7 +216,13 @@
   {#if showNewInviteForm}
     <Card class="mb-8">
       <h3 class="text-lg font-semibold mb-4">Send New Invitation</h3>
-      <form on:submit|preventDefault={sendInvitation} class="space-y-4">
+      <form
+        onsubmit={(e) => {
+          e.preventDefault();
+          sendInvitation();
+        }}
+        class="space-y-4"
+      >
         <FormGroup label="Email Address" id="invite-email">
           <Input
             id="invite-email"

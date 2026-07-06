@@ -231,7 +231,13 @@
   {#if showAddDomainForm}
     <Card class="mb-8">
       <h3 class="text-lg font-semibold mb-4">Add New Domain</h3>
-      <form on:submit|preventDefault={handleAddDomain} class="space-y-4">
+      <form
+        onsubmit={(e) => {
+          e.preventDefault();
+          handleAddDomain();
+        }}
+        class="space-y-4"
+      >
         <FormGroup label="Domain" id="new-domain">
           <Input
             id="new-domain"

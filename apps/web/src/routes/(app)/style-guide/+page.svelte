@@ -1,9 +1,11 @@
 <script lang="ts">
   import StyleGuide from '$lib/theme/StyleGuide.svelte';
-  import { page } from '$app/stores';
-  
+  import { page } from '$app/state';
+
   // Check if we're in development mode
-  $: isDev = $page.url.hostname === 'localhost' || $page.url.hostname === '127.0.0.1';
+  const isDev = $derived(
+    page.url.hostname === 'localhost' || page.url.hostname === '127.0.0.1'
+  );
 </script>
 
 {#if isDev}

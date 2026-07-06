@@ -5,6 +5,7 @@
   import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import QuotaCellBuilder from '$lib/components/designer/QuotaCellBuilder.svelte';
 
   let { open = $bindable(false) } = $props<{ open: boolean }>();
 
@@ -17,6 +18,7 @@
       localGroups = groups.map((g) => ({
         ...g,
         quotas: g.quotas.map((q) => ({ ...q })),
+        cells: g.cells?.map((c) => ({ ...c, values: { ...c.values } })),
       }));
       expandedGroups = new Set(groups.map((g) => g.id));
     }
@@ -106,7 +108,9 @@
   }
 
   function save() {
-    const groups = localGroups.filter((g) => g.quotas.length > 0);
+    const groups = localGroups.filter(
+      (g) => g.quotas.length > 0 || (g.cells?.length ?? 0) > 0
+    );
 
     designerStore.updateQuestionnaire({
       settings: {
@@ -175,6 +179,17 @@
             <!-- Group content -->
             {#if expandedGroups.has(group.id)}
               <div class="px-4 py-3 space-y-3">
+                {#if group.logic === 'cross'}
+                  <QuotaCellBuilder
+                    group={group}
+                    onChange={(g) =>
+                      (localGroups = localGroups.map((x, i) => (i === groupIndex ? g : x)))}
+                  />
+                  <p class="text-[10px] text-muted-foreground">
+                    Interlocking cells fill independently; a participant is blocked only when
+                    their own cell (their combination of values) is full.
+                  </p>
+                {/if}
                 {#if group.quotas.length === 0}
                   <p class="text-xs text-muted-foreground italic text-center py-2">
                     No quotas in this group. Add one below.

@@ -98,6 +98,15 @@ export interface RuntimeConfig {
   participantNumber?: number;
   conditionGroupCounts?: number[];
   /**
+   * Server-authoritative between-subjects arm assignment (E-FLOW-6), claimed
+   * atomically at session-create time. When present it OVERRIDES the local
+   * {@link ConditionAssigner} — the client no longer races over a fetched
+   * count snapshot. Absent only offline (no create round-trip) or when the
+   * design declares no conditions; the runtime then falls back to local
+   * assignment seeded by the real {@link participantNumber}.
+   */
+  serverAssignment?: { condition: string; conditionIndex: number };
+  /**
    * Last-synced SERVER-COMPUTED VARIABLE aggregates, keyed by variable id
    * (server-computed-variable / E-FEEDBACK-3). {@link initializeVariables} injects
    * each into the one VariableEngine as a `'server-sync'` value so server-computed
@@ -765,13 +774,25 @@ export class QuestionnaireRuntime {
 
     const participantNumber = this.config.participantNumber ?? 0;
 
-    // Assign condition
-    const assigner = new ConditionAssigner(
-      design.conditions,
-      design.assignmentStrategy,
-      design.seed
-    );
-    const assignment = assigner.assign(participantNumber, this.config.conditionGroupCounts);
+    // E-FLOW-6: prefer the server-authoritative arm assignment when present
+    // (claimed atomically at create time, race-free). Fall back to the local
+    // ConditionAssigner only offline / when no server assignment arrived —
+    // now seeded with the REAL participantNumber rather than a hard-coded 0.
+    const serverAssignment = this.config.serverAssignment;
+    let assignment: { conditionName: string; conditionIndex: number };
+    if (serverAssignment && serverAssignment.condition) {
+      assignment = {
+        conditionName: serverAssignment.condition,
+        conditionIndex: serverAssignment.conditionIndex,
+      };
+    } else {
+      const assigner = new ConditionAssigner(
+        design.conditions,
+        design.assignmentStrategy,
+        design.seed
+      );
+      assignment = assigner.assign(participantNumber, this.config.conditionGroupCounts);
+    }
     this.assignedCondition = assignment.conditionName;
 
     // Register condition as session variables accessible via {{condition}}

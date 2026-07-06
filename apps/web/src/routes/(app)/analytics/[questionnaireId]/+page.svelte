@@ -166,10 +166,29 @@
     return lines.join('\n');
   }
 
+  // E-FLOW-6: live per-arm allocation counts from the authoritative
+  // arm_counts ledger (server-atomic between-subjects assignment).
+  let armCounts = $state<Record<string, number>>({});
+  let armEntries = $derived(
+    Object.entries(armCounts).sort(([a], [b]) => a.localeCompare(b))
+  );
+  let armTotal = $derived(armEntries.reduce((s, [, n]) => s + n, 0));
+
+  async function loadArmCounts() {
+    try {
+      armCounts = await api.questionnaires.armCounts(data.questionnaireId);
+    } catch {
+      // Non-critical: no between-subjects design or no assignments yet.
+      armCounts = {};
+    }
+  }
+
   onMount(() => {
     // Start real-time streaming
     realtimeClient = new RealtimeAnalyticsClient(data.questionnaireId);
     realtimeClient.subscribe();
+
+    void loadArmCounts();
 
     // Poll reactive state from the client
     const pollInterval = setInterval(() => {
@@ -180,8 +199,12 @@
       }
     }, 2000);
 
+    // Refresh arm balance periodically so the designer sees allocation drift live.
+    const armInterval = setInterval(() => void loadArmCounts(), 5000);
+
     return () => {
       clearInterval(pollInterval);
+      clearInterval(armInterval);
     };
   });
 
@@ -449,6 +472,36 @@
             </div>
           {/if}
         {/if}
+      </div>
+    </div>
+  {/if}
+
+  <!-- Between-subjects arm balance (E-FLOW-6) -->
+  {#if armEntries.length > 0}
+    <div class="space-y-4">
+      <div>
+        <h2 class="text-lg font-semibold text-foreground">Arm balance</h2>
+        <p class="text-sm text-muted-foreground">
+          Live between-subjects allocation from the server-atomic assignment ledger.
+          {armTotal} participant{armTotal === 1 ? '' : 's'} assigned across {armEntries.length} arm{armEntries.length === 1 ? '' : 's'}.
+        </p>
+      </div>
+      <div class="glass-card p-6 space-y-3">
+        {#each armEntries as [name, count] (name)}
+          {@const pct = armTotal > 0 ? (count / armTotal) * 100 : 0}
+          <div>
+            <div class="flex justify-between text-sm mb-1">
+              <span class="font-medium text-foreground">{name}</span>
+              <span class="text-muted-foreground">{count} ({pct.toFixed(0)}%)</span>
+            </div>
+            <div class="h-2 w-full rounded-full bg-muted">
+              <div
+                class="h-2 rounded-full bg-primary transition-all duration-300"
+                style="width: {pct}%"
+              ></div>
+            </div>
+          </div>
+        {/each}
       </div>
     </div>
   {/if}

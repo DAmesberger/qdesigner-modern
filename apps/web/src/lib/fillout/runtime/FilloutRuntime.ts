@@ -18,7 +18,20 @@ export interface FilloutRuntimeConfig {
 	questionnaire: Questionnaire;
 	sessionId: string;
 	participantId?: string;
+	/**
+	 * 0-based monotonic per-questionnaire participant index (E-FLOW-6),
+	 * allocated server-side at create time and threaded into the wrapped
+	 * {@link RuntimeConfig}. Seeds counterbalancing (`getBlockOrder`) so
+	 * Latin-square rows rotate across participants instead of every
+	 * participant getting row 0.
+	 */
+	participantNumber?: number;
 	conditionGroupCounts?: number[];
+	/**
+	 * Server-authoritative between-subjects arm assignment (E-FLOW-6). Passed
+	 * straight through so the runtime prefers it over the local ConditionAssigner.
+	 */
+	serverAssignment?: { condition: string; conditionIndex: number };
 	formHost?: FormQuestionHost;
 	enableOfflineSync?: boolean;
 	syncInterval?: number;
@@ -423,6 +436,16 @@ export class FilloutRuntime {
 
 	getVariables(): Record<string, unknown> {
 		return this.runtime.getVariableEngine().getAllVariables();
+	}
+
+	/**
+	 * E-FLOW-7: publish a flow variable (e.g. `_quotaCell`, `_eligible`) into the
+	 * runtime's VariableEngine so downstream branch rules / piping can read it.
+	 * Used by the fillout page to expose the participant's interlocking quota
+	 * cell and eligibility outcome.
+	 */
+	setFlowVariable(name: string, value: unknown): void {
+		this.runtime.getVariableEngine().setValue(name, value as never);
 	}
 
 	/**

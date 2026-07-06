@@ -117,6 +117,27 @@ export const questionnaires = {
         })
       )
     ),
+  /**
+   * Live per-arm allocation counts from the authoritative `arm_counts` ledger
+   * (E-FLOW-6). Distinct from {@link conditionCounts}, which derives from
+   * session rows; this is the atomic assignment tally the server maintains at
+   * create time. Shaped as `{ conditionName: assignedCount }`.
+   */
+  armCounts: async (questionnaireId: string): Promise<Record<string, number>> => {
+    const rows = await callSdk(() =>
+      sdk.armCounts<true>({
+        client: apiClient,
+        responseStyle: 'data',
+        throwOnError: true,
+        path: { id: questionnaireId },
+      })
+    );
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      counts[String(row.condition_name)] = Number(row.assigned_count ?? 0);
+    }
+    return counts;
+  },
   bumpVersion: (projectId: string, id: string, bumpType: 'major' | 'minor' | 'patch') =>
     callSdk(() =>
       bumpVersionRequest<true>({

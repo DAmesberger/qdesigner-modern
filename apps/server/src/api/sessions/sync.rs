@@ -248,6 +248,14 @@ pub async fn sync_session(
 
     if normalized_status.as_deref() == Some("completed") {
         refresh_session_variable_projection(&mut tx, session_id).await?;
+        // E-FLOW-7: atomically claim the participant's interlocking quota cell
+        // at completion, inside this same transaction, so concurrent completions
+        // can never overfill a cell. The client pins which cell the participant
+        // is in (`metadata.quotaCell.key`); the CAP is resolved authoritatively
+        // from the questionnaire definition here — never from the client. A
+        // rejected claim (cell already full — a race lost) is flagged on the
+        // session so researchers can filter over-cap completions.
+        claim_quota_cell_at_completion(&mut tx, session_id).await?;
     }
 
     // Broadcast analytics event if new responses were synced
@@ -277,6 +285,124 @@ pub async fn sync_session(
         events_synced,
         variables_synced,
     }))
+}
+
+/// E-FLOW-7: at completion, atomically claim the participant's interlocking
+/// quota cell. The client pins *which* cell the participant is in via
+/// `metadata.quotaCell.key`; the per-cell CAP is resolved authoritatively here
+/// from the questionnaire definition (a client-supplied target is never
+/// trusted). A rejected claim (cell already full — a completion race lost) sets
+/// `metadata.quotaCellOverflow = true` so over-cap completions can be filtered.
+///
+/// No-op when the session has no pinned cell (no cross-quota configured, or the
+/// pinned cell no longer exists in the definition). Runs in the caller's
+/// transaction so the claim and the completion commit/roll back together.
+pub(crate) async fn claim_quota_cell_at_completion(
+    conn: &mut sqlx::PgConnection,
+    session_id: Uuid,
+) -> Result<(), ApiError> {
+    let row = sqlx::query_as::<_, (Uuid, serde_json::Value)>(
+        "SELECT questionnaire_id, COALESCE(metadata, '{}'::jsonb) FROM sessions WHERE id = $1",
+    )
+    .bind(session_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    let Some((questionnaire_id, metadata)) = row else {
+        return Ok(());
+    };
+
+    // The client-pinned cell key (which interlocking cell the participant fell
+    // into, computed from their live in-survey variables).
+    let cell_key = metadata
+        .get("quotaCell")
+        .and_then(|c| c.get("key"))
+        .and_then(|v| v.as_str());
+    let Some(cell_key) = cell_key else {
+        return Ok(());
+    };
+
+    // Resolve the cap server-side from the questionnaire definition: match the
+    // pinned key against the configured cross-quota cells (re-serialized with
+    // the same canonical key format the client uses).
+    let settings = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT COALESCE(content->'settings', '{}'::jsonb) FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(questionnaire_id)
+    .fetch_optional(&mut *conn)
+    .await?
+    .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
+
+    let Some(target) = resolve_configured_cell_target(&settings, cell_key) else {
+        // Pinned cell isn't in the current definition — don't claim.
+        return Ok(());
+    };
+
+    let claimed = sqlx::query_scalar::<_, i64>("SELECT public.claim_quota_cell($1, $2, $3)")
+        .bind(questionnaire_id)
+        .bind(cell_key)
+        .bind(target)
+        .fetch_one(&mut *conn)
+        .await?;
+
+    if claimed < 0 {
+        // Cell was already full at completion (race lost). Flag, don't fail —
+        // the session already completed; the atomic counter simply didn't grow.
+        sqlx::query(
+            "UPDATE sessions SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{quotaCellOverflow}', 'true'::jsonb) WHERE id = $1",
+        )
+        .bind(session_id)
+        .execute(&mut *conn)
+        .await?;
+    }
+
+    Ok(())
+}
+
+/// Canonical serialization of an interlocking cell's `values` map — sorted
+/// `name=value` pairs joined by `|`. MUST match the client
+/// `QuotaService.quotaCellKey` so a server-resolved cell matches the
+/// client-pinned key exactly.
+fn quota_cell_key(values: &serde_json::Map<String, serde_json::Value>) -> String {
+    let mut pairs: Vec<(String, String)> = values
+        .iter()
+        .map(|(k, v)| {
+            let val = v.as_str().map(|s| s.to_string()).unwrap_or_else(|| match v {
+                serde_json::Value::Null => String::new(),
+                other => other.to_string(),
+            });
+            (k.clone(), val)
+        })
+        .collect();
+    pairs.sort();
+    pairs
+        .into_iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+/// Find, among the configured cross-quota cells in `settings.quotas[*].cells`,
+/// the cell whose canonical key equals `cell_key`, and return its `target`
+/// (0 ⇒ uncapped). Returns `None` when no configured cell matches.
+fn resolve_configured_cell_target(settings: &serde_json::Value, cell_key: &str) -> Option<i64> {
+    let groups = settings.get("quotas")?.as_array()?;
+    for group in groups {
+        let cells = match group.get("cells").and_then(|c| c.as_array()) {
+            Some(c) => c,
+            None => continue,
+        };
+        for cell in cells {
+            let values = match cell.get("values").and_then(|v| v.as_object()) {
+                Some(v) => v,
+                None => continue,
+            };
+            if quota_cell_key(values) == cell_key {
+                return Some(cell.get("target").and_then(|t| t.as_i64()).unwrap_or(0));
+            }
+        }
+    }
+    None
 }
 
 // ── Filter Endpoint ──────────────────────────────────────────────

@@ -176,7 +176,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/{id}/versions", get(questionnaires::list_versions))
         .route("/{id}/condition-counts", get(sessions::condition_counts))
+        .route("/{id}/arm-counts", get(sessions::arm_counts))
         .route("/{id}/quota-status", get(sessions::quota_status))
+        .route("/{id}/quota-cells", get(sessions::quota_cells))
         .route("/{id}/cohort-stats", get(sessions::public_cohort_stats))
         .route(
             "/{id}/server-variables",

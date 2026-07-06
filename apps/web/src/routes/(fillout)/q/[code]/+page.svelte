@@ -115,6 +115,10 @@
   let error = $state<string | null>(null);
   let currentScreen = $state<'welcome' | 'consent' | 'runtime' | 'complete' | 'over-quota'>('welcome');
   let overQuotaMessage = $state<string>('');
+  // E-FLOW-7: the participant's selected interlocking quota cell key, computed
+  // at entry in createSessionAndStart and read in initializeRuntime (pinned to
+  // metadata + exposed as the `_quotaCell` flow variable).
+  let quotaCellKey: string | null = null;
   // `session` spans three assignment shapes across create / resume / offline paths
   // (camelCase SessionData, snake_case Session DTO, a locally-built offline stub), so
   // it stays loosely typed; normalizing it is runtime-wiring work (F040), out of scope.
@@ -122,6 +126,13 @@
   let session = $state<any>(null);
   let completedSession = $state<QuestionnaireSession | undefined>(undefined);
   let conditionGroupCounts = $state<number[] | undefined>(undefined);
+  // E-FLOW-6: server-allocated 0-based participant index + authoritative arm
+  // assignment, captured from the session-create response and threaded into the
+  // runtime so counterbalancing rotates per participant and the arm is race-free.
+  let participantNumber = $state<number | undefined>(undefined);
+  let serverAssignment = $state<{ condition: string; conditionIndex: number } | undefined>(
+    undefined
+  );
 
   // Flatten the completed session's variable snapshot into the plain record the
   // CompletionScreen / E-FEEDBACK-3 report page consume. Server-computed values
@@ -437,6 +448,7 @@
       // gate). When neither live nor cached data exists it returns `unchecked`,
       // and we record `quotaUnchecked` on the session instead of silently allowing.
       let quotaUnchecked = false;
+      quotaCellKey = null;
       const quotaGroups = data.questionnaire.definition?.settings?.quotas;
       if (quotaGroups && quotaGroups.length > 0) {
         const urlParams = new Map(Object.entries(data.urlParams ?? {}));
@@ -464,6 +476,30 @@
           return;
         }
         quotaUnchecked = quotaResult.unchecked === true;
+
+        // E-FLOW-7: interlocking cross-quota cells. Select the participant's
+        // cell from the values known at entry (URL params); if that cell is
+        // full, block (independent-cell semantics — a full sibling cell is
+        // irrelevant). Otherwise pin the selected cell key so the server can
+        // atomically CLAIM it at completion (server resolves the cap; it never
+        // trusts a client-supplied target). The re-check after in-survey
+        // demographics is driven from the runtime page hooks (see below).
+        const cellResult = await QuotaService.checkCells(
+          data.questionnaire.id,
+          quotaGroups,
+          urlParams
+        );
+        if (!cellResult.allowed) {
+          if (cellResult.action === 'redirect' && cellResult.redirectUrl) {
+            window.location.href = cellResult.redirectUrl;
+            return;
+          }
+          overQuotaMessage = cellResult.message || 'This study has reached its target for your group.';
+          currentScreen = 'over-quota';
+          loading = false;
+          return;
+        }
+        quotaCellKey = cellResult.cellKey;
       }
 
       if (navigator.onLine) {
@@ -489,6 +525,11 @@
           if (quotaUnchecked) {
             metadata.quotaUnchecked = true;
           }
+          if (quotaCellKey) {
+            // E-FLOW-7: pin the interlocking cell so the server atomically
+            // claims it at completion (cap resolved server-side).
+            metadata.quotaCell = { key: quotaCellKey };
+          }
 
           const created = await api.sessions.create({
             questionnaireId: data.questionnaire.id,
@@ -499,6 +540,17 @@
             metadata,
           });
           session = created;
+          // E-FLOW-6: seed counterbalancing + between-subjects assignment from the
+          // server's atomic allocation (returned by create). participantNumber is the
+          // real 0-based index (fixes the "always participant 0 → Latin row 0" bug);
+          // assignedCondition, when present, is authoritative over local assignment.
+          participantNumber = created.participantNumber;
+          serverAssignment = created.assignedCondition
+            ? {
+                condition: created.assignedCondition,
+                conditionIndex: created.assignedConditionIndex ?? 0,
+              }
+            : undefined;
           // A brand-new session id — a resumeFrom captured against a prior local session
           // must NOT be applied here (it would restore an unrelated cursor/variables).
           activeResumeState = undefined;
@@ -540,6 +592,9 @@
         }
         if (quotaUnchecked) {
           offlineMetadata.quotaUnchecked = true;
+        }
+        if (quotaCellKey) {
+          offlineMetadata.quotaCell = { key: quotaCellKey };
         }
         const offlineSession = await OfflineSessionService.createSession(
           data.questionnaire.id,
@@ -706,7 +761,9 @@
         questionnaire: definition,
         sessionId: session.id,
         participantId: data.participantId || undefined,
+        participantNumber,
         conditionGroupCounts,
+        serverAssignment,
         formHost,
         enableOfflineSync: true,
         serverVariables,
@@ -751,6 +808,13 @@
           liveAnnouncement = buildQuestionAnnouncement(event, questionList);
         },
       });
+
+      // E-FLOW-7: expose the interlocking quota cell + eligibility as flow
+      // variables for downstream branching. `_quotaCell` is the participant's
+      // selected cell key (or empty); `_eligible` starts true and is updated by
+      // the screener re-check at its page boundary.
+      runtime.setFlowVariable('_quotaCell', quotaCellKey ?? '');
+      runtime.setFlowVariable('_eligible', true);
 
       loadingMessage = 'Starting questionnaire...';
       await runtime.start();

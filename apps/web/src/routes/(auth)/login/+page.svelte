@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import {
     ArrowRight,
     BarChart3,
@@ -20,11 +20,11 @@
   import { api } from '$lib/services/api';
   import { m } from '$lib/paraglide/messages';
 
-  let email = '';
-  let password = '';
-  let loading = false;
-  let error: string | null = null;
-  let successMessage: string | null = null;
+  let email = $state('');
+  let password = $state('');
+  let loading = $state(false);
+  let error = $state<string | null>(null);
+  let successMessage = $state<string | null>(null);
 
   // Same-origin relative redirect target (must start with a single '/').
   function safeRedirect(raw: string | null): string | null {
@@ -33,10 +33,10 @@
     return raw;
   }
 
-  $: redirectParam = safeRedirect($page.url.searchParams.get('redirect'));
-  $: signupHref = redirectParam
-    ? `/signup?redirect=${encodeURIComponent(redirectParam)}`
-    : '/signup';
+  const redirectParam = $derived(safeRedirect(page.url.searchParams.get('redirect')));
+  const signupHref = $derived(
+    redirectParam ? `/signup?redirect=${encodeURIComponent(redirectParam)}` : '/signup'
+  );
 
   interface DevQuickLoginPersona {
     id: string;

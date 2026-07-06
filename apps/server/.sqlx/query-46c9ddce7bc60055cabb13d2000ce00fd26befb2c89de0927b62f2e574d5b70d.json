@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO sessions (id, questionnaire_id, participant_id, status, started_at,\n                              browser_info, metadata,\n                              questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch,\n                              user_id, fingerprint)\n        VALUES ($1, $2, $3, 'active', NOW(), $4, $5, $6, $7, $8, $9, $10)\n        RETURNING id, questionnaire_id, participant_id, status as \"status!\",\n                  started_at, completed_at, last_activity_at, metadata as \"metadata!\",\n                  browser_info, created_at,\n                  questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch\n        ",
+  "query": "\n        INSERT INTO sessions (id, questionnaire_id, participant_id, status, started_at,\n                              browser_info, metadata,\n                              questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch,\n                              user_id, fingerprint,\n                              participant_number, assigned_condition, assigned_condition_index)\n        VALUES ($1, $2, $3, 'active', NOW(), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)\n        RETURNING id, questionnaire_id, participant_id, status as \"status!\",\n                  started_at, completed_at, last_activity_at, metadata as \"metadata!\",\n                  browser_info, created_at,\n                  questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch\n        ",
   "describe": {
     "columns": [
       {
@@ -80,7 +80,10 @@
         "Int4",
         "Int4",
         "Uuid",
-        "Text"
+        "Text",
+        "Int8",
+        "Text",
+        "Int4"
       ]
     },
     "nullable": [
@@ -99,5 +102,5 @@
       true
     ]
   },
-  "hash": "562b9a30262720153e7fcb61e960174ffa31565ec23a0a6f23a73fa542c432a5"
+  "hash": "46c9ddce7bc60055cabb13d2000ce00fd26befb2c89de0927b62f2e574d5b70d"
 }

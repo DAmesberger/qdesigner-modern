@@ -31,6 +31,15 @@ export type AggregateOverview = {
     overall_variable_stats?: null | NumericStatsSummary;
 };
 
+/**
+ * A single live per-arm count row for the designer readout
+ * (`GET /api/questionnaires/{id}/arm-counts`).
+ */
+export type ArmCount = {
+    condition_name: string;
+    assigned_count: number;
+};
+
 export type AuthResponse = {
     access_token: string;
     refresh_token: string;
@@ -164,6 +173,21 @@ export type CreateSessionRequest = {
  */
 export type CreateSessionResponse = Session & {
     duplicate: boolean;
+    /**
+     * 0-based monotonic per-questionnaire participant index allocated at
+     * create time (E-FLOW-6). The client seeds counterbalancing
+     * (`getBlockOrder`) and offline condition assignment with this, so
+     * Latin-square rows actually rotate across participants.
+     */
+    participant_number: number;
+    /**
+     * Server-authoritative between-subjects arm assignment (E-FLOW-6),
+     * claimed atomically against `arm_counts`. Absent (null) when the
+     * questionnaire declares no experimental design, or when every arm is at
+     * cap. The client prefers this over local `ConditionAssigner` when present.
+     */
+    assigned_condition?: string | null;
+    assigned_condition_index?: number | null;
 };
 
 export type CreateTemplateRequest = {
@@ -3476,6 +3500,36 @@ export type ConditionCountsResponses = {
 };
 
 export type ConditionCountsResponse = ConditionCountsResponses[keyof ConditionCountsResponses];
+
+export type ArmCountsData = {
+    body?: never;
+    path: {
+        /**
+         * Questionnaire id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/questionnaires/{id}/arm-counts';
+};
+
+export type ArmCountsErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type ArmCountsError = ArmCountsErrors[keyof ArmCountsErrors];
+
+export type ArmCountsResponses = {
+    /**
+     * Live per-arm allocation counts
+     */
+    200: Array<ArmCount>;
+};
+
+export type ArmCountsResponse = ArmCountsResponses[keyof ArmCountsResponses];
 
 export type QuotaStatusData = {
     body?: never;

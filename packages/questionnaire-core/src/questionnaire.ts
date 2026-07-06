@@ -311,6 +311,25 @@ export interface QuotaDefinition {
   enabled: boolean;
 }
 
+/**
+ * A single interlocking quota cell (E-FLOW-7). Unlike a flat {@link QuotaDefinition},
+ * a cell is the intersection of one value per {@link QuotaGroup.variables} entry
+ * (e.g. `age=25-34` × `gender=male`). The `values` map is keyed by variable name;
+ * the missing/omitted key means "any value of that variable" (a marginal cell).
+ * The serialized cell key ({@link quotaCellKey}) is the stable identity used by
+ * the server per-cell counter (`quota_cells.cell_key`).
+ */
+export interface QuotaCell {
+  /** Stable id (assigned by the designer builder). */
+  id: string;
+  /** One value per participating variable; keyed by variable name. */
+  values: Record<string, string>;
+  /** Per-cell target (completions cap). 0 / undefined ⇒ uncapped. */
+  target: number;
+  /** Last-known live count (populated at read time; not persisted in the definition). */
+  current?: number;
+}
+
 export interface QuotaGroup {
   id: string;
   name: string;
@@ -318,6 +337,53 @@ export interface QuotaGroup {
   quotas: QuotaDefinition[];
   logic: 'independent' | 'cross';
   variables: string[];
+  /**
+   * Interlocking cross-quota cells (E-FLOW-7). Only meaningful when
+   * `logic === 'cross'`. Each cell is the intersection of one value per
+   * {@link variables} entry; the participant is assigned to the single cell
+   * whose `values` all match their live in-survey variables, and blocked only
+   * when THAT cell is full (least-full / independent-cell semantics), not when
+   * any sibling cell is full.
+   */
+  cells?: QuotaCell[];
+}
+
+// ============================================================================
+// Screener / Eligibility Gating (E-FLOW-7)
+// ============================================================================
+
+/**
+ * A structured pre-survey / in-survey eligibility screener (E-FLOW-7).
+ * Distinct from a quota: a screen-out is a per-respondent eligibility decision
+ * (out of the target population), whereas over-quota is a capacity decision
+ * (population fine, cell full). The two route to different completion states.
+ *
+ * Rules are evaluated (in order) via the runtime `VariableEngine` against the
+ * participant's live variables at the screener page; the first rule whose
+ * `eligibleWhen` formula evaluates falsy screens the participant out with that
+ * rule's structured reason/redirect.
+ */
+export interface ScreenerRule {
+  id: string;
+  /** Human label for the eligibility criterion (e.g. "Adults only"). */
+  label?: string;
+  /** Formula that must be TRUE to remain eligible (VariableEngine grammar). */
+  eligibleWhen: string;
+  /** Structured, machine-readable screen-out reason recorded to session metadata. */
+  screenOutReason: string;
+  /** Optional message shown to the screened-out participant. */
+  screenOutMessage?: string;
+  /** Optional redirect (e.g. panel screen-out URL) distinct from over-quota. */
+  screenOutRedirectUrl?: string;
+}
+
+export interface ScreenerBlock {
+  id: string;
+  name?: string;
+  /** Page id after which eligibility is (re-)evaluated. */
+  pageId: string;
+  /** Ordered eligibility rules; first failing rule screens the participant out. */
+  rules: ScreenerRule[];
 }
 
 // ============================================================================
@@ -470,6 +536,12 @@ export interface QuestionnaireSettings {
   dataQuality?: DataQualitySettings;
   fraudPrevention?: FraudPreventionSettings;
   quotas?: QuotaGroup[];
+  /**
+   * Structured eligibility screeners (E-FLOW-7). Evaluated at their `pageId`
+   * boundary; a screen-out routes to the `ineligible` completion state,
+   * distinct from `over-quota`.
+   */
+  screeners?: ScreenerBlock[];
   /**
    * First-class subscale scoring config (E-FEEDBACK-1). Computed at fillout
    * `complete()` and persisted as namespaced `score.<scaleId>` session variables.

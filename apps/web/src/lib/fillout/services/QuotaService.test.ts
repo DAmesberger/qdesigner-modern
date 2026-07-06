@@ -193,3 +193,140 @@ describe('QuotaService', () => {
 		await expect(QuotaService.fetchQuotaStatus(QID)).rejects.toThrow();
 	});
 });
+
+describe('QuotaService interlocking cells (E-FLOW-7)', () => {
+	beforeEach(() => {
+		vi.restoreAllMocks();
+		vi.stubGlobal('localStorage', memoryLocalStorage());
+	});
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
+	});
+
+	function crossGroup(): QuotaGroup {
+		return {
+			id: 'cg1',
+			name: 'Age x Gender',
+			logic: 'cross',
+			variables: ['age', 'gender'],
+			quotas: [],
+			cells: [
+				{ id: 'c1', values: { age: '25-34', gender: 'male' }, target: 2 },
+				{ id: 'c2', values: { age: '25-34', gender: 'female' }, target: 2 },
+				{ id: 'c3', values: { age: '18-24', gender: 'male' }, target: 2 },
+			],
+		};
+	}
+
+	function cellsResponse(rows: Array<{ key: string; target: number; current: number }>) {
+		return {
+			ok: true,
+			json: async () => ({
+				cells: rows.map((r) => ({
+					cell_key: r.key,
+					target: r.target,
+					current: r.current,
+					is_full: r.current >= r.target,
+				})),
+			}),
+		};
+	}
+
+	it('serializes a cell key as sorted name=value pairs joined by "|"', () => {
+		expect(QuotaService.quotaCellKey({ gender: 'male', age: '25-34' })).toBe(
+			'age=25-34|gender=male'
+		);
+	});
+
+	it('selects the single cell whose values all match the live variables', () => {
+		const hit = QuotaService.selectCell(
+			crossGroup(),
+			new Map<string, unknown>([
+				['age', '25-34'],
+				['gender', 'male'],
+			])
+		);
+		expect(hit?.cellKey).toBe('age=25-34|gender=male');
+		expect(hit?.cell.id).toBe('c1');
+	});
+
+	it('returns null when no cell matches the participant', () => {
+		const hit = QuotaService.selectCell(
+			crossGroup(),
+			new Map<string, unknown>([
+				['age', '65+'],
+				['gender', 'male'],
+			])
+		);
+		expect(hit).toBeNull();
+	});
+
+	it('blocks ONLY when the participant own cell is full, not a sibling', async () => {
+		// male 25-34 cell is FULL (2/2); female 25-34 is NOT (0/2).
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () =>
+				cellsResponse([{ key: 'age=25-34|gender=male', target: 2, current: 2 }])
+			)
+		);
+
+		const maleFull = await QuotaService.checkCells(
+			QID,
+			[crossGroup()],
+			new Map<string, unknown>([
+				['age', '25-34'],
+				['gender', 'male'],
+			])
+		);
+		expect(maleFull.cellKey).toBe('age=25-34|gender=male');
+		expect(maleFull.allowed).toBe(false);
+
+		// The female participant's own cell is empty → allowed, even though the
+		// male sibling cell is full.
+		const femaleOk = await QuotaService.checkCells(
+			QID,
+			[crossGroup()],
+			new Map<string, unknown>([
+				['age', '25-34'],
+				['gender', 'female'],
+			])
+		);
+		expect(femaleOk.cellKey).toBe('age=25-34|gender=female');
+		expect(femaleOk.allowed).toBe(true);
+	});
+
+	it('allows a participant whose cell has no live count yet (occupancy 0)', async () => {
+		vi.stubGlobal('fetch', vi.fn(async () => cellsResponse([])));
+		const res = await QuotaService.checkCells(
+			QID,
+			[crossGroup()],
+			new Map<string, unknown>([
+				['age', '18-24'],
+				['gender', 'male'],
+			])
+		);
+		expect(res.allowed).toBe(true);
+		expect(res.cellKey).toBe('age=18-24|gender=male');
+	});
+
+	it('returns unchecked when cells cannot be fetched and no snapshot is cached', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => {
+				throw new Error('offline');
+			})
+		);
+		const res = await QuotaService.checkCells(
+			QID,
+			[crossGroup()],
+			new Map<string, unknown>([
+				['age', '25-34'],
+				['gender', 'male'],
+			])
+		);
+		expect(res.allowed).toBe(true);
+		expect(res.unchecked).toBe(true);
+		expect(res.cellKey).toBe('age=25-34|gender=male');
+	});
+});

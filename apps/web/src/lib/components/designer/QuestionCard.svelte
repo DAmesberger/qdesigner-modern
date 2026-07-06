@@ -4,14 +4,18 @@
   import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { ChevronUp, ChevronDown, Pencil, Copy, Trash2 } from 'lucide-svelte';
 
-  export let question: Question;
-  export let index: number;
-  export let isSelected: boolean = false;
-  export let blockId: string | undefined = undefined;
-  export let pageId: string | undefined = undefined;
+  interface Props {
+    question: Question;
+    index: number;
+    isSelected?: boolean;
+    blockId?: string;
+    pageId?: string;
+  }
 
-  let isDragOver = false;
-  let dropPosition: 'before' | 'after' | null = null;
+  let { question, index, isSelected = false, blockId, pageId }: Props = $props();
+
+  let isDragOver = $state(false);
+  let dropPosition = $state<'before' | 'after' | null>(null);
 
   function handleClick(e: MouseEvent) {
     e.stopPropagation();

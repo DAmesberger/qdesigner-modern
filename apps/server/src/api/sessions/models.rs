@@ -53,6 +53,19 @@ pub struct CreateSessionResponse {
     #[serde(flatten)]
     pub session: Session,
     pub duplicate: bool,
+    /// 0-based monotonic per-questionnaire participant index allocated at
+    /// create time (E-FLOW-6). The client seeds counterbalancing
+    /// (`getBlockOrder`) and offline condition assignment with this, so
+    /// Latin-square rows actually rotate across participants.
+    pub participant_number: i64,
+    /// Server-authoritative between-subjects arm assignment (E-FLOW-6),
+    /// claimed atomically against `arm_counts`. Absent (null) when the
+    /// questionnaire declares no experimental design, or when every arm is at
+    /// cap. The client prefers this over local `ConditionAssigner` when present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assigned_condition: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assigned_condition_index: Option<i32>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -334,6 +347,25 @@ pub struct CheckDuplicateRequest {
 pub struct CheckDuplicateResponse {
     pub is_duplicate: bool,
     pub previous_completions: i64,
+}
+
+// ── Between-subjects arm assignment (E-FLOW-6) ───────────────────────
+
+/// One row returned by `public.claim_experiment_arm`.
+#[derive(Debug, sqlx::FromRow)]
+pub(crate) struct ArmClaim {
+    pub(crate) condition_name: String,
+    pub(crate) condition_index: i32,
+    #[allow(dead_code)]
+    pub(crate) assigned_count: i64,
+}
+
+/// A single live per-arm count row for the designer readout
+/// (`GET /api/questionnaires/{id}/arm-counts`).
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
+pub struct ArmCount {
+    pub condition_name: String,
+    pub assigned_count: i64,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────
@@ -1221,6 +1253,25 @@ pub struct QuotaStatusItem {
 pub struct QuotaStatusResponse {
     pub quotas: Vec<QuotaStatusItem>,
     pub total_completed: i64,
+}
+
+/// Live occupancy of a single interlocking quota cell (E-FLOW-7). The client
+/// selects the participant's cell by key and blocks only when that cell is full.
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
+pub struct QuotaCellStatus {
+    /// Serialized interlocking tuple, e.g. `age=25-34|gender=male`.
+    pub cell_key: String,
+    /// Per-cell cap (0 ⇒ uncapped).
+    pub target: i64,
+    /// Live occupancy.
+    pub current: i64,
+    /// `target > 0 && current >= target`.
+    pub is_full: bool,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct QuotaCellsResponse {
+    pub cells: Vec<QuotaCellStatus>,
 }
 
 /// A parsed quota `condition`. Kept in lockstep with the client parser

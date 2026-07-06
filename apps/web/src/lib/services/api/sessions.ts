@@ -84,7 +84,17 @@ export const sessions = {
           version_patch: data.versionPatch,
         },
       })
-    ).then((raw) => ({ ...mapSession(raw), duplicate: Boolean(raw.duplicate) })),
+    ).then((raw) => ({
+      ...mapSession(raw),
+      duplicate: Boolean(raw.duplicate),
+      // E-FLOW-6: server-atomic between-subjects assignment + monotonic
+      // participant index, allocated at create time. The runtime seeds
+      // counterbalancing from participantNumber and prefers the server arm.
+      participantNumber: typeof raw.participant_number === 'number' ? raw.participant_number : 0,
+      assignedCondition: raw.assigned_condition ?? null,
+      assignedConditionIndex:
+        typeof raw.assigned_condition_index === 'number' ? raw.assigned_condition_index : null,
+    })),
   checkDuplicate: (questionnaireId: string, fingerprint: string) =>
     callSdk(() =>
       sdk.checkDuplicate<true>({

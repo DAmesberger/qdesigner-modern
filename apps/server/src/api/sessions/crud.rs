@@ -120,14 +120,84 @@ pub async fn create_session(
         .execute(&mut **tx)
         .await?;
 
+    // E-FLOW-6: server-atomic between-subjects assignment + participant number.
+    // Both run through SECURITY DEFINER functions (00031) inside THIS request
+    // transaction, so they commit or roll back with the session INSERT below —
+    // no orphan arm counts, and the allocation is race-free under concurrent
+    // starts (the client's old read-a-snapshot-then-pick approach was not).
+    //
+    // participant_number is allocated for EVERY session (0-based, monotonic per
+    // questionnaire): counterbalancing (`getBlockOrder`) needs a real, distinct
+    // index per participant even for single-arm designs. Previously the runtime
+    // never received one and every participant got Latin-square row 0.
+    let participant_number: i64 =
+        sqlx::query_scalar("SELECT public.allocate_participant_number($1)")
+            .bind(body.questionnaire_id)
+            .fetch_one(&mut **tx)
+            .await?;
+
+    // Read the (version-agnostic) experimental design straight from the
+    // questionnaire definition so the assignment is server-authoritative and
+    // cannot be forged by the client. When a between-subjects design declares
+    // conditions, claim the least-full arm atomically (00031).
+    let design: Option<serde_json::Value> = sqlx::query_scalar::<_, Option<serde_json::Value>>(
+        "SELECT content->'settings'->'experimentalDesign' FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(body.questionnaire_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .flatten();
+
+    let mut assigned_condition: Option<String> = None;
+    let mut assigned_condition_index: Option<i32> = None;
+    if let Some(design) = design.as_ref() {
+        let conditions: Vec<String> = design
+            .get("conditions")
+            .and_then(|c| c.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|c| c.get("name").and_then(|n| n.as_str()).map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if !conditions.is_empty() {
+            let strategy = design
+                .get("assignmentStrategy")
+                .and_then(|s| s.as_str())
+                .unwrap_or("balanced")
+                .to_string();
+
+            // No per-arm caps in the design config today; pass NULL (unlimited).
+            let claim = sqlx::query_as::<_, ArmClaim>(
+                "SELECT o_condition_name AS condition_name, \
+                        o_condition_index AS condition_index, \
+                        o_assigned_count AS assigned_count \
+                 FROM public.claim_experiment_arm($1, $2, $3, $4)",
+            )
+            .bind(body.questionnaire_id)
+            .bind(&conditions)
+            .bind(&strategy)
+            .bind(Option::<Vec<i64>>::None)
+            .fetch_optional(&mut **tx)
+            .await?;
+
+            if let Some(claim) = claim {
+                assigned_condition = Some(claim.condition_name);
+                assigned_condition_index = Some(claim.condition_index);
+            }
+        }
+    }
+
     let session = sqlx::query_as!(
         Session,
         r#"
         INSERT INTO sessions (id, questionnaire_id, participant_id, status, started_at,
                               browser_info, metadata,
                               questionnaire_version_major, questionnaire_version_minor, questionnaire_version_patch,
-                              user_id, fingerprint)
-        VALUES ($1, $2, $3, 'active', NOW(), $4, $5, $6, $7, $8, $9, $10)
+                              user_id, fingerprint,
+                              participant_number, assigned_condition, assigned_condition_index)
+        VALUES ($1, $2, $3, 'active', NOW(), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id, questionnaire_id, participant_id, status as "status!",
                   started_at, completed_at, last_activity_at, metadata as "metadata!",
                   browser_info, created_at,
@@ -143,6 +213,9 @@ pub async fn create_session(
         ver_patch,
         session_user_id,
         fingerprint,
+        participant_number,
+        assigned_condition,
+        assigned_condition_index,
     )
     .fetch_one(&mut **tx)
     .await?;
@@ -160,7 +233,13 @@ pub async fn create_session(
 
     Ok((
         axum::http::StatusCode::CREATED,
-        Json(CreateSessionResponse { session, duplicate }),
+        Json(CreateSessionResponse {
+            session,
+            duplicate,
+            participant_number,
+            assigned_condition,
+            assigned_condition_index,
+        }),
     ))
 }
 

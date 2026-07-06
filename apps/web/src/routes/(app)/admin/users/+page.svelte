@@ -11,18 +11,18 @@
 
   const ROLE_OPTIONS = ['owner', 'admin', 'member', 'viewer'] as const;
 
-  let members: OrganizationMember[] = [];
-  let loading = true;
-  let error: string | null = null;
-  let removingUserId: string | null = null;
-  let updatingUserId: string | null = null;
-  let currentUserId: string | null = null;
+  let members = $state<OrganizationMember[]>([]);
+  let loading = $state(true);
+  let error = $state<string | null>(null);
+  let removingUserId = $state<string | null>(null);
+  let updatingUserId = $state<string | null>(null);
+  let currentUserId = $state<string | null>(null);
 
-  let currentOrg: any = null;
+  let currentOrg = $state<any>(null);
 
   // The current user's own role in this org drives which controls are enabled.
-  $: currentUserRole = members.find((m) => m.userId === currentUserId)?.role ?? null;
-  $: canManageRoles = currentUserRole === 'owner' || currentUserRole === 'admin';
+  const currentUserRole = $derived(members.find((m) => m.userId === currentUserId)?.role ?? null);
+  const canManageRoles = $derived(currentUserRole === 'owner' || currentUserRole === 'admin');
 
   onMount(async () => {
     await loadData();
@@ -243,7 +243,7 @@
                       value={member.role}
                       disabled={updatingUserId === member.userId}
                       aria-label="Change role for {member.user?.email || 'member'}"
-                      on:change={(e) => changeRole(member, e.currentTarget.value)}
+                      onchange={(e) => changeRole(member, e.currentTarget.value)}
                     >
                       {#each ROLE_OPTIONS as opt}
                         <option value={opt} disabled={opt === 'owner' && currentUserRole !== 'owner'}>
@@ -266,7 +266,7 @@
                       type="button"
                       class="inline-flex items-center px-3 py-1.5 rounded-md border border-border text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       disabled={removingUserId === member.userId}
-                      on:click={() => removeMember(member)}
+                      onclick={() => removeMember(member)}
                     >
                       {removingUserId === member.userId ? 'Removing…' : 'Remove'}
                     </button>

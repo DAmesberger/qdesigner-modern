@@ -4917,6 +4917,58 @@
         ]
       }
     },
+    "/api/questionnaires/{id}/arm-counts": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "GET /api/questionnaires/:id/arm-counts",
+        "description": "Live per-arm allocation counts straight from the `arm_counts` ledger\n(E-FLOW-6, dovetails with the analytics per-arm readout / P8-T4). This is\nthe authoritative assignment tally maintained atomically at create time —\ndistinct from `condition-counts`, which derives from session rows.",
+        "operationId": "arm_counts",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Questionnaire id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Live per-arm allocation counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArmCount"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/questionnaires/{id}/quota-status": {
       "get": {
         "tags": [
@@ -5757,6 +5809,23 @@
           }
         }
       },
+      "ArmCount": {
+        "type": "object",
+        "description": "A single live per-arm count row for the designer readout\n(`GET /api/questionnaires/{id}/arm-counts`).",
+        "required": [
+          "condition_name",
+          "assigned_count"
+        ],
+        "properties": {
+          "condition_name": {
+            "type": "string"
+          },
+          "assigned_count": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AuthResponse": {
         "type": "object",
         "required": [
@@ -6225,11 +6294,31 @@
           {
             "type": "object",
             "required": [
-              "duplicate"
+              "duplicate",
+              "participant_number"
             ],
             "properties": {
               "duplicate": {
                 "type": "boolean"
+              },
+              "participant_number": {
+                "type": "integer",
+                "format": "int64",
+                "description": "0-based monotonic per-questionnaire participant index allocated at\ncreate time (E-FLOW-6). The client seeds counterbalancing\n(`getBlockOrder`) and offline condition assignment with this, so\nLatin-square rows actually rotate across participants."
+              },
+              "assigned_condition": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Server-authoritative between-subjects arm assignment (E-FLOW-6),\nclaimed atomically against `arm_counts`. Absent (null) when the\nquestionnaire declares no experimental design, or when every arm is at\ncap. The client prefers this over local `ConditionAssigner` when present."
+              },
+              "assigned_condition_index": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int32"
               }
             }
           }

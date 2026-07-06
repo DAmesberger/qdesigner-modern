@@ -1,6 +1,6 @@
 <script lang="ts">
   import theme from './index';
-  import { themeMode } from './ThemeProvider.svelte';
+  import { theme as themeStore } from '$lib/stores/theme';
 
   const colors = [
     { name: 'Primary', class: 'bg-primary', textClass: 'text-primary-foreground' },
@@ -31,11 +31,11 @@
     <div class={theme.components.container.section}>
       <h2 class="{theme.typography.h2} mb-4">Theme Mode</h2>
       <button
-        on:click={() => ($themeMode = $themeMode === 'light' ? 'dark' : 'light')}
+        onclick={() => themeStore.toggle()}
         class="{theme.components.button.variants.outline} {theme.components.button.sizes
           .md} rounded-md"
       >
-        Current: {$themeMode} mode
+        Current: {$themeStore} mode
       </button>
     </div>
 
@@ -251,7 +251,7 @@
       <div class="flex justify-between items-center mb-4">
         <h2 class={theme.typography.h2}>Usage Example</h2>
         <button
-          on:click={() => (showCode = !showCode)}
+          onclick={() => (showCode = !showCode)}
           class="{theme.components.button.variants.outline} {theme.components.button.sizes
             .sm} rounded-md"
         >

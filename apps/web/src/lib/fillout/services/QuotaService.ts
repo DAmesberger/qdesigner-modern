@@ -1,4 +1,4 @@
-import type { QuotaGroup, QuotaDefinition } from '$lib/shared/types/questionnaire';
+import type { QuotaGroup, QuotaDefinition, QuotaCell } from '$lib/shared/types/questionnaire';
 
 export interface QuotaCheckResult {
 	allowed: boolean;
@@ -39,6 +39,42 @@ export interface QuotaStatusResponse {
 		is_full: boolean;
 	}>;
 	total_completed: number;
+}
+
+/** Live occupancy of one interlocking quota cell, from GET /quota-cells. */
+export interface QuotaCellStatus {
+	cellKey: string;
+	target: number;
+	current: number;
+	isFull: boolean;
+}
+
+export interface QuotaCellsResponse {
+	cells: Array<{
+		cell_key: string;
+		target: number;
+		current: number;
+		is_full: boolean;
+	}>;
+}
+
+/**
+ * Result of selecting the participant's interlocking cell (E-FLOW-7).
+ * `cellKey` is the canonical serialized tuple (also exposed to the flow as the
+ * `_quotaCell` variable). `allowed` is false only when THAT cell is full.
+ */
+export interface CellCheckResult {
+	/** The participant's selected cell key, or `null` if no cross-quota matched. */
+	cellKey: string | null;
+	/** The matched cell definition (with its per-cell target), if any. */
+	cell: QuotaCell | null;
+	/** False only when the participant's own cell is full (independent-cell semantics). */
+	allowed: boolean;
+	action?: QuotaDefinition['overQuotaAction'];
+	redirectUrl?: string;
+	message?: string;
+	/** True when cell occupancy could not be verified and no snapshot existed. */
+	unchecked?: boolean;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -156,6 +192,161 @@ export class QuotaService {
 				primaryQuota.overQuotaMessage ||
 				'This study has reached its target number of participants. Thank you for your interest.',
 		};
+	}
+
+	// ── Interlocking cross-quota cells (E-FLOW-7) ────────────────────
+
+	/**
+	 * Canonical serialization of an interlocking cell's value tuple — sorted
+	 * `name=value` pairs joined by `|`. MUST match the server
+	 * `sync::quota_cell_key` so a client-pinned key matches the server-resolved
+	 * cell exactly.
+	 */
+	static quotaCellKey(values: Record<string, string>): string {
+		return Object.keys(values)
+			.sort()
+			.map((k) => `${k}=${values[k] ?? ''}`)
+			.join('|');
+	}
+
+	/**
+	 * Select the participant's interlocking cell from a `logic: 'cross'` group
+	 * by matching every one of the cell's `values` against the participant's
+	 * live in-survey variables. Returns the single matching cell (and its key),
+	 * or `null` when none matches (participant falls outside the grid). A cell's
+	 * `values` map may omit a variable to mean "any value" (a marginal cell).
+	 */
+	static selectCell(
+		group: QuotaGroup,
+		currentValues: Map<string, unknown>
+	): { cell: QuotaCell; cellKey: string } | null {
+		if (group.logic !== 'cross' || !group.cells) return null;
+		for (const cell of group.cells) {
+			const matches = Object.entries(cell.values).every(
+				([varName, expected]) => String(currentValues.get(varName)) === String(expected)
+			);
+			if (matches) {
+				return { cell, cellKey: this.quotaCellKey(cell.values) };
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Fetch live per-cell occupancy from the server. Cells with no completions
+	 * yet are simply absent (occupancy 0 ⇒ room available). Throws on a non-OK
+	 * response so the caller can decide the offline fallback (mirrors
+	 * {@link fetchQuotaStatus}).
+	 */
+	static async fetchCellStatus(questionnaireId: string): Promise<QuotaCellStatus[]> {
+		const res = await fetch(`${API_BASE}/api/questionnaires/${questionnaireId}/quota-cells`);
+		if (!res.ok) {
+			throw new Error(`Quota cells request failed: ${res.status}`);
+		}
+		const data: QuotaCellsResponse = await res.json();
+		return data.cells.map((c) => ({
+			cellKey: c.cell_key,
+			target: c.target,
+			current: c.current,
+			isFull: c.is_full,
+		}));
+	}
+
+	/**
+	 * Evaluate the interlocking cell gate for the participant against their live
+	 * in-survey variables. Selects the participant's cell, fetches live
+	 * occupancy, and blocks ONLY when that cell is full — sibling cells being
+	 * full is irrelevant (independent-cell semantics). On a fetch failure with
+	 * no cached snapshot the participant proceeds with `unchecked: true`.
+	 *
+	 * Designed to be re-invoked after in-survey demographic questions resolve
+	 * the participant's cell, not only at entry.
+	 */
+	static async checkCells(
+		questionnaireId: string,
+		quotaGroups: QuotaGroup[],
+		currentValues: Map<string, unknown>
+	): Promise<CellCheckResult> {
+		// Find the participant's cell across all cross-quota groups (first match).
+		let selected: { group: QuotaGroup; cell: QuotaCell; cellKey: string } | null = null;
+		for (const group of quotaGroups) {
+			const hit = this.selectCell(group, currentValues);
+			if (hit) {
+				selected = { group, ...hit };
+				break;
+			}
+		}
+
+		if (!selected) {
+			// No interlocking cell matched — cross-quota does not gate this participant.
+			return { cellKey: null, cell: null, allowed: true };
+		}
+
+		let statuses: QuotaCellStatus[];
+		try {
+			statuses = await this.fetchCellStatus(questionnaireId);
+			this.cacheCellStatus(questionnaireId, statuses);
+		} catch {
+			const cached = this.readCachedCellStatus(questionnaireId);
+			if (cached === null) {
+				return {
+					cellKey: selected.cellKey,
+					cell: selected.cell,
+					allowed: true,
+					unchecked: true,
+				};
+			}
+			statuses = cached;
+		}
+
+		const live = statuses.find((s) => s.cellKey === selected!.cellKey);
+		const target = selected.cell.target ?? 0;
+		const current = live?.current ?? 0;
+		const isFull = target > 0 && current >= target;
+
+		if (!isFull) {
+			return { cellKey: selected.cellKey, cell: { ...selected.cell, current }, allowed: true };
+		}
+
+		// The participant's own cell is full — block. Cross cells reuse the flat
+		// over-quota action fields of the first quota in the group (if any).
+		const action = selected.group.quotas[0]?.overQuotaAction ?? 'terminate';
+		return {
+			cellKey: selected.cellKey,
+			cell: { ...selected.cell, current },
+			allowed: action === 'continue',
+			action,
+			redirectUrl: selected.group.quotas[0]?.overQuotaRedirectUrl,
+			message:
+				selected.group.quotas[0]?.overQuotaMessage ||
+				'This study has reached its target for your demographic group. Thank you for your interest.',
+		};
+	}
+
+	private static readonly CELL_CACHE_PREFIX = 'qd-quota-cells:';
+
+	private static cacheCellStatus(questionnaireId: string, statuses: QuotaCellStatus[]): void {
+		if (typeof localStorage === 'undefined') return;
+		try {
+			localStorage.setItem(
+				this.CELL_CACHE_PREFIX + questionnaireId,
+				JSON.stringify({ fetchedAt: new Date().toISOString(), statuses })
+			);
+		} catch {
+			// non-fatal
+		}
+	}
+
+	static readCachedCellStatus(questionnaireId: string): QuotaCellStatus[] | null {
+		if (typeof localStorage === 'undefined') return null;
+		try {
+			const raw = localStorage.getItem(this.CELL_CACHE_PREFIX + questionnaireId);
+			if (!raw) return null;
+			const snapshot = JSON.parse(raw) as { statuses?: QuotaCellStatus[] };
+			return Array.isArray(snapshot.statuses) ? snapshot.statuses : null;
+		} catch {
+			return null;
+		}
 	}
 
 	static evaluateQuotaCondition(

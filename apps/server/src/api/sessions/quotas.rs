@@ -36,14 +36,62 @@ pub async fn condition_counts(
     // Verify access via the questionnaire's project
     access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
 
+    // E-FLOW-6: prefer the authoritative `assigned_condition` column persisted
+    // at create time; fall back to the legacy `metadata->>'assignedCondition'`
+    // slot for sessions created before 00031 (client-side assignment).
     let counts = sqlx::query_as::<_, ConditionCount>(
         r#"
-        SELECT metadata->>'assignedCondition' AS condition_name, COUNT(*)::bigint AS count
+        SELECT COALESCE(assigned_condition, metadata->>'assignedCondition') AS condition_name,
+               COUNT(*)::bigint AS count
         FROM sessions
         WHERE questionnaire_id = $1
-          AND metadata->>'assignedCondition' IS NOT NULL
-        GROUP BY metadata->>'assignedCondition'
+          AND COALESCE(assigned_condition, metadata->>'assignedCondition') IS NOT NULL
+        GROUP BY COALESCE(assigned_condition, metadata->>'assignedCondition')
         ORDER BY count DESC
+        "#,
+    )
+    .bind(questionnaire_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    Ok(Json(counts))
+}
+
+/// GET /api/questionnaires/:id/arm-counts
+///
+/// Live per-arm allocation counts straight from the `arm_counts` ledger
+/// (E-FLOW-6, dovetails with the analytics per-arm readout / P8-T4). This is
+/// the authoritative assignment tally maintained atomically at create time —
+/// distinct from `condition-counts`, which derives from session rows.
+#[utoipa::path(
+    get,
+    path = "/api/questionnaires/{id}/arm-counts",
+    params(
+        ("id" = Uuid, Path, description = "Questionnaire id")
+    ),
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Live per-arm allocation counts", body = [ArmCount]),
+        (status = 403, description = "Access denied", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["analytics"]
+)]
+pub async fn arm_counts(
+    user: AuthenticatedUser,
+    tx: Tx,
+    Path(questionnaire_id): Path<Uuid>,
+) -> Result<Json<Vec<ArmCount>>, ApiError> {
+    let mut tx = tx.tx().await?;
+    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
+
+    let counts = sqlx::query_as::<_, ArmCount>(
+        r#"
+        SELECT condition_name, assigned_count
+        FROM arm_counts
+        WHERE questionnaire_id = $1
+        ORDER BY condition_name ASC
         "#,
     )
     .bind(questionnaire_id)
@@ -177,4 +225,52 @@ pub async fn quota_status(
         quotas,
         total_completed,
     }))
+}
+
+// ── Interlocking Quota Cells Endpoint (E-FLOW-7) ─────────────────────
+
+/// GET /api/questionnaires/{id}/quota-cells
+///
+/// Returns live per-cell occupancy for interlocking cross-quota cells. The
+/// client computes the participant's cell key from live in-survey variables
+/// and blocks only when THAT cell is full (independent-cell semantics), rather
+/// than when any sibling cell is full.
+///
+/// Anonymous, like `quota_status`. `quota_cells` carries no RLS policy and is
+/// aggregate-only (no per-session rows), so a plain SELECT under the app role
+/// is safe — no SECURITY DEFINER needed for the read. A cell only appears once
+/// it has received its first claim; a not-yet-claimed cell is absent (occupancy
+/// 0), which the client treats as "room available".
+#[utoipa::path(
+    get,
+    path = "/api/questionnaires/{id}/quota-cells",
+    params(
+        ("id" = Uuid, Path, description = "Questionnaire id")
+    ),
+    responses(
+        (status = 200, description = "Live per-cell quota occupancy", body = QuotaCellsResponse),
+        (status = 404, description = "Questionnaire not found", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["analytics"]
+)]
+pub async fn quota_cells(
+    State(state): State<AppState>,
+    Path(questionnaire_id): Path<Uuid>,
+) -> Result<Json<QuotaCellsResponse>, ApiError> {
+    let cells = sqlx::query_as::<_, QuotaCellStatus>(
+        r#"
+        SELECT cell_key,
+               target,
+               current,
+               (target > 0 AND current >= target) AS is_full
+        FROM quota_cells
+        WHERE questionnaire_id = $1
+        ORDER BY cell_key ASC
+        "#,
+    )
+    .bind(questionnaire_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(QuotaCellsResponse { cells }))
 }
