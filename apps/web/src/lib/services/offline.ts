@@ -46,13 +46,21 @@ function createOfflineStore() {
       return;
     }
 
-    if (dev) {
+    // In dev the SW is normally torn down so HMR isn't shadowed by stale caches.
+    // Set VITE_SW_DEV=true to KEEP it registered so offline fillout can be exercised
+    // (Playwright/agent-browser offline lane) without a full prod build (E-OFF-3).
+    const swDevEnabled =
+      import.meta.env.VITE_SW_DEV === 'true' || import.meta.env.VITE_SW_DEV === '1';
+    if (dev && !swDevEnabled) {
       await clearDevServiceWorkers();
       update((state) => ({ ...state, isOnline: navigator.onLine, isServiceWorkerReady: false }));
       window.addEventListener('online', handleOnline);
       window.addEventListener('offline', handleOffline);
       console.log('[Offline] Development mode: service worker disabled');
       return;
+    }
+    if (dev && swDevEnabled) {
+      console.log('[Offline] VITE_SW_DEV set — service worker ENABLED in dev for offline QA');
     }
 
     // Service workers are required - no fallback

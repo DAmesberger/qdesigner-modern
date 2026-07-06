@@ -1,7 +1,7 @@
 // QDesigner Modern Service Worker
 // Version: 2.0.0
 
-const CACHE_NAME = 'qdesigner-v3';
+const CACHE_NAME = 'qdesigner-v4';
 const RUNTIME_CACHE = 'qdesigner-runtime';
 const BUNDLE_CACHE = 'qdesigner-bundles';
 // Bumped v1 -> v2: media now keys on the stable same-origin proxy path
@@ -270,6 +270,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Document navigations into the offline-capable fillout runtime (`/q/*`):
+  // network-first, but fall back to the CACHED fillout shell so the SvelteKit client
+  // router boots and `+page.ts` takes its IndexedDB offline branch. Crucially this must
+  // NOT resolve to offline.html — that static page would replace the SPA and the
+  // participant could never resume a pinned/offline session (E-OFF-3).
+  if (request.mode === 'navigate' && url.pathname.startsWith('/q/')) {
+    event.respondWith(filloutNavigationStrategy(request));
+    return;
+  }
+
   // Fillout media proxy (`/api/media/{id}/content`): stable, immutable, same-origin.
   // Cache-first against the durable media cache so offline fillout can replay it.
   // Must be checked before the networkFirst `/api/` rule, which would otherwise
@@ -462,6 +472,35 @@ async function networkFirst(request) {
       return cached;
     }
     console.error('[SW] Network first fetch failed:', error);
+    return offlineResponse();
+  }
+}
+
+// Network-first navigation for `/q/*` documents with a cached-shell fallback.
+// Online: fetch + cache the fillout document under its exact URL so a later offline
+// reload/resume has a real shell. Offline: serve the cached document for this code
+// (ignoreSearch so a `?sid=`/resume query still hits), then the cached app root shell
+// (the SvelteKit client will route to the right /q/CODE), and only then a bare offline
+// response — never offline.html, which would break client routing + IndexedDB resume.
+async function filloutNavigationStrategy(request) {
+  const cache = await caches.open(RUNTIME_CACHE);
+
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch (error) {
+    console.log('[SW] Offline navigation to fillout — serving cached shell:', request.url);
+    const cachedDoc = await cache.match(request, { ignoreSearch: true });
+    if (cachedDoc) {
+      return cachedDoc;
+    }
+    const rootShell = await caches.match('/');
+    if (rootShell) {
+      return rootShell;
+    }
     return offlineResponse();
   }
 }
