@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, type ComponentType } from 'svelte';
   import { beforeNavigate, replaceState } from '$app/navigation';
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
@@ -17,7 +17,7 @@
   import WYSIWYGCanvas from './WYSIWYGCanvas.svelte';
   import StructuralCanvas from './StructuralCanvas.svelte';
   import DesignerCommandPalette from './components/DesignerCommandPalette.svelte';
-  import ReactionLabWorkspace from './components/ReactionLabWorkspace.svelte';
+  import { moduleRegistry } from '$lib/modules/registry';
   import ScriptEditorOverlay from '$lib/components/designer/ScriptEditorOverlay.svelte';
   import TourOverlay from '$lib/help/components/TourOverlay.svelte';
 
@@ -30,6 +30,32 @@
   let scriptEditorOpen = $state(false);
   let scriptEditorQuestion = $state<any>(null);
   let scriptEditorCleanup: (() => void) | null = null;
+
+  // Full-canvas Reaction Lab. The trigger stays unchanged
+  // (openLab → designerStore.openReactionLab → route fork on reactionLabQuestion);
+  // only the MOUNT now resolves through the module registry's
+  // `fullCanvasDesigner` capability instead of a hard-coded route-local import.
+  let reactionLabComponent = $state<ComponentType | null>(null);
+  $effect(() => {
+    const question = designerStore.reactionLabQuestion;
+    if (!question) {
+      reactionLabComponent = null;
+      return;
+    }
+    let cancelled = false;
+    void moduleRegistry
+      .loadComponent(question.type, 'fullCanvasDesigner')
+      .then((component) => {
+        if (!cancelled) reactionLabComponent = component;
+      })
+      .catch((error) => {
+        console.error('Failed to load reaction lab workspace:', error);
+        if (!cancelled) reactionLabComponent = null;
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   // Collaborative editing
   let collab: CollaborativeDesigner | null = null;
@@ -353,14 +379,17 @@
       {#if designerStore.viewMode === 'structural'}
         <StructuralCanvas />
       {:else if designerStore.reactionLabQuestion}
-        <ReactionLabWorkspace
-          question={designerStore.reactionLabQuestion}
-          organizationId={designerStore.questionnaire.organizationId || designerStore.organizationId || ''}
-          userId={designerStore.userId || ''}
-          onclose={() => designerStore.closeReactionLab()}
-          onupdate={(updates) =>
-            designerStore.updateQuestion(designerStore.reactionLabQuestion!.id, updates as any)}
-        />
+        {#if reactionLabComponent}
+          {@const ReactionLab = reactionLabComponent}
+          <ReactionLab
+            question={designerStore.reactionLabQuestion}
+            organizationId={designerStore.questionnaire.organizationId || designerStore.organizationId || ''}
+            userId={designerStore.userId || ''}
+            onclose={() => designerStore.closeReactionLab()}
+            onupdate={(updates: Record<string, unknown>) =>
+              designerStore.updateQuestion(designerStore.reactionLabQuestion!.id, updates as any)}
+          />
+        {/if}
       {:else}
         <WYSIWYGCanvas />
       {/if}

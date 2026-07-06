@@ -13,10 +13,11 @@ import { createReactionStudyStarter } from '$lib/modules/questions/reaction-time
 import type {
   PlannedReactionTrial,
 } from '$lib/modules/questions/reaction-time/model/reaction-plan-types';
-import type {
-  ReactionStudyBlock,
-  ReactionStudyTrialTemplate,
-  ReactionTaskType,
+import {
+  createStimulusForKind,
+  type ReactionStudyBlock,
+  type ReactionStudyTrialTemplate,
+  type ReactionTaskType,
 } from '$lib/modules/questions/reaction-time/model/reaction-schema';
 
 export type ReactionExperimentTemplateKind = ReactionTaskType;
@@ -205,6 +206,98 @@ export function createDefaultReactionExperimentConfig(
       },
       previewParticipantId: 'preview-participant',
     },
+  };
+}
+
+/**
+ * Structured deep clone used by the Reaction Lab designer to keep its editable
+ * `config` immutable-per-edit (clone → mutate → commit). Falls back to a
+ * JSON round-trip on engines/objects `structuredClone` cannot handle.
+ */
+export function cloneConfig<T>(value: T): T {
+  try {
+    return structuredClone(value);
+  } catch {
+    return JSON.parse(JSON.stringify(value)) as T;
+  }
+}
+
+/**
+ * Derive the implicit fixation/cue/stimulus/response/iti phase strip from a
+ * trial's flat timing fields when it carries no explicit `phases[]`. Mirrors the
+ * runtime's default sequencing so the designer preview shows what will run.
+ */
+export function deriveDefaultPhases(trial: ReactionExperimentTrial): ScheduledPhase[] {
+  const phases: ScheduledPhase[] = [];
+  if ((trial.fixationMs || 0) > 0) {
+    phases.push({
+      name: 'fixation',
+      durationMs: trial.fixationMs || 0,
+      allowResponse: false,
+      marksStimulusOnset: false,
+    });
+  }
+  if ((trial.preStimulusDelayMs || 0) > 0) {
+    phases.push({
+      name: 'cue',
+      durationMs: trial.preStimulusDelayMs || 0,
+      allowResponse: false,
+      marksStimulusOnset: false,
+    });
+  }
+  phases.push({
+    name: 'stimulus',
+    durationMs: trial.stimulusDurationMs || 0,
+    allowResponse: true,
+    marksStimulusOnset: true,
+  });
+  phases.push({
+    name: 'response',
+    durationMs: trial.responseTimeoutMs || 0,
+    allowResponse: true,
+    marksStimulusOnset: false,
+  });
+  if ((trial.interTrialIntervalMs || 0) > 0) {
+    phases.push({
+      name: 'iti',
+      durationMs: trial.interTrialIntervalMs || 0,
+      allowResponse: false,
+      marksStimulusOnset: false,
+    });
+  }
+  return phases;
+}
+
+/**
+ * Build a stimulus of the requested kind. Delegates to the shared
+ * `createStimulusForKind` (P6-T5) so the reaction-experiment lab and the
+ * reaction-time editor construct identical stimulus defaults.
+ */
+export function createStimulus(kind: ReactionStimulusConfig['kind']): ReactionStimulusConfig {
+  return createStimulusForKind(kind);
+}
+
+/** Construct a fresh default trial for a block (used by the outline "+ Trial"/"Add Block"). */
+export function createTrial(blockId: string, index: number): ReactionExperimentTrial {
+  return {
+    id: `${blockId}-trial-${index}`,
+    name: `Trial ${index}`,
+    condition: '',
+    repeat: 1,
+    isPractice: false,
+    isTarget: false,
+    stimulus: createStimulus('text'),
+    validKeys: ['f', 'j'],
+    correctResponse: 'j',
+    requireCorrect: false,
+    fixationMs: 500,
+    preStimulusDelayMs: 0,
+    stimulusDurationMs: 250,
+    responseTimeoutMs: 1800,
+    interTrialIntervalMs: 300,
+    positionVariants: [],
+    assetPoolIds: [],
+    phases: [],
   };
 }
 
@@ -871,8 +964,14 @@ function asStringArray(value: unknown, fallback: string[]) {
   return output.length > 0 ? output : [...fallback];
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
+/**
+ * Clamp a number into `[min, max]`. The `value || 0` guard coerces `NaN`
+ * (e.g. `Number('')` from an emptied numeric input) to the lower bound so the
+ * designer's number fields never persist `NaN`. All internal (normalize) call
+ * sites pass finite `asNumber(...)` results, for which the guard is a no-op.
+ */
+export function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value || 0));
 }
 
 function hashString(input: string) {

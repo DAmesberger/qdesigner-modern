@@ -1,30 +1,21 @@
 <script lang="ts">
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
-  import type {
-    Question,
-    Page,
-    Variable,
-    CarryForwardMode,
-    CarryForwardTargetField,
-    CarryForwardConfig,
-    LegacyResponseTypeConfig,
-  } from '$lib/shared';
-  import { isSingleChoiceQuestion, isMultipleChoiceQuestion } from '$lib/shared';
+  import type { Question, Page, Variable } from '$lib/shared';
   import { moduleRegistry } from '$lib/modules/registry';
-  import { slide } from 'svelte/transition';
-  import { untrack, type ComponentType } from 'svelte';
+  import { type ComponentType } from 'svelte';
   import StyleEditor from './StyleEditor.svelte';
   import ScriptEditor from './ScriptEditor.svelte';
   import { getItemSettings } from '$lib/utils/itemSettings';
-  import { api } from '$lib/services/api';
-  import { Library, MousePointerClick, CheckCircle } from 'lucide-svelte';
-  import {
-    CARRY_FORWARD_SOURCE_TYPES,
-    getAvailableModes,
-    getAvailableTargetFields,
-  } from '$lib/runtime/core/CarryForward';
+  import { Library, MousePointerClick } from 'lucide-svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import SaveTemplateModal from './properties/SaveTemplateModal.svelte';
+  import ChoiceOptionsEditor from './properties/ChoiceOptionsEditor.svelte';
+  import AttentionCheckSection from './properties/AttentionCheckSection.svelte';
+  import CarryForwardSection from './properties/CarryForwardSection.svelte';
+  import PageProperties from './properties/PageProperties.svelte';
+  import VariableProperties from './properties/VariableProperties.svelte';
+  import type { DesignerQuestionUpdate } from './properties/types';
 
   let activeTab = $state<'properties' | 'style' | 'script'>('properties');
   // Theme is persisted on the questionnaire via the designer store (autosaved).
@@ -51,162 +42,19 @@
     !!questionItem &&
       ['single-choice', 'multiple-choice', 'scale', 'rating'].includes(questionItem.type)
   );
-  let bulkOptionDraft = $state('');
-
-  // Save as Template state
-  let showSaveTemplateModal = $state(false);
-  let templateName = $state('');
-  let templateDescription = $state('');
-  let templateCategory = $state('custom');
-  let templateTags = $state('');
-  let templateIsShared = $state(false);
-  let templateSaving = $state(false);
-  let templateSaveError = $state<string | null>(null);
-  let templateSaveSuccess = $state(false);
-
-  const templateCategories = [
-    { id: 'demographics', label: 'Demographics' },
-    { id: 'likert-scales', label: 'Likert Scales' },
-    { id: 'attention-checks', label: 'Attention Checks' },
-    { id: 'consent', label: 'Consent' },
-    { id: 'clinical', label: 'Clinical' },
-    { id: 'personality', label: 'Personality' },
-    { id: 'custom', label: 'Custom' },
-  ];
-
-  function openSaveTemplateModal() {
-    if (!questionItem) return;
-    templateName = questionItem.name || `${questionItem.type} template`;
-    templateDescription = '';
-    templateCategory = 'custom';
-    templateTags = questionItem.tags?.join(', ') || '';
-    templateIsShared = false;
-    templateSaving = false;
-    templateSaveError = null;
-    templateSaveSuccess = false;
-    showSaveTemplateModal = true;
-  }
-
-  async function saveAsTemplate() {
-    if (!questionItem || !organizationId) return;
-
-    templateSaving = true;
-    templateSaveError = null;
-
-    try {
-      // Build the question config snapshot (everything except the id)
-      const { id: _id, order: _order, ...config } = questionItem;
-
-      const tags = templateTags
-        .split(',')
-        .map((t) => t.trim())
-        .filter((t) => t.length > 0);
-
-      await api.templates.create(organizationId, {
-        name: templateName,
-        description: templateDescription || undefined,
-        category: templateCategory,
-        tags: tags.length > 0 ? tags : undefined,
-        question_type: questionItem.type,
-        question_config: config as Record<string, unknown>,
-        is_shared: templateIsShared,
-      });
-
-      templateSaveSuccess = true;
-      setTimeout(() => {
-        showSaveTemplateModal = false;
-        templateSaveSuccess = false;
-      }, 1500);
-    } catch (e) {
-      templateSaveError = e instanceof Error ? e.message : 'Failed to save template';
-    } finally {
-      templateSaving = false;
-    }
-  }
-
-  // Carry-forward derived state
+  // The shell owns the supportsX gating deriveds so it decides which sections to
+  // render; the sections themselves receive an already-narrowed non-null question.
   let supportsCarryForward = $derived(
-    !!questionItem && !['text-display', 'instruction', 'media-display', 'webgl', 'statistical-feedback', 'bar-chart'].includes(questionItem.type)
+    !!questionItem &&
+      !['text-display', 'instruction', 'media-display', 'webgl', 'statistical-feedback', 'bar-chart'].includes(
+        questionItem.type
+      )
   );
-  let carryForwardSourceQuestions = $derived.by(() => {
-    if (!questionItem) return [];
-    // Gather all questions that appear before this one in the questionnaire and can be sources
-    const allQuestions = designerStore.questionnaire.questions;
-    const currentOrder = questionItem.order;
-    return allQuestions.filter(
-      (q) =>
-        q.id !== questionItem.id &&
-        q.order < currentOrder &&
-        CARRY_FORWARD_SOURCE_TYPES.has(q.type)
-    );
-  });
-  let carryForwardModes = $derived(
-    questionItem ? getAvailableModes(questionItem.type) : []
-  );
-  let carryForwardTargetFields = $derived.by(() => {
-    const cf: CarryForwardConfig | undefined = questionItem?.carryForward;
-    if (!cf?.mode) return ['value'] as CarryForwardTargetField[];
-    return getAvailableTargetFields(cf.mode);
-  });
 
-  // Debug logging
-  // $effect(() => {
-  //   console.log('[PropertiesPanel] Store state:', {
-  //     organizationId,
-  //     userId,
-  //     questionnaire: designerStore.questionnaire
-  //   });
-  // });
+  // Save as Template modal visibility (state + form live in SaveTemplateModal).
+  let showSaveTemplateModal = $state(false);
 
   // Update handlers
-
-  /**
-   * Loose per-option shape carried by the designer's dual-schema questionnaire data.
-   * The persisted option objects include `key` (keyboard key), `icon`, `color` and
-   * `description` fields that are absent from the strict `ChoiceOption`/`ResponseOption`
-   * types in questionnaire-core, so the designer's option updates are typed against this
-   * widened shape rather than the union display config.
-   */
-  type DesignerChoiceOption = {
-    id?: string;
-    label: string;
-    value: string | number;
-    key?: string;
-    description?: string;
-    icon?: string;
-    image?: string;
-    color?: string;
-  };
-
-  /** Config payload the module designer components pass through `onUpdate`. */
-  type DesignerConfigUpdate = {
-    options?: DesignerChoiceOption[];
-    prompt?: string;
-    [key: string]: unknown;
-  };
-
-  /**
-   * Legacy dual-schema display / response(-type) views the designer writes alongside the
-   * typed union member. Display is only ever spread from / merged into the existing config
-   * and passed straight to the store, so it stays an open record — it carries both the
-   * strict `ChoiceOption` (image: MediaConfig) and the loose bulk-editor option shapes.
-   */
-  type DesignerDisplayUpdate = Record<string, unknown>;
-  type DesignerResponseTypeUpdate = {
-    type?: string;
-    options?: DesignerChoiceOption[];
-    [key: string]: unknown;
-  };
-
-  type DesignerQuestionUpdate = Omit<
-    Partial<Question>,
-    'config' | 'display' | 'response' | 'responseType'
-  > & {
-    config?: DesignerConfigUpdate;
-    display?: DesignerDisplayUpdate;
-    response?: Record<string, unknown>;
-    responseType?: DesignerResponseTypeUpdate;
-  };
 
   function updateQuestion(updates: DesignerQuestionUpdate) {
     if (questionItem) {
@@ -324,128 +172,6 @@
       });
     }
   }
-
-  function extractChoiceOptions(question: Question): Array<{ value: string; label: string; key?: string }> {
-    const fromResponseType = question.responseType?.options;
-    const responseObj = question.response;
-    const fromResponse =
-      responseObj && typeof responseObj === 'object' && 'options' in responseObj
-        ? (responseObj as { options?: unknown }).options
-        : undefined;
-    // `display` is a per-union-member field (absent from BaseQuestion), so reaching
-    // `display.options` requires narrowing to a choice member first.
-    const fromDisplay =
-      isSingleChoiceQuestion(question) || isMultipleChoiceQuestion(question)
-        ? question.display.options
-        : undefined;
-
-    const source: unknown[] = Array.isArray(fromResponseType)
-      ? fromResponseType
-      : Array.isArray(fromResponse)
-        ? fromResponse
-        : Array.isArray(fromDisplay)
-          ? fromDisplay
-          : [];
-
-    return source
-      .map((option) => {
-        if (!option || typeof option !== 'object') return null;
-        const opt = option as { value?: unknown; id?: unknown; label?: unknown; key?: unknown };
-        const value = opt.value ?? opt.id ?? opt.label;
-        if (value === undefined || value === null) return null;
-        const normalized: { value: string; label: string; key?: string } = {
-          value: String(value),
-          label: String(opt.label ?? value),
-        };
-        if (opt.key !== undefined && opt.key !== null && opt.key !== '') {
-          normalized.key = String(opt.key);
-        }
-        return normalized;
-      })
-      .filter(
-        (option): option is { value: string; label: string; key?: string } => option !== null
-      );
-  }
-
-  function formatChoiceOptions(question: Question): string {
-    return extractChoiceOptions(question)
-      .map((option) => {
-        if (option.key) return `${option.label}|${option.value}|${option.key}`;
-        return `${option.label}|${option.value}`;
-      })
-      .join('\n');
-  }
-
-  function parseChoiceOptionsInput(raw: string): Array<{ value: string; label: string; key?: string }> {
-    return raw
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-      .map((line) => {
-        const [labelPart, valuePart, keyPart] = line.split('|').map((part) => part.trim());
-        const label = labelPart || valuePart || 'Option';
-        const value = valuePart || labelPart || label;
-        return {
-          label,
-          value,
-          key: keyPart || undefined,
-        };
-      });
-  }
-
-  function applyBulkChoiceOptions(raw: string): void {
-    if (!questionItem || !isChoiceQuestion) return;
-
-    const options = parseChoiceOptionsInput(raw);
-    const existingResponseType: LegacyResponseTypeConfig = questionItem.responseType || {
-      type: 'single',
-    };
-    const existingResponse: Record<string, unknown> =
-      questionItem.response && typeof questionItem.response === 'object'
-        ? { ...(questionItem.response as Record<string, unknown>) }
-        : { type: existingResponseType.type || 'single' };
-    // `responseType.type` and `response.type` resolve to the same value under the original
-    // `||` fallbacks, so a single resolved type feeds both dual-schema views.
-    const resolvedType =
-      existingResponseType.type ||
-      (typeof existingResponse.type === 'string' ? existingResponse.type : undefined) ||
-      'single';
-
-    updateQuestion({
-      responseType: {
-        ...existingResponseType,
-        type: resolvedType,
-        options,
-      },
-      response: {
-        ...existingResponse,
-        type: resolvedType,
-        options,
-      },
-      display: {
-        ...questionItem.display,
-        options: options.map((option, index) => ({
-          id: `opt_${index + 1}`,
-          label: option.label,
-          value: option.value,
-          key: option.key,
-        })),
-      },
-    });
-  }
-
-  // Reset the bulk-options draft only when the *selection* changes (a different
-  // question id or choice/non-choice toggle), not on every deep edit of the
-  // selected question. Reading only the identity keys as tracked deps and
-  // computing the draft inside untrack() stops in-place question edits (e.g.
-  // typing into another field) from clobbering the draft mid-typing.
-  $effect(() => {
-    const id = questionItem?.id;
-    const choice = isChoiceQuestion;
-    untrack(() => {
-      if (id && choice) bulkOptionDraft = formatChoiceOptions(questionItem!);
-    });
-  });
 </script>
 
 <div class="h-full flex flex-col overflow-hidden">
@@ -500,7 +226,7 @@
               <button
                 type="button"
                 class="w-full flex items-center justify-center gap-2 rounded-md border border-border bg-muted/50 text-foreground py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-                onclick={openSaveTemplateModal}
+                onclick={() => (showSaveTemplateModal = true)}
                 data-testid="save-as-template-button"
               >
                 <Library class="w-4 h-4" />
@@ -595,19 +321,7 @@
             {/if}
 
             {#if isChoiceQuestion}
-              <div class="border-t pt-4">
-                <h4 class="text-sm font-medium text-foreground mb-2">Bulk Option Editor</h4>
-                <p class="text-xs text-muted-foreground mb-2">
-                  One option per line using <code>label|value|key</code>. The keyboard key is optional.
-                </p>
-                <textarea
-                  class="w-full min-h-32 px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary font-mono text-xs bg-background text-foreground"
-                  bind:value={bulkOptionDraft}
-                  onblur={() => applyBulkChoiceOptions(bulkOptionDraft)}
-                  placeholder="Yes|1|y&#10;No|0|n"
-                  data-testid="designer-bulk-option-editor"
-                ></textarea>
-              </div>
+              <ChoiceOptionsEditor {questionItem} onApply={updateQuestion} />
             {/if}
 
             <!-- Common Optional Properties -->
@@ -748,403 +462,19 @@
                 </div>
 
                 {#if supportsAttentionCheck}
-                  <div class="border-t pt-3 mt-3">
-                    <label class="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={questionItem.attentionCheck?.enabled || false}
-                        onchange={(e: Event & { currentTarget: HTMLInputElement }) => {
-                          const enabled = e.currentTarget.checked;
-                          updateQuestion({
-                            attentionCheck: enabled
-                              ? { enabled: true, correctAnswer: '', type: 'instructed' as const }
-                              : { enabled: false, correctAnswer: '', type: 'instructed' as const },
-                          });
-                        }}
-                        class="rounded border-input text-primary focus:ring-primary"
-                        data-testid="attention-check-toggle"
-                      />
-                      <span class="text-sm text-foreground">Attention check</span>
-                    </label>
-
-                    {#if questionItem.attentionCheck?.enabled}
-                      <div class="mt-2 space-y-2 pl-6">
-                        <div>
-                          <label
-                            for="attention-type-{questionItem.id}"
-                            class="block text-xs font-medium text-muted-foreground mb-1"
-                          >Check Type</label>
-                          <Select
-                            id="attention-type-{questionItem.id}"
-                            value={questionItem.attentionCheck.type || 'instructed'}
-                            onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
-                              updateQuestion({
-                                attentionCheck: {
-                                  ...questionItem.attentionCheck!,
-                                  type: e.currentTarget.value as 'instructed' | 'trap',
-                                },
-                              })}
-                            placeholder=""
-                          >
-                            <option value="instructed">Instructed (explicit)</option>
-                            <option value="trap">Trap (hidden)</option>
-                          </Select>
-                        </div>
-
-                        <div>
-                          <label
-                            for="attention-answer-{questionItem.id}"
-                            class="block text-xs font-medium text-muted-foreground mb-1"
-                          >Correct Answer</label>
-                          <input
-                            id="attention-answer-{questionItem.id}"
-                            type="text"
-                            value={String(questionItem.attentionCheck.correctAnswer ?? '')}
-                            oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                              updateQuestion({
-                                attentionCheck: {
-                                  ...questionItem.attentionCheck!,
-                                  correctAnswer: e.currentTarget.value,
-                                },
-                              })}
-                            class="w-full px-2 py-1.5 text-sm border border-input rounded-md bg-background text-foreground"
-                            placeholder="Expected answer value"
-                            data-testid="attention-check-answer"
-                          />
-                          <p class="text-xs text-muted-foreground mt-0.5">
-                            The value the respondent must select to pass the check
-                          </p>
-                        </div>
-                      </div>
-                    {/if}
-                  </div>
+                  <AttentionCheckSection {questionItem} onUpdate={updateQuestion} />
                 {/if}
 
-                {#if supportsCarryForward && carryForwardSourceQuestions.length > 0}
-                  <div class="border-t pt-3 mt-3">
-                    <label class="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={!!questionItem.carryForward}
-                        onchange={(e: Event & { currentTarget: HTMLInputElement }) => {
-                          if (e.currentTarget.checked) {
-                            const firstSource = carryForwardSourceQuestions[0];
-                            const defaultMode = carryForwardModes[0] || 'default-value';
-                            const defaultTarget = getAvailableTargetFields(defaultMode)[0] || 'value';
-                            updateQuestion({
-                              carryForward: {
-                                sourceQuestionId: firstSource?.id || '',
-                                mode: defaultMode,
-                                targetField: defaultTarget,
-                              },
-                            });
-                          } else {
-                            updateQuestion({ carryForward: undefined });
-                          }
-                        }}
-                        class="rounded border-input text-primary focus:ring-primary"
-                        data-testid="carry-forward-toggle"
-                      />
-                      <span class="text-sm text-foreground">Carry forward</span>
-                    </label>
-                    <p class="text-xs text-muted-foreground mt-1 ml-6">
-                      Use answers from a prior question as defaults, options, or context
-                    </p>
-
-                    {#if questionItem.carryForward}
-                      {@const cfConfig = questionItem.carryForward}
-                      <div class="mt-2 space-y-2 pl-6">
-                        <div>
-                          <label
-                            for="cf-source-{questionItem.id}"
-                            class="block text-xs font-medium text-muted-foreground mb-1"
-                          >Source Question</label>
-                          <Select
-                            id="cf-source-{questionItem.id}"
-                            value={cfConfig.sourceQuestionId}
-                            onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
-                              updateQuestion({
-                                carryForward: {
-                                  ...cfConfig,
-                                  sourceQuestionId: e.currentTarget.value,
-                                },
-                              })}
-                            placeholder=""
-                          >
-                            {#each carryForwardSourceQuestions as sourceQ (sourceQ.id)}
-                              <option value={sourceQ.id}>
-                                {sourceQ.name || sourceQ.id} ({sourceQ.type})
-                              </option>
-                            {/each}
-                          </Select>
-                        </div>
-
-                        <div>
-                          <label
-                            for="cf-mode-{questionItem.id}"
-                            class="block text-xs font-medium text-muted-foreground mb-1"
-                          >Mode</label>
-                          <Select
-                            id="cf-mode-{questionItem.id}"
-                            value={cfConfig.mode}
-                            onchange={(e: Event & { currentTarget: HTMLSelectElement }) => {
-                              const newMode = e.currentTarget.value as CarryForwardMode;
-                              const newTargets = getAvailableTargetFields(newMode);
-                              updateQuestion({
-                                carryForward: {
-                                  ...cfConfig,
-                                  mode: newMode,
-                                  targetField: newTargets.includes(cfConfig.targetField)
-                                    ? cfConfig.targetField
-                                    : newTargets[0] || 'value',
-                                },
-                              });
-                            }}
-                            placeholder=""
-                          >
-                            {#each carryForwardModes as mode (mode)}
-                              <option value={mode}>
-                                {#if mode === 'default-value'}
-                                  Default value (pre-fill answer)
-                                {:else if mode === 'selected-options'}
-                                  Selected options (carry chosen items)
-                                {:else if mode === 'unselected-options'}
-                                  Unselected options (carry unchosen items)
-                                {:else if mode === 'text-content'}
-                                  Text content (insert answer text)
-                                {/if}
-                              </option>
-                            {/each}
-                          </Select>
-                        </div>
-
-                        <div>
-                          <label
-                            for="cf-target-{questionItem.id}"
-                            class="block text-xs font-medium text-muted-foreground mb-1"
-                          >Target Field</label>
-                          <Select
-                            id="cf-target-{questionItem.id}"
-                            value={cfConfig.targetField}
-                            onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
-                              updateQuestion({
-                                carryForward: {
-                                  ...cfConfig,
-                                  targetField: e.currentTarget.value as CarryForwardTargetField,
-                                },
-                              })}
-                            placeholder=""
-                          >
-                            {#each carryForwardTargetFields as field (field)}
-                              <option value={field}>
-                                {#if field === 'value'}
-                                  Value (pre-fill response)
-                                {:else if field === 'options'}
-                                  Options (replace option list)
-                                {:else if field === 'prompt'}
-                                  Prompt (insert into question text)
-                                {/if}
-                              </option>
-                            {/each}
-                          </Select>
-                        </div>
-
-                        {#if cfConfig.mode === 'text-content' && cfConfig.targetField === 'prompt'}
-                          <p class="text-xs text-muted-foreground bg-muted p-2 rounded-md">
-                            Use <code class="bg-background px-1 rounded text-xs">{'{{carryForward}}'}</code> in the prompt to control where the carried text appears. Without it, the text is appended.
-                          </p>
-                        {/if}
-                      </div>
-                    {/if}
-                  </div>
+                {#if supportsCarryForward}
+                  <CarryForwardSection {questionItem} onUpdate={updateQuestion} />
                 {/if}
               </div>
             </div>
           </div>
         {:else if pageItem}
-          <!-- Page Properties -->
-          <div class="p-4 space-y-4">
-            <div>
-              <label
-                for="page-name-{pageItem.id}"
-                class="block text-sm font-medium text-foreground mb-1">Page Name</label
-              >
-              <input
-                id="page-name-{pageItem.id}"
-                type="text"
-                value={pageItem.name || ''}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                  updatePageProperty('name', e.currentTarget.value)}
-                class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-                placeholder="Page name..."
-              />
-            </div>
-
-            <div>
-              <label
-                for="page-id-{pageItem.id}"
-                class="block text-sm font-medium text-foreground mb-1">Page ID</label
-              >
-              <input
-                id="page-id-{pageItem.id}"
-                type="text"
-                value={pageItem.id}
-                disabled
-                class="w-full px-3 py-2 border border-input rounded-md bg-muted text-muted-foreground"
-              />
-            </div>
-
-            <div>
-              <label
-                for="page-layout-{pageItem.id}"
-                class="block text-sm font-medium text-foreground mb-1">Layout</label
-              >
-              <Select
-                id="page-layout-{pageItem.id}"
-                value={pageItem.layout?.type || 'vertical'}
-                onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
-                  updatePageProperty('layout', {
-                    ...pageItem.layout,
-                    type: e.currentTarget.value,
-                  })}
-                placeholder=""
-              >
-                <option value="vertical">Vertical</option>
-                <option value="horizontal">Horizontal</option>
-                <option value="grid">Grid</option>
-              </Select>
-            </div>
-
-            <!-- Page time limit (E-FLOW-5) -->
-            <div class="border-t pt-3">
-              <span class="block text-sm font-medium text-foreground mb-2">Page time limit</span>
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label
-                    for="page-timelimit-{pageItem.id}"
-                    class="block text-xs text-muted-foreground mb-1">Seconds (0 = none)</label
-                  >
-                  <input
-                    id="page-timelimit-{pageItem.id}"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={pageItem.settings?.timeLimit ? pageItem.settings.timeLimit / 1000 : 0}
-                    oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-                      const secs = Number(e.currentTarget.value);
-                      const ms = Number.isFinite(secs) && secs > 0 ? Math.round(secs * 1000) : undefined;
-                      updatePageProperty('settings', { ...pageItem.settings, timeLimit: ms });
-                    }}
-                    class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-                    data-testid="page-timelimit-input"
-                  />
-                </div>
-                <div>
-                  <label
-                    for="page-timelimit-action-{pageItem.id}"
-                    class="block text-xs text-muted-foreground mb-1">On timeout</label
-                  >
-                  <Select
-                    id="page-timelimit-action-{pageItem.id}"
-                    value={pageItem.settings?.onTimeLimit || 'auto-advance'}
-                    onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
-                      updatePageProperty('settings', {
-                        ...pageItem.settings,
-                        onTimeLimit: e.currentTarget.value as 'auto-advance' | 'terminate',
-                      })}
-                    placeholder=""
-                  >
-                    <option value="auto-advance">Auto-advance</option>
-                    <option value="terminate">Terminate</option>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <span class="block text-sm font-medium text-foreground mb-1">Questions</span>
-              <p class="text-sm text-muted-foreground">
-                This page contains {pageItem.blocks?.reduce(
-                  (sum: number, block: any) => sum + (block.questions?.length || 0),
-                  0
-                ) || 0} questions
-              </p>
-            </div>
-          </div>
+          <PageProperties {pageItem} onUpdate={updatePageProperty} />
         {:else if variableItem}
-          <!-- Variable Properties -->
-          <div class="p-4 space-y-4">
-            <div>
-              <label
-                for="var-name-{variableItem.id}"
-                class="block text-sm font-medium text-foreground mb-1">Variable Name</label
-              >
-              <input
-                id="var-name-{variableItem.id}"
-                type="text"
-                value={variableItem.name}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                  updateVariableProperty('name', e.currentTarget.value)}
-                class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-                placeholder="Optional internal identifier"
-              />
-            </div>
-
-            <div>
-              <label
-                for="var-type-{variableItem.id}"
-                class="block text-sm font-medium text-foreground mb-1">Type</label
-              >
-              <Select
-                id="var-type-{variableItem.id}"
-                value={variableItem.type}
-                onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
-                  updateVariableProperty('type', e.currentTarget.value)}
-                placeholder=""
-              >
-                <option value="number">Number</option>
-                <option value="string">Text</option>
-                <option value="boolean">True/False</option>
-                <option value="date">Date</option>
-                <option value="time">Time</option>
-                <option value="array">List</option>
-                <option value="reaction_time">Reaction Time</option>
-                <option value="stimulus_onset">Stimulus Onset</option>
-              </Select>
-            </div>
-
-            <div>
-              <label
-                for="var-formula-{variableItem.id}"
-                class="block text-sm font-medium text-foreground mb-1">Formula</label
-              >
-              <textarea
-                id="var-formula-{variableItem.id}"
-                value={variableItem.formula || ''}
-                oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) =>
-                  updateVariableProperty('formula', e.currentTarget.value)}
-                rows="3"
-                class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary font-mono text-sm bg-background text-foreground"
-                placeholder="e.g., age * 10 + reactionTime"
-              ></textarea>
-            </div>
-
-            <div>
-              <label
-                for="var-desc-{variableItem.id}"
-                class="block text-sm font-medium text-foreground mb-1">Description</label
-              >
-              <input
-                id="var-desc-{variableItem.id}"
-                type="text"
-                value={variableItem.description || ''}
-                oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
-                  updateVariableProperty('description', e.currentTarget.value)}
-                class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-                placeholder="What is this variable for?"
-              />
-            </div>
-          </div>
+          <VariableProperties {variableItem} onUpdate={updateVariableProperty} />
         {:else}
           <!-- No Selection -->
           <div class="p-4 text-center text-muted-foreground">
@@ -1195,122 +525,10 @@
 </div>
 
 <!-- Save as Template Modal -->
-{#if showSaveTemplateModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center">
-    <!-- Backdrop -->
-    <button
-      type="button"
-      class="absolute inset-0 bg-black/50"
-      onclick={() => (showSaveTemplateModal = false)}
-      aria-label="Close modal"
-    ></button>
-
-    <!-- Modal -->
-    <div
-      class="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-md mx-4 p-6"
-      data-testid="save-template-modal"
-    >
-      <h3 class="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-        <Library class="w-5 h-5 text-primary" />
-        Save as Template
-      </h3>
-
-      {#if templateSaveSuccess}
-        <div class="text-center py-8">
-          <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-success/10 flex items-center justify-center">
-            <CheckCircle size={24} class="text-success" />
-          </div>
-          <p class="text-sm font-medium text-foreground">Template saved successfully</p>
-          <p class="text-xs text-muted-foreground mt-1">Available in the Template Library</p>
-        </div>
-      {:else}
-        <div class="space-y-4">
-          <div>
-            <label for="template-name" class="block text-sm font-medium text-foreground mb-1">Name</label>
-            <input
-              id="template-name"
-              type="text"
-              bind:value={templateName}
-              class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-              placeholder="Template name"
-              data-testid="template-name-input"
-            />
-          </div>
-
-          <div>
-            <label for="template-description" class="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea
-              id="template-description"
-              bind:value={templateDescription}
-              rows="2"
-              class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-              placeholder="Optional description"
-              data-testid="template-description-input"
-            ></textarea>
-          </div>
-
-          <div>
-            <label for="template-category" class="block text-sm font-medium text-foreground mb-1">Category</label>
-            <Select
-              id="template-category"
-              bind:value={templateCategory}
-              placeholder=""
-            >
-              {#each templateCategories as cat}
-                <option value={cat.id}>{cat.label}</option>
-              {/each}
-            </Select>
-          </div>
-
-          <div>
-            <label for="template-tags" class="block text-sm font-medium text-foreground mb-1">Tags</label>
-            <input
-              id="template-tags"
-              type="text"
-              bind:value={templateTags}
-              class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
-              placeholder="tag1, tag2, tag3"
-              data-testid="template-tags-input"
-            />
-          </div>
-
-          <label class="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              bind:checked={templateIsShared}
-              class="rounded border-input text-primary focus:ring-primary"
-              data-testid="template-shared-checkbox"
-            />
-            <span class="text-sm text-foreground">Share with organization</span>
-          </label>
-
-          {#if templateSaveError}
-            <div class="bg-destructive/10 text-destructive rounded-md p-2 text-sm">
-              {templateSaveError}
-            </div>
-          {/if}
-
-          <div class="flex items-center gap-3 pt-2">
-            <button
-              type="button"
-              class="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-              onclick={saveAsTemplate}
-              disabled={templateSaving || !templateName.trim()}
-              data-testid="template-save-confirm"
-            >
-              {templateSaving ? 'Saving...' : 'Save Template'}
-            </button>
-            <button
-              type="button"
-              class="px-4 py-2 border border-border rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              onclick={() => (showSaveTemplateModal = false)}
-              data-testid="template-save-cancel"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      {/if}
-    </div>
-  </div>
+{#if showSaveTemplateModal && questionItem && organizationId}
+  <SaveTemplateModal
+    {questionItem}
+    {organizationId}
+    onClose={() => (showSaveTemplateModal = false)}
+  />
 {/if}

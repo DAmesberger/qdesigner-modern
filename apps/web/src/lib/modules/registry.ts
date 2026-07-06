@@ -25,7 +25,7 @@ class ModuleRegistryImpl implements IModuleRegistry {
   unregister(type: string): void {
     this.modules.delete(type);
     // Clear cached components
-    ['runtime', 'designer'].forEach(variant => {
+    ['runtime', 'designer', 'fullCanvasDesigner'].forEach(variant => {
       this.componentCache.delete(`${type}:${variant}`);
     });
   }
@@ -54,7 +54,10 @@ class ModuleRegistryImpl implements IModuleRegistry {
   /**
    * Load a component dynamically
    */
-  async loadComponent(type: string, variant: 'runtime' | 'designer'): Promise<ComponentType> {
+  async loadComponent(
+    type: string,
+    variant: 'runtime' | 'designer' | 'fullCanvasDesigner'
+  ): Promise<ComponentType> {
     const cacheKey = `${type}:${variant}`;
     
     // Check cache first
@@ -172,7 +175,10 @@ export function getModulesByCategory(category: ModuleCategory): ModuleMetadata[]
   return moduleRegistry.getByCategory(category);
 }
 
-export async function loadModuleComponent(type: string, variant: 'runtime' | 'designer'): Promise<ComponentType> {
+export async function loadModuleComponent(
+  type: string,
+  variant: 'runtime' | 'designer' | 'fullCanvasDesigner'
+): Promise<ComponentType> {
   return moduleRegistry.loadComponent(type, variant);
 }
 

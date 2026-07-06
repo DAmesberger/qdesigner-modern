@@ -18,11 +18,12 @@ beforeAll(() => {
 });
 
 /**
- * Guardrail (F076) for the ReactionLabWorkspace god component (1959 lines). It
- * normalizes its own reactive `config` from the `question` prop and emits changes
- * through `onupdate` (the channel the +page wires back into the designerStore). We
- * seed the store + openReactionLab as the real designer does, then smoke-mount and
- * assert the block outline renders and the add-block interaction emits an update.
+ * Guardrail (F076) for the decomposed Reaction Lab (P6-T6). The shell normalizes
+ * its own reactive `config` from the `question` prop and emits changes through
+ * `onupdate` (the channel the +page wires back into the designerStore). We seed
+ * the store + openReactionLab as the real designer does, then smoke-mount and
+ * assert the block outline (OutlinePane) renders and the add-block interaction
+ * emits an update.
  */
 function seedReactionExperiment() {
   designerStore.loadQuestionnaireFromDefinition({

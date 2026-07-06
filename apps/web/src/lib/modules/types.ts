@@ -58,6 +58,19 @@ export interface ModuleCapabilities {
 export interface ModuleComponents {
   runtime: () => Promise<{ default: unknown }>;
   designer: () => Promise<{ default: unknown }>;
+  /**
+   * Full-canvas takeover editor (optional capability).
+   *
+   * A module may declare a `fullCanvasDesigner` when its authoring surface needs
+   * to replace the entire designer center canvas (and suppress the right
+   * sidebar) rather than render inside the properties panel like the standard
+   * `designer`. The designer route resolves this loader through
+   * `moduleRegistry.loadComponent(type, 'fullCanvasDesigner')` when the module
+   * requests the takeover (e.g. reaction-experiment's Reaction Lab), so the
+   * route no longer hard-codes the workspace import. The mounted component
+   * receives `{ question, organizationId, userId, onclose, onupdate }`.
+   */
+  fullCanvasDesigner?: () => Promise<{ default: unknown }>;
 }
 
 // Answer type definition for questions
@@ -252,5 +265,8 @@ export interface ModuleRegistry {
   get(type: string): ModuleMetadata | undefined;
   getByCategory(category: ModuleCategory): ModuleMetadata[];
   getAllTypes(): string[];
-  loadComponent(type: string, variant: 'runtime' | 'designer'): Promise<ComponentType>;
+  loadComponent(
+    type: string,
+    variant: 'runtime' | 'designer' | 'fullCanvasDesigner'
+  ): Promise<ComponentType>;
 }
