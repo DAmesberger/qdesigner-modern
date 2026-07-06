@@ -51,7 +51,12 @@ pub fn router(state: AppState) -> Router {
         .layer(CatchPanicLayer::new());
 
     let user_routes = Router::new()
-        .route("/me", get(users::get_profile).patch(users::update_profile))
+        .route(
+            "/me",
+            get(users::get_profile)
+                .patch(users::update_profile)
+                .delete(users::delete_account),
+        )
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
@@ -249,10 +254,7 @@ pub fn router(state: AppState) -> Router {
                 rate_limit_middleware,
             )),
         )
-        .route(
-            "/{id}/synced-client-ids",
-            get(sessions::synced_client_ids),
-        )
+        .route("/{id}/synced-client-ids", get(sessions::synced_client_ids))
         .route(
             "/{id}/variables",
             get(sessions::get_variables).post(sessions::upsert_variable),

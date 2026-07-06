@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AddMemberData, AddMemberErrors, AddMemberResponses, AddProjectMemberData, AddProjectMemberErrors, AddProjectMemberResponses, AggregateSessionsData, AggregateSessionsErrors, AggregateSessionsResponses, ArmCountsData, ArmCountsErrors, ArmCountsResponses, BumpVersionData, BumpVersionErrors, BumpVersionResponses, ChangeMemberRoleData, ChangeMemberRoleErrors, ChangeMemberRoleResponses, CheckAutoJoinData, CheckAutoJoinErrors, CheckAutoJoinResponses, CheckDuplicateData, CheckDuplicateResponses, CompareSessionsData, CompareSessionsErrors, CompareSessionsResponses, ConditionCountsData, ConditionCountsErrors, ConditionCountsResponses, ConfirmPasswordResetData, ConfirmPasswordResetErrors, ConfirmPasswordResetResponses, CreateCommentData, CreateCommentErrors, CreateCommentResponses, CreateDomainData, CreateDomainErrors, CreateDomainResponses, CreateInvitationData, CreateInvitationErrors, CreateInvitationResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateQuestionnaireData, CreateQuestionnaireErrors, CreateQuestionnaireResponses, CreateSessionData, CreateSessionErrors, CreateSessionResponses, CreateTemplateData, CreateTemplateErrors, CreateTemplateResponses, CrossProjectAnalyticsData, CrossProjectAnalyticsErrors, CrossProjectAnalyticsResponses, DashboardSummaryData, DashboardSummaryErrors, DashboardSummaryResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteCommentData, DeleteCommentErrors, DeleteCommentResponses, DeleteDomainData, DeleteDomainErrors, DeleteDomainResponses, DeleteMediaData, DeleteMediaErrors, DeleteMediaResponses, DeleteOrganizationData, DeleteOrganizationErrors, DeleteOrganizationResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, DeleteQuestionnaireData, DeleteQuestionnaireErrors, DeleteQuestionnaireResponses, DeleteTemplateData, DeleteTemplateErrors, DeleteTemplateResponses, ExportResponsesData, ExportResponsesErrors, ExportResponsesResponses, FilterSessionsData, FilterSessionsErrors, FilterSessionsResponses, GetEventsData, GetEventsErrors, GetEventsResponses, GetInvitationData, GetInvitationErrors, GetInvitationResponses, GetMediaData, GetMediaErrors, GetMediaResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetProfileData, GetProfileErrors, GetProfileResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetQuestionnaireByCodeData, GetQuestionnaireByCodeErrors, GetQuestionnaireByCodeResponses, GetQuestionnaireData, GetQuestionnaireErrors, GetQuestionnaireResponses, GetResponsesData, GetResponsesErrors, GetResponsesResponses, GetSessionData, GetSessionErrors, GetSessionResponses, GetTemplateData, GetTemplateErrors, GetTemplateResponses, GetVariablesData, GetVariablesErrors, GetVariablesResponses, HealthData, HealthResponses, ListCommentsData, ListCommentsErrors, ListCommentsResponses, ListDomainsData, ListDomainsErrors, ListDomainsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMediaData, ListMediaErrors, ListMediaResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsResponses, ListPendingInvitationsData, ListPendingInvitationsErrors, ListPendingInvitationsResponses, ListProjectMembersData, ListProjectMembersErrors, ListProjectMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListQuestionnairesData, ListQuestionnairesErrors, ListQuestionnairesResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListTemplatesData, ListTemplatesErrors, ListTemplatesResponses, ListVersionsData, ListVersionsErrors, ListVersionsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, MeData, MeErrors, MeResponses, PasswordResetData, PasswordResetErrors, PasswordResetResponses, PublicCohortStatsData, PublicCohortStatsErrors, PublicCohortStatsResponses, PublicServerVariablesData, PublicServerVariablesErrors, PublicServerVariablesResponses, PublishQuestionnaireData, PublishQuestionnaireErrors, PublishQuestionnaireResponses, QuotaStatusData, QuotaStatusErrors, QuotaStatusResponses, ReadyData, ReadyErrors, ReadyResponses, RefreshData, RefreshErrors, RefreshResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemoveProjectMemberData, RemoveProjectMemberErrors, RemoveProjectMemberResponses, ResendVerificationCodeData, ResendVerificationCodeResponses, RevokeInvitationData, RevokeInvitationErrors, RevokeInvitationResponses, SendVerificationCodeData, SendVerificationCodeResponses, StreamMediaContentData, StreamMediaContentErrors, StreamMediaContentResponses, SubmitEventsData, SubmitEventsErrors, SubmitEventsResponses, SubmitResponseData, SubmitResponseErrors, SubmitResponseResponses, SyncSessionData, SyncSessionErrors, SyncSessionResponses, TimeseriesData, TimeseriesErrors, TimeseriesResponses, UpdateCommentData, UpdateCommentErrors, UpdateCommentResponses, UpdateDomainData, UpdateDomainErrors, UpdateDomainResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectMemberData, UpdateProjectMemberErrors, UpdateProjectMemberResponses, UpdateProjectResponses, UpdateQuestionnaireData, UpdateQuestionnaireErrors, UpdateQuestionnaireResponses, UpdateSessionData, UpdateSessionErrors, UpdateSessionResponses, UpdateTemplateData, UpdateTemplateErrors, UpdateTemplateResponses, UploadMediaData, UploadMediaErrors, UploadMediaResponses, UploadSessionMediaData, UploadSessionMediaErrors, UploadSessionMediaResponses, UpsertVariableData, UpsertVariableErrors, UpsertVariableResponses, VerifyCodeData, VerifyCodeResponses, VerifyDomainData, VerifyDomainErrors, VerifyDomainResponses, VerifyEmailData, VerifyEmailErrors, VerifyEmailResponses } from './types.gen';
+import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AddMemberData, AddMemberErrors, AddMemberResponses, AddProjectMemberData, AddProjectMemberErrors, AddProjectMemberResponses, AggregateSessionsData, AggregateSessionsErrors, AggregateSessionsResponses, ArmCountsData, ArmCountsErrors, ArmCountsResponses, AssignMemberRoleData, AssignMemberRoleErrors, AssignMemberRoleResponses, BumpVersionData, BumpVersionErrors, BumpVersionResponses, ChangeMemberRoleData, ChangeMemberRoleErrors, ChangeMemberRoleResponses, CheckAutoJoinData, CheckAutoJoinErrors, CheckAutoJoinResponses, CheckDuplicateData, CheckDuplicateResponses, CompareSessionsData, CompareSessionsErrors, CompareSessionsResponses, ConditionCountsData, ConditionCountsErrors, ConditionCountsResponses, ConfirmPasswordResetData, ConfirmPasswordResetErrors, ConfirmPasswordResetResponses, CreateCommentData, CreateCommentErrors, CreateCommentResponses, CreateDomainData, CreateDomainErrors, CreateDomainResponses, CreateInvitationData, CreateInvitationErrors, CreateInvitationResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateQuestionnaireData, CreateQuestionnaireErrors, CreateQuestionnaireResponses, CreateRoleData, CreateRoleErrors, CreateRoleResponses, CreateSessionData, CreateSessionErrors, CreateSessionResponses, CreateTemplateData, CreateTemplateErrors, CreateTemplateResponses, CrossProjectAnalyticsData, CrossProjectAnalyticsErrors, CrossProjectAnalyticsResponses, DashboardSummaryData, DashboardSummaryErrors, DashboardSummaryResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteAccountData, DeleteAccountErrors, DeleteAccountResponses, DeleteCommentData, DeleteCommentErrors, DeleteCommentResponses, DeleteDomainData, DeleteDomainErrors, DeleteDomainResponses, DeleteMediaData, DeleteMediaErrors, DeleteMediaResponses, DeleteOrganizationData, DeleteOrganizationErrors, DeleteOrganizationResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, DeleteQuestionnaireData, DeleteQuestionnaireErrors, DeleteQuestionnaireResponses, DeleteRoleData, DeleteRoleErrors, DeleteRoleResponses, DeleteTemplateData, DeleteTemplateErrors, DeleteTemplateResponses, ExportResponsesData, ExportResponsesErrors, ExportResponsesResponses, FilterSessionsData, FilterSessionsErrors, FilterSessionsResponses, GetEventsData, GetEventsErrors, GetEventsResponses, GetInvitationData, GetInvitationErrors, GetInvitationResponses, GetMediaData, GetMediaErrors, GetMediaResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetOrgBrandingData, GetOrgBrandingErrors, GetOrgBrandingResponses, GetProfileData, GetProfileErrors, GetProfileResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetQuestionnaireByCodeData, GetQuestionnaireByCodeErrors, GetQuestionnaireByCodeResponses, GetQuestionnaireData, GetQuestionnaireErrors, GetQuestionnaireResponses, GetResponsesData, GetResponsesErrors, GetResponsesResponses, GetSeatsData, GetSeatsErrors, GetSeatsResponses, GetSessionData, GetSessionErrors, GetSessionResponses, GetTemplateData, GetTemplateErrors, GetTemplateResponses, GetVariablesData, GetVariablesErrors, GetVariablesResponses, HealthData, HealthResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListCommentsData, ListCommentsErrors, ListCommentsResponses, ListDomainsData, ListDomainsErrors, ListDomainsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMediaData, ListMediaErrors, ListMediaResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsResponses, ListPendingInvitationsData, ListPendingInvitationsErrors, ListPendingInvitationsResponses, ListProjectMembersData, ListProjectMembersErrors, ListProjectMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListQuestionnairesData, ListQuestionnairesErrors, ListQuestionnairesResponses, ListRolesData, ListRolesErrors, ListRolesResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListTemplatesData, ListTemplatesErrors, ListTemplatesResponses, ListVersionsData, ListVersionsErrors, ListVersionsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, MeData, MeErrors, MeResponses, PasswordResetData, PasswordResetErrors, PasswordResetResponses, PublicCohortStatsData, PublicCohortStatsErrors, PublicCohortStatsResponses, PublicServerVariablesData, PublicServerVariablesErrors, PublicServerVariablesResponses, PublishQuestionnaireData, PublishQuestionnaireErrors, PublishQuestionnaireResponses, QuotaCellsData, QuotaCellsErrors, QuotaCellsResponses, QuotaStatusData, QuotaStatusErrors, QuotaStatusResponses, ReadyData, ReadyErrors, ReadyResponses, RefreshData, RefreshErrors, RefreshResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemoveProjectMemberData, RemoveProjectMemberErrors, RemoveProjectMemberResponses, ResendVerificationCodeData, ResendVerificationCodeResponses, RevokeInvitationData, RevokeInvitationErrors, RevokeInvitationResponses, SendVerificationCodeData, SendVerificationCodeResponses, StreamMediaContentData, StreamMediaContentErrors, StreamMediaContentResponses, SubmitEventsData, SubmitEventsErrors, SubmitEventsResponses, SubmitResponseData, SubmitResponseErrors, SubmitResponseResponses, SyncedClientIdsData, SyncedClientIdsErrors, SyncedClientIdsResponses, SyncSessionData, SyncSessionErrors, SyncSessionResponses, TimeseriesData, TimeseriesErrors, TimeseriesResponses, TransferOrgOwnershipData, TransferOrgOwnershipErrors, TransferOrgOwnershipResponses, TransferProjectOwnershipData, TransferProjectOwnershipErrors, TransferProjectOwnershipResponses, UpdateCommentData, UpdateCommentErrors, UpdateCommentResponses, UpdateDomainData, UpdateDomainErrors, UpdateDomainResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectMemberData, UpdateProjectMemberErrors, UpdateProjectMemberResponses, UpdateProjectResponses, UpdateQuestionnaireData, UpdateQuestionnaireErrors, UpdateQuestionnaireResponses, UpdateRoleData, UpdateRoleErrors, UpdateRoleResponses, UpdateSessionData, UpdateSessionErrors, UpdateSessionResponses, UpdateTemplateData, UpdateTemplateErrors, UpdateTemplateResponses, UploadMediaData, UploadMediaErrors, UploadMediaResponses, UploadSessionMediaData, UploadSessionMediaErrors, UploadSessionMediaResponses, UpsertVariableData, UpsertVariableErrors, UpsertVariableResponses, VerifyCodeData, VerifyCodeResponses, VerifyDomainData, VerifyDomainErrors, VerifyDomainResponses, VerifyEmailData, VerifyEmailErrors, VerifyEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -155,6 +155,29 @@ export const confirmPasswordReset = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
+ * DELETE /api/users/me — self-service account deletion (GDPR erasure).
+ *
+ * Password-confirmed. Blocks (409) while the caller still owns any
+ * organization that has other active members — they must transfer
+ * ownership first. Otherwise: soft-deletes organizations where the caller
+ * was the sole member, removes the caller's memberships, and anonymizes
+ * the `users` row (PII scrubbed, `deleted_at` set). Research
+ * sessions/responses are retained **pseudonymously** — the `user_id` link
+ * is left intact so longitudinal/aggregate analysis survives while the
+ * personal data on the users row is erased. Refresh tokens are revoked
+ * after the request transaction commits.
+ */
+export const deleteAccount = <ThrowOnError extends boolean = false>(options: Options<DeleteAccountData, ThrowOnError>) => (options.client ?? client).delete<DeleteAccountResponses, DeleteAccountErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/users/me',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * GET /api/users/me
  */
 export const getProfile = <ThrowOnError extends boolean = false>(options?: Options<GetProfileData, ThrowOnError>) => (options?.client ?? client).get<GetProfileResponses, GetProfileErrors, ThrowOnError>({
@@ -230,6 +253,25 @@ export const updateOrganization = <ThrowOnError extends boolean = false>(options
 });
 
 /**
+ * GET /api/organizations/:id/seats
+ */
+export const getSeats = <ThrowOnError extends boolean = false>(options: Options<GetSeatsData, ThrowOnError>) => (options.client ?? client).get<GetSeatsResponses, GetSeatsErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/organizations/{id}/seats',
+    ...options
+});
+
+/**
+ * GET /api/organizations/:id/branding
+ *
+ * Anonymous, lightweight branding read (E-RBAC-8). The participant fillout
+ * chrome fetches this to theme itself. `organizations` is RLS-exempt (ADR 0015),
+ * so this queries the pool directly like the public by-code questionnaire read —
+ * no auth, no per-request tx. Returns only presentation fields.
+ */
+export const getOrgBranding = <ThrowOnError extends boolean = false>(options: Options<GetOrgBrandingData, ThrowOnError>) => (options.client ?? client).get<GetOrgBrandingResponses, GetOrgBrandingErrors, ThrowOnError>({ url: '/api/organizations/{id}/branding', ...options });
+
+/**
  * GET /api/organizations/:id/members
  */
 export const listMembers = <ThrowOnError extends boolean = false>(options: Options<ListMembersData, ThrowOnError>) => (options.client ?? client).get<ListMembersResponses, ListMembersErrors, ThrowOnError>({
@@ -266,6 +308,25 @@ export const removeMember = <ThrowOnError extends boolean = false>(options: Opti
 export const changeMemberRole = <ThrowOnError extends boolean = false>(options: Options<ChangeMemberRoleData, ThrowOnError>) => (options.client ?? client).put<ChangeMemberRoleResponses, ChangeMemberRoleErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/organizations/{id}/members/{user_id}/role',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * POST /api/organizations/:id/transfer-ownership (E-RBAC-5)
+ *
+ * The sanctioned, audited path to hand an organization to another member.
+ * Unlike `change_member_role` — which refuses to demote the last owner —
+ * this promotes the new owner *and* (by default) demotes the caller in one
+ * transaction, so the org is never left ownerless. The caller must be a
+ * current owner and re-confirm their password.
+ */
+export const transferOrgOwnership = <ThrowOnError extends boolean = false>(options: Options<TransferOrgOwnershipData, ThrowOnError>) => (options.client ?? client).post<TransferOrgOwnershipResponses, TransferOrgOwnershipErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/organizations/{id}/transfer-ownership',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -396,6 +457,79 @@ export const updateDomain = <ThrowOnError extends boolean = false>(options: Opti
 export const checkAutoJoin = <ThrowOnError extends boolean = false>(options: Options<CheckAutoJoinData, ThrowOnError>) => (options.client ?? client).get<CheckAutoJoinResponses, CheckAutoJoinErrors, ThrowOnError>({ url: '/api/domains/auto-join', ...options });
 
 /**
+ * GET /api/organizations/:id/audit
+ *
+ * Reverse-chronological, keyset-paginated audit timeline for one
+ * organization. Org admin/owner gated (defense-in-depth: the
+ * `audit_events_select` RLS policy also admits only active admins/owners).
+ */
+export const listAuditEvents = <ThrowOnError extends boolean = false>(options: Options<ListAuditEventsData, ThrowOnError>) => (options.client ?? client).get<ListAuditEventsResponses, ListAuditEventsErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/organizations/{id}/audit',
+    ...options
+});
+
+/**
+ * GET /api/organizations/:id/roles
+ */
+export const listRoles = <ThrowOnError extends boolean = false>(options: Options<ListRolesData, ThrowOnError>) => (options.client ?? client).get<ListRolesResponses, ListRolesErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/organizations/{id}/roles',
+    ...options
+});
+
+/**
+ * POST /api/organizations/:id/roles
+ */
+export const createRole = <ThrowOnError extends boolean = false>(options: Options<CreateRoleData, ThrowOnError>) => (options.client ?? client).post<CreateRoleResponses, CreateRoleErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/organizations/{id}/roles',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * DELETE /api/organizations/:id/roles/:role_id
+ */
+export const deleteRole = <ThrowOnError extends boolean = false>(options: Options<DeleteRoleData, ThrowOnError>) => (options.client ?? client).delete<DeleteRoleResponses, DeleteRoleErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/organizations/{id}/roles/{role_id}',
+    ...options
+});
+
+/**
+ * PATCH /api/organizations/:id/roles/:role_id
+ */
+export const updateRole = <ThrowOnError extends boolean = false>(options: Options<UpdateRoleData, ThrowOnError>) => (options.client ?? client).patch<UpdateRoleResponses, UpdateRoleErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/organizations/{id}/roles/{role_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * PUT /api/organizations/:id/members/:user_id/custom-role
+ *
+ * Assign (or clear, with `custom_role_id: null`) a member's custom role.
+ * The referenced role must belong to the same org.
+ */
+export const assignMemberRole = <ThrowOnError extends boolean = false>(options: Options<AssignMemberRoleData, ThrowOnError>) => (options.client ?? client).put<AssignMemberRoleResponses, AssignMemberRoleErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/organizations/{id}/members/{user_id}/custom-role',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * GET /api/projects
  */
 export const listProjects = <ThrowOnError extends boolean = false>(options?: Options<ListProjectsData, ThrowOnError>) => (options?.client ?? client).get<ListProjectsResponses, ListProjectsErrors, ThrowOnError>({
@@ -485,6 +619,24 @@ export const removeProjectMember = <ThrowOnError extends boolean = false>(option
 export const updateProjectMember = <ThrowOnError extends boolean = false>(options: Options<UpdateProjectMemberData, ThrowOnError>) => (options.client ?? client).patch<UpdateProjectMemberResponses, UpdateProjectMemberErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/projects/{id}/members/{uid}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * POST /api/projects/:id/transfer-ownership (E-RBAC-5)
+ *
+ * Reassigns the sole project owner. The caller must be the current project
+ * owner or an org owner/admin. The new owner must already be an org member;
+ * if they are not yet a project member they are auto-added as `owner`. Any
+ * previous project owner is demoted to `admin` in the same transaction.
+ */
+export const transferProjectOwnership = <ThrowOnError extends boolean = false>(options: Options<TransferProjectOwnershipData, ThrowOnError>) => (options.client ?? client).post<TransferProjectOwnershipResponses, TransferProjectOwnershipErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/projects/{id}/transfer-ownership',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -872,6 +1024,22 @@ export const armCounts = <ThrowOnError extends boolean = false>(options: Options
 export const quotaStatus = <ThrowOnError extends boolean = false>(options: Options<QuotaStatusData, ThrowOnError>) => (options.client ?? client).get<QuotaStatusResponses, QuotaStatusErrors, ThrowOnError>({ url: '/api/questionnaires/{id}/quota-status', ...options });
 
 /**
+ * GET /api/questionnaires/{id}/quota-cells
+ *
+ * Returns live per-cell occupancy for interlocking cross-quota cells. The
+ * client computes the participant's cell key from live in-survey variables
+ * and blocks only when THAT cell is full (independent-cell semantics), rather
+ * than when any sibling cell is full.
+ *
+ * Anonymous, like `quota_status`. `quota_cells` carries no RLS policy and is
+ * aggregate-only (no per-session rows), so a plain SELECT under the app role
+ * is safe — no SECURITY DEFINER needed for the read. A cell only appears once
+ * it has received its first claim; a not-yet-claimed cell is absent (occupancy
+ * 0), which the client treats as "room available".
+ */
+export const quotaCells = <ThrowOnError extends boolean = false>(options: Options<QuotaCellsData, ThrowOnError>) => (options.client ?? client).get<QuotaCellsResponses, QuotaCellsErrors, ThrowOnError>({ url: '/api/questionnaires/{id}/quota-cells', ...options });
+
+/**
  * GET /api/questionnaires/{id}/cohort-stats
  *
  * Public, aggregate-only cohort statistics for a PUBLISHED questionnaire.
@@ -920,6 +1088,19 @@ export const syncSession = <ThrowOnError extends boolean = false>(options: Optio
         ...options.headers
     }
 });
+
+/**
+ * GET /api/sessions/{id}/synced-client-ids
+ *
+ * Lightweight reconcile probe (E-OFF-5): returns the `client_id`s the server
+ * durably holds for the session (responses + interaction events). The client
+ * diffs its locally-`acked` ledger rows against this set and re-queues anything
+ * the server does not actually have — defending against a client-side
+ * over-marking that would otherwise strand data. Runs under the fillout GUC
+ * (`app.session_id` from the URL path), so an anonymous session can probe its
+ * own durability; `ensure_session_participant_or_member` gates access.
+ */
+export const syncedClientIds = <ThrowOnError extends boolean = false>(options: Options<SyncedClientIdsData, ThrowOnError>) => (options.client ?? client).get<SyncedClientIdsResponses, SyncedClientIdsErrors, ThrowOnError>({ url: '/api/sessions/{id}/synced-client-ids', ...options });
 
 export const filterSessions = <ThrowOnError extends boolean = false>(options: Options<FilterSessionsData, ThrowOnError>) => (options.client ?? client).post<FilterSessionsResponses, FilterSessionsErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

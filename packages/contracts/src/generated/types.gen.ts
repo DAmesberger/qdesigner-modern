@@ -40,6 +40,43 @@ export type ArmCount = {
     assigned_count: number;
 };
 
+export type AssignCustomRoleRequest = {
+    /**
+     * The custom role to assign, or `null` to clear the assignment (demote
+     * the member back to their system-role defaults).
+     */
+    custom_role_id?: string | null;
+};
+
+/**
+ * One row of the org audit timeline, joined with the actor's identity.
+ */
+export type AuditEventRecord = {
+    id: string;
+    organization_id: string;
+    actor_user_id?: string | null;
+    actor_email?: string | null;
+    actor_full_name?: string | null;
+    action: string;
+    resource_type: string;
+    resource_id?: string | null;
+    metadata: unknown;
+    /**
+     * Actor IP as a plain host string (no netmask), or null.
+     */
+    ip?: string | null;
+    created_at?: string | null;
+};
+
+/**
+ * Paginated audit-timeline page. `next_cursor` is present only when more
+ * rows may exist (the page came back full); pass it back as `cursor`.
+ */
+export type AuditListResponse = {
+    events: Array<AuditEventRecord>;
+    next_cursor?: string | null;
+};
+
 export type AuthResponse = {
     access_token: string;
     refresh_token: string;
@@ -147,6 +184,11 @@ export type CreateQuestionnaireRequest = {
     settings?: unknown;
 };
 
+export type CreateRoleRequest = {
+    name: string;
+    permissions: Array<string>;
+};
+
 export type CreateSessionRequest = {
     questionnaire_id: string;
     participant_id?: string | null;
@@ -225,6 +267,13 @@ export type DashboardSummary = {
     questionnaires: Array<QuestionnaireSummary>;
     recent_activity: Array<ActivityRecord>;
     stats: DashboardStats;
+};
+
+export type DeleteAccountRequest = {
+    /**
+     * Current account password, re-confirmed to authorize the erasure.
+     */
+    password: string;
 };
 
 export type DeletedResponse = {
@@ -412,6 +461,29 @@ export type NumericStatsSummary = {
     p99?: number | null;
 };
 
+/**
+ * Lightweight, anonymously-readable branding for an organization (E-RBAC-8).
+ * The participant fillout chrome fetches this to theme itself. Non-sensitive
+ * by construction — only presentation fields, resolved with platform fallbacks
+ * on the client.
+ */
+export type OrgBranding = {
+    organization_id: string;
+    name: string;
+    /**
+     * Brand primary color (`settings.primaryColor`), or null for the platform default.
+     */
+    primary_color?: string | null;
+    /**
+     * Logo URL — `settings.logoUrl` if set, else the legacy `logo_url` column.
+     */
+    logo_url?: string | null;
+    /**
+     * Optional participant header text (`settings.participantHeader`).
+     */
+    participant_header?: string | null;
+};
+
 export type OrgMember = {
     user_id: string;
     email: string;
@@ -419,6 +491,65 @@ export type OrgMember = {
     role: string;
     status: string;
     joined_at?: string | null;
+    /**
+     * Assigned custom role (E-RBAC-3), if any — its permissions override the
+     * `role` tier's defaults for this member.
+     */
+    custom_role_id?: string | null;
+    custom_role_name?: string | null;
+};
+
+/**
+ * One role definition (system preset or custom).
+ */
+export type OrgRoleRecord = {
+    id: string;
+    organization_id: string;
+    name: string;
+    permissions: Array<string>;
+    is_system: boolean;
+    created_at?: string | null;
+    updated_at?: string | null;
+};
+
+/**
+ * Documented shape of `organizations.settings` (E-RBAC-8, ADR trail).
+ *
+ * The column stays free-form JSONB — this struct is a *typed view* over the
+ * keys the platform cares about, used to validate writes ([`validate_org_settings`])
+ * and to surface branding anonymously ([`get_org_branding`]). Unknown keys
+ * (e.g. the `defaults` block the settings UI stores) deserialize away and are
+ * preserved on write because `update_organization` persists the caller's whole
+ * object, not a re-serialization of this struct. Keys are camelCase to match the
+ * JSON the frontend writes and the `settings->>'seatLimit'` reads in [`seat_usage`].
+ */
+export type OrgSettings = {
+    /**
+     * Brand primary color as a CSS hex string (`#RGB` or `#RRGGBB`). Applied to
+     * participant chrome as the `--primary` token.
+     */
+    primaryColor?: string | null;
+    /**
+     * Absolute http(s) or same-origin logo URL rendered on participant chrome.
+     */
+    logoUrl?: string | null;
+    /**
+     * Short header text shown above participant questionnaires.
+     */
+    participantHeader?: string | null;
+    /**
+     * Default visibility for newly created projects (E-RBAC-1).
+     */
+    projectVisibility?: string | null;
+    /**
+     * Seat cap (E-RBAC-4); enforced in [`seat_usage`] / [`enforce_seat_limit`].
+     */
+    seatLimit?: number | null;
+    /**
+     * When true, org member roles are managed by the IdP and not editable
+     * in-app (E-RBAC-6).
+     */
+    idpManagedRoles?: boolean | null;
 };
 
 export type Organization = {
@@ -535,6 +666,12 @@ export type QuestionnaireAnalytics = {
 export type QuestionnaireByCode = {
     id: string;
     name: string;
+    /**
+     * Owning organization id — lets the anonymous fillout route fetch org
+     * branding (`GET /api/organizations/{id}/branding`, E-RBAC-8) to theme the
+     * participant chrome.
+     */
+    organization_id: string;
     definition: unknown;
     is_active: boolean;
     start_date?: string | null;
@@ -569,6 +706,33 @@ export type QuestionnaireVersion = {
     version_major: number;
     version_minor: number;
     version_patch: number;
+};
+
+/**
+ * Live occupancy of a single interlocking quota cell (E-FLOW-7). The client
+ * selects the participant's cell by key and blocks only when that cell is full.
+ */
+export type QuotaCellStatus = {
+    /**
+     * Serialized interlocking tuple, e.g. `age=25-34|gender=male`.
+     */
+    cell_key: string;
+    /**
+     * Per-cell cap (0 ⇒ uncapped).
+     */
+    target: number;
+    /**
+     * Live occupancy.
+     */
+    current: number;
+    /**
+     * `target > 0 && current >= target`.
+     */
+    is_full: boolean;
+};
+
+export type QuotaCellsResponse = {
+    cells: Array<QuotaCellStatus>;
 };
 
 export type QuotaStatusItem = {
@@ -620,6 +784,34 @@ export type ResponseRecord = {
     metadata: unknown;
     created_at?: string | null;
     client_id?: string | null;
+};
+
+/**
+ * The full catalogue of assignable permission tokens — returned alongside
+ * the roles so the matrix editor can render the checkbox grid without
+ * hard-coding the list client-side.
+ */
+export type RolesListResponse = {
+    roles: Array<OrgRoleRecord>;
+    available_permissions: Array<string>;
+};
+
+/**
+ * Seat usage for an organization. `limit` is null when no `seatLimit` is set
+ * in `organizations.settings` (unlimited). A "seat" is an active member or a
+ * pending invitation (an outstanding invitation reserves a prospective seat).
+ */
+export type SeatUsageResponse = {
+    /**
+     * Configured seat limit (`settings->>'seatLimit'`), or null when unlimited.
+     */
+    limit?: number | null;
+    /**
+     * Seats currently consumed (`active_members + pending_invitations`).
+     */
+    used: number;
+    active_members: number;
+    pending_invitations: number;
 };
 
 export type SendVerificationCodeRequest = {
@@ -806,6 +998,22 @@ export type SyncResult = {
     responses_synced: number;
     events_synced: number;
     variables_synced: number;
+    /**
+     * Ack-driven marking (E-OFF-4): the `client_id`s (responses AND events) the
+     * server DURABLY HOLDS after this sync — i.e. every id in a chunk whose
+     * `INSERT ... ON CONFLICT (client_id) DO NOTHING` statement committed, which
+     * includes rows that were already present from a prior partial sync. The
+     * client flips ONLY these rows to `synced=1`; anything absent here stays
+     * unsynced and retries next pass. Empty when nothing was written.
+     */
+    accepted_client_ids?: Array<string>;
+    /**
+     * Ack-driven marking (E-OFF-4): the session-variable NAMES durably upserted
+     * by this sync. The client marks only these variable rows synced (guarded by
+     * a per-record clientId concurrency token), replacing the old mark-all-by-
+     * session semantics that raced with mid-flight variable writes.
+     */
+    accepted_variable_names?: Array<string>;
 };
 
 /**
@@ -830,11 +1038,52 @@ export type SyncVariableItem = {
     source?: string | null;
 };
 
+/**
+ * Response for `GET /api/sessions/{id}/synced-client-ids` (E-OFF-5 reconcile).
+ * The `client_id`s the server DURABLY HOLDS for the session (responses +
+ * interaction events). The client diffs its locally-`acked` ledger rows against
+ * this set to detect and re-queue any over-marking (locally acked, server-missing).
+ */
+export type SyncedClientIdsResponse = {
+    client_ids: Array<string>;
+};
+
 export type TimeSeriesBucket = {
     timestamp: string;
     sessions_started: number;
     sessions_completed: number;
     avg_completion_ms?: number | null;
+};
+
+/**
+ * Body for `POST /api/organizations/:id/transfer-ownership` (E-RBAC-5).
+ */
+export type TransferOwnershipRequest = {
+    /**
+     * The org member who becomes the new owner. Must be an active member.
+     */
+    new_owner_user_id: string;
+    /**
+     * Caller's current password — required to re-confirm a sensitive action.
+     */
+    password: string;
+    /**
+     * When true (default), the outgoing owner is demoted to `admin` in the
+     * same transaction. When false, the org ends up with two owners.
+     */
+    demote_previous_owner?: boolean;
+};
+
+/**
+ * Body for `POST /api/projects/:id/transfer-ownership` (E-RBAC-5).
+ */
+export type TransferProjectOwnershipRequest = {
+    /**
+     * The user who becomes the new project owner. Must be an active member
+     * of the project's parent organization (auto-added to the project as
+     * `owner` if not already a project member).
+     */
+    new_owner_user_id: string;
 };
 
 export type UpdateCommentRequest = {
@@ -885,6 +1134,11 @@ export type UpdateQuestionnaireRequest = {
     content?: unknown;
     status?: string | null;
     settings?: unknown;
+};
+
+export type UpdateRoleRequest = {
+    name?: string | null;
+    permissions?: Array<string> | null;
 };
 
 export type UpdateSessionRequest = {
@@ -1221,6 +1475,39 @@ export type ConfirmPasswordResetResponses = {
 
 export type ConfirmPasswordResetResponse = ConfirmPasswordResetResponses[keyof ConfirmPasswordResetResponses];
 
+export type DeleteAccountData = {
+    body: DeleteAccountRequest;
+    path?: never;
+    query?: never;
+    url: '/api/users/me';
+};
+
+export type DeleteAccountErrors = {
+    /**
+     * Password incorrect
+     */
+    401: ErrorEnvelope;
+    /**
+     * Still owns shared organization(s); transfer ownership first
+     */
+    409: ErrorEnvelope;
+    /**
+     * Validation error
+     */
+    422: ErrorEnvelope;
+};
+
+export type DeleteAccountError = DeleteAccountErrors[keyof DeleteAccountErrors];
+
+export type DeleteAccountResponses = {
+    /**
+     * Account deleted and anonymized
+     */
+    200: MessageResponse;
+};
+
+export type DeleteAccountResponse = DeleteAccountResponses[keyof DeleteAccountResponses];
+
 export type GetProfileData = {
     body?: never;
     path?: never;
@@ -1429,6 +1716,70 @@ export type UpdateOrganizationResponses = {
 
 export type UpdateOrganizationResponse = UpdateOrganizationResponses[keyof UpdateOrganizationResponses];
 
+export type GetSeatsData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/seats';
+};
+
+export type GetSeatsErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * Organization not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetSeatsError = GetSeatsErrors[keyof GetSeatsErrors];
+
+export type GetSeatsResponses = {
+    /**
+     * Seat usage
+     */
+    200: SeatUsageResponse;
+};
+
+export type GetSeatsResponse = GetSeatsResponses[keyof GetSeatsResponses];
+
+export type GetOrgBrandingData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/branding';
+};
+
+export type GetOrgBrandingErrors = {
+    /**
+     * Organization not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetOrgBrandingError = GetOrgBrandingErrors[keyof GetOrgBrandingErrors];
+
+export type GetOrgBrandingResponses = {
+    /**
+     * Organization branding
+     */
+    200: OrgBranding;
+};
+
+export type GetOrgBrandingResponse = GetOrgBrandingResponses[keyof GetOrgBrandingResponses];
+
 export type ListMembersData = {
     body?: never;
     path: {
@@ -1580,6 +1931,44 @@ export type ChangeMemberRoleResponses = {
 };
 
 export type ChangeMemberRoleResponse = ChangeMemberRoleResponses[keyof ChangeMemberRoleResponses];
+
+export type TransferOrgOwnershipData = {
+    body: TransferOwnershipRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/transfer-ownership';
+};
+
+export type TransferOrgOwnershipErrors = {
+    /**
+     * Target is not a member / would leave no owner
+     */
+    400: ErrorEnvelope;
+    /**
+     * Password re-confirmation failed
+     */
+    401: ErrorEnvelope;
+    /**
+     * Caller is not an owner
+     */
+    403: ErrorEnvelope;
+};
+
+export type TransferOrgOwnershipError = TransferOrgOwnershipErrors[keyof TransferOrgOwnershipErrors];
+
+export type TransferOrgOwnershipResponses = {
+    /**
+     * Ownership transferred
+     */
+    200: MessageResponse;
+};
+
+export type TransferOrgOwnershipResponse = TransferOrgOwnershipResponses[keyof TransferOrgOwnershipResponses];
 
 export type ListInvitationsData = {
     body?: never;
@@ -2007,6 +2396,251 @@ export type CheckAutoJoinResponses = {
 
 export type CheckAutoJoinResponse = CheckAutoJoinResponses[keyof CheckAutoJoinResponses];
 
+export type ListAuditEventsData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: {
+        /**
+         * Exact `action` string filter (e.g. `member.role_changed`).
+         */
+        action?: string | null;
+        /**
+         * Filter to a single actor user id.
+         */
+        actor?: string | null;
+        /**
+         * Inclusive lower bound on `created_at` (RFC 3339).
+         */
+        from?: string | null;
+        /**
+         * Inclusive upper bound on `created_at` (RFC 3339).
+         */
+        to?: string | null;
+        /**
+         * Opaque keyset cursor from a prior page's `next_cursor`.
+         */
+        cursor?: string | null;
+        /**
+         * Page size (1..=200, default 50).
+         */
+        limit?: number | null;
+    };
+    url: '/api/organizations/{id}/audit';
+};
+
+export type ListAuditEventsErrors = {
+    /**
+     * Invalid cursor
+     */
+    400: ErrorEnvelope;
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListAuditEventsError = ListAuditEventsErrors[keyof ListAuditEventsErrors];
+
+export type ListAuditEventsResponses = {
+    /**
+     * Audit timeline page
+     */
+    200: AuditListResponse;
+};
+
+export type ListAuditEventsResponse = ListAuditEventsResponses[keyof ListAuditEventsResponses];
+
+export type ListRolesData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/roles';
+};
+
+export type ListRolesErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListRolesError = ListRolesErrors[keyof ListRolesErrors];
+
+export type ListRolesResponses = {
+    /**
+     * System + custom roles
+     */
+    200: RolesListResponse;
+};
+
+export type ListRolesResponse = ListRolesResponses[keyof ListRolesResponses];
+
+export type CreateRoleData = {
+    body: CreateRoleRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/roles';
+};
+
+export type CreateRoleErrors = {
+    /**
+     * Invalid name or permission
+     */
+    400: ErrorEnvelope;
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * A role with that name already exists
+     */
+    409: ErrorEnvelope;
+};
+
+export type CreateRoleError = CreateRoleErrors[keyof CreateRoleErrors];
+
+export type CreateRoleResponses = {
+    /**
+     * Custom role created
+     */
+    201: OrgRoleRecord;
+};
+
+export type CreateRoleResponse = CreateRoleResponses[keyof CreateRoleResponses];
+
+export type DeleteRoleData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+        /**
+         * Role id
+         */
+        role_id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/roles/{role_id}';
+};
+
+export type DeleteRoleErrors = {
+    /**
+     * Access denied or system role is immutable
+     */
+    403: ErrorEnvelope;
+    /**
+     * Role not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type DeleteRoleError = DeleteRoleErrors[keyof DeleteRoleErrors];
+
+export type DeleteRoleResponses = {
+    /**
+     * Custom role deleted
+     */
+    200: DeletedResponse;
+};
+
+export type DeleteRoleResponse = DeleteRoleResponses[keyof DeleteRoleResponses];
+
+export type UpdateRoleData = {
+    body: UpdateRoleRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+        /**
+         * Role id
+         */
+        role_id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/roles/{role_id}';
+};
+
+export type UpdateRoleErrors = {
+    /**
+     * Invalid name or permission
+     */
+    400: ErrorEnvelope;
+    /**
+     * Access denied or system role is immutable
+     */
+    403: ErrorEnvelope;
+    /**
+     * Role not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type UpdateRoleError = UpdateRoleErrors[keyof UpdateRoleErrors];
+
+export type UpdateRoleResponses = {
+    /**
+     * Custom role updated
+     */
+    200: OrgRoleRecord;
+};
+
+export type UpdateRoleResponse = UpdateRoleResponses[keyof UpdateRoleResponses];
+
+export type AssignMemberRoleData = {
+    body: AssignCustomRoleRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+        /**
+         * Member user id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/members/{user_id}/custom-role';
+};
+
+export type AssignMemberRoleErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * Member or role not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type AssignMemberRoleError = AssignMemberRoleErrors[keyof AssignMemberRoleErrors];
+
+export type AssignMemberRoleResponses = {
+    /**
+     * Custom role assignment updated
+     */
+    200: MessageResponse;
+};
+
+export type AssignMemberRoleResponse = AssignMemberRoleResponses[keyof AssignMemberRoleResponses];
+
 export type ListProjectsData = {
     body?: never;
     path?: never;
@@ -2326,6 +2960,44 @@ export type UpdateProjectMemberResponses = {
 };
 
 export type UpdateProjectMemberResponse = UpdateProjectMemberResponses[keyof UpdateProjectMemberResponses];
+
+export type TransferProjectOwnershipData = {
+    body: TransferProjectOwnershipRequest;
+    path: {
+        /**
+         * Project id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/transfer-ownership';
+};
+
+export type TransferProjectOwnershipErrors = {
+    /**
+     * Target is not a member / would leave no owner
+     */
+    400: ErrorEnvelope;
+    /**
+     * Caller may not transfer this project
+     */
+    403: ErrorEnvelope;
+    /**
+     * Project not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type TransferProjectOwnershipError = TransferProjectOwnershipErrors[keyof TransferProjectOwnershipErrors];
+
+export type TransferProjectOwnershipResponses = {
+    /**
+     * Ownership transferred
+     */
+    200: MessageResponse;
+};
+
+export type TransferProjectOwnershipResponse = TransferProjectOwnershipResponses[keyof TransferProjectOwnershipResponses];
 
 export type GetQuestionnaireByCodeData = {
     body?: never;
@@ -3561,6 +4233,36 @@ export type QuotaStatusResponses = {
 
 export type QuotaStatusResponse2 = QuotaStatusResponses[keyof QuotaStatusResponses];
 
+export type QuotaCellsData = {
+    body?: never;
+    path: {
+        /**
+         * Questionnaire id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/questionnaires/{id}/quota-cells';
+};
+
+export type QuotaCellsErrors = {
+    /**
+     * Questionnaire not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type QuotaCellsError = QuotaCellsErrors[keyof QuotaCellsErrors];
+
+export type QuotaCellsResponses = {
+    /**
+     * Live per-cell quota occupancy
+     */
+    200: QuotaCellsResponse;
+};
+
+export type QuotaCellsResponse2 = QuotaCellsResponses[keyof QuotaCellsResponses];
+
 export type PublicCohortStatsData = {
     body?: never;
     path: {
@@ -3677,6 +4379,36 @@ export type SyncSessionResponses = {
 };
 
 export type SyncSessionResponse = SyncSessionResponses[keyof SyncSessionResponses];
+
+export type SyncedClientIdsData = {
+    body?: never;
+    path: {
+        /**
+         * Session id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/sessions/{id}/synced-client-ids';
+};
+
+export type SyncedClientIdsErrors = {
+    /**
+     * Session not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type SyncedClientIdsError = SyncedClientIdsErrors[keyof SyncedClientIdsErrors];
+
+export type SyncedClientIdsResponses = {
+    /**
+     * Client ids the server durably holds
+     */
+    200: SyncedClientIdsResponse;
+};
+
+export type SyncedClientIdsResponse2 = SyncedClientIdsResponses[keyof SyncedClientIdsResponses];
 
 export type FilterSessionsData = {
     body: FilterRequest;

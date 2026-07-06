@@ -1,9 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { QuestionnaireSummary, TimeSeriesBucket } from '$lib/shared/types/api';
+  import { SvelteSet } from 'svelte/reactivity';
+  import type {
+    QuestionnaireSummary,
+    TimeSeriesBucket,
+    CrossProjectAnalyticsData,
+  } from '$lib/shared/types/api';
   import type { AnalyticsPageData } from './+page';
   import { api } from '$lib/services/api';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import { Button, Input, Checkbox } from '$lib/components/ui';
+  import ComparePanel from './ComparePanel.svelte';
 
   interface Props {
     data: AnalyticsPageData;
@@ -25,6 +32,40 @@
   // Sorting
   let sortColumn = $state<string>('name');
   let sortDirection = $state<'asc' | 'desc'>('asc');
+
+  // Cross-project comparison
+  let selectedIds = $state(new SvelteSet<string>());
+  let compareSource = $state<'variable' | 'response'>('variable');
+  let compareKey = $state('');
+  let comparing = $state(false);
+  let compareResult = $state<CrossProjectAnalyticsData | null>(null);
+  let compareError = $state<string | null>(null);
+
+  function toggleSelected(id: string) {
+    if (selectedIds.has(id)) {
+      selectedIds.delete(id);
+    } else {
+      selectedIds.add(id);
+    }
+  }
+
+  async function runCompare() {
+    if (selectedIds.size < 2) return;
+    comparing = true;
+    compareError = null;
+    try {
+      compareResult = await api.organizations.analytics(data.organizationId, {
+        questionnaireIds: [...selectedIds],
+        source: compareSource,
+        key: compareKey.trim() || undefined,
+      });
+    } catch (err) {
+      compareResult = null;
+      compareError = err instanceof Error ? err.message : 'Failed to load comparison.';
+    } finally {
+      comparing = false;
+    }
+  }
 
   $effect(() => {
     questionnaires = [...(data.questionnaires ?? [])];
@@ -253,6 +294,9 @@
         <table class="w-full text-sm">
           <thead>
             <tr class="border-b border-border bg-background/50">
+              <th class="px-4 py-3 w-10">
+                <span class="sr-only">Select</span>
+              </th>
               <th class="px-4 py-3 text-left font-medium text-muted-foreground">
                 <button onclick={() => toggleSort('name')} class="hover:text-foreground">
                   Name{sortIndicator('name')}
@@ -294,6 +338,15 @@
                 class="border-b border-border/50 hover:bg-background/30 cursor-pointer transition-colors"
                 onclick={() => window.location.href = `/analytics/${q.id}`}
               >
+                <td
+                  class="px-4 py-3"
+                  onclick={(e) => e.stopPropagation()}
+                >
+                  <Checkbox
+                    checked={selectedIds.has(q.id)}
+                    onchange={() => toggleSelected(q.id)}
+                  />
+                </td>
                 <td class="px-4 py-3 font-medium text-foreground">
                   <a href="/analytics/{q.id}" class="hover:underline">{q.name}</a>
                 </td>
@@ -329,6 +382,41 @@
           </tbody>
         </table>
       </div>
+    </div>
+  {/if}
+
+  <!-- Cross-project comparison -->
+  {#if selectedIds.size >= 2}
+    <div class="mt-8 space-y-6">
+      <div class="glass-card p-4 flex flex-wrap items-end gap-4">
+        <div>
+          <span class="text-sm font-medium text-foreground">
+            Compare {selectedIds.size} questionnaires
+          </span>
+        </div>
+        <div>
+          <label for="compare-source" class="text-xs text-muted-foreground block mb-1">Source</label>
+          <Select id="compare-source" bind:value={compareSource} placeholder="">
+            <option value="variable">Variable</option>
+            <option value="response">Response</option>
+          </Select>
+        </div>
+        <div>
+          <label for="compare-key" class="text-xs text-muted-foreground block mb-1">
+            Numeric key (optional)
+          </label>
+          <Input
+            id="compare-key"
+            bind:value={compareKey}
+            placeholder="e.g. reaction_time"
+          />
+        </div>
+        <Button onclick={runCompare} loading={comparing} disabled={comparing}>
+          Compare
+        </Button>
+      </div>
+
+      <ComparePanel result={compareResult} loading={comparing} error={compareError} />
     </div>
   {/if}
 </div>

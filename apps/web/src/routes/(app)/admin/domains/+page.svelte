@@ -4,6 +4,7 @@
   import { api } from '$lib/services/api';
   import {
     addDomain,
+    verifyDomain,
     updateDomainConfig,
     removeDomain,
     type DomainConfig,
@@ -27,6 +28,9 @@
   let showAddDomainForm = false;
   let newDomain = '';
   let addingDomain = false;
+
+  // Domain verification (DNS TXT ownership check) in-flight id
+  let verifyingDomainId: string | null = null;
 
   // Current user and organization
   let currentUser: any = null;
@@ -127,17 +131,33 @@
     addingDomain = false;
   }
 
-  function handleVerifyDomain() {
-    // Automated domain verification (resolving the DNS TXT record or fetching
-    // the .well-known file and comparing the token) is not yet implemented.
-    // Previously this called an endpoint that auto-verified unconditionally,
-    // which falsely marked unproven domains as verified and enabled auto-join.
-    // Until real verification exists we leave the domain Pending and explain
-    // the current state rather than fake a success.
+  async function handleVerifyDomain(domainId: string) {
+    // Real ownership check: the server resolves the DNS TXT record at
+    // `_qdesigner-verify.<domain>` and matches it against this domain's
+    // verification token. A pass flips verified_at; a miss returns honest
+    // guidance (no fake success, so auto-join stays disabled for unproven
+    // domains).
+    if (!currentOrg) return;
     error = null;
     success = null;
-    notice =
-      'Automated domain verification is not available yet. Add the DNS TXT record shown below, then contact your administrator to confirm ownership. Domains remain pending until verification is implemented, and auto-join stays disabled for unverified domains.';
+    notice = null;
+    verifyingDomainId = domainId;
+
+    try {
+      const result = await verifyDomain(currentOrg.id, domainId);
+      if (result.success) {
+        success = 'Domain ownership verified. Auto-join is now enabled for this domain.';
+        await loadDomains();
+      } else {
+        notice =
+          result.error ??
+          'Domain ownership could not be verified. Add the DNS TXT record shown below, then retry — DNS changes can take a few minutes to propagate.';
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to verify domain';
+    } finally {
+      verifyingDomainId = null;
+    }
   }
 
   async function handleUpdateDomain(domainId: string) {
@@ -313,7 +333,13 @@
 
               <div class="flex gap-2">
                 {#if !domain.verifiedAt}
-                  <Button size="sm" variant="primary" onclick={() => handleVerifyDomain()}>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    loading={verifyingDomainId === domain.id}
+                    disabled={verifyingDomainId !== null}
+                    onclick={() => handleVerifyDomain(domain.id)}
+                  >
                     Verify Domain
                   </Button>
                 {:else if editingDomain === domain.id}
@@ -342,17 +368,15 @@
               <Alert variant="info">
                 <h4 class="font-semibold mb-2">Verification Instructions</h4>
                 <p class="mb-2">
-                  Add the following record to prove domain ownership. Note: automated
-                  verification is not available yet, so the domain will stay pending until
-                  ownership is confirmed manually.
+                  Add the DNS TXT record below to prove ownership, then click
+                  <strong>Verify Domain</strong>. DNS changes can take a few minutes to
+                  propagate; the domain stays pending (auto-join disabled) until the record
+                  resolves.
                 </p>
                 <div class="space-y-2 text-sm font-mono bg-background p-3 rounded">
                   <p><strong>DNS TXT Record:</strong></p>
-                  <p>Name: _qdesigner.{domain.domain}</p>
+                  <p>Name: _qdesigner-verify.{domain.domain}</p>
                   <p>Value: {domain.verificationToken}</p>
-                  <p class="mt-2"><strong>OR File Verification:</strong></p>
-                  <p>URL: https://{domain.domain}/.well-known/qdesigner-verify.txt</p>
-                  <p>Content: {domain.verificationToken}</p>
                 </div>
               </Alert>
             {:else if editingDomain === domain.id}

@@ -515,6 +515,71 @@
           }
         ]
       },
+      "delete": {
+        "tags": [
+          "users"
+        ],
+        "summary": "DELETE /api/users/me — self-service account deletion (GDPR erasure).",
+        "description": "Password-confirmed. Blocks (409) while the caller still owns any\norganization that has other active members — they must transfer\nownership first. Otherwise: soft-deletes organizations where the caller\nwas the sole member, removes the caller's memberships, and anonymizes\nthe `users` row (PII scrubbed, `deleted_at` set). Research\nsessions/responses are retained **pseudonymously** — the `user_id` link\nis left intact so longitudinal/aggregate analysis survives while the\npersonal data on the users row is erased. Refresh tokens are revoked\nafter the request transaction commits.",
+        "operationId": "delete_account",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Account deleted and anonymized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Password incorrect",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Still owns shared organization(s); transfer ownership first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
       "patch": {
         "tags": [
           "users"
@@ -869,6 +934,108 @@
         ]
       }
     },
+    "/api/organizations/{id}/seats": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "GET /api/organizations/:id/seats",
+        "operationId": "get_seats",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seat usage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeatUsageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organization not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/branding": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "GET /api/organizations/:id/branding",
+        "description": "Anonymous, lightweight branding read (E-RBAC-8). The participant fillout\nchrome fetches this to theme itself. `organizations` is RLS-exempt (ADR 0015),\nso this queries the pool directly like the public by-code questionnaire read —\nno auth, no per-request tx. Returns only presentation fields.",
+        "operationId": "get_org_branding",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organization branding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgBranding"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organization not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/organizations/{id}/members": {
       "get": {
         "tags": [
@@ -1146,6 +1313,85 @@
           },
           "404": {
             "description": "Member not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/transfer-ownership": {
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "POST /api/organizations/:id/transfer-ownership (E-RBAC-5)",
+        "description": "The sanctioned, audited path to hand an organization to another member.\nUnlike `change_member_role` — which refuses to demote the last owner —\nthis promotes the new owner *and* (by default) demotes the caller in one\ntransaction, so the org is never left ownerless. The caller must be a\ncurrent owner and re-confirm their password.",
+        "operationId": "transfer_org_ownership",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferOwnershipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Ownership transferred",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Target is not a member / would leave no owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Password re-confirmation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller is not an owner",
             "content": {
               "application/json": {
                 "schema": {
@@ -1905,6 +2151,498 @@
         }
       }
     },
+    "/api/organizations/{id}/audit": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "GET /api/organizations/:id/audit",
+        "description": "Reverse-chronological, keyset-paginated audit timeline for one\norganization. Org admin/owner gated (defense-in-depth: the\n`audit_events_select` RLS policy also admits only active admins/owners).",
+        "operationId": "list_audit_events",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Exact `action` string filter (e.g. `member.role_changed`).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "description": "Filter to a single actor user id.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive lower bound on `created_at` (RFC 3339).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Inclusive upper bound on `created_at` (RFC 3339).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque keyset cursor from a prior page's `next_cursor`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size (1..=200, default 50).",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit timeline page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/roles": {
+      "get": {
+        "tags": [
+          "roles"
+        ],
+        "summary": "GET /api/organizations/:id/roles",
+        "operationId": "list_roles",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "System + custom roles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolesListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "roles"
+        ],
+        "summary": "POST /api/organizations/:id/roles",
+        "operationId": "create_role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Custom role created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgRoleRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid name or permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A role with that name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/roles/{role_id}": {
+      "delete": {
+        "tags": [
+          "roles"
+        ],
+        "summary": "DELETE /api/organizations/:id/roles/:role_id",
+        "operationId": "delete_role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "description": "Role id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Custom role deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or system role is immutable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Role not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "roles"
+        ],
+        "summary": "PATCH /api/organizations/:id/roles/:role_id",
+        "operationId": "update_role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "description": "Role id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Custom role updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgRoleRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid name or permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied or system role is immutable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Role not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/members/{user_id}/custom-role": {
+      "put": {
+        "tags": [
+          "roles"
+        ],
+        "summary": "PUT /api/organizations/:id/members/:user_id/custom-role",
+        "description": "Assign (or clear, with `custom_role_id: null`) a member's custom role.\nThe referenced role must belong to the same org.",
+        "operationId": "assign_member_role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "Member user id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignCustomRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Custom role assignment updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Member or role not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/projects": {
       "get": {
         "tags": [
@@ -2511,6 +3249,85 @@
           },
           "404": {
             "description": "Project member not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/transfer-ownership": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "POST /api/projects/:id/transfer-ownership (E-RBAC-5)",
+        "description": "Reassigns the sole project owner. The caller must be the current project\nowner or an org owner/admin. The new owner must already be an org member;\nif they are not yet a project member they are auto-added as `owner`. Any\nprevious project owner is demoted to `admin` in the same transaction.",
+        "operationId": "transfer_project_ownership",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Project id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferProjectOwnershipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Ownership transferred",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Target is not a member / would leave no owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller may not transfer this project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -5013,6 +5830,50 @@
         }
       }
     },
+    "/api/questionnaires/{id}/quota-cells": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "GET /api/questionnaires/{id}/quota-cells",
+        "description": "Returns live per-cell occupancy for interlocking cross-quota cells. The\nclient computes the participant's cell key from live in-survey variables\nand blocks only when THAT cell is full (independent-cell semantics), rather\nthan when any sibling cell is full.\n\nAnonymous, like `quota_status`. `quota_cells` carries no RLS policy and is\naggregate-only (no per-session rows), so a plain SELECT under the app role\nis safe — no SECURITY DEFINER needed for the read. A cell only appears once\nit has received its first claim; a not-yet-claimed cell is absent (occupancy\n0), which the client treats as \"room available\".",
+        "operationId": "quota_cells",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Questionnaire id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Live per-cell quota occupancy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaCellsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Questionnaire not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/questionnaires/{id}/cohort-stats": {
       "get": {
         "tags": [
@@ -5200,6 +6061,50 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/synced-client-ids": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "GET /api/sessions/{id}/synced-client-ids",
+        "description": "Lightweight reconcile probe (E-OFF-5): returns the `client_id`s the server\ndurably holds for the session (responses + interaction events). The client\ndiffs its locally-`acked` ledger rows against this set and re-queues anything\nthe server does not actually have — defending against a client-side\nover-marking that would otherwise strand data. Runs under the fillout GUC\n(`app.session_id` from the URL path), so an anonymous session can probe its\nown durability; `ensure_session_participant_or_member` gates access.",
+        "operationId": "synced_client_ids",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Client ids the server durably holds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncedClientIdsResponse"
                 }
               }
             }
@@ -5826,6 +6731,108 @@
           }
         }
       },
+      "AssignCustomRoleRequest": {
+        "type": "object",
+        "properties": {
+          "custom_role_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The custom role to assign, or `null` to clear the assignment (demote\nthe member back to their system-role defaults)."
+          }
+        }
+      },
+      "AuditEventRecord": {
+        "type": "object",
+        "description": "One row of the org audit timeline, joined with the actor's identity.",
+        "required": [
+          "id",
+          "organization_id",
+          "action",
+          "resource_type",
+          "metadata"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actor_user_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "actor_email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actor_full_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "resource_type": {
+            "type": "string"
+          },
+          "resource_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "metadata": {},
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Actor IP as a plain host string (no netmask), or null."
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "AuditListResponse": {
+        "type": "object",
+        "description": "Paginated audit-timeline page. `next_cursor` is present only when more\nrows may exist (the page came back full); pass it back as `cursor`.",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEventRecord"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "AuthResponse": {
         "type": "object",
         "required": [
@@ -6238,6 +7245,24 @@
           "settings": {}
         }
       },
+      "CreateRoleRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "permissions"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "CreateSessionRequest": {
         "type": "object",
         "required": [
@@ -6483,6 +7508,18 @@
           },
           "stats": {
             "$ref": "#/components/schemas/DashboardStats"
+          }
+        }
+      },
+      "DeleteAccountRequest": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "Current account password, re-confirmed to authorize the erasure."
           }
         }
       },
@@ -7241,6 +8278,44 @@
           }
         }
       },
+      "OrgBranding": {
+        "type": "object",
+        "description": "Lightweight, anonymously-readable branding for an organization (E-RBAC-8).\nThe participant fillout chrome fetches this to theme itself. Non-sensitive\nby construction — only presentation fields, resolved with platform fallbacks\non the client.",
+        "required": [
+          "organization_id",
+          "name"
+        ],
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "primary_color": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Brand primary color (`settings.primaryColor`), or null for the platform default."
+          },
+          "logo_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Logo URL — `settings.logoUrl` if set, else the legacy `logo_url` column."
+          },
+          "participant_header": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional participant header text (`settings.participantHeader`)."
+          }
+        }
+      },
       "OrgMember": {
         "type": "object",
         "required": [
@@ -7275,6 +8350,116 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "custom_role_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Assigned custom role (E-RBAC-3), if any — its permissions override the\n`role` tier's defaults for this member."
+          },
+          "custom_role_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "OrgRoleRecord": {
+        "type": "object",
+        "description": "One role definition (system preset or custom).",
+        "required": [
+          "id",
+          "organization_id",
+          "name",
+          "permissions",
+          "is_system"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "is_system": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "OrgSettings": {
+        "type": "object",
+        "description": "Documented shape of `organizations.settings` (E-RBAC-8, ADR trail).\n\nThe column stays free-form JSONB — this struct is a *typed view* over the\nkeys the platform cares about, used to validate writes ([`validate_org_settings`])\nand to surface branding anonymously ([`get_org_branding`]). Unknown keys\n(e.g. the `defaults` block the settings UI stores) deserialize away and are\npreserved on write because `update_organization` persists the caller's whole\nobject, not a re-serialization of this struct. Keys are camelCase to match the\nJSON the frontend writes and the `settings->>'seatLimit'` reads in [`seat_usage`].",
+        "properties": {
+          "primaryColor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Brand primary color as a CSS hex string (`#RGB` or `#RRGGBB`). Applied to\nparticipant chrome as the `--primary` token."
+          },
+          "logoUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Absolute http(s) or same-origin logo URL rendered on participant chrome."
+          },
+          "participantHeader": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Short header text shown above participant questionnaires."
+          },
+          "projectVisibility": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Default visibility for newly created projects (E-RBAC-1)."
+          },
+          "seatLimit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Seat cap (E-RBAC-4); enforced in [`seat_usage`] / [`enforce_seat_limit`]."
+          },
+          "idpManagedRoles": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "When true, org member roles are managed by the IdP and not editable\nin-app (E-RBAC-6)."
           }
         }
       },
@@ -7767,6 +8952,7 @@
         "required": [
           "id",
           "name",
+          "organization_id",
           "definition",
           "is_active",
           "project",
@@ -7783,6 +8969,11 @@
           },
           "name": {
             "type": "string"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Owning organization id — lets the anonymous fillout route fetch org\nbranding (`GET /api/organizations/{id}/branding`, E-RBAC-8) to theme the\nparticipant chrome."
           },
           "definition": {},
           "is_active": {
@@ -7921,6 +9112,50 @@
           "version_patch": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "QuotaCellStatus": {
+        "type": "object",
+        "description": "Live occupancy of a single interlocking quota cell (E-FLOW-7). The client\nselects the participant's cell by key and blocks only when that cell is full.",
+        "required": [
+          "cell_key",
+          "target",
+          "current",
+          "is_full"
+        ],
+        "properties": {
+          "cell_key": {
+            "type": "string",
+            "description": "Serialized interlocking tuple, e.g. `age=25-34|gender=male`."
+          },
+          "target": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Per-cell cap (0 ⇒ uncapped)."
+          },
+          "current": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Live occupancy."
+          },
+          "is_full": {
+            "type": "boolean",
+            "description": "`target > 0 && current >= target`."
+          }
+        }
+      },
+      "QuotaCellsResponse": {
+        "type": "object",
+        "required": [
+          "cells"
+        ],
+        "properties": {
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuotaCellStatus"
+            }
           }
         }
       },
@@ -8092,6 +9327,60 @@
               "null"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "RolesListResponse": {
+        "type": "object",
+        "description": "The full catalogue of assignable permission tokens — returned alongside\nthe roles so the matrix editor can render the checkbox grid without\nhard-coding the list client-side.",
+        "required": [
+          "roles",
+          "available_permissions"
+        ],
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrgRoleRecord"
+            }
+          },
+          "available_permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SeatUsageResponse": {
+        "type": "object",
+        "description": "Seat usage for an organization. `limit` is null when no `seatLimit` is set\nin `organizations.settings` (unlimited). A \"seat\" is an active member or a\npending invitation (an outstanding invitation reserves a prospective seat).",
+        "required": [
+          "used",
+          "active_members",
+          "pending_invitations"
+        ],
+        "properties": {
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Configured seat limit (`settings->>'seatLimit'`), or null when unlimited."
+          },
+          "used": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Seats currently consumed (`active_members + pending_invitations`)."
+          },
+          "active_members": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pending_invitations": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -8665,6 +9954,21 @@
           "variables_synced": {
             "type": "integer",
             "format": "int32"
+          },
+          "accepted_client_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Ack-driven marking (E-OFF-4): the `client_id`s (responses AND events) the\nserver DURABLY HOLDS after this sync — i.e. every id in a chunk whose\n`INSERT ... ON CONFLICT (client_id) DO NOTHING` statement committed, which\nincludes rows that were already present from a prior partial sync. The\nclient flips ONLY these rows to `synced=1`; anything absent here stays\nunsynced and retries next pass. Empty when nothing was written."
+          },
+          "accepted_variable_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ack-driven marking (E-OFF-4): the session-variable NAMES durably upserted\nby this sync. The client marks only these variable rows synced (guarded by\na per-record clientId concurrency token), replacing the old mark-all-by-\nsession semantics that raced with mid-flight variable writes."
           }
         }
       },
@@ -8734,6 +10038,22 @@
           }
         }
       },
+      "SyncedClientIdsResponse": {
+        "type": "object",
+        "description": "Response for `GET /api/sessions/{id}/synced-client-ids` (E-OFF-5 reconcile).\nThe `client_id`s the server DURABLY HOLDS for the session (responses +\ninteraction events). The client diffs its locally-`acked` ledger rows against\nthis set to detect and re-queue any over-marking (locally acked, server-missing).",
+        "required": [
+          "client_ids"
+        ],
+        "properties": {
+          "client_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
       "TimeSeriesBucket": {
         "type": "object",
         "required": [
@@ -8760,6 +10080,43 @@
               "null"
             ],
             "format": "double"
+          }
+        }
+      },
+      "TransferOwnershipRequest": {
+        "type": "object",
+        "description": "Body for `POST /api/organizations/:id/transfer-ownership` (E-RBAC-5).",
+        "required": [
+          "new_owner_user_id",
+          "password"
+        ],
+        "properties": {
+          "new_owner_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The org member who becomes the new owner. Must be an active member."
+          },
+          "password": {
+            "type": "string",
+            "description": "Caller's current password — required to re-confirm a sensitive action."
+          },
+          "demote_previous_owner": {
+            "type": "boolean",
+            "description": "When true (default), the outgoing owner is demoted to `admin` in the\nsame transaction. When false, the org ends up with two owners."
+          }
+        }
+      },
+      "TransferProjectOwnershipRequest": {
+        "type": "object",
+        "description": "Body for `POST /api/projects/:id/transfer-ownership` (E-RBAC-5).",
+        "required": [
+          "new_owner_user_id"
+        ],
+        "properties": {
+          "new_owner_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The user who becomes the new project owner. Must be an active member\nof the project's parent organization (auto-added to the project as\n`owner` if not already a project member)."
           }
         }
       },
@@ -8953,6 +10310,26 @@
             ]
           },
           "settings": {}
+        }
+      },
+      "UpdateRoleRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "permissions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
         }
       },
       "UpdateSessionRequest": {
@@ -9165,6 +10542,10 @@
     {
       "name": "organizations",
       "description": "Organization management, invitations, and domains"
+    },
+    {
+      "name": "roles",
+      "description": "Custom roles and granular permissions"
     },
     {
       "name": "projects",
