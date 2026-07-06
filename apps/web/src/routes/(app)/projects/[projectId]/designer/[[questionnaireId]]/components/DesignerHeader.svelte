@@ -1,13 +1,14 @@
 <script lang="ts">
   import { appPaths } from '$lib/routing/paths';
   import { designerStore } from '$lib/stores/designer.svelte';
-  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator } from 'lucide-svelte';
+  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator, LayoutDashboard } from 'lucide-svelte';
   import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
   import DistributionPanel from './DistributionPanel.svelte';
   import ExperimentalDesignPanel from '$lib/components/designer/ExperimentalDesignPanel.svelte';
   import DataQualityPanel from '$lib/components/designer/DataQualityPanel.svelte';
   import ScaleScoringEditor from '$lib/components/designer/scoring/ScaleScoringEditor.svelte';
   import QuotaPanel from '$lib/components/designer/QuotaPanel.svelte';
+  import ReportPagePanel from '$lib/components/designer/ReportPagePanel.svelte';
   import VersionManager from '$lib/components/designer/VersionManager.svelte';
   import type { PresenceUser } from '$lib/services/presence.svelte';
 
@@ -27,6 +28,7 @@
   let showDataQuality = $state(false);
   let showScaleScoring = $state(false);
   let showQuotas = $state(false);
+  let showReportPage = $state(false);
 
   $effect(() => {
     titleValue = questionnaireName || 'Untitled Questionnaire';
@@ -266,6 +268,18 @@
     Quotas
   </button>
 
+  <!-- Report page button -->
+  <button
+    type="button"
+    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
+    onclick={() => (showReportPage = true)}
+    data-testid="designer-report-page-button"
+    title="Report Page"
+  >
+    <LayoutDashboard class="h-3.5 w-3.5" />
+    Report
+  </button>
+
   <!-- Share button -->
   <button
     type="button"
@@ -324,3 +338,5 @@
 <ScaleScoringEditor bind:open={showScaleScoring} />
 
 <QuotaPanel bind:open={showQuotas} />
+
+<ReportPagePanel bind:open={showReportPage} />

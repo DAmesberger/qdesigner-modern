@@ -1,6 +1,13 @@
 <script lang="ts">
   import { designerStore } from '$lib/stores/designer.svelte';
-  import type { Variable, VariableType } from '$lib/shared';
+  import type {
+    Variable,
+    VariableType,
+    ServerComputationDef,
+    ServerStat,
+    DatasetFilter,
+  } from '$lib/shared';
+  import { MAX_SERVER_VARIABLES } from '@qdesigner/questionnaire-core';
   import FormulaEditor from './FormulaEditor.svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import { onMount } from 'svelte';
@@ -30,6 +37,192 @@
   let showDependencyGraph = $state(false);
   let dependencyCanvas = $state<HTMLCanvasElement>();
 
+  // Server-computed variable authoring (server-computed-variable / E-FEEDBACK-3).
+  // A single "computation mode" fork drives whether the variable is static, a
+  // formula, or a SERVER-computed aggregate. Server mode reveals a source/key
+  // picker, a materialization toggle (single stat ⇒ number, full stats ⇒ object),
+  // and a dataset filter builder.
+  type ComputationMode = 'static' | 'formula' | 'server';
+  let computationMode = $state<ComputationMode>('static');
+
+  // The active edit target (edit dialog vs. add dialog share one shape).
+  const draft = $derived<Partial<Variable> & { type: VariableType }>(
+    (editingVariable ?? newVariable) as Partial<Variable> & { type: VariableType }
+  );
+
+  const serverStats: { value: ServerStat; label: string }[] = [
+    { value: 'n', label: 'Count (n)' },
+    { value: 'mean', label: 'Mean' },
+    { value: 'sd', label: 'Std deviation' },
+    { value: 'min', label: 'Minimum' },
+    { value: 'max', label: 'Maximum' },
+    { value: 'p10', label: '10th percentile' },
+    { value: 'p25', label: '25th percentile' },
+    { value: 'median', label: 'Median (p50)' },
+    { value: 'p75', label: '75th percentile' },
+    { value: 'p90', label: '90th percentile' },
+    { value: 'p95', label: '95th percentile' },
+    { value: 'p99', label: '99th percentile' },
+  ];
+
+  const whereOps: { value: NonNullable<DatasetFilter['where']>[number]['op']; label: string }[] = [
+    { value: 'eq', label: '= (equals)' },
+    { value: 'ne', label: '≠ (not equals)' },
+    { value: 'lt', label: '< (less than)' },
+    { value: 'lte', label: '≤ (at most)' },
+    { value: 'gt', label: '> (greater than)' },
+    { value: 'gte', label: '≥ (at least)' },
+    { value: 'in', label: 'in (comma-separated list)' },
+  ];
+
+  // Session variables usable as a where-clause target (server variables can't be
+  // filtered on — they are not persisted per-session).
+  const sessionVariableOptions = $derived(
+    (designerStore.questionnaire.variables || [])
+      .filter((v) => !v.server)
+      .map((v) => ({ value: v.name, label: v.name }))
+  );
+
+  // Key-picker options for source: 'response' (question ids) vs 'variable'
+  // (declared variables + score.<scaleId>.<field> paths from settings.scoring).
+  const questionKeyOptions = $derived(
+    (designerStore.questionnaire.questions || []).map((q) => ({
+      value: q.id,
+      label: q.name ? `${q.name} (${q.id})` : q.id,
+    }))
+  );
+
+  const scoreFieldSuffixes = ['value', 'tScore', 'percentile', 'z', 'stanine'];
+  const variableKeyOptions = $derived.by(() => {
+    const vars = (designerStore.questionnaire.variables || [])
+      .filter((v) => !v.server)
+      .map((v) => ({ value: v.name, label: v.name }));
+    const scales = designerStore.questionnaire.settings?.scoring?.scales ?? [];
+    const scoreOpts = scales.flatMap((s) =>
+      scoreFieldSuffixes.map((f) => ({
+        value: `score.${s.id}.${f}`,
+        label: `${s.name || s.id} · ${f}`,
+      }))
+    );
+    return [...vars, ...scoreOpts];
+  });
+
+  // How many server variables already exist (excluding the one being edited).
+  const serverVariableCount = $derived(
+    (designerStore.questionnaire.variables || []).filter(
+      (v) => v.server && v.id !== editingVariable?.id
+    ).length
+  );
+
+  const IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+  const serverValidationErrors = $derived.by((): string[] => {
+    if (computationMode !== 'server') return [];
+    const errors: string[] = [];
+    const name = draft.name ?? '';
+    if (!IDENTIFIER_RE.test(name)) {
+      errors.push('Name must be a plain identifier (letters, digits, underscore; no leading digit).');
+    }
+    if (name.length > 50) {
+      errors.push('Name must be 50 characters or fewer.');
+    }
+    if (serverVariableCount >= MAX_SERVER_VARIABLES) {
+      errors.push(`At most ${MAX_SERVER_VARIABLES} server-computed variables per questionnaire.`);
+    }
+    const srv = draft.server;
+    if (!srv?.key) {
+      errors.push('Choose a source key to aggregate across participants.');
+    }
+    if (srv?.stat && draft.type !== 'number') {
+      errors.push('A single-statistic server variable must be type Number.');
+    }
+    if (srv && !srv.stat && draft.type !== 'object') {
+      errors.push('A full-statistics server variable must be type Object.');
+    }
+    if (draft.defaultValue === undefined || draft.defaultValue === '') {
+      errors.push('A default value is required — participants offline (or below the anonymity floor) see it as the fallback.');
+    }
+    const known = new Set(sessionVariableOptions.map((o) => o.value));
+    (srv?.dataset?.where ?? []).forEach((w, i) => {
+      if (!w.var) errors.push(`Filter row ${i + 1}: choose a variable.`);
+      else if (!known.has(w.var)) errors.push(`Filter row ${i + 1}: variable "${w.var}" is not a declared variable.`);
+    });
+    return errors;
+  });
+
+  function defaultServerDef(): ServerComputationDef {
+    return { source: 'variable', key: '', stat: 'mean' };
+  }
+
+  function setComputationMode(mode: ComputationMode): void {
+    computationMode = mode;
+    const d = editingVariable ?? newVariable;
+    if (mode === 'server') {
+      d.formula = undefined;
+      if (!d.server) d.server = defaultServerDef();
+      d.type = d.server.stat ? 'number' : 'object';
+    } else {
+      d.server = undefined;
+      if (mode === 'static') d.formula = undefined;
+    }
+  }
+
+  function updateServer(patch: Partial<ServerComputationDef>): void {
+    const d = editingVariable ?? newVariable;
+    const base: ServerComputationDef = d.server ?? defaultServerDef();
+    d.server = { ...base, ...patch };
+  }
+
+  function setMaterialization(kind: 'single' | 'full'): void {
+    const d = editingVariable ?? newVariable;
+    const base: ServerComputationDef = d.server ?? defaultServerDef();
+    if (kind === 'single') {
+      d.server = { ...base, stat: base.stat ?? 'mean' };
+      d.type = 'number';
+    } else {
+      const next = { ...base };
+      delete next.stat;
+      d.server = next;
+      d.type = 'object';
+    }
+  }
+
+  function updateDataset(patch: Partial<DatasetFilter>): void {
+    const d = editingVariable ?? newVariable;
+    const base: DatasetFilter = d.server?.dataset ?? { id: crypto.randomUUID() };
+    updateServer({ dataset: { ...base, ...patch } });
+  }
+
+  function addWhereRow(): void {
+    const d = editingVariable ?? newVariable;
+    const ds: DatasetFilter = d.server?.dataset ?? { id: crypto.randomUUID() };
+    const where = [...(ds.where ?? []), { var: '', op: 'eq' as const, value: '' }];
+    updateDataset({ where });
+  }
+
+  function updateWhereRow(
+    index: number,
+    patch: Partial<NonNullable<DatasetFilter['where']>[number]>
+  ): void {
+    const d = editingVariable ?? newVariable;
+    const where = (d.server?.dataset?.where ?? []).map((w, i) =>
+      i === index ? { ...w, ...patch } : w
+    );
+    updateDataset({ where });
+  }
+
+  function removeWhereRow(index: number): void {
+    const d = editingVariable ?? newVariable;
+    const where = (d.server?.dataset?.where ?? []).filter((_, i) => i !== index);
+    updateDataset({ where });
+  }
+
+  function setWhereValue(index: number, raw: string, op: string): void {
+    const value: string | Array<string> =
+      op === 'in' ? raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0) : raw;
+    updateWhereRow(index, { value });
+  }
+
   const variableTypes: { value: VariableType; label: string }[] = [
     { value: 'number', label: 'Number' },
     { value: 'string', label: 'Text' },
@@ -42,8 +235,14 @@
     { value: 'stimulus_onset', label: 'Stimulus Onset' },
   ];
 
+  function openAddVariable() {
+    showAddVariable = true;
+    computationMode = newVariable.server ? 'server' : newVariable.formula ? 'formula' : 'static';
+  }
+
   function handleAddVariable() {
     if (!newVariable.name) return;
+    if (computationMode === 'server' && serverValidationErrors.length > 0) return;
 
     const defaultValue = parseDefaultValue(newVariable.defaultValue?.toString() || '', newVariable.type);
 
@@ -53,7 +252,8 @@
       type: newVariable.type,
       scope: newVariable.scope ?? 'global',
       defaultValue: defaultValue !== '' ? defaultValue : undefined,
-      formula: newVariable.formula || undefined,
+      formula: computationMode === 'formula' ? newVariable.formula || undefined : undefined,
+      server: computationMode === 'server' ? newVariable.server : undefined,
       description: newVariable.description || undefined,
     });
 
@@ -66,15 +266,18 @@
       formula: '',
       description: '',
     };
+    computationMode = 'static';
     showAddVariable = false;
   }
 
   function handleEditVariable(variable: Variable) {
     editingVariable = { ...variable };
+    computationMode = variable.server ? 'server' : variable.formula ? 'formula' : 'static';
   }
 
   function handleUpdateVariable() {
     if (!editingVariable) return;
+    if (computationMode === 'server' && serverValidationErrors.length > 0) return;
 
     const defaultValue = parseDefaultValue(
       editingVariable.defaultValue?.toString() || '',
@@ -85,11 +288,13 @@
       name: editingVariable.name,
       type: editingVariable.type,
       defaultValue: defaultValue !== '' ? defaultValue : undefined,
-      formula: editingVariable.formula || undefined,
+      formula: computationMode === 'formula' ? editingVariable.formula || undefined : undefined,
+      server: computationMode === 'server' ? editingVariable.server : undefined,
       description: editingVariable.description || undefined,
     });
 
     editingVariable = null;
+    computationMode = 'static';
   }
 
   function handleDeleteVariable(variableId: string) {
@@ -325,7 +530,7 @@
           <span>{showDependencyGraph ? 'Hide' : 'Show'} Graph</span>
         </button>
         <button
-          onclick={() => (showAddVariable = true)}
+          onclick={openAddVariable}
           class="px-3 py-1 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm"
         >
           Add Variable
@@ -393,6 +598,11 @@
                     {#if variable.formula}
                       <span class="text-xs px-2 py-0.5 bg-violet-500/10 rounded text-violet-600 dark:text-violet-400">
                         formula
+                      </span>
+                    {/if}
+                    {#if variable.server}
+                      <span class="text-xs px-2 py-0.5 bg-sky-500/10 rounded text-sky-600 dark:text-sky-400">
+                        server
                       </span>
                     {/if}
                   </div>
@@ -469,7 +679,7 @@
   open={showVariableDialog}
   title={editingVariable ? 'Edit Variable' : 'Add Variable'}
   size="md"
-  onclose={() => { showAddVariable = false; editingVariable = null; }}
+  onclose={() => { showAddVariable = false; editingVariable = null; computationMode = 'static'; }}
 >
   <div class="space-y-4">
         <div>
@@ -492,30 +702,57 @@
         </div>
 
         <div>
-          <label class="text-sm font-medium text-foreground mb-1 flex items-center gap-1" for="var-type">Type <HelpTip helpKey="variables.types.number" /></label>
+          <label class="block text-sm font-medium text-foreground mb-1" for="var-mode">Computation</label>
           <Select
-            id="var-type"
-            value={editingVariable ? editingVariable.type : newVariable.type}
-            onchange={(e) => {
-              const value = e.currentTarget.value as VariableType;
-              if (editingVariable) {
-                editingVariable.type = value;
-              } else {
-                newVariable.type = value;
-              }
-            }}
+            id="var-mode"
+            value={computationMode}
+            onchange={(e) => setComputationMode(e.currentTarget.value as ComputationMode)}
             placeholder=""
           >
-            {#each variableTypes as type}
-              <option value={type.value}>{type.label}</option>
-            {/each}
+            <option value="static">Static (default value)</option>
+            <option value="formula">Formula (computed locally)</option>
+            <option value="server">Server-computed (aggregate across participants)</option>
           </Select>
+          {#if computationMode === 'server'}
+            <p class="text-xs text-muted-foreground mt-1">
+              Computed on the server from every completed session. Participants see the value as of
+              their last online load; offline it falls back to the default value below.
+            </p>
+          {/if}
         </div>
 
+        {#if computationMode !== 'server'}
+          <div>
+            <label class="text-sm font-medium text-foreground mb-1 flex items-center gap-1" for="var-type">Type <HelpTip helpKey="variables.types.number" /></label>
+            <Select
+              id="var-type"
+              value={editingVariable ? editingVariable.type : newVariable.type}
+              onchange={(e) => {
+                const value = e.currentTarget.value as VariableType;
+                if (editingVariable) {
+                  editingVariable.type = value;
+                } else {
+                  newVariable.type = value;
+                }
+              }}
+              placeholder=""
+            >
+              {#each variableTypes as type}
+                <option value={type.value}>{type.label}</option>
+              {/each}
+            </Select>
+          </div>
+        {/if}
+
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1" for="var-default"
-            >Default Value (optional)</label
-          >
+          <label class="block text-sm font-medium text-foreground mb-1" for="var-default">
+            {#if computationMode === 'server'}
+              Default Value <span class="text-destructive">*</span>
+              <span class="font-normal text-muted-foreground">— offline / insufficient-data fallback</span>
+            {:else}
+              Default Value (optional)
+            {/if}
+          </label>
           <input
             id="var-default"
             type="text"
@@ -531,10 +768,13 @@
               }
             }}
             class="w-full px-3 py-2 border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary bg-background text-foreground"
-            placeholder="Leave empty for no default"
+            placeholder={computationMode === 'server'
+              ? 'Shown when never synced / below anonymity floor'
+              : 'Leave empty for no default'}
           />
         </div>
 
+        {#if computationMode !== 'server'}
         <div>
           <div class="flex items-center justify-between mb-1">
             <label class="text-sm font-medium text-foreground flex items-center gap-1" for="var-formula"
@@ -583,6 +823,190 @@
 
           <p class="text-xs text-muted-foreground mt-1">Use other variable names directly in formulas</p>
         </div>
+        {/if}
+
+        {#if computationMode === 'server'}
+          <div class="space-y-4 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3" data-testid="server-variable-editor">
+            <!-- Source + key -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-foreground mb-1" for="srv-source">Aggregate over</label>
+                <Select
+                  id="srv-source"
+                  value={draft.server?.source ?? 'variable'}
+                  onchange={(e) => updateServer({ source: e.currentTarget.value as 'variable' | 'response', key: '' })}
+                  placeholder=""
+                >
+                  <option value="variable">Session variable / score</option>
+                  <option value="response">Question response</option>
+                </Select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-foreground mb-1" for="srv-key">Source key</label>
+                <Select
+                  id="srv-key"
+                  value={draft.server?.key ?? ''}
+                  onchange={(e) => updateServer({ key: e.currentTarget.value })}
+                  placeholder=""
+                >
+                  <option value="">Select…</option>
+                  {#each (draft.server?.source === 'response' ? questionKeyOptions : variableKeyOptions) as opt}
+                    <option value={opt.value}>{opt.label}</option>
+                  {/each}
+                </Select>
+                <input
+                  type="text"
+                  value={draft.server?.key ?? ''}
+                  oninput={(e) => updateServer({ key: e.currentTarget.value })}
+                  class="mt-1 w-full px-2 py-1 text-xs border border-border rounded bg-background text-foreground font-mono"
+                  placeholder="or type a key (e.g. score.anxiety.value)"
+                />
+              </div>
+            </div>
+
+            <!-- Materialization -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-foreground mb-1" for="srv-materialization">Materialization</label>
+                <Select
+                  id="srv-materialization"
+                  value={draft.server?.stat ? 'single' : 'full'}
+                  onchange={(e) => setMaterialization(e.currentTarget.value as 'single' | 'full')}
+                  placeholder=""
+                >
+                  <option value="single">Single statistic → Number</option>
+                  <option value="full">Full statistics → Object</option>
+                </Select>
+              </div>
+              {#if draft.server?.stat}
+                <div>
+                  <label class="block text-xs font-medium text-foreground mb-1" for="srv-stat">Statistic</label>
+                  <Select
+                    id="srv-stat"
+                    value={draft.server?.stat ?? 'mean'}
+                    onchange={(e) => updateServer({ stat: e.currentTarget.value as ServerStat })}
+                    placeholder=""
+                  >
+                    {#each serverStats as s}
+                      <option value={s.value}>{s.label}</option>
+                    {/each}
+                  </Select>
+                </div>
+              {:else}
+                <p class="text-xs text-muted-foreground self-end pb-2">
+                  Resolves to a stats bundle
+                  <code class="bg-muted px-1 rounded">{'{ n, mean, sd, median, p25, p75, … }'}</code>
+                  — bind it in feedback / report cohort widgets.
+                </p>
+              {/if}
+            </div>
+
+            <!-- Dataset filter -->
+            <div class="space-y-2">
+              <div class="text-xs font-semibold text-foreground">Dataset</div>
+              <div class="grid grid-cols-3 gap-2">
+                <div>
+                  <label class="block text-[11px] text-muted-foreground mb-0.5" for="srv-version-scope">Version scope</label>
+                  <Select
+                    id="srv-version-scope"
+                    value={draft.server?.dataset?.versionScope ?? 'sameMajor'}
+                    onchange={(e) => updateDataset({ versionScope: e.currentTarget.value as DatasetFilter['versionScope'] })}
+                    placeholder=""
+                  >
+                    <option value="sameMajor">Same major</option>
+                    <option value="exact">Exact version</option>
+                    <option value="any">Any version</option>
+                  </Select>
+                </div>
+                <div>
+                  <label class="block text-[11px] text-muted-foreground mb-0.5" for="srv-after">Completed after</label>
+                  <input
+                    id="srv-after"
+                    type="date"
+                    value={(draft.server?.dataset?.completedAfter ?? '').slice(0, 10)}
+                    oninput={(e) => updateDataset({ completedAfter: e.currentTarget.value || undefined })}
+                    class="w-full px-2 py-1 text-xs border border-border rounded bg-background text-foreground"
+                  />
+                </div>
+                <div>
+                  <label class="block text-[11px] text-muted-foreground mb-0.5" for="srv-before">Completed before</label>
+                  <input
+                    id="srv-before"
+                    type="date"
+                    value={(draft.server?.dataset?.completedBefore ?? '').slice(0, 10)}
+                    oninput={(e) => updateDataset({ completedBefore: e.currentTarget.value || undefined })}
+                    class="w-full px-2 py-1 text-xs border border-border rounded bg-background text-foreground"
+                  />
+                </div>
+              </div>
+
+              <!-- where rows -->
+              <div class="space-y-2">
+                {#each draft.server?.dataset?.where ?? [] as row, i}
+                  <div class="flex items-center gap-1.5" data-testid={`srv-where-${i}`}>
+                    <Select
+                      value={row.var}
+                      onchange={(e) => updateWhereRow(i, { var: e.currentTarget.value })}
+                      placeholder=""
+                      class="text-xs"
+                    >
+                      <option value="">Variable…</option>
+                      {#each sessionVariableOptions as opt}
+                        <option value={opt.value}>{opt.label}</option>
+                      {/each}
+                    </Select>
+                    <Select
+                      value={row.op}
+                      onchange={(e) => updateWhereRow(i, { op: e.currentTarget.value as typeof row.op })}
+                      placeholder=""
+                      class="text-xs"
+                    >
+                      {#each whereOps as op}
+                        <option value={op.value}>{op.label}</option>
+                      {/each}
+                    </Select>
+                    <input
+                      type="text"
+                      value={Array.isArray(row.value) ? row.value.join(', ') : String(row.value ?? '')}
+                      oninput={(e) => setWhereValue(i, e.currentTarget.value, row.op)}
+                      class="flex-1 min-w-0 px-2 py-1 text-xs border border-border rounded bg-background text-foreground"
+                      placeholder={row.op === 'in' ? 'a, b, c' : 'value'}
+                    />
+                    <button
+                      type="button"
+                      onclick={() => removeWhereRow(i)}
+                      class="p-1 rounded hover:bg-destructive/10"
+                      aria-label="Remove filter"
+                    >
+                      <Trash2 class="w-3.5 h-3.5 text-destructive" />
+                    </button>
+                  </div>
+                {/each}
+                <button
+                  type="button"
+                  onclick={addWhereRow}
+                  class="flex items-center gap-1 text-xs text-primary hover:text-primary/80"
+                >
+                  <Plus class="w-3.5 h-3.5" /> Add filter
+                </button>
+              </div>
+            </div>
+
+            <p class="text-[11px] text-muted-foreground leading-relaxed">
+              Values compute after publish; there is no live preview because the server only
+              evaluates published declarations. Cohorts below the anonymity floor (n&lt;5) return no
+              statistics and the default value is used instead.
+            </p>
+
+            {#if serverValidationErrors.length > 0}
+              <div class="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive space-y-0.5" data-testid="server-variable-errors">
+                {#each serverValidationErrors as err}
+                  <p>{err}</p>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
 
         <div>
           <label class="block text-sm font-medium text-foreground mb-1" for="var-desc"
@@ -611,6 +1035,7 @@
       onclick={() => {
         showAddVariable = false;
         editingVariable = null;
+        computationMode = 'static';
       }}
       class="px-4 py-2 text-muted-foreground hover:text-foreground"
     >
@@ -618,7 +1043,8 @@
     </button>
     <button
       onclick={editingVariable ? handleUpdateVariable : handleAddVariable}
-      class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+      disabled={computationMode === 'server' && serverValidationErrors.length > 0}
+      class="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed"
     >
       {editingVariable ? 'Update' : 'Add'} Variable
     </button>

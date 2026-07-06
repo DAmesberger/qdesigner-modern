@@ -33,6 +33,7 @@
     { value: 'current-session', label: 'Current Session' },
     { value: 'norm-table', label: 'Norm Table (bundled / offline)' },
     { value: 'self-baseline', label: 'Self-Baseline (pre / post)' },
+    { value: 'server-variable', label: 'Server variable (offline-synced)' },
     { value: 'cohort', label: 'Cohort Aggregate' },
     { value: 'participant-vs-cohort', label: 'Participant vs Cohort' },
     { value: 'participant-vs-participant', label: 'Participant vs Participant' },
@@ -40,14 +41,25 @@
 
   // Modes that resolve entirely from local variables (no analytics API call);
   // they surface a "current variable" picker instead of a questionnaire/key pair.
+  // 'server-variable' is local too: the cohort bundle is an object-typed server
+  // variable already injected into the live VariableEngine, so it renders offline.
   const localModes: StatisticalSourceMode[] = [
     'current-session',
     'norm-table',
     'self-baseline',
+    'server-variable',
   ];
   const isLocalMode = $derived(localModes.includes(config.sourceMode));
 
   const normTableOptions = NORM_TABLES.map((n) => ({ value: n.id, label: n.label }));
+
+  // Object-typed server-computed variables — the only ones that carry a full
+  // stats bundle a cohort widget can bind (server-computed-variable / E-FEEDBACK-3).
+  const serverVariableOptions = $derived(
+    (designerStore.questionnaire.variables || [])
+      .filter((v) => v.server && v.type === 'object')
+      .map((v) => ({ value: v.name, label: v.name }))
+  );
 
   function updateCustomNorm(patch: Partial<CustomNormConfig>): void {
     const existing: CustomNormConfig = config.dataSource.customNorm ?? {
@@ -553,7 +565,64 @@
           </div>
         {/if}
       {/if}
+      {#if config.sourceMode === 'server-variable'}
+        <div class="row" data-testid="stats-server-variable-row">
+          <label for="stats-server-variable">Cohort server variable</label>
+          <Select
+            id="stats-server-variable"
+            value={config.dataSource.serverVariable ?? ''}
+            onchange={(event) =>
+              updateConfig({
+                dataSource: { serverVariable: (event.currentTarget as HTMLSelectElement).value },
+              })}
+          >
+            <option value="">Select object-typed server variable…</option>
+            {#each serverVariableOptions as opt}
+              <option value={opt.value}>{opt.label}</option>
+            {/each}
+          </Select>
+          {#if serverVariableOptions.length === 0}
+            <p class="hint">
+              No object-typed server variables yet. Create one in the Variables panel
+              (Computation → Server-computed → Full statistics), then bind it here.
+            </p>
+          {:else}
+            <p class="hint">
+              Reads the synced <code>{'{ n, mean, sd, median, p25, p75, … }'}</code> bundle straight
+              out of the participant's variables — no network on the render path (works offline).
+            </p>
+          {/if}
+        </div>
+
+        <div class="row" data-testid="stats-server-fallback-row">
+          <label for="stats-server-fallback">Fallback norm table (offline / below n=5)</label>
+          <Select
+            id="stats-server-fallback"
+            value={config.dataSource.fallbackNormTableId ?? ''}
+            onchange={(event) =>
+              updateConfig({
+                dataSource: {
+                  fallbackNormTableId: (event.currentTarget as HTMLSelectElement).value,
+                },
+              })}
+          >
+            <option value="">None (honest empty cohort)</option>
+            {#each normTableOptions as option}
+              <option value={option.value}>{option.label}</option>
+            {/each}
+          </Select>
+        </div>
+      {/if}
     {:else}
+      {#if config.sourceMode === 'cohort' || config.sourceMode === 'participant-vs-cohort'}
+        <div class="behavior-warning" data-testid="stats-cohort-deprecation">
+          Cohort modes fetch live from the analytics API and do NOT render for offline or
+          anonymous participants. For participant-facing feedback, prefer
+          <strong>Server variable (offline-synced)</strong>: declare an object-typed
+          server-computed variable and bind it here — it resolves from the last synced value with
+          no network on the render path.
+        </div>
+      {/if}
       <div class="grid-two">
         <div class="row">
           <label for="stats-questionnaire-id">Questionnaire ID</label>
