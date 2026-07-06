@@ -1,10 +1,23 @@
+import type { MathJsInstance } from 'mathjs';
 import type { Variable, VariableType } from '@qdesigner/questionnaire-core';
 import { BUILTIN_FUNCTIONS, createSandboxedMath } from './sandbox-math';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- variable engine evaluates dynamic formula payloads
 type DynamicValue = any;
 
-const math = createSandboxedMath();
+// Lazy, module-private singleton so importing this module does not eagerly
+// `create(all)` the mathjs instance. Consumers that only touch the parser/
+// AST paths can then tree-shake this module (and its mathjs dependency) out;
+// mathjs is only instantiated on first formula use. Semantics unchanged: all
+// VariableEngine instances share one math instance, and the class API stays
+// fully synchronous.
+let mathInstance: MathJsInstance | null = null;
+function getMath(): MathJsInstance {
+  if (!mathInstance) {
+    mathInstance = createSandboxedMath();
+  }
+  return mathInstance;
+}
 
 export interface VariableValue {
   id: string;
@@ -98,11 +111,11 @@ export class VariableEngine {
   }
 
   public evaluate(expression: string, scope?: Record<string, DynamicValue>): DynamicValue {
-    return math.evaluate(expression, scope || {});
+    return getMath().evaluate(expression, scope || {});
   }
 
   public validate(formula: string): void {
-    math.parse(formula);
+    getMath().parse(formula);
   }
 
   public evaluateFormula(formula: string, contextVariableId?: string): EvaluationResult {
@@ -138,7 +151,7 @@ export class VariableEngine {
     fn: (...args: DynamicValue[]) => DynamicValue,
     options?: { override?: boolean }
   ): void {
-    math.import(
+    getMath().import(
       {
         [name]: fn,
       },
@@ -230,7 +243,7 @@ export class VariableEngine {
     try {
       const dependencies = this.extractDependencies(formula);
       const scope = this.createEvaluationScope(dependencies, stack);
-      const value = math.evaluate(formula, scope);
+      const value = getMath().evaluate(formula, scope);
 
       const result: EvaluationResult = { value, dependencies };
       if (cacheKey) {
@@ -250,7 +263,7 @@ export class VariableEngine {
     const dependencies = new Set<string>();
 
     try {
-      const node = math.parse(formula);
+      const node = getMath().parse(formula);
 
       node.traverse((traversed: DynamicValue, path: string, parent: DynamicValue) => {
         if (traversed.type !== 'SymbolNode') return;

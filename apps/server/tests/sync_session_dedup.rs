@@ -233,6 +233,83 @@ async fn sync_metadata_merge_preserves_prior_keys_and_is_idempotent() {
 }
 
 #[tokio::test]
+async fn batched_multi_row_insert_dedups_and_counts_only_new_rows() {
+    // Mirrors the chunked multi-row INSERT sync_session now issues for
+    // responses: a single `INSERT ... VALUES (row), (row), ... ON CONFLICT
+    // (client_id) DO NOTHING`. The batch's rows_affected() must count ONLY the
+    // rows actually inserted (skipped duplicates don't count) — this is what
+    // responses_synced/events_synced accumulate. Here k of N rows collide with
+    // pre-existing client_ids, so the batch must report N-k and the table must
+    // hold exactly N rows for the session.
+    let Some(pool) = fixture_pool().await else {
+        eprintln!("Skipping: DATABASE_URL not set");
+        return;
+    };
+
+    let session_id = make_session(&pool).await.expect("session");
+
+    const N: usize = 6;
+    const K: usize = 2;
+    let client_ids: Vec<Uuid> = (0..N).map(|_| Uuid::new_v4()).collect();
+
+    // Pre-insert the first K rows so they already exist on the server.
+    for cid in client_ids.iter().take(K) {
+        sqlx::query(
+            "INSERT INTO responses (session_id, client_id, question_id, value) \
+             VALUES ($1, $2, 'q-1', '\"pre\"'::jsonb) ON CONFLICT (client_id) DO NOTHING",
+        )
+        .bind(session_id)
+        .bind(cid)
+        .execute(&pool)
+        .await
+        .expect("pre-insert");
+    }
+
+    // Batch-insert all N rows in one multi-row statement (the handler's shape).
+    let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        "INSERT INTO responses (session_id, question_id, value, client_id) ",
+    );
+    builder.push_values(client_ids.iter(), |mut row, cid| {
+        row.push_bind(session_id)
+            .push_bind("q-1")
+            .push_bind(serde_json::json!("batch"))
+            .push_bind(cid);
+    });
+    builder.push(" ON CONFLICT (client_id) DO NOTHING");
+    let affected = builder
+        .build()
+        .execute(&pool)
+        .await
+        .expect("batch insert")
+        .rows_affected();
+
+    assert_eq!(
+        affected,
+        (N - K) as u64,
+        "batch rows_affected must count only newly-inserted rows"
+    );
+
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM responses WHERE session_id = $1")
+        .bind(session_id)
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    assert_eq!(count, N as i64, "table must hold exactly N distinct rows");
+
+    // The pre-existing rows must retain their ORIGINAL value (DO NOTHING, not
+    // overwrite): the K colliding client_ids still read "pre".
+    for cid in client_ids.iter().take(K) {
+        let value: serde_json::Value =
+            sqlx::query_scalar("SELECT value FROM responses WHERE client_id = $1")
+                .bind(cid)
+                .fetch_one(&pool)
+                .await
+                .expect("value");
+        assert_eq!(value, serde_json::json!("pre"), "collision must not overwrite");
+    }
+}
+
+#[tokio::test]
 async fn distinct_client_ids_each_create_a_row() {
     let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");

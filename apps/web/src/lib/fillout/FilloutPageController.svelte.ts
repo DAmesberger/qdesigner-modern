@@ -25,7 +25,7 @@ import type { ServerVariableSnapshot } from '$lib/runtime/core/QuestionnaireRunt
 import { ensureModulesRegistered } from '$lib/modules/register-all';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import type { GatekeeperResult } from '$lib/runtime/timing';
-import { FilloutRuntime, type FilloutRuntimeConfig } from '$lib/fillout/runtime/FilloutRuntime';
+import type { FilloutRuntime, FilloutRuntimeConfig } from '$lib/fillout/runtime/FilloutRuntime';
 import type { Session } from '$lib/api/generated/types.gen';
 import type { ResumeSnapshot } from '$lib/fillout/runtime/responseMapping';
 
@@ -84,7 +84,11 @@ export interface FilloutServiceBag {
     onSyncStart?: () => void;
     onSyncComplete?: (result: SyncResult) => void;
   }) => FilloutUploadSync;
-  makeRuntime: (config: FilloutRuntimeConfig) => FilloutRuntime;
+  // Async so the default factory can dynamically import FilloutRuntime, keeping the
+  // mathjs subgraph (FilloutRuntime → QuestionnaireRuntime → VariableEngine → mathjs)
+  // off the fillout route's static/modulepreload graph (F103). Sync test doubles that
+  // return a runtime directly still satisfy this (awaited at the call site).
+  makeRuntime: (config: FilloutRuntimeConfig) => FilloutRuntime | Promise<FilloutRuntime>;
   gatekeeper: () => TimingGatekeeper;
 }
 
@@ -95,7 +99,12 @@ function defaultServiceBag(): FilloutServiceBag {
     quota: QuotaService,
     content: FilloutContentCache,
     makeSyncEngine: (opts) => new FilloutUploadSync(opts),
-    makeRuntime: (config) => new FilloutRuntime(config),
+    makeRuntime: async (config) => {
+      // Dynamic import (F103): defers the mathjs chunk until first runtime construction,
+      // so the public /q/[code] initial graph never statically references it.
+      const { FilloutRuntime } = await import('$lib/fillout/runtime/FilloutRuntime');
+      return new FilloutRuntime(config);
+    },
     gatekeeper: () => TimingGatekeeper.shared(),
   };
 }
@@ -708,7 +717,7 @@ export class FilloutPageController {
         }
       );
 
-      this.runtime = this.services.makeRuntime({
+      this.runtime = await this.services.makeRuntime({
         canvas,
         questionnaire: inputs.definition,
         sessionId: this.session.id,

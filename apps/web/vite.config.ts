@@ -69,6 +69,14 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
+            // Keep Rollup's shared CommonJS interop helpers (getDefaultExportFromCjs /
+            // commonjsGlobal) out of the fat vendor chunks below. Otherwise Rollup
+            // co-locates them into the first big vendor chunk (mathjs), so every
+            // CJS-interop consumer (e.g. lucide-svelte icons on the fillout screens)
+            // statically imports the 650 kB mathjs chunk just for a 2-line helper —
+            // defeating the lazy-loading of mathjs off the /q/[code] route (F103).
+            if (id.includes('commonjsHelpers') || id.includes('commonjs-dynamic-modules'))
+              return 'cjs-helpers';
             if (id.includes('monaco-editor')) return 'monaco';
             if (id.includes('chart.js')) return 'charts';
             if (id.includes('mathjs')) return 'mathjs';

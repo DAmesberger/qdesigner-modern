@@ -372,6 +372,7 @@ pub struct ArmCount {
 
 #[derive(Debug, sqlx::FromRow)]
 pub(crate) struct ResponseValueRow {
+    questionnaire_id: Uuid,
     participant_id: Option<String>,
     value: Value,
 }
@@ -384,6 +385,7 @@ pub(crate) struct NumericSample {
 
 #[derive(Debug, sqlx::FromRow)]
 pub(crate) struct VariableProjectionRow {
+    questionnaire_id: Uuid,
     participant_id: Option<String>,
     numeric_value: Option<f64>,
     raw_value: Option<Value>,
@@ -877,6 +879,7 @@ pub(crate) async fn load_numeric_samples<'e>(
             let sql = format!(
                 r#"
                 SELECT
+                    s.questionnaire_id,
                     s.participant_id,
                     svi.numeric_value,
                     COALESCE(svi.raw_value, sv.variable_value) AS raw_value
@@ -920,7 +923,7 @@ pub(crate) async fn load_numeric_samples<'e>(
 
             let sql = format!(
                 r#"
-                SELECT s.participant_id, r.value
+                SELECT s.questionnaire_id, s.participant_id, r.value
                 FROM responses r
                 INNER JOIN sessions s ON s.id = r.session_id
                 WHERE {}
@@ -950,6 +953,93 @@ pub(crate) async fn load_numeric_samples<'e>(
                 .collect())
         }
     }
+}
+
+/// Set-based generalization of [`load_numeric_samples`] over many
+/// questionnaires at once: one query with `s.questionnaire_id = ANY($1)`
+/// instead of N per-questionnaire queries. Returns the samples grouped by
+/// questionnaire id (questionnaires with no numeric samples are simply absent
+/// from the map). Unlike the single-qid variant this does not filter by
+/// participant — the only caller (cross-project analytics) always passes
+/// `None` there.
+pub(crate) async fn load_numeric_samples_batch<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    source: AggregateSource,
+    questionnaire_ids: &[Uuid],
+    key: &str,
+) -> Result<HashMap<Uuid, Vec<NumericSample>>, ApiError> {
+    let mut grouped: HashMap<Uuid, Vec<NumericSample>> = HashMap::new();
+
+    match source {
+        AggregateSource::Variable => {
+            let rows = sqlx::query_as::<_, VariableProjectionRow>(
+                r#"
+                SELECT
+                    s.questionnaire_id,
+                    s.participant_id,
+                    svi.numeric_value,
+                    COALESCE(svi.raw_value, sv.variable_value) AS raw_value
+                FROM sessions s
+                LEFT JOIN session_variable_index svi
+                    ON svi.session_id = s.id
+                   AND svi.variable_name = $2
+                LEFT JOIN session_variables sv
+                    ON sv.session_id = s.id
+                   AND sv.variable_name = $2
+                WHERE s.questionnaire_id = ANY($1)
+                  AND (svi.variable_name IS NOT NULL OR sv.variable_name IS NOT NULL)
+                ORDER BY s.created_at ASC
+                "#,
+            )
+            .bind(questionnaire_ids)
+            .bind(key)
+            .fetch_all(executor)
+            .await?;
+
+            for row in rows {
+                if let Some(value) = row
+                    .numeric_value
+                    .or_else(|| row.raw_value.as_ref().and_then(json_value_to_f64))
+                {
+                    grouped.entry(row.questionnaire_id).or_default().push(
+                        NumericSample {
+                            participant_id: row.participant_id,
+                            value,
+                        },
+                    );
+                }
+            }
+        }
+        AggregateSource::Response => {
+            let rows = sqlx::query_as::<_, ResponseValueRow>(
+                r#"
+                SELECT s.questionnaire_id, s.participant_id, r.value
+                FROM responses r
+                INNER JOIN sessions s ON s.id = r.session_id
+                WHERE s.questionnaire_id = ANY($1)
+                  AND r.question_id = $2
+                ORDER BY s.created_at ASC
+                "#,
+            )
+            .bind(questionnaire_ids)
+            .bind(key)
+            .fetch_all(executor)
+            .await?;
+
+            for row in rows {
+                if let Some(value) = json_value_to_f64(&row.value) {
+                    grouped.entry(row.questionnaire_id).or_default().push(
+                        NumericSample {
+                            participant_id: row.participant_id,
+                            value,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(grouped)
 }
 
 pub(crate) fn json_value_to_f64(value: &Value) -> Option<f64> {

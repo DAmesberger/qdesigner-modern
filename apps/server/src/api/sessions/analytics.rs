@@ -402,13 +402,14 @@ pub async fn cross_project_analytics(
     // Per-questionnaire variable means for cross-comparison
     let mut variable_means: Vec<(Uuid, f64, Vec<f64>)> = Vec::new();
 
-    for &qid in &questionnaire_ids {
-        if !valid_set.contains(&qid) {
-            continue;
-        }
+    // Set-based gather: three batched queries over all requested questionnaires
+    // instead of the previous per-questionnaire query fan-out. The assembly loop
+    // below iterates `questionnaire_ids` in the caller's original order and
+    // reads from these maps, preserving the skip-on-missing-summary semantics.
 
-        // Get questionnaire info + counts
-        let summary = sqlx::query_as::<_, QuestionnaireSummary>(
+    // (1) Summaries + counts, keyed by questionnaire id.
+    let summary_map: HashMap<Uuid, QuestionnaireSummary> =
+        sqlx::query_as::<_, QuestionnaireSummary>(
             r#"
             SELECT
                 q.id,
@@ -425,44 +426,72 @@ pub async fn cross_project_analytics(
             FROM questionnaire_definitions q
             LEFT JOIN sessions s ON s.questionnaire_id = q.id
             LEFT JOIN responses r ON r.session_id = s.id
-            WHERE q.id = $1 AND q.deleted_at IS NULL
+            WHERE q.id = ANY($1) AND q.deleted_at IS NULL
             GROUP BY q.id, q.name, q.project_id, q.status
             "#,
         )
-        .bind(qid)
-        .fetch_optional(&mut **tx)
-        .await?;
+        .bind(&questionnaire_ids)
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(|summary| (summary.id, summary))
+        .collect();
 
-        let summary = match summary {
-            Some(s) => s,
+    // (2) Completion durations (ms), grouped by questionnaire id.
+    let mut timing_map: HashMap<Uuid, Vec<f64>> = HashMap::new();
+    for (qid, ms) in sqlx::query_as::<_, (Uuid, f64)>(
+        r#"
+        SELECT
+            s.questionnaire_id,
+            (EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) * 1000.0)::float8
+        FROM sessions s
+        WHERE s.questionnaire_id = ANY($1)
+          AND s.completed_at IS NOT NULL
+          AND s.started_at IS NOT NULL
+        "#,
+    )
+    .bind(&questionnaire_ids)
+    .fetch_all(&mut **tx)
+    .await?
+    {
+        timing_map.entry(qid).or_default().push(ms);
+    }
+
+    // (3) Numeric samples for the aggregation key, grouped by questionnaire id
+    // (only when a key was supplied — matches the prior per-qid guard).
+    let samples_map: HashMap<Uuid, Vec<NumericSample>> = if key.is_empty() {
+        HashMap::new()
+    } else {
+        load_numeric_samples_batch(&mut **tx, source, &questionnaire_ids, &key).await?
+    };
+
+    for &qid in &questionnaire_ids {
+        if !valid_set.contains(&qid) {
+            continue;
+        }
+
+        // Preserve skip-on-missing-summary: a questionnaire with no summary row
+        // (deleted between the validity check and now, etc.) is skipped.
+        let summary = match summary_map.get(&qid) {
+            Some(summary) => summary,
             None => continue,
         };
 
         // Gather timing values
-        let timing_rows = sqlx::query_scalar::<_, f64>(
-            r#"
-            SELECT (EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) * 1000.0)::float8
-            FROM sessions s
-            WHERE s.questionnaire_id = $1
-              AND s.completed_at IS NOT NULL
-              AND s.started_at IS NOT NULL
-            "#,
-        )
-        .bind(qid)
-        .fetch_all(&mut **tx)
-        .await?;
-
-        let timing_stats = if timing_rows.is_empty() {
-            None
-        } else {
-            all_timing_values.extend(&timing_rows);
-            Some(compute_numeric_stats(&timing_rows))
+        let timing_stats = match timing_map.get(&qid) {
+            Some(timing_rows) if !timing_rows.is_empty() => {
+                all_timing_values.extend(timing_rows);
+                Some(compute_numeric_stats(timing_rows))
+            }
+            _ => None,
         };
 
         // Gather variable stats if key is provided
         let variable_stats = if !key.is_empty() {
-            let samples = load_numeric_samples(&mut **tx, source, qid, &key, None).await?;
-            let values: Vec<f64> = samples.iter().map(|s| s.value).collect();
+            let values: Vec<f64> = samples_map
+                .get(&qid)
+                .map(|samples| samples.iter().map(|s| s.value).collect())
+                .unwrap_or_default();
             if !values.is_empty() {
                 let stats = compute_numeric_stats(&values);
                 if let Some(mean) = stats.mean {
@@ -488,7 +517,7 @@ pub async fn cross_project_analytics(
 
         per_questionnaire.push(QuestionnaireAnalytics {
             questionnaire_id: qid,
-            name: summary.name,
+            name: summary.name.clone(),
             response_count: summary.total_responses,
             completed_sessions: summary.completed_sessions,
             completion_rate,

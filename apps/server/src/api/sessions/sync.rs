@@ -13,6 +13,11 @@ use crate::middleware::tx::Tx;
 use crate::state::AppState;
 use crate::websocket::manager::WsMessage;
 
+/// Rows per multi-row INSERT chunk in [`sync_session`]. Bounds the per-statement
+/// bind count well under Postgres' 65535-parameter limit: responses bind 9
+/// columns/row (500 × 9 = 4500 binds) and events 6 columns/row.
+const SYNC_BATCH_ROWS: usize = 500;
+
 /// POST /api/sessions/{id}/sync
 #[utoipa::path(
     post,
@@ -153,53 +158,57 @@ pub async fn sync_session(
         HashMap::new()
     };
 
-    // Sync responses with dedup
-    for resp in &body.responses {
-        let result = sqlx::query!(
-            r#"
-            INSERT INTO responses (session_id, question_id, value, reaction_time_us, presented_at, answered_at, metadata, client_id, timing_provenance)
-            VALUES ($1, $2, $3, $4, $5::text::timestamptz, $6::text::timestamptz, COALESCE($7, '{}'::jsonb), $8, $9)
-            ON CONFLICT (client_id) DO NOTHING
-            "#,
-            session_id,
-            resp.question_id,
-            resp.value,
-            resp.reaction_time_us,
-            resp.presented_at,
-            resp.answered_at,
-            resp.metadata,
-            resp.client_id,
-            resp.timing_provenance,
-        )
-        .execute(&mut **tx)
-        .await?;
-
-        if result.rows_affected() > 0 {
-            responses_synced += 1;
-        }
+    // Sync responses with dedup — chunked multi-row inserts instead of one
+    // round-trip per row. `ON CONFLICT (client_id) DO NOTHING` preserves the
+    // idempotent dedup, and `rows_affected()` on the batch counts only the rows
+    // actually inserted (skipped duplicates don't count), matching the prior
+    // per-row `> 0` accounting exactly. presented_at/answered_at keep the
+    // Postgres-side text→timestamptz parse (bound as Option<String>); metadata
+    // keeps the COALESCE(..,'{}') default.
+    for chunk in body.responses.chunks(SYNC_BATCH_ROWS) {
+        let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "INSERT INTO responses (session_id, question_id, value, reaction_time_us, \
+             presented_at, answered_at, metadata, client_id, timing_provenance) ",
+        );
+        builder.push_values(chunk, |mut row, resp| {
+            row.push_bind(session_id)
+                .push_bind(&resp.question_id)
+                .push_bind(&resp.value)
+                .push_bind(resp.reaction_time_us)
+                .push_bind(&resp.presented_at)
+                .push_unseparated("::text::timestamptz")
+                .push_bind(&resp.answered_at)
+                .push_unseparated("::text::timestamptz");
+            row.push("COALESCE(");
+            row.push_bind_unseparated(&resp.metadata);
+            row.push_unseparated("::jsonb, '{}'::jsonb)");
+            row.push_bind(&resp.client_id)
+                .push_bind(&resp.timing_provenance);
+        });
+        builder.push(" ON CONFLICT (client_id) DO NOTHING");
+        let result = builder.build().execute(&mut **tx).await?;
+        responses_synced += result.rows_affected() as i32;
     }
 
-    // Sync events with dedup
-    for evt in &body.events {
-        let result = sqlx::query!(
-            r#"
-            INSERT INTO interaction_events (session_id, event_type, question_id, timestamp_us, metadata, client_id)
-            VALUES ($1, $2, $3, $4, COALESCE($5, '{}'::jsonb), $6)
-            ON CONFLICT (client_id) DO NOTHING
-            "#,
-            session_id,
-            evt.event_type,
-            evt.question_id,
-            evt.timestamp_us,
-            evt.metadata,
-            evt.client_id,
-        )
-        .execute(&mut **tx)
-        .await?;
-
-        if result.rows_affected() > 0 {
-            events_synced += 1;
-        }
+    // Sync events with dedup — same chunked strategy as responses.
+    for chunk in body.events.chunks(SYNC_BATCH_ROWS) {
+        let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "INSERT INTO interaction_events (session_id, event_type, question_id, \
+             timestamp_us, metadata, client_id) ",
+        );
+        builder.push_values(chunk, |mut row, evt| {
+            row.push_bind(session_id)
+                .push_bind(&evt.event_type)
+                .push_bind(&evt.question_id)
+                .push_bind(evt.timestamp_us);
+            row.push("COALESCE(");
+            row.push_bind_unseparated(&evt.metadata);
+            row.push_unseparated("::jsonb, '{}'::jsonb)");
+            row.push_bind(&evt.client_id);
+        });
+        builder.push(" ON CONFLICT (client_id) DO NOTHING");
+        let result = builder.build().execute(&mut **tx).await?;
+        events_synced += result.rows_affected() as i32;
     }
 
     // Sync variables (upsert)

@@ -1,12 +1,41 @@
 import { db, type FilloutSession } from '$lib/services/db/indexeddb';
 import { browser } from '$app/environment';
 import type { ResumeState } from '$lib/runtime/core/ResumeState';
+import { FilloutCrypto } from './crypto/FilloutCrypto';
+
+type SessionMetadata = Record<string, unknown> | undefined;
 
 /**
  * Manages fillout sessions offline-first using IndexedDB.
  * Sessions are created client-side with crypto.randomUUID() — no server round-trip needed.
  */
 export class OfflineSessionService {
+	/**
+	 * E-OFF-2: encrypt a session's `metadata` blob (consent, url params,
+	 * fingerprint, progress) at rest. `browserInfo`/version/status stay cleartext —
+	 * the latter are indexed and non-content. Undefined passes through untouched.
+	 */
+	private static async encryptMeta(sessionId: string, meta: SessionMetadata): Promise<SessionMetadata> {
+		return (await FilloutCrypto.encryptField(sessionId, meta)) as SessionMetadata;
+	}
+
+	/** Decrypt a stored metadata slot back to a plain object (or undefined). */
+	private static async decryptMeta(sessionId: string, meta: unknown): Promise<SessionMetadata> {
+		return (await FilloutCrypto.decryptField(sessionId, meta)) as SessionMetadata;
+	}
+
+	/**
+	 * Return a copy of a stored session row with its `metadata` decrypted, so all
+	 * callers see plaintext regardless of at-rest encryption. No-op on undefined.
+	 */
+	private static async decryptRow(
+		row: FilloutSession | undefined
+	): Promise<FilloutSession | undefined> {
+		if (!row) return row;
+		if (row.metadata === undefined) return row;
+		return { ...row, metadata: await this.decryptMeta(row.id, row.metadata) };
+	}
+
 	/**
 	 * Create a new session locally.
 	 */
@@ -19,22 +48,24 @@ export class OfflineSessionService {
 		metadata?: Record<string, unknown>,
 		browserInfo?: Record<string, unknown>,
 	): Promise<FilloutSession> {
+		const id = crypto.randomUUID();
 		const session: FilloutSession = {
-			id: crypto.randomUUID(),
+			id,
 			questionnaireId,
 			status: 'active',
 			versionMajor,
 			versionMinor,
 			versionPatch,
 			participantId,
-			metadata,
+			metadata: await this.encryptMeta(id, metadata),
 			browserInfo,
 			createdAt: Date.now(),
 			synced: 0,
 		};
 
 		await db.filloutSessions.put(session);
-		return session;
+		// Return the plaintext view to the caller (the stored row is encrypted).
+		return { ...session, metadata };
 	}
 
 	/**
@@ -57,6 +88,12 @@ export class OfflineSessionService {
 		metadata?: Record<string, unknown>;
 	}): Promise<void> {
 		const existing = await db.filloutSessions.get(input.id);
+		// New metadata is encrypted; when absent, keep the existing (already
+		// encrypted) row value untouched.
+		const metadata =
+			input.metadata !== undefined
+				? await this.encryptMeta(input.id, input.metadata)
+				: existing?.metadata;
 		const session: FilloutSession = {
 			id: input.id,
 			questionnaireId: input.questionnaireId,
@@ -65,7 +102,7 @@ export class OfflineSessionService {
 			versionMinor: input.versionMinor,
 			versionPatch: input.versionPatch,
 			participantId: input.participantId ?? existing?.participantId,
-			metadata: input.metadata ?? existing?.metadata,
+			metadata,
 			browserInfo: existing?.browserInfo,
 			createdAt: existing?.createdAt ?? Date.now(),
 			completedAt: existing?.completedAt,
@@ -80,7 +117,7 @@ export class OfflineSessionService {
 	static async resumeSession(sessionId: string): Promise<FilloutSession | null> {
 		const session = await db.filloutSessions.get(sessionId);
 		if (!session || session.status === 'completed') return null;
-		return session;
+		return (await this.decryptRow(session)) ?? null;
 	}
 
 	/**
@@ -91,7 +128,7 @@ export class OfflineSessionService {
 			.where('[questionnaireId+status]')
 			.equals([questionnaireId, 'active'])
 			.first();
-		return session ?? null;
+		return (await this.decryptRow(session)) ?? null;
 	}
 
 	/**
@@ -114,8 +151,10 @@ export class OfflineSessionService {
 		const session = await db.filloutSessions.get(sessionId);
 		if (!session) return;
 
+		// Decrypt the current metadata before merging, then re-encrypt the result.
+		const currentMeta = (await this.decryptMeta(sessionId, session.metadata)) ?? {};
 		const patch: Partial<FilloutSession> = {
-			metadata: { ...session.metadata, progress },
+			metadata: await this.encryptMeta(sessionId, { ...currentMeta, progress }),
 			updatedAt: Date.now(),
 			synced: 0,
 		};
@@ -187,8 +226,9 @@ export class OfflineSessionService {
 			if (v !== undefined) cleaned[k] = v;
 		}
 
+		const currentMeta = (await this.decryptMeta(sessionId, s.metadata)) ?? {};
 		await db.filloutSessions.update(sessionId, {
-			metadata: { ...(s.metadata ?? {}), ...cleaned },
+			metadata: await this.encryptMeta(sessionId, { ...currentMeta, ...cleaned }),
 			synced: 0,
 		});
 	}
@@ -218,17 +258,18 @@ export class OfflineSessionService {
 	 * Get a session row by id (undefined when it exists only on the server).
 	 */
 	static async getSession(sessionId: string): Promise<FilloutSession | undefined> {
-		return db.filloutSessions.get(sessionId);
+		return this.decryptRow(await db.filloutSessions.get(sessionId));
 	}
 
 	/**
 	 * Get all unsynced sessions.
 	 */
 	static async getUnsyncedSessions(): Promise<FilloutSession[]> {
-		return db.filloutSessions
+		const rows = await db.filloutSessions
 			.where('synced')
 			.equals(0)
 			.toArray();
+		return Promise.all(rows.map((r) => this.decryptRow(r) as Promise<FilloutSession>));
 	}
 
 	/**

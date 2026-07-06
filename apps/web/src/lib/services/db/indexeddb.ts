@@ -189,6 +189,30 @@ export interface FilloutServerVariable {
   syncedAt: number;
 }
 
+/** Reserved primary key of the single device-root-key row in `filloutKeys`. */
+export const DEVICE_ROOT_KEY_ID = '__device_root__';
+
+/**
+ * Key material for encryption-at-rest (E-OFF-2). One row per session holds that
+ * session's AES-GCM data key WRAPPED by the device root key; a single reserved
+ * row ({@link DEVICE_ROOT_KEY_ID}) holds the non-extractable device root key
+ * itself. Persisting the root key as a `CryptoKey` object (structured-clone) —
+ * rather than raw bytes — means IndexedDB never stores extractable key material.
+ * Destroying a row (purge / clear-this-device) renders the paired ciphertext
+ * permanently unreadable.
+ */
+export interface FilloutKeyRow {
+  /** Primary key: a session id, or {@link DEVICE_ROOT_KEY_ID} for the root-key row. */
+  sessionId: string;
+  /** Device-root row ONLY: non-extractable AES-GCM wrapping key (wrapKey/unwrapKey usages). */
+  rootKey?: CryptoKey;
+  /** Per-session row ONLY: this session's data key, wrapped by the device root key. */
+  wrappedKey?: ArrayBuffer;
+  /** Per-session row ONLY: the IV used to wrap `wrappedKey`. */
+  iv?: Uint8Array;
+  createdAt: number;
+}
+
 class QDesignerDatabase extends Dexie {
   // Designer tables
   questionnaires!: Table<OfflineQuestionnaire>;
@@ -204,6 +228,7 @@ class QDesignerDatabase extends Dexie {
   filloutVariables!: Table<FilloutVariable>;
   filloutMedia!: Table<FilloutMediaEntry>;
   filloutServerVariables!: Table<FilloutServerVariable>;
+  filloutKeys!: Table<FilloutKeyRow, string>;
 
   constructor() {
     super('QDesignerOfflineDB');
@@ -316,6 +341,33 @@ class QDesignerDatabase extends Dexie {
       filloutVariables: '[sessionId+name], sessionId, synced',
       filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt',
       filloutServerVariables: '[definitionKey+variableId], definitionKey, questionnaireId, syncedAt'
+    });
+
+    // v6: encryption-at-rest key store (E-OFF-2).
+    //  - filloutKeys is new: one row per session holding that session's AES-GCM
+    //    data key WRAPPED by the device root key, plus one reserved row
+    //    (DEVICE_ROOT_KEY_ID) holding the non-extractable root CryptoKey itself.
+    //    Keyed on `sessionId`; no secondary indexes (all lookups are by PK).
+    //  - Purely ADDITIVE. Existing response/variable/session-metadata rows stay
+    //    readable: the read paths pass a non-envelope slot through as plaintext
+    //    (legacy or insecure-context fallback), so there is NO destructive
+    //    re-encrypt migration inside the upgrade transaction (awaiting
+    //    crypto.subtle inside a Dexie upgrade tx risks a premature commit).
+    //    New writes from v6 onward are encrypted; residual plaintext is removed
+    //    by purge-after-sync and clearThisDevice().
+    this.version(6).stores({
+      questionnaires: 'id, userId, syncStatus, lastModified, [id+userId]',
+      syncQueue: '++id, userId, status, timestamp, [userId+status]',
+      resources: 'id, url, lastAccessed, expiresAt',
+      drafts: 'id, userId, questionnaireId, timestamp, [userId+questionnaireId]',
+      filloutQuestionnaires: 'id, questionnaireId, accessCode, syncedAt',
+      filloutSessions: 'id, questionnaireId, status, createdAt, synced, [questionnaireId+status]',
+      filloutResponses: '++id, sessionId, clientId, questionId, synced, [sessionId+synced]',
+      filloutEvents: '++id, sessionId, clientId, synced, [sessionId+synced]',
+      filloutVariables: '[sessionId+name], sessionId, synced',
+      filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt',
+      filloutServerVariables: '[definitionKey+variableId], definitionKey, questionnaireId, syncedAt',
+      filloutKeys: 'sessionId'
     });
   }
 
@@ -556,13 +608,21 @@ class QDesignerDatabase extends Dexie {
    *    been re-armed, so it stays.
    *  - Uses the `[sessionId+synced]` compound index for responses/events; the
    *    `filloutVariables` table has no compound index, so it filters on `synced`.
+   *  - E-OFF-2: when the session is fully drained (row deleted AND no unsynced
+   *    child rows remain), its encryption key (`filloutKeys`) is destroyed too so
+   *    no key material lingers. The key is kept while ANY unsynced ciphertext for
+   *    the session survives — destroying it would render that data permanently
+   *    unreadable before it has synced.
    */
   async purgeSyncedSessionData(sessionId: string): Promise<void> {
     await this.transaction('rw',
-      this.filloutSessions,
-      this.filloutResponses,
-      this.filloutEvents,
-      this.filloutVariables,
+      [
+        this.filloutSessions,
+        this.filloutResponses,
+        this.filloutEvents,
+        this.filloutVariables,
+        this.filloutKeys,
+      ],
       async () => {
         await this.filloutResponses
           .where('[sessionId+synced]')
@@ -579,8 +639,18 @@ class QDesignerDatabase extends Dexie {
           .delete();
 
         const sessionRow = await this.filloutSessions.get(sessionId);
-        if (sessionRow && sessionRow.synced === 1) {
+        const sessionDeleted = !!sessionRow && sessionRow.synced === 1;
+        if (sessionDeleted) {
           await this.filloutSessions.delete(sessionId);
+        }
+
+        // Destroy the per-session key only once nothing readable remains for it.
+        const remaining =
+          (await this.filloutResponses.where('sessionId').equals(sessionId).count()) +
+          (await this.filloutEvents.where('sessionId').equals(sessionId).count()) +
+          (await this.filloutVariables.where('sessionId').equals(sessionId).count());
+        if (sessionDeleted && remaining === 0) {
+          await this.filloutKeys.delete(sessionId);
         }
       }
     );
@@ -615,6 +685,55 @@ class QDesignerDatabase extends Dexie {
         ]);
       }
     );
+  }
+
+  /**
+   * Hard "clear this device" for the shared/kiosk research device (E-OFF-2 step 6,
+   * surfaced by the shared-device UX in E-OFF-6). Wipes EVERY fillout store —
+   * participant data (sessions/responses/events/variables), cached definitions +
+   * media accounting, server-variable aggregates, AND the encryption keys
+   * (`filloutKeys`) — then deletes the `fillout-media-v2` Cache-API store.
+   *
+   * Destroying `filloutKeys` is the security payload: any residual UNSYNCED
+   * ciphertext left behind (a row a concurrent purge could not remove) becomes
+   * permanently undecryptable once its wrapping key is gone. The caller MUST warn
+   * about and confirm past any unsynced data first — this is intentional,
+   * user-driven, irreversible data loss.
+   */
+  async clearThisDevice(): Promise<void> {
+    await this.transaction('rw',
+      [
+        this.filloutSessions,
+        this.filloutResponses,
+        this.filloutEvents,
+        this.filloutVariables,
+        this.filloutQuestionnaires,
+        this.filloutMedia,
+        this.filloutServerVariables,
+        this.filloutKeys,
+      ],
+      async () => {
+        await Promise.all([
+          this.filloutSessions.clear(),
+          this.filloutResponses.clear(),
+          this.filloutEvents.clear(),
+          this.filloutVariables.clear(),
+          this.filloutQuestionnaires.clear(),
+          this.filloutMedia.clear(),
+          this.filloutServerVariables.clear(),
+          this.filloutKeys.clear()
+        ]);
+      }
+    );
+
+    // Evict the paired media blobs. Cache name mirrors FilloutContentCache.MEDIA_CACHE_NAME.
+    if (typeof caches !== 'undefined') {
+      try {
+        await caches.delete('fillout-media-v2');
+      } catch {
+        // Cache API unavailable / already gone — the IndexedDB wipe above stands.
+      }
+    }
   }
 }
 

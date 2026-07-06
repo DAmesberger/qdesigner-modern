@@ -1,4 +1,5 @@
 import { db, type FilloutResponse, type FilloutEvent, type FilloutVariable } from '$lib/services/db/indexeddb';
+import { FilloutCrypto } from './crypto/FilloutCrypto';
 
 /**
  * Per-response timing provenance (contract C-PROVENANCE). Captured alongside
@@ -49,16 +50,22 @@ export class OfflineResponsePersistence {
 			metadata?: Record<string, unknown>;
 		}
 	): Promise<void> {
+		// E-OFF-2: encrypt the sensitive slots (participant answer + free-form
+		// metadata) at rest. Timing columns (reactionTimeUs / presentedAt /
+		// answeredAt / timingProvenance) stay cleartext for local analytics and
+		// index-free querying, and never carry response content.
 		const record: StoredFilloutResponse = {
 			sessionId,
 			clientId: crypto.randomUUID(),
 			questionId: data.questionId,
-			value: data.value,
+			value: await FilloutCrypto.encryptField(sessionId, data.value),
 			reactionTimeUs: data.reactionTimeUs,
 			presentedAt: data.presentedAt,
 			answeredAt: data.answeredAt,
 			timingProvenance: data.timingProvenance,
-			metadata: data.metadata,
+			metadata: (await FilloutCrypto.encryptField(sessionId, data.metadata)) as
+				| Record<string, unknown>
+				| undefined,
 			synced: 0,
 		};
 
@@ -97,7 +104,7 @@ export class OfflineResponsePersistence {
 		const record: FilloutVariable = {
 			sessionId,
 			name,
-			value,
+			value: await FilloutCrypto.encryptField(sessionId, value),
 			synced: 0,
 		};
 
@@ -105,13 +112,33 @@ export class OfflineResponsePersistence {
 	}
 
 	/**
+	 * Decrypt the sensitive slots of a stored response row (E-OFF-2). A row whose
+	 * value/metadata are plaintext (legacy or insecure-context) round-trips
+	 * unchanged via {@link FilloutCrypto.decryptField}.
+	 */
+	private static async decryptResponse(r: FilloutResponse): Promise<FilloutResponse> {
+		return {
+			...r,
+			value: await FilloutCrypto.decryptField(r.sessionId, r.value),
+			metadata: (await FilloutCrypto.decryptField(r.sessionId, r.metadata)) as
+				| Record<string, unknown>
+				| undefined,
+		};
+	}
+
+	private static async decryptVariable(v: FilloutVariable): Promise<FilloutVariable> {
+		return { ...v, value: await FilloutCrypto.decryptField(v.sessionId, v.value) };
+	}
+
+	/**
 	 * Get all responses for a session (for resume).
 	 */
 	static async getSessionResponses(sessionId: string): Promise<FilloutResponse[]> {
-		return db.filloutResponses
+		const rows = await db.filloutResponses
 			.where('sessionId')
 			.equals(sessionId)
 			.toArray();
+		return Promise.all(rows.map((r) => this.decryptResponse(r)));
 	}
 
 	/**
@@ -128,10 +155,11 @@ export class OfflineResponsePersistence {
 	 * Get all variables for a session.
 	 */
 	static async getSessionVariables(sessionId: string): Promise<FilloutVariable[]> {
-		return db.filloutVariables
+		const rows = await db.filloutVariables
 			.where('sessionId')
 			.equals(sessionId)
 			.toArray();
+		return Promise.all(rows.map((v) => this.decryptVariable(v)));
 	}
 
 	/**
@@ -160,10 +188,11 @@ export class OfflineResponsePersistence {
 	 * Get unsynced responses for a session.
 	 */
 	static async getUnsyncedResponses(sessionId: string): Promise<FilloutResponse[]> {
-		return db.filloutResponses
+		const rows = await db.filloutResponses
 			.where('[sessionId+synced]')
 			.equals([sessionId, 0])
 			.toArray();
+		return Promise.all(rows.map((r) => this.decryptResponse(r)));
 	}
 
 	/**
@@ -180,11 +209,12 @@ export class OfflineResponsePersistence {
 	 * Get unsynced variables for a session.
 	 */
 	static async getUnsyncedVariables(sessionId: string): Promise<FilloutVariable[]> {
-		return db.filloutVariables
+		const rows = await db.filloutVariables
 			.where('sessionId')
 			.equals(sessionId)
 			.filter((v) => v.synced === 0)
 			.toArray();
+		return Promise.all(rows.map((v) => this.decryptVariable(v)));
 	}
 
 	/**
