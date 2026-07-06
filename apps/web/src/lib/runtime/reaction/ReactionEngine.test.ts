@@ -804,6 +804,9 @@ function createMockEngine(opts?: {
   gatekeeper?: ConstructorParameters<typeof ReactionEngine>[0]['gatekeeper'];
   clock?: () => number;
   hooks?: ConstructorParameters<typeof ReactionEngine>[0]['hooks'];
+  gamepadSource?: ConstructorParameters<typeof ReactionEngine>[0]['gamepadSource'];
+  requestFrame?: ConstructorParameters<typeof ReactionEngine>[0]['requestFrame'];
+  cancelFrame?: ConstructorParameters<typeof ReactionEngine>[0]['cancelFrame'];
 }) {
   const canvas = document.createElement('canvas');
   canvas.width = 800;
@@ -817,12 +820,23 @@ function createMockEngine(opts?: {
     gatekeeper: opts?.gatekeeper,
     clock: opts?.clock,
     hooks: opts?.hooks,
+    gamepadSource: opts?.gamepadSource,
+    requestFrame: opts?.requestFrame,
+    cancelFrame: opts?.cancelFrame,
   });
-  return { engine, target, ...mock };
+  return { engine, target, canvas, ...mock };
 }
 
 function dispatchKey(target: HTMLElement, key: string, timeStamp?: number) {
   const event = new KeyboardEvent('keydown', { key });
+  if (timeStamp !== undefined) {
+    Object.defineProperty(event, 'timeStamp', { value: timeStamp, configurable: true });
+  }
+  target.dispatchEvent(event);
+}
+
+function dispatchKeyUp(target: HTMLElement, key: string, timeStamp?: number) {
+  const event = new KeyboardEvent('keyup', { key });
   if (timeStamp !== undefined) {
     Object.defineProperty(event, 'timeStamp', { value: timeStamp, configurable: true });
   }
@@ -1496,6 +1510,191 @@ describe('ReactionEngine — robustness', () => {
     expect(result.invalid).toBe(false);
     expect(result.invalidReason).toBeUndefined();
     expect(result.response?.value).toBe('f');
+
+    engine.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-channel precision response capture (E-REACT-1): gamepad, key-hold /
+// release timing, and spatial-response scoring.
+// ---------------------------------------------------------------------------
+
+describe('ReactionEngine — multi-channel capture (E-REACT-1)', () => {
+  // ---- Gamepad: onset → response with method 'gamepad.timestamp' ----
+
+  it('captures a gamepad response on a mapped-button rising edge', async () => {
+    let clock = 1000;
+    const pump: { poll: ((time: number) => void) | null } = { poll: null };
+    let pressed = false;
+
+    const { engine, emitFrame } = createMockEngine({
+      clock: () => clock,
+      gamepadSource: () => ({ buttons: [{ pressed }] }),
+      requestFrame: (cb) => {
+        pump.poll = cb;
+        return 1;
+      },
+      cancelFrame: () => {
+        pump.poll = null;
+      },
+    });
+
+    const resultPromise = engine.runTrial({
+      id: 'gamepad',
+      responseMode: 'gamepad',
+      gamepadButtonMap: { 0: 'go' },
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 500,
+    });
+
+    await flush();
+    // Visual onset at raf time 1000.
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+
+    // Poll frame 1: button still up — no response.
+    pump.poll?.(0);
+    // Press the button and advance the clock; poll frame 2 detects the edge.
+    pressed = true;
+    clock = 1180;
+    pump.poll?.(0);
+
+    const result = await resultPromise;
+
+    expect(result.response?.source).toBe('gamepad');
+    expect(result.response?.responseDevice).toBe('gamepad');
+    expect(result.response?.gamepadButtonIndex).toBe(0);
+    expect(result.response?.value).toBe('go');
+    expect(result.response?.timingMethod).toBe('gamepad.timestamp');
+    expect(result.response?.timestamp).toBe(1180);
+    expect(result.response?.reactionTimeMs).toBe(180);
+    expect(result.provenance.responseMethod).toBe('gamepad.timestamp');
+
+    engine.destroy();
+  });
+
+  // ---- Keyboard hold/release: holdDurationMs = release − press ----
+
+  it('captures key-hold duration on release when captureKeyUp is set', async () => {
+    const { engine, target, emitFrame } = createMockEngine({});
+
+    const resultPromise = engine.runTrial({
+      id: 'key-hold',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      captureKeyUp: true,
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 500,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+
+    // Key DOWN does not resolve the trial yet (RT anchor = 1100).
+    dispatchKey(target, 'f', 1100);
+    // Key UP finalizes the response and records the hold duration.
+    dispatchKeyUp(target, 'f', 1350);
+
+    const result = await resultPromise;
+
+    expect(result.response?.value).toBe('f');
+    expect(result.response?.responseDevice).toBe('keyboard');
+    // RT is measured from the key-DOWN onset, not the release.
+    expect(result.response?.timestamp).toBe(1100);
+    expect(result.response?.reactionTimeMs).toBe(100);
+    expect(result.response?.releaseTimestamp).toBe(1350);
+    expect(result.response?.holdDurationMs).toBe(250);
+
+    engine.destroy();
+  });
+
+  // ---- Spatial scoring: normalized click vs targetRegion ----
+
+  it('scores a spatial click inside the target region as correct', async () => {
+    const { engine, canvas, emitFrame } = createMockEngine({});
+
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 600,
+      width: 800,
+      height: 600,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    const resultPromise = engine.runTrial({
+      id: 'spatial-hit',
+      responseMode: 'mouse',
+      requireCorrect: true,
+      targetRegion: { x: 0.5, y: 0.5, radius: 0.2 },
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 400,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+
+    // Click dead centre → normalized (0.5, 0.5), inside the region.
+    const event = new MouseEvent('click', { clientX: 400, clientY: 300, bubbles: true });
+    Object.defineProperty(event, 'timeStamp', { value: 1120, configurable: true });
+    canvas.dispatchEvent(event);
+
+    const result = await resultPromise;
+
+    expect(result.response?.source).toBe('mouse');
+    expect(result.isCorrect).toBe(true);
+    expect(result.response?.reactionTimeMs).toBe(120);
+
+    engine.destroy();
+  });
+
+  it('scores a spatial click outside the target region as incorrect', async () => {
+    const { engine, canvas, emitFrame } = createMockEngine({});
+
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      right: 800,
+      bottom: 600,
+      width: 800,
+      height: 600,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    const resultPromise = engine.runTrial({
+      id: 'spatial-miss',
+      responseMode: 'mouse',
+      requireCorrect: true,
+      targetRegion: { x: 0.5, y: 0.5, radius: 0.1 },
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 400,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+
+    // Click near the corner → normalized (~0.88, ~0.83), well outside the region.
+    const event = new MouseEvent('click', { clientX: 700, clientY: 500, bubbles: true });
+    Object.defineProperty(event, 'timeStamp', { value: 1120, configurable: true });
+    canvas.dispatchEvent(event);
+
+    const result = await resultPromise;
+
+    expect(result.response?.source).toBe('mouse');
+    expect(result.isCorrect).toBe(false);
 
     engine.destroy();
   });

@@ -33,6 +33,8 @@ import type {
   VideoFrameSample,
 } from './types';
 import { computeReactionTimeMs, computeSignedReactionTimeMs } from '../core/reactionTiming';
+import { GamepadPoller, type GamepadSource } from './input/GamepadPoller';
+import { pointInRegion } from './input/spatialHit';
 
 /** Max number of video frames retained in the per-trial reconstruction ring. */
 const VIDEO_FRAME_RING_MAX = 240;
@@ -55,6 +57,16 @@ interface ReactionEngineOptions {
    * clock flakiness.
    */
   clock?: () => number;
+  /**
+   * Injectable gamepad-state source (E-REACT-1). Defaults to the first connected
+   * `navigator` gamepad. Exposed so the deterministic test harness can drive a
+   * virtual gamepad without hardware.
+   */
+  gamepadSource?: GamepadSource;
+  /** Injectable frame scheduler for the gamepad poller. Defaults to rAF. */
+  requestFrame?: (callback: (time: number) => void) => number;
+  /** Injectable frame canceller for the gamepad poller. Defaults to cAF. */
+  cancelFrame?: (handle: number) => void;
 }
 
 /**
@@ -122,6 +134,9 @@ export class ReactionEngine {
   private readonly hooks?: ReactionEngineHooks;
   private eventTarget: Document | HTMLElement;
   private readonly now: () => number;
+  private readonly gamepadSource?: GamepadSource;
+  private readonly requestFrame?: (callback: (time: number) => void) => number;
+  private readonly cancelFrame?: (handle: number) => void;
 
   private scheduledPhases: ScheduledPhase[] = [];
   private frameUnsubscribe: (() => void) | null = null;
@@ -186,6 +201,9 @@ export class ReactionEngine {
     this.eventTarget = options.eventTarget || document;
     this.hooks = options.hooks;
     this.now = options.clock ?? (() => performance.now());
+    this.gamepadSource = options.gamepadSource;
+    this.requestFrame = options.requestFrame;
+    this.cancelFrame = options.cancelFrame;
 
     this.gatekeeper = options.gatekeeper;
 
@@ -730,20 +748,79 @@ export class ReactionEngine {
 
     if (mode === 'keyboard') {
       const allowedKeys = new Set((config.validKeys || []).map((key) => key.toLowerCase()));
-      const handler = (event: KeyboardEvent) => {
+      const captureKeyUp = Boolean(config.captureKeyUp);
+      // Key-hold/release paradigm state: the key-DOWN time per key, held until
+      // the matching key-UP finalizes the response (RT still measured from down).
+      const pendingPress = new Map<string, { time: number; method: TimingMethod }>();
+
+      const keydownHandler = (event: KeyboardEvent) => {
         if (!this.responseEnabled) return;
 
         const key = event.key.toLowerCase();
         if (allowedKeys.size > 0 && !allowedKeys.has(key)) return;
 
         const { time, method } = this.getEventTime(event);
-        this.handleResponse('keyboard', key, time, method);
+
+        if (!captureKeyUp) {
+          this.handleResponse('keyboard', key, time, method);
+          return;
+        }
+
+        // Hold/release: a pre-onset press is still an anticipatory false start
+        // (routed through handleResponse's discard path); a post-onset press is
+        // stashed and the response is finalized on the matching key-UP.
+        if (this.stimulusOnsetTime == null) {
+          this.handleResponse('keyboard', key, time, method);
+          return;
+        }
+        pendingPress.set(key, { time, method });
       };
 
-      this.eventTarget.addEventListener('keydown', handler as EventListener);
+      this.eventTarget.addEventListener('keydown', keydownHandler as EventListener);
       this.cleanupListeners.push(() =>
-        this.eventTarget.removeEventListener('keydown', handler as EventListener)
+        this.eventTarget.removeEventListener('keydown', keydownHandler as EventListener)
       );
+
+      if (captureKeyUp) {
+        const keyupHandler = (event: KeyboardEvent) => {
+          const key = event.key.toLowerCase();
+          const press = pendingPress.get(key);
+          if (!press) return;
+          pendingPress.delete(key);
+
+          const { time: releaseTime } = this.getEventTime(event);
+          const holdDurationMs = Math.max(0, releaseTime - press.time);
+          this.handleResponse('keyboard', key, press.time, press.method, {
+            responseDevice: 'keyboard',
+            releaseTimestamp: releaseTime,
+            holdDurationMs,
+          });
+        };
+
+        this.eventTarget.addEventListener('keyup', keyupHandler as EventListener);
+        this.cleanupListeners.push(() =>
+          this.eventTarget.removeEventListener('keyup', keyupHandler as EventListener)
+        );
+      }
+    }
+
+    if (mode === 'gamepad') {
+      const poller = new GamepadPoller({
+        buttonMap: config.gamepadButtonMap ?? {},
+        source: this.gamepadSource,
+        now: this.now,
+        requestFrame: this.requestFrame,
+        cancelFrame: this.cancelFrame,
+        onResponse: ({ buttonIndex, value, timestamp }) => {
+          if (!this.responseEnabled) return;
+          this.handleResponse('gamepad', value, timestamp, 'gamepad.timestamp', {
+            responseDevice: 'gamepad',
+            gamepadButtonIndex: buttonIndex,
+          });
+        },
+      });
+      poller.start();
+      this.cleanupListeners.push(() => poller.stop());
     }
 
     if (mode === 'mouse') {
@@ -800,7 +877,13 @@ export class ReactionEngine {
     source: ReactionResponseMode,
     value: string | { x: number; y: number },
     time: number,
-    method: TimingMethod
+    method: TimingMethod,
+    extra?: {
+      responseDevice?: ReactionResponseMode;
+      releaseTimestamp?: number;
+      holdDurationMs?: number;
+      gamepadButtonIndex?: number;
+    }
   ): void {
     if (this.stimulusOnsetTime == null) {
       this.anticipatory = true;
@@ -820,6 +903,10 @@ export class ReactionEngine {
       reactionTimeMs: computeReactionTimeMs(this.stimulusOnsetTime, time),
       rawRtMs,
       timingMethod: method,
+      responseDevice: extra?.responseDevice ?? source,
+      releaseTimestamp: extra?.releaseTimestamp,
+      holdDurationMs: extra?.holdDurationMs,
+      gamepadButtonIndex: extra?.gamepadButtonIndex,
     });
   }
 
@@ -883,6 +970,16 @@ export class ReactionEngine {
   ): boolean | null {
     if (!config.requireCorrect) {
       return null;
+    }
+
+    // Spatial scoring (mouse/touch): a configured targetRegion scores the
+    // captured normalized `{ x, y }` point by proximity, viewport-independently.
+    // A missing response, or a non-spatial value, is incorrect.
+    if (config.targetRegion) {
+      if (!response || typeof response.value !== 'object') {
+        return false;
+      }
+      return pointInRegion(response.value, config.targetRegion);
     }
 
     if (!config.correctResponse) {

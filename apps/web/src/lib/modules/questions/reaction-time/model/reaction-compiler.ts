@@ -152,7 +152,10 @@ function trialFromTemplate(
 
   return {
     id: `${template.id}-${trialNumberSuffix}`,
-    responseMode: 'keyboard',
+    responseMode: config.response.mode,
+    captureKeyUp: config.response.captureKeyUp,
+    targetRegion: config.response.targetRegion,
+    gamepadButtonMap: config.response.gamepadButtonMap,
     validKeys,
     correctResponse: template.correctResponse || config.correctKey || undefined,
     requireCorrect: template.requireCorrect ?? config.response.requireCorrect,
@@ -514,7 +517,10 @@ function normalizeCustomTrial(
 
   const normalizedTrial: ReactionTrialConfig = {
     id: trial.id || `custom-${trialNumber}`,
-    responseMode: trial.responseMode || 'keyboard',
+    responseMode: trial.responseMode || config.response.mode,
+    captureKeyUp: trial.captureKeyUp ?? config.response.captureKeyUp,
+    targetRegion: trial.targetRegion ?? config.response.targetRegion,
+    gamepadButtonMap: trial.gamepadButtonMap ?? config.response.gamepadButtonMap,
     validKeys: trial.validKeys || config.response.validKeys,
     correctResponse: trial.correctResponse || undefined,
     requireCorrect: trial.requireCorrect ?? config.response.requireCorrect,
@@ -740,7 +746,10 @@ function toStandardTrialConfig(
 
   return {
     id: `reaction-time-${trialNumber}`,
-    responseMode: 'keyboard',
+    responseMode: config.response.mode,
+    captureKeyUp: config.response.captureKeyUp,
+    targetRegion: config.response.targetRegion,
+    gamepadButtonMap: config.response.gamepadButtonMap,
     validKeys: config.response.validKeys,
     correctResponse: config.correctKey || undefined,
     requireCorrect: config.response.requireCorrect,

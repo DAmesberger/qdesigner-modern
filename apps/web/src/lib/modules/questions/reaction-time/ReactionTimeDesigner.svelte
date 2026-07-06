@@ -13,6 +13,7 @@
 
   type ReactionTaskType = 'standard' | 'n-back' | 'stroop' | 'flanker' | 'iat' | 'dot-probe' | 'custom';
   type StimulusType = 'text' | 'shape' | 'image' | 'video' | 'audio';
+  type ResponseMode = 'keyboard' | 'mouse' | 'touch' | 'gamepad';
 
   interface MediaStimulusRef {
     mediaId: string;
@@ -98,6 +99,10 @@
       validKeys: string[];
       timeout: number;
       requireCorrect?: boolean;
+      mode?: ResponseMode;
+      targetRegion?: { x: number; y: number; radius: number };
+      gamepadButtonMap?: Record<number, string>;
+      captureKeyUp?: boolean;
     };
     correctKey?: string;
     feedback?: boolean;
@@ -150,6 +155,73 @@
   let showExternalMediaUrl = $state(false);
   let mediaThumbnailUrl = $state<string | null>(null);
   let hydratedQuestionId = $state<string | null>(null);
+
+  // Response-mode + gamepad press-to-bind state (E-REACT-1).
+  let gamepadBindValue = $state('');
+  let gamepadListening = $state(false);
+  let gamepadListenError = $state<string | null>(null);
+  let gamepadRafHandle: number | null = null;
+
+  const responseModes: Array<{ value: ResponseMode; label: string }> = [
+    { value: 'keyboard', label: 'Keyboard (key press)' },
+    { value: 'mouse', label: 'Mouse (spatial click)' },
+    { value: 'touch', label: 'Touch (spatial tap)' },
+    { value: 'gamepad', label: 'Gamepad (button box)' },
+  ];
+
+  function stopGamepadListening() {
+    gamepadListening = false;
+    if (gamepadRafHandle != null) {
+      cancelAnimationFrame(gamepadRafHandle);
+      gamepadRafHandle = null;
+    }
+  }
+
+  function bindGamepadButton(index: number, value: string) {
+    const map = { ...(question.config.response.gamepadButtonMap ?? {}) };
+    map[index] = value;
+    question.config.response.gamepadButtonMap = map;
+  }
+
+  function removeGamepadBinding(index: number) {
+    const map = { ...(question.config.response.gamepadButtonMap ?? {}) };
+    delete map[index];
+    question.config.response.gamepadButtonMap = Object.keys(map).length > 0 ? map : undefined;
+  }
+
+  function startGamepadListening() {
+    const value = gamepadBindValue.trim();
+    if (!value) {
+      gamepadListenError = 'Enter a response value first (e.g. "go").';
+      return;
+    }
+    if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') {
+      gamepadListenError = 'Gamepad API is unavailable in this browser.';
+      return;
+    }
+    gamepadListenError = null;
+    gamepadListening = true;
+
+    const poll = () => {
+      if (!gamepadListening) return;
+      for (const gamepad of navigator.getGamepads()) {
+        if (!gamepad) continue;
+        for (let index = 0; index < gamepad.buttons.length; index++) {
+          if (gamepad.buttons[index]?.pressed) {
+            bindGamepadButton(index, value);
+            gamepadBindValue = '';
+            stopGamepadListening();
+            return;
+          }
+        }
+      }
+      gamepadRafHandle = requestAnimationFrame(poll);
+    };
+    gamepadRafHandle = requestAnimationFrame(poll);
+  }
+
+  // Tear down any in-flight gamepad listen loop on unmount.
+  $effect(() => () => stopGamepadListening());
 
   function toRecord(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
@@ -1335,6 +1407,20 @@
     <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Response Settings</h4>
 
     <div class="mb-4">
+      <label for="response-mode">Response Device</label>
+      <Select id="response-mode" bind:value={question.config.response.mode}>
+        {#each responseModes as option}
+          <option value={option.value}>{option.label}</option>
+        {/each}
+      </Select>
+      <p class="mt-1 text-xs text-muted-foreground">
+        Keyboard captures key presses; mouse/touch score a spatial click against a target region;
+        gamepad captures button-box presses with frame-accurate timing.
+      </p>
+    </div>
+
+    {#if question.config.response.mode === 'keyboard' || !question.config.response.mode}
+    <div class="mb-4">
       <span class="block mb-1.5 text-sm font-medium text-foreground">Valid Response Keys</span>
 
       <!-- Key input -->
@@ -1381,6 +1467,127 @@
         </div>
       {/if}
     </div>
+
+    <div class="mb-4">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          bind:checked={question.config.response.captureKeyUp}
+          class="w-4 h-4 cursor-pointer"
+        />
+        <span>Capture key release (records hold duration)</span>
+      </label>
+      <p class="mt-1 text-xs text-muted-foreground">
+        For hold/release paradigms: the reaction time is measured from key-down, and the hold
+        duration (down → up) is recorded alongside it.
+      </p>
+    </div>
+    {/if}
+
+    {#if question.config.response.mode === 'gamepad'}
+    <div class="mb-4">
+      <span class="block mb-1.5 text-sm font-medium text-foreground">Gamepad Button Mapping</span>
+      <p class="mb-2 text-xs text-muted-foreground">
+        Enter a response value, then press the physical button you want to bind. Connect a gamepad
+        and press any button so the browser reports it.
+      </p>
+      <div class="flex gap-2 mb-2">
+        <input
+          type="text"
+          bind:value={gamepadBindValue}
+          placeholder="Response value (e.g. go)"
+          class="input"
+          disabled={gamepadListening}
+        />
+        {#if gamepadListening}
+          <Button variant="secondary" size="sm" onclick={stopGamepadListening}>Cancel</Button>
+        {:else}
+          <Button variant="secondary" size="sm" onclick={startGamepadListening} disabled={!gamepadBindValue.trim()}>
+            Press to Bind
+          </Button>
+        {/if}
+      </div>
+      {#if gamepadListening}
+        <p class="text-xs text-primary">Listening… press a gamepad button now.</p>
+      {/if}
+      {#if gamepadListenError}
+        <p class="text-xs text-destructive">{gamepadListenError}</p>
+      {/if}
+      <div class="flex flex-wrap gap-2 mt-2">
+        {#each Object.entries(question.config.response.gamepadButtonMap ?? {}) as [index, value]}
+          <div class="flex items-center gap-2 px-3 py-1.5 bg-muted border border-border rounded-md">
+            <span class="font-mono text-sm font-medium text-foreground">Button {index} → {value}</span>
+            <button class="remove-btn" onclick={() => removeGamepadBinding(Number(index))} aria-label="Remove binding">✕</button>
+          </div>
+        {/each}
+        {#if Object.keys(question.config.response.gamepadButtonMap ?? {}).length === 0}
+          <span class="text-xs text-muted-foreground italic">No buttons mapped yet.</span>
+        {/if}
+      </div>
+    </div>
+    {/if}
+
+    {#if question.config.response.mode === 'mouse' || question.config.response.mode === 'touch'}
+    <div class="mb-4">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={Boolean(question.config.response.targetRegion)}
+          onchange={(e) => {
+            question.config.response.targetRegion = e.currentTarget.checked
+              ? (question.config.response.targetRegion ?? { x: 0.5, y: 0.5, radius: 0.15 })
+              : undefined;
+          }}
+          class="w-4 h-4 cursor-pointer"
+        />
+        <span>Score clicks against a target region</span>
+      </label>
+      {#if question.config.response.targetRegion}
+        <div class="grid grid-cols-3 gap-3 mt-2">
+          <div>
+            <label for="target-region-x">Center X (0–1)</label>
+            <input
+              id="target-region-x"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              bind:value={question.config.response.targetRegion.x}
+              class="input"
+            />
+          </div>
+          <div>
+            <label for="target-region-y">Center Y (0–1)</label>
+            <input
+              id="target-region-y"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              bind:value={question.config.response.targetRegion.y}
+              class="input"
+            />
+          </div>
+          <div>
+            <label for="target-region-radius">Radius (0–1)</label>
+            <input
+              id="target-region-radius"
+              type="number"
+              min="0.01"
+              max="1"
+              step="0.01"
+              bind:value={question.config.response.targetRegion.radius}
+              class="input"
+            />
+          </div>
+        </div>
+        <p class="mt-1 text-xs text-muted-foreground">
+          Coordinates are normalized to the stimulus canvas (0,0 = top-left, 1,1 = bottom-right), so
+          scoring is viewport-independent.
+        </p>
+      {/if}
+    </div>
+    {/if}
 
     <div class="mb-4">
       <label for="response-timeout">Response Timeout (ms)</label>

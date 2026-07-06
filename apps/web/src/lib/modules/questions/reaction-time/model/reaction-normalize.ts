@@ -12,7 +12,9 @@ import type {
   NormalizedReactionConfig,
   ReactionCustomTrial,
   ReactionLegacyQuestionConfig,
+  ReactionResponseMode,
   ReactionStudyConfig,
+  ReactionTargetRegion,
   ReactionTaskType,
   StroopTaskConfig,
 } from './reaction-schema';
@@ -165,6 +167,10 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
       validKeys,
       timeout: asInt(source.response?.timeout, 2000, 100, 30000),
       requireCorrect: Boolean(source.response?.requireCorrect),
+      mode: normalizeResponseMode(source.response?.mode),
+      targetRegion: normalizeTargetRegion(source.response?.targetRegion),
+      gamepadButtonMap: normalizeGamepadButtonMap(source.response?.gamepadButtonMap),
+      captureKeyUp: Boolean(source.response?.captureKeyUp),
     },
     correctKey: ensureString(source.correctKey),
     feedback: source.feedback !== false,
@@ -234,6 +240,57 @@ function normalizeValidKeys(value: unknown): string[] {
     .map((key) => key.trim());
 
   return keys.length > 0 ? keys : [...DEFAULT_VALID_KEYS];
+}
+
+function normalizeResponseMode(value: unknown): ReactionResponseMode {
+  if (value === 'keyboard' || value === 'mouse' || value === 'touch' || value === 'gamepad') {
+    return value;
+  }
+  return 'keyboard';
+}
+
+/**
+ * Validate a spatial-response target region. Every field must be a finite
+ * number; `x`/`y` are clamped to normalized [0,1] canvas space and the radius
+ * to (0,1]. Returns undefined when the input is absent or malformed.
+ */
+function normalizeTargetRegion(value: unknown): ReactionTargetRegion | undefined {
+  const record = toRecord(value);
+  if (!record) return undefined;
+
+  const x = Number(record.x);
+  const y = Number(record.y);
+  const radius = Number(record.radius);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(radius)) {
+    return undefined;
+  }
+  if (radius <= 0) return undefined;
+
+  return {
+    x: Math.min(1, Math.max(0, x)),
+    y: Math.min(1, Math.max(0, y)),
+    radius: Math.min(1, radius),
+  };
+}
+
+/**
+ * Validate a gamepad button-map: keys must parse to non-negative integer button
+ * indices and values must be non-empty strings. Returns undefined when empty.
+ */
+function normalizeGamepadButtonMap(value: unknown): Record<number, string> | undefined {
+  const record = toRecord(value);
+  if (!record) return undefined;
+
+  const map: Record<number, string> = {};
+  for (const [key, raw] of Object.entries(record)) {
+    const index = Number(key);
+    if (!Number.isInteger(index) || index < 0) continue;
+    const mapped = ensureString(raw).trim();
+    if (!mapped) continue;
+    map[index] = mapped;
+  }
+
+  return Object.keys(map).length > 0 ? map : undefined;
 }
 
 function normalizeFlankerStimulusSet(value: unknown): [string, string] {

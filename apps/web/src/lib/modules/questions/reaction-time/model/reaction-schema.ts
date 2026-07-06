@@ -1,4 +1,12 @@
-import type { ReactionStimulusConfig, ReactionTrialConfig, ScheduledPhase } from '$lib/runtime/reaction';
+import type {
+  ReactionResponseMode,
+  ReactionStimulusConfig,
+  ReactionTargetRegion,
+  ReactionTrialConfig,
+  ScheduledPhase,
+} from '$lib/runtime/reaction';
+
+export type { ReactionResponseMode, ReactionTargetRegion };
 
 export type ReactionTaskType =
   | 'standard'
@@ -151,6 +159,14 @@ export interface ReactionStudyConfig {
     validKeys: string[];
     timeout: number;
     requireCorrect: boolean;
+    /** Response device family. Defaults to `keyboard`. */
+    mode: ReactionResponseMode;
+    /** Spatial-response scoring region (mouse/touch), normalized [0,1]. */
+    targetRegion?: ReactionTargetRegion;
+    /** Gamepad button index → response value mapping. */
+    gamepadButtonMap?: Record<number, string>;
+    /** Keyboard hold/release capture (records releaseTimestamp/holdDurationMs). */
+    captureKeyUp?: boolean;
   };
   correctKey: string;
   feedback: boolean;
@@ -183,6 +199,10 @@ export interface ReactionLegacyQuestionConfig {
     validKeys?: string[];
     timeout?: number;
     requireCorrect?: boolean;
+    mode?: ReactionResponseMode;
+    targetRegion?: ReactionTargetRegion;
+    gamepadButtonMap?: Record<number, string>;
+    captureKeyUp?: boolean;
   };
   correctKey?: string;
   feedback?: boolean;

@@ -33,6 +33,8 @@ import {
   createStroopTrials,
   createFlankerTrials,
   createNBackTrials,
+  GamepadPoller,
+  type GamepadSnapshot,
 } from '$lib/runtime/reaction';
 import { computeReactionTimeMs } from '$lib/runtime/core/reactionTiming';
 import { VariableEngine } from '@qdesigner/scripting-engine';
@@ -68,6 +70,84 @@ export interface ControlFlowResult {
   presentedPageIds: string[];
   presentedQuestionIds: string[];
   skippedPageIds: string[];
+}
+
+export interface GamepadSimOptions {
+  /** Button index to press (`navigator.getGamepads()` order). */
+  buttonIndex: number;
+  /** Response value the button maps to. */
+  value: string;
+  /** Synthetic stimulus-onset timestamp. */
+  onsetTimestamp: number;
+  /** Synthetic timestamp of the frame on which the button is pressed. */
+  responseTimestamp: number;
+}
+
+export interface GamepadSimResult {
+  buttonIndex: number;
+  value: string;
+  /** The clock value captured on the press frame. */
+  timestamp: number;
+  onsetTimestamp: number;
+  /** RT computed via the production formula (`timestamp - onset`, clamped). */
+  reactionTimeMs: number;
+  method: 'gamepad.timestamp';
+}
+
+/**
+ * Drive the REAL {@link GamepadPoller} with a scripted, hardware-free gamepad
+ * source across two frames: frame 1 with the button up, frame 2 with it pressed.
+ * The poller detects the rising edge, and RT is computed with the same
+ * `computeReactionTimeMs` the runtime uses — so a Playwright assertion of
+ * `reactionTimeMs === response - onset` exercises production code, not a mock.
+ */
+export function simulateGamepadResponse(options: GamepadSimOptions): GamepadSimResult | null {
+  const { buttonIndex, value, onsetTimestamp, responseTimestamp } = options;
+
+  let pressed = false;
+  let clock = onsetTimestamp;
+  const pump: { queued: ((time: number) => void) | null } = { queued: null };
+  const captured: GamepadSimResult[] = [];
+
+  const source = (): GamepadSnapshot => ({
+    buttons: Array.from({ length: buttonIndex + 1 }, (_, index) => ({
+      pressed: index === buttonIndex ? pressed : false,
+    })),
+  });
+
+  const poller = new GamepadPoller({
+    buttonMap: { [buttonIndex]: value },
+    source,
+    now: () => clock,
+    requestFrame: (cb) => {
+      pump.queued = cb;
+      return 1;
+    },
+    cancelFrame: () => {
+      pump.queued = null;
+    },
+    onResponse: (response) =>
+      captured.push({
+        buttonIndex: response.buttonIndex,
+        value: response.value,
+        timestamp: response.timestamp,
+        onsetTimestamp,
+        reactionTimeMs: computeReactionTimeMs(onsetTimestamp, response.timestamp),
+        method: 'gamepad.timestamp',
+      }),
+  });
+
+  poller.start();
+  // Frame 1: button still up.
+  clock = onsetTimestamp;
+  pump.queued?.(clock);
+  // Frame 2: button pressed → rising edge captured at responseTimestamp.
+  pressed = true;
+  clock = responseTimestamp;
+  pump.queued?.(clock);
+  poller.stop();
+
+  return captured[0] ?? null;
 }
 
 export interface ScenarioOptions {
@@ -115,6 +195,11 @@ export interface RuntimeDebugApi extends RuntimeDebugSnapshot {
   advance(): number;
   /** Simulate page/flow control for the control-flow fixture. */
   runControlFlow(answers?: Record<string, unknown>): ControlFlowResult;
+  /**
+   * Drive the real GamepadPoller with a scripted virtual gamepad and return the
+   * captured onset→response with production-formula RT. Hardware-free.
+   */
+  simulateGamepad(options: GamepadSimOptions): GamepadSimResult | null;
   /** Data-only snapshot (safe to return through page.evaluate). */
   snapshot(): RuntimeDebugSnapshot;
 }
@@ -507,6 +592,7 @@ export function installReactionHarness(
       harness.injectTrial(index, onset, response, value),
     advance: () => harness.advance(),
     runControlFlow: (answers) => harness.runControlFlow(answers),
+    simulateGamepad: (options) => simulateGamepadResponse(options),
     snapshot: () => harness.snapshot(),
   };
 

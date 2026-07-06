@@ -29,6 +29,12 @@ interface TrialResponse {
   expectedResponse: string | null;
   isTarget: boolean | null;
   responseTimingMethod: string | null;
+  /** Device family that produced the response (keyboard/mouse/touch/gamepad). */
+  responseDevice: string | null;
+  /** Key-hold/release paradigms: hold duration in ms, else null. */
+  holdDurationMs: number | null;
+  /** Gamepad responses: the button index that fired, else null. */
+  gamepadButtonIndex: number | null;
   stimulusTimingMethod: string | null;
   frameStats: {
     fps: number;
@@ -138,6 +144,9 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
         expectedResponse: planned.metadata.expectedResponse || null,
         isTarget: planned.metadata.isTarget ?? null,
         responseTimingMethod: result.response?.timingMethod || null,
+        responseDevice: result.response?.responseDevice || null,
+        holdDurationMs: result.response?.holdDurationMs ?? null,
+        gamepadButtonIndex: result.response?.gamepadButtonIndex ?? null,
         stimulusTimingMethod: result.stimulusTimingMethod || null,
         frameStats: {
           fps: result.stats.fps,

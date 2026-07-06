@@ -4,11 +4,22 @@ export type {
   ReactionTrialConfig,
   ReactionTrialResult,
   ReactionResponseCapture,
+  ReactionResponseMode,
+  ReactionTargetRegion,
   ReactionStimulusConfig,
   ReactionFixationConfig,
   ScheduledPhase,
   TimingMethod,
 } from './types';
+
+export { pointInRegion } from './input/spatialHit';
+export { GamepadPoller } from './input/GamepadPoller';
+export type {
+  GamepadSnapshot,
+  GamepadSource,
+  GamepadResponse,
+  GamepadPollerOptions,
+} from './input/GamepadPoller';
 
 // Preset re-exports
 export {

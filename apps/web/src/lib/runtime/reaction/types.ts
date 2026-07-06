@@ -1,6 +1,18 @@
 import type { RGBAColor, FrameSample, FrameStats } from '$lib/shared';
 
-export type ReactionResponseMode = 'keyboard' | 'mouse' | 'touch';
+export type ReactionResponseMode = 'keyboard' | 'mouse' | 'touch' | 'gamepad';
+
+/**
+ * A normalized target region for spatial-response scoring. `x`/`y` are the
+ * region centre and `radius` its extent, all expressed in the SAME normalized
+ * [0,1] canvas space as a captured `{ x, y }` pointer/touch value — so a click
+ * is scored viewport-independently (see `input/spatialHit.ts`).
+ */
+export interface ReactionTargetRegion {
+  x: number;
+  y: number;
+  radius: number;
+}
 
 export interface ReactionFixationConfig {
   enabled?: boolean;
@@ -105,6 +117,23 @@ export interface ReactionTrialConfig {
   vsync?: boolean;
   backgroundColor?: RGBAColor;
   allowResponseDuringPreStimulus?: boolean;
+  /**
+   * Keyboard only: also capture the key-UP so a hold/release paradigm records
+   * `releaseTimestamp` and `holdDurationMs`. When set, the response is finalized
+   * on release (RT is still measured from the key-DOWN onset).
+   */
+  captureKeyUp?: boolean;
+  /**
+   * Spatial-response scoring region (mouse/touch). When present,
+   * `evaluateCorrectness` marks the trial correct iff the captured normalized
+   * `{ x, y }` point falls within `radius` of `(x, y)`.
+   */
+  targetRegion?: ReactionTargetRegion;
+  /**
+   * Gamepad only: maps a `navigator.getGamepads()` button index to the response
+   * value emitted when that button transitions unpressed→pressed.
+   */
+  gamepadButtonMap?: Record<number, string>;
 }
 
 export type TimingMethod =
@@ -112,6 +141,7 @@ export type TimingMethod =
   | 'rvfc'
   | 'audioContext'
   | 'raf'
+  | 'gamepad.timestamp'
   | 'performance.now';
 
 export interface ReactionResponseCapture {
@@ -128,6 +158,20 @@ export interface ReactionResponseCapture {
    */
   rawRtMs?: number;
   timingMethod?: TimingMethod;
+  /**
+   * The device family that produced the response. Usually equal to `source`;
+   * threaded explicitly so the persistence layer can record it verbatim.
+   */
+  responseDevice?: ReactionResponseMode;
+  /**
+   * Keyboard hold/release paradigms (`captureKeyUp`): the high-resolution
+   * timestamp of the key-UP that finalized the response.
+   */
+  releaseTimestamp?: number;
+  /** Hold duration in ms (`releaseTimestamp - keydownTimestamp`), clamped at 0. */
+  holdDurationMs?: number;
+  /** Gamepad only: the `navigator.getGamepads()` button index that fired. */
+  gamepadButtonIndex?: number;
 }
 
 /** One logged video frame, used to reconstruct the displayed frame at response time. */
