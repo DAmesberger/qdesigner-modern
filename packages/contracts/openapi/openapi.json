@@ -3028,6 +3028,366 @@
         }
       }
     },
+    "/api/organizations/{id}/api-keys": {
+      "get": {
+        "tags": [
+          "api_keys"
+        ],
+        "summary": "GET /api/organizations/:id/api-keys",
+        "operationId": "list_api_keys",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "API keys (secrets redacted)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyRecord"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "api_keys"
+        ],
+        "summary": "POST /api/organizations/:id/api-keys",
+        "operationId": "create_api_key",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "API key created — plaintext shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateApiKeyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid name or scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/api-keys/{key_id}": {
+      "delete": {
+        "tags": [
+          "api_keys"
+        ],
+        "summary": "DELETE /api/organizations/:id/api-keys/:key_id",
+        "operationId": "revoke_api_key",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "key_id",
+            "in": "path",
+            "description": "API key id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "API key revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found or already revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/scim-tokens": {
+      "get": {
+        "tags": [
+          "scim"
+        ],
+        "summary": "GET /api/organizations/:id/scim-tokens",
+        "operationId": "list_scim_tokens",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SCIM tokens (secrets redacted)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScimTokenRecord"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "scim"
+        ],
+        "summary": "POST /api/organizations/:id/scim-tokens",
+        "operationId": "create_scim_token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScimTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "SCIM token created — plaintext shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateScimTokenResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/scim-tokens/{token_id}": {
+      "delete": {
+        "tags": [
+          "scim"
+        ],
+        "summary": "DELETE /api/organizations/:id/scim-tokens/:token_id — disable (soft-revoke).",
+        "operationId": "revoke_scim_token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "token_id",
+            "in": "path",
+            "description": "SCIM token id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SCIM token revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found or already revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/projects": {
       "get": {
         "tags": [
@@ -7099,6 +7459,75 @@
           }
         }
       },
+      "ApiKeyRecord": {
+        "type": "object",
+        "description": "One API key with the secret redacted. `revoked` is a convenience flag\nderived from `revoked_at`.",
+        "required": [
+          "id",
+          "organization_id",
+          "name",
+          "prefix",
+          "scopes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string",
+            "description": "The public lookup handle (embedded verbatim in the plaintext token)."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "ArmCount": {
         "type": "object",
         "description": "A single live per-arm count row for the designer readout\n(`GET /api/questionnaires/{id}/arm-counts`).",
@@ -7463,6 +7892,50 @@
           }
         }
       },
+      "CreateApiKeyRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "scopes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Granular permission tokens (e.g. `[\"session:read\", \"response:read\"]`)."
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Optional hard expiry; omit for a non-expiring key."
+          }
+        }
+      },
+      "CreateApiKeyResponse": {
+        "type": "object",
+        "description": "Returned exactly once on creation — the only time the plaintext `key` is\never available. Store it now or it is unrecoverable.",
+        "required": [
+          "key",
+          "api_key"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The full plaintext token `sk_<prefix>_<secret>`. Shown ONCE."
+          },
+          "api_key": {
+            "$ref": "#/components/schemas/ApiKeyRecord"
+          }
+        }
+      },
       "CreateCommentRequest": {
         "type": "object",
         "required": [
@@ -7709,6 +8182,34 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "CreateScimTokenRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CreateScimTokenResponse": {
+        "type": "object",
+        "description": "Returned once on creation — the plaintext `token` is unrecoverable after.",
+        "required": [
+          "token",
+          "scim_token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The full plaintext SCIM bearer token. Shown ONCE."
+          },
+          "scim_token": {
+            "$ref": "#/components/schemas/ScimTokenRecord"
           }
         }
       },
@@ -9915,6 +10416,57 @@
           }
         }
       },
+      "ScimTokenRecord": {
+        "type": "object",
+        "description": "One SCIM bearer token with the secret redacted.",
+        "required": [
+          "id",
+          "organization_id",
+          "name",
+          "prefix",
+          "enabled"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "SeatUsageResponse": {
         "type": "object",
         "description": "Seat usage for an organization. `limit` is null when no `seatLimit` is set\nin `organizations.settings` (unlimited). A \"seat\" is an active member or a\npending invitation (an outstanding invitation reserves a prospective seat).",
@@ -11179,6 +11731,14 @@
     {
       "name": "sso",
       "description": "SSO federation (OIDC/SAML) and identity-provider configuration"
+    },
+    {
+      "name": "api_keys",
+      "description": "API keys / service accounts for programmatic access"
+    },
+    {
+      "name": "scim",
+      "description": "SCIM 2.0 provisioning tokens and directory sync"
     },
     {
       "name": "projects",

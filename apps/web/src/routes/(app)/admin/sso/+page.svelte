@@ -6,6 +6,7 @@
     CreateIdpBody,
     UpdateIdpBody,
   } from '$lib/services/api/sso';
+  import type { ScimTokenRecord } from '$lib/services/api/scim-tokens';
   import { confirmDialog } from '$lib/stores/confirm.svelte';
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Button from '$lib/components/ui/Button.svelte';
@@ -21,6 +22,13 @@
 
   let currentOrg = $state<{ id: string; name: string } | null>(null);
   let providers = $state<IdentityProvider[]>([]);
+
+  // ── SCIM provisioning tokens ──
+  let scimTokens = $state<ScimTokenRecord[]>([]);
+  let scimTokenName = $state('');
+  let scimNewToken = $state<string | null>(null);
+  let scimCopied = $state(false);
+  const scimBaseUrl = `${(import.meta.env.VITE_API_URL || '').replace(/\/$/, '')}/scim/v2`;
 
   // ── Add-provider form ── (concrete non-null strings so they bind to <Input>)
   interface IdpForm {
@@ -76,7 +84,7 @@
         return;
       }
       currentOrg = { id: org.id, name: org.name };
-      await loadProviders();
+      await Promise.all([loadProviders(), loadScimTokens()]);
     } catch (err) {
       console.error('SSO load error:', err);
       error = 'Failed to load SSO configuration (owner access required)';
@@ -88,6 +96,59 @@
   async function loadProviders() {
     if (!currentOrg) return;
     providers = await api.sso.list(currentOrg.id);
+  }
+
+  async function loadScimTokens() {
+    if (!currentOrg) return;
+    scimTokens = await api.scimTokens.list(currentOrg.id);
+  }
+
+  async function createScimToken() {
+    if (!currentOrg) return;
+    error = null;
+    success = null;
+    saving = true;
+    try {
+      const res = await api.scimTokens.create(currentOrg.id, scimTokenName.trim() || undefined);
+      scimNewToken = res.token;
+      scimCopied = false;
+      scimTokenName = '';
+      success = 'SCIM token created — copy it now, it will not be shown again.';
+      await loadScimTokens();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to create SCIM token';
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function copyScimToken() {
+    if (!scimNewToken) return;
+    try {
+      await navigator.clipboard.writeText(scimNewToken);
+      scimCopied = true;
+    } catch {
+      scimCopied = false;
+    }
+  }
+
+  async function revokeScimToken(t: ScimTokenRecord) {
+    if (!currentOrg) return;
+    const ok = await confirmDialog({
+      title: 'Revoke SCIM token',
+      message: `Revoke "${t.name}" (${t.prefix}…)? The IdP connector using it stops provisioning immediately.`,
+      confirmLabel: 'Revoke',
+      destructive: true,
+    });
+    if (!ok) return;
+    error = null;
+    try {
+      await api.scimTokens.revoke(currentOrg.id, t.id);
+      success = 'SCIM token revoked';
+      await loadScimTokens();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to revoke SCIM token';
+    }
   }
 
   function parseGroupMap(text: string): Record<string, string> | null {
@@ -441,4 +502,82 @@
       {/each}
     </div>
   {/if}
+
+  <!-- ── SCIM provisioning ── -->
+  <div class="mt-12">
+    <div class="mb-4 flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-foreground">SCIM Provisioning</h2>
+        <p class="mt-1 text-muted-foreground">
+          Let your IdP automatically de/provision members. Point its SCIM connector at the base URL
+          below and authenticate with a token.
+        </p>
+      </div>
+      <Button variant="primary" onclick={() => void createScimToken()} loading={saving}>
+        Generate SCIM Token
+      </Button>
+    </div>
+
+    <Card class="mb-4">
+      <FormGroup label="Optional token label" id="scim-name">
+        <Input id="scim-name" type="text" bind:value={scimTokenName} placeholder="Okta production" />
+      </FormGroup>
+      <p class="mt-2 text-sm text-muted-foreground">
+        SCIM 2.0 base URL: <code class="break-all text-xs">{scimBaseUrl}</code>
+      </p>
+    </Card>
+
+    {#if scimNewToken}
+      <Card class="mb-4 border-primary">
+        <h3 class="mb-2 text-lg font-semibold">Your new SCIM token</h3>
+        <p class="mb-3 text-sm text-muted-foreground">
+          Copy it now — it is never shown again. Configure it as the bearer token in your IdP's SCIM
+          connector.
+        </p>
+        <div class="flex items-center gap-2">
+          <code
+            class="flex-1 break-all rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm"
+            >{scimNewToken}</code
+          >
+          <Button variant="secondary" onclick={() => void copyScimToken()}>
+            {scimCopied ? 'Copied' : 'Copy'}
+          </Button>
+          <Button variant="ghost" onclick={() => (scimNewToken = null)}>Dismiss</Button>
+        </div>
+      </Card>
+    {/if}
+
+    {#if scimTokens.length === 0}
+      <Card>
+        <div class="py-6 text-center text-muted-foreground">
+          No SCIM tokens yet. Generate one to enable directory-driven provisioning.
+        </div>
+      </Card>
+    {:else}
+      <div class="space-y-3">
+        {#each scimTokens as t (t.id)}
+          <Card>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="flex items-center gap-3">
+                  <h3 class="font-semibold">{t.name}</h3>
+                  <Badge variant={t.enabled ? 'success' : 'secondary'}>
+                    {t.enabled ? 'Active' : 'Revoked'}
+                  </Badge>
+                  <code class="text-xs text-muted-foreground">{t.prefix}…</code>
+                </div>
+                <p class="mt-1 text-sm text-muted-foreground">
+                  Created {t.created_at ? new Date(t.created_at).toLocaleString() : '—'} · Last used
+                  {t.last_used_at ? new Date(t.last_used_at).toLocaleString() : 'never'}
+                </p>
+              </div>
+              {#if t.enabled}
+                <Button variant="destructive" onclick={() => void revokeScimToken(t)}>Revoke</Button>
+              {/if}
+            </div>
+          </Card>
+        {/each}
+      </div>
+    {/if}
+  </div>
 </div>

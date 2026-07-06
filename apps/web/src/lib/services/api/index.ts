@@ -1,6 +1,8 @@
 import { organizations } from './organizations';
 import { roles } from './roles';
 import { sso } from './sso';
+import { apiKeys } from './api-keys';
+import { scimTokens } from './scim-tokens';
 import { projects } from './projects';
 import { questionnaires } from './questionnaires';
 import { sessions } from './sessions';
@@ -15,6 +17,8 @@ export const api = {
   organizations,
   roles,
   sso,
+  apiKeys,
+  scimTokens,
   projects,
   questionnaires,
   sessions,

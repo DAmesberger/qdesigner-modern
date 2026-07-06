@@ -6,12 +6,14 @@ use axum::{
 };
 use tower_http::catch_panic::CatchPanicLayer;
 
+use crate::middleware::api_key::set_api_key_context;
 use crate::middleware::fillout_rls_context::set_fillout_rls_context;
 use crate::middleware::rate_limit::rate_limit_middleware;
 use crate::middleware::rls_context::set_rls_context;
 use crate::state::AppState;
 
 pub mod access;
+pub mod api_keys;
 pub mod auth;
 pub mod comments;
 pub mod dev;
@@ -21,6 +23,7 @@ pub mod organizations;
 pub mod projects;
 pub mod questionnaires;
 pub mod roles;
+pub mod scim;
 pub mod sessions;
 pub mod sso;
 pub mod templates;
@@ -141,6 +144,19 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/sso/{idp_id}",
             patch(sso::update_provider).delete(sso::delete_provider),
+        )
+        .route(
+            "/{id}/api-keys",
+            get(api_keys::list_api_keys).post(api_keys::create_api_key),
+        )
+        .route("/{id}/api-keys/{key_id}", delete(api_keys::revoke_api_key))
+        .route(
+            "/{id}/scim-tokens",
+            get(scim::list_scim_tokens).post(scim::create_scim_token),
+        )
+        .route(
+            "/{id}/scim-tokens/{token_id}",
+            delete(scim::revoke_scim_token),
         )
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
@@ -318,6 +334,57 @@ pub fn router(state: AppState) -> Router {
         ))
         .layer(CatchPanicLayer::new());
 
+    // Machine surface (E-RBAC-7). API-key authenticated (Authorization: Bearer
+    // sk_...), scope-gated per route. The `set_api_key_context` middleware opens
+    // an RLS tx bound to the key's creator and rate-limits by key id, so no
+    // separate rate_limit layer is needed here.
+    let machine_routes = Router::new()
+        .route(
+            "/questionnaires/{qid}/aggregate",
+            get(api_keys::machine_aggregate),
+        )
+        .route(
+            "/questionnaires/{qid}/export",
+            get(api_keys::machine_export),
+        )
+        .route(
+            "/organizations/{org}/members",
+            post(api_keys::machine_add_member),
+        )
+        .layer(CatchPanicLayer::new())
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            set_api_key_context,
+        ));
+
+    // SCIM 2.0 provisioning (E-RBAC-7). Anonymous at the router layer — each
+    // handler authenticates its per-org bearer token itself. Rate-limited like
+    // the other machine/auth surfaces (keyed by peer IP for anonymous callers).
+    let scim_routes = Router::new()
+        .route("/Users", get(scim::list_users).post(scim::create_user))
+        .route(
+            "/Users/{id}",
+            get(scim::get_user)
+                .patch(scim::patch_user)
+                .put(scim::replace_user)
+                .delete(scim::delete_user),
+        )
+        .route(
+            "/Groups",
+            get(scim::list_groups).post(scim::groups_unsupported),
+        )
+        .route(
+            "/Groups/{id}",
+            get(scim::get_group)
+                .patch(scim::groups_unsupported)
+                .delete(scim::groups_unsupported),
+        )
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ))
+        .layer(CatchPanicLayer::new());
+
     let ws_route = Router::new()
         .route("/ws", get(crate::websocket::handler::ws_upgrade))
         // Contain a panic in the synchronous upgrade handler as a 500.
@@ -338,6 +405,8 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/sessions", session_routes)
         .nest("/api/media", media_routes)
         .nest("/api/sso", sso_routes)
+        .nest("/api/v1", machine_routes)
+        .nest("/scim/v2", scim_routes)
         .nest("/api", ws_route)
         .route(
             "/api/domains/auto-join",

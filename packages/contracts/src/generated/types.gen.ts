@@ -32,6 +32,26 @@ export type AggregateOverview = {
 };
 
 /**
+ * One API key with the secret redacted. `revoked` is a convenience flag
+ * derived from `revoked_at`.
+ */
+export type ApiKeyRecord = {
+    id: string;
+    organization_id: string;
+    name: string;
+    /**
+     * The public lookup handle (embedded verbatim in the plaintext token).
+     */
+    prefix: string;
+    scopes: Array<string>;
+    created_by?: string | null;
+    last_used_at?: string | null;
+    expires_at?: string | null;
+    revoked_at?: string | null;
+    created_at?: string | null;
+};
+
+/**
  * A single live per-arm count row for the designer readout
  * (`GET /api/questionnaires/{id}/arm-counts`).
  */
@@ -141,6 +161,30 @@ export type CountResponse = {
     count: number;
 };
 
+export type CreateApiKeyRequest = {
+    name: string;
+    /**
+     * Granular permission tokens (e.g. `["session:read", "response:read"]`).
+     */
+    scopes: Array<string>;
+    /**
+     * Optional hard expiry; omit for a non-expiring key.
+     */
+    expires_at?: string | null;
+};
+
+/**
+ * Returned exactly once on creation — the only time the plaintext `key` is
+ * ever available. Store it now or it is unrecoverable.
+ */
+export type CreateApiKeyResponse = {
+    /**
+     * The full plaintext token `sk_<prefix>_<secret>`. Shown ONCE.
+     */
+    key: string;
+    api_key: ApiKeyRecord;
+};
+
 export type CreateCommentRequest = {
     parent_id?: string | null;
     anchor_type: string;
@@ -218,6 +262,21 @@ export type CreateQuestionnaireRequest = {
 export type CreateRoleRequest = {
     name: string;
     permissions: Array<string>;
+};
+
+export type CreateScimTokenRequest = {
+    name?: string | null;
+};
+
+/**
+ * Returned once on creation — the plaintext `token` is unrecoverable after.
+ */
+export type CreateScimTokenResponse = {
+    /**
+     * The full plaintext SCIM bearer token. Shown ONCE.
+     */
+    token: string;
+    scim_token: ScimTokenRecord;
 };
 
 export type CreateSessionRequest = {
@@ -859,6 +918,20 @@ export type ResponseRecord = {
 export type RolesListResponse = {
     roles: Array<OrgRoleRecord>;
     available_permissions: Array<string>;
+};
+
+/**
+ * One SCIM bearer token with the secret redacted.
+ */
+export type ScimTokenRecord = {
+    id: string;
+    organization_id: string;
+    name: string;
+    prefix: string;
+    enabled: boolean;
+    created_by?: string | null;
+    last_used_at?: string | null;
+    created_at?: string | null;
 };
 
 /**
@@ -2934,6 +3007,206 @@ export type SsoCallbackErrors = {
 };
 
 export type SsoCallbackError = SsoCallbackErrors[keyof SsoCallbackErrors];
+
+export type ListApiKeysData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/api-keys';
+};
+
+export type ListApiKeysErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListApiKeysError = ListApiKeysErrors[keyof ListApiKeysErrors];
+
+export type ListApiKeysResponses = {
+    /**
+     * API keys (secrets redacted)
+     */
+    200: Array<ApiKeyRecord>;
+};
+
+export type ListApiKeysResponse = ListApiKeysResponses[keyof ListApiKeysResponses];
+
+export type CreateApiKeyData = {
+    body: CreateApiKeyRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/api-keys';
+};
+
+export type CreateApiKeyErrors = {
+    /**
+     * Invalid name or scope
+     */
+    400: ErrorEnvelope;
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type CreateApiKeyError = CreateApiKeyErrors[keyof CreateApiKeyErrors];
+
+export type CreateApiKeyResponses = {
+    /**
+     * API key created — plaintext shown once
+     */
+    201: CreateApiKeyResponse;
+};
+
+export type CreateApiKeyResponse2 = CreateApiKeyResponses[keyof CreateApiKeyResponses];
+
+export type RevokeApiKeyData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+        /**
+         * API key id
+         */
+        key_id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/api-keys/{key_id}';
+};
+
+export type RevokeApiKeyErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * Not found or already revoked
+     */
+    404: ErrorEnvelope;
+};
+
+export type RevokeApiKeyError = RevokeApiKeyErrors[keyof RevokeApiKeyErrors];
+
+export type RevokeApiKeyResponses = {
+    /**
+     * API key revoked
+     */
+    200: MessageResponse;
+};
+
+export type RevokeApiKeyResponse = RevokeApiKeyResponses[keyof RevokeApiKeyResponses];
+
+export type ListScimTokensData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/scim-tokens';
+};
+
+export type ListScimTokensErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListScimTokensError = ListScimTokensErrors[keyof ListScimTokensErrors];
+
+export type ListScimTokensResponses = {
+    /**
+     * SCIM tokens (secrets redacted)
+     */
+    200: Array<ScimTokenRecord>;
+};
+
+export type ListScimTokensResponse = ListScimTokensResponses[keyof ListScimTokensResponses];
+
+export type CreateScimTokenData = {
+    body: CreateScimTokenRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/scim-tokens';
+};
+
+export type CreateScimTokenErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type CreateScimTokenError = CreateScimTokenErrors[keyof CreateScimTokenErrors];
+
+export type CreateScimTokenResponses = {
+    /**
+     * SCIM token created — plaintext shown once
+     */
+    201: CreateScimTokenResponse;
+};
+
+export type CreateScimTokenResponse2 = CreateScimTokenResponses[keyof CreateScimTokenResponses];
+
+export type RevokeScimTokenData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+        /**
+         * SCIM token id
+         */
+        token_id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/scim-tokens/{token_id}';
+};
+
+export type RevokeScimTokenErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * Not found or already revoked
+     */
+    404: ErrorEnvelope;
+};
+
+export type RevokeScimTokenError = RevokeScimTokenErrors[keyof RevokeScimTokenErrors];
+
+export type RevokeScimTokenResponses = {
+    /**
+     * SCIM token revoked
+     */
+    200: MessageResponse;
+};
+
+export type RevokeScimTokenResponse = RevokeScimTokenResponses[keyof RevokeScimTokenResponses];
 
 export type ListProjectsData = {
     body?: never;

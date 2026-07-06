@@ -64,6 +64,22 @@ pub enum AuditAction {
     SsoProviderUpdated,
     /// An org owner deleted an identity provider.
     SsoProviderDeleted,
+    // API keys / service accounts (E-RBAC-7).
+    /// An owner/admin minted a new API key (the plaintext is shown once).
+    ApiKeyCreated,
+    /// An API key was presented for the first time (first successful auth).
+    ApiKeyFirstUsed,
+    /// An owner/admin revoked an API key.
+    ApiKeyRevoked,
+    // SCIM provisioning (E-RBAC-7).
+    /// An owner/admin minted a per-org SCIM bearer token.
+    ScimTokenCreated,
+    /// An owner/admin revoked (disabled) a SCIM bearer token.
+    ScimTokenRevoked,
+    /// A directory connector provisioned (created/activated) a member via SCIM.
+    ScimUserProvisioned,
+    /// A directory connector deactivated a member via SCIM (active=false).
+    ScimUserDeactivated,
 }
 
 impl AuditAction {
@@ -91,6 +107,13 @@ impl AuditAction {
             AuditAction::SsoProviderCreated => "sso.provider_created",
             AuditAction::SsoProviderUpdated => "sso.provider_updated",
             AuditAction::SsoProviderDeleted => "sso.provider_deleted",
+            AuditAction::ApiKeyCreated => "api_key.created",
+            AuditAction::ApiKeyFirstUsed => "api_key.first_used",
+            AuditAction::ApiKeyRevoked => "api_key.revoked",
+            AuditAction::ScimTokenCreated => "scim_token.created",
+            AuditAction::ScimTokenRevoked => "scim_token.revoked",
+            AuditAction::ScimUserProvisioned => "scim.user_provisioned",
+            AuditAction::ScimUserDeactivated => "scim.user_deactivated",
         }
     }
 }
@@ -106,6 +129,9 @@ pub mod resource {
     pub const PROJECT_MEMBER: &str = "project_member";
     pub const ROLE: &str = "org_role";
     pub const IDENTITY_PROVIDER: &str = "identity_provider";
+    pub const API_KEY: &str = "api_key";
+    pub const SCIM_TOKEN: &str = "scim_token";
+    pub const SCIM_USER: &str = "scim_user";
 }
 
 /// One privileged action to append to the log.
