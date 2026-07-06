@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { auth } from '$lib/services/auth';
   import ThemeToggle from '../ThemeToggle.svelte';
@@ -24,10 +24,10 @@
   ];
 
   // Check if current route needs minimal layout
-  let isDesignerRoute = $derived($page?.url?.pathname?.includes('/designer/') || false);
+  let isDesignerRoute = $derived(page?.url?.pathname?.includes('/designer/') || false);
   let isMinimalLayout = $derived(isDesignerRoute);
 
-  let currentPath = $derived($page?.url?.pathname || '/');
+  let currentPath = $derived(page?.url?.pathname || '/');
 
   let userInitials = $derived.by(() => {
     if (!user?.email) return '?';

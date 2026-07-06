@@ -66,7 +66,7 @@
   const welcomeText = $derived(welcomeMessage?.trim() ? welcomeMessage : questionnaire.description);
 
   // Calculate estimated duration from questions if not provided
-  const calculatedDuration = $derived(() => {
+  const calculatedDuration = $derived.by(() => {
     if (estimatedDuration) return estimatedDuration;
 
     const questionCount =
@@ -100,13 +100,13 @@
       {/if}
 
       <div class="info-grid">
-        {#if calculatedDuration() > 0}
+        {#if calculatedDuration > 0}
           <div class="info-item">
             <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <circle cx="12" cy="12" r="10" stroke-width="2" />
               <path d="M12 6v6l4 2" stroke-width="2" stroke-linecap="round" />
             </svg>
-            <span>About {calculatedDuration()} minutes</span>
+            <span>About {calculatedDuration} minutes</span>
           </div>
         {/if}
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { fade } from 'svelte/transition';
   import AppShell from '$lib/components/ui/layout/AppShell.svelte';
   import { ws } from '$lib/services/ws';
@@ -70,7 +70,7 @@
 
 <!-- This layout wraps all authenticated app pages with the AppShell -->
 <AppShell user={data.user}>
-  {#key $page.url.pathname}
+  {#key page.url.pathname}
     <div
       in:fade={{ duration: reducedMotion ? 0 : 150, delay: reducedMotion ? 0 : 50 }}
       out:fade={{ duration: reducedMotion ? 0 : 100 }}

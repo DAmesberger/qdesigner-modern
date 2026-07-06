@@ -4,7 +4,10 @@ import { OfflineResponsePersistence } from '../services/OfflineResponsePersisten
 import { OfflineSessionService } from '../services/OfflineSessionService';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
 import type { ResumeState } from '$lib/runtime/core/ResumeState';
-import type { ServerVariableSnapshot } from '$lib/runtime/core/QuestionnaireRuntime';
+import type {
+	ServerVariableSnapshot,
+	QuestionPresentedEvent,
+} from '$lib/runtime/core/QuestionnaireRuntime';
 import { RuntimeEventBus } from './RuntimeEventBus';
 import type { ResumeSnapshot } from './responseMapping';
 import type { FormQuestionHost } from '$lib/runtime/core/FormQuestionHost';
@@ -44,6 +47,12 @@ export interface FilloutRuntimeConfig {
 	onComplete?: (session: QuestionnaireSession) => void;
 	onProgress?: (pageIndex: number, totalPages: number) => void;
 	onSessionUpdate?: (progress: number) => void;
+	/**
+	 * Fired for EVERY presented item (including WebGL reaction stimuli) before the
+	 * category switch in the wrapped runtime. Forwarded straight through via the
+	 * `wrappedConfig` spread so the fillout page can drive the aria-live announcement.
+	 */
+	onQuestionPresented?: (event: QuestionPresentedEvent) => void;
 }
 
 export class FilloutRuntime {

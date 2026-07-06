@@ -52,7 +52,7 @@
   let redirectCountdown = $state(5);
 
   // Calculate statistics
-  const duration = $derived(() => {
+  const duration = $derived.by(() => {
     if (!session?.startTime || !session?.endTime) return null;
     const ms = session.endTime - session.startTime;
     const minutes = Math.floor(ms / 60000);
@@ -60,7 +60,7 @@
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   });
 
-  const completionCode = $derived(() => {
+  const completionCode = $derived.by(() => {
     if (distributionSettings?.panelIntegration?.completionCode) {
       return distributionSettings.panelIntegration.completionCode;
     }
@@ -69,7 +69,7 @@
   });
 
   // Build redirect URL with variable substitution
-  const redirectUrl = $derived(() => {
+  const redirectUrl = $derived.by(() => {
     const panel = distributionSettings?.panelIntegration;
     let url = distributionSettings?.completionRedirectUrl || panel?.completionUrl || '';
     if (!url) return null;
@@ -78,7 +78,7 @@
     url = url.replace(/\{\{(\w+)\}\}/g, (_match, varName: string) => {
       if (varName in urlParams) return encodeURIComponent(urlParams[varName] ?? '');
       if (varName in variables) return encodeURIComponent(String(variables[varName] ?? ''));
-      if (varName === 'COMPLETION_CODE') return encodeURIComponent(completionCode());
+      if (varName === 'COMPLETION_CODE') return encodeURIComponent(completionCode);
       if (varName === 'SESSION_ID') return encodeURIComponent(session?.id ?? '');
       if (varName === 'PARTICIPANT_ID') return encodeURIComponent(session?.participantId ?? '');
       return '';
@@ -100,29 +100,29 @@
   });
 
   // Panel-specific redirect URLs
-  const panelRedirectUrl = $derived(() => {
+  const panelRedirectUrl = $derived.by(() => {
     const panel = distributionSettings?.panelIntegration;
     if (!panel) return null;
 
     switch (panel.provider) {
       case 'prolific':
-        return `https://app.prolific.com/submissions/complete?cc=${encodeURIComponent(completionCode())}`;
+        return `https://app.prolific.com/submissions/complete?cc=${encodeURIComponent(completionCode)}`;
       case 'sona': {
         const base = panel.completionUrl;
         if (!base) return null;
         const sep = base.includes('?') ? '&' : '?';
-        return `${base}${sep}survey_code=${encodeURIComponent(completionCode())}`;
+        return `${base}${sep}survey_code=${encodeURIComponent(completionCode)}`;
       }
       default:
         return null;
     }
   });
 
-  const effectiveRedirectUrl = $derived(() => redirectUrl() || panelRedirectUrl());
+  const effectiveRedirectUrl = $derived(redirectUrl || panelRedirectUrl);
 
   // Auto-redirect countdown
   $effect(() => {
-    const target = effectiveRedirectUrl();
+    const target = effectiveRedirectUrl;
     if (!target) return;
 
     redirectCountdown = 5;
@@ -196,10 +196,10 @@
 
       {#if showStatistics && session}
         <div class="flex gap-8 justify-center mb-8 p-6 bg-muted rounded-lg">
-          {#if duration()}
+          {#if duration}
             <div class="flex flex-col gap-1">
               <span class="text-sm text-muted-foreground">Time taken</span>
-              <span class="text-2xl font-semibold text-foreground">{duration()}</span>
+              <span class="text-2xl font-semibold text-foreground">{duration}</span>
             </div>
           {/if}
 
@@ -216,10 +216,10 @@
       <div class="mb-8 p-6 bg-muted rounded-lg">
         <p class="text-sm text-muted-foreground mb-2">Your completion code:</p>
         <div class="flex items-center justify-center gap-2 mb-2">
-          <code class="text-2xl font-semibold tracking-widest text-primary font-mono">{completionCode()}</code>
+          <code class="text-2xl font-semibold tracking-widest text-primary font-mono">{completionCode}</code>
           <button
             class="w-8 h-8 p-1.5 bg-background border border-border rounded-md cursor-pointer transition-all duration-200 text-muted-foreground hover:bg-muted hover:text-foreground active:scale-95"
-            onclick={() => navigator.clipboard.writeText(completionCode())}
+            onclick={() => navigator.clipboard.writeText(completionCode)}
             title="Copy to clipboard"
             aria-label="Copy to clipboard"
           >
@@ -233,7 +233,7 @@
       </div>
 
       <!-- Panel integration / redirect info -->
-      {#if effectiveRedirectUrl()}
+      {#if effectiveRedirectUrl}
         <div class="mb-6 p-4 bg-muted rounded-lg text-center" data-testid="fillout-redirect-info">
           {#if distributionSettings?.panelIntegration}
             <p class="text-sm text-foreground mb-2">
@@ -252,7 +252,7 @@
               Redirecting in {redirectCountdown} seconds...
             </p>
           {/if}
-          <a href={effectiveRedirectUrl()} class="text-xs text-primary underline">Click here if not redirected automatically</a>
+          <a href={effectiveRedirectUrl} class="text-xs text-primary underline">Click here if not redirected automatically</a>
         </div>
       {/if}
 
@@ -264,7 +264,7 @@
             action="https://www.mturk.com/mturk/externalSubmit"
           >
             <input type="hidden" name="assignmentId" value={urlParams['assignmentId'] ?? ''} />
-            <input type="hidden" name="completionCode" value={completionCode()} />
+            <input type="hidden" name="completionCode" value={completionCode} />
             <Button variant="default" size="lg" type="submit">
               Submit HIT
             </Button>

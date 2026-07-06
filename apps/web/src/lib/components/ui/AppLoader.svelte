@@ -32,7 +32,6 @@
     easing: cubicOut,
   });
 
-  let currentStage = $state<string>('');
   let errorMessage = $state<string>('');
   let showRetry = $state(false);
   let startTime = Date.now();
@@ -60,12 +59,15 @@
     progress.set(completedWeight);
   });
 
-  // Update current stage message
-  $effect(() => {
-    const activeStage = stages.find((s) => s.status === 'loading');
-    if (activeStage) {
-      currentStage = activeStage.message || activeStage.name;
-    }
+  // Current stage message. When a stage is loading, show its message/name.
+  // When nothing is loading (between stages / after completion), retain the
+  // last-progressed stage's label — matching the UX the previous $effect gave
+  // by never clearing back to empty.
+  const currentStage = $derived.by(() => {
+    const active = stages.find((s) => s.status === 'loading');
+    if (active) return active.message || active.name;
+    const done = [...stages].reverse().find((s) => s.status === 'complete');
+    return done?.message || done?.name || stages.at(-1)?.name || '';
   });
 
   async function updateStage(stageId: string, status: LoadingStage['status'], message?: string) {

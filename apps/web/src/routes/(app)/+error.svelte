@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
 
-  let status = $derived($page.status);
-  let message = $derived($page.error?.message || '');
+  let status = $derived(page.status);
+  let message = $derived(page.error?.message || '');
 
   let title = $derived(
     status === 403

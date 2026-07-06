@@ -132,7 +132,7 @@
   });
 
   // Transform question to analytics format for display modules
-  const analyticsData = $derived(() => {
+  const analyticsData = $derived.by(() => {
     const metadata = moduleRegistry.get(question.type);
     if (metadata?.category === 'display') {
       // Transform question data to analytics format
@@ -171,7 +171,7 @@
   {#if metadata?.category === 'display' || metadata?.category === 'analytics'}
     <!-- Display modules (analytics, instructions) use analytics prop -->
     <QuestionComponent
-      analytics={analyticsData()}
+      analytics={analyticsData}
       {mode}
       {variables}
       onevent={(e: any) => {

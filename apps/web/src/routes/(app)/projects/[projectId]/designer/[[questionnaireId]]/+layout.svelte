@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { page } from '$app/stores';
   import AppLoader from '$lib/components/ui/AppLoader.svelte';
   import { browser } from '$app/environment';
   import { onMount } from 'svelte';

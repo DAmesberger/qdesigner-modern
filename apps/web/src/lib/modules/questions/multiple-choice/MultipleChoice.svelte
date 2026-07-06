@@ -491,6 +491,16 @@
     background: hsl(var(--primary));
   }
 
+  /* Keyboard focus (WCAG 2.4.7) — the input is opacity:0, so surface the ring on the indicator */
+  .choice-input:focus-visible + .choice-indicator {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+
+  .choice-label:has(.choice-input:focus-visible) {
+    border-color: hsl(var(--primary));
+  }
+
   .radio-dot {
     width: 0.5rem;
     height: 0.5rem;

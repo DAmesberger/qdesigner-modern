@@ -2,7 +2,7 @@
   import { fade, fly } from 'svelte/transition';
   import { designerStore } from '$lib/stores/designer.svelte';
   import { toast } from '$lib/stores/toast';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import { api } from '$lib/services/api';
@@ -19,7 +19,7 @@
   let pendingBumpType = $state<'major' | 'minor' | 'patch' | null>(null);
   let bumpNote = $state('');
 
-  let user = $derived($page.data?.user);
+  let user = $derived(page.data?.user);
   let questionnaire = $derived(designerStore.questionnaire);
   let versionDisplay = $derived(
     formatSemver({

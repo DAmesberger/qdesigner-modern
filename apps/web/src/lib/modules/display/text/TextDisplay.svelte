@@ -134,7 +134,7 @@
   });
 
   // Build style object
-  const contentStyle = $derived(() => {
+  const contentStyle = $derived.by(() => {
     const styles: Record<string, string> = {};
     const styling = instruction.config.styling;
 
@@ -156,7 +156,7 @@
 </script>
 
 <BaseInstruction {instruction} {mode} {onInteraction}>
-  <div class="text-display-content" style={contentStyle()}>
+  <div class="text-display-content" style={contentStyle}>
     {#if instruction.config.markdown}
       {@html processedContent}
     {:else}

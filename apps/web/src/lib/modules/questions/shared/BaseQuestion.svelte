@@ -292,7 +292,12 @@
     {/if}
 
     {#if resolvedTitle}
-      <div class="question-title" id="question-{question.id}-title">
+      <div
+        class="question-title"
+        id="question-{question.id}-title"
+        role="heading"
+        aria-level="2"
+      >
         {@html processedTitle || resolvedTitle}
         {#if question.required && mode === 'runtime'}
           <span class="required-indicator" aria-label="Required">*</span>

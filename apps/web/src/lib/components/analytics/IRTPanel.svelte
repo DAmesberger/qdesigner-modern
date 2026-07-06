@@ -59,7 +59,7 @@
   );
 
   // Test Information Function: sum of info across all items
-  const tifData = $derived(() => {
+  const tifData = $derived.by(() => {
     let maxInfo = 0;
     const points: { theta: number; info: number }[] = [];
     for (let i = 0; i <= thetaSteps; i++) {
@@ -74,8 +74,8 @@
     return { points, maxInfo };
   });
 
-  const tifPath = $derived(() => {
-    const { points, maxInfo } = tifData();
+  const tifPath = $derived.by(() => {
+    const { points, maxInfo } = tifData;
     if (maxInfo === 0) return '';
     return points
       .map((p, i) => {
@@ -230,9 +230,9 @@
       {/each}
 
       <!-- TIF curve -->
-      {#if tifPath()}
+      {#if tifPath}
         <path
-          d={tifPath()}
+          d={tifPath}
           fill="none"
           stroke="#3B82F6"
           stroke-width="2.5"

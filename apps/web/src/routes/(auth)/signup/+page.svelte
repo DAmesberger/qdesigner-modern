@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { onMount, tick } from 'svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
@@ -40,7 +40,7 @@
 
   // Prefill the email field from a ?email= query param (e.g. from an invite link)
   onMount(() => {
-    const prefill = $page.url.searchParams.get('email');
+    const prefill = page.url.searchParams.get('email');
     if (prefill) email = prefill;
   });
 

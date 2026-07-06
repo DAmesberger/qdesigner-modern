@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import { untrack } from 'svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
@@ -55,10 +56,12 @@
   let selectedColorPreset = $state('');
   let selectedSizePreset = $state('');
 
-  // Initialize config defaults
-  $effect(() => {
-    if (!question.config) {
-      question.config = {
+  // Seed config defaults once per question (keyed on identity), outside the
+  // reactive read graph — so this one-time normalization does not re-run as a
+  // reactive effect on every deep config edit.
+  function normalizeDrawingConfig(q: Question & { config: DrawingConfig }) {
+    if (!q.config) {
+      q.config = {
         tools: ['pen', 'eraser'],
         colors: ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'],
         canvas: {
@@ -68,14 +71,20 @@
         analysis: {},
       };
     } else {
-      if (!question.config.tools) question.config.tools = ['pen', 'eraser'];
-      if (!question.config.colors)
-        question.config.colors = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'];
-      if (!question.config.canvas) question.config.canvas = {};
-      if (!question.config.canvas.width) question.config.canvas.width = 600;
-      if (!question.config.canvas.height) question.config.canvas.height = 400;
-      if (!question.config.analysis) question.config.analysis = {};
+      if (!q.config.tools) q.config.tools = ['pen', 'eraser'];
+      if (!q.config.colors)
+        q.config.colors = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'];
+      if (!q.config.canvas) q.config.canvas = {};
+      if (!q.config.canvas.width) q.config.canvas.width = 600;
+      if (!q.config.canvas.height) q.config.canvas.height = 400;
+      if (!q.config.analysis) q.config.analysis = {};
     }
+  }
+
+  $effect(() => {
+    const id = question.id;
+    void id;
+    untrack(() => normalizeDrawingConfig(question));
   });
 
   function toggleTool(tool: 'pen' | 'eraser' | 'line' | 'shape') {

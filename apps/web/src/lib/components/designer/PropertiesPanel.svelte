@@ -12,7 +12,7 @@
   import { isSingleChoiceQuestion, isMultipleChoiceQuestion } from '$lib/shared';
   import { moduleRegistry } from '$lib/modules/registry';
   import { slide } from 'svelte/transition';
-  import type { ComponentType } from 'svelte';
+  import { untrack, type ComponentType } from 'svelte';
   import StyleEditor from './StyleEditor.svelte';
   import ScriptEditor from './ScriptEditor.svelte';
   import { getItemSettings } from '$lib/utils/itemSettings';
@@ -433,10 +433,17 @@
     });
   }
 
+  // Reset the bulk-options draft only when the *selection* changes (a different
+  // question id or choice/non-choice toggle), not on every deep edit of the
+  // selected question. Reading only the identity keys as tracked deps and
+  // computing the draft inside untrack() stops in-place question edits (e.g.
+  // typing into another field) from clobbering the draft mid-typing.
   $effect(() => {
-    if (questionItem && isChoiceQuestion) {
-      bulkOptionDraft = formatChoiceOptions(questionItem);
-    }
+    const id = questionItem?.id;
+    const choice = isChoiceQuestion;
+    untrack(() => {
+      if (id && choice) bulkOptionDraft = formatChoiceOptions(questionItem!);
+    });
   });
 </script>
 

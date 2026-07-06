@@ -86,13 +86,13 @@
   let animationFrameId: number | undefined;
 
   // Derived display values
-  const formattedTime = $derived(() => {
+  const formattedTime = $derived.by(() => {
     const mins = Math.floor(elapsedTime / 60);
     const secs = elapsedTime % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   });
 
-  const formattedMaxDuration = $derived(() => {
+  const formattedMaxDuration = $derived.by(() => {
     const mins = Math.floor(maxDuration / 60);
     const secs = maxDuration % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -523,7 +523,7 @@
           {/if}
         </button>
         <p class="m-0 text-[0.8125rem] text-muted-foreground">
-          Max duration: {formattedMaxDuration()}
+          Max duration: {formattedMaxDuration}
           {#if maxFileSize}
             &middot; Max size: {formatBytes(maxFileSize)}
           {/if}
@@ -600,9 +600,9 @@
         <!-- Timer and controls -->
         <div class="flex flex-col items-center gap-3 px-4 pb-4">
           <div class="font-mono text-xl font-semibold text-foreground max-sm:text-base">
-            <span class="text-destructive">{formattedTime()}</span>
+            <span class="text-destructive">{formattedTime}</span>
             <span class="mx-1 text-muted-foreground">/</span>
-            <span class="text-muted-foreground">{formattedMaxDuration()}</span>
+            <span class="text-muted-foreground">{formattedMaxDuration}</span>
           </div>
 
           <div class="w-full h-1 bg-border rounded-sm overflow-hidden">
@@ -653,7 +653,7 @@
         {/if}
 
         <div class="flex items-center justify-center gap-2 px-4 py-2 text-[0.8125rem] text-muted-foreground">
-          <span>Duration: {formattedTime()}</span>
+          <span>Duration: {formattedTime}</span>
           <span class="text-border">&middot;</span>
           <span>Size: {recordedBlob ? formatBytes(recordedBlob.size) : '---'}</span>
         </div>

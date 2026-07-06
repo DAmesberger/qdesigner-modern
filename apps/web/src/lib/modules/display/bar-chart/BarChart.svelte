@@ -71,15 +71,12 @@
 
   let { analytics, mode = 'runtime', variables = {}, onInteraction }: Props = $props();
 
-  // Ensure analytics has dataSource
-  $effect(() => {
-    if (!analytics.dataSource) {
-      analytics.dataSource = {
-        variables: [],
-        aggregation: 'none',
-      };
-    }
-  });
+  // Read-through fallback for a missing dataSource — replaces the prior effect
+  // that mutated the incoming prop. BaseAnalytics already guards `dataSource`
+  // access with optional chaining, and the default carries no variables, so
+  // this is behavior-preserving while keeping the prop out of the write graph.
+  const DEFAULT_DATA_SOURCE = { variables: [], aggregation: 'none' } as const;
+  const dataSource = $derived(analytics.dataSource ?? DEFAULT_DATA_SOURCE);
 
   let chartCanvas = $state<HTMLCanvasElement>();
   let chart: Chart | null = null;
@@ -533,7 +530,7 @@
     >
       {#if mode === 'edit'}
         <!-- In edit mode, show a preview chart if we have variables selected -->
-        {#if (analytics.dataSource?.variables?.length ?? 0) > 0 || config.value}
+        {#if (dataSource.variables?.length ?? 0) > 0 || config.value}
           <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
           <!-- role="img" + aria-label is the WAI-ARIA technique for an accessible canvas -->
           <canvas

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { designerStore } from '$lib/stores/designer.svelte';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { toast } from '$lib/stores/toast';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
@@ -14,7 +14,7 @@
   let listError = $state('');
 
   // Get user from page data (passed from layout)
-  let user = $derived($page.data.user);
+  let user = $derived(page.data.user);
 
   // Update user ID when it changes
   $effect(() => {

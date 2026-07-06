@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import { untrack } from 'svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
   type RecordingMode = 'audio' | 'video-audio' | 'video-only';
@@ -49,15 +50,24 @@
     { label: '10 seconds', value: 10 },
   ];
 
-  // Initialize config defaults
+  // Seed config defaults once per question (keyed on identity), outside the
+  // reactive read graph — so this one-time normalization does not re-run as a
+  // reactive effect on every deep config edit. The numeric fields keep the
+  // truthy-guard form to preserve the original 0-handling behavior.
+  function ensureDefaults(q: Question & { config: MediaResponseConfig }) {
+    q.config.recordingMode ??= 'audio';
+    if (!q.config.maxDuration) q.config.maxDuration = 120;
+    if (!q.config.maxFileSize) q.config.maxFileSize = 50 * 1024 * 1024;
+    q.config.audioQuality ??= 'medium';
+    q.config.videoQuality ??= 'medium';
+    q.config.allowRerecord ??= true;
+    q.config.countdown ??= 3;
+  }
+
   $effect(() => {
-    if (!question.config.recordingMode) question.config.recordingMode = 'audio';
-    if (!question.config.maxDuration) question.config.maxDuration = 120;
-    if (!question.config.maxFileSize) question.config.maxFileSize = 50 * 1024 * 1024;
-    if (!question.config.audioQuality) question.config.audioQuality = 'medium';
-    if (!question.config.videoQuality) question.config.videoQuality = 'medium';
-    if (question.config.allowRerecord === undefined) question.config.allowRerecord = true;
-    if (question.config.countdown === undefined) question.config.countdown = 3;
+    const id = question.id;
+    void id;
+    untrack(() => ensureDefaults(question));
   });
 
   function formatDuration(seconds: number): string {

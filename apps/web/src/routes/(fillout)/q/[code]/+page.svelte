@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
   import Spinner from '$lib/components/ui/feedback/Spinner.svelte';
@@ -11,6 +10,7 @@
   import { FilloutRuntime } from '$lib/fillout/runtime/FilloutRuntime';
   import ModularRenderer from '$lib/runtime/ModularRenderer.svelte';
   import type { FormQuestionHost, FormHostPresentation } from '$lib/runtime/core/FormQuestionHost';
+  import { buildQuestionAnnouncement } from '$lib/fillout/a11y/announce';
   import type { ResumeState } from '$lib/runtime/core/ResumeState';
   import type { ConsentData, FilloutDefinition } from '$lib/fillout/types';
   import type { QuestionnaireSession } from '$lib/shared';
@@ -232,6 +232,10 @@
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- captured value spans every module answer shape
   let currentValue = $state<any>(undefined);
   let hasAnswered = $state(false);
+  // A11y (F094/F098): persistent live region text + focus target for the form card.
+  let liveAnnouncement = $state('');
+  let formCardEl = $state<HTMLDivElement>();
+  let lastPresentedItemId: string | null = null;
 
   const activeItem = $derived(
     activePresentation
@@ -252,6 +256,12 @@
       currentValue = presentation.initialValue;
       hasAnswered = presentation.initialValue !== undefined && presentation.initialValue !== null;
       activePresentation = presentation;
+      // Move keyboard focus to the freshly-mounted question region, but only when the
+      // item actually changed — re-presents (e.g. validation re-render) must not steal
+      // focus from a module's inner input. tick() waits for the {#key} subtree remount.
+      const changed = presentation.item.id !== lastPresentedItemId;
+      lastPresentedItemId = presentation.item.id;
+      if (changed) void tick().then(() => formCardEl?.focus());
     },
     clear() {
       activePresentation = null;
@@ -721,6 +731,11 @@
             loadingMessage = `Loading media resources... ${Math.round(progress * 2)}%`;
           }
         },
+        // A11y (F094/F098): announce every presented item — including WebGL reaction
+        // stimuli, which fire this before the category switch and never reach the overlay.
+        onQuestionPresented: (event) => {
+          liveAnnouncement = buildQuestionAnnouncement(event, questionList);
+        },
       });
 
       loadingMessage = 'Starting questionnaire...';
@@ -810,6 +825,10 @@
 <svelte:window on:keydown={handleKeyDown} on:resize={handleResize} />
 
 <div class="fillout-page" bind:this={container} data-testid="fillout-root">
+  <!-- Persistent SR-only live region (F094): survives screen switches so every
+       question presentation is announced. -->
+  <div class="sr-only" role="status" aria-live="polite">{liveAnnouncement}</div>
+
   <!-- Offline / Sync indicators -->
   {#if isOffline || syncStatus !== 'idle'}
     <div class="status-bar" data-testid="fillout-status-bar">
@@ -889,6 +908,7 @@
       onPrimeAudio={ensureAudioUnlocked}
     />
   {:else if currentScreen === 'runtime'}
+    <h1 class="sr-only">{definition?.name ?? 'Questionnaire'}</h1>
     {#if showTimingBanner && qualification}
       <div class="timing-banner" data-testid="fillout-timing-banner">
         <DeviceQualificationBanner
@@ -945,7 +965,12 @@
     <div class="html-overlay" data-testid="fillout-runtime-overlay">
       {#if activePresentation && activeItem}
         <div class="form-overlay" data-testid="fillout-form-overlay">
-          <div class="form-card" data-question-type={activePresentation.type}>
+          <div
+            class="form-card"
+            data-question-type={activePresentation.type}
+            bind:this={formCardEl}
+            tabindex="-1"
+          >
             {#key activePresentation.item.id}
               <ModularRenderer
                 item={activeItem}

@@ -442,6 +442,12 @@
     border-radius: 50%;
   }
 
+  /* Keyboard focus (WCAG 2.4.7) — input is opacity:0, surface the ring on the indicator */
+  .radio-input:focus-visible + .radio-indicator {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+
   /* Checkbox styles — :checked + span */
   .checkbox-input {
     position: absolute;
@@ -463,6 +469,12 @@
   .checkbox-input:checked + .checkbox-indicator {
     border-color: hsl(var(--primary));
     background: hsl(var(--primary));
+  }
+
+  /* Keyboard focus (WCAG 2.4.7) — input is opacity:0, surface the ring on the indicator */
+  .checkbox-input:focus-visible + .checkbox-indicator {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
   }
 
   .checkmark {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import Button from '$lib/components/ui/Button.svelte';
@@ -23,7 +23,7 @@
   let currentUser: any = null;
 
   onMount(async () => {
-    const token = $page.params.token;
+    const token = page.params.token;
 
     if (!token) {
       error = 'Invalid invitation link';

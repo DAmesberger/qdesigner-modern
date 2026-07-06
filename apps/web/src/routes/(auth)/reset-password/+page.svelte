@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import Button from '$lib/components/ui/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
@@ -13,7 +13,7 @@
   let error = $state<string | null>(null);
   let success = $state(false);
 
-  let token = $derived($page.url.searchParams.get('token') ?? '');
+  let token = $derived(page.url.searchParams.get('token') ?? '');
 
   let passwordStrength = $derived(calculatePasswordStrength(newPassword));
   let passwordsMatch = $derived(

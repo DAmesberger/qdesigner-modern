@@ -15,7 +15,7 @@
 
   let { trial = $bindable(), index, onRemove }: Props = $props();
 
-  const stimulusKind = $derived(() => {
+  const stimulusKind = $derived.by(() => {
     if (typeof trial.stimulus === 'object' && trial.stimulus?.kind) {
       return trial.stimulus.kind;
     }
@@ -86,19 +86,19 @@
   // OR frames; a frame count removes the stimulus on the exact vsync boundary
   // (drift-free brief-exposure / masking / RSVP). Prefer the session's qualified
   // mean frame interval; fall back to a 60Hz assumption when unqualified.
-  const frameIntervalMs = $derived(() => {
+  const frameIntervalMs = $derived.by(() => {
     const measured = TimingGatekeeper.shared().getMeanFrameIntervalMs();
     return measured > 0 ? measured : 1000 / 60;
   });
-  const refreshHz = $derived(() => Math.round(1000 / frameIntervalMs()));
+  const refreshHz = $derived(Math.round(1000 / frameIntervalMs));
 
   function conversionHint(ms?: number, frames?: number): string {
-    const hz = refreshHz();
+    const hz = refreshHz;
     if (frames && frames > 0) {
-      return `≈ ${Math.round(durationMsForFrames(frames, frameIntervalMs()))} ms at ${hz} Hz`;
+      return `≈ ${Math.round(durationMsForFrames(frames, frameIntervalMs))} ms at ${hz} Hz`;
     }
     if (ms && ms > 0) {
-      return `≈ ${framesForDurationMs(ms, frameIntervalMs())} frames at ${hz} Hz`;
+      return `≈ ${framesForDurationMs(ms, frameIntervalMs)} frames at ${hz} Hz`;
     }
     return '';
   }
@@ -149,7 +149,7 @@
 
     <div class="form-group">
       <span class="label-text">Kind</span>
-      <select class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6" value={stimulusKind()} onchange={(e) => setStimulusKind((e.currentTarget as HTMLSelectElement).value as ReactionStimulusConfig['kind'])}>
+      <select class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6" value={stimulusKind} onchange={(e) => setStimulusKind((e.currentTarget as HTMLSelectElement).value as ReactionStimulusConfig['kind'])}>
         <option value="text">Text</option>
         <option value="shape">Shape</option>
         <option value="image">Image</option>

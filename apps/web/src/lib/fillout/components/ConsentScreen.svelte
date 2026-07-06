@@ -44,7 +44,7 @@
   });
 
   // Check if all required fields are complete
-  const canAccept = $derived(() => {
+  const canAccept = $derived.by(() => {
     // Check required checkboxes
     const requiredCheckboxes = checkboxes.filter((cb) => cb.required);
     const allChecked = requiredCheckboxes.every((cb) => checkboxStates[cb.id]);
@@ -56,7 +56,7 @@
   });
 
   function handleAccept() {
-    if (!canAccept()) {
+    if (!canAccept) {
       showError = true;
       return;
     }
@@ -153,7 +153,7 @@
           variant="default"
           size="lg"
           onclick={handleAccept}
-          disabled={!canAccept()}
+          disabled={!canAccept}
           data-testid="fillout-consent-accept-button"
         >
           I Agree
