@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { beforeNavigate } from '$app/navigation';
   import { designerStore } from '$lib/stores/designer.svelte';
   import { autoSave } from '$lib/services/autoSave.svelte';
   import { ws } from '$lib/services/ws';
@@ -40,6 +41,51 @@
   $effect(() => {
     presenceUsers = presence?.otherUsers ?? [];
   });
+
+  // Debounced save-on-edit (F-13). The 30s autoSave interval is only a backstop;
+  // this narrows the unsaved window to ~2.5s after the last edit so a quick reload
+  // doesn't discard freshly added questions. Reading `questionnaire` (whose
+  // reference is replaced by commit() on every edit) reschedules the timer on each
+  // edit; the false→true `isDirty` flip arms it. saveQuestionnaire() guards re-entry
+  // via isLoading, and resetTracking() stops the interval from immediately re-saving.
+  const SAVE_DEBOUNCE_MS = 2500;
+  $effect(() => {
+    const dirty = designerStore.isDirty;
+    void designerStore.questionnaire; // re-run (reschedule) on each edit
+    if (!dirty) return;
+
+    const timer = setTimeout(() => {
+      if (designerStore.isDirty && !designerStore.isSaving) {
+        void designerStore.saveQuestionnaire().then((ok) => {
+          if (ok) autoSave.resetTracking();
+        });
+      }
+    }, SAVE_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  });
+
+  // Flush on in-app navigation (F-13). beforeNavigate fires synchronously and does
+  // not await async callbacks, but the save is a fetch already in flight by the time
+  // the component tears down, so a best-effort fire persists the pending edits.
+  beforeNavigate(() => {
+    if (designerStore.isDirty && !designerStore.isSaving) {
+      void designerStore.saveQuestionnaire().then((ok) => {
+        if (ok) autoSave.resetTracking();
+      });
+    }
+  });
+
+  // Flush on tab close / hard reload (F-13). beforeunload cannot await, so we fire a
+  // best-effort save AND trigger the browser's native unsaved-changes prompt; the
+  // debounce above keeps the unsaved window small when the user proceeds anyway.
+  function handleBeforeUnload(event: BeforeUnloadEvent) {
+    if (designerStore.isDirty) {
+      void designerStore.saveQuestionnaire();
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
 
   function connectPresence() {
     const questionnaireId = designerStore.questionnaire?.id;
@@ -255,10 +301,13 @@
     };
     window.addEventListener('open-script-editor', handleOpenScriptEditor);
     scriptEditorCleanup = () => window.removeEventListener('open-script-editor', handleOpenScriptEditor);
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
   });
 
   onDestroy(() => {
     autoSave.stop();
+    window.removeEventListener('beforeunload', handleBeforeUnload);
     disconnectPresence();
     designerStore.setCollab(null);
     collabCleanup?.();
