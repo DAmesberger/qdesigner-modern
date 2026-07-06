@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import type { Question } from '$lib/shared';
   import {
     optionTranslationKey,

@@ -1,0 +1,904 @@
+import { tick } from 'svelte';
+import { goto } from '$app/navigation';
+import type {
+  FormQuestionHost,
+  FormHostPresentation,
+  FormTimerState,
+} from '$lib/runtime/core/FormQuestionHost';
+import { buildQuestionAnnouncement } from '$lib/fillout/a11y/announce';
+import type { ResumeState } from '$lib/runtime/core/ResumeState';
+import type {
+  ConsentData,
+  FilloutDefinition,
+  FilloutQuestionnairePayload,
+} from '$lib/fillout/types';
+import type { Question, QuestionnaireSession } from '$lib/shared';
+import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
+import { FilloutContentCache } from '$lib/fillout/services/FilloutContentCache';
+import { FilloutUploadSync, type SyncResult } from '$lib/fillout/services/FilloutUploadSync';
+import { QuotaService } from '$lib/fillout/services/QuotaService';
+import { FraudDetectionService } from '$lib/fillout/services/FraudDetectionService';
+import { api } from '$lib/services/api';
+import { db, filloutDefinitionKey, type FilloutServerVariable } from '$lib/services/db/indexeddb';
+import { collectServerVariables, declHash } from '@qdesigner/questionnaire-core';
+import type { ServerVariableSnapshot } from '$lib/runtime/core/QuestionnaireRuntime';
+import { ensureModulesRegistered } from '$lib/modules/register-all';
+import { TimingGatekeeper } from '$lib/runtime/timing';
+import type { GatekeeperResult } from '$lib/runtime/timing';
+import { FilloutRuntime, type FilloutRuntimeConfig } from '$lib/fillout/runtime/FilloutRuntime';
+import type { Session } from '$lib/api/generated/types.gen';
+import type { ResumeSnapshot } from '$lib/fillout/runtime/responseMapping';
+
+/**
+ * The subset of the fillout entry page's `load` return the controller reads. Kept
+ * as a standalone interface (rather than the route's generated `PageData`) so this
+ * headless module carries no dependency on the route file — the `.svelte` view
+ * constructs it with the real `PageData`, which is structurally compatible.
+ */
+export interface FilloutPageData {
+  questionnaire: FilloutQuestionnairePayload;
+  existingSession: Session | null;
+  code: string;
+  participantId: string | null;
+  urlParams: Record<string, string>;
+  preview: boolean;
+  isOffline: boolean;
+  pinnedFallback: boolean;
+  resumeSnapshot: ResumeSnapshot | null;
+  resumeCompleted: boolean;
+  resumeFromDevice: boolean;
+  resumeState?: ResumeState;
+  resumeStateSessionId: string | null;
+  resumeSessionId: string | null;
+}
+
+/**
+ * Locale-dependent runtime inputs supplied by the view at start/resume time. Locale
+ * selection lives in the `.svelte` view (ADR 0022 content translation), so the
+ * localized `definition`, `rawDefinition`, `questionList`, and the DOM `canvas`
+ * cross the boundary as a lazily-read accessor — captured when the runtime is built.
+ */
+export interface FilloutRuntimeInputs {
+  canvas: HTMLCanvasElement | undefined;
+  /** Definition with prompts / labels / titles localized for the active locale. */
+  definition: FilloutDefinition;
+  /** The un-localized definition (server-variable snapshots key off this). */
+  rawDefinition: FilloutDefinition;
+  questionList: Question[];
+  hasReactionQuestion: boolean;
+}
+
+/**
+ * Injectable service bag. Defaults are the real implementations; tests swap them to
+ * exercise the lifecycle headlessly. `offlineSession`, `fraud`, `quota`, `content`
+ * are STATIC-method classes, so the bag carries the class references (not instances);
+ * `makeSyncEngine` / `makeRuntime` / `gatekeeper` are factories over the instance/shared
+ * services.
+ */
+export interface FilloutServiceBag {
+  offlineSession: typeof OfflineSessionService;
+  fraud: typeof FraudDetectionService;
+  quota: typeof QuotaService;
+  content: typeof FilloutContentCache;
+  makeSyncEngine: (opts: {
+    onSyncStart?: () => void;
+    onSyncComplete?: (result: SyncResult) => void;
+  }) => FilloutUploadSync;
+  makeRuntime: (config: FilloutRuntimeConfig) => FilloutRuntime;
+  gatekeeper: () => TimingGatekeeper;
+}
+
+function defaultServiceBag(): FilloutServiceBag {
+  return {
+    offlineSession: OfflineSessionService,
+    fraud: FraudDetectionService,
+    quota: QuotaService,
+    content: FilloutContentCache,
+    makeSyncEngine: (opts) => new FilloutUploadSync(opts),
+    makeRuntime: (config) => new FilloutRuntime(config),
+    gatekeeper: () => TimingGatekeeper.shared(),
+  };
+}
+
+/** 30-day default staleness window when a declaration omits `server.staleAfterMs`. */
+const SERVER_VAR_DEFAULT_STALE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Headless controller for the `(fillout)/q/[code]` entry page (F040). Owns the
+ * service wiring (offline session, upload sync, quotas, fraud, timing gatekeeper,
+ * runtime) and the screen state machine, leaving the `.svelte` file a thin view that
+ * renders screens and forwards events. Being a `.svelte.ts` runes module, its
+ * `$state` fields are reactive when read from the component; computed values are
+ * exposed as getters over that state (the designer-store idiom). Strictly
+ * behavior-preserving code motion from the former 900-line component.
+ */
+export class FilloutPageController {
+  // --- Screen state machine ---------------------------------------------------
+  screen = $state<'welcome' | 'consent' | 'runtime' | 'complete' | 'over-quota'>('welcome');
+  overQuotaMessage = $state('');
+  loading = $state(false);
+  loadingMessage = $state('Loading questionnaire...');
+  loadingProgress = $state(0);
+  error = $state<string | null>(null);
+
+  // --- Session state ----------------------------------------------------------
+  // `session` spans three assignment shapes across create / resume / offline paths
+  // (camelCase SessionData, snake_case Session DTO, a locally-built offline stub), so
+  // it stays loosely typed.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  session = $state<any>(null);
+  completedSession = $state<QuestionnaireSession | undefined>(undefined);
+  conditionGroupCounts = $state<number[] | undefined>(undefined);
+  // E-FLOW-6: server-allocated 0-based participant index + authoritative arm assignment.
+  participantNumber = $state<number | undefined>(undefined);
+  serverAssignment = $state<{ condition: string; conditionIndex: number } | undefined>(undefined);
+  // Fraud prevention state
+  fraudFingerprint = $state<string | undefined>(undefined);
+  // E-FLOW-7: participant's selected interlocking quota cell key, computed at entry and
+  // pinned to metadata + exposed as the `_quotaCell` flow variable. Non-reactive.
+  quotaCellKey: string | null = null;
+
+  // --- Offline / sync state ---------------------------------------------------
+  isOffline = $state(false);
+  syncStatus = $state<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  savedLocally = $state(false);
+
+  // Resume state (E-OFF-1 / E-FLOW-3, FIX-F12).
+  resumeNotice = $state<string | null>(null);
+  pinnedFallbackDismissed = $state(false);
+  // True save-and-continue snapshot: mutable so a fresh-session create (or "Start over")
+  // can drop it — it must only ever be applied to the SAME session it was captured on.
+  activeResumeState = $state<ResumeState | undefined>(undefined);
+
+  // --- Timing qualification (Slice 3.4) --------------------------------------
+  qualification = $state<GatekeeperResult | null>(null);
+  bannerDismissed = $state(false);
+
+  // --- HTML-overlay form rendering (ADR 0018) --------------------------------
+  activePresentation = $state<FormHostPresentation | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- captured value spans every module answer shape
+  currentValue = $state<any>(undefined);
+  hasAnswered = $state(false);
+  timerState = $state<FormTimerState | null>(null);
+  // A11y (F094/F098): persistent live-region text.
+  liveAnnouncement = $state('');
+
+  // --- Shared-device "End session / clear this device" (F005) ----------------
+  clearConfirmOpen = $state(false);
+  clearUnsyncedCount = $state(0);
+  clearing = $state(false);
+  clearDone = $state(false);
+
+  // --- Non-reactive service handles ------------------------------------------
+  private runtime: FilloutRuntime | null = null;
+  private syncEngine: FilloutUploadSync | null = null;
+  private audioUnlockContext: AudioContext | null = null;
+  private lastPresentedItemId: string | null = null;
+  private readonly services: FilloutServiceBag;
+
+  /**
+   * View-provided accessor for the locale-dependent runtime inputs + the DOM canvas.
+   * Read lazily (at runtime-construction time) so it reflects the participant's latest
+   * locale pick and the freshly-bound canvas. Must be set before start/resume.
+   */
+  getRuntimeInputs: (() => FilloutRuntimeInputs) | null = null;
+
+  /**
+   * View-provided hook fired when a NEW form item is presented (item id changed), used
+   * by the view to move keyboard focus to the freshly-mounted question region. Kept out
+   * of the controller because it is a DOM concern (tick + element focus).
+   */
+  presentFocusHook: (() => void) | null = null;
+
+  constructor(
+    private readonly data: FilloutPageData,
+    services: Partial<FilloutServiceBag> = {}
+  ) {
+    this.services = { ...defaultServiceBag(), ...services };
+    this.isOffline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
+    this.activeResumeState = data.resumeState ?? undefined;
+  }
+
+  // --- Derived / presentational reads ----------------------------------------
+
+  /**
+   * Flatten the completed session's variable snapshot into the plain record the
+   * CompletionScreen / E-FEEDBACK-3 report page consume.
+   */
+  get completedVariables(): Record<string, unknown> {
+    return Object.fromEntries(
+      (this.completedSession?.variables ?? []).map((v) => [v.variableId, v.value])
+    );
+  }
+
+  get activeItem() {
+    return this.activePresentation
+      ? {
+          ...this.activePresentation.item,
+          category: this.activePresentation.category,
+          config: this.activePresentation.config,
+        }
+      : null;
+  }
+
+  get canAdvance(): boolean {
+    return (
+      !this.activePresentation ||
+      !this.activePresentation.interactive ||
+      !this.activePresentation.required ||
+      this.hasAnswered
+    );
+  }
+
+  // --- FormQuestionHost bridge (runtime → overlay state) ---------------------
+  readonly formHost: FormQuestionHost = {
+    present: (presentation) => {
+      this.currentValue = presentation.initialValue;
+      this.hasAnswered =
+        presentation.initialValue !== undefined && presentation.initialValue !== null;
+      this.activePresentation = presentation;
+      // Fire the view's focus hook only when the item actually changed — re-presents
+      // (e.g. validation re-render) must not steal focus from a module's inner input.
+      const changed = presentation.item.id !== this.lastPresentedItemId;
+      this.lastPresentedItemId = presentation.item.id;
+      if (changed) this.presentFocusHook?.();
+    },
+    clear: () => {
+      this.activePresentation = null;
+      this.currentValue = undefined;
+      this.hasAnswered = false;
+      this.timerState = null;
+    },
+    updateTimer: (state) => {
+      this.timerState = state;
+    },
+    getCurrentValue: () => this.currentValue,
+  };
+
+  handleOverlayResponse(value: unknown) {
+    this.currentValue = value;
+    this.hasAnswered =
+      value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0);
+  }
+
+  submitOverlayAnswer() {
+    const presentation = this.activePresentation;
+    if (!presentation) return;
+    if (presentation.interactive && presentation.required && !this.hasAnswered) return;
+    presentation.onSubmit(this.currentValue);
+  }
+
+  // --- Lifecycle wiring -------------------------------------------------------
+
+  /** Track online/offline transitions (the view forwards window events here). */
+  setOffline(offline: boolean) {
+    this.isOffline = offline;
+  }
+
+  /** Construct + start the upload-sync engine (call once, on mount). */
+  startSyncEngine(): void {
+    this.syncEngine = this.services.makeSyncEngine({
+      onSyncStart: () => {
+        this.syncStatus = 'syncing';
+      },
+      onSyncComplete: (result) => {
+        this.syncStatus = result.errors.length > 0 ? 'error' : 'synced';
+        // Reset after a bit
+        setTimeout(() => {
+          this.syncStatus = 'idle';
+        }, 3000);
+      },
+    });
+    this.syncEngine.start();
+  }
+
+  /**
+   * Bootstrap from the load data (call once, on mount). Routes completed / resumed /
+   * in-progress sessions straight into the runtime, else lands on the welcome screen.
+   */
+  async initFromLoad(): Promise<void> {
+    const data = this.data;
+    // Resume short-circuit (E-OFF-1): a completed session routes straight to the
+    // completion screen instead of re-running the questionnaire.
+    if (data.resumeCompleted) {
+      if (data.existingSession) {
+        this.session = data.existingSession;
+        sessionStorage.setItem('qd_api_session_id', this.session.id);
+      }
+      this.screen = 'complete';
+      return;
+    }
+
+    if (data.existingSession) {
+      this.session = data.existingSession;
+      sessionStorage.setItem('qd_api_session_id', this.session.id);
+      if (this.session.status === 'in_progress' || this.session.status === 'active') {
+        this.screen = 'runtime';
+        await this.initializeRuntime();
+      }
+    } else if (data.resumeSnapshot && data.resumeSessionId) {
+      // Offline / anonymous same-device resume (E-OFF-1): continue the SAME session id.
+      this.session = {
+        id: data.resumeSessionId,
+        questionnaire_id: data.questionnaire.id,
+        status: 'active',
+      };
+      sessionStorage.setItem('qd_api_session_id', this.session.id);
+      this.screen = 'runtime';
+      await this.initializeRuntime();
+    } else if (data.questionnaire.definition.settings?.requireConsent === false) {
+      this.screen = 'welcome';
+    }
+  }
+
+  async handleStart(): Promise<void> {
+    // "Start" is a user gesture — unlock audio here so the no-consent path also
+    // satisfies the autoplay policy before any reaction trial (CONTRACT-AUDIO).
+    this.ensureAudioUnlocked();
+    if (this.data.questionnaire.definition.settings?.requireConsent) {
+      this.screen = 'consent';
+    } else {
+      await this.createSessionAndStart();
+    }
+  }
+
+  /**
+   * "Start over" from the welcome-screen resume choice (E-FLOW-3, FIX-F12): discard the
+   * saved position (both the in-memory resumeFrom and the persisted ResumeState), then
+   * run the normal start flow.
+   */
+  async handleStartOver(): Promise<void> {
+    this.activeResumeState = undefined;
+    if (this.data.resumeStateSessionId) {
+      await this.services.offlineSession
+        .clearResumeState(this.data.resumeStateSessionId)
+        .catch(() => {});
+    }
+    await this.handleStart();
+  }
+
+  async handleConsent(consentData: ConsentData): Promise<void> {
+    await this.createSessionAndStart(consentData);
+  }
+
+  handleDeclineConsent(): void {
+    goto('/');
+  }
+
+  async createSessionAndStart(consentData?: ConsentData): Promise<void> {
+    const data = this.data;
+    try {
+      this.loading = true;
+
+      // Fraud prevention checks before session creation. The fingerprint is generated here
+      // and sent to the server AT create time (below); server-side fingerprint dedup is
+      // reported back via the create response `duplicate` flag rather than a separate
+      // read-probe that RLS hides from anonymous callers (slice 2.5).
+      const fpSettings = data.questionnaire.definition.settings?.fraudPrevention;
+      if (fpSettings && navigator.onLine) {
+        const fraudResult = await this.services.fraud.checkAll(data.questionnaire.id, fpSettings);
+        this.fraudFingerprint = fraudResult.fingerprint;
+
+        // Cookie/behavior fraud (evaluated locally) can terminate before we create a session.
+        if (!fraudResult.passed) {
+          if (fpSettings.fraudAction === 'terminate') {
+            this.error =
+              fpSettings.fraudMessage || 'This survey is not available for your submission.';
+            this.loading = false;
+            return;
+          } else if (fpSettings.fraudAction === 'redirect' && fpSettings.fraudRedirectUrl) {
+            window.location.href = fpSettings.fraudRedirectUrl;
+            return;
+          }
+          // 'flag' action: continue but store the flags in session metadata later
+        }
+      }
+
+      // Quota gate — runs BEFORE session creation so an over-quota respondent
+      // never leaves an orphan session, and so the (un)verified state can be
+      // recorded into the create metadata. Evaluated even offline: checkQuotas
+      // falls back to the last cached snapshot. When neither live nor cached data
+      // exists it returns `unchecked`, and we record `quotaUnchecked` on the session.
+      let quotaUnchecked = false;
+      this.quotaCellKey = null;
+      const quotaGroups = data.questionnaire.definition?.settings?.quotas;
+      if (quotaGroups && quotaGroups.length > 0) {
+        const urlParams = new Map(Object.entries(data.urlParams ?? {}));
+        let quotaResult = await this.services.quota.checkQuotas(
+          data.questionnaire.id,
+          quotaGroups,
+          urlParams
+        );
+        // A swallowed fetch failure surfaces as `unchecked`; while online, retry once.
+        if (quotaResult.unchecked && navigator.onLine) {
+          quotaResult = await this.services.quota.checkQuotas(
+            data.questionnaire.id,
+            quotaGroups,
+            urlParams
+          );
+        }
+        if (!quotaResult.allowed) {
+          if (quotaResult.action === 'redirect' && quotaResult.redirectUrl) {
+            window.location.href = quotaResult.redirectUrl;
+            return;
+          }
+          this.overQuotaMessage =
+            quotaResult.message || 'This study has reached its target number of participants.';
+          this.screen = 'over-quota';
+          this.loading = false;
+          return;
+        }
+        quotaUnchecked = quotaResult.unchecked === true;
+
+        // E-FLOW-7: interlocking cross-quota cells. Select the participant's cell from
+        // the values known at entry (URL params); if that cell is full, block. Otherwise
+        // pin the selected cell key so the server can atomically CLAIM it at completion.
+        const cellResult = await this.services.quota.checkCells(
+          data.questionnaire.id,
+          quotaGroups,
+          urlParams
+        );
+        if (!cellResult.allowed) {
+          if (cellResult.action === 'redirect' && cellResult.redirectUrl) {
+            window.location.href = cellResult.redirectUrl;
+            return;
+          }
+          this.overQuotaMessage =
+            cellResult.message || 'This study has reached its target for your group.';
+          this.screen = 'over-quota';
+          this.loading = false;
+          return;
+        }
+        this.quotaCellKey = cellResult.cellKey;
+      }
+
+      if (navigator.onLine) {
+        if (data.existingSession) {
+          // Resume the in-flight server session addressed by ?sid= (already non-completed).
+          this.session = data.existingSession;
+        } else {
+          // Create a fresh server session. The version pin + fingerprint + consent/urlParams
+          // all go in the CREATE request so the server can record the exact version and dedup
+          // by fingerprint atomically.
+          const metadata: Record<string, unknown> = {
+            device_info: this.services.offlineSession.getDeviceInfo(),
+          };
+          if (consentData) {
+            metadata.consent = { ...consentData, timestamp: new Date().toISOString() };
+          }
+          if (data.urlParams && Object.keys(data.urlParams).length > 0) {
+            metadata.urlParams = data.urlParams;
+          }
+          if (this.fraudFingerprint) {
+            metadata.fingerprint = this.fraudFingerprint;
+          }
+          if (quotaUnchecked) {
+            metadata.quotaUnchecked = true;
+          }
+          if (this.quotaCellKey) {
+            // E-FLOW-7: pin the interlocking cell so the server atomically claims it.
+            metadata.quotaCell = { key: this.quotaCellKey };
+          }
+
+          const created = await api.sessions.create({
+            questionnaireId: data.questionnaire.id,
+            participantId: data.participantId || undefined,
+            versionMajor: data.questionnaire.versionMajor ?? 1,
+            versionMinor: data.questionnaire.versionMinor ?? 0,
+            versionPatch: data.questionnaire.versionPatch ?? 0,
+            metadata,
+          });
+          this.session = created;
+          // E-FLOW-6: seed counterbalancing + between-subjects assignment from the server's
+          // atomic allocation (returned by create).
+          this.participantNumber = created.participantNumber;
+          this.serverAssignment = created.assignedCondition
+            ? {
+                condition: created.assignedCondition,
+                conditionIndex: created.assignedConditionIndex ?? 0,
+              }
+            : undefined;
+          // A brand-new session id — a resumeFrom captured against a prior local session
+          // must NOT be applied here (it would restore an unrelated cursor/variables).
+          this.activeResumeState = undefined;
+
+          // Server-side fingerprint dedup (slice 2.5): react to the typed `duplicate`
+          // flag api.sessions.create() surfaces from the create response.
+          if (fpSettings?.preventDuplicates && created.duplicate === true) {
+            if (fpSettings.fraudAction === 'terminate') {
+              this.error =
+                fpSettings.fraudMessage || 'This survey is not available for your submission.';
+              this.loading = false;
+              return;
+            } else if (fpSettings.fraudAction === 'redirect' && fpSettings.fraudRedirectUrl) {
+              window.location.href = fpSettings.fraudRedirectUrl;
+              return;
+            }
+            // 'flag' action: continue; the server already recorded the fingerprint + flag.
+          }
+        }
+
+        // Persist a durable LOCAL pin row for the online session so version GC /
+        // media eviction can see the version it runs against, and so it can be
+        // resumed offline. Fire-and-forget; failure only loses the local pin.
+        if (this.session?.id) {
+          await this.services.offlineSession
+            .recordServerSession({
+              id: this.session.id,
+              questionnaireId: data.questionnaire.id,
+              versionMajor: data.questionnaire.versionMajor ?? 1,
+              versionMinor: data.questionnaire.versionMinor ?? 0,
+              versionPatch: data.questionnaire.versionPatch ?? 0,
+              participantId: data.participantId || undefined,
+            })
+            .catch(() => {});
+        }
+      } else {
+        // Offline: create session locally, pinning the version it started against.
+        const offlineMetadata: Record<string, unknown> = {};
+        if (consentData) {
+          offlineMetadata.consent = { ...consentData, timestamp: new Date().toISOString() };
+        }
+        if (quotaUnchecked) {
+          offlineMetadata.quotaUnchecked = true;
+        }
+        if (this.quotaCellKey) {
+          offlineMetadata.quotaCell = { key: this.quotaCellKey };
+        }
+        const offlineSession = await this.services.offlineSession.createSession(
+          data.questionnaire.id,
+          data.questionnaire.versionMajor ?? 1,
+          data.questionnaire.versionMinor ?? 0,
+          data.questionnaire.versionPatch ?? 0,
+          data.participantId || undefined,
+          Object.keys(offlineMetadata).length > 0 ? offlineMetadata : undefined,
+          this.services.offlineSession.getDeviceInfo()
+        );
+        this.session = {
+          id: offlineSession.id,
+          questionnaire_id: offlineSession.questionnaireId,
+          status: 'active',
+        };
+        // Brand-new offline session — drop any prior-session resumeFrom (see above).
+        this.activeResumeState = undefined;
+      }
+
+      sessionStorage.setItem('qd_api_session_id', this.session.id);
+
+      this.screen = 'runtime';
+      this.loading = false;
+      await tick();
+      await this.initializeRuntime();
+    } catch (err) {
+      console.error('Failed to create session:', err);
+      this.error = err instanceof Error ? err.message : 'Failed to start questionnaire';
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  /**
+   * Build the injected SERVER-COMPUTED VARIABLE snapshot map from the version-pinned
+   * aggregates cached by +page.ts (server-computed-variable / E-FEEDBACK-3). ZERO
+   * network on this path — the read side.
+   */
+  private async buildServerVariableSnapshots(
+    definition: FilloutDefinition,
+    questionnaireId: string,
+    version: { major: number; minor: number; patch: number }
+  ): Promise<Record<string, ServerVariableSnapshot>> {
+    const declared = collectServerVariables({ variables: definition.variables ?? [] });
+    if (declared.length === 0) return {};
+
+    const exactKey = filloutDefinitionKey(
+      questionnaireId,
+      version.major,
+      version.minor,
+      version.patch
+    );
+    let exactById = new Map<string, FilloutServerVariable>();
+    try {
+      const exactRows = await db.filloutServerVariables
+        .where('definitionKey')
+        .equals(exactKey)
+        .toArray();
+      exactById = new Map(exactRows.map((r) => [r.variableId, r]));
+    } catch {
+      return {};
+    }
+
+    let crossVersion: FilloutServerVariable[] | null = null;
+    const now = Date.now();
+    const out: Record<string, ServerVariableSnapshot> = {};
+    for (const v of declared) {
+      if (!v.server) continue;
+      let row = exactById.get(v.id);
+      if (!row) {
+        // Cross-version fallback: only a byte-identical declaration is safe to reuse.
+        const localHash = declHash(v.server);
+        if (!crossVersion) {
+          try {
+            crossVersion = await db.filloutServerVariables
+              .where('questionnaireId')
+              .equals(questionnaireId)
+              .toArray();
+          } catch {
+            crossVersion = [];
+          }
+        }
+        row = crossVersion.find(
+          (r) =>
+            r.definitionKey !== exactKey &&
+            r.declHash === localHash &&
+            (r.variableId === v.id || r.name === v.name)
+        );
+      }
+      if (!row) continue;
+
+      const staleAfterMs =
+        typeof v.server.staleAfterMs === 'number'
+          ? v.server.staleAfterMs
+          : SERVER_VAR_DEFAULT_STALE_MS;
+      const computedMs = Date.parse(row.computedAt);
+      out[v.id] = {
+        n: row.n,
+        stats: row.stats,
+        computedAt: row.computedAt,
+        stale: Number.isFinite(computedMs) ? now - computedMs > staleAfterMs : false,
+      };
+    }
+    return out;
+  }
+
+  async initializeRuntime(): Promise<void> {
+    try {
+      this.loading = true;
+
+      // Modules must be registered before the runtime can resolve question types.
+      // Awaiting the shared, idempotent promise here guarantees a populated registry
+      // for both the resumed path and createSessionAndStart. Kept INSIDE the try so a
+      // registration rejection surfaces the error screen instead of a blank runtime.
+      await ensureModulesRegistered();
+
+      const inputs = this.getRuntimeInputs?.();
+      if (!inputs) {
+        throw new Error('Runtime inputs are not available');
+      }
+
+      // Kick device qualification for the timing banner (no-op unless this
+      // questionnaire contains a reaction paradigm). Shared + cached.
+      this.beginTimingQualification(inputs.hasReactionQuestion);
+
+      let canvas = inputs.canvas;
+      if (!canvas) {
+        await tick();
+        canvas = this.getRuntimeInputs?.()?.canvas;
+        if (!canvas) {
+          throw new Error('Runtime canvas is not ready');
+        }
+      }
+
+      // No page-level WebGLRenderer (CONTRACT-LAZY, Slice 4.6): the runtime owns the
+      // single renderer and creates it lazily — only if a WebGL item is reached.
+      this.loadingMessage = 'Loading questionnaire...';
+
+      // Fetch condition counts (online only)
+      if (navigator.onLine) {
+        try {
+          const counts = await api.questionnaires.conditionCounts(this.data.questionnaire.id);
+          if (counts) {
+            this.conditionGroupCounts = Object.values(counts).map(Number);
+          }
+        } catch {
+          // Non-critical
+        }
+      }
+
+      // Server-computed variables (server-computed-variable / E-FEEDBACK-3): one Dexie
+      // read of the version-pinned aggregates, materialized OFFLINE into the one
+      // VariableEngine at construction so flow / piping / quotas / feedback resolve
+      // them with zero fetch on the read path.
+      const serverVariables = await this.buildServerVariableSnapshots(
+        inputs.rawDefinition,
+        this.data.questionnaire.id,
+        {
+          major: this.data.questionnaire.versionMajor ?? 1,
+          minor: this.data.questionnaire.versionMinor ?? 0,
+          patch: this.data.questionnaire.versionPatch ?? 0,
+        }
+      );
+
+      this.runtime = this.services.makeRuntime({
+        canvas,
+        questionnaire: inputs.definition,
+        sessionId: this.session.id,
+        participantId: this.data.participantId || undefined,
+        participantNumber: this.participantNumber,
+        conditionGroupCounts: this.conditionGroupCounts,
+        serverAssignment: this.serverAssignment,
+        formHost: this.formHost,
+        enableOfflineSync: true,
+        serverVariables,
+        // Resumable sessions (E-OFF-1): rehydrate prior answers + variable state.
+        resumeSnapshot: this.data.resumeSnapshot ?? undefined,
+        resumeFromDevice: this.data.resumeFromDevice,
+        // True save-and-continue (E-FLOW-3, FIX-F12): restore the exact cursor / loop
+        // counters / variable context and jump straight to the captured page.
+        resumeFrom: this.activeResumeState ?? undefined,
+        onComplete: (completed) => {
+          void this.handleComplete(completed);
+        },
+        onSessionUpdate: (progress) => {
+          if (this.loading) {
+            this.loadingProgress = progress;
+            this.loadingMessage = `Loading media resources... ${Math.round(progress * 2)}%`;
+          }
+        },
+        // A11y (F094/F098): announce every presented item — including WebGL reaction
+        // stimuli, which fire this before the category switch and never reach the overlay.
+        onQuestionPresented: (event) => {
+          this.liveAnnouncement = buildQuestionAnnouncement(event, inputs.questionList);
+        },
+      });
+
+      // E-FLOW-7: expose the interlocking quota cell + eligibility as flow variables.
+      this.runtime.setFlowVariable('_quotaCell', this.quotaCellKey ?? '');
+      this.runtime.setFlowVariable('_eligible', true);
+
+      this.loadingMessage = 'Starting questionnaire...';
+      await this.runtime.start();
+      this.loading = false;
+
+      // Resume toast (E-OFF-1): confirm we rehydrated at the right spot.
+      if (this.data.resumeSnapshot) {
+        const restored = this.data.resumeSnapshot.responses.length;
+        const total = inputs.questionList.length || restored;
+        this.resumeNotice = `Resuming where you left off (question ${Math.min(
+          restored + 1,
+          total
+        )} of ${total})`;
+        setTimeout(() => {
+          this.resumeNotice = null;
+        }, 6000);
+      }
+    } catch (err) {
+      console.error('Failed to initialize runtime:', err);
+      this.loading = false;
+
+      let errorMessage = err instanceof Error ? err.message : 'Failed to start questionnaire';
+      if (errorMessage.includes('Failed to preload')) {
+        errorMessage = `Unable to load required media files:\n${errorMessage}`;
+      }
+      this.error = errorMessage;
+    }
+  }
+
+  /**
+   * The runtime's completion flow: snapshot the completed session, transition to the
+   * completion screen, mark fraud-duplicate + offline session complete, trigger sync,
+   * and opportunistically GC now that a session finished.
+   */
+  async handleComplete(completed: QuestionnaireSession): Promise<void> {
+    this.completedSession = completed;
+    this.screen = 'complete';
+    this.savedLocally = true;
+
+    // Mark completed for fraud prevention duplicate detection
+    this.services.fraud.markCompleted(this.data.questionnaire.id);
+
+    // Mark offline session complete
+    await this.services.offlineSession.completeSession(this.session.id).catch(() => {});
+
+    // Trigger sync
+    this.syncEngine?.syncNow();
+
+    // Opportunistic GC now that a session finished. The just-completed session's
+    // definition + media stay protected until its records sync, so this only reclaims
+    // already-synced stale versions.
+    this.services.content.pruneDefinitions().catch(() => {});
+    this.services.content.enforceMediaQuota().catch(() => {});
+  }
+
+  private beginTimingQualification(hasReactionQuestion: boolean): void {
+    if (!hasReactionQuestion || this.qualification) return;
+    // Runs calibration once (shared + cached). The reaction engines resolve the same
+    // instance, so this does NOT double-calibrate — it just populates the banner grade
+    // in parallel with runtime startup.
+    this.services
+      .gatekeeper()
+      .qualify()
+      .then((result) => {
+        this.qualification = result;
+      })
+      .catch(() => {
+        // Non-critical: absence of a grade just means no banner.
+      });
+  }
+
+  /**
+   * Shared Web Audio unlock. Created + resumed on a user gesture (welcome start /
+   * consent accept) so the browser's document-scoped autoplay policy permits the
+   * reaction engine's own AudioContext.resume() when it primes audio pre-trial.
+   */
+  ensureAudioUnlocked(): void {
+    try {
+      const Ctor =
+        typeof AudioContext !== 'undefined'
+          ? AudioContext
+          : // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkit-prefixed fallback
+            (window as any).webkitAudioContext;
+      if (!Ctor) return;
+      if (!this.audioUnlockContext) {
+        this.audioUnlockContext = new Ctor();
+      }
+      if (this.audioUnlockContext && this.audioUnlockContext.state === 'suspended') {
+        void this.audioUnlockContext.resume().catch(() => {});
+      }
+    } catch {
+      // Best-effort: audio unlock never blocks participation.
+    }
+  }
+
+  handleKeyDown(event: KeyboardEvent): void {
+    this.runtime?.handleKeyPress(event);
+  }
+
+  handleResize(): void {
+    // Delegate to the runtime's single owned renderer (Slice 4.6). No-op until that
+    // renderer is lazily created — form-only questionnaires never allocate one.
+    this.runtime?.resize(window.innerWidth, window.innerHeight);
+  }
+
+  // --- Shared-device "End session / clear this device" (F005) ----------------
+
+  private async countUnsyncedFilloutRows(): Promise<number> {
+    try {
+      const [r, e, v] = await Promise.all([
+        db.filloutResponses.where('synced').equals(0).count(),
+        db.filloutEvents.where('synced').equals(0).count(),
+        db.filloutVariables.where('synced').equals(0).count(),
+      ]);
+      return r + e + v;
+    } catch {
+      return 0;
+    }
+  }
+
+  async requestClearDevice(): Promise<void> {
+    this.clearUnsyncedCount = await this.countUnsyncedFilloutRows();
+    this.clearConfirmOpen = true;
+  }
+
+  async confirmClearDevice(): Promise<void> {
+    this.clearing = true;
+    try {
+      await db.clearAllFilloutData();
+      // Drop the API session pointer so a stale id can't be reused on this device.
+      try {
+        sessionStorage.removeItem('qd_api_session_id');
+      } catch {
+        /* no-op */
+      }
+      this.clearDone = true;
+      this.clearConfirmOpen = false;
+    } catch (err) {
+      console.error('Failed to clear device data:', err);
+    } finally {
+      this.clearing = false;
+    }
+  }
+
+  cancelClearDevice(): void {
+    this.clearConfirmOpen = false;
+  }
+
+  /** Tear down runtime, sync engine, and the audio unlock context (call on unmount). */
+  dispose(): void {
+    this.runtime?.dispose();
+    this.syncEngine?.stop();
+    if (this.audioUnlockContext) {
+      void this.audioUnlockContext.close().catch(() => {});
+      this.audioUnlockContext = null;
+    }
+  }
+}

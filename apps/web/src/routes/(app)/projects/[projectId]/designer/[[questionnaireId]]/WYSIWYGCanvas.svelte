@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import QuestionVisualRenderer from '$lib/wysiwyg/QuestionVisualRenderer.svelte';
   import QuestionRenderer from '$lib/components/questions/QuestionRenderer.svelte';
   import LiveTestRunner from '$lib/wysiwyg/LiveTestRunner.svelte';

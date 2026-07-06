@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import type { ExperimentalCondition, ExperimentalDesignConfig } from '$lib/shared';
   import { Plus, Trash2 } from 'lucide-svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';

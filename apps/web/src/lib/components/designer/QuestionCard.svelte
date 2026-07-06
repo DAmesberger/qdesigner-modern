@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { ChevronUp, ChevronDown, Pencil, Copy, Trash2 } from 'lucide-svelte';
 

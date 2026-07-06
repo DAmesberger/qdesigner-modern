@@ -1,7 +1,8 @@
 <script lang="ts">
   import ResponseMappingEditor from './ResponseMappingEditor.svelte';
   import PhaseTimelineEditor from './PhaseTimelineEditor.svelte';
-  import type { ReactionStudyTrialTemplate } from '../model/reaction-schema';
+  import StimulusKindEditor from './StimulusKindEditor.svelte';
+  import type { ReactionStudyTrialTemplate } from '$lib/modules/questions/reaction-time/model/reaction-schema';
   import type { ReactionStimulusConfig } from '$lib/runtime/reaction';
   import { framesForDurationMs, durationMsForFrames } from '$lib/runtime/reaction';
   import { TimingGatekeeper } from '$lib/runtime/timing';
@@ -11,9 +12,19 @@
     trial: ReactionStudyTrialTemplate;
     index: number;
     onRemove: (index: number) => void;
+    /**
+     * Optional immutable-commit affordance (P6-T5). Fired after any field or
+     * stimulus mutation, alongside the `$bindable` trial reassignment, so a
+     * non-`bind:` consumer can commit the change.
+     */
+    onUpdate?: (trial: ReactionStudyTrialTemplate) => void;
   }
 
-  let { trial = $bindable(), index, onRemove }: Props = $props();
+  let { trial = $bindable(), index, onRemove, onUpdate }: Props = $props();
+
+  function emit() {
+    onUpdate?.(trial);
+  }
 
   const stimulusKind = $derived.by(() => {
     if (typeof trial.stimulus === 'object' && trial.stimulus?.kind) {
@@ -23,63 +34,9 @@
     return 'text';
   });
 
-  function setStimulusKind(kind: ReactionStimulusConfig['kind']) {
-    if (kind === 'text') {
-      trial.stimulus = {
-        kind: 'text',
-        text: 'GO',
-        fontPx: 64,
-      };
-      return;
-    }
-
-    if (kind === 'shape') {
-      trial.stimulus = {
-        kind: 'shape',
-        shape: 'circle',
-        radiusPx: 80,
-      };
-      return;
-    }
-
-    if (kind === 'image') {
-      trial.stimulus = {
-        kind: 'image',
-        src: '',
-        widthPx: 360,
-        heightPx: 360,
-      };
-      return;
-    }
-
-    if (kind === 'video') {
-      trial.stimulus = {
-        kind: 'video',
-        src: '',
-        autoplay: true,
-        muted: true,
-        widthPx: 640,
-        heightPx: 360,
-      };
-      return;
-    }
-
-    if (kind === 'audio') {
-      trial.stimulus = {
-        kind: 'audio',
-        src: '',
-        autoplay: true,
-        volume: 1,
-      };
-      return;
-    }
-
-    trial.stimulus = {
-      kind: 'custom',
-      shader: '',
-      vertices: [],
-      uniforms: {},
-    };
+  function setStimulus(next: ReactionStimulusConfig) {
+    trial.stimulus = next;
+    emit();
   }
 
   // Live ms⇄frames conversion hint (E-REACT-3). Durations can be authored in ms
@@ -104,7 +61,8 @@
   }
 </script>
 
-<div class="trial-card">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="trial-card" oninput={emit} onchange={emit}>
   <div class="trial-top">
     <h6>Trial {index + 1}</h6>
     <button class="remove-btn" type="button" onclick={() => onRemove(index)}>✕</button>
@@ -147,16 +105,7 @@
   <div class="stimulus-panel">
     <div class="panel-title">Stimulus</div>
 
-    <div class="form-group">
-      <span class="label-text">Kind</span>
-      <select class="block w-full rounded-md border-0 py-1.5 pl-3 pr-10 text-foreground bg-background shadow-sm ring-1 ring-inset ring-border focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6" value={stimulusKind} onchange={(e) => setStimulusKind((e.currentTarget as HTMLSelectElement).value as ReactionStimulusConfig['kind'])}>
-        <option value="text">Text</option>
-        <option value="shape">Shape</option>
-        <option value="image">Image</option>
-        <option value="video">Video</option>
-        <option value="audio">Audio</option>
-      </select>
-    </div>
+    <StimulusKindEditor kind={stimulusKind} onChange={setStimulus} />
 
     {#if typeof trial.stimulus === 'string'}
       <div class="form-group">
@@ -241,8 +190,8 @@
     </div>
   </div>
 
-  <ResponseMappingEditor bind:trial />
-  <PhaseTimelineEditor bind:trial />
+  <ResponseMappingEditor bind:trial {onUpdate} />
+  <PhaseTimelineEditor bind:trial {onUpdate} />
 </div>
 
 <style>

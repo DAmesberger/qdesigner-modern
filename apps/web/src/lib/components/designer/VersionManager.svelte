@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fade, fly } from 'svelte/transition';
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import { toast } from '$lib/stores/toast';
   import { page } from '$app/state';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';

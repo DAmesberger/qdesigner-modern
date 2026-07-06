@@ -1,0 +1,117 @@
+import type { ReactionTrialConfig } from '$lib/runtime/reaction';
+import type { ReactionFeedbackSettings, ReactionStudyConfig } from './reaction-schema';
+
+/**
+ * Designer-facing config shape for the reaction-time question editor. Extracted
+ * from the inline definition in ReactionTimeDesigner.svelte (P6-T5) so the parent
+ * and the `TaskPresetFields` sub-editor can share a single typed contract.
+ */
+export type ReactionTaskType =
+  | 'standard'
+  | 'n-back'
+  | 'stroop'
+  | 'flanker'
+  | 'iat'
+  | 'dot-probe'
+  | 'custom';
+export type StimulusType = 'text' | 'shape' | 'image' | 'video' | 'audio';
+export type ResponseMode = 'keyboard' | 'mouse' | 'touch' | 'gamepad';
+
+export interface MediaStimulusRef {
+  mediaId: string;
+  mediaUrl?: string;
+  filename?: string;
+  mimeType?: string;
+  width?: number;
+  height?: number;
+  durationSeconds?: number;
+}
+
+export interface ReactionTimeConfig {
+  study?: ReactionStudyConfig;
+  task: {
+    type: ReactionTaskType;
+    nBack: {
+      n: number;
+      sequenceLength: number;
+      targetRate: number;
+      stimulusSet: string[];
+      targetKey: string;
+      nonTargetKey: string;
+      fixationMs: number;
+      responseTimeoutMs: number;
+    };
+    stroop: {
+      trialCount: number;
+      colors: string[];
+      congruentRatio: number;
+      stimulusDuration: number;
+      isi: number;
+      fixationMs: number;
+      responseTimeoutMs: number;
+    };
+    flanker: {
+      trialCount: number;
+      stimulusSet: [string, string];
+      congruentRatio: number;
+      includeNeutral: boolean;
+      neutralRatio: number;
+      flankerCount: number;
+      stimulusDuration: number;
+      isi: number;
+      fixationMs: number;
+      responseTimeoutMs: number;
+    };
+    iat: {
+      category1Name: string;
+      category1Items: string[];
+      category2Name: string;
+      category2Items: string[];
+      attribute1Name: string;
+      attribute1Items: string[];
+      attribute2Name: string;
+      attribute2Items: string[];
+      trialsPerBlock: number;
+      practiceTrialsPerBlock: number;
+      fixationMs: number;
+      responseTimeoutMs: number;
+    };
+    dotProbe: {
+      trialCount: number;
+      cueDuration: number;
+      isi: number;
+      congruentRatio: number;
+      probeSymbol: string;
+      stimulusPairs: Array<{ salient: string; neutral: string }>;
+      fixationMs: number;
+      responseTimeoutMs: number;
+    };
+    customTrials: Array<Partial<ReactionTrialConfig>>;
+  };
+  stimulus: {
+    type: StimulusType;
+    content: string;
+    mediaRef?: MediaStimulusRef;
+    fixation?: {
+      type: 'cross' | 'dot';
+      duration: number;
+    };
+  };
+  response: {
+    validKeys: string[];
+    timeout: number;
+    requireCorrect?: boolean;
+    mode?: ResponseMode;
+    targetRegion?: { x: number; y: number; radius: number };
+    gamepadButtonMap?: Record<number, string>;
+    captureKeyUp?: boolean;
+  };
+  correctKey?: string;
+  feedback?: boolean;
+  feedbackSettings?: ReactionFeedbackSettings;
+  practice?: boolean;
+  practiceTrials?: number;
+  testTrials?: number;
+  targetFPS?: number;
+  prompt?: string;
+}

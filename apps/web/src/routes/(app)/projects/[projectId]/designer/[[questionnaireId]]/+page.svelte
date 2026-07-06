@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { beforeNavigate, replaceState } from '$app/navigation';
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import { autoSave } from '$lib/services/autoSave.svelte';
   import { ws } from '$lib/services/ws';
   import { PresenceService, type PresenceUser } from '$lib/services/presence.svelte';

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { appPaths } from '$lib/routing/paths';
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator, LayoutDashboard } from 'lucide-svelte';
   import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
   import DistributionPanel from './DistributionPanel.svelte';

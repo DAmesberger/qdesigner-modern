@@ -3,7 +3,8 @@
   import { mediaService } from '$lib/services/mediaService';
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import { toast } from '$lib/stores/toast';
   import { confirmDialog } from '$lib/stores/confirm.svelte';
   import type {

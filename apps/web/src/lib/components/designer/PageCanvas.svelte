@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import QuestionCard from './QuestionCard.svelte';
   import type { Question } from '$lib/shared';
   import { Settings, Database, FileText } from 'lucide-svelte';

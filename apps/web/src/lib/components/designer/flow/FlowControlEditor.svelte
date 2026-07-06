@@ -14,7 +14,9 @@
   } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
 
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+
+  const designerStore = getDesignerContext();
   import type { FlowControl, Page, Block, Variable } from '$lib/shared/types/questionnaire';
   import theme from '$lib/theme';
 

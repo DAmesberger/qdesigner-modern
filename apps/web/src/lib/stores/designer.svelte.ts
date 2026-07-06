@@ -99,7 +99,7 @@ function writeTranslationEntry(
   }
 }
 
-class DesignerStore {
+export class DesignerStore {
   private readonly documentStore = new DocumentStore();
   private readonly persistenceService = new DesignerPersistenceService();
 

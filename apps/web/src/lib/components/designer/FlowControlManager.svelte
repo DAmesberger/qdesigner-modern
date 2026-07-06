@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import type { FlowControl } from '$lib/shared/types/questionnaire';
   import { nanoid } from 'nanoid';
   import FlowControlEditor from './flow/FlowControlEditor.svelte';

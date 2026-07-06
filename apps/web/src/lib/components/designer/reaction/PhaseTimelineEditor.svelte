@@ -1,12 +1,14 @@
 <script lang="ts">
   import type { ScheduledPhase } from '$lib/runtime/reaction';
-  import type { ReactionStudyTrialTemplate } from '../model/reaction-schema';
+  import type { ReactionStudyTrialTemplate } from '$lib/modules/questions/reaction-time/model/reaction-schema';
 
   interface Props {
     trial: ReactionStudyTrialTemplate;
+    /** Immutable-commit affordance (P6-T5); fired alongside the bind: mutation. */
+    onUpdate?: (trial: ReactionStudyTrialTemplate) => void;
   }
 
-  let { trial = $bindable() }: Props = $props();
+  let { trial = $bindable(), onUpdate }: Props = $props();
 
   function addPhase() {
     const currentPhases = Array.isArray(trial.phases) ? trial.phases : [];
@@ -19,11 +21,13 @@
         marksStimulusOnset: false,
       } satisfies ScheduledPhase,
     ];
+    onUpdate?.(trial);
   }
 
   function removePhase(index: number) {
     const currentPhases = Array.isArray(trial.phases) ? trial.phases : [];
     trial.phases = currentPhases.filter((_, i) => i !== index);
+    onUpdate?.(trial);
   }
 </script>
 

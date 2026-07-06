@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import type { ReportPageConfig, ReportWidget } from '$lib/shared';
   import { generateId } from '$lib/shared';
   import { NORM_TABLES } from '$lib/runtime/feedback/normTables';

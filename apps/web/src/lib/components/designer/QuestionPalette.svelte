@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import { registerAllModules } from '$lib/modules';
   import { getModulesByCategory } from '$lib/modules/registry';
   import type { ModuleMetadata, ModuleCategory } from '$lib/modules/types';

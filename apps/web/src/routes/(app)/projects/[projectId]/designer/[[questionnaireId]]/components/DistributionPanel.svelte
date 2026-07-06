@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import { X, Copy, Check, Globe, Lock, ExternalLink, Code, QrCode } from 'lucide-svelte';
 
   interface Props {

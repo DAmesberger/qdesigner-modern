@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import type { Questionnaire, Question, QuestionnaireTheme, Variable } from '$lib/shared';
   import { VariableEngine } from '@qdesigner/scripting-engine';
   import QuestionRenderer from '../questions/QuestionRenderer.svelte';

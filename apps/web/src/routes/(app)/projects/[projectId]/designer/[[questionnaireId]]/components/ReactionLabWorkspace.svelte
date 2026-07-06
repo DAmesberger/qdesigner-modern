@@ -5,7 +5,8 @@
   import ScriptEditorOverlay from '$lib/components/designer/ScriptEditorOverlay.svelte';
   import type { MediaAsset } from '$lib/shared/types/media';
   import { mediaService } from '$lib/services/mediaService';
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import ReactionStagePreview from '$lib/modules/questions/reaction-experiment/ReactionStagePreview.svelte';
   import {
     REACTION_EXPERIMENT_TEMPLATES,

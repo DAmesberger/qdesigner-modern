@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import type { DesignerPanel } from '$lib/stores/designer/ui';
   import QuestionPalette from '$lib/components/designer/QuestionPalette.svelte';
   import TemplateLibrary from '$lib/components/designer/TemplateLibrary.svelte';

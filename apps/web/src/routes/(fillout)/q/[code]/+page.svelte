@@ -7,18 +7,8 @@
   import WelcomeScreen from '$lib/fillout/components/WelcomeScreen.svelte';
   import ConsentScreen from '$lib/fillout/components/ConsentScreen.svelte';
   import CompletionScreen from '$lib/fillout/components/CompletionScreen.svelte';
-  import { FilloutRuntime } from '$lib/fillout/runtime/FilloutRuntime';
   import ModularRenderer from '$lib/runtime/ModularRenderer.svelte';
-  import type {
-    FormQuestionHost,
-    FormHostPresentation,
-    FormTimerState,
-  } from '$lib/runtime/core/FormQuestionHost';
   import TimerDisplay from '$lib/components/ui/TimerDisplay.svelte';
-  import { buildQuestionAnnouncement } from '$lib/fillout/a11y/announce';
-  import type { ResumeState } from '$lib/runtime/core/ResumeState';
-  import type { ConsentData, FilloutDefinition } from '$lib/fillout/types';
-  import type { QuestionnaireSession } from '$lib/shared';
   import {
     localizeQuestionnaire,
     resolveText,
@@ -26,25 +16,23 @@
     getAvailableLocales,
     getLocaleLabel,
   } from '$lib/shared';
-  import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
-  import { FilloutContentCache } from '$lib/fillout/services/FilloutContentCache';
-  import { FilloutUploadSync } from '$lib/fillout/services/FilloutUploadSync';
-  import { QuotaService } from '$lib/fillout/services/QuotaService';
-  import { FraudDetectionService } from '$lib/fillout/services/FraudDetectionService';
-  import { api } from '$lib/services/api';
-  import { db, filloutDefinitionKey, type FilloutServerVariable } from '$lib/services/db/indexeddb';
-  import { collectServerVariables, declHash } from '@qdesigner/questionnaire-core';
-  import type { ServerVariableSnapshot } from '$lib/runtime/core/QuestionnaireRuntime';
-  import { ensureModulesRegistered } from '$lib/modules/register-all';
-  import { TimingGatekeeper } from '$lib/runtime/timing';
-  import type { GatekeeperResult } from '$lib/runtime/timing';
   import DeviceQualificationBanner from '$lib/runtime/timing/components/DeviceQualificationBanner.svelte';
+  import {
+    FilloutPageController,
+    type FilloutRuntimeInputs,
+  } from '$lib/fillout/FilloutPageController.svelte';
 
   interface Props {
     data: PageData;
   }
 
   let { data }: Props = $props();
+
+  // Headless lifecycle + service wiring (F040). The controller owns the screen state
+  // machine, session create/resume, quota/fraud gates, the runtime, and the onComplete
+  // flow; this view stays presentational — locale selection, screen rendering, and event
+  // forwarding to controller methods. See lib/fillout/FilloutPageController.svelte.ts.
+  const controller = new FilloutPageController(data);
 
   // --- Content translation (MOD-04, ADR 0022) -------------------------------
   // The definition is a FilloutDefinition (core Questionnaire + the top-level
@@ -102,77 +90,20 @@
     }
   }
 
+  // DOM element refs — bound in the template, handed to the controller lazily.
   let container = $state<HTMLDivElement>();
-  let canvas = $state<HTMLCanvasElement>();
   // CONTRACT-LAZY (Slice 4.6): the page no longer owns a WebGLRenderer. There is exactly
   // ONE renderer, owned + lazily created by the runtime; the page keeps only the canvas
-  // (bound below) and delegates resize to runtime.resize().
-  let runtime: FilloutRuntime | null = null;
-  let syncEngine: FilloutUploadSync | null = null;
-  let loading = $state(false);
-  let loadingMessage = $state('Loading questionnaire...');
-  let loadingProgress = $state(0);
-  let error = $state<string | null>(null);
-  let currentScreen = $state<'welcome' | 'consent' | 'runtime' | 'complete' | 'over-quota'>('welcome');
-  let overQuotaMessage = $state<string>('');
-  // E-FLOW-7: the participant's selected interlocking quota cell key, computed
-  // at entry in createSessionAndStart and read in initializeRuntime (pinned to
-  // metadata + exposed as the `_quotaCell` flow variable).
-  let quotaCellKey: string | null = null;
-  // `session` spans three assignment shapes across create / resume / offline paths
-  // (camelCase SessionData, snake_case Session DTO, a locally-built offline stub), so
-  // it stays loosely typed; normalizing it is runtime-wiring work (F040), out of scope.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let session = $state<any>(null);
-  let completedSession = $state<QuestionnaireSession | undefined>(undefined);
-  let conditionGroupCounts = $state<number[] | undefined>(undefined);
-  // E-FLOW-6: server-allocated 0-based participant index + authoritative arm
-  // assignment, captured from the session-create response and threaded into the
-  // runtime so counterbalancing rotates per participant and the arm is race-free.
-  let participantNumber = $state<number | undefined>(undefined);
-  let serverAssignment = $state<{ condition: string; conditionIndex: number } | undefined>(
-    undefined
-  );
+  // (bound below) and delegates resize to the controller.
+  let canvas = $state<HTMLCanvasElement>();
+  // A11y (F094/F098): focus target for the form card.
+  let formCardEl = $state<HTMLDivElement>();
 
-  // Flatten the completed session's variable snapshot into the plain record the
-  // CompletionScreen / E-FEEDBACK-3 report page consume. Server-computed values
-  // are already in here by construction (complete() snapshots every variable),
-  // so the report renders its cohort widgets OFFLINE with no fetch.
-  const completedVariables = $derived<Record<string, unknown>>(
-    Object.fromEntries(
-      (completedSession?.variables ?? []).map((v) => [v.variableId, v.value])
-    )
-  );
-
-  // Fraud prevention state
-  let fraudFingerprint = $state<string | undefined>(undefined);
-
-  // Offline state
-  let isOffline = $state(!navigator.onLine);
-  let syncStatus = $state<'idle' | 'syncing' | 'synced' | 'error'>('idle');
-  let savedLocally = $state(false);
-
-  // Resume state (E-OFF-1): a non-blocking toast confirming the runtime rehydrated at
-  // the right question, and a dismiss flag for the pinned-version-unavailable notice.
-  let resumeNotice = $state<string | null>(null);
-  let pinnedFallbackDismissed = $state(false);
-
-  // True save-and-continue snapshot (E-FLOW-3, FIX-F12). Mutable so a fresh-session create
-  // (or an explicit "Start over") can drop it — it must only ever be applied to the SAME
-  // session it was captured on, never a brand-new one. `resumeFrom` is passed into the
-  // FilloutRuntime config ALONGSIDE resumeSnapshot: hydrate seeds prior answers, resumeFrom
-  // restores the exact cursor/loop/variables and jumps to the captured page.
-  let activeResumeState = $state<ResumeState | undefined>(data.resumeState ?? undefined);
-
-  // --- Timing qualification (Slice 3.4) -------------------------------------
-  // Reaction paradigms depend on frame-exact stimulus onset. The session-wide
-  // TimingGatekeeper runs device calibration once; the ReactionEngine reuses
-  // that exact measurement (TimingGatekeeper.shared()) for visual-latency
-  // compensation, and the banner below surfaces the grade to the participant.
+  // --- Timing qualification banner (Slice 3.4) ------------------------------
+  // Reaction paradigms depend on frame-exact stimulus onset. The controller runs the
+  // session-wide TimingGatekeeper; this view derives the banner visibility from the
+  // resulting grade (`controller.qualification`) and the locale-dependent question list.
   const REACTION_QUESTION_TYPES = new Set(['reaction-time', 'reaction-experiment']);
-  let qualification = $state<GatekeeperResult | null>(null);
-  let bannerDismissed = $state(false);
-
   const questionList = $derived(definition?.questions ?? []);
   const hasReactionQuestion = $derived(
     questionList.some((q) => REACTION_QUESTION_TYPES.has(q?.type))
@@ -185,12 +116,15 @@
   );
   // Warn on yellow/red; green needs no banner (it would just be noise).
   const showTimingBanner = $derived(
-    hasReactionQuestion && !bannerDismissed && qualification !== null && qualification.grade !== 'green'
+    hasReactionQuestion &&
+      !controller.bannerDismissed &&
+      controller.qualification !== null &&
+      controller.qualification.grade !== 'green'
   );
   // Red grade on a precision paradigm: prominent block/warn (participants are not
   // hard-stopped — dead-ending a study is worse — but are strongly cautioned).
   const timingBlocked = $derived(
-    hasReactionQuestion && requiresPrecisionTiming && qualification?.grade === 'red'
+    hasReactionQuestion && requiresPrecisionTiming && controller.qualification?.grade === 'red'
   );
 
   // Photosensitivity accommodation (F097). Reaction paradigms alternate high-contrast
@@ -203,735 +137,75 @@
     typeof window !== 'undefined' &&
     !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  // Shared Web Audio unlock. Created + resumed on a user gesture (welcome start /
-  // consent accept) so the browser's document-scoped autoplay policy permits the
-  // reaction engine's own AudioContext.resume() when it primes audio pre-trial.
-  let audioUnlockContext: AudioContext | null = null;
-  function ensureAudioUnlocked(): void {
-    try {
-      const Ctor =
-        typeof AudioContext !== 'undefined'
-          ? AudioContext
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkit-prefixed fallback
-          : (window as any).webkitAudioContext;
-      if (!Ctor) return;
-      if (!audioUnlockContext) {
-        audioUnlockContext = new Ctor();
-      }
-      if (audioUnlockContext && audioUnlockContext.state === 'suspended') {
-        void audioUnlockContext.resume().catch(() => {});
-      }
-    } catch {
-      // Best-effort: audio unlock never blocks participation.
-    }
-  }
+  // Bridge the locale-dependent runtime inputs + the DOM canvas to the controller. Read
+  // lazily (at runtime-construction time) so they reflect the participant's latest locale
+  // pick and the freshly-bound canvas.
+  controller.getRuntimeInputs = (): FilloutRuntimeInputs => ({
+    canvas,
+    definition,
+    rawDefinition,
+    questionList,
+    hasReactionQuestion,
+  });
+  // Move keyboard focus to the freshly-mounted question region on a NEW item. tick()
+  // waits for the {#key} subtree remount.
+  controller.presentFocusHook = () => void tick().then(() => formCardEl?.focus());
 
-  function beginTimingQualification(): void {
-    if (!hasReactionQuestion || qualification) return;
-    // Runs calibration once (shared + cached). The reaction engines resolve the
-    // same instance, so this does NOT double-calibrate — it just populates the
-    // banner grade in parallel with runtime startup.
-    TimingGatekeeper.shared()
-      .qualify()
-      .then((result) => {
-        qualification = result;
-      })
-      .catch(() => {
-        // Non-critical: absence of a grade just means no banner.
-      });
-  }
-
-  // HTML-overlay form rendering (ADR 0018: hybrid fillout rendering contract).
-  // The runtime mounts per-module runtime Svelte components here for form-style
-  // questions and instruction/display items; reaction-time paradigms stay on WebGL.
-  let activePresentation = $state<FormHostPresentation | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- captured value spans every module answer shape
-  let currentValue = $state<any>(undefined);
-  let hasAnswered = $state(false);
-  // Live per-question countdown pushed by the runtime's TimerController (E-FLOW-5).
-  let timerState = $state<FormTimerState | null>(null);
-  // A11y (F094/F098): persistent live region text + focus target for the form card.
-  let liveAnnouncement = $state('');
-  let formCardEl = $state<HTMLDivElement>();
-  let lastPresentedItemId: string | null = null;
-
-  const activeItem = $derived(
-    activePresentation
-      ? {
-          ...activePresentation.item,
-          category: activePresentation.category,
-          config: activePresentation.config,
-        }
-      : null
-  );
-
-  const canAdvance = $derived(
-    !activePresentation || !activePresentation.interactive || !activePresentation.required || hasAnswered
-  );
-
-  const formHost: FormQuestionHost = {
-    present(presentation) {
-      currentValue = presentation.initialValue;
-      hasAnswered = presentation.initialValue !== undefined && presentation.initialValue !== null;
-      activePresentation = presentation;
-      // Move keyboard focus to the freshly-mounted question region, but only when the
-      // item actually changed — re-presents (e.g. validation re-render) must not steal
-      // focus from a module's inner input. tick() waits for the {#key} subtree remount.
-      const changed = presentation.item.id !== lastPresentedItemId;
-      lastPresentedItemId = presentation.item.id;
-      if (changed) void tick().then(() => formCardEl?.focus());
-    },
-    clear() {
-      activePresentation = null;
-      currentValue = undefined;
-      hasAnswered = false;
-      timerState = null;
-    },
-    updateTimer(state) {
-      timerState = state;
-    },
-    getCurrentValue() {
-      return currentValue;
-    },
-  };
-
-  function handleOverlayResponse(value: unknown) {
-    currentValue = value;
-    hasAnswered = value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0);
-  }
-
-  function submitOverlayAnswer() {
-    const presentation = activePresentation;
-    if (!presentation) return;
-    if (presentation.interactive && presentation.required && !hasAnswered) return;
-    presentation.onSubmit(currentValue);
-  }
-
-  // Initialize on mount
   onMount(() => {
     // Track online/offline
-    const handleOnline = () => { isOffline = false; };
-    const handleOffline = () => { isOffline = true; };
+    const handleOnline = () => controller.setOffline(false);
+    const handleOffline = () => controller.setOffline(true);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Start sync engine
-    syncEngine = new FilloutUploadSync({
-      onSyncStart: () => { syncStatus = 'syncing'; },
-      onSyncComplete: (result) => {
-        syncStatus = result.errors.length > 0 ? 'error' : 'synced';
-        // Reset after a bit
-        setTimeout(() => { syncStatus = 'idle'; }, 3000);
-      },
-    });
-    syncEngine.start();
-
-    const init = async () => {
-      // Resume short-circuit (E-OFF-1): a session that already completed routes straight
-      // to the completion screen instead of re-running the questionnaire.
-      if (data.resumeCompleted) {
-        if (data.existingSession) {
-          session = data.existingSession;
-          sessionStorage.setItem('qd_api_session_id', session.id);
-        }
-        currentScreen = 'complete';
-        return;
-      }
-
-      if (data.existingSession) {
-        session = data.existingSession;
-        sessionStorage.setItem('qd_api_session_id', session.id);
-        if (session.status === 'in_progress' || session.status === 'active') {
-          currentScreen = 'runtime';
-          await initializeRuntime();
-        }
-      } else if (data.resumeSnapshot && data.resumeSessionId) {
-        // Offline / anonymous same-device resume (E-OFF-1): the server did not return an
-        // `existingSession` (no network, or the API won't hand an anonymous participant
-        // their session), but IndexedDB holds this session's answers. Continue the SAME
-        // session id — not a fresh one — so restored + new responses stay coherent.
-        session = {
-          id: data.resumeSessionId,
-          questionnaire_id: data.questionnaire.id,
-          status: 'active',
-        };
-        sessionStorage.setItem('qd_api_session_id', session.id);
-        currentScreen = 'runtime';
-        await initializeRuntime();
-      } else if (data.questionnaire.definition.settings?.requireConsent === false) {
-        currentScreen = 'welcome';
-      }
-    };
-
-    init();
+    controller.startSyncEngine();
+    controller.initFromLoad();
 
     return () => {
-      runtime?.dispose();
-      syncEngine?.stop();
-      if (audioUnlockContext) {
-        void audioUnlockContext.close().catch(() => {});
-        audioUnlockContext = null;
-      }
+      controller.dispose();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       document.body.classList.remove('fillout');
       sessionStorage.removeItem('qd_api_session_id');
     };
   });
-
-  async function handleStart() {
-    // "Start" is a user gesture — unlock audio here so the no-consent path also
-    // satisfies the autoplay policy before any reaction trial (CONTRACT-AUDIO).
-    ensureAudioUnlocked();
-    if (data.questionnaire.definition.settings?.requireConsent) {
-      currentScreen = 'consent';
-    } else {
-      await createSessionAndStart();
-    }
-  }
-
-  // "Start over" from the welcome-screen resume choice (E-FLOW-3, FIX-F12): discard the
-  // saved position (both the in-memory resumeFrom and the persisted ResumeState) so this
-  // and any future reload begin cleanly at index 0, then run the normal start flow. The
-  // fresh-create branches in createSessionAndStart mint a new session id, so no prior
-  // answers are hydrated — a true restart.
-  async function handleStartOver() {
-    activeResumeState = undefined;
-    if (data.resumeStateSessionId) {
-      await OfflineSessionService.clearResumeState(data.resumeStateSessionId).catch(() => {});
-    }
-    await handleStart();
-  }
-
-  async function handleConsent(consentData: ConsentData) {
-    await createSessionAndStart(consentData);
-  }
-
-  async function handleDeclineConsent() {
-    goto('/');
-  }
-
-  async function createSessionAndStart(consentData?: ConsentData) {
-    try {
-      loading = true;
-
-      // Fraud prevention checks before session creation. The fingerprint is generated here
-      // and sent to the server AT create time (below); server-side fingerprint dedup is
-      // reported back via the create response `duplicate` flag rather than a separate
-      // read-probe that RLS hides from anonymous callers (slice 2.5).
-      const fpSettings = data.questionnaire.definition.settings?.fraudPrevention;
-      if (fpSettings && navigator.onLine) {
-        const fraudResult = await FraudDetectionService.checkAll(
-          data.questionnaire.id,
-          fpSettings
-        );
-        fraudFingerprint = fraudResult.fingerprint;
-
-        // Cookie/behavior fraud (evaluated locally) can terminate before we create a session.
-        if (!fraudResult.passed) {
-          if (fpSettings.fraudAction === 'terminate') {
-            error = fpSettings.fraudMessage || 'This survey is not available for your submission.';
-            loading = false;
-            return;
-          } else if (fpSettings.fraudAction === 'redirect' && fpSettings.fraudRedirectUrl) {
-            window.location.href = fpSettings.fraudRedirectUrl;
-            return;
-          }
-          // 'flag' action: continue but store the flags in session metadata later
-        }
-      }
-
-      // Quota gate — runs BEFORE session creation so an over-quota respondent
-      // never leaves an orphan session, and so the (un)verified state can be
-      // recorded into the create metadata. Evaluated even offline: checkQuotas
-      // falls back to the last cached snapshot (dropping the old `navigator.onLine`
-      // gate). When neither live nor cached data exists it returns `unchecked`,
-      // and we record `quotaUnchecked` on the session instead of silently allowing.
-      let quotaUnchecked = false;
-      quotaCellKey = null;
-      const quotaGroups = data.questionnaire.definition?.settings?.quotas;
-      if (quotaGroups && quotaGroups.length > 0) {
-        const urlParams = new Map(Object.entries(data.urlParams ?? {}));
-        let quotaResult = await QuotaService.checkQuotas(
-          data.questionnaire.id,
-          quotaGroups,
-          urlParams
-        );
-        // A swallowed fetch failure surfaces as `unchecked`; while online, retry once.
-        if (quotaResult.unchecked && navigator.onLine) {
-          quotaResult = await QuotaService.checkQuotas(
-            data.questionnaire.id,
-            quotaGroups,
-            urlParams
-          );
-        }
-        if (!quotaResult.allowed) {
-          if (quotaResult.action === 'redirect' && quotaResult.redirectUrl) {
-            window.location.href = quotaResult.redirectUrl;
-            return;
-          }
-          overQuotaMessage = quotaResult.message || 'This study has reached its target number of participants.';
-          currentScreen = 'over-quota';
-          loading = false;
-          return;
-        }
-        quotaUnchecked = quotaResult.unchecked === true;
-
-        // E-FLOW-7: interlocking cross-quota cells. Select the participant's
-        // cell from the values known at entry (URL params); if that cell is
-        // full, block (independent-cell semantics — a full sibling cell is
-        // irrelevant). Otherwise pin the selected cell key so the server can
-        // atomically CLAIM it at completion (server resolves the cap; it never
-        // trusts a client-supplied target). The re-check after in-survey
-        // demographics is driven from the runtime page hooks (see below).
-        const cellResult = await QuotaService.checkCells(
-          data.questionnaire.id,
-          quotaGroups,
-          urlParams
-        );
-        if (!cellResult.allowed) {
-          if (cellResult.action === 'redirect' && cellResult.redirectUrl) {
-            window.location.href = cellResult.redirectUrl;
-            return;
-          }
-          overQuotaMessage = cellResult.message || 'This study has reached its target for your group.';
-          currentScreen = 'over-quota';
-          loading = false;
-          return;
-        }
-        quotaCellKey = cellResult.cellKey;
-      }
-
-      if (navigator.onLine) {
-        if (data.existingSession) {
-          // Resume the in-flight server session addressed by ?sid= (already non-completed).
-          session = data.existingSession;
-        } else {
-          // Create a fresh server session. The version pin + fingerprint + consent/urlParams
-          // all go in the CREATE request so the server can (a) record the exact version this
-          // session ran against (slice 2.2) and (b) dedup by fingerprint atomically (slice 2.5).
-          const metadata: Record<string, unknown> = {
-            device_info: OfflineSessionService.getDeviceInfo(),
-          };
-          if (consentData) {
-            metadata.consent = { ...consentData, timestamp: new Date().toISOString() };
-          }
-          if (data.urlParams && Object.keys(data.urlParams).length > 0) {
-            metadata.urlParams = data.urlParams;
-          }
-          if (fraudFingerprint) {
-            metadata.fingerprint = fraudFingerprint;
-          }
-          if (quotaUnchecked) {
-            metadata.quotaUnchecked = true;
-          }
-          if (quotaCellKey) {
-            // E-FLOW-7: pin the interlocking cell so the server atomically
-            // claims it at completion (cap resolved server-side).
-            metadata.quotaCell = { key: quotaCellKey };
-          }
-
-          const created = await api.sessions.create({
-            questionnaireId: data.questionnaire.id,
-            participantId: data.participantId || undefined,
-            versionMajor: data.questionnaire.versionMajor ?? 1,
-            versionMinor: data.questionnaire.versionMinor ?? 0,
-            versionPatch: data.questionnaire.versionPatch ?? 0,
-            metadata,
-          });
-          session = created;
-          // E-FLOW-6: seed counterbalancing + between-subjects assignment from the
-          // server's atomic allocation (returned by create). participantNumber is the
-          // real 0-based index (fixes the "always participant 0 → Latin row 0" bug);
-          // assignedCondition, when present, is authoritative over local assignment.
-          participantNumber = created.participantNumber;
-          serverAssignment = created.assignedCondition
-            ? {
-                condition: created.assignedCondition,
-                conditionIndex: created.assignedConditionIndex ?? 0,
-              }
-            : undefined;
-          // A brand-new session id — a resumeFrom captured against a prior local session
-          // must NOT be applied here (it would restore an unrelated cursor/variables).
-          activeResumeState = undefined;
-
-          // Server-side fingerprint dedup (slice 2.5): react to the typed `duplicate`
-          // flag api.sessions.create() surfaces from the create response.
-          if (fpSettings?.preventDuplicates && created.duplicate === true) {
-            if (fpSettings.fraudAction === 'terminate') {
-              error = fpSettings.fraudMessage || 'This survey is not available for your submission.';
-              loading = false;
-              return;
-            } else if (fpSettings.fraudAction === 'redirect' && fpSettings.fraudRedirectUrl) {
-              window.location.href = fpSettings.fraudRedirectUrl;
-              return;
-            }
-            // 'flag' action: continue; the server already recorded the fingerprint + flag.
-          }
-        }
-
-        // Persist a durable LOCAL pin row for the online session so version GC /
-        // media eviction can see the version it runs against, and so it can be
-        // resumed offline. Online sessions otherwise have no filloutSessions row
-        // (the recurring trap). Fire-and-forget; failure only loses the local pin.
-        if (session?.id) {
-          await OfflineSessionService.recordServerSession({
-            id: session.id,
-            questionnaireId: data.questionnaire.id,
-            versionMajor: data.questionnaire.versionMajor ?? 1,
-            versionMinor: data.questionnaire.versionMinor ?? 0,
-            versionPatch: data.questionnaire.versionPatch ?? 0,
-            participantId: data.participantId || undefined,
-          }).catch(() => {});
-        }
-      } else {
-        // Offline: create session locally, pinning the version it started against.
-        const offlineMetadata: Record<string, unknown> = {};
-        if (consentData) {
-          offlineMetadata.consent = { ...consentData, timestamp: new Date().toISOString() };
-        }
-        if (quotaUnchecked) {
-          offlineMetadata.quotaUnchecked = true;
-        }
-        if (quotaCellKey) {
-          offlineMetadata.quotaCell = { key: quotaCellKey };
-        }
-        const offlineSession = await OfflineSessionService.createSession(
-          data.questionnaire.id,
-          data.questionnaire.versionMajor ?? 1,
-          data.questionnaire.versionMinor ?? 0,
-          data.questionnaire.versionPatch ?? 0,
-          data.participantId || undefined,
-          Object.keys(offlineMetadata).length > 0 ? offlineMetadata : undefined,
-          OfflineSessionService.getDeviceInfo(),
-        );
-        session = {
-          id: offlineSession.id,
-          questionnaire_id: offlineSession.questionnaireId,
-          status: 'active',
-        };
-        // Brand-new offline session — drop any prior-session resumeFrom (see above).
-        activeResumeState = undefined;
-      }
-
-      sessionStorage.setItem('qd_api_session_id', session.id);
-
-      currentScreen = 'runtime';
-      loading = false;
-      await tick();
-      await initializeRuntime();
-    } catch (err) {
-      console.error('Failed to create session:', err);
-      error = err instanceof Error ? err.message : 'Failed to start questionnaire';
-    } finally {
-      loading = false;
-    }
-  }
-
-  /** 30-day default staleness window when a declaration omits `server.staleAfterMs`. */
-  const SERVER_VAR_DEFAULT_STALE_MS = 30 * 24 * 60 * 60 * 1000;
-
-  /**
-   * Build the injected SERVER-COMPUTED VARIABLE snapshot map from the version-pinned
-   * aggregates cached by +page.ts (server-computed-variable / E-FEEDBACK-3). ZERO
-   * network on this path — the read side. Prefers the exact definitionKey; a declared
-   * variable with no exact row falls back to a row from ANOTHER version of the same
-   * questionnaire ONLY when the declaration hash is byte-identical (semantically safe
-   * cross-version reuse). A variable with no matching row is simply absent from the
-   * map → the runtime leaves it at its `defaultValue`.
-   */
-  async function buildServerVariableSnapshots(
-    definition: FilloutDefinition,
-    questionnaireId: string,
-    version: { major: number; minor: number; patch: number }
-  ): Promise<Record<string, ServerVariableSnapshot>> {
-    const declared = collectServerVariables({ variables: definition.variables ?? [] });
-    if (declared.length === 0) return {};
-
-    const exactKey = filloutDefinitionKey(questionnaireId, version.major, version.minor, version.patch);
-    let exactById = new Map<string, FilloutServerVariable>();
-    try {
-      const exactRows = await db.filloutServerVariables.where('definitionKey').equals(exactKey).toArray();
-      exactById = new Map(exactRows.map((r) => [r.variableId, r]));
-    } catch {
-      return {};
-    }
-
-    let crossVersion: FilloutServerVariable[] | null = null;
-    const now = Date.now();
-    const out: Record<string, ServerVariableSnapshot> = {};
-    for (const v of declared) {
-      if (!v.server) continue;
-      let row = exactById.get(v.id);
-      if (!row) {
-        // Cross-version fallback: only a byte-identical declaration is safe to reuse.
-        const localHash = declHash(v.server);
-        if (!crossVersion) {
-          try {
-            crossVersion = await db.filloutServerVariables
-              .where('questionnaireId')
-              .equals(questionnaireId)
-              .toArray();
-          } catch {
-            crossVersion = [];
-          }
-        }
-        row = crossVersion.find(
-          (r) =>
-            r.definitionKey !== exactKey &&
-            r.declHash === localHash &&
-            (r.variableId === v.id || r.name === v.name)
-        );
-      }
-      if (!row) continue;
-
-      const staleAfterMs =
-        typeof v.server.staleAfterMs === 'number' ? v.server.staleAfterMs : SERVER_VAR_DEFAULT_STALE_MS;
-      const computedMs = Date.parse(row.computedAt);
-      out[v.id] = {
-        n: row.n,
-        stats: row.stats,
-        computedAt: row.computedAt,
-        stale: Number.isFinite(computedMs) ? now - computedMs > staleAfterMs : false,
-      };
-    }
-    return out;
-  }
-
-  async function initializeRuntime() {
-    try {
-      loading = true;
-
-      // Modules must be registered before the runtime can resolve question types.
-      // On a resumed session this is invoked directly from onMount (fire-and-forget)
-      // and can win the race against the root layout's un-awaited registration; an
-      // empty registry previously made QuestionnaireRuntime.showCurrentItem silently
-      // skip every item (Slice 1.8). Awaiting the shared, idempotent promise here
-      // guarantees a populated registry for both the resumed path and
-      // createSessionAndStart. Kept INSIDE the try so a registration rejection
-      // surfaces the error screen instead of stranding the participant on a blank
-      // runtime (the resumed path has no outer try/catch).
-      await ensureModulesRegistered();
-
-      // Kick device qualification for the timing banner (no-op unless this
-      // questionnaire contains a reaction paradigm). Shared + cached, so the
-      // reaction engines reuse the same result without re-calibrating.
-      beginTimingQualification();
-
-      if (!canvas) {
-        await tick();
-        if (!canvas) {
-          throw new Error('Runtime canvas is not ready');
-        }
-      }
-
-      // No page-level WebGLRenderer (CONTRACT-LAZY, Slice 4.6): the runtime owns the
-      // single renderer and creates it lazily — only if a WebGL item is reached — so a
-      // form-only questionnaire never calls getContext('webgl2').
-      loadingMessage = 'Loading questionnaire...';
-
-      // Fetch condition counts (online only)
-      if (navigator.onLine) {
-        try {
-          const counts = await api.questionnaires.conditionCounts(data.questionnaire.id);
-          if (counts) {
-            conditionGroupCounts = Object.values(counts).map(Number);
-          }
-        } catch {
-          // Non-critical
-        }
-      }
-
-      // Server-computed variables (server-computed-variable / E-FEEDBACK-3): one Dexie
-      // read of the version-pinned aggregates, materialized OFFLINE into the one
-      // VariableEngine at construction so flow / piping / quotas / feedback resolve
-      // them with zero fetch on the read path.
-      const serverVariables = await buildServerVariableSnapshots(
-        rawDefinition,
-        data.questionnaire.id,
-        {
-          major: data.questionnaire.versionMajor ?? 1,
-          minor: data.questionnaire.versionMinor ?? 0,
-          patch: data.questionnaire.versionPatch ?? 0,
-        }
-      );
-
-      runtime = new FilloutRuntime({
-        canvas,
-        questionnaire: definition,
-        sessionId: session.id,
-        participantId: data.participantId || undefined,
-        participantNumber,
-        conditionGroupCounts,
-        serverAssignment,
-        formHost,
-        enableOfflineSync: true,
-        serverVariables,
-        // Resumable sessions (E-OFF-1): rehydrate prior answers + variable state so the
-        // runtime resumes at the first unanswered item rather than restarting at zero.
-        resumeSnapshot: data.resumeSnapshot ?? undefined,
-        resumeFromDevice: data.resumeFromDevice,
-        // True save-and-continue (E-FLOW-3, FIX-F12): restore the exact cursor / loop
-        // counters / variable context and jump straight to the captured page —
-        // complementary to resumeSnapshot, which seeds prior answers. Undefined ⇒ the
-        // E-OFF-1 answer-cursor resume alone (fresh starts clear activeResumeState below).
-        resumeFrom: activeResumeState ?? undefined,
-        onComplete: async (completed) => {
-          completedSession = completed;
-          currentScreen = 'complete';
-          savedLocally = true;
-
-          // Mark completed for fraud prevention duplicate detection
-          FraudDetectionService.markCompleted(data.questionnaire.id);
-
-          // Mark offline session complete
-          await OfflineSessionService.completeSession(session.id).catch(() => {});
-
-          // Trigger sync
-          syncEngine?.syncNow();
-
-          // Opportunistic GC now that a session finished. The just-completed session's
-          // definition + media stay protected until its records sync (protectedVersionKeys
-          // covers unsynced sessions), so this only reclaims already-synced stale versions.
-          FilloutContentCache.pruneDefinitions().catch(() => {});
-          FilloutContentCache.enforceMediaQuota().catch(() => {});
-        },
-        onSessionUpdate: (progress) => {
-          if (loading) {
-            loadingProgress = progress;
-            loadingMessage = `Loading media resources... ${Math.round(progress * 2)}%`;
-          }
-        },
-        // A11y (F094/F098): announce every presented item — including WebGL reaction
-        // stimuli, which fire this before the category switch and never reach the overlay.
-        onQuestionPresented: (event) => {
-          liveAnnouncement = buildQuestionAnnouncement(event, questionList);
-        },
-      });
-
-      // E-FLOW-7: expose the interlocking quota cell + eligibility as flow
-      // variables for downstream branching. `_quotaCell` is the participant's
-      // selected cell key (or empty); `_eligible` starts true and is updated by
-      // the screener re-check at its page boundary.
-      runtime.setFlowVariable('_quotaCell', quotaCellKey ?? '');
-      runtime.setFlowVariable('_eligible', true);
-
-      loadingMessage = 'Starting questionnaire...';
-      await runtime.start();
-      loading = false;
-
-      // Resume toast (E-OFF-1): confirm we rehydrated at the right spot. N is the first
-      // unanswered question (restored count + 1) of the total.
-      if (data.resumeSnapshot) {
-        const restored = data.resumeSnapshot.responses.length;
-        const total = questionList.length || restored;
-        resumeNotice = `Resuming where you left off (question ${Math.min(restored + 1, total)} of ${total})`;
-        setTimeout(() => {
-          resumeNotice = null;
-        }, 6000);
-      }
-    } catch (err) {
-      console.error('Failed to initialize runtime:', err);
-      loading = false;
-
-      let errorMessage = err instanceof Error ? err.message : 'Failed to start questionnaire';
-      if (errorMessage.includes('Failed to preload')) {
-        errorMessage = `Unable to load required media files:\n${errorMessage}`;
-      }
-      error = errorMessage;
-    }
-  }
-
-  function handleKeyDown(event: KeyboardEvent) {
-    runtime?.handleKeyPress(event);
-  }
-
-  function handleResize() {
-    // Delegate to the runtime's single owned renderer (Slice 4.6). No-op until that
-    // renderer is lazily created — form-only questionnaires never allocate one.
-    runtime?.resize(window.innerWidth, window.innerHeight);
-  }
-
-  // --- Shared-device "End session / clear this device" (F005) ---------------
-  // On a shared/kiosk device the completed participant must be able to wipe all
-  // fillout data from IndexedDB so the next person can't read it. We probe for
-  // still-unsynced rows first: if any exist, clearing them is unrecoverable data
-  // loss, so the action requires an explicit confirmation showing the warning.
-  let clearConfirmOpen = $state(false);
-  let clearUnsyncedCount = $state(0);
-  let clearing = $state(false);
-  let clearDone = $state(false);
-
-  async function countUnsyncedFilloutRows(): Promise<number> {
-    try {
-      const [r, e, v] = await Promise.all([
-        db.filloutResponses.where('synced').equals(0).count(),
-        db.filloutEvents.where('synced').equals(0).count(),
-        db.filloutVariables.where('synced').equals(0).count(),
-      ]);
-      return r + e + v;
-    } catch {
-      return 0;
-    }
-  }
-
-  async function requestClearDevice() {
-    clearUnsyncedCount = await countUnsyncedFilloutRows();
-    clearConfirmOpen = true;
-  }
-
-  async function confirmClearDevice() {
-    clearing = true;
-    try {
-      await db.clearAllFilloutData();
-      // Drop the API session pointer so a stale id can't be reused on this device.
-      try { sessionStorage.removeItem('qd_api_session_id'); } catch { /* no-op */ }
-      clearDone = true;
-      clearConfirmOpen = false;
-    } catch (err) {
-      console.error('Failed to clear device data:', err);
-    } finally {
-      clearing = false;
-    }
-  }
-
-  function cancelClearDevice() {
-    clearConfirmOpen = false;
-  }
 </script>
 
-<svelte:window on:keydown={handleKeyDown} on:resize={handleResize} />
+<svelte:window
+  on:keydown={(e) => controller.handleKeyDown(e)}
+  on:resize={() => controller.handleResize()}
+/>
 
 <div class="fillout-page" bind:this={container} data-testid="fillout-root">
   <!-- Persistent SR-only live region (F094): survives screen switches so every
        question presentation is announced. -->
-  <div class="sr-only" role="status" aria-live="polite">{liveAnnouncement}</div>
+  <div class="sr-only" role="status" aria-live="polite">{controller.liveAnnouncement}</div>
 
   <!-- Offline / Sync indicators -->
-  {#if isOffline || syncStatus !== 'idle'}
+  {#if controller.isOffline || controller.syncStatus !== 'idle'}
     <div class="status-bar" data-testid="fillout-status-bar">
-      {#if isOffline}
+      {#if controller.isOffline}
         <div class="status-badge offline">
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364a9 9 0 010-12.728M13 10l-4 4m0-4l4 4" />
           </svg>
           Offline — responses saved locally
         </div>
-      {:else if syncStatus === 'syncing'}
+      {:else if controller.syncStatus === 'syncing'}
         <div class="status-badge syncing">
           <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           Syncing responses...
         </div>
-      {:else if syncStatus === 'synced'}
+      {:else if controller.syncStatus === 'synced'}
         <div class="status-badge synced">
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
           </svg>
           Synced to server
         </div>
-      {:else if syncStatus === 'error'}
+      {:else if controller.syncStatus === 'error'}
         <div class="status-badge error">
           <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -942,33 +216,33 @@
     </div>
   {/if}
 
-  {#if error}
+  {#if controller.error}
     <div class="error-container" data-testid="fillout-error">
       <EmptyState
         title="Unable to load questionnaire"
-        description={error}
+        description={controller.error}
         buttonText="Go back"
         onAction={() => goto('/')}
       />
     </div>
-  {:else if loading && currentScreen !== 'runtime'}
+  {:else if controller.loading && controller.screen !== 'runtime'}
     <div class="loading-container" data-testid="fillout-loading">
       <Spinner size="lg" />
-      <p class="loading-text">{loadingMessage}</p>
-      {#if loadingProgress > 0}
+      <p class="loading-text">{controller.loadingMessage}</p>
+      {#if controller.loadingProgress > 0}
         <div class="loading-progress">
-          <div class="progress-bar" style="width: {loadingProgress}%"></div>
+          <div class="progress-bar" style="width: {controller.loadingProgress}%"></div>
         </div>
       {/if}
     </div>
-  {:else if currentScreen === 'welcome'}
+  {:else if controller.screen === 'welcome'}
     <WelcomeScreen
       questionnaire={definition}
       projectName={data.questionnaire.projectName}
-      onStart={handleStart}
-      hasResumeState={!!activeResumeState}
-      onContinue={handleStart}
-      onStartOver={handleStartOver}
+      onStart={() => controller.handleStart()}
+      hasResumeState={!!controller.activeResumeState}
+      onContinue={() => controller.handleStart()}
+      onStartOver={() => controller.handleStartOver()}
       {welcomeMessage}
       languageOptions={languageOptions}
       activeLocale={effectiveLocale}
@@ -976,22 +250,22 @@
       showPhotosensitivityAdvisory={hasReactionQuestion}
       {prefersReducedMotion}
     />
-  {:else if currentScreen === 'consent'}
+  {:else if controller.screen === 'consent'}
     <ConsentScreen
       content={consentText}
       checkboxes={rawDefinition.consent?.checkboxes}
       requireSignature={rawDefinition.consent?.requireSignature}
-      onAccept={handleConsent}
-      onDecline={handleDeclineConsent}
-      onPrimeAudio={ensureAudioUnlocked}
+      onAccept={(c) => controller.handleConsent(c)}
+      onDecline={() => controller.handleDeclineConsent()}
+      onPrimeAudio={() => controller.ensureAudioUnlocked()}
     />
-  {:else if currentScreen === 'runtime'}
+  {:else if controller.screen === 'runtime'}
     <h1 class="sr-only">{definition?.name ?? 'Questionnaire'}</h1>
-    {#if showTimingBanner && qualification}
+    {#if showTimingBanner && controller.qualification}
       <div class="timing-banner" data-testid="fillout-timing-banner">
         <DeviceQualificationBanner
-          result={qualification}
-          onDismiss={timingBlocked ? undefined : () => (bannerDismissed = true)}
+          result={controller.qualification}
+          onDismiss={timingBlocked ? undefined : () => (controller.bannerDismissed = true)}
         />
         {#if timingBlocked}
           <p class="timing-block-note" data-testid="fillout-timing-block-note">
@@ -1003,13 +277,13 @@
       </div>
     {/if}
 
-    {#if resumeNotice}
+    {#if controller.resumeNotice}
       <div class="resume-toast" data-testid="fillout-resume-toast" role="status">
-        {resumeNotice}
+        {controller.resumeNotice}
       </div>
     {/if}
 
-    {#if data.pinnedFallback && !pinnedFallbackDismissed}
+    {#if data.pinnedFallback && !controller.pinnedFallbackDismissed}
       <div class="pinned-fallback-note" data-testid="fillout-pinned-fallback-note" role="status">
         <span>
           The exact version this session started on isn't stored on this device, so it's
@@ -1019,7 +293,7 @@
           type="button"
           class="pinned-fallback-dismiss"
           data-testid="fillout-pinned-fallback-dismiss"
-          onclick={() => (pinnedFallbackDismissed = true)}
+          onclick={() => (controller.pinnedFallbackDismissed = true)}
         >
           Dismiss
         </button>
@@ -1041,32 +315,32 @@
     ></canvas>
 
     <div class="html-overlay" data-testid="fillout-runtime-overlay">
-      {#if activePresentation && activeItem}
+      {#if controller.activePresentation && controller.activeItem}
         <div class="form-overlay" data-testid="fillout-form-overlay">
           <div
             class="form-card"
-            data-question-type={activePresentation.type}
+            data-question-type={controller.activePresentation.type}
             bind:this={formCardEl}
             tabindex="-1"
           >
-            {#if timerState}
+            {#if controller.timerState}
               <div class="form-timer" data-testid="fillout-form-timer">
                 <TimerDisplay
-                  remainingMs={timerState.remainingMs}
-                  totalMs={timerState.totalMs}
-                  warning={timerState.warning}
+                  remainingMs={controller.timerState.remainingMs}
+                  totalMs={controller.timerState.totalMs}
+                  warning={controller.timerState.warning}
                 />
               </div>
             {/if}
-            {#key activePresentation.item.id}
+            {#key controller.activePresentation.item.id}
               <ModularRenderer
-                item={activeItem}
+                item={controller.activeItem}
                 mode="runtime"
-                variables={activePresentation.variables}
-                bind:value={currentValue}
-                onResponse={handleOverlayResponse}
-                onValidation={activePresentation.onValidation}
-                onInteraction={activePresentation.onInteraction}
+                variables={controller.activePresentation.variables}
+                bind:value={controller.currentValue}
+                onResponse={(v) => controller.handleOverlayResponse(v)}
+                onValidation={controller.activePresentation.onValidation}
+                onInteraction={controller.activePresentation.onInteraction}
               />
             {/key}
 
@@ -1075,8 +349,8 @@
                 type="button"
                 class="form-continue"
                 data-testid="fillout-form-continue"
-                disabled={!canAdvance}
-                onclick={submitOverlayAnswer}
+                disabled={!controller.canAdvance}
+                onclick={() => controller.submitOverlayAnswer()}
               >
                 Continue
               </button>
@@ -1085,20 +359,20 @@
         </div>
       {/if}
     </div>
-  {:else if currentScreen === 'over-quota'}
+  {:else if controller.screen === 'over-quota'}
     <div class="loading-container" data-testid="fillout-over-quota">
       <EmptyState
         title="Study Full"
-        description={overQuotaMessage}
+        description={controller.overQuotaMessage}
         buttonText="Go back"
         onAction={() => goto('/')}
       />
     </div>
-  {:else if currentScreen === 'complete'}
+  {:else if controller.screen === 'complete'}
     <CompletionScreen
-      session={completedSession}
+      session={controller.completedSession}
       customMessage={completionMessage}
-      variables={completedVariables}
+      variables={controller.completedVariables}
       reportConfig={rawDefinition.settings?.report}
       distributionSettings={rawDefinition.settings?.distribution}
       urlParams={data.urlParams}
@@ -1109,17 +383,21 @@
     <!-- Shared-device data hygiene (F005): let the participant wipe every
          fillout record from this browser before handing it back. -->
     <div class="shared-device-panel" data-testid="fillout-clear-device">
-      {#if clearDone}
+      {#if controller.clearDone}
         <p class="shared-device-done" data-testid="fillout-clear-device-done">
           This device has been cleared. It is safe to hand back.
         </p>
-      {:else if clearConfirmOpen}
+      {:else if controller.clearConfirmOpen}
         <div class="shared-device-confirm" data-testid="fillout-clear-device-confirm">
-          {#if clearUnsyncedCount > 0}
+          {#if controller.clearUnsyncedCount > 0}
             <p class="shared-device-warning" data-testid="fillout-clear-device-warning">
-              Warning: {clearUnsyncedCount} response{clearUnsyncedCount === 1 ? '' : 's'} on this
-              device {clearUnsyncedCount === 1 ? 'has' : 'have'} not been sent to the server yet.
-              Clearing now will permanently discard {clearUnsyncedCount === 1 ? 'it' : 'them'}.
+              Warning: {controller.clearUnsyncedCount} response{controller.clearUnsyncedCount === 1
+                ? ''
+                : 's'} on this device {controller.clearUnsyncedCount === 1 ? 'has' : 'have'} not been
+              sent to the server yet. Clearing now will permanently discard {controller.clearUnsyncedCount ===
+              1
+                ? 'it'
+                : 'them'}.
             </p>
           {:else}
             <p class="shared-device-note">
@@ -1132,17 +410,17 @@
               type="button"
               class="shared-device-btn danger"
               data-testid="fillout-clear-device-confirm-btn"
-              disabled={clearing}
-              onclick={confirmClearDevice}
+              disabled={controller.clearing}
+              onclick={() => controller.confirmClearDevice()}
             >
-              {clearing ? 'Clearing…' : 'Clear this device'}
+              {controller.clearing ? 'Clearing…' : 'Clear this device'}
             </button>
             <button
               type="button"
               class="shared-device-btn"
               data-testid="fillout-clear-device-cancel-btn"
-              disabled={clearing}
-              onclick={cancelClearDevice}
+              disabled={controller.clearing}
+              onclick={() => controller.cancelClearDevice()}
             >
               Cancel
             </button>
@@ -1153,7 +431,7 @@
           type="button"
           class="shared-device-btn"
           data-testid="fillout-clear-device-btn"
-          onclick={requestClearDevice}
+          onclick={() => controller.requestClearDevice()}
         >
           End session / clear this device
         </button>

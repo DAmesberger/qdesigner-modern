@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import type { QuotaGroup, QuotaDefinition } from '$lib/shared';
   import { generateId } from '$lib/shared';
   import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-svelte';

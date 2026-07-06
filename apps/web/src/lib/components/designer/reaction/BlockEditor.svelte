@@ -1,13 +1,31 @@
 <script lang="ts">
   import TrialTemplateEditor from './TrialTemplateEditor.svelte';
-  import type { ReactionStudyBlock, ReactionStudyTrialTemplate } from '../model/reaction-schema';
+  import {
+    createStimulusForKind,
+    type ReactionStudyBlock,
+    type ReactionStudyTrialTemplate,
+  } from '$lib/modules/questions/reaction-time/model/reaction-schema';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface Props {
     blocks: ReactionStudyBlock[];
+    /**
+     * Optional immutable-commit affordance (P6-T5). Fired after any block/trial
+     * mutation so a consumer that drives this editor without `bind:` (e.g. the
+     * ReactionLab immutable `updateConfig` flow) can commit the next value. The
+     * `$bindable` reassignment is preserved for `bind:blocks` consumers, so both
+     * styles work from the same component.
+     */
+    onUpdate?: (blocks: ReactionStudyBlock[]) => void;
   }
 
-  let { blocks = $bindable() }: Props = $props();
+  let { blocks = $bindable(), onUpdate }: Props = $props();
+
+  // Notify immutable consumers. `bind:blocks` consumers already saw the mutation
+  // via the reassignment; this just re-emits the current array reference.
+  function emit() {
+    onUpdate?.(blocks);
+  }
 
   function ensureBlocks() {
     if (!Array.isArray(blocks)) {
@@ -29,11 +47,13 @@
         trials: [],
       },
     ];
+    emit();
   }
 
   function removeBlock(index: number) {
     ensureBlocks();
     blocks = blocks.filter((_, i) => i !== index);
+    emit();
   }
 
   function addTrial(block: ReactionStudyBlock) {
@@ -45,11 +65,7 @@
         name: `Trial ${nextIndex}`,
         condition: '',
         repeat: 1,
-        stimulus: {
-          kind: 'text',
-          text: 'GO',
-          fontPx: 64,
-        },
+        stimulus: createStimulusForKind('text'),
         validKeys: ['f', 'j'],
         correctResponse: 'j',
         requireCorrect: true,
@@ -58,20 +74,27 @@
         interTrialIntervalMs: 300,
       } satisfies ReactionStudyTrialTemplate,
     ];
+    blocks = [...blocks];
+    emit();
   }
 
   function removeTrial(block: ReactionStudyBlock, trialIndex: number) {
     block.trials = block.trials.filter((_, i) => i !== trialIndex);
+    blocks = [...blocks];
+    emit();
   }
 
   // E-REACT-4: criterion-based practice. Toggling this on a practice block makes
   // the runtime re-run it until the accuracy target is met (or attempts run out).
   function togglePracticeCriterion(block: ReactionStudyBlock, enabled: boolean) {
     block.practiceCriterion = enabled ? { minAccuracy: 0.8, maxAttempts: 3 } : undefined;
+    blocks = [...blocks];
+    emit();
   }
 </script>
 
-<div class="block-editor-root">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="block-editor-root" oninput={emit} onchange={emit}>
   <div class="block-editor-header">
     <h5 class="subsection-title">Visual Block &amp; Trial Editor</h5>
     <button class="btn btn-secondary" type="button" onclick={addBlock}>Add Block</button>
@@ -179,6 +202,7 @@
                   bind:trial={block.trials[trialIndex]!}
                   index={trialIndex}
                   onRemove={(idx) => removeTrial(block, idx)}
+                  onUpdate={emit}
                 />
               {/each}
             </div>

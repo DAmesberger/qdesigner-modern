@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { designerStore } from '$lib/stores/designer.svelte';
+  import { getDesignerContext } from '$lib/stores/designer-context';
+  const designerStore = getDesignerContext();
   import { tourEngine } from '$lib/help/tours/TourEngine.svelte';
   import { Search } from 'lucide-svelte';
 

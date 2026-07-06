@@ -245,3 +245,47 @@ export interface ReactionLegacyQuestionConfig {
 }
 
 export type NormalizedReactionConfig = ReactionStudyConfig;
+
+/**
+ * Canonical constructor for a fresh stimulus of a given kind. Extracted from the
+ * duplicated stimulus-kind switches that previously lived in TrialTemplateEditor
+ * (`setStimulusKind`) and ReactionLabWorkspace (`createStimulus`). Both the
+ * reaction-time and reaction-experiment stacks consume this so a newly picked
+ * kind always yields a fully-formed, WebGL-renderable config with a centered
+ * position. Callers may spread extra fields (e.g. `id`) onto the result.
+ */
+export function createStimulusForKind(
+  kind: ReactionStimulusConfig['kind']
+): ReactionStimulusConfig {
+  const position = { x: 0, y: 0 };
+  switch (kind) {
+    case 'shape':
+      return { kind: 'shape', shape: 'circle', radiusPx: 80, position };
+    case 'image':
+      return { kind: 'image', src: '', widthPx: 360, heightPx: 360, position };
+    case 'video':
+      return {
+        kind: 'video',
+        src: '',
+        autoplay: true,
+        muted: true,
+        loop: true,
+        widthPx: 640,
+        heightPx: 360,
+        position,
+      };
+    case 'audio':
+      return { kind: 'audio', src: '', autoplay: true, volume: 1, position };
+    case 'custom':
+      return {
+        kind: 'custom',
+        shader: 'void main() { gl_FragColor = vec4(0.49, 0.82, 0.98, 1.0); }',
+        vertices: [-0.5, -0.5, 0.5, -0.5, 0, 0.5],
+        uniforms: {},
+        position,
+      };
+    case 'text':
+    default:
+      return { kind: 'text', text: 'GO', fontPx: 64, position };
+  }
+}

@@ -1,11 +1,13 @@
 <script lang="ts">
-  import type { ReactionStudyTrialTemplate } from '../model/reaction-schema';
+  import type { ReactionStudyTrialTemplate } from '$lib/modules/questions/reaction-time/model/reaction-schema';
 
   interface Props {
     trial: ReactionStudyTrialTemplate;
+    /** Immutable-commit affordance (P6-T5); fired alongside the bind: mutation. */
+    onUpdate?: (trial: ReactionStudyTrialTemplate) => void;
   }
 
-  let { trial = $bindable() }: Props = $props();
+  let { trial = $bindable(), onUpdate }: Props = $props();
 
   const validKeysText = $derived((trial.validKeys || []).join(', '));
 
@@ -15,6 +17,7 @@
       .map((entry) => entry.trim())
       .filter(Boolean);
     trial.validKeys = keys;
+    onUpdate?.(trial);
   }
 </script>
 

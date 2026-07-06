@@ -2,6 +2,13 @@
   import AppLoader from '$lib/components/ui/AppLoader.svelte';
   import { browser } from '$app/environment';
   import { onMount } from 'svelte';
+  import { setDesignerContext } from '$lib/stores/designer-context';
+  import { designerStore } from '$lib/stores/designer.svelte';
+
+  // Provide the singleton store to the designer +page subtree so every designer
+  // component consumes it via getDesignerContext() (F034 injection seam). Runs
+  // during component init, before any child mounts.
+  setDesignerContext(designerStore);
 
   let { children } = $props();
   let isLoading = $state(true);
