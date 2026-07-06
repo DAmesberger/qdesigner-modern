@@ -16,6 +16,8 @@ import type { Question, QuestionnaireSession } from '$lib/shared';
 import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
 import { FilloutContentCache } from '$lib/fillout/services/FilloutContentCache';
 import { FilloutUploadSync, type SyncResult } from '$lib/fillout/services/FilloutUploadSync';
+import { OfflineResponsePersistence } from '$lib/fillout/services/OfflineResponsePersistence';
+import { SyncLedger } from '$lib/fillout/services/integrity/SyncLedger';
 import { QuotaService } from '$lib/fillout/services/QuotaService';
 import { FraudDetectionService } from '$lib/fillout/services/FraudDetectionService';
 import { api } from '$lib/services/api';
@@ -152,6 +154,16 @@ export class FilloutPageController {
   syncStatus = $state<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   savedLocally = $state(false);
 
+  // Connectivity UX (E-OFF-6): persistent, non-transient sync readout. `pendingCount`
+  // is the SyncLedger's `pending` tally (records queued locally, not yet server-acked);
+  // it survives reloads because the ledger lives in IndexedDB, so a participant who
+  // closed the tab with unsent data still sees it on return. `lastSyncedAt` is the epoch
+  // ms of the last fully-successful drain.
+  pendingCount = $state(0);
+  deadletterCount = $state(0);
+  lastSyncedAt = $state<number | null>(null);
+  private statsTimer: ReturnType<typeof setInterval> | null = null;
+
   // Resume state (E-OFF-1 / E-FLOW-3, FIX-F12).
   resumeNotice = $state<string | null>(null);
   pinnedFallbackDismissed = $state(false);
@@ -171,12 +183,6 @@ export class FilloutPageController {
   timerState = $state<FormTimerState | null>(null);
   // A11y (F094/F098): persistent live-region text.
   liveAnnouncement = $state('');
-
-  // --- Shared-device "End session / clear this device" (F005) ----------------
-  clearConfirmOpen = $state(false);
-  clearUnsyncedCount = $state(0);
-  clearing = $state(false);
-  clearDone = $state(false);
 
   // --- Non-reactive service handles ------------------------------------------
   private runtime: FilloutRuntime | null = null;
@@ -291,14 +297,61 @@ export class FilloutPageController {
         this.syncStatus = 'syncing';
       },
       onSyncComplete: (result) => {
-        this.syncStatus = result.errors.length > 0 ? 'error' : 'synced';
-        // Reset after a bit
+        const failed = result.errors.length > 0;
+        this.syncStatus = failed ? 'error' : 'synced';
+        // A clean drain is the anchor for the "last synced" readout (E-OFF-6).
+        if (!failed) {
+          this.lastSyncedAt = Date.now();
+        }
+        // Refresh the pending/dead-letter tallies now that records drained.
+        void this.refreshSyncStats();
+        // Reset the transient status chip after a bit (the persistent panel keeps
+        // showing the honest pending/last-synced state independently).
         setTimeout(() => {
           this.syncStatus = 'idle';
         }, 3000);
       },
     });
     this.syncEngine.start();
+    // Seed the pending count from the ledger (survives reloads) and keep it live so
+    // newly-persisted answers show up in the panel even without a sync round-trip.
+    void this.refreshSyncStats();
+    if (typeof setInterval !== 'undefined') {
+      this.statsTimer = setInterval(() => void this.refreshSyncStats(), 4000);
+    }
+  }
+
+  /** Whether a sync drain is currently in flight (drives the panel spinner). */
+  get isSyncing(): boolean {
+    return this.syncStatus === 'syncing';
+  }
+
+  /**
+   * Refresh the connectivity-UX tallies from the SyncLedger (E-OFF-6). Best-effort:
+   * a read failure leaves the last-known counts in place rather than flapping to zero.
+   */
+  async refreshSyncStats(): Promise<void> {
+    try {
+      const stats = await SyncLedger.stats();
+      this.pendingCount = stats.pending;
+      this.deadletterCount = stats.deadletter;
+    } catch {
+      // Non-critical: the panel keeps its last-known counts.
+    }
+  }
+
+  /**
+   * Manual "Sync now" (E-OFF-6 step 2). No-op while offline; otherwise drains the
+   * upload queue and refreshes the tallies. The engine serializes concurrent drains
+   * under a cross-tab lock, so a double-tap is safe.
+   */
+  async manualSync(): Promise<void> {
+    if (!this.syncEngine || this.isOffline) return;
+    try {
+      await this.syncEngine.syncNow();
+    } finally {
+      await this.refreshSyncStats();
+    }
   }
 
   /**
@@ -858,9 +911,10 @@ export class FilloutPageController {
     this.runtime?.resize(window.innerWidth, window.innerHeight);
   }
 
-  // --- Shared-device "End session / clear this device" (F005) ----------------
+  // --- Save & exit / clear-this-device (E-OFF-6 step 3, E-OFF-2/E-OFF-3) -------
 
-  private async countUnsyncedFilloutRows(): Promise<number> {
+  /** Public tally of unsynced rows for the Save-&-exit confirmation gate. */
+  async getUnsyncedCount(): Promise<number> {
     try {
       const [r, e, v] = await Promise.all([
         db.filloutResponses.where('synced').equals(0).count(),
@@ -873,36 +927,67 @@ export class FilloutPageController {
     }
   }
 
-  async requestClearDevice(): Promise<void> {
-    this.clearUnsyncedCount = await this.countUnsyncedFilloutRows();
-    this.clearConfirmOpen = true;
+  /** Force a final upload drain before a shared-device exit (no-op while offline). */
+  async forceSyncBeforeExit(): Promise<void> {
+    if (!this.syncEngine || this.isOffline) return;
+    await this.syncEngine.syncNow();
+    await this.refreshSyncStats();
   }
 
-  async confirmClearDevice(): Promise<void> {
-    this.clearing = true;
+  /**
+   * Hard wipe of every fillout store on this device (E-OFF-2/E-OFF-3): participant
+   * data, cached definitions + media accounting, server-variable aggregates, and — the
+   * security payload — the per-session encryption keys, plus the media Cache-API store.
+   * Callers MUST gate this behind the Save-&-exit confirmation flow.
+   */
+  async clearDeviceForHandoff(): Promise<void> {
+    await db.clearThisDevice();
     try {
-      await db.clearAllFilloutData();
-      // Drop the API session pointer so a stale id can't be reused on this device.
-      try {
-        sessionStorage.removeItem('qd_api_session_id');
-      } catch {
-        /* no-op */
-      }
-      this.clearDone = true;
-      this.clearConfirmOpen = false;
-    } catch (err) {
-      console.error('Failed to clear device data:', err);
-    } finally {
-      this.clearing = false;
+      sessionStorage.removeItem('qd_api_session_id');
+    } catch {
+      /* no-op */
     }
+    this.pendingCount = 0;
+    this.deadletterCount = 0;
   }
 
-  cancelClearDevice(): void {
-    this.clearConfirmOpen = false;
+  /**
+   * Download a JSON snapshot of every UNSYNCED row on this device (E-OFF-5 escape
+   * hatch), so a participant clearing a device that can't reach the server can still
+   * recover their answers off-device. Browser-only (DOM download); a no-op in SSR.
+   */
+  async exportUnsyncedData(): Promise<void> {
+    if (
+      typeof document === 'undefined' ||
+      typeof URL === 'undefined' ||
+      typeof URL.createObjectURL !== 'function'
+    ) {
+      return;
+    }
+    const snapshot = await OfflineResponsePersistence.exportUnsyncedData();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `qdesigner-unsynced-${new Date()
+        .toISOString()
+        .slice(0, 19)
+        .replace(/[:T]/g, '-')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
   }
 
   /** Tear down runtime, sync engine, and the audio unlock context (call on unmount). */
   dispose(): void {
+    if (this.statsTimer) {
+      clearInterval(this.statsTimer);
+      this.statsTimer = null;
+    }
     this.runtime?.dispose();
     this.syncEngine?.stop();
     if (this.audioUnlockContext) {

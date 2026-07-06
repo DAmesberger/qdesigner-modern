@@ -249,11 +249,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For mutating API requests, intercept failures and queue for offline sync
+  // For mutating API requests, intercept failures and queue for offline sync.
+  // EXCEPT the fillout-sync-owned mutations (E-OFF-4): FilloutUploadSync already
+  // drains responses/events/variables/session-progress idempotently (offline-first
+  // IndexedDB + ack-driven /sync). Letting the SW ALSO queue+replay those would
+  // create a second, uncoordinated retry path racing on the same client_ids.
   if (
     QUEUABLE_METHODS.includes(request.method) &&
     url.origin === self.location.origin &&
-    url.pathname.startsWith('/api/')
+    url.pathname.startsWith('/api/') &&
+    !isFilloutSyncOwned(url, request.method)
   ) {
     event.respondWith(fetchWithOfflineQueue(request));
     return;
@@ -348,6 +353,30 @@ async function fetchWithOfflineQueue(request) {
 }
 
 // ---------- Cache strategies ----------
+
+// Fillout-sync-owned mutation paths (E-OFF-4). FilloutUploadSync is the sole,
+// idempotent retry path for these (ack-driven /sync with per-record client_ids),
+// so the SW offline queue must NOT also capture them — a double retry path would
+// race two writers on the same client_ids. These fall through to a plain network
+// fetch; offline, the fetch simply fails and the app-level engine owns the retry.
+const FILLOUT_SYNC_OWNED_PATHS = [
+  /^\/api\/sessions\/[^/]+\/sync$/,
+  /^\/api\/sessions\/[^/]+\/responses$/,
+  /^\/api\/sessions\/[^/]+\/events$/,
+];
+// Session progress update (status / metadata) — a PATCH/PUT on the session root.
+// FilloutUploadSync re-drives this via /sync's session-init + status, so it is
+// likewise engine-owned. Guarded to the session-root path (not create at /sessions).
+const SESSION_PROGRESS_PATH = /^\/api\/sessions\/[^/]+$/;
+
+function isFilloutSyncOwned(url, method) {
+  if (url.origin !== self.location.origin) return false;
+  if (FILLOUT_SYNC_OWNED_PATHS.some((re) => re.test(url.pathname))) return true;
+  if ((method === 'PATCH' || method === 'PUT') && SESSION_PROGRESS_PATH.test(url.pathname)) {
+    return true;
+  }
+  return false;
+}
 
 // Matches the same-origin media streaming proxy: `GET /api/media/{id}/content`.
 // The full request URL is a stable, immutable cache key (contract D1).

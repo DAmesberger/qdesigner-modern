@@ -1,5 +1,7 @@
 import { db, type FilloutResponse, type FilloutEvent, type FilloutVariable } from '$lib/services/db/indexeddb';
 import { FilloutCrypto } from './crypto/FilloutCrypto';
+import { computeChecksum, verifyChecksum } from './integrity/checksum';
+import { SyncLedger } from './integrity/SyncLedger';
 
 /**
  * Per-response timing provenance (contract C-PROVENANCE). Captured alongside
@@ -66,10 +68,25 @@ export class OfflineResponsePersistence {
 			metadata: (await FilloutCrypto.encryptField(sessionId, data.metadata)) as
 				| Record<string, unknown>
 				| undefined,
+			attempts: 0,
 			synced: 0,
 		};
+		// E-OFF-5: checksum the canonicalized STORED content (post-encryption) so a
+		// later partial write / corruption / tamper is detectable on read.
+		const checksum = await computeChecksum(this.responseChecksumPayload(record));
+		record.checksum = checksum;
 
 		await db.filloutResponses.add(record);
+		// Write-verify: re-read the durable row and re-check its checksum before
+		// telling the runtime the write succeeded, so a failed IndexedDB write
+		// surfaces immediately instead of being silently assumed durable.
+		await this.assertWritten(
+			await db.filloutResponses.where('clientId').equals(record.clientId).first(),
+			checksum,
+			(r) => this.responseChecksumPayload(r as StoredFilloutResponse),
+			`response ${record.clientId}`
+		);
+		await SyncLedger.enqueue('response', record.clientId, sessionId);
 	}
 
 	/**
@@ -91,24 +108,174 @@ export class OfflineResponsePersistence {
 			questionId: data.questionId,
 			timestampUs: data.timestampUs,
 			metadata: data.metadata,
+			attempts: 0,
 			synced: 0,
 		};
+		const checksum = await computeChecksum(this.eventChecksumPayload(record));
+		record.checksum = checksum;
 
 		await db.filloutEvents.add(record);
+		await this.assertWritten(
+			await db.filloutEvents.where('clientId').equals(record.clientId).first(),
+			checksum,
+			(r) => this.eventChecksumPayload(r as FilloutEvent),
+			`event ${record.clientId}`
+		);
+		await SyncLedger.enqueue('event', record.clientId, sessionId);
 	}
 
 	/**
 	 * Save a variable value.
 	 */
 	static async saveVariable(sessionId: string, name: string, value: unknown): Promise<void> {
+		const clientId = crypto.randomUUID();
 		const record: FilloutVariable = {
 			sessionId,
 			name,
 			value: await FilloutCrypto.encryptField(sessionId, value),
+			// E-OFF-4: fresh concurrency token on every write so an ack for an older
+			// value never marks a newer (re-saved) value synced. Keyed [sessionId+name]
+			// so put() overwrites in place — the clientId is what distinguishes versions.
+			clientId,
+			attempts: 0,
 			synced: 0,
 		};
+		const checksum = await computeChecksum(this.variableChecksumPayload(record));
+		record.checksum = checksum;
 
 		await db.filloutVariables.put(record);
+		// Write-verify by the composite key (put overwrites in place).
+		await this.assertWritten(
+			await db.filloutVariables.get([sessionId, name]),
+			checksum,
+			(r) => this.variableChecksumPayload(r as FilloutVariable),
+			`variable ${sessionId}/${name}`
+		);
+		await SyncLedger.enqueue('variable', clientId, sessionId);
+	}
+
+	// ── Integrity helpers (E-OFF-5) ──────────────────────────────────────
+
+	/** Canonical content of a stored response row used for its checksum. */
+	private static responseChecksumPayload(r: StoredFilloutResponse): unknown {
+		return {
+			sessionId: r.sessionId,
+			clientId: r.clientId,
+			questionId: r.questionId,
+			value: r.value,
+			reactionTimeUs: r.reactionTimeUs,
+			presentedAt: r.presentedAt,
+			answeredAt: r.answeredAt,
+			timingProvenance: r.timingProvenance,
+			metadata: r.metadata,
+		};
+	}
+
+	private static eventChecksumPayload(e: FilloutEvent): unknown {
+		return {
+			sessionId: e.sessionId,
+			clientId: e.clientId,
+			eventType: e.eventType,
+			questionId: e.questionId,
+			timestampUs: e.timestampUs,
+			metadata: e.metadata,
+		};
+	}
+
+	private static variableChecksumPayload(v: FilloutVariable): unknown {
+		return { sessionId: v.sessionId, name: v.name, value: v.value, clientId: v.clientId };
+	}
+
+	/**
+	 * Write-verify (E-OFF-5 step 2): assert a just-written row is durably present
+	 * and its stored content still matches the checksum, throwing a clear error to
+	 * the runtime when it does not. A durable write that silently failed (quota,
+	 * eviction mid-transaction) surfaces here instead of being assumed successful.
+	 */
+	private static async assertWritten<T extends { checksum?: string }>(
+		reread: T | undefined,
+		expected: string,
+		payload: (r: T) => unknown,
+		label: string
+	): Promise<void> {
+		if (!reread) {
+			throw new Error(`[integrity] durable write failed: ${label} not found after write`);
+		}
+		const ok = await verifyChecksum(payload(reread), expected);
+		if (!ok || reread.checksum !== expected) {
+			throw new Error(`[integrity] write-verify checksum mismatch for ${label}`);
+		}
+	}
+
+	/**
+	 * Verify a stored row's checksum before it enters the sync stream. On mismatch
+	 * the row is escalated (ledger dead-letter + visible alert) and EXCLUDED from
+	 * the returned set so corrupt content is never synced as if intact — but the
+	 * row is left in IndexedDB so it can be exported/recovered.
+	 */
+	private static async verifyStored(
+		kind: 'response' | 'event' | 'variable',
+		clientId: string,
+		sessionId: string,
+		checksum: string | undefined,
+		payload: unknown
+	): Promise<boolean> {
+		if (await verifyChecksum(payload, checksum)) return true;
+		await SyncLedger.escalateChecksumMismatch(kind, clientId, sessionId);
+		return false;
+	}
+
+	/**
+	 * Record a failed sync attempt against the durable rows (E-OFF-5): bumps each
+	 * record's `attempts` + `lastError` in lockstep with the ledger dead-letter
+	 * accounting. Response/event rows are keyed by their indexed `clientId`.
+	 */
+	static async recordSyncFailure(
+		kind: 'response' | 'event',
+		clientIds: string[],
+		error: string
+	): Promise<void> {
+		if (clientIds.length === 0) return;
+		const bump = (row: FilloutResponse | FilloutEvent) => {
+			row.attempts = (row.attempts ?? 0) + 1;
+			row.lastError = error;
+		};
+		for (const clientId of clientIds) {
+			if (kind === 'response') {
+				await db.filloutResponses.where('clientId').equals(clientId).modify(bump);
+			} else {
+				await db.filloutEvents.where('clientId').equals(clientId).modify(bump);
+			}
+		}
+	}
+
+	/**
+	 * Manual escape hatch (E-OFF-5 step 7): a JSON-serializable snapshot of every
+	 * UNSYNCED row across all sessions, plus the ledger dead-letters, so a device
+	 * that can never reach the server is still recoverable. Sensitive slots are
+	 * decrypted so the export is human-usable off-device.
+	 */
+	static async exportUnsyncedData(): Promise<{
+		exportedAt: string;
+		responses: FilloutResponse[];
+		events: FilloutEvent[];
+		variables: FilloutVariable[];
+		deadletters: Awaited<ReturnType<typeof SyncLedger.deadletters>>;
+	}> {
+		const [responses, events, variables] = await Promise.all([
+			db.filloutResponses.where('synced').equals(0).toArray(),
+			db.filloutEvents.where('synced').equals(0).toArray(),
+			db.filloutVariables.where('synced').equals(0).toArray(),
+		]);
+		const decRes = await Promise.all(responses.map((r) => this.decryptResponse(r)));
+		const decVars = await Promise.all(variables.map((v) => this.decryptVariable(v)));
+		return {
+			exportedAt: new Date().toISOString(),
+			responses: decRes,
+			events,
+			variables: decVars,
+			deadletters: await SyncLedger.deadletters(),
+		};
 	}
 
 	/**
@@ -192,17 +359,42 @@ export class OfflineResponsePersistence {
 			.where('[sessionId+synced]')
 			.equals([sessionId, 0])
 			.toArray();
-		return Promise.all(rows.map((r) => this.decryptResponse(r)));
+		// E-OFF-5: verify each row's checksum; a corrupt row is escalated and
+		// dropped from the sync stream (never synced as if intact) but kept on disk.
+		const intact: StoredFilloutResponse[] = [];
+		for (const r of rows) {
+			const ok = await this.verifyStored(
+				'response',
+				r.clientId,
+				r.sessionId,
+				(r as StoredFilloutResponse).checksum,
+				this.responseChecksumPayload(r as StoredFilloutResponse)
+			);
+			if (ok) intact.push(r as StoredFilloutResponse);
+		}
+		return Promise.all(intact.map((r) => this.decryptResponse(r)));
 	}
 
 	/**
 	 * Get unsynced events for a session.
 	 */
 	static async getUnsyncedEvents(sessionId: string): Promise<FilloutEvent[]> {
-		return db.filloutEvents
+		const rows = await db.filloutEvents
 			.where('[sessionId+synced]')
 			.equals([sessionId, 0])
 			.toArray();
+		const intact: FilloutEvent[] = [];
+		for (const e of rows) {
+			const ok = await this.verifyStored(
+				'event',
+				e.clientId,
+				e.sessionId,
+				e.checksum,
+				this.eventChecksumPayload(e)
+			);
+			if (ok) intact.push(e);
+		}
+		return intact;
 	}
 
 	/**
@@ -214,7 +406,18 @@ export class OfflineResponsePersistence {
 			.equals(sessionId)
 			.filter((v) => v.synced === 0)
 			.toArray();
-		return Promise.all(rows.map((v) => this.decryptVariable(v)));
+		const intact: FilloutVariable[] = [];
+		for (const v of rows) {
+			const ok = await this.verifyStored(
+				'variable',
+				v.clientId ?? `${v.sessionId}/${v.name}`,
+				v.sessionId,
+				v.checksum,
+				this.variableChecksumPayload(v)
+			);
+			if (ok) intact.push(v);
+		}
+		return Promise.all(intact.map((v) => this.decryptVariable(v)));
 	}
 
 	/**
@@ -238,12 +441,39 @@ export class OfflineResponsePersistence {
 	}
 
 	/**
-	 * Mark variables as synced for a session.
+	 * Mark session variables synced (E-OFF-4).
+	 *
+	 * Ack-driven when `accepted` is supplied: flips ONLY the named rows the server
+	 * durably upserted, and only while the row still carries the clientId that was
+	 * sent — a value re-written during the sync round-trip has a newer clientId and
+	 * is left unsynced for the next pass. This replaces the old mark-ALL-by-session
+	 * semantics that raced with mid-flight writes.
+	 *
+	 * Backward-compatible fallback: with `accepted` omitted (older server that does
+	 * not echo `accepted_variable_names`), it marks every row for the session synced
+	 * — the legacy behaviour, preserving idempotent drain against such servers.
 	 */
-	static async markVariablesSynced(sessionId: string): Promise<void> {
-		await db.filloutVariables
-			.where('sessionId')
-			.equals(sessionId)
-			.modify({ synced: 1 });
+	static async markVariablesSynced(
+		sessionId: string,
+		accepted?: { name: string; clientId?: string }[]
+	): Promise<void> {
+		if (accepted === undefined) {
+			await db.filloutVariables
+				.where('sessionId')
+				.equals(sessionId)
+				.modify({ synced: 1 });
+			return;
+		}
+
+		for (const { name, clientId } of accepted) {
+			await db.filloutVariables
+				.where('[sessionId+name]')
+				.equals([sessionId, name])
+				// Guard on the concurrency token: skip a row overwritten mid-flight
+				// (its clientId no longer matches the one the server acked). When the
+				// sent record had no clientId (legacy row), fall through and mark it.
+				.filter((v) => clientId === undefined || v.clientId === clientId)
+				.modify({ synced: 1 });
+		}
 	}
 }

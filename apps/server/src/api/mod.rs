@@ -226,6 +226,10 @@ pub fn router(state: AppState) -> Router {
             )),
         )
         .route(
+            "/{id}/synced-client-ids",
+            get(sessions::synced_client_ids),
+        )
+        .route(
             "/{id}/variables",
             get(sessions::get_variables).post(sessions::upsert_variable),
         )

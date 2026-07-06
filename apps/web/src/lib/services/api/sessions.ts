@@ -306,7 +306,15 @@ export const sessions = {
         path: { id: sessionId },
         body,
       })
-    ) as Promise<{ responses_synced: number; events_synced: number; variables_synced: number }>,
+    ) as Promise<{
+      responses_synced: number;
+      events_synced: number;
+      variables_synced: number;
+      // Ack-driven marking (E-OFF-4). Optional: an older server omits these and
+      // the client falls back to marking every sent record synced.
+      accepted_client_ids?: string[];
+      accepted_variable_names?: string[];
+    }>,
   uploadMedia: (
     sessionId: string,
     file: File | Blob,

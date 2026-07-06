@@ -198,6 +198,50 @@ export async function requestPersistentStorage(): Promise<boolean> {
   }
 }
 
+/**
+ * Default headroom (bytes) below which starting a long OFFLINE run is considered
+ * risky when storage is not persistent (E-OFF-5 step 4). A reaction-time study can
+ * queue thousands of rows; 50 MB is a conservative floor before mid-study eviction
+ * becomes a real threat.
+ */
+export const MIN_OFFLINE_HEADROOM_BYTES = 50 * 1024 * 1024;
+
+export interface EvictionRisk {
+  /** Did the browser grant persistent storage (immune to routine eviction)? */
+  persisted: boolean;
+  /** Best-effort free bytes (quota − usage); 0 when the estimate API is absent. */
+  headroomBytes: number;
+  /** True when storage is NOT persistent AND headroom is below the floor. */
+  atRisk: boolean;
+  /** Participant/researcher-facing warning when `atRisk`, else undefined. */
+  message?: string;
+}
+
+/**
+ * Eviction guard (E-OFF-5 step 4). On fillout start, request persistent storage
+ * and — if it is DENIED and free headroom is below `minHeadroomBytes` — report a
+ * risk so the caller can warn the participant/researcher and block starting a long
+ * offline run rather than silently risk mid-study eviction of research data.
+ */
+export async function assessEvictionRisk(
+  minHeadroomBytes: number = MIN_OFFLINE_HEADROOM_BYTES
+): Promise<EvictionRisk> {
+  const persisted = await requestPersistentStorage();
+  const estimate = await getStorageEstimate();
+  const headroomBytes = estimate ? Math.max(0, estimate.quota - estimate.usage) : 0;
+  const atRisk = !persisted && headroomBytes < minHeadroomBytes;
+  return {
+    persisted,
+    headroomBytes,
+    atRisk,
+    message: atRisk
+      ? `Storage is not persistent and only ~${Math.round(headroomBytes / (1024 * 1024))} MB is free. ` +
+        'A long offline session risks being evicted mid-study and losing data. Free up space or use a ' +
+        'different device before starting.'
+      : undefined,
+  };
+}
+
 // Helper to estimate storage usage
 export async function getStorageEstimate(): Promise<{ usage: number; quota: number } | null> {
   if (!browser || !navigator.storage?.estimate) {

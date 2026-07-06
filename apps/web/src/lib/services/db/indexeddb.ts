@@ -138,6 +138,17 @@ export interface FilloutResponse {
   presentedAt?: string;
   answeredAt?: string;
   metadata?: Record<string, unknown>;
+  /**
+   * SHA-256 (or FNV-1a fallback) of the canonicalized STORED content (E-OFF-5),
+   * computed at write time and re-verified on read. A mismatch means the row was
+   * partially written / corrupted / tampered — it is escalated, not synced.
+   * Optional so pre-E-OFF-5 rows (and direct test puts) remain valid.
+   */
+  checksum?: string;
+  /** Sync attempt counter (E-OFF-5). Bumped each time the row was sent but not acked. */
+  attempts?: number;
+  /** Last sync error seen for this row (E-OFF-5 dead-letter diagnostics). */
+  lastError?: string;
   synced: 0 | 1;
 }
 
@@ -149,6 +160,12 @@ export interface FilloutEvent {
   questionId?: string;
   timestampUs: number;
   metadata?: Record<string, unknown>;
+  /** Content checksum (E-OFF-5); see {@link FilloutResponse.checksum}. */
+  checksum?: string;
+  /** Sync attempt counter (E-OFF-5). */
+  attempts?: number;
+  /** Last sync error seen for this row (E-OFF-5). */
+  lastError?: string;
   synced: 0 | 1;
 }
 
@@ -156,7 +173,42 @@ export interface FilloutVariable {
   sessionId: string;
   name: string;
   value: unknown;
+  /**
+   * Per-record concurrency token (E-OFF-4). Regenerated on every `saveVariable`
+   * put, so a variable re-written mid-sync gets a fresh id. Ack-driven marking
+   * only flips a row to `synced=1` when the server-accepted name still carries
+   * the clientId that was sent — a value overwritten during the network round-trip
+   * keeps its newer clientId and stays unsynced for the next pass. A plain stored
+   * column (structured-clone round-trips it); no index / schema bump needed.
+   * Optional so pre-E-OFF-4 rows (and direct test puts) remain valid.
+   */
+  clientId?: string;
+  /** Content checksum (E-OFF-5); see {@link FilloutResponse.checksum}. */
+  checksum?: string;
+  /** Sync attempt counter (E-OFF-5). */
+  attempts?: number;
+  /** Last sync error seen for this row (E-OFF-5). */
+  lastError?: string;
   synced: 0 | 1;
+}
+
+/**
+ * Append-only sync-journey audit for every durable participant record (E-OFF-5).
+ * One row per record `clientId`, tracking its passage from `pending` (enqueued
+ * locally) → `acked` (server durably holds it) or → `deadletter` (K sync attempts
+ * failed; escalated to a human, never silently dropped). Reconcile diffs the
+ * `acked` rows against what the server actually reports so a client-side
+ * over-marking (locally acked, server-missing) is detected and re-queued.
+ */
+export interface FilloutSyncLedgerEntry {
+  /** Primary key: the record's dedup `clientId`. */
+  clientId: string;
+  sessionId: string;
+  kind: 'response' | 'event' | 'variable';
+  state: 'pending' | 'acked' | 'deadletter';
+  attempts: number;
+  lastError?: string;
+  updatedAt: number;
 }
 
 /**
@@ -229,6 +281,7 @@ class QDesignerDatabase extends Dexie {
   filloutMedia!: Table<FilloutMediaEntry>;
   filloutServerVariables!: Table<FilloutServerVariable>;
   filloutKeys!: Table<FilloutKeyRow, string>;
+  filloutSyncLedger!: Table<FilloutSyncLedgerEntry, string>;
 
   constructor() {
     super('QDesignerOfflineDB');
@@ -368,6 +421,30 @@ class QDesignerDatabase extends Dexie {
       filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt',
       filloutServerVariables: '[definitionKey+variableId], definitionKey, questionnaireId, syncedAt',
       filloutKeys: 'sessionId'
+    });
+
+    // v7: sync-integrity ledger + no-silent-loss (E-OFF-5).
+    //  - filloutSyncLedger is new: one append-only audit row per record clientId
+    //    (PK `clientId`), with `state`/`kind`/`[sessionId+state]` indexes for the
+    //    reconcile diff, dead-letter query, and per-session stats. Purely additive
+    //    — no .upgrade() body, so Dexie creates the empty table on next open.
+    //  - The new checksum/attempts/lastError columns on filloutResponses/Events/
+    //    Variables are plain STORED fields (structured-clone round-trips them), not
+    //    indexes, so they need no schema entry; all v6 stores are restated verbatim.
+    this.version(7).stores({
+      questionnaires: 'id, userId, syncStatus, lastModified, [id+userId]',
+      syncQueue: '++id, userId, status, timestamp, [userId+status]',
+      resources: 'id, url, lastAccessed, expiresAt',
+      drafts: 'id, userId, questionnaireId, timestamp, [userId+questionnaireId]',
+      filloutQuestionnaires: 'id, questionnaireId, accessCode, syncedAt',
+      filloutSessions: 'id, questionnaireId, status, createdAt, synced, [questionnaireId+status]',
+      filloutResponses: '++id, sessionId, clientId, questionId, synced, [sessionId+synced]',
+      filloutEvents: '++id, sessionId, clientId, synced, [sessionId+synced]',
+      filloutVariables: '[sessionId+name], sessionId, synced',
+      filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt',
+      filloutServerVariables: '[definitionKey+variableId], definitionKey, questionnaireId, syncedAt',
+      filloutKeys: 'sessionId',
+      filloutSyncLedger: 'clientId, sessionId, kind, state, updatedAt, [sessionId+state]'
     });
   }
 
@@ -573,6 +650,28 @@ class QDesignerDatabase extends Dexie {
       itemCount++;
     });
 
+    // Fillout offline tables (E-OFF-5): participant data dominates the store on a
+    // long offline run, so the storage readout must account for it. Media blobs
+    // live in the Cache API (tracked via getStorageEstimate), not IndexedDB, so
+    // only the metadata row is counted here.
+    const filloutTables: Table<{ size?: number }>[] = [
+      this.filloutSessions as unknown as Table<{ size?: number }>,
+      this.filloutResponses as unknown as Table<{ size?: number }>,
+      this.filloutEvents as unknown as Table<{ size?: number }>,
+      this.filloutVariables as unknown as Table<{ size?: number }>,
+      this.filloutQuestionnaires as unknown as Table<{ size?: number }>,
+      this.filloutMedia as unknown as Table<{ size?: number }>,
+      this.filloutServerVariables as unknown as Table<{ size?: number }>,
+      this.filloutSyncLedger as unknown as Table<{ size?: number }>,
+    ];
+    for (const table of filloutTables) {
+      const rows = await table.toArray();
+      for (const row of rows) {
+        totalSize += JSON.stringify(row).length;
+        itemCount++;
+      }
+    }
+
     return { used: totalSize, items: itemCount };
   }
 
@@ -711,6 +810,7 @@ class QDesignerDatabase extends Dexie {
         this.filloutMedia,
         this.filloutServerVariables,
         this.filloutKeys,
+        this.filloutSyncLedger,
       ],
       async () => {
         await Promise.all([
@@ -721,7 +821,8 @@ class QDesignerDatabase extends Dexie {
           this.filloutQuestionnaires.clear(),
           this.filloutMedia.clear(),
           this.filloutServerVariables.clear(),
-          this.filloutKeys.clear()
+          this.filloutKeys.clear(),
+          this.filloutSyncLedger.clear()
         ]);
       }
     );

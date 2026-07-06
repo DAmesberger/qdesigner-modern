@@ -7,6 +7,9 @@
   import WelcomeScreen from '$lib/fillout/components/WelcomeScreen.svelte';
   import ConsentScreen from '$lib/fillout/components/ConsentScreen.svelte';
   import CompletionScreen from '$lib/fillout/components/CompletionScreen.svelte';
+  import SyncStatusPanel from '$lib/fillout/components/SyncStatusPanel.svelte';
+  import ShareDeviceExit from '$lib/fillout/components/ShareDeviceExit.svelte';
+  import { m } from '$lib/paraglide/messages';
   import ModularRenderer from '$lib/runtime/ModularRenderer.svelte';
   import TimerDisplay from '$lib/components/ui/TimerDisplay.svelte';
   import {
@@ -137,6 +140,30 @@
     typeof window !== 'undefined' &&
     !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+  // --- Connectivity UX (E-OFF-6) --------------------------------------------
+  // Persistent sync widget: visible whenever the participant is actually in/after a
+  // session, or whenever there is something honest to report (offline, pending, or a
+  // drain in flight). Kept off the pristine welcome screen so it isn't noise there.
+  const hasQuotas = $derived((rawDefinition?.settings?.quotas?.length ?? 0) > 0);
+  const showSyncPanel = $derived(
+    controller.screen === 'runtime' ||
+      controller.screen === 'complete' ||
+      controller.isOffline ||
+      controller.pendingCount > 0 ||
+      controller.isSyncing
+  );
+  // Reload-persistent prompt (step 7): the SyncLedger pending tally lives in IndexedDB,
+  // so a participant who closed the tab mid-session sees this on the entry screens.
+  const showUnsyncedBanner = $derived(
+    controller.pendingCount > 0 &&
+      (controller.screen === 'welcome' || controller.screen === 'consent')
+  );
+  // Honest offline-quota disclosure (step 4): eligibility can't be checked offline, so
+  // say so up front rather than silently admitting — server re-checks on submission (P1-T4).
+  const showOfflineQuotaDisclosure = $derived(
+    hasQuotas && controller.isOffline && controller.screen === 'welcome'
+  );
+
   // Bridge the locale-dependent runtime inputs + the DOM canvas to the controller. Read
   // lazily (at runtime-construction time) so they reflect the participant's latest locale
   // pick and the freshly-bound canvas.
@@ -181,38 +208,24 @@
        question presentation is announced. -->
   <div class="sr-only" role="status" aria-live="polite">{controller.liveAnnouncement}</div>
 
-  <!-- Offline / Sync indicators -->
-  {#if controller.isOffline || controller.syncStatus !== 'idle'}
+  <!-- Persistent connectivity widget (E-OFF-6): online/offline, N answers pending,
+       last-synced time, and a manual Sync-now control. Replaces the auto-hiding badge. -->
+  {#if showSyncPanel}
     <div class="status-bar" data-testid="fillout-status-bar">
-      {#if controller.isOffline}
-        <div class="status-badge offline">
-          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364a9 9 0 010-12.728M13 10l-4 4m0-4l4 4" />
-          </svg>
-          Offline — responses saved locally
-        </div>
-      {:else if controller.syncStatus === 'syncing'}
-        <div class="status-badge syncing">
-          <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Syncing responses...
-        </div>
-      {:else if controller.syncStatus === 'synced'}
-        <div class="status-badge synced">
-          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-          </svg>
-          Synced to server
-        </div>
-      {:else if controller.syncStatus === 'error'}
-        <div class="status-badge error">
-          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          Sync error — will retry
-        </div>
-      {/if}
+      <SyncStatusPanel
+        online={!controller.isOffline}
+        syncing={controller.isSyncing}
+        pending={controller.pendingCount}
+        lastSyncedAt={controller.lastSyncedAt}
+        onSyncNow={() => controller.manualSync()}
+      />
+    </div>
+  {/if}
+
+  <!-- Reload-persistent "unsynced on this device" prompt (E-OFF-6 step 7). -->
+  {#if showUnsyncedBanner}
+    <div class="unsynced-banner" data-testid="fillout-unsynced-banner" role="status">
+      {m.fillout_unsynced_banner({ count: controller.pendingCount })}
     </div>
   {/if}
 
@@ -236,6 +249,15 @@
       {/if}
     </div>
   {:else if controller.screen === 'welcome'}
+    {#if showOfflineQuotaDisclosure}
+      <div
+        class="offline-quota-note"
+        data-testid="fillout-offline-quota-note"
+        role="status"
+      >
+        {m.fillout_offline_quota_notice()}
+      </div>
+    {/if}
     <WelcomeScreen
       questionnaire={definition}
       projectName={data.questionnaire.projectName}
@@ -380,62 +402,17 @@
       onClose={() => goto('/')}
     />
 
-    <!-- Shared-device data hygiene (F005): let the participant wipe every
-         fillout record from this browser before handing it back. -->
+    <!-- Shared-device data hygiene (E-OFF-6 step 3): force a final sync, then wipe every
+         fillout store + keys + media cache (E-OFF-2/E-OFF-3) so the kiosk is safe to hand
+         back. Unsynced rows require explicit confirmation and offer the E-OFF-5 export first. -->
     <div class="shared-device-panel" data-testid="fillout-clear-device">
-      {#if controller.clearDone}
-        <p class="shared-device-done" data-testid="fillout-clear-device-done">
-          This device has been cleared. It is safe to hand back.
-        </p>
-      {:else if controller.clearConfirmOpen}
-        <div class="shared-device-confirm" data-testid="fillout-clear-device-confirm">
-          {#if controller.clearUnsyncedCount > 0}
-            <p class="shared-device-warning" data-testid="fillout-clear-device-warning">
-              Warning: {controller.clearUnsyncedCount} response{controller.clearUnsyncedCount === 1
-                ? ''
-                : 's'} on this device {controller.clearUnsyncedCount === 1 ? 'has' : 'have'} not been
-              sent to the server yet. Clearing now will permanently discard {controller.clearUnsyncedCount ===
-              1
-                ? 'it'
-                : 'them'}.
-            </p>
-          {:else}
-            <p class="shared-device-note">
-              All data on this device has been sent to the server. Clear it to remove your
-              answers from this browser?
-            </p>
-          {/if}
-          <div class="shared-device-actions">
-            <button
-              type="button"
-              class="shared-device-btn danger"
-              data-testid="fillout-clear-device-confirm-btn"
-              disabled={controller.clearing}
-              onclick={() => controller.confirmClearDevice()}
-            >
-              {controller.clearing ? 'Clearing…' : 'Clear this device'}
-            </button>
-            <button
-              type="button"
-              class="shared-device-btn"
-              data-testid="fillout-clear-device-cancel-btn"
-              disabled={controller.clearing}
-              onclick={() => controller.cancelClearDevice()}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      {:else}
-        <button
-          type="button"
-          class="shared-device-btn"
-          data-testid="fillout-clear-device-btn"
-          onclick={() => controller.requestClearDevice()}
-        >
-          End session / clear this device
-        </button>
-      {/if}
+      <ShareDeviceExit
+        online={!controller.isOffline}
+        countUnsynced={() => controller.getUnsyncedCount()}
+        onSync={() => controller.forceSyncBeforeExit()}
+        onClear={() => controller.clearDeviceForHandoff()}
+        onExport={() => controller.exportUnsyncedData()}
+      />
     </div>
   {/if}
 </div>
@@ -461,40 +438,38 @@
     pointer-events: none;
   }
 
-  .status-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.375rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    pointer-events: auto;
-    backdrop-filter: blur(8px);
+  .unsynced-banner {
+    position: fixed;
+    top: 3rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 96;
+    width: min(560px, calc(100vw - 1.5rem));
+    padding: 0.625rem 1rem;
+    border-radius: 0.5rem;
+    background: hsl(var(--warning) / 0.12);
+    border: 1px solid hsl(var(--warning) / 0.35);
+    color: hsl(var(--foreground));
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    text-align: center;
   }
 
-  .status-badge.offline {
-    background: rgb(254 243 199 / 0.9);
-    color: rgb(146 64 14);
-    border: 1px solid rgb(253 224 71 / 0.5);
-  }
-
-  .status-badge.syncing {
-    background: rgb(219 234 254 / 0.9);
-    color: rgb(30 64 175);
-    border: 1px solid rgb(147 197 253 / 0.5);
-  }
-
-  .status-badge.synced {
-    background: rgb(220 252 231 / 0.9);
-    color: rgb(22 101 52);
-    border: 1px solid rgb(134 239 172 / 0.5);
-  }
-
-  .status-badge.error {
-    background: rgb(254 226 226 / 0.9);
-    color: rgb(153 27 27);
-    border: 1px solid rgb(252 165 165 / 0.5);
+  .offline-quota-note {
+    position: fixed;
+    top: 3rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 96;
+    width: min(560px, calc(100vw - 1.5rem));
+    padding: 0.625rem 1rem;
+    border-radius: 0.5rem;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    text-align: center;
   }
 
   .loading-container,
@@ -683,88 +658,4 @@
     text-align: center;
   }
 
-  .shared-device-confirm {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.875rem 1rem;
-    border-radius: 0.5rem;
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
-    box-shadow: 0 6px 24px rgb(0 0 0 / 0.12);
-  }
-
-  .shared-device-warning {
-    color: hsl(var(--destructive));
-    font-size: 0.8125rem;
-    line-height: 1.4;
-  }
-
-  .shared-device-note {
-    color: hsl(var(--muted-foreground));
-    font-size: 0.8125rem;
-    line-height: 1.4;
-  }
-
-  .shared-device-done {
-    color: hsl(var(--muted-foreground));
-    font-size: 0.8125rem;
-  }
-
-  .shared-device-actions {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-  }
-
-  .shared-device-btn {
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid hsl(var(--border));
-    background: hsl(var(--card));
-    color: hsl(var(--foreground));
-    font-size: 0.8125rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: opacity 0.15s ease;
-  }
-
-  .shared-device-btn:hover {
-    opacity: 0.85;
-  }
-
-  .shared-device-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .shared-device-btn.danger {
-    background: hsl(var(--destructive));
-    color: hsl(var(--destructive-foreground));
-    border-color: hsl(var(--destructive));
-  }
-
-  :global(.dark) .status-badge.offline {
-    background: rgb(120 53 15 / 0.8);
-    color: rgb(253 224 71);
-    border-color: rgb(161 98 7 / 0.5);
-  }
-
-  :global(.dark) .status-badge.syncing {
-    background: rgb(30 58 138 / 0.8);
-    color: rgb(147 197 253);
-    border-color: rgb(59 130 246 / 0.5);
-  }
-
-  :global(.dark) .status-badge.synced {
-    background: rgb(20 83 45 / 0.8);
-    color: rgb(134 239 172);
-    border-color: rgb(34 197 94 / 0.5);
-  }
-
-  :global(.dark) .status-badge.error {
-    background: rgb(127 29 29 / 0.8);
-    color: rgb(252 165 165);
-    border-color: rgb(220 38 38 / 0.5);
-  }
 </style>

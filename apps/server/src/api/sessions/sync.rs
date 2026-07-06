@@ -141,6 +141,13 @@ pub async fn sync_session(
     let mut responses_synced = 0i32;
     let mut events_synced = 0i32;
     let mut variables_synced = 0i32;
+    // Ack-driven marking (E-OFF-4): every client_id / variable name the server
+    // durably holds after this sync, returned so the client flips ONLY these to
+    // synced=1. A committed `ON CONFLICT (client_id) DO NOTHING` chunk guarantees
+    // every id it carried is now present (freshly inserted OR already there from a
+    // prior partial sync), so we ack the whole chunk on success.
+    let mut accepted_client_ids: Vec<Uuid> = Vec::new();
+    let mut accepted_variable_names: Vec<String> = Vec::new();
     let session_context = if body.variables.is_empty() {
         None
     } else {
@@ -188,6 +195,8 @@ pub async fn sync_session(
         builder.push(" ON CONFLICT (client_id) DO NOTHING");
         let result = builder.build().execute(&mut **tx).await?;
         responses_synced += result.rows_affected() as i32;
+        // Statement committed → every client_id in this chunk is now durably held.
+        accepted_client_ids.extend(chunk.iter().map(|resp| resp.client_id));
     }
 
     // Sync events with dedup — same chunked strategy as responses.
@@ -209,6 +218,8 @@ pub async fn sync_session(
         builder.push(" ON CONFLICT (client_id) DO NOTHING");
         let result = builder.build().execute(&mut **tx).await?;
         events_synced += result.rows_affected() as i32;
+        // Same ack contract as responses — the committed chunk is durably held.
+        accepted_client_ids.extend(chunk.iter().map(|evt| evt.client_id));
     }
 
     // Sync variables (upsert)
@@ -224,6 +235,9 @@ pub async fn sync_session(
         if let Some(context) = &session_context {
             persist_session_variable(&mut tx, session_id, context, &variable_name, normalized)
                 .await?;
+            // Durably upserted → ack this name so the client marks exactly this
+            // variable row synced (never the whole session).
+            accepted_variable_names.push(variable_name);
         }
 
         variables_synced += 1;
@@ -293,7 +307,54 @@ pub async fn sync_session(
         responses_synced,
         events_synced,
         variables_synced,
+        accepted_client_ids,
+        accepted_variable_names,
     }))
+}
+
+/// GET /api/sessions/{id}/synced-client-ids
+///
+/// Lightweight reconcile probe (E-OFF-5): returns the `client_id`s the server
+/// durably holds for the session (responses + interaction events). The client
+/// diffs its locally-`acked` ledger rows against this set and re-queues anything
+/// the server does not actually have — defending against a client-side
+/// over-marking that would otherwise strand data. Runs under the fillout GUC
+/// (`app.session_id` from the URL path), so an anonymous session can probe its
+/// own durability; `ensure_session_participant_or_member` gates access.
+#[utoipa::path(
+    get,
+    path = "/api/sessions/{id}/synced-client-ids",
+    params(
+        ("id" = Uuid, Path, description = "Session id")
+    ),
+    responses(
+        (status = 200, description = "Client ids the server durably holds", body = SyncedClientIdsResponse),
+        (status = 404, description = "Session not found", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["sessions"]
+)]
+pub async fn synced_client_ids(
+    OptionalUser(user): OptionalUser,
+    tx: Tx,
+    Path(session_id): Path<Uuid>,
+) -> Result<Json<SyncedClientIdsResponse>, ApiError> {
+    let mut tx = tx.tx().await?;
+    ensure_session_participant_or_member(&mut tx, user.as_ref(), session_id).await?;
+
+    let client_ids = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT client_id FROM responses
+        WHERE session_id = $1 AND client_id IS NOT NULL
+        UNION
+        SELECT client_id FROM interaction_events
+        WHERE session_id = $1 AND client_id IS NOT NULL
+        "#,
+    )
+    .bind(session_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    Ok(Json(SyncedClientIdsResponse { client_ids }))
 }
 
 /// E-FLOW-7: at completion, atomically claim the participant's interlocking

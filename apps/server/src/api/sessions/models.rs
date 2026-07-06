@@ -1698,6 +1698,29 @@ pub struct SyncResult {
     pub responses_synced: i32,
     pub events_synced: i32,
     pub variables_synced: i32,
+    /// Ack-driven marking (E-OFF-4): the `client_id`s (responses AND events) the
+    /// server DURABLY HOLDS after this sync — i.e. every id in a chunk whose
+    /// `INSERT ... ON CONFLICT (client_id) DO NOTHING` statement committed, which
+    /// includes rows that were already present from a prior partial sync. The
+    /// client flips ONLY these rows to `synced=1`; anything absent here stays
+    /// unsynced and retries next pass. Empty when nothing was written.
+    #[serde(default)]
+    pub accepted_client_ids: Vec<Uuid>,
+    /// Ack-driven marking (E-OFF-4): the session-variable NAMES durably upserted
+    /// by this sync. The client marks only these variable rows synced (guarded by
+    /// a per-record clientId concurrency token), replacing the old mark-all-by-
+    /// session semantics that raced with mid-flight variable writes.
+    #[serde(default)]
+    pub accepted_variable_names: Vec<String>,
+}
+
+/// Response for `GET /api/sessions/{id}/synced-client-ids` (E-OFF-5 reconcile).
+/// The `client_id`s the server DURABLY HOLDS for the session (responses +
+/// interaction events). The client diffs its locally-`acked` ledger rows against
+/// this set to detect and re-queue any over-marking (locally acked, server-missing).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SyncedClientIdsResponse {
+    pub client_ids: Vec<Uuid>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
