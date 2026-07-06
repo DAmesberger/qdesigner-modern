@@ -462,4 +462,183 @@ describe('statistical feedback engine', () => {
       expect(compareSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('server-variable mode (E-FEEDBACK-3, offline / zero-fetch)', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    // A synced object bundle exactly as the runtime injects it (server-sync).
+    const cohortBundle = {
+      n: 142,
+      mean: 40,
+      sd: 8,
+      min: 12,
+      max: 68,
+      p10: 30,
+      p25: 35,
+      median: 40,
+      p75: 45,
+      p90: 50,
+      p95: 54,
+      p99: 60,
+      computedAt: '2026-07-04T12:00:00.000Z',
+    };
+
+    it('builds a participant-vs-cohort series from the injected bundle with NO fetch', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+      const aggregateSpy = vi.spyOn(sessionAnalyticsService, 'aggregate');
+      const aggregatePublicSpy = vi.spyOn(sessionAnalyticsService, 'aggregatePublic');
+
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'server-variable',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            currentVariable: 'score_anxiety',
+            key: 'score_anxiety',
+            serverVariable: 'cohortAnxiety',
+          },
+        },
+        { score_anxiety: 48, cohortAnxiety: cohortBundle },
+        'runtime'
+      );
+
+      // Zero network of any kind.
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(aggregateSpy).not.toHaveBeenCalled();
+      expect(aggregatePublicSpy).not.toHaveBeenCalled();
+
+      expect(series.mode).toBe('participant-vs-cohort');
+      expect(series.points).toEqual([
+        { label: 'Participant', value: 48 },
+        { label: 'Cohort', value: 40 },
+      ]);
+      // zScore = (48 - 40) / 8 = 1.
+      expect(series.summary?.zScore).toBe(1);
+      expect(series.summary?.cohortN).toBe(142);
+      expect(series.distribution).toEqual({ mean: 40, stdDev: 8, n: 142 });
+      expect(series.normSource).toContain('n=142');
+    });
+
+    it('walks into a dotted server-variable field caption but reads the whole bundle by name', async () => {
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'server-variable',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            currentVariable: 'score.anxiety.value',
+            key: 'score.anxiety.value',
+            serverVariable: 'cohortAnxiety',
+          },
+        },
+        {
+          'score.anxiety': { value: 32, tScore: 45 },
+          cohortAnxiety: cohortBundle,
+        },
+        'runtime'
+      );
+
+      expect(series.points[0]).toEqual({ label: 'Participant', value: 32 });
+      expect(series.points[1]).toEqual({ label: 'Cohort', value: 40 });
+    });
+
+    it('below the anonymity floor (n<5, stats withheld) falls back to a bundled norm table', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'server-variable',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            currentVariable: 'anxiety',
+            key: 'anxiety',
+            serverVariable: 'cohortAnxiety',
+            fallbackNormTableId: 'gad7-general-population',
+          },
+        },
+        // Bundle present but below floor: n=3, numeric stats undefined.
+        { anxiety: 2.95, cohortAnxiety: { n: 3, computedAt: '2026-07-04T12:00:00.000Z' } },
+        'runtime'
+      );
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      // Fell through to the offline norm-table path.
+      expect(series.mode).toBe('norm-table');
+      expect(series.normSource).toContain('GAD-7');
+    });
+
+    it('below the floor with no fallback yields an honest empty cohort carrying cohortN', async () => {
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'server-variable',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            currentVariable: 'anxiety',
+            key: 'anxiety',
+            serverVariable: 'cohortAnxiety',
+          },
+        },
+        { anxiety: 55, cohortAnxiety: { n: 3, computedAt: '2026-07-04T12:00:00.000Z' } },
+        'runtime'
+      );
+
+      expect(series.mode).toBe('participant-vs-cohort');
+      expect(series.points).toEqual([
+        { label: 'Participant', value: 55 },
+        { label: 'Cohort', value: null },
+      ]);
+      expect(series.summary?.cohortN).toBe(3);
+      expect(series.summary?.cohortMean).toBeNull();
+    });
+
+    it('never-synced server variable (undefined) yields an empty cohort with null n', async () => {
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'server-variable',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            currentVariable: 'anxiety',
+            key: 'anxiety',
+            serverVariable: 'cohortAnxiety',
+          },
+        },
+        { anxiety: 55 /* cohortAnxiety never injected */ },
+        'runtime'
+      );
+
+      expect(series.points[0]).toEqual({ label: 'Participant', value: 55 });
+      expect(series.points[1]).toEqual({ label: 'Cohort', value: null });
+      expect(series.summary?.cohortN).toBeNull();
+    });
+
+    it('validates that a current variable and a server variable are configured', () => {
+      const errors = validateStatisticalFeedbackConfig({
+        ...defaultStatisticalFeedbackConfig,
+        sourceMode: 'server-variable',
+        dataSource: {
+          ...defaultStatisticalFeedbackConfig.dataSource,
+          currentVariable: '',
+          key: '',
+          serverVariable: '',
+        },
+      });
+
+      expect(errors.some((e) => /current variable/i.test(e))).toBe(true);
+      expect(errors.some((e) => /server variable/i.test(e))).toBe(true);
+    });
+  });
 });

@@ -118,6 +118,16 @@
   let completedSession = $state<QuestionnaireSession | undefined>(undefined);
   let conditionGroupCounts = $state<number[] | undefined>(undefined);
 
+  // Flatten the completed session's variable snapshot into the plain record the
+  // CompletionScreen / E-FEEDBACK-3 report page consume. Server-computed values
+  // are already in here by construction (complete() snapshots every variable),
+  // so the report renders its cohort widgets OFFLINE with no fetch.
+  const completedVariables = $derived<Record<string, unknown>>(
+    Object.fromEntries(
+      (completedSession?.variables ?? []).map((v) => [v.variableId, v.value])
+    )
+  );
+
   // Fraud prevention state
   let fraudFingerprint = $state<string | undefined>(undefined);
 
@@ -976,6 +986,8 @@
     <CompletionScreen
       session={completedSession}
       customMessage={completionMessage}
+      variables={completedVariables}
+      reportConfig={rawDefinition.settings?.report}
       distributionSettings={rawDefinition.settings?.distribution}
       urlParams={data.urlParams}
       showStatistics={true}

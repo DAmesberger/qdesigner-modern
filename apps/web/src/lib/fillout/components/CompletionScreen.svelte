@@ -3,8 +3,10 @@
   import Card from '$lib/components/ui/layout/Card.svelte';
   import type { QuestionnaireSession } from '$lib/shared';
   import type { DistributionSettings } from '$lib/shared/types/questionnaire';
+  import type { ReportPageConfig } from '@qdesigner/questionnaire-core';
   import type { ScoreInterpreterConfig } from '$lib/runtime/feedback/ScoreInterpreter';
   import { generateReport, type ReportConfig } from '$lib/runtime/feedback/ReportGenerator';
+  import ReportPageView from './ReportPageView.svelte';
 
   interface Props {
     session?: QuestionnaireSession;
@@ -17,6 +19,12 @@
     variables?: Record<string, unknown>;
     /** Report title override */
     reportTitle?: string;
+    /**
+     * E-FEEDBACK-3 participant report page config (`settings.report`). When
+     * enabled, renders the widget grid ABOVE the completion card, reading the
+     * completed session's `variables` (server values already injected).
+     */
+    reportConfig?: ReportPageConfig;
     /** Distribution settings for redirect/panel behavior */
     distributionSettings?: DistributionSettings;
     /** URL params captured at fillout start, used for redirect variable substitution */
@@ -33,6 +41,7 @@
     scoreConfigs = [],
     variables = {},
     reportTitle,
+    reportConfig,
     distributionSettings,
     urlParams = {},
     onClose,
@@ -158,7 +167,17 @@
   const showReportButton = $derived(scoreConfigs.length > 0);
 </script>
 
-<div class="min-h-screen flex items-center justify-center p-4 bg-background" data-testid="fillout-completion-screen">
+<div class="min-h-screen flex flex-col items-center justify-center p-4 bg-background" data-testid="fillout-completion-screen">
+  {#if reportConfig?.enabled && (reportConfig.widgets?.length ?? 0) > 0}
+    <ReportPageView
+      {reportConfig}
+      {variables}
+      {scoreConfigs}
+      {session}
+      {reportTitle}
+    />
+  {/if}
+
   <Card class="completion-card">
     <div class="completion-content p-8 text-center">
       <!-- Success icon -->

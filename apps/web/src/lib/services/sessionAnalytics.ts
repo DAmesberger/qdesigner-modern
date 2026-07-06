@@ -29,7 +29,10 @@ export interface ChartSeriesContract {
     | 'participant-vs-cohort'
     | 'participant-vs-participant'
     | 'norm-table'
-    | 'self-baseline';
+    | 'self-baseline'
+    // E-FEEDBACK-3: the offline server-variable error fallback echoes the source
+    // mode; the successful path materializes as 'participant-vs-cohort'.
+    | 'server-variable';
   metric: AnalyticsMetric;
   points: ChartPoint[];
   /**

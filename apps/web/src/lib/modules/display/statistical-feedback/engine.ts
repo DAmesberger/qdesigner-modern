@@ -23,7 +23,16 @@ export type StatisticalSourceMode =
   | 'participant-vs-cohort'
   | 'participant-vs-participant'
   | 'norm-table'
-  | 'self-baseline';
+  | 'self-baseline'
+  | 'server-variable';
+
+/**
+ * Anonymity floor mirrored from the server (`MIN_COHORT_N`, sessions/models.rs).
+ * A server-computed cohort bundle below this n arrives with its numeric stats
+ * withheld, so the client treats it as "insufficient data" and walks the
+ * fallback chain rather than plotting a phantom band.
+ */
+const MIN_SERVER_COHORT_N = 5;
 
 /** Researcher-supplied inline norm used when `normTableId === CUSTOM_NORM_TABLE_ID`. */
 export interface CustomNormConfig {
@@ -55,6 +64,19 @@ export interface StatisticalFeedbackDataSourceConfig {
    * variable.
    */
   baselineVariable?: string;
+  /**
+   * NAME of an object-typed server-computed variable (server-computed-variable /
+   * E-FEEDBACK-3) used by `server-variable` mode. Its synced bundle
+   * `{ n, mean, sd, min, max, p25, median, p75, …, computedAt }` is read straight
+   * out of the participant's live variables — no network on the render path.
+   */
+  serverVariable?: string;
+  /**
+   * Bundled norm id used as the OFFLINE fallback for `server-variable` mode when
+   * the cohort is below the anonymity floor (n < 5) or was never synced. Points
+   * at the same norm-table library as {@link normTableId}.
+   */
+  fallbackNormTableId?: string;
 }
 
 export interface StatisticalFeedbackConfig {
@@ -93,6 +115,8 @@ export const defaultStatisticalFeedbackConfig: StatisticalFeedbackConfig = {
     comparisonParticipantId: '',
     normTableId: '',
     baselineVariable: '',
+    serverVariable: '',
+    fallbackNormTableId: '',
   },
   scoreInterpretation: [],
   enableReportDownload: false,
@@ -265,6 +289,94 @@ function resolveEffectiveNorm(
   };
 }
 
+/**
+ * The subset of a server-computed variable's object bundle the feedback chart
+ * needs. Read straight out of the participant's live variables — never fetched.
+ */
+interface ServerCohort {
+  n: number;
+  mean: number | null;
+  sd: number | null;
+  min: number | null;
+  max: number | null;
+  p25: number | null;
+  median: number | null;
+  p75: number | null;
+  computedAt: string | null;
+}
+
+/** Coerce a resolved server-variable value into a {@link ServerCohort}, or null. */
+function readCohortBundle(bundle: unknown): ServerCohort | null {
+  if (!bundle || typeof bundle !== 'object' || Array.isArray(bundle)) {
+    return null;
+  }
+  const b = bundle as Record<string, unknown>;
+  const num = (value: unknown): number | null => {
+    const parsed = parseNumeric(value);
+    return parsed !== null && Number.isFinite(parsed) ? parsed : null;
+  };
+  return {
+    n: num(b.n) ?? 0,
+    mean: num(b.mean),
+    sd: num(b.sd),
+    min: num(b.min),
+    max: num(b.max),
+    p25: num(b.p25),
+    median: num(b.median),
+    p75: num(b.p75),
+    computedAt: typeof b.computedAt === 'string' ? b.computedAt : null,
+  };
+}
+
+/** A caption a widget can show below a server-cohort chart ("n=142, as of …"). */
+function serverCohortCaption(cohort: ServerCohort): string {
+  if (!cohort.computedAt) {
+    return `n=${cohort.n}`;
+  }
+  const parsed = new Date(cohort.computedAt);
+  const asOf = Number.isNaN(parsed.getTime())
+    ? cohort.computedAt
+    : parsed.toLocaleDateString();
+  return `n=${cohort.n}, as of ${asOf}`;
+}
+
+/**
+ * Map a server-computed cohort bundle into the same participant-vs-cohort
+ * contract the live cohort path emits (buildParticipantVsCohortSeriesLocal),
+ * so the existing charts render it unchanged — but with ZERO network access.
+ */
+function buildServerVariableSeries(
+  participantValue: number | null,
+  cohort: ServerCohort,
+  metric: AnalyticsMetric
+): ChartSeriesContract {
+  const zScore =
+    participantValue !== null && cohort.mean !== null && cohort.sd !== null && cohort.sd > 0
+      ? (participantValue - cohort.mean) / cohort.sd
+      : null;
+
+  return {
+    mode: 'participant-vs-cohort',
+    metric,
+    points: [
+      { label: 'Participant', value: participantValue },
+      { label: 'Cohort', value: cohort.mean },
+    ],
+    normSource: serverCohortCaption(cohort),
+    summary: {
+      participantValue,
+      cohortMean: cohort.mean,
+      cohortStdDev: cohort.sd,
+      cohortN: cohort.n,
+      zScore,
+    },
+    distribution:
+      cohort.mean !== null && cohort.sd !== null && cohort.sd > 0
+        ? { mean: cohort.mean, stdDev: cohort.sd, n: cohort.n }
+        : undefined,
+  };
+}
+
 const normInterpreter = new NormativeScoreInterpreter();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- normalizes unknown config shapes
@@ -331,6 +443,15 @@ export function validateStatisticalFeedbackConfig(config: StatisticalFeedbackCon
     }
     if (!config.dataSource.baselineVariable) {
       errors.push('A baseline (pre-test) variable is required for self-baseline mode.');
+    }
+  }
+
+  if (config.sourceMode === 'server-variable') {
+    if (!config.dataSource.currentVariable && !config.dataSource.key) {
+      errors.push('A current variable is required for server-variable mode.');
+    }
+    if (!config.dataSource.serverVariable) {
+      errors.push('Select an object-typed server variable for server-variable mode.');
     }
   }
 
@@ -468,6 +589,59 @@ export async function resolveStatisticalFeedbackSeries(
       summary: {
         deltaFromBaseline: delta,
         rci,
+      },
+    };
+  }
+
+  // Server-variable mode (server-computed-variable / E-FEEDBACK-3): compare the
+  // participant's OWN local value against a cohort bundle that a server-computed
+  // variable already injected into the VariableEngine. Fully OFFLINE — reads the
+  // object bundle straight out of `variables`, NEVER fetches (unlike the live
+  // `cohort` / `participant-vs-cohort` modes below, which call the analytics API).
+  if (config.sourceMode === 'server-variable') {
+    const variableName = config.dataSource.currentVariable || config.dataSource.key;
+    const participantValue = resolveNumericValue(variableName, variables, config.metric);
+
+    const serverVarName = (config.dataSource.serverVariable ?? '').trim();
+    const bundle = serverVarName ? resolveVariableValue(serverVarName, variables) : undefined;
+    const cohort = readCohortBundle(bundle);
+
+    // Layer 1 — enough data: render the participant-vs-cohort band/box.
+    if (cohort && cohort.n >= MIN_SERVER_COHORT_N && cohort.mean !== null) {
+      return buildServerVariableSeries(participantValue, cohort, config.metric);
+    }
+
+    // Layer 2 — below the anonymity floor / never synced: fall back to a bundled
+    // norm table if the designer declared one (E-FEEDBACK-2 path, offline).
+    const fallbackNormId = (config.dataSource.fallbackNormTableId ?? '').trim();
+    if (fallbackNormId) {
+      return resolveStatisticalFeedbackSeries(
+        {
+          ...config,
+          sourceMode: 'norm-table',
+          dataSource: { ...config.dataSource, normTableId: fallbackNormId },
+        },
+        variables,
+        renderMode
+      );
+    }
+
+    // Layer 3 — honest empty cohort: the participant point still renders and the
+    // caption can read `cohortN` ("n=3, insufficient data") from the summary.
+    return {
+      mode: 'participant-vs-cohort',
+      metric: config.metric,
+      points: [
+        { label: 'Participant', value: participantValue },
+        { label: 'Cohort', value: null },
+      ],
+      normSource: cohort ? serverCohortCaption(cohort) : undefined,
+      summary: {
+        participantValue,
+        cohortMean: null,
+        cohortStdDev: null,
+        cohortN: cohort?.n ?? null,
+        zScore: null,
       },
     };
   }
