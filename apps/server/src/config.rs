@@ -37,6 +37,13 @@ pub struct Config {
     pub server_host: String,
     pub server_port: u16,
 
+    // Symmetric key used to encrypt per-org IdP `client_secret`s at rest
+    // (E-RBAC-6). When unset it falls back to `jwt_secret` at the call site, so
+    // dev/test never need a separate secret; production should set a dedicated
+    // `SSO_ENCRYPTION_KEY`. Only ever consumed through
+    // [`Config::sso_encryption_key`], which applies the fallback.
+    pub sso_encryption_key: Option<String>,
+
     // Whether the refresh_token cookie carries the `Secure` attribute. Defaults
     // to true (production posture). Browsers accept Secure cookies over
     // http://localhost, so the default is fine for the standard dev setup; set
@@ -97,11 +104,24 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(4100),
+            sso_encryption_key: std::env::var("SSO_ENCRYPTION_KEY")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
             cookie_secure: std::env::var("COOKIE_SECURE")
                 .ok()
                 .map(|v| !matches!(v.trim().to_ascii_lowercase().as_str(), "false" | "0" | "no"))
                 .unwrap_or(true),
         }
+    }
+
+    /// Resolve the effective SSO-secret encryption key, falling back to the
+    /// JWT signing secret when no dedicated `SSO_ENCRYPTION_KEY` is set. The
+    /// raw string is hashed to a 32-byte AES-256 key by
+    /// [`crate::api::sso::crypto`], so any length is acceptable.
+    pub fn sso_encryption_key(&self) -> &str {
+        self.sso_encryption_key
+            .as_deref()
+            .unwrap_or(&self.jwt_secret)
     }
 }
 

@@ -152,6 +152,37 @@ export type CreateDomainRequest = {
     domain: string;
 };
 
+export type CreateIdpRequest = {
+    /**
+     * `"oidc"` or `"saml"`.
+     */
+    protocol: string;
+    display_name?: string | null;
+    /**
+     * OIDC issuer / SAML entity id.
+     */
+    issuer?: string | null;
+    /**
+     * OIDC discovery URL / SAML metadata URL (reachability validated).
+     */
+    metadata_url?: string | null;
+    client_id?: string | null;
+    /**
+     * Plaintext client secret; stored encrypted, never returned.
+     */
+    client_secret?: string | null;
+    default_role?: string;
+    group_claim?: string | null;
+    /**
+     * Object mapping IdP group name → org role (`admin`|`member`|`viewer`).
+     */
+    group_role_map?: {
+        [key: string]: unknown;
+    };
+    enforce_role_mapping?: boolean;
+    enabled?: boolean;
+};
+
 export type CreateInvitationRequest = {
     email: string;
     role: string;
@@ -353,6 +384,33 @@ export type FilteredSessionRow = {
 
 export type HealthStatus = {
     status: string;
+};
+
+/**
+ * One identity provider, with the `client_secret` redacted to a presence
+ * flag. Never carries the ciphertext or plaintext secret.
+ */
+export type IdentityProviderRecord = {
+    id: string;
+    organization_id: string;
+    protocol: string;
+    display_name?: string | null;
+    issuer?: string | null;
+    metadata_url?: string | null;
+    client_id?: string | null;
+    /**
+     * True when a `client_secret` is stored (its value is never returned).
+     */
+    has_client_secret: boolean;
+    default_role: string;
+    group_claim: string;
+    group_role_map: {
+        [key: string]: unknown;
+    };
+    enforce_role_mapping: boolean;
+    enabled: boolean;
+    created_at?: string | null;
+    updated_at?: string | null;
 };
 
 export type InteractionEventRecord = {
@@ -773,6 +831,13 @@ export type RegisterRequest = {
     full_name?: string | null;
 };
 
+export type ResolveResponse = {
+    sso_available: boolean;
+    org_slug?: string | null;
+    provider_name?: string | null;
+    protocol?: string | null;
+};
+
 export type ResponseRecord = {
     id: string;
     session_id: string;
@@ -1096,6 +1161,24 @@ export type UpdateDomainRequest = {
     include_subdomains?: boolean | null;
     default_role?: string | null;
     welcome_message?: string | null;
+};
+
+export type UpdateIdpRequest = {
+    display_name?: string | null;
+    issuer?: string | null;
+    metadata_url?: string | null;
+    client_id?: string | null;
+    /**
+     * Non-empty → re-encrypt and replace; empty string → clear the secret.
+     */
+    client_secret?: string | null;
+    default_role?: string | null;
+    group_claim?: string | null;
+    group_role_map: {
+        [key: string]: unknown;
+    };
+    enforce_role_mapping?: boolean | null;
+    enabled?: boolean | null;
 };
 
 export type UpdateOrgRequest = {
@@ -2640,6 +2723,217 @@ export type AssignMemberRoleResponses = {
 };
 
 export type AssignMemberRoleResponse = AssignMemberRoleResponses[keyof AssignMemberRoleResponses];
+
+export type ListProvidersData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/sso';
+};
+
+export type ListProvidersErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListProvidersError = ListProvidersErrors[keyof ListProvidersErrors];
+
+export type ListProvidersResponses = {
+    /**
+     * Configured identity providers
+     */
+    200: Array<IdentityProviderRecord>;
+};
+
+export type ListProvidersResponse = ListProvidersResponses[keyof ListProvidersResponses];
+
+export type CreateProviderData = {
+    body: CreateIdpRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/sso';
+};
+
+export type CreateProviderErrors = {
+    /**
+     * Invalid configuration
+     */
+    400: ErrorEnvelope;
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type CreateProviderError = CreateProviderErrors[keyof CreateProviderErrors];
+
+export type CreateProviderResponses = {
+    /**
+     * Identity provider created
+     */
+    201: IdentityProviderRecord;
+};
+
+export type CreateProviderResponse = CreateProviderResponses[keyof CreateProviderResponses];
+
+export type DeleteProviderData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+        /**
+         * Identity provider id
+         */
+        idp_id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/sso/{idp_id}';
+};
+
+export type DeleteProviderErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * Not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type DeleteProviderError = DeleteProviderErrors[keyof DeleteProviderErrors];
+
+export type DeleteProviderResponses = {
+    /**
+     * Identity provider deleted
+     */
+    200: MessageResponse;
+};
+
+export type DeleteProviderResponse = DeleteProviderResponses[keyof DeleteProviderResponses];
+
+export type UpdateProviderData = {
+    body: UpdateIdpRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+        /**
+         * Identity provider id
+         */
+        idp_id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/sso/{idp_id}';
+};
+
+export type UpdateProviderErrors = {
+    /**
+     * Invalid configuration
+     */
+    400: ErrorEnvelope;
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * Not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type UpdateProviderError = UpdateProviderErrors[keyof UpdateProviderErrors];
+
+export type UpdateProviderResponses = {
+    /**
+     * Identity provider updated
+     */
+    200: IdentityProviderRecord;
+};
+
+export type UpdateProviderResponse = UpdateProviderResponses[keyof UpdateProviderResponses];
+
+export type ResolveSsoData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Email whose domain is resolved
+         */
+        email: string;
+    };
+    url: '/api/sso/resolve';
+};
+
+export type ResolveSsoResponses = {
+    /**
+     * SSO availability for the email's domain
+     */
+    200: ResolveResponse;
+};
+
+export type ResolveSsoResponse = ResolveSsoResponses[keyof ResolveSsoResponses];
+
+export type SsoStartData = {
+    body?: never;
+    path: {
+        /**
+         * Organization slug
+         */
+        org_slug: string;
+    };
+    query?: never;
+    url: '/api/sso/{org_slug}/start';
+};
+
+export type SsoStartErrors = {
+    /**
+     * No SSO configured for this organization
+     */
+    404: ErrorEnvelope;
+};
+
+export type SsoStartError = SsoStartErrors[keyof SsoStartErrors];
+
+export type SsoCallbackData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Authorization code
+         */
+        code?: string;
+        /**
+         * Opaque CSRF state
+         */
+        state?: string;
+    };
+    url: '/api/sso/callback';
+};
+
+export type SsoCallbackErrors = {
+    /**
+     * Invalid callback
+     */
+    400: ErrorEnvelope;
+};
+
+export type SsoCallbackError = SsoCallbackErrors[keyof SsoCallbackErrors];
 
 export type ListProjectsData = {
     body?: never;

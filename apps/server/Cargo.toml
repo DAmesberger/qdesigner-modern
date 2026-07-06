@@ -35,6 +35,15 @@ rand = "0.8"
 sha2 = "0.10"
 hex = "0.4"
 futures-util = "0.3"
+# Symmetric AEAD for encrypting per-org IdP `client_secret` at rest (E-RBAC-6).
+# The 32-byte key is derived (SHA-256) from the config `SSO_ENCRYPTION_KEY`
+# (falls back to `JWT_SECRET`); each ciphertext carries its own random nonce.
+aes-gcm = "0.10"
+# Outbound HTTP for the OIDC federation flow (E-RBAC-6): OpenID discovery
+# fetch, JWKS fetch, and the authorization-code → token exchange. rustls so it
+# links without system OpenSSL; default-features off drops the native-tls
+# default. Mirrors the dev-dependency already declared below.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 yrs = "0.25.0"
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid", "preserve_order", "preserve_path_order"] }
 infer = "0.16"
@@ -61,4 +70,10 @@ http-body-util = "0.1"
 # MailPit HTTP API probe (P3-T3): confirm a verification email actually
 # landed after the SMTP send path. `rustls-tls` so it links without system
 # OpenSSL; `default-features = false` drops the native-tls default.
+# (Now also a runtime dependency for the OIDC flow — kept here as well so the
+# feature set is explicit for the test harness.)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# Mock OIDC provider for the E-RBAC-6 federation tests: stands up an in-process
+# HTTP server that serves the discovery document, JWKS, and token endpoint so
+# the callback handler can be exercised end-to-end without a live IdP.
+wiremock = "0.6"

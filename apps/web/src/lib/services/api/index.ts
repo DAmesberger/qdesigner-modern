@@ -1,5 +1,6 @@
 import { organizations } from './organizations';
 import { roles } from './roles';
+import { sso } from './sso';
 import { projects } from './projects';
 import { questionnaires } from './questionnaires';
 import { sessions } from './sessions';
@@ -13,6 +14,7 @@ import { passwordReset } from './password-reset';
 export const api = {
   organizations,
   roles,
+  sso,
   projects,
   questionnaires,
   sessions,

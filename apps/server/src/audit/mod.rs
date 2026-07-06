@@ -54,6 +54,16 @@ pub enum AuditAction {
     OrgOwnershipTransferred,
     /// Project ownership was transferred to another member (E-RBAC-5).
     ProjectOwnershipTransferred,
+    // SSO federation (E-RBAC-6).
+    /// A member signed in through a federated IdP (OIDC/SAML), which may
+    /// have JIT-provisioned the user and/or their org membership.
+    SsoLogin,
+    /// An org owner registered a new identity provider.
+    SsoProviderCreated,
+    /// An org owner edited an identity provider's configuration.
+    SsoProviderUpdated,
+    /// An org owner deleted an identity provider.
+    SsoProviderDeleted,
 }
 
 impl AuditAction {
@@ -77,6 +87,10 @@ impl AuditAction {
             AuditAction::MemberCustomRoleAssigned => "member.custom_role_assigned",
             AuditAction::OrgOwnershipTransferred => "organization.ownership_transferred",
             AuditAction::ProjectOwnershipTransferred => "project.ownership_transferred",
+            AuditAction::SsoLogin => "sso.login",
+            AuditAction::SsoProviderCreated => "sso.provider_created",
+            AuditAction::SsoProviderUpdated => "sso.provider_updated",
+            AuditAction::SsoProviderDeleted => "sso.provider_deleted",
         }
     }
 }
@@ -91,6 +105,7 @@ pub mod resource {
     pub const PROJECT: &str = "project";
     pub const PROJECT_MEMBER: &str = "project_member";
     pub const ROLE: &str = "org_role";
+    pub const IDENTITY_PROVIDER: &str = "identity_provider";
 }
 
 /// One privileged action to append to the log.

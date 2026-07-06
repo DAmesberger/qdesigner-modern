@@ -291,6 +291,7 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         cors_origins: vec!["http://localhost:4173".into()],
         server_host: "127.0.0.1".into(),
         server_port: 4100,
+        sso_encryption_key: None,
         cookie_secure: false,
     };
 

@@ -1157,6 +1157,34 @@ pub async fn change_member_role(
     .await?
     .ok_or_else(|| ApiError::NotFound("Member not found".into()))?;
 
+    // IdP-managed roles (E-RBAC-6 step 8): if the target was federated by an
+    // enabled IdP that enforces role mapping, their org role is owned by the
+    // IdP's group→role mapping on each login and must not be mutated by hand
+    // (this also blocks an SSO-provisioned admin from self-changing their own
+    // role). The manual path is refused for everyone under this posture.
+    let idp_managed = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM users u
+            JOIN org_identity_providers idp ON idp.id = u.idp_id
+            WHERE u.id = $1
+              AND idp.organization_id = $2
+              AND idp.enforce_role_mapping = true
+              AND idp.enabled = true
+        )
+        "#,
+    )
+    .bind(target_id)
+    .bind(org_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if idp_managed {
+        return Err(ApiError::Forbidden(
+            "This member's role is managed by SSO (IdP group mapping) and cannot be changed manually".into(),
+        ));
+    }
+
     // Only an owner may grant or revoke the owner role.
     let touches_owner = body.role == "owner" || current_role == "owner";
     if touches_owner

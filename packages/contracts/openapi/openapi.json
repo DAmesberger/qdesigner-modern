@@ -2643,6 +2643,391 @@
         ]
       }
     },
+    "/api/organizations/{id}/sso": {
+      "get": {
+        "tags": [
+          "sso"
+        ],
+        "summary": "GET /api/organizations/:id/sso",
+        "operationId": "list_providers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Configured identity providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IdentityProviderRecord"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "sso"
+        ],
+        "summary": "POST /api/organizations/:id/sso",
+        "operationId": "create_provider",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIdpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Identity provider created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityProviderRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/sso/{idp_id}": {
+      "delete": {
+        "tags": [
+          "sso"
+        ],
+        "summary": "DELETE /api/organizations/:id/sso/:idp_id",
+        "operationId": "delete_provider",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "idp_id",
+            "in": "path",
+            "description": "Identity provider id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Identity provider deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "sso"
+        ],
+        "summary": "PATCH /api/organizations/:id/sso/:idp_id",
+        "operationId": "update_provider",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "idp_id",
+            "in": "path",
+            "description": "Identity provider id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateIdpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Identity provider updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityProviderRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/sso/resolve": {
+      "get": {
+        "tags": [
+          "sso"
+        ],
+        "summary": "GET /api/sso/resolve?email=user@corp.com",
+        "description": "Anonymous. Resolves whether the email's verified domain (P8-T8\n`organization_domains`) belongs to an org with an enabled IdP, so the login\npage can offer a \"Sign in with SSO\" affordance and know which org slug to\nhand to `start`.",
+        "operationId": "resolve_sso",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "description": "Email whose domain is resolved",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSO availability for the email's domain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResolveResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sso/{org_slug}/start": {
+      "get": {
+        "tags": [
+          "sso"
+        ],
+        "summary": "GET /api/sso/:org_slug/start",
+        "description": "Anonymous. Resolves the org's enabled IdP, fetches OIDC discovery, records a\nsingle-use login-state row (CSRF `state` + `nonce`, pinned endpoints), and\nredirects the browser to the IdP authorization endpoint.",
+        "operationId": "sso_start",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "in": "path",
+            "description": "Organization slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Redirect to the identity provider"
+          },
+          "404": {
+            "description": "No SSO configured for this organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sso/callback": {
+      "get": {
+        "tags": [
+          "sso"
+        ],
+        "summary": "GET /api/sso/callback?code=...&state=...",
+        "description": "Anonymous. Completes the authorization-code exchange, validates the\nid_token, JIT-provisions the user + membership, mints an app JWT, and\nbounces the browser back to the SPA with the access token in the URL\nfragment (the refresh token rides an httpOnly cookie).",
+        "operationId": "sso_callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Authorization code",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Opaque CSRF state",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Redirect back to the app with a session"
+          },
+          "400": {
+            "description": "Invalid callback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects": {
       "get": {
         "tags": [
@@ -7117,6 +7502,70 @@
           }
         }
       },
+      "CreateIdpRequest": {
+        "type": "object",
+        "required": [
+          "protocol"
+        ],
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "description": "`\"oidc\"` or `\"saml\"`."
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OIDC issuer / SAML entity id."
+          },
+          "metadata_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OIDC discovery URL / SAML metadata URL (reachability validated)."
+          },
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_secret": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Plaintext client secret; stored encrypted, never returned."
+          },
+          "default_role": {
+            "type": "string"
+          },
+          "group_claim": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "group_role_map": {
+            "type": "object",
+            "description": "Object mapping IdP group name → org role (`admin`|`member`|`viewer`)."
+          },
+          "enforce_role_mapping": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
       "CreateInvitationRequest": {
         "type": "object",
         "required": [
@@ -7807,6 +8256,91 @@
         "properties": {
           "status": {
             "type": "string"
+          }
+        }
+      },
+      "IdentityProviderRecord": {
+        "type": "object",
+        "description": "One identity provider, with the `client_secret` redacted to a presence\nflag. Never carries the ciphertext or plaintext secret.",
+        "required": [
+          "id",
+          "organization_id",
+          "protocol",
+          "has_client_secret",
+          "default_role",
+          "group_claim",
+          "group_role_map",
+          "enforce_role_mapping",
+          "enabled"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_client_secret": {
+            "type": "boolean",
+            "description": "True when a `client_secret` is stored (its value is never returned)."
+          },
+          "default_role": {
+            "type": "string"
+          },
+          "group_claim": {
+            "type": "string"
+          },
+          "group_role_map": {
+            "type": "object"
+          },
+          "enforce_role_mapping": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       },
@@ -9270,6 +9804,35 @@
           }
         }
       },
+      "ResolveResponse": {
+        "type": "object",
+        "required": [
+          "sso_available"
+        ],
+        "properties": {
+          "sso_available": {
+            "type": "boolean"
+          },
+          "org_slug": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "protocol": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "ResponseRecord": {
         "type": "object",
         "required": [
@@ -10166,6 +10729,72 @@
           }
         }
       },
+      "UpdateIdpRequest": {
+        "type": "object",
+        "required": [
+          "group_role_map"
+        ],
+        "properties": {
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_secret": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Non-empty → re-encrypt and replace; empty string → clear the secret."
+          },
+          "default_role": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "group_claim": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "group_role_map": {
+            "type": "object"
+          },
+          "enforce_role_mapping": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
       "UpdateOrgRequest": {
         "type": "object",
         "properties": {
@@ -10546,6 +11175,10 @@
     {
       "name": "roles",
       "description": "Custom roles and granular permissions"
+    },
+    {
+      "name": "sso",
+      "description": "SSO federation (OIDC/SAML) and identity-provider configuration"
     },
     {
       "name": "projects",

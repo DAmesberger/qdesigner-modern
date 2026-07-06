@@ -22,6 +22,7 @@ pub mod projects;
 pub mod questionnaires;
 pub mod roles;
 pub mod sessions;
+pub mod sso;
 pub mod templates;
 pub mod users;
 
@@ -132,6 +133,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/members/{user_id}/custom-role",
             put(roles::assign_member_role),
+        )
+        .route(
+            "/{id}/sso",
+            get(sso::list_providers).post(sso::create_provider),
+        )
+        .route(
+            "/{id}/sso/{idp_id}",
+            patch(sso::update_provider).delete(sso::delete_provider),
         )
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
@@ -296,6 +305,19 @@ pub fn router(state: AppState) -> Router {
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context))
         .merge(media_content_routes);
 
+    // Anonymous SSO federation entry points (E-RBAC-6). No RLS context — the
+    // start/callback flow provisions users/members on the app pool directly and
+    // `resolve` is a public domain probe. Rate-limited like the auth routes.
+    let sso_routes = Router::new()
+        .route("/resolve", get(sso::resolve_sso))
+        .route("/callback", get(sso::sso_callback))
+        .route("/{org_slug}/start", get(sso::sso_start))
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ))
+        .layer(CatchPanicLayer::new());
+
     let ws_route = Router::new()
         .route("/ws", get(crate::websocket::handler::ws_upgrade))
         // Contain a panic in the synchronous upgrade handler as a 500.
@@ -315,6 +337,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/questionnaires", questionnaire_routes)
         .nest("/api/sessions", session_routes)
         .nest("/api/media", media_routes)
+        .nest("/api/sso", sso_routes)
         .nest("/api", ws_route)
         .route(
             "/api/domains/auto-join",

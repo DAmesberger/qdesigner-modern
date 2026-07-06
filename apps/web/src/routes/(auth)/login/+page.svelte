@@ -26,6 +26,31 @@
   let error = $state<string | null>(null);
   let successMessage = $state<string | null>(null);
 
+  // SSO federation (E-RBAC-6): once an email is entered, probe whether its
+  // verified domain belongs to an org with an enabled OIDC provider.
+  let ssoProvider = $state<{ slug: string; name: string | null } | null>(null);
+
+  async function checkSso() {
+    ssoProvider = null;
+    const value = email.trim();
+    if (!value.includes('@')) return;
+    try {
+      const res = await api.sso.resolve(value);
+      if (res.sso_available && res.org_slug && res.protocol === 'oidc') {
+        ssoProvider = { slug: res.org_slug, name: res.provider_name };
+      }
+    } catch (err) {
+      console.warn('SSO resolve failed', err);
+    }
+  }
+
+  function startSso() {
+    if (!ssoProvider) return;
+    // Full-page navigation to the backend start endpoint — the IdP redirect
+    // flow must own the browser (not a fetch).
+    window.location.href = api.sso.startUrl(ssoProvider.slug);
+  }
+
   // Same-origin relative redirect target (must start with a single '/').
   function safeRedirect(raw: string | null): string | null {
     if (!raw) return null;
@@ -358,6 +383,7 @@
               error={!!error}
               describedby={error ? 'login-error' : undefined}
               bind:value={email}
+              onblur={checkSso}
               placeholder="Enter your email"
               class="h-12 rounded-xl border border-border/80 bg-card/80 px-4 shadow-none dark:border-white/10 dark:bg-white/5"
             />
@@ -442,6 +468,20 @@
             {m.auth_login_submit()}
             <ArrowRight class="ml-2 h-4 w-4" />
           </Button>
+
+          {#if ssoProvider}
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              class="h-12 w-full rounded-xl text-base font-semibold"
+              onclick={startSso}
+              data-testid="sso-signin"
+            >
+              <ShieldCheck class="mr-2 h-4 w-4" />
+              Sign in with {ssoProvider.name || 'SSO'}
+            </Button>
+          {/if}
 
           {#if showDevQuickLogin}
             <div
