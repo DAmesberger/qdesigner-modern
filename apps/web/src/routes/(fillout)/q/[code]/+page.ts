@@ -64,6 +64,14 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 				await FilloutContentCache.cacheQuestionnaire(payload, code);
 				void FilloutContentCache.pruneDefinitions().catch(() => {});
 				void FilloutContentCache.enforceMediaQuota().catch(() => {});
+				// Server-computed variables (server-computed-variable / E-FEEDBACK-3): land
+				// the latest aggregates before the participant can reach any consumer, but
+				// never let them block load — cap at 3s and swallow failures. Short-circuits
+				// to a no-op when the definition declares no server variables.
+				await Promise.race([
+					FilloutContentCache.cacheServerVariables(payload),
+					new Promise((resolve) => setTimeout(resolve, 3000)),
+				]).catch(() => {});
 			} else if (response.status === 404) {
 				throw error(404, 'Questionnaire not found');
 			} else {
@@ -199,6 +207,17 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 				version_minor: pin.minor,
 				version_patch: pin.patch,
 			};
+		}
+
+		// Server-computed variables for the PINNED version (server-computed-variable):
+		// fetch this version's aggregates so the pinned definitionKey the runtime reads
+		// from carries fresh values for ITS declarations, not the latest's. Capped so a
+		// resume is never blocked; failures leave prior rows intact for offline resume.
+		if (navigator.onLine) {
+			await Promise.race([
+				FilloutContentCache.cacheServerVariables(effective, pin),
+				new Promise((resolve) => setTimeout(resolve, 3000)),
+			]).catch(() => {});
 		}
 	}
 

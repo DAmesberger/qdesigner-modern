@@ -3,7 +3,47 @@ import {
 	filloutDefinitionKey,
 	type FilloutQuestionnaire,
 	type FilloutMediaEntry,
+	type FilloutServerVariable,
 } from '$lib/services/db/indexeddb';
+import {
+	collectServerVariables,
+	declHash,
+	type ServerVariableStats,
+	type Variable,
+} from '@qdesigner/questionnaire-core';
+import type { NumericStatsSummary, ServerVariablesResponse } from '$lib/api/generated/types.gen';
+
+/** Fetch-skip window when a definition's `settings.report.refreshMs` is unset (24h). */
+const DEFAULT_SERVER_VARS_REFRESH_MS = 24 * 60 * 60 * 1000;
+
+/** Map the server's `NumericStatsSummary` onto the cached {@link ServerVariableStats}. */
+function mapServerStats(s: NumericStatsSummary): ServerVariableStats {
+	return {
+		mean: s.mean ?? 0,
+		stdDev: s.std_dev ?? 0,
+		min: s.min ?? 0,
+		max: s.max ?? 0,
+		p10: s.p10 ?? 0,
+		p25: s.p25 ?? 0,
+		median: s.median ?? 0,
+		p75: s.p75 ?? 0,
+		p90: s.p90 ?? 0,
+		p95: s.p95 ?? 0,
+		p99: s.p99 ?? 0,
+	};
+}
+
+/**
+ * Pull the definition content object out of a raw by-code / cached questionnaire
+ * payload. Server-computed variable declarations live on `definition.variables`
+ * (the JSONB `content` the server reads); some cached rows carry a flattened
+ * `variables` array at the top level, so accept either.
+ */
+function definitionContent(questionnaireData: Record<string, unknown>): Record<string, unknown> {
+	const def = questionnaireData.definition;
+	if (def && typeof def === 'object') return def as Record<string, unknown>;
+	return questionnaireData;
+}
 
 /**
  * Manages downloading and caching questionnaires for offline fillout.
@@ -56,6 +96,121 @@ export class FilloutContentCache {
 	 */
 	static async cacheQuestionnaire(questionnaireData: Record<string, unknown>, accessCode: string): Promise<void> {
 		await this.syncForOffline(accessCode, questionnaireData);
+	}
+
+	/**
+	 * Fetch and cache the SERVER-COMPUTED VARIABLE aggregates for a definition
+	 * (server-computed-variable / E-FEEDBACK-3), so they resolve OFFLINE from the
+	 * one VariableEngine at runtime construction.
+	 *
+	 * Version-pinned: rows are keyed `[definitionKey+variableId]` on the exact
+	 * `(id, version)` the participant runs against, so a background refresh to a
+	 * newer version never clobbers the aggregates an in-flight session pinned.
+	 *
+	 * Cost controls, in order:
+	 *  1. ZERO network when the definition declares no server variables
+	 *     ({@link collectServerVariables} empty) — the common case.
+	 *  2. Freshness skip: no fetch while the newest cached row for this
+	 *     definitionKey is younger than `settings.report.refreshMs` (default 24h).
+	 *  3. Each fetched entry's `decl_hash` is cross-checked against the local
+	 *     declaration ({@link declHash}); a mismatch (client/server disagree on the
+	 *     declaration) is dropped rather than cached.
+	 *
+	 * Never throws: a network / parse failure leaves prior rows intact (offline
+	 * correctness beats freshness) and the caller's load path is unaffected.
+	 *
+	 * @param version Optional pin — when resuming an older version, fetch that
+	 *   version's aggregates for ITS declarations rather than the latest.
+	 * @param options `force: true` bypasses the freshness-skip window — used by the
+	 *   post-sync refresh so the cohort that just absorbed this participant updates
+	 *   promptly (still bounded by the server's own result-cache TTL).
+	 */
+	static async cacheServerVariables(
+		questionnaireData: Record<string, unknown>,
+		version?: { major: number; minor: number; patch: number },
+		options?: { force?: boolean }
+	): Promise<void> {
+		const questionnaireId = questionnaireData.id as string | undefined;
+		if (!questionnaireId) return;
+
+		const content = definitionContent(questionnaireData);
+		const rawVariables = Array.isArray(content.variables) ? (content.variables as Variable[]) : [];
+		const declared = collectServerVariables({ variables: rawVariables });
+		// (1) Zero declarations → zero fetch cost. Short-circuits before any I/O.
+		if (declared.length === 0) return;
+
+		const versionMajor = version?.major ?? (questionnaireData.version_major as number) ?? 1;
+		const versionMinor = version?.minor ?? (questionnaireData.version_minor as number) ?? 0;
+		const versionPatch = version?.patch ?? (questionnaireData.version_patch as number) ?? 0;
+		const definitionKey = filloutDefinitionKey(questionnaireId, versionMajor, versionMinor, versionPatch);
+
+		// (2) Freshness skip.
+		const settings = (content.settings ?? {}) as Record<string, unknown>;
+		const report = (settings.report ?? {}) as Record<string, unknown>;
+		const refreshMs =
+			typeof report.refreshMs === 'number' && report.refreshMs > 0
+				? report.refreshMs
+				: DEFAULT_SERVER_VARS_REFRESH_MS;
+		if (!options?.force) {
+			const existing = await db.filloutServerVariables
+				.where('definitionKey')
+				.equals(definitionKey)
+				.toArray();
+			if (existing.length > 0) {
+				const newest = existing.reduce((max, row) => Math.max(max, row.syncedAt), 0);
+				if (Date.now() - newest < refreshMs) return;
+			}
+		}
+
+		// Local declaration hashes for the (3) cross-check. Keyed by both id and
+		// name so we can match whichever the response entry carries.
+		const localHashById = new Map<string, string>();
+		const localHashByName = new Map<string, string>();
+		for (const v of declared) {
+			if (!v.server) continue;
+			const hash = declHash(v.server);
+			localHashById.set(v.id, hash);
+			localHashByName.set(v.name, hash);
+		}
+
+		// The client sends ZERO filters — only the optional version pin. The server
+		// evaluates only its published declarations (the authorization model).
+		const versionParam = version
+			? `?version=${versionMajor}.${versionMinor}.${versionPatch}`
+			: '';
+		let resp: ServerVariablesResponse;
+		try {
+			const r = await fetch(`/api/questionnaires/${questionnaireId}/server-variables${versionParam}`);
+			if (!r.ok) return;
+			resp = (await r.json()) as ServerVariablesResponse;
+		} catch {
+			return; // Offline / network error — keep whatever we already cached.
+		}
+
+		const now = Date.now();
+		const rows: FilloutServerVariable[] = [];
+		for (const entry of resp.variables ?? []) {
+			// (3) Cross-check declHash: only persist a row whose declaration the
+			// client agrees with byte-for-byte.
+			const localHash = localHashById.get(entry.id) ?? localHashByName.get(entry.name);
+			if (localHash && localHash !== entry.decl_hash) continue;
+
+			rows.push({
+				definitionKey,
+				variableId: entry.id,
+				name: entry.name,
+				declHash: entry.decl_hash,
+				questionnaireId,
+				n: entry.sample_count,
+				stats: entry.stats ? mapServerStats(entry.stats) : null,
+				computedAt: resp.computed_at,
+				syncedAt: now,
+			});
+		}
+
+		if (rows.length > 0) {
+			await db.filloutServerVariables.bulkPut(rows);
+		}
 	}
 
 	/**
@@ -140,7 +295,6 @@ export class FilloutContentCache {
 	 */
 	static async pruneDefinitions(): Promise<void> {
 		const rows = await db.filloutQuestionnaires.toArray();
-		if (rows.length === 0) return;
 
 		const keep = await this.protectedVersionKeys();
 
@@ -157,6 +311,25 @@ export class FilloutContentCache {
 				await this.evictDefinitionMedia(row.id);
 				await db.filloutQuestionnaires.delete(row.id);
 			}
+		}
+
+		// Drop server-computed-variable aggregates for any definition version that
+		// was just GC'd (or that no cached definition/session references anymore).
+		// `keep` still holds every protected (pinned / unsynced) and latest version,
+		// so a session with in-flight data keeps its injected server values.
+		await this.pruneServerVariables(keep);
+	}
+
+	/**
+	 * Delete cached server-variable aggregate rows whose `definitionKey` is not in
+	 * the retained set. Bounded, index-scoped delete per orphaned key.
+	 */
+	private static async pruneServerVariables(keep: Set<string>): Promise<void> {
+		const keys = new Set<string>();
+		for (const row of await db.filloutServerVariables.toArray()) keys.add(row.definitionKey);
+		for (const key of keys) {
+			if (keep.has(key)) continue;
+			await db.filloutServerVariables.where('definitionKey').equals(key).delete();
 		}
 	}
 

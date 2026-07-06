@@ -36,6 +36,7 @@ import { type ResumeState, RESUME_STATE_VERSION, isResumeStateCompatible } from 
 import { scoreScales } from '../feedback/ScaleScorer';
 import { parseNumeric } from '$lib/shared/utils/statistics';
 import { nanoid } from 'nanoid';
+import { materializeServerValue, type ServerVariableStats } from '@qdesigner/questionnaire-core';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime state handles heterogeneous question data
 type DynamicValue = any;
@@ -49,12 +50,39 @@ type DynamicValue = any;
  */
 type PresentedQuestion = Question & { _carryForwardInitialValue?: unknown };
 
+/**
+ * The last-synced aggregate for one SERVER-COMPUTED VARIABLE
+ * (server-computed-variable / E-FEEDBACK-3), read from the `filloutServerVariables`
+ * Dexie table and injected into the one VariableEngine at construction. Carries the
+ * raw aggregate ({@link materializeServerValue} turns it into the variable's value)
+ * plus a `stale` flag surfaced in feedback captions. Structurally a
+ * `ServerVariableRow`, so it feeds `materializeServerValue` directly.
+ */
+export interface ServerVariableSnapshot {
+  /** Cohort size (populated even below the anonymity floor). */
+  n: number;
+  /** Full stats, or `null` when withheld below the server's n>=5 floor. */
+  stats: ServerVariableStats | null;
+  /** Server-clock ISO-8601 timestamp of the aggregation. */
+  computedAt: string;
+  /** True when the cached row is older than the declaration's `staleAfterMs`. */
+  stale: boolean;
+}
+
 export interface RuntimeConfig {
   canvas: HTMLCanvasElement;
   questionnaire: Questionnaire;
   participantId?: string;
   participantNumber?: number;
   conditionGroupCounts?: number[];
+  /**
+   * Last-synced SERVER-COMPUTED VARIABLE aggregates, keyed by variable id
+   * (server-computed-variable / E-FEEDBACK-3). {@link initializeVariables} injects
+   * each into the one VariableEngine as a `'server-sync'` value so server-computed
+   * variables resolve OFFLINE — falling back to the variable's `defaultValue` when a
+   * snapshot is absent (never synced) or below the anonymity floor.
+   */
+  serverVariables?: Record<string, ServerVariableSnapshot>;
   /**
    * Optional HTML-overlay host. When supplied, form-style questions (and
    * instruction/display items) are rendered by mounting their per-module runtime
@@ -612,6 +640,54 @@ export class QuestionnaireRuntime {
       scope: 'global',
       defaultValue: this.config.questionnaire.pages.length,
     });
+
+    this.injectServerVariables();
+  }
+
+  /**
+   * Inject the last-synced SERVER-COMPUTED VARIABLE aggregates
+   * (server-computed-variable / E-FEEDBACK-3) into the one VariableEngine as
+   * `'server-sync'` values, so they resolve OFFLINE for every consumer alike — flow
+   * conditions, piping, quotas, scripting, and the statistical-feedback engine. Runs
+   * AFTER the registerVariable pass above so every target id already exists.
+   *
+   * Fallback semantics (deliberate, all lean on registerVariable's `defaultValue`
+   * seeding): a variable with NO snapshot (never synced on this device) is left at its
+   * defaultValue; a SCALAR stat withheld below the anonymity floor materializes to
+   * `undefined` and is likewise skipped → defaultValue; an OBJECT bundle always injects
+   * (carrying `n` + `computedAt`, numeric fields possibly undefined) so feedback widgets
+   * can caption honestly even below the floor. Also registers a `_serverDataAsOf` global
+   * (mirrors `_participantId`) carrying the OLDEST computedAt for "as of <date>" piping.
+   */
+  private injectServerVariables(): void {
+    const snapshots = this.config.serverVariables;
+    if (!snapshots) return;
+
+    let oldestComputedAt: string | undefined;
+    for (const variable of this.config.questionnaire.variables || []) {
+      if (!variable.server) continue;
+      const snapshot = snapshots[variable.id];
+      if (!snapshot) continue;
+
+      const value = materializeServerValue(variable, snapshot);
+      if (value === undefined) continue;
+
+      this.variableEngine.setVariable(variable.id, value, 'server-sync');
+      if (!oldestComputedAt || snapshot.computedAt < oldestComputedAt) {
+        oldestComputedAt = snapshot.computedAt;
+      }
+    }
+
+    if (oldestComputedAt) {
+      this.registerVariableIfMissing({
+        id: '_serverDataAsOf',
+        name: 'serverDataAsOf',
+        type: 'string',
+        scope: 'global',
+        defaultValue: oldestComputedAt,
+      });
+      this.variableEngine.setVariable('_serverDataAsOf', oldestComputedAt, 'server-sync');
+    }
   }
 
   private initializeExperimentalDesign(): void {

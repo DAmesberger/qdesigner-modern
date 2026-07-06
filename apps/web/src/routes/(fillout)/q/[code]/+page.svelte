@@ -12,7 +12,7 @@
   import ModularRenderer from '$lib/runtime/ModularRenderer.svelte';
   import type { FormQuestionHost, FormHostPresentation } from '$lib/runtime/core/FormQuestionHost';
   import type { ResumeState } from '$lib/runtime/core/ResumeState';
-  import type { ConsentData } from '$lib/fillout/types';
+  import type { ConsentData, FilloutDefinition } from '$lib/fillout/types';
   import type { QuestionnaireSession } from '$lib/shared';
   import {
     localizeQuestionnaire,
@@ -27,7 +27,9 @@
   import { QuotaService } from '$lib/fillout/services/QuotaService';
   import { FraudDetectionService } from '$lib/fillout/services/FraudDetectionService';
   import { api } from '$lib/services/api';
-  import { db } from '$lib/services/db/indexeddb';
+  import { db, filloutDefinitionKey, type FilloutServerVariable } from '$lib/services/db/indexeddb';
+  import { collectServerVariables, declHash } from '@qdesigner/questionnaire-core';
+  import type { ServerVariableSnapshot } from '$lib/runtime/core/QuestionnaireRuntime';
   import { ensureModulesRegistered } from '$lib/modules/register-all';
   import { TimingGatekeeper } from '$lib/runtime/timing';
   import type { GatekeeperResult } from '$lib/runtime/timing';
@@ -537,6 +539,76 @@
     }
   }
 
+  /** 30-day default staleness window when a declaration omits `server.staleAfterMs`. */
+  const SERVER_VAR_DEFAULT_STALE_MS = 30 * 24 * 60 * 60 * 1000;
+
+  /**
+   * Build the injected SERVER-COMPUTED VARIABLE snapshot map from the version-pinned
+   * aggregates cached by +page.ts (server-computed-variable / E-FEEDBACK-3). ZERO
+   * network on this path — the read side. Prefers the exact definitionKey; a declared
+   * variable with no exact row falls back to a row from ANOTHER version of the same
+   * questionnaire ONLY when the declaration hash is byte-identical (semantically safe
+   * cross-version reuse). A variable with no matching row is simply absent from the
+   * map → the runtime leaves it at its `defaultValue`.
+   */
+  async function buildServerVariableSnapshots(
+    definition: FilloutDefinition,
+    questionnaireId: string,
+    version: { major: number; minor: number; patch: number }
+  ): Promise<Record<string, ServerVariableSnapshot>> {
+    const declared = collectServerVariables({ variables: definition.variables ?? [] });
+    if (declared.length === 0) return {};
+
+    const exactKey = filloutDefinitionKey(questionnaireId, version.major, version.minor, version.patch);
+    let exactById = new Map<string, FilloutServerVariable>();
+    try {
+      const exactRows = await db.filloutServerVariables.where('definitionKey').equals(exactKey).toArray();
+      exactById = new Map(exactRows.map((r) => [r.variableId, r]));
+    } catch {
+      return {};
+    }
+
+    let crossVersion: FilloutServerVariable[] | null = null;
+    const now = Date.now();
+    const out: Record<string, ServerVariableSnapshot> = {};
+    for (const v of declared) {
+      if (!v.server) continue;
+      let row = exactById.get(v.id);
+      if (!row) {
+        // Cross-version fallback: only a byte-identical declaration is safe to reuse.
+        const localHash = declHash(v.server);
+        if (!crossVersion) {
+          try {
+            crossVersion = await db.filloutServerVariables
+              .where('questionnaireId')
+              .equals(questionnaireId)
+              .toArray();
+          } catch {
+            crossVersion = [];
+          }
+        }
+        row = crossVersion.find(
+          (r) =>
+            r.definitionKey !== exactKey &&
+            r.declHash === localHash &&
+            (r.variableId === v.id || r.name === v.name)
+        );
+      }
+      if (!row) continue;
+
+      const staleAfterMs =
+        typeof v.server.staleAfterMs === 'number' ? v.server.staleAfterMs : SERVER_VAR_DEFAULT_STALE_MS;
+      const computedMs = Date.parse(row.computedAt);
+      out[v.id] = {
+        n: row.n,
+        stats: row.stats,
+        computedAt: row.computedAt,
+        stale: Number.isFinite(computedMs) ? now - computedMs > staleAfterMs : false,
+      };
+    }
+    return out;
+  }
+
   async function initializeRuntime() {
     try {
       loading = true;
@@ -581,6 +653,20 @@
         }
       }
 
+      // Server-computed variables (server-computed-variable / E-FEEDBACK-3): one Dexie
+      // read of the version-pinned aggregates, materialized OFFLINE into the one
+      // VariableEngine at construction so flow / piping / quotas / feedback resolve
+      // them with zero fetch on the read path.
+      const serverVariables = await buildServerVariableSnapshots(
+        rawDefinition,
+        data.questionnaire.id,
+        {
+          major: data.questionnaire.versionMajor ?? 1,
+          minor: data.questionnaire.versionMinor ?? 0,
+          patch: data.questionnaire.versionPatch ?? 0,
+        }
+      );
+
       runtime = new FilloutRuntime({
         canvas,
         questionnaire: definition,
@@ -589,6 +675,7 @@
         conditionGroupCounts,
         formHost,
         enableOfflineSync: true,
+        serverVariables,
         // Resumable sessions (E-OFF-1): rehydrate prior answers + variable state so the
         // runtime resumes at the first unanswered item rather than restarting at zero.
         resumeSnapshot: data.resumeSnapshot ?? undefined,

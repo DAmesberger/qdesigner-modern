@@ -4,6 +4,7 @@ import { OfflineResponsePersistence } from '../services/OfflineResponsePersisten
 import { OfflineSessionService } from '../services/OfflineSessionService';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
 import type { ResumeState } from '$lib/runtime/core/ResumeState';
+import type { ServerVariableSnapshot } from '$lib/runtime/core/QuestionnaireRuntime';
 import { RuntimeEventBus } from './RuntimeEventBus';
 import type { ResumeSnapshot } from './responseMapping';
 import type { FormQuestionHost } from '$lib/runtime/core/FormQuestionHost';
@@ -18,6 +19,14 @@ export interface FilloutRuntimeConfig {
 	formHost?: FormQuestionHost;
 	enableOfflineSync?: boolean;
 	syncInterval?: number;
+	/**
+	 * Last-synced SERVER-COMPUTED VARIABLE aggregates keyed by variable id
+	 * (server-computed-variable / E-FEEDBACK-3). Passed straight through into the
+	 * wrapped {@link RuntimeConfig} so the runtime injects them OFFLINE at
+	 * construction. `complete()` snapshots the resolved values into
+	 * `session.variables` with everything else, so synced server values persist.
+	 */
+	serverVariables?: Record<string, ServerVariableSnapshot>;
 	/**
 	 * Prior-session answers + variable state to rehydrate from (E-OFF-1). When present
 	 * the runtime is hydrated before start() so it resumes at the first unanswered item.

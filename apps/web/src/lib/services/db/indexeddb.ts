@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type { Questionnaire } from '$lib/shared';
 import type { ResumeState } from '$lib/runtime/core/ResumeState';
+import type { ServerVariableStats } from '@qdesigner/questionnaire-core';
 
 export interface SyncQueueItem {
   id?: string;
@@ -158,6 +159,36 @@ export interface FilloutVariable {
   synced: 0 | 1;
 }
 
+/**
+ * Cached aggregate for one SERVER-COMPUTED VARIABLE (server-computed-variable /
+ * E-FEEDBACK-3). One row per (version-pinned definition, variable): the runtime
+ * reads these before construction and injects each into the ONE VariableEngine as
+ * a `'server-sync'` value, so server-computed variables resolve OFFLINE from the
+ * last synced aggregate (falling back to the variable's `defaultValue` when a row
+ * is absent). Keyed `[definitionKey+variableId]` so concurrent versions coexist,
+ * mirroring {@link FilloutQuestionnaire}. `declHash` lets the +page.svelte snapshot
+ * builder safely reuse a row cross-version when the declaration is byte-identical.
+ */
+export interface FilloutServerVariable {
+  /** {@link filloutDefinitionKey}(questionnaireId, maj, min, patch) — same composite as filloutQuestionnaires. */
+  definitionKey: string;
+  /** Variable id from the definition (the key the runtime injects against). */
+  variableId: string;
+  /** Variable name (the mathjs symbol consumers resolve). */
+  name: string;
+  /** Stable content hash of the `server` declaration (matches the questionnaire-core `declHash`). */
+  declHash: string;
+  questionnaireId: string;
+  /** Cohort size (populated even below the anonymity floor). */
+  n: number;
+  /** Full stats, or `null` when withheld below the server's n>=5 anonymity floor. */
+  stats: ServerVariableStats | null;
+  /** Server-clock ISO-8601 timestamp of the aggregation. */
+  computedAt: string;
+  /** Client-clock ms when this row was written (drives the freshness skip). */
+  syncedAt: number;
+}
+
 class QDesignerDatabase extends Dexie {
   // Designer tables
   questionnaires!: Table<OfflineQuestionnaire>;
@@ -172,6 +203,7 @@ class QDesignerDatabase extends Dexie {
   filloutEvents!: Table<FilloutEvent>;
   filloutVariables!: Table<FilloutVariable>;
   filloutMedia!: Table<FilloutMediaEntry>;
+  filloutServerVariables!: Table<FilloutServerVariable>;
 
   constructor() {
     super('QDesignerOfflineDB');
@@ -261,6 +293,29 @@ class QDesignerDatabase extends Dexie {
       filloutEvents: '++id, sessionId, clientId, synced, [sessionId+synced]',
       filloutVariables: '[sessionId+name], sessionId, synced',
       filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt'
+    });
+
+    // v5: server-computed variables (server-computed-variable / E-FEEDBACK-3).
+    //  - filloutServerVariables is new: one aggregate row per (version-pinned
+    //    definition, variable), compound-keyed [definitionKey+variableId] so
+    //    concurrent versions coexist like filloutQuestionnaires. `definitionKey`
+    //    and `questionnaireId` are plain indexes for the snapshot read and prune
+    //    GC; `syncedAt` drives the freshness-skip query. Purely additive — all v4
+    //    stores are restated unchanged and there is NO .upgrade() body, so Dexie
+    //    creates the empty table lazily on next open and old clients upgrade
+    //    transparently.
+    this.version(5).stores({
+      questionnaires: 'id, userId, syncStatus, lastModified, [id+userId]',
+      syncQueue: '++id, userId, status, timestamp, [userId+status]',
+      resources: 'id, url, lastAccessed, expiresAt',
+      drafts: 'id, userId, questionnaireId, timestamp, [userId+questionnaireId]',
+      filloutQuestionnaires: 'id, questionnaireId, accessCode, syncedAt',
+      filloutSessions: 'id, questionnaireId, status, createdAt, synced, [questionnaireId+status]',
+      filloutResponses: '++id, sessionId, clientId, questionId, synced, [sessionId+synced]',
+      filloutEvents: '++id, sessionId, clientId, synced, [sessionId+synced]',
+      filloutVariables: '[sessionId+name], sessionId, synced',
+      filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt',
+      filloutServerVariables: '[definitionKey+variableId], definitionKey, questionnaireId, syncedAt'
     });
   }
 

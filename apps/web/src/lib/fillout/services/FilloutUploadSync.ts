@@ -2,7 +2,8 @@ import { browser } from '$app/environment';
 import { api } from '$lib/services/api';
 import { OfflineSessionService } from './OfflineSessionService';
 import { OfflineResponsePersistence, type StoredFilloutResponse } from './OfflineResponsePersistence';
-import { db, type FilloutSession } from '$lib/services/db/indexeddb';
+import { FilloutContentCache } from './FilloutContentCache';
+import { db, filloutDefinitionKey, type FilloutSession } from '$lib/services/db/indexeddb';
 import type { SyncPayload } from '$lib/api/generated/types.gen';
 
 export interface SyncResult {
@@ -89,6 +90,9 @@ export class FilloutUploadSync {
 		try {
 			const sessions = await this.collectSessionsToSync();
 
+			// Version-pinned definitions whose sessions just drained — nudged below.
+			const drainedDefinitionKeys = new Set<string>();
+
 			for (const session of sessions) {
 				try {
 					const sessionResult = await this.syncSession(session);
@@ -96,11 +100,28 @@ export class FilloutUploadSync {
 					result.responsesSynced += sessionResult.responsesSynced;
 					result.eventsSynced += sessionResult.eventsSynced;
 					result.variablesSynced += sessionResult.variablesSynced;
+					// A stub (online-created) session has no local definition to refresh.
+					if (session.questionnaireId) {
+						drainedDefinitionKeys.add(
+							filloutDefinitionKey(
+								session.questionnaireId,
+								session.versionMajor,
+								session.versionMinor,
+								session.versionPatch
+							)
+						);
+					}
 				} catch (err) {
 					const msg = err instanceof Error ? err.message : 'Unknown sync error';
 					result.errors.push(`Session ${session.id}: ${msg}`);
 				}
 			}
+
+			// Server-computed variables (server-computed-variable / E-FEEDBACK-3): the
+			// cohort just absorbed these completed sessions — fire-and-forget a FORCED
+			// refresh (bypassing the client freshness window) so the next run on this
+			// device sees updated aggregates. Uploads are already done; never blocks.
+			void this.refreshServerVariables(drainedDefinitionKeys);
 
 			// Reset backoff on success
 			this.retryDelay = 1000;
@@ -162,6 +183,28 @@ export class FilloutUploadSync {
 			createdAt: 0,
 			synced: 0,
 		};
+	}
+
+	/**
+	 * Force-refresh the server-computed variable aggregates for every drained
+	 * definition version, reading each version's cached definition to resolve its
+	 * declarations. Best-effort: a missing definition row or a failed fetch is
+	 * skipped and never surfaces in the sync result.
+	 */
+	private async refreshServerVariables(definitionKeys: Set<string>): Promise<void> {
+		for (const key of definitionKeys) {
+			try {
+				const row = await db.filloutQuestionnaires.get(key);
+				if (!row) continue;
+				await FilloutContentCache.cacheServerVariables(
+					row.data,
+					{ major: row.versionMajor, minor: row.versionMinor, patch: row.versionPatch },
+					{ force: true }
+				);
+			} catch {
+				// Best-effort refresh — never affects the upload result.
+			}
+		}
 	}
 
 	/**
