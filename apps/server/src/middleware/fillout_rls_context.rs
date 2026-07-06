@@ -43,11 +43,13 @@ pub async fn set_fillout_rls_context(
     // set_config(key, value, true) — `true` makes the setting
     // transaction-local (cleared on commit/rollback). Empty string
     // resolves to NULL via NULLIF in the `current_app_*_id()` helpers.
-    sqlx::query("SELECT set_config('app.user_id', $1, true), set_config('app.session_id', $2, true)")
-        .bind(user_id.map(|u| u.to_string()).unwrap_or_default())
-        .bind(session_id.map(|s| s.to_string()).unwrap_or_default())
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "SELECT set_config('app.user_id', $1, true), set_config('app.session_id', $2, true)",
+    )
+    .bind(user_id.map(|u| u.to_string()).unwrap_or_default())
+    .bind(session_id.map(|s| s.to_string()).unwrap_or_default())
+    .execute(&mut *tx)
+    .await?;
 
     let slot: SharedTx = Arc::new(Mutex::new(Some(tx)));
     request.extensions_mut().insert(slot.clone());

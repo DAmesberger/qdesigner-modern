@@ -101,7 +101,11 @@ async fn seat_usage_counts_active_members_and_pending_invitations() {
     assert_eq!(limit, Some(3), "seat limit read from settings");
     assert_eq!(active, 2, "only active members count");
     assert_eq!(pending, 1, "pending invitation reserves a seat");
-    assert_eq!(active + pending, 3, "used seats == limit (next add is blocked)");
+    assert_eq!(
+        active + pending,
+        3,
+        "used seats == limit (next add is blocked)"
+    );
 }
 
 #[tokio::test]

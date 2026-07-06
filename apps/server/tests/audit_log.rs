@@ -64,31 +64,39 @@ async fn role_change_writes_single_attributed_audit_event() {
 
     // ── Assert via the DB (bypass pool sees all rows regardless of RLS) ──
     let pool = fixture_pool().await.expect("fixture pool");
-    let row: (Uuid, Uuid, Option<Uuid>, String, String, Option<Uuid>, serde_json::Value) =
-        sqlx::query_as(
-            "SELECT id, organization_id, actor_user_id, action, resource_type, resource_id, metadata \
+    let row: (
+        Uuid,
+        Uuid,
+        Option<Uuid>,
+        String,
+        String,
+        Option<Uuid>,
+        serde_json::Value,
+    ) = sqlx::query_as(
+        "SELECT id, organization_id, actor_user_id, action, resource_type, resource_id, metadata \
              FROM audit_events \
              WHERE organization_id = $1 AND action = 'member.role_changed'",
-        )
-        .bind(tenant.org_id)
-        .fetch_one(&pool)
-        .await
-        .expect("exactly one member.role_changed row");
+    )
+    .bind(tenant.org_id)
+    .fetch_one(&pool)
+    .await
+    .expect("exactly one member.role_changed row");
 
     let (_id, org_id, actor, action, resource_type, resource_id, metadata) = row;
     assert_eq!(org_id, tenant.org_id);
     assert_eq!(actor, Some(owner.id), "actor is the acting owner");
     assert_eq!(action, "member.role_changed");
     assert_eq!(resource_type, "organization_member");
-    assert_eq!(resource_id, Some(member.id), "resource is the target member");
+    assert_eq!(
+        resource_id,
+        Some(member.id),
+        "resource is the target member"
+    );
     assert_eq!(
         metadata["before"], "member",
         "metadata records the prior role"
     );
-    assert_eq!(
-        metadata["after"], "admin",
-        "metadata records the new role"
-    );
+    assert_eq!(metadata["after"], "admin", "metadata records the new role");
 
     // Exactly one such row (no double-writes, no writes on the no-op path).
     let count: i64 = sqlx::query_scalar(
@@ -98,7 +106,10 @@ async fn role_change_writes_single_attributed_audit_event() {
     .fetch_one(&pool)
     .await
     .expect("count");
-    assert_eq!(count, 1, "a single role change writes exactly one audit row");
+    assert_eq!(
+        count, 1,
+        "a single role change writes exactly one audit row"
+    );
 
     // ── Assert via the API (org admin/owner can read the timeline) ──
     let (status, page) = json_request(
@@ -192,12 +203,11 @@ async fn audit_rows_are_immutable_for_the_app_role() {
 /// immutability assertions are meaningful (a superuser would bypass the
 /// REVOKE and the test would be a false green).
 async fn assert_app_role(pool: &PgPool) {
-    let is_super: bool = sqlx::query_scalar(
-        "SELECT rolsuper FROM pg_roles WHERE rolname = current_user",
-    )
-    .fetch_one(pool)
-    .await
-    .expect("role introspection");
+    let is_super: bool =
+        sqlx::query_scalar("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
+            .fetch_one(pool)
+            .await
+            .expect("role introspection");
     assert!(
         !is_super,
         "immutability test requires a non-superuser app role; got a superuser connection"

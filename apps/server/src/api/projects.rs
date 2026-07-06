@@ -232,7 +232,12 @@ pub async fn create_project(
     // Require at least member role in the org
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, body.organization_id, &OrgRole::Member)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            body.organization_id,
+            &OrgRole::Member,
+        )
         .await?
     {
         return Err(ApiError::Forbidden(
@@ -1086,5 +1091,7 @@ pub async fn transfer_project_ownership(
     )
     .await?;
 
-    Ok(Json(serde_json::json!({ "message": "Ownership transferred" })))
+    Ok(Json(
+        serde_json::json!({ "message": "Ownership transferred" }),
+    ))
 }

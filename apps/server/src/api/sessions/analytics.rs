@@ -832,10 +832,9 @@ pub async fn public_server_variables(
 ) -> Result<Json<ServerVariablesResponse>, ApiError> {
     // Optional pinned-version selector.
     let requested_version = match query.version.as_deref().map(str::trim) {
-        Some(v) if !v.is_empty() => Some(
-            parse_semver_triplet(v)
-                .ok_or_else(|| ApiError::BadRequest("Invalid version (expected major.minor.patch)".into()))?,
-        ),
+        Some(v) if !v.is_empty() => Some(parse_semver_triplet(v).ok_or_else(|| {
+            ApiError::BadRequest("Invalid version (expected major.minor.patch)".into())
+        })?),
         _ => None,
     };
 

@@ -222,9 +222,7 @@ impl RbacManager {
         project_id: Uuid,
         required: &ProjectRole,
     ) -> Result<bool, ApiError> {
-        let role = self
-            .get_project_role(executor, user_id, project_id)
-            .await?;
+        let role = self.get_project_role(executor, user_id, project_id).await?;
         Ok(role.is_some_and(|r| project_role_level(&r) >= project_role_level(required)))
     }
 

@@ -84,8 +84,8 @@ pub fn validate_upload(
         )));
     }
 
-    let kind = infer::get(bytes)
-        .ok_or_else(|| ApiError::BadRequest("Unrecognized file type".into()))?;
+    let kind =
+        infer::get(bytes).ok_or_else(|| ApiError::BadRequest("Unrecognized file type".into()))?;
 
     let sniffed_mime = kind.mime_type();
     let matcher = kind.matcher_type();
@@ -256,7 +256,12 @@ pub async fn upload_media(
     // Verify write access
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Member)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Member,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("No write access".into()));
@@ -465,7 +470,10 @@ pub async fn stream_media_content(
         // fall back to the DB size only when S3 omits it. Using the DB value in
         // preference would truncate/hang the connection if the row's size_bytes
         // ever diverges from the real object (e.g. replaced out-of-band).
-        let len = object.content_length.filter(|&n| n > 0).unwrap_or(asset.size_bytes);
+        let len = object
+            .content_length
+            .filter(|&n| n > 0)
+            .unwrap_or(asset.size_bytes);
         builder = builder.header(header::CONTENT_LENGTH, len);
     }
 
@@ -637,7 +645,10 @@ pub async fn upload_session_media(
     let s3_key = format!("sessions/{session_id}/media/{file_id}.{ext}");
 
     // Upload to S3
-    state.storage.upload(&s3_key, bytes, &canonical_mime).await?;
+    state
+        .storage
+        .upload(&s3_key, bytes, &canonical_mime)
+        .await?;
 
     // Store metadata in DB
     let asset = sqlx::query_as::<_, SessionMediaAsset>(
@@ -730,8 +741,7 @@ mod validate_upload_tests {
         // A PDF sniffs as application/pdf — not in the image/audio/video
         // allowlist.
         let pdf = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
-        let err = validate_upload(pdf, "application/pdf")
-            .expect_err("pdf must be rejected");
+        let err = validate_upload(pdf, "application/pdf").expect_err("pdf must be rejected");
         assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
     }
 
@@ -739,8 +749,7 @@ mod validate_upload_tests {
     fn rejects_oversize() {
         let mut big = png_bytes();
         big.resize(MAX_UPLOAD_BYTES + 1, 0);
-        let err =
-            validate_upload(&big, "image/png").expect_err("oversize must be rejected");
+        let err = validate_upload(&big, "image/png").expect_err("oversize must be rejected");
         assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
     }
 

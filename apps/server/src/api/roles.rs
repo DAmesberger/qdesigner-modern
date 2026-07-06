@@ -151,7 +151,10 @@ pub async fn list_roles(
 
     Ok(Json(RolesListResponse {
         roles,
-        available_permissions: Permission::ALL.iter().map(|p| p.as_str().to_string()).collect(),
+        available_permissions: Permission::ALL
+            .iter()
+            .map(|p| p.as_str().to_string())
+            .collect(),
     }))
 }
 
@@ -256,9 +259,7 @@ pub async fn update_role(
     .ok_or_else(|| ApiError::NotFound("Role not found".into()))?;
 
     if is_system {
-        return Err(ApiError::Forbidden(
-            "System roles are immutable".into(),
-        ));
+        return Err(ApiError::Forbidden("System roles are immutable".into()));
     }
 
     let name = match body.name {
@@ -345,18 +346,18 @@ pub async fn delete_role(
     .ok_or_else(|| ApiError::NotFound("Role not found".into()))?;
 
     if is_system {
-        return Err(ApiError::Forbidden(
-            "System roles cannot be deleted".into(),
-        ));
+        return Err(ApiError::Forbidden("System roles cannot be deleted".into()));
     }
 
     // Members holding this role fall back to their system-role defaults via
     // the ON DELETE SET NULL FK on organization_members.custom_role_id.
-    sqlx::query("DELETE FROM org_roles WHERE id = $1 AND organization_id = $2 AND is_system = false")
-        .bind(role_id)
-        .bind(org_id)
-        .execute(&mut **tx)
-        .await?;
+    sqlx::query(
+        "DELETE FROM org_roles WHERE id = $1 AND organization_id = $2 AND is_system = false",
+    )
+    .bind(role_id)
+    .bind(org_id)
+    .execute(&mut **tx)
+    .await?;
 
     audit::record(
         &mut **tx,
@@ -458,5 +459,7 @@ pub async fn assign_member_role(
     )
     .await?;
 
-    Ok(Json(serde_json::json!({ "message": "Custom role updated" })))
+    Ok(Json(
+        serde_json::json!({ "message": "Custom role updated" }),
+    ))
 }

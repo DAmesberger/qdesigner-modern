@@ -38,11 +38,16 @@ fn parse_filter_param(
 ) -> Result<FilterParam, ApiError> {
     match kind {
         FilterFieldType::Text => Ok(FilterParam::Text(raw.to_string())),
-        FilterFieldType::BigInt => raw.trim().parse::<i64>().map(FilterParam::BigInt).map_err(|_| {
-            ApiError::Validation(format!(
-                "Field '{field}' expects an integer value, got '{raw}'"
-            ))
-        }),
+        FilterFieldType::BigInt => {
+            raw.trim()
+                .parse::<i64>()
+                .map(FilterParam::BigInt)
+                .map_err(|_| {
+                    ApiError::Validation(format!(
+                        "Field '{field}' expects an integer value, got '{raw}'"
+                    ))
+                })
+        }
         FilterFieldType::Timestamp => chrono::DateTime::parse_from_rfc3339(raw.trim())
             .map(|dt| FilterParam::Timestamp(dt.with_timezone(&chrono::Utc)))
             .map_err(|_| {

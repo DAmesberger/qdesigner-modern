@@ -305,7 +305,11 @@ async fn batched_multi_row_insert_dedups_and_counts_only_new_rows() {
                 .fetch_one(&pool)
                 .await
                 .expect("value");
-        assert_eq!(value, serde_json::json!("pre"), "collision must not overwrite");
+        assert_eq!(
+            value,
+            serde_json::json!("pre"),
+            "collision must not overwrite"
+        );
     }
 }
 

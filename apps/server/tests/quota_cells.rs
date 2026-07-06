@@ -63,7 +63,13 @@ async fn seed(pool: &PgPool) -> Uuid {
 /// Fire `n` concurrent claims against a single cell, each on its own pooled
 /// connection (a fresh autocommit transaction), and return the vector of
 /// returned occupancies (-1 == rejected).
-async fn concurrent_claims(pool: Arc<PgPool>, qid: Uuid, cell_key: &str, target: i64, n: usize) -> Vec<i64> {
+async fn concurrent_claims(
+    pool: Arc<PgPool>,
+    qid: Uuid,
+    cell_key: &str,
+    target: i64,
+    n: usize,
+) -> Vec<i64> {
     let mut handles = Vec::with_capacity(n);
     for _ in 0..n {
         let pool = pool.clone();
@@ -116,15 +122,20 @@ async fn concurrent_claims_never_exceed_a_cell_target() {
     // no value above the cap) — proof the increment is serialized.
     let mut wins: Vec<i64> = results.into_iter().filter(|&r| r >= 1).collect();
     wins.sort_unstable();
-    assert_eq!(wins, (1..=TARGET).collect::<Vec<_>>(), "occupancies are 1..=target with no overfill");
+    assert_eq!(
+        wins,
+        (1..=TARGET).collect::<Vec<_>>(),
+        "occupancies are 1..=target with no overfill"
+    );
 
     // Persisted counter matches the cap exactly.
-    let current: i64 =
-        sqlx::query_scalar("SELECT current FROM quota_cells WHERE questionnaire_id = $1 AND cell_key = 'gender=male'")
-            .bind(qid)
-            .fetch_one(&*pool)
-            .await
-            .expect("current");
+    let current: i64 = sqlx::query_scalar(
+        "SELECT current FROM quota_cells WHERE questionnaire_id = $1 AND cell_key = 'gender=male'",
+    )
+    .bind(qid)
+    .fetch_one(&*pool)
+    .await
+    .expect("current");
     assert_eq!(current, TARGET, "persisted current never exceeds target");
 }
 
@@ -178,6 +189,12 @@ async fn uncapped_cell_admits_every_claim() {
     // target <= 0 ⇒ uncapped: every one of the concurrent claims succeeds.
     let results = concurrent_claims(pool.clone(), qid, "gender=other", 0, 12).await;
     let successes = results.iter().filter(|&&r| r >= 1).count();
-    assert_eq!(successes, 12, "an uncapped cell (target 0) admits every claim");
-    assert!(results.iter().all(|&r| r != -1), "no rejection for an uncapped cell");
+    assert_eq!(
+        successes, 12,
+        "an uncapped cell (target 0) admits every claim"
+    );
+    assert!(
+        results.iter().all(|&r| r != -1),
+        "no rejection for an uncapped cell"
+    );
 }

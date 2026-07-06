@@ -46,7 +46,11 @@ async fn custom_analyst_role_reads_analytics_but_is_denied_publish() {
         Some(&serde_json::json!({ "email": analyst.email, "role": "admin" })),
     )
     .await;
-    assert_eq!(status, StatusCode::CREATED, "add analyst as admin: {json:?}");
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "add analyst as admin: {json:?}"
+    );
 
     // Owner authors the custom Analyst role.
     let (status, role) = json_request(
@@ -68,7 +72,10 @@ async fn custom_analyst_role_reads_analytics_but_is_denied_publish() {
     let (status, json) = json_request(
         &app,
         "PUT",
-        &format!("/api/organizations/{org}/members/{}/custom-role", analyst.id),
+        &format!(
+            "/api/organizations/{org}/members/{}/custom-role",
+            analyst.id
+        ),
         Some(&owner.token),
         Some(&serde_json::json!({ "custom_role_id": role_id })),
     )

@@ -49,12 +49,7 @@ impl ApiError {
     /// TOCTOU race between a SELECT-EXISTS gate and the INSERT can surface
     /// a duplicate-key error that is semantically a conflict, not a bug.
     pub fn from_db_error(err: sqlx::Error) -> ApiError {
-        if err
-            .as_database_error()
-            .and_then(|e| e.code())
-            .as_deref()
-            == Some("23505")
-        {
+        if err.as_database_error().and_then(|e| e.code()).as_deref() == Some("23505") {
             ApiError::Conflict("Resource already exists".into())
         } else {
             ApiError::Database(err)

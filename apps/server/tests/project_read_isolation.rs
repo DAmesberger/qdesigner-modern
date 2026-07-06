@@ -17,9 +17,7 @@
 use axum::http::StatusCode;
 
 mod common;
-use common::{
-    build_test_state, json_request, provision_tenant, register_user, test_app, TestUser,
-};
+use common::{build_test_state, json_request, provision_tenant, register_user, test_app, TestUser};
 
 /// Whether the project list returned by `GET /api/projects` contains `id`.
 fn list_contains(list: &serde_json::Value, id: uuid::Uuid) -> bool {
@@ -56,7 +54,11 @@ async fn set_visibility(app: &axum::Router, admin: &TestUser, org_id: uuid::Uuid
         Some(&body),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "set projectVisibility={value}: {json:?}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "set projectVisibility={value}: {json:?}"
+    );
 }
 
 #[tokio::test]
@@ -86,8 +88,14 @@ async fn project_read_isolation_respects_org_visibility() {
         "under 'org' visibility, member B must see project P: {list:?}"
     );
 
-    let (status, _json) =
-        json_request(&app, "GET", &format!("/api/projects/{p}"), Some(tok_b), None).await;
+    let (status, _json) = json_request(
+        &app,
+        "GET",
+        &format!("/api/projects/{p}"),
+        Some(tok_b),
+        None,
+    )
+    .await;
     assert_eq!(
         status,
         StatusCode::OK,
@@ -104,8 +112,14 @@ async fn project_read_isolation_respects_org_visibility() {
         "under 'members' visibility, member B must NOT see project P: {list:?}"
     );
 
-    let (status, json) =
-        json_request(&app, "GET", &format!("/api/projects/{p}"), Some(tok_b), None).await;
+    let (status, json) = json_request(
+        &app,
+        "GET",
+        &format!("/api/projects/{p}"),
+        Some(tok_b),
+        None,
+    )
+    .await;
     assert_eq!(
         status,
         StatusCode::FORBIDDEN,
@@ -121,14 +135,19 @@ async fn project_read_isolation_respects_org_visibility() {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "B org-filtered list (members): {list:?}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "B org-filtered list (members): {list:?}"
+    );
     assert!(
         !list_contains(&list, p),
         "under 'members' visibility, B org-filtered list must NOT include P: {list:?}"
     );
 
     // Owner A always sees P.
-    let (status, list) = json_request(&app, "GET", "/api/projects", Some(&user_a.token), None).await;
+    let (status, list) =
+        json_request(&app, "GET", "/api/projects", Some(&user_a.token), None).await;
     assert_eq!(status, StatusCode::OK, "A list (members): {list:?}");
     assert!(
         list_contains(&list, p),
@@ -142,7 +161,11 @@ async fn project_read_isolation_respects_org_visibility() {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "org owner A GET project P must be 200");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "org owner A GET project P must be 200"
+    );
 
     // ── Add B to project P — restores B's read access under 'members' ────
     let member_body = serde_json::json!({ "email": user_b.email, "role": "viewer" });
@@ -154,7 +177,11 @@ async fn project_read_isolation_respects_org_visibility() {
         Some(&member_body),
     )
     .await;
-    assert_eq!(status, StatusCode::CREATED, "A add B to project P: {json:?}");
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "A add B to project P: {json:?}"
+    );
 
     let (status, list) = json_request(&app, "GET", "/api/projects", Some(tok_b), None).await;
     assert_eq!(status, StatusCode::OK, "B list after join: {list:?}");
@@ -162,8 +189,14 @@ async fn project_read_isolation_respects_org_visibility() {
         list_contains(&list, p),
         "after being added to P, member B must see it again under 'members': {list:?}"
     );
-    let (status, _json) =
-        json_request(&app, "GET", &format!("/api/projects/{p}"), Some(tok_b), None).await;
+    let (status, _json) = json_request(
+        &app,
+        "GET",
+        &format!("/api/projects/{p}"),
+        Some(tok_b),
+        None,
+    )
+    .await;
     assert_eq!(
         status,
         StatusCode::OK,

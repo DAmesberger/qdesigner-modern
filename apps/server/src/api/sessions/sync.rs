@@ -437,10 +437,13 @@ fn quota_cell_key(values: &serde_json::Map<String, serde_json::Value>) -> String
     let mut pairs: Vec<(String, String)> = values
         .iter()
         .map(|(k, v)| {
-            let val = v.as_str().map(|s| s.to_string()).unwrap_or_else(|| match v {
-                serde_json::Value::Null => String::new(),
-                other => other.to_string(),
-            });
+            let val = v
+                .as_str()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| match v {
+                    serde_json::Value::Null => String::new(),
+                    other => other.to_string(),
+                });
             (k.clone(), val)
         })
         .collect();

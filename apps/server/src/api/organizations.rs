@@ -12,8 +12,8 @@ use validator::Validate;
 
 use crate::audit::{self, resource, AuditAction, AuditEvent, ClientIp};
 use crate::auth::models::AuthenticatedUser;
-use crate::middleware::tx::Tx;
 use crate::error::ApiError;
+use crate::middleware::tx::Tx;
 use crate::state::AppState;
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -565,7 +565,12 @@ pub async fn update_organization(
     // Require at least admin role
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -678,7 +683,12 @@ pub async fn delete_organization(
     let mut tx = tx.tx().await?;
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Owner,
+        )
         .await?
     {
         return Err(ApiError::Forbidden(
@@ -755,10 +765,7 @@ pub async fn seat_usage(
 
 /// Deny when adding one more seat would exceed the configured `seatLimit`.
 /// No-op when no limit is set.
-async fn enforce_seat_limit(
-    conn: &mut sqlx::PgConnection,
-    org_id: Uuid,
-) -> Result<(), ApiError> {
+async fn enforce_seat_limit(conn: &mut sqlx::PgConnection, org_id: Uuid) -> Result<(), ApiError> {
     let (limit, active, pending) = seat_usage(conn, org_id).await?;
     if let Some(limit) = limit {
         let used = active + pending;
@@ -915,7 +922,12 @@ pub async fn add_member(
     if body.role == "owner"
         && !state
             .rbac
-            .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
+            .has_org_role(
+                &mut **tx,
+                user.user_id,
+                org_id,
+                &crate::rbac::models::OrgRole::Owner,
+            )
             .await?
     {
         return Err(ApiError::Forbidden(
@@ -925,7 +937,12 @@ pub async fn add_member(
 
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1018,7 +1035,12 @@ pub async fn remove_member(
     let mut tx = tx.tx().await?;
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1114,7 +1136,12 @@ pub async fn change_member_role(
     // Caller must be at least an admin of this org.
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1135,7 +1162,12 @@ pub async fn change_member_role(
     if touches_owner
         && !state
             .rbac
-            .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
+            .has_org_role(
+                &mut **tx,
+                user.user_id,
+                org_id,
+                &crate::rbac::models::OrgRole::Owner,
+            )
             .await?
     {
         return Err(ApiError::Forbidden(
@@ -1161,7 +1193,9 @@ pub async fn change_member_role(
 
     // No-op fast path: role unchanged.
     if current_role == body.role {
-        return Ok(Json(serde_json::json!({ "message": "Member role updated" })));
+        return Ok(Json(
+            serde_json::json!({ "message": "Member role updated" }),
+        ));
     }
 
     sqlx::query(
@@ -1191,7 +1225,9 @@ pub async fn change_member_role(
     )
     .await?;
 
-    Ok(Json(serde_json::json!({ "message": "Member role updated" })))
+    Ok(Json(
+        serde_json::json!({ "message": "Member role updated" }),
+    ))
 }
 
 /// Guarded, atomic org-ownership mutation used by [`transfer_org_ownership`].
@@ -1304,7 +1340,12 @@ pub async fn transfer_org_ownership(
     // Caller must be a current owner of this org.
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Owner,
+        )
         .await?
     {
         return Err(ApiError::Forbidden(
@@ -1371,7 +1412,9 @@ pub async fn transfer_org_ownership(
     )
     .await?;
 
-    Ok(Json(serde_json::json!({ "message": "Ownership transferred" })))
+    Ok(Json(
+        serde_json::json!({ "message": "Ownership transferred" }),
+    ))
 }
 
 // ── Invitations ──────────────────────────────────────────────────────
@@ -1401,7 +1444,12 @@ pub async fn list_invitations(
     let mut tx = tx.tx().await?;
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1462,7 +1510,12 @@ pub async fn create_invitation(
 
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1894,7 +1947,12 @@ pub async fn revoke_invitation(
     let mut tx = tx.tx().await?;
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -1963,7 +2021,12 @@ pub async fn list_domains(
     let mut tx = tx.tx().await?;
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -2013,7 +2076,12 @@ pub async fn create_domain(
     let mut tx = tx.tx().await?;
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -2071,7 +2139,12 @@ pub async fn verify_domain(
         let mut tx = tx.tx().await?;
         if !state
             .rbac
-            .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+            .has_org_role(
+                &mut **tx,
+                user.user_id,
+                org_id,
+                &crate::rbac::models::OrgRole::Admin,
+            )
             .await?
         {
             return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -2212,7 +2285,12 @@ pub async fn update_domain(
     let mut tx = tx.tx().await?;
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -2302,7 +2380,12 @@ pub async fn delete_domain(
     let mut tx = tx.tx().await?;
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -2463,7 +2546,12 @@ pub async fn list_audit_events(
 
     if !state
         .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .has_org_role(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
         .await?
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
@@ -2521,9 +2609,10 @@ pub async fn list_audit_events(
 
     // A full page means there may be more; emit a cursor from the last row.
     let next_cursor = if events.len() as i64 == limit {
-        events
-            .last()
-            .and_then(|e| e.created_at.map(|ts| format!("{}|{}", ts.to_rfc3339(), e.id)))
+        events.last().and_then(|e| {
+            e.created_at
+                .map(|ts| format!("{}|{}", ts.to_rfc3339(), e.id))
+        })
     } else {
         None
     };

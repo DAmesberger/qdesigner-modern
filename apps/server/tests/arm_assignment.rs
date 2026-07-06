@@ -118,14 +118,18 @@ async fn concurrent_claims_stay_balanced() {
     );
 
     // The persisted ledger agrees with the observed tally.
-    let ledger: Vec<(String, i64)> =
-        sqlx::query_as("SELECT condition_name, assigned_count FROM arm_counts WHERE questionnaire_id = $1")
-            .bind(qid)
-            .fetch_all(&pool)
-            .await
-            .expect("ledger");
+    let ledger: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT condition_name, assigned_count FROM arm_counts WHERE questionnaire_id = $1",
+    )
+    .bind(qid)
+    .fetch_all(&pool)
+    .await
+    .expect("ledger");
     let ledger_total: i64 = ledger.iter().map(|(_, c)| c).sum();
-    assert_eq!(ledger_total, N as i64, "arm_counts ledger must total N: {ledger:?}");
+    assert_eq!(
+        ledger_total, N as i64,
+        "arm_counts ledger must total N: {ledger:?}"
+    );
 }
 
 #[tokio::test]
@@ -178,10 +182,7 @@ async fn concurrent_claims_never_exceed_cap() {
         "exactly the total capacity must be claimable: got {successes}, tally={tally:?}"
     );
     for (name, count) in &tally {
-        assert!(
-            *count <= 10,
-            "arm {name} exceeded its cap of 10: {count}"
-        );
+        assert!(*count <= 10, "arm {name} exceeded its cap of 10: {count}");
     }
 }
 

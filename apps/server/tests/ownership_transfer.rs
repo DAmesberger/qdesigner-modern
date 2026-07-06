@@ -241,8 +241,14 @@ async fn project_transfer_promotes_target_and_demotes_prior_owner() {
     .expect("transfer should succeed");
     drop(conn);
 
-    assert_eq!(project_role(&pool, project, target).await.as_deref(), Some("owner"));
-    assert_eq!(project_role(&pool, project, owner).await.as_deref(), Some("admin"));
+    assert_eq!(
+        project_role(&pool, project, target).await.as_deref(),
+        Some("owner")
+    );
+    assert_eq!(
+        project_role(&pool, project, owner).await.as_deref(),
+        Some("admin")
+    );
     assert_eq!(project_owner_count(&pool, project).await, 1);
 }
 
@@ -269,8 +275,14 @@ async fn project_transfer_auto_adds_org_member_as_owner() {
     .expect("transfer should auto-add the org member");
     drop(conn);
 
-    assert_eq!(project_role(&pool, project, target).await.as_deref(), Some("owner"));
-    assert_eq!(project_role(&pool, project, owner).await.as_deref(), Some("admin"));
+    assert_eq!(
+        project_role(&pool, project, target).await.as_deref(),
+        Some("owner")
+    );
+    assert_eq!(
+        project_role(&pool, project, owner).await.as_deref(),
+        Some("admin")
+    );
     assert_eq!(project_owner_count(&pool, project).await, 1);
 }
 
@@ -295,7 +307,13 @@ async fn project_transfer_rejects_non_org_member() {
     .await;
     drop(conn);
 
-    assert!(result.is_err(), "transfer to a non-org-member must be rejected");
-    assert_eq!(project_role(&pool, project, owner).await.as_deref(), Some("owner"));
+    assert!(
+        result.is_err(),
+        "transfer to a non-org-member must be rejected"
+    );
+    assert_eq!(
+        project_role(&pool, project, owner).await.as_deref(),
+        Some("owner")
+    );
     assert_eq!(project_owner_count(&pool, project).await, 1);
 }

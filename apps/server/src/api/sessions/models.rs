@@ -1001,12 +1001,13 @@ pub(crate) async fn load_numeric_samples_batch<'e>(
                     .numeric_value
                     .or_else(|| row.raw_value.as_ref().and_then(json_value_to_f64))
                 {
-                    grouped.entry(row.questionnaire_id).or_default().push(
-                        NumericSample {
+                    grouped
+                        .entry(row.questionnaire_id)
+                        .or_default()
+                        .push(NumericSample {
                             participant_id: row.participant_id,
                             value,
-                        },
-                    );
+                        });
                 }
             }
         }
@@ -1028,12 +1029,13 @@ pub(crate) async fn load_numeric_samples_batch<'e>(
 
             for row in rows {
                 if let Some(value) = json_value_to_f64(&row.value) {
-                    grouped.entry(row.questionnaire_id).or_default().push(
-                        NumericSample {
+                    grouped
+                        .entry(row.questionnaire_id)
+                        .or_default()
+                        .push(NumericSample {
                             participant_id: row.participant_id,
                             value,
-                        },
-                    );
+                        });
                 }
             }
         }

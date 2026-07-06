@@ -167,7 +167,8 @@ async fn main() {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 60 * 60));
             loop {
                 interval.tick().await;
-                let ttl = chrono::Duration::from_std(access_ttl).unwrap_or(chrono::Duration::hours(1));
+                let ttl =
+                    chrono::Duration::from_std(access_ttl).unwrap_or(chrono::Duration::hours(1));
                 match auth::session::purge_expired_revoked_tokens(&pool, ttl).await {
                     Ok(deleted) if deleted > 0 => {
                         tracing::info!(deleted, "purged expired revoked_tokens");

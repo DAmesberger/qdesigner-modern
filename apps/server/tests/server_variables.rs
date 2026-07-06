@@ -83,12 +83,14 @@ async fn mk_project(pool: &PgPool, user: Uuid) -> Uuid {
     .fetch_one(pool)
     .await
     .expect("org");
-    sqlx::query_scalar("INSERT INTO projects (organization_id, name, code) VALUES ($1, 'SV', $2) RETURNING id")
-        .bind(org)
-        .bind(format!("sv-{}", &Uuid::new_v4().to_string()[..8]))
-        .fetch_one(pool)
-        .await
-        .expect("project")
+    sqlx::query_scalar(
+        "INSERT INTO projects (organization_id, name, code) VALUES ($1, 'SV', $2) RETURNING id",
+    )
+    .bind(org)
+    .bind(format!("sv-{}", &Uuid::new_v4().to_string()[..8]))
+    .fetch_one(pool)
+    .await
+    .expect("project")
 }
 
 async fn mk_questionnaire(
@@ -194,7 +196,15 @@ async fn dataset_stats_returns_full_quartiles_over_completed_sessions() {
     };
     let user = mk_user(&pool).await;
     let project = mk_project(&pool, user).await;
-    let qid = mk_questionnaire(&pool, project, user, serde_json::json!({}), "published", (1, 0, 0)).await;
+    let qid = mk_questionnaire(
+        &pool,
+        project,
+        user,
+        serde_json::json!({}),
+        "published",
+        (1, 0, 0),
+    )
+    .await;
 
     // 10..=60 step 10 over 6 completed sessions; version 1.0.0.
     for score in [10, 20, 30, 40, 50, 60] {
@@ -205,7 +215,14 @@ async fn dataset_stats_returns_full_quartiles_over_completed_sessions() {
     let active = mk_session(&pool, qid, false, (1, 0, 0), None).await;
     set_var_num(&pool, active, "score", 999).await;
 
-    let row = dataset_stats(&pool, qid, "variable", "score", serde_json::json!({ "versionScope": "any" })).await;
+    let row = dataset_stats(
+        &pool,
+        qid,
+        "variable",
+        "score",
+        serde_json::json!({ "versionScope": "any" }),
+    )
+    .await;
 
     assert_eq!(row.n, 6, "6 completed; active excluded");
     assert!((row.mean.unwrap() - 35.0).abs() < 1e-9);
@@ -229,7 +246,15 @@ async fn dataset_stats_version_scope_excludes_other_versions() {
     };
     let user = mk_user(&pool).await;
     let project = mk_project(&pool, user).await;
-    let qid = mk_questionnaire(&pool, project, user, serde_json::json!({}), "published", (2, 0, 0)).await;
+    let qid = mk_questionnaire(
+        &pool,
+        project,
+        user,
+        serde_json::json!({}),
+        "published",
+        (2, 0, 0),
+    )
+    .await;
 
     // 5 at major 2 (2.1.0), 5 at major 3.
     for score in [10, 20, 30, 40, 50] {
@@ -274,7 +299,14 @@ async fn dataset_stats_version_scope_excludes_other_versions() {
     assert_eq!(exact_absent.n, 0, "no session at exactly 2.0.0");
 
     // any → all ten.
-    let any = dataset_stats(&pool, qid, "variable", "score", serde_json::json!({ "versionScope": "any" })).await;
+    let any = dataset_stats(
+        &pool,
+        qid,
+        "variable",
+        "score",
+        serde_json::json!({ "versionScope": "any" }),
+    )
+    .await;
     assert_eq!(any.n, 10);
 }
 
@@ -286,10 +318,25 @@ async fn dataset_stats_where_clause_filters_over_session_variable_index() {
     };
     let user = mk_user(&pool).await;
     let project = mk_project(&pool, user).await;
-    let qid = mk_questionnaire(&pool, project, user, serde_json::json!({}), "published", (1, 0, 0)).await;
+    let qid = mk_questionnaire(
+        &pool,
+        project,
+        user,
+        serde_json::json!({}),
+        "published",
+        (1, 0, 0),
+    )
+    .await;
 
     // 6 sessions: sex f/m alternating, age 15..40; score = age.
-    let rows = [("f", 30), ("m", 20), ("f", 40), ("m", 18), ("f", 25), ("m", 15)];
+    let rows = [
+        ("f", 30),
+        ("m", 20),
+        ("f", 40),
+        ("m", 18),
+        ("f", 25),
+        ("m", 15),
+    ];
     for (sex, age) in rows {
         let sid = mk_session(&pool, qid, true, (1, 0, 0), None).await;
         set_var_num(&pool, sid, "score", age).await;
@@ -357,7 +404,15 @@ async fn dataset_stats_completed_at_bounds() {
     };
     let user = mk_user(&pool).await;
     let project = mk_project(&pool, user).await;
-    let qid = mk_questionnaire(&pool, project, user, serde_json::json!({}), "published", (1, 0, 0)).await;
+    let qid = mk_questionnaire(
+        &pool,
+        project,
+        user,
+        serde_json::json!({}),
+        "published",
+        (1, 0, 0),
+    )
+    .await;
 
     let dates = [
         "2026-01-01T00:00:00Z",
@@ -402,7 +457,15 @@ async fn dataset_stats_response_source_branch() {
     };
     let user = mk_user(&pool).await;
     let project = mk_project(&pool, user).await;
-    let qid = mk_questionnaire(&pool, project, user, serde_json::json!({}), "published", (1, 0, 0)).await;
+    let qid = mk_questionnaire(
+        &pool,
+        project,
+        user,
+        serde_json::json!({}),
+        "published",
+        (1, 0, 0),
+    )
+    .await;
 
     for v in [2, 4, 6, 8, 10] {
         let sid = mk_session(&pool, qid, true, (1, 0, 0), None).await;
@@ -416,7 +479,14 @@ async fn dataset_stats_response_source_branch() {
         .expect("response");
     }
 
-    let row = dataset_stats(&pool, qid, "response", "q1", serde_json::json!({ "versionScope": "any" })).await;
+    let row = dataset_stats(
+        &pool,
+        qid,
+        "response",
+        "q1",
+        serde_json::json!({ "versionScope": "any" }),
+    )
+    .await;
     assert_eq!(row.n, 5);
     assert!((row.mean.unwrap() - 6.0).abs() < 1e-9);
 }
@@ -473,14 +543,20 @@ async fn endpoint_returns_entries_with_stats_above_floor() {
     let vars = body["variables"].as_array().expect("variables array");
     assert_eq!(vars.len(), 2, "one object + one scalar declaration");
 
-    let obj = vars.iter().find(|v| v["name"] == "cohortAnxiety").expect("cohortAnxiety");
+    let obj = vars
+        .iter()
+        .find(|v| v["name"] == "cohortAnxiety")
+        .expect("cohortAnxiety");
     assert_eq!(obj["sample_count"].as_i64(), Some(6));
     assert!((obj["stats"]["mean"].as_f64().unwrap() - 35.0).abs() < 1e-9);
     assert!(obj["stats"]["p25"].as_f64().is_some(), "quartiles present");
     // decl_hash matches the TS declHash({source:'variable',key:'score'}).
     assert!(!obj["decl_hash"].as_str().unwrap().is_empty());
 
-    let scalar = vars.iter().find(|v| v["name"] == "cohortMean").expect("cohortMean");
+    let scalar = vars
+        .iter()
+        .find(|v| v["name"] == "cohortMean")
+        .expect("cohortMean");
     assert_eq!(scalar["source"].as_str(), Some("variable"));
     assert!((scalar["stats"]["mean"].as_f64().unwrap() - 35.0).abs() < 1e-9);
 }
@@ -532,7 +608,15 @@ async fn endpoint_404_for_unpublished_and_missing() {
     // Unpublished (draft) questionnaire.
     let user = mk_user(&pool).await;
     let project = mk_project(&pool, user).await;
-    let draft = mk_questionnaire(&pool, project, user, serde_json::json!({}), "draft", (1, 0, 0)).await;
+    let draft = mk_questionnaire(
+        &pool,
+        project,
+        user,
+        serde_json::json!({}),
+        "draft",
+        (1, 0, 0),
+    )
+    .await;
     let (status, _) = json_request(
         &app,
         "GET",
@@ -570,11 +654,12 @@ async fn endpoint_version_resolves_snapshot_and_flags_registry_fallback() {
     // Latest registry declares `cohortAnxiety`/`cohortMean` over `score`.
     let qid = seed_endpoint_fixture(&pool, &[10, 20, 30, 40, 50]).await;
     // Grab the created_by user for the snapshot FK.
-    let created_by: Uuid = sqlx::query_scalar("SELECT created_by FROM questionnaire_definitions WHERE id = $1")
-        .bind(qid)
-        .fetch_one(&pool)
-        .await
-        .expect("created_by");
+    let created_by: Uuid =
+        sqlx::query_scalar("SELECT created_by FROM questionnaire_definitions WHERE id = $1")
+            .bind(qid)
+            .fetch_one(&pool)
+            .await
+            .expect("created_by");
 
     // A pinned 1.0.0 snapshot with a DIFFERENT declaration (keyed 'legacyScore').
     let snap_content = serde_json::json!({
@@ -607,7 +692,12 @@ async fn endpoint_version_resolves_snapshot_and_flags_registry_fallback() {
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(body["version"].as_str(), Some("1.0.0"));
     assert_eq!(body["fallback_registry"].as_bool(), Some(false));
-    let names: Vec<&str> = body["variables"].as_array().unwrap().iter().filter_map(|v| v["name"].as_str()).collect();
+    let names: Vec<&str> = body["variables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v["name"].as_str())
+        .collect();
     assert_eq!(names, vec!["legacy"], "snapshot declarations used");
 
     // ?version=9.9.9 has no snapshot → registry fallback (flagged).
@@ -621,9 +711,21 @@ async fn endpoint_version_resolves_snapshot_and_flags_registry_fallback() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body:?}");
     assert_eq!(body["version"].as_str(), Some("9.9.9"));
-    assert_eq!(body["fallback_registry"].as_bool(), Some(true), "pruned snapshot → registry fallback");
-    let names: Vec<&str> = body["variables"].as_array().unwrap().iter().filter_map(|v| v["name"].as_str()).collect();
-    assert!(names.contains(&"cohortAnxiety"), "registry declarations used: {names:?}");
+    assert_eq!(
+        body["fallback_registry"].as_bool(),
+        Some(true),
+        "pruned snapshot → registry fallback"
+    );
+    let names: Vec<&str> = body["variables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v["name"].as_str())
+        .collect();
+    assert!(
+        names.contains(&"cohortAnxiety"),
+        "registry declarations used: {names:?}"
+    );
 }
 
 #[tokio::test]
@@ -659,5 +761,9 @@ async fn endpoint_caps_declarations_at_fifty() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["variables"].as_array().unwrap().len(), 50, "capped at 50 declarations");
+    assert_eq!(
+        body["variables"].as_array().unwrap().len(),
+        50,
+        "capped at 50 declarations"
+    );
 }
