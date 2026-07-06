@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { beforeNavigate } from '$app/navigation';
+  import { beforeNavigate, replaceState } from '$app/navigation';
   import { designerStore } from '$lib/stores/designer.svelte';
   import { autoSave } from '$lib/services/autoSave.svelte';
   import { ws } from '$lib/services/ws';
@@ -120,6 +120,25 @@
       });
     }
   }
+
+  // A freshly-created questionnaire mints its id in the store, but the URL stays
+  // /designer/new?name=... — so a reload re-runs the "create" flow and forks a blank
+  // duplicate record (visible as the canvas reverting to blank). Sync the URL to the real
+  // id once, via shallow replaceState (no load re-run, so in-memory edits are untouched). (F-15)
+  let urlSyncedId: string | undefined;
+  $effect(() => {
+    const id = designerStore.questionnaire?.id;
+    const pid = data?.projectId;
+    if (!id || !pid || urlSyncedId === id) return;
+    if (typeof window !== 'undefined' && !window.location.pathname.endsWith(`/designer/${id}`)) {
+      try {
+        replaceState(`/projects/${pid}/designer/${id}`, {});
+        urlSyncedId = id;
+      } catch {
+        // router not ready yet; a later run of this effect will retry
+      }
+    }
+  });
 
   async function initializeDesigner() {
     try {
