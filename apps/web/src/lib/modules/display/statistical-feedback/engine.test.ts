@@ -73,6 +73,28 @@ describe('statistical feedback engine', () => {
     expect(series.points[0]).toEqual({ label: 'q_rt_value.derived.congruencyEffectMs', value: 42.5 });
   });
 
+  it('resolves a namespaced subscale score field (score.<scaleId>.<field>)', async () => {
+    // E-FEEDBACK-1: the runtime writes the computed scale score under a FLAT key
+    // `score.anxiety` whose value is an object; a feedback widget binds to a field of it.
+    const series = await resolveStatisticalFeedbackSeries(
+      {
+        ...defaultStatisticalFeedbackConfig,
+        sourceMode: 'current-session',
+        metric: 'mean',
+        dataSource: {
+          ...defaultStatisticalFeedbackConfig.dataSource,
+          currentVariable: 'score.anxiety.tScore',
+          key: 'score.anxiety.tScore',
+        },
+      },
+      {
+        'score.anxiety': { value: 18, tScore: 60, percentile: 84.1, band: 'Above Average' },
+      }
+    );
+
+    expect(series.points[0]).toEqual({ label: 'score.anxiety.tScore', value: 60 });
+  });
+
   it('resolves grouped current-session objects into chart points', async () => {
     const series = await resolveStatisticalFeedbackSeries(
       {

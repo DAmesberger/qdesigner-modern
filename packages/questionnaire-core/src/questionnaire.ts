@@ -63,7 +63,13 @@ export interface Variable {
   dependencies?: string[];
   validation?: ValidationRule[];
   description?: string;
-  metadata?: Record<string, unknown>;
+  /**
+   * Free-form metadata bag. `scoreOf` is a first-class hint (E-FEEDBACK-1): when a
+   * variable is the persisted computed result of a {@link ScaleScoringDef}, it links
+   * back to that scale's `id` so an import/round-trip can recognise it as a scale
+   * score rather than a raw answer variable.
+   */
+  metadata?: Record<string, unknown> & { scoreOf?: string };
 }
 
 export type VariableType =
@@ -204,6 +210,62 @@ export interface QuotaGroup {
   variables: string[];
 }
 
+// ============================================================================
+// Scale Scoring Configuration (E-FEEDBACK-1)
+// ============================================================================
+
+export type ScaleAggregation = 'sum' | 'mean';
+
+/**
+ * How a scale handles items the participant left unanswered.
+ * - `listwise`     — any missing item drops the whole scale (score = null).
+ * - `mean-impute`  — replace each missing item with the mean of the answered items (person-mean).
+ * - `prorate`      — sum the answered items, then scale up: sum * itemsExpected / itemsAnswered.
+ * - `available`    — aggregate only the answered items, no imputation or proration.
+ */
+export type ScaleMissingPolicy = 'listwise' | 'mean-impute' | 'prorate' | 'available';
+
+/**
+ * Normative reference for a scale. When present, the scale score is compared against
+ * this population to yield z / T / stanine / percentile via the psychometric
+ * NormativeScoreInterpreter.
+ */
+export interface ScaleNormData {
+  mean: number;
+  sd: number;
+  /** Optional provenance label for the norm (e.g. "PHQ-9 general population, n=5000"). */
+  source?: string;
+}
+
+/**
+ * A first-class subscale definition (E-FEEDBACK-1). Rides in the existing
+ * `questionnaire_definitions` JSON under `settings.scoring` — no DB migration — and is
+ * computed deterministically at fillout `complete()` so the full normative/subscale
+ * scoring is available OFFLINE. Computed scores persist through the session.variables
+ * pipeline (namespaced `score.<id>`).
+ */
+export interface ScaleScoringDef {
+  /** Stable id; the computed score is namespaced `score.<id>`. */
+  id: string;
+  /** Human-readable label shown in the designer / feedback. */
+  name: string;
+  /** Question ids whose numeric answers make up this scale. */
+  itemIds: string[];
+  /** Subset of `itemIds` scored in reverse via `(itemMin + itemMax - value)`. */
+  reverseScoredItemIds?: string[];
+  /** Per-item minimum (used for reverse scoring). */
+  itemMin: number;
+  /** Per-item maximum (used for reverse scoring). */
+  itemMax: number;
+  aggregation: ScaleAggregation;
+  missingPolicy: ScaleMissingPolicy;
+  norm?: ScaleNormData;
+}
+
+export interface ScoringConfig {
+  scales: ScaleScoringDef[];
+}
+
 export interface QuestionnaireSettings {
   allowBackNavigation?: boolean;
   showProgressBar?: boolean;
@@ -220,6 +282,11 @@ export interface QuestionnaireSettings {
   dataQuality?: DataQualitySettings;
   fraudPrevention?: FraudPreventionSettings;
   quotas?: QuotaGroup[];
+  /**
+   * First-class subscale scoring config (E-FEEDBACK-1). Computed at fillout
+   * `complete()` and persisted as namespaced `score.<scaleId>` session variables.
+   */
+  scoring?: ScoringConfig;
   metadata?: Record<string, DynamicValue>;
   /**
    * Live storage location for per-locale content translations (MOD-04, ADR 0022).

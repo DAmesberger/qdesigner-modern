@@ -81,24 +81,37 @@ function resolveVariableValue(path: string, variables: Record<string, unknown>):
     return variables[trimmed];
   }
 
-  const [root, ...segments] = trimmed.split('.');
-  if (!root) return undefined;
-
-  let cursor: unknown = variables[root];
-  for (const segment of segments) {
-    if (!segment) continue;
-    if (!cursor || typeof cursor !== 'object') {
-      return undefined;
-    }
-
-    const record = cursor as Record<string, unknown>;
-    if (!Object.hasOwn(record, segment)) {
-      return undefined;
-    }
-    cursor = record[segment];
+  const segments = trimmed.split('.').filter(Boolean);
+  if (segments.length === 0) {
+    return undefined;
   }
 
-  return cursor;
+  // Resolve against the longest matching flat key first, then walk the remaining
+  // segments as member access. This handles both a nested root object
+  // (`q_rt_value.derived.congruencyEffectMs`) and a namespaced flat key whose value is
+  // an object — e.g. the computed subscale score `score.<scaleId>` holding fields like
+  // `tScore` / `percentile` / `band` (E-FEEDBACK-1: `score.<scaleId>.tScore`).
+  for (let prefixLength = segments.length - 1; prefixLength >= 1; prefixLength--) {
+    const key = segments.slice(0, prefixLength).join('.');
+    if (!Object.hasOwn(variables, key)) {
+      continue;
+    }
+
+    let cursor: unknown = variables[key];
+    for (const segment of segments.slice(prefixLength)) {
+      if (!cursor || typeof cursor !== 'object') {
+        return undefined;
+      }
+      const record = cursor as Record<string, unknown>;
+      if (!Object.hasOwn(record, segment)) {
+        return undefined;
+      }
+      cursor = record[segment];
+    }
+    return cursor;
+  }
+
+  return undefined;
 }
 
 function metricValueFromObject(metric: AnalyticsMetric, value: Record<string, unknown>): number | null {

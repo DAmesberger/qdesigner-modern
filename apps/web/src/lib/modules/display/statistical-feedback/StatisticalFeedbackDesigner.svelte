@@ -63,6 +63,27 @@
     return output;
   });
 
+  // Scale-score bindings (E-FEEDBACK-1): each scale declared in settings.scoring exposes
+  // its computed fields as `score.<id>.<field>` so a feedback metric can bind to a
+  // T-score / percentile / band, not just a raw response variable.
+  const scaleScoreFields = [
+    { field: 'value', label: 'Score' },
+    { field: 'tScore', label: 'T-Score' },
+    { field: 'percentile', label: 'Percentile' },
+    { field: 'z', label: 'Z-Score' },
+    { field: 'stanine', label: 'Stanine' },
+  ] as const;
+
+  const scaleScoreOptions = $derived.by(() => {
+    const scales = designerStore.questionnaire.settings?.scoring?.scales ?? [];
+    return scales.flatMap((scale) =>
+      scaleScoreFields.map((f) => ({
+        value: `score.${scale.id}.${f.field}`,
+        label: `${scale.name || scale.id} · ${f.label}`,
+      }))
+    );
+  });
+
   const validationErrors = $derived(validateStatisticalFeedbackConfig(config));
 
   function emit(nextConfig: StatisticalFeedbackConfig): void {
@@ -360,6 +381,13 @@
           {#each designerStore.questionnaire.variables as variable}
             <option value={variable.name}>{variable.name}</option>
           {/each}
+          {#if scaleScoreOptions.length > 0}
+            <optgroup label="Scale scores" data-testid="stats-scale-scores-optgroup">
+              {#each scaleScoreOptions as option}
+                <option value={option.value}>{option.label}</option>
+              {/each}
+            </optgroup>
+          {/if}
         </Select>
       </div>
     {:else}

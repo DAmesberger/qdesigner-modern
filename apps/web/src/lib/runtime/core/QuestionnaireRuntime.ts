@@ -33,6 +33,8 @@ import type { AttentionCheckConfig } from '../quality/AttentionCheck';
 import { resolveCarryForward, applyCarryForward } from './CarryForward';
 import type { CarryForwardConfig } from '$lib/shared';
 import { type ResumeState, RESUME_STATE_VERSION, isResumeStateCompatible } from './ResumeState';
+import { scoreScales } from '../feedback/ScaleScorer';
+import { parseNumeric } from '$lib/shared/utils/statistics';
 import { nanoid } from 'nanoid';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime state handles heterogeneous question data
@@ -1118,6 +1120,11 @@ export class QuestionnaireRuntime {
       );
     }
 
+    // Refresh subscale / normative scores (E-FEEDBACK-1) before rendering so a
+    // statistical-feedback panel bound to `score.<scaleId>.<field>` resolves against the
+    // participant's own just-computed values. No-op unless `settings.scoring` is declared.
+    this.applyScaleScores();
+
     // Hybrid render (ADR 0018): mount the module's runtime Svelte component into the
     // HTML overlay so instruction / display / analytics items are actually visible.
     // Slice 5.1 extended this from the `instruction` category alone to also cover
@@ -1543,6 +1550,68 @@ export class QuestionnaireRuntime {
     return null;
   }
 
+  /**
+   * Compute the questionnaire's declared subscale scores (E-FEEDBACK-1) and write each
+   * one back into the VariableEngine under a namespaced `score.<scaleId>` id. Being in
+   * the VariableEngine means the value flows through BOTH consumers with no extra plumbing:
+   *   - the statistical-feedback overlay reads `getAllVariables()` at present time, so a
+   *     feedback widget can bind a metric to `score.<scaleId>.tScore` / `.percentile`;
+   *   - `complete()`'s variable snapshot pushes it into `session.variables`, which the
+   *     fillout layer persists offline-first via `OfflineResponsePersistence.saveVariable`.
+   *
+   * Pure + deterministic (delegates to `scoreScales`), so it is idempotent — safe to call
+   * before each feedback panel and again at completion. No-op when no scoring is declared.
+   */
+  private applyScaleScores(): void {
+    const scoring = this.config.questionnaire.settings.scoring;
+    if (!scoring || !Array.isArray(scoring.scales) || scoring.scales.length === 0) return;
+
+    // Answer values are addressable by question id: registerQuestionVariables names the
+    // `${id}_value` variable `id`, so getAllVariables()[itemId] is that question's answer.
+    const allVars = this.variableEngine.getAllVariables();
+    const responses: Record<string, number | null> = {};
+    for (const scale of scoring.scales) {
+      for (const itemId of scale.itemIds) {
+        if (!(itemId in responses)) {
+          responses[itemId] = parseNumeric(allVars[itemId]);
+        }
+      }
+    }
+
+    for (const result of scoreScales(responses, scoring)) {
+      const variableId = `score.${result.scaleId}`;
+      // Register lazily (no defaultValue — 'object' can't validate null) then set the value.
+      this.registerVariableIfMissing({
+        id: variableId,
+        name: variableId,
+        type: 'object',
+        scope: 'global',
+      });
+      try {
+        this.variableEngine.setVariable(
+          variableId,
+          {
+            value: result.value,
+            z: result.z,
+            tScore: result.tScore,
+            stanine: result.stanine,
+            percentile: result.percentile,
+            band: result.band,
+            itemsAnswered: result.itemsAnswered,
+            itemsExpected: result.itemsExpected,
+          },
+          'scoring'
+        );
+      } catch (error) {
+        console.warn(
+          `[scoring] failed to set ${variableId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+  }
+
   private complete(): void {
     if (!this.isRunning) return;
 
@@ -1561,6 +1630,10 @@ export class QuestionnaireRuntime {
       this.session.metadata = {};
     }
     this.session.metadata.qualityReport = this.qualityReport.generate() as unknown as Record<string, unknown>;
+
+    // Compute subscale / normative scores (E-FEEDBACK-1) BEFORE the snapshot so the
+    // namespaced `score.<scaleId>` values are captured into session.variables and persisted.
+    this.applyScaleScores();
 
     const allVariables = this.variableEngine.getAllVariables();
     for (const [variableId, value] of Object.entries(allVariables)) {

@@ -1,11 +1,12 @@
 <script lang="ts">
   import { appPaths } from '$lib/routing/paths';
   import { designerStore } from '$lib/stores/designer.svelte';
-  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target } from 'lucide-svelte';
+  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator } from 'lucide-svelte';
   import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
   import DistributionPanel from './DistributionPanel.svelte';
   import ExperimentalDesignPanel from '$lib/components/designer/ExperimentalDesignPanel.svelte';
   import DataQualityPanel from '$lib/components/designer/DataQualityPanel.svelte';
+  import ScaleScoringEditor from '$lib/components/designer/scoring/ScaleScoringEditor.svelte';
   import QuotaPanel from '$lib/components/designer/QuotaPanel.svelte';
   import VersionManager from '$lib/components/designer/VersionManager.svelte';
   import type { PresenceUser } from '$lib/services/presence.svelte';
@@ -24,6 +25,7 @@
   let showDistribution = $state(false);
   let showExperimentalDesign = $state(false);
   let showDataQuality = $state(false);
+  let showScaleScoring = $state(false);
   let showQuotas = $state(false);
 
   $effect(() => {
@@ -240,6 +242,18 @@
     Quality
   </button>
 
+  <!-- Scale scoring button -->
+  <button
+    type="button"
+    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
+    onclick={() => (showScaleScoring = true)}
+    data-testid="designer-scale-scoring-button"
+    title="Scale Scoring"
+  >
+    <Calculator class="h-3.5 w-3.5" />
+    Scoring
+  </button>
+
   <!-- Quotas button -->
   <button
     type="button"
@@ -306,5 +320,7 @@
 <ExperimentalDesignPanel bind:open={showExperimentalDesign} />
 
 <DataQualityPanel bind:open={showDataQuality} />
+
+<ScaleScoringEditor bind:open={showScaleScoring} />
 
 <QuotaPanel bind:open={showQuotas} />
