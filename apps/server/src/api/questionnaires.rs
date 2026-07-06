@@ -43,6 +43,10 @@ pub struct Questionnaire {
 pub struct QuestionnaireByCode {
     pub id: Uuid,
     pub name: String,
+    /// Owning organization id — lets the anonymous fillout route fetch org
+    /// branding (`GET /api/organizations/{id}/branding`, E-RBAC-8) to theme the
+    /// participant chrome.
+    pub organization_id: Uuid,
     pub definition: serde_json::Value,
     pub is_active: bool,
     pub start_date: Option<chrono::NaiveDate>,
@@ -128,6 +132,7 @@ pub async fn get_questionnaire_by_code(
         SELECT
             q.id,
             q.name,
+            p.organization_id,
             q.content AS definition,
             (q.status = 'published' AND p.status = 'active') AS is_active,
             p.start_date,

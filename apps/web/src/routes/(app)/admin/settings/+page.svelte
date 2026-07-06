@@ -28,6 +28,33 @@
   let digestFrequency = $state<'daily' | 'weekly' | 'none'>('weekly');
   let savingDefaults = $state(false);
 
+  // Seat model (E-RBAC-4).
+  let seatUsage = $state<{
+    limit: number | null;
+    used: number;
+    active_members: number;
+    pending_invitations: number;
+  } | null>(null);
+  let seatLimitInput = $state('');
+  let savingSeats = $state(false);
+
+  // Branding / whitelabel (E-RBAC-8).
+  let brandingPrimaryColor = $state('');
+  let brandingLogoUrl = $state('');
+  let brandingParticipantHeader = $state('');
+  let savingBranding = $state(false);
+
+  // Access defaults (E-RBAC-1 project visibility home).
+  let projectVisibility = $state<'organization' | 'restricted'>('organization');
+  let savingAccess = $state(false);
+
+  // The color picker cannot be empty; show a sensible default when unset.
+  const colorPickerValue = $derived(
+    /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(brandingPrimaryColor.trim())
+      ? brandingPrimaryColor.trim()
+      : '#4f46e5'
+  );
+
   onMount(async () => {
     await loadData();
   });
@@ -59,6 +86,23 @@
         emailNotifications = defaults.emailNotifications ?? true;
         digestFrequency = defaults.digestFrequency ?? 'weekly';
       }
+
+      seatLimitInput =
+        currentOrg.settings?.seatLimit != null ? String(currentOrg.settings.seatLimit) : '';
+
+      // Branding + access hydrate from the same settings JSONB.
+      const s = currentOrg.settings ?? {};
+      brandingPrimaryColor = s.primaryColor ?? '';
+      brandingLogoUrl = s.logoUrl ?? currentOrg.logoUrl ?? '';
+      brandingParticipantHeader = s.participantHeader ?? '';
+      projectVisibility = s.projectVisibility === 'restricted' ? 'restricted' : 'organization';
+
+      // Seat usage is a live count; failure just hides the card values.
+      try {
+        seatUsage = await api.organizations.seats(currentOrg.id);
+      } catch {
+        seatUsage = null;
+      }
     } catch (err) {
       console.error('Error loading settings:', err);
       error = 'Failed to load settings';
@@ -75,24 +119,128 @@
     success = null;
 
     try {
-      // Store defaults in organization metadata via the existing update API
+      // Store defaults in organization metadata via the existing update API.
+      // The settings column is replaced wholesale server-side, so preserve the
+      // rest of the object (e.g. seatLimit) instead of clobbering it.
+      const nextSettings = {
+        ...(currentOrg.settings ?? {}),
+        defaults: {
+          timeLimit: parseInt(defaultTimeLimit, 10) || 30,
+          randomization: defaultRandomization,
+          randomSeed: defaultRandomSeed || null,
+          emailNotifications,
+          digestFrequency,
+        },
+      };
       await api.organizations.update(currentOrg.id, {
         name: orgName,
-        settings: {
-          defaults: {
-            timeLimit: parseInt(defaultTimeLimit, 10) || 30,
-            randomization: defaultRandomization,
-            randomSeed: defaultRandomSeed || null,
-            emailNotifications,
-            digestFrequency,
-          },
-        },
+        settings: nextSettings,
       });
+      currentOrg.settings = nextSettings;
       success = 'Defaults saved successfully';
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to save defaults';
     } finally {
       savingDefaults = false;
+    }
+  }
+
+  async function handleSaveSeats() {
+    if (!currentOrg) return;
+
+    const trimmed = seatLimitInput.trim();
+    let seatLimit: number | null = null;
+    if (trimmed !== '') {
+      const parsed = parseInt(trimmed, 10);
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        error = 'Seat limit must be a positive whole number, or blank for unlimited';
+        return;
+      }
+      if (seatUsage && parsed < seatUsage.used) {
+        error = `Seat limit cannot be below current usage (${seatUsage.used} seats in use)`;
+        return;
+      }
+      seatLimit = parsed;
+    }
+
+    savingSeats = true;
+    error = null;
+    success = null;
+    try {
+      const nextSettings = { ...(currentOrg.settings ?? {}), seatLimit };
+      await api.organizations.update(currentOrg.id, {
+        name: orgName,
+        settings: nextSettings,
+      });
+      currentOrg.settings = nextSettings;
+      seatUsage = await api.organizations.seats(currentOrg.id);
+      success = seatLimit == null ? 'Seat limit removed (unlimited)' : 'Seat limit saved';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to save seat limit';
+    } finally {
+      savingSeats = false;
+    }
+  }
+
+  async function handleSaveBranding() {
+    if (!currentOrg) return;
+
+    const color = brandingPrimaryColor.trim();
+    if (color && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color)) {
+      error = 'Primary color must be a hex value like #4f46e5';
+      return;
+    }
+    const logo = brandingLogoUrl.trim();
+    if (logo && !(logo.startsWith('http://') || logo.startsWith('https://') || logo.startsWith('/'))) {
+      error = 'Logo URL must be an absolute http(s) URL or a same-origin path';
+      return;
+    }
+
+    savingBranding = true;
+    error = null;
+    success = null;
+    try {
+      // Merge into the whole settings object so we never clobber defaults/seatLimit.
+      const nextSettings = {
+        ...(currentOrg.settings ?? {}),
+        primaryColor: color || null,
+        logoUrl: logo || null,
+        participantHeader: brandingParticipantHeader.trim() || null,
+      };
+      await api.organizations.update(currentOrg.id, {
+        name: orgName,
+        settings: nextSettings,
+      });
+      currentOrg.settings = nextSettings;
+      success = 'Branding saved successfully';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to save branding';
+    } finally {
+      savingBranding = false;
+    }
+  }
+
+  async function handleSaveAccess() {
+    if (!currentOrg) return;
+
+    savingAccess = true;
+    error = null;
+    success = null;
+    try {
+      const nextSettings = {
+        ...(currentOrg.settings ?? {}),
+        projectVisibility,
+      };
+      await api.organizations.update(currentOrg.id, {
+        name: orgName,
+        settings: nextSettings,
+      });
+      currentOrg.settings = nextSettings;
+      success = 'Access defaults saved successfully';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to save access defaults';
+    } finally {
+      savingAccess = false;
     }
   }
 
@@ -160,6 +308,173 @@
             <Button type="submit" variant="primary" loading={saving}>Save Changes</Button>
           </div>
         </form>
+      </Card>
+
+      <Card>
+        <h3 class="text-lg font-semibold mb-4">Seats</h3>
+        {#if seatUsage}
+          <div class="mb-4 flex flex-wrap gap-4">
+            <div class="rounded-lg border border-border bg-muted/40 px-4 py-3">
+              <p class="text-sm text-muted-foreground">Seats used</p>
+              <p class="text-2xl font-bold text-foreground">
+                {seatUsage.used}{#if seatUsage.limit != null}<span
+                    class="text-base font-normal text-muted-foreground"> of {seatUsage.limit}</span
+                  >{/if}
+              </p>
+            </div>
+            <div class="rounded-lg border border-border bg-muted/40 px-4 py-3">
+              <p class="text-sm text-muted-foreground">Active members</p>
+              <p class="text-2xl font-bold text-foreground">{seatUsage.active_members}</p>
+            </div>
+            <div class="rounded-lg border border-border bg-muted/40 px-4 py-3">
+              <p class="text-sm text-muted-foreground">Pending invitations</p>
+              <p class="text-2xl font-bold text-foreground">{seatUsage.pending_invitations}</p>
+            </div>
+          </div>
+        {/if}
+        <form onsubmit={(e) => { e.preventDefault(); handleSaveSeats(); }} class="space-y-4">
+          <FormGroup label="Seat limit" id="seat-limit">
+            <input
+              id="seat-limit"
+              type="number"
+              min="1"
+              placeholder="Unlimited"
+              bind:value={seatLimitInput}
+              class="w-full rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <p class="text-sm text-muted-foreground mt-1">
+              Maximum number of seats (active members + pending invitations). Leave blank
+              for unlimited. Adding a member or invitation beyond the limit is blocked.
+            </p>
+          </FormGroup>
+          <div class="flex justify-end">
+            <Button type="submit" variant="primary" loading={savingSeats}>Save Seat Limit</Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card>
+        <h3 class="text-lg font-semibold mb-4">Branding</h3>
+        <p class="text-sm text-muted-foreground mb-4">
+          Whitelabel the participant-facing questionnaire chrome. These apply to the
+          public fillout pages; unset fields fall back to platform defaults.
+        </p>
+        <form onsubmit={(e) => { e.preventDefault(); handleSaveBranding(); }} class="space-y-4">
+          <FormGroup label="Primary color" id="brand-color">
+            <div class="flex items-center gap-3">
+              <input
+                id="brand-color-picker"
+                type="color"
+                value={colorPickerValue}
+                oninput={(e) => (brandingPrimaryColor = e.currentTarget.value)}
+                aria-label="Primary color picker"
+                class="h-10 w-14 cursor-pointer rounded border border-border bg-card p-1"
+              />
+              <Input
+                id="brand-color"
+                type="text"
+                placeholder="#4f46e5"
+                bind:value={brandingPrimaryColor}
+              />
+            </div>
+            <p class="text-sm text-muted-foreground mt-1">
+              Hex color (e.g. #4f46e5). Themes buttons and accents on participant screens.
+            </p>
+          </FormGroup>
+
+          <FormGroup label="Logo URL" id="brand-logo">
+            <Input
+              id="brand-logo"
+              type="text"
+              placeholder="https://… or /media/…/content"
+              bind:value={brandingLogoUrl}
+            />
+            <p class="text-sm text-muted-foreground mt-1">
+              Absolute http(s) URL or a same-origin media path. Upload an asset in the
+              designer media library, then paste its content URL here.
+            </p>
+          </FormGroup>
+
+          <FormGroup label="Participant header text" id="brand-header">
+            <Input
+              id="brand-header"
+              type="text"
+              placeholder="e.g. Amescon Research Lab"
+              bind:value={brandingParticipantHeader}
+            />
+          </FormGroup>
+
+          <!-- Live preview of the participant chrome header. -->
+          <div>
+            <p class="text-sm font-medium text-foreground mb-2">Preview</p>
+            <div
+              class="flex items-center justify-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-4"
+              data-testid="branding-preview"
+            >
+              {#if brandingLogoUrl.trim()}
+                <img
+                  src={brandingLogoUrl.trim()}
+                  alt="Logo preview"
+                  class="max-h-10 max-w-[160px] object-contain"
+                />
+              {/if}
+              {#if brandingParticipantHeader.trim()}
+                <span class="text-sm font-semibold text-foreground"
+                  >{brandingParticipantHeader.trim()}</span
+                >
+              {/if}
+              {#if !brandingLogoUrl.trim() && !brandingParticipantHeader.trim()}
+                <span class="text-sm text-muted-foreground">No logo or header set</span>
+              {/if}
+            </div>
+            <div class="mt-3 flex items-center gap-3">
+              <span class="text-sm text-muted-foreground">Primary button:</span>
+              <span
+                class="inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-white"
+                style="background-color: {colorPickerValue};"
+                data-testid="branding-button-preview"
+              >
+                Continue
+              </span>
+            </div>
+          </div>
+
+          <div class="flex justify-end">
+            <Button type="submit" variant="primary" loading={savingBranding}>Save Branding</Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card>
+        <h3 class="text-lg font-semibold mb-4">Access</h3>
+        <form onsubmit={(e) => { e.preventDefault(); handleSaveAccess(); }} class="space-y-4">
+          <FormGroup label="Default project visibility" id="project-visibility">
+            <Select id="project-visibility" bind:value={projectVisibility} placeholder="">
+              <option value="organization">Visible to all organization members</option>
+              <option value="restricted">Restricted to explicitly-added members</option>
+            </Select>
+            <p class="text-sm text-muted-foreground mt-1">
+              Sets the default visibility applied to newly created projects.
+            </p>
+          </FormGroup>
+          <div class="flex justify-end">
+            <Button type="submit" variant="primary" loading={savingAccess}>Save Access</Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card>
+        <h3 class="text-lg font-semibold mb-4">Identity &amp; SSO</h3>
+        <p class="text-sm text-muted-foreground mb-4">
+          Manage verified email domains and auto-join rules for your organization.
+          IdP-managed role provisioning is configured per verified domain.
+        </p>
+        <a
+          href="/admin/domains"
+          class="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+        >
+          Manage domains &amp; identity
+        </a>
       </Card>
 
       <Card>

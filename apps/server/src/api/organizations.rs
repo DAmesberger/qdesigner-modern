@@ -61,6 +61,110 @@ pub struct UpdateOrgRequest {
     pub settings: Option<serde_json::Value>,
 }
 
+/// Documented shape of `organizations.settings` (E-RBAC-8, ADR trail).
+///
+/// The column stays free-form JSONB — this struct is a *typed view* over the
+/// keys the platform cares about, used to validate writes ([`validate_org_settings`])
+/// and to surface branding anonymously ([`get_org_branding`]). Unknown keys
+/// (e.g. the `defaults` block the settings UI stores) deserialize away and are
+/// preserved on write because `update_organization` persists the caller's whole
+/// object, not a re-serialization of this struct. Keys are camelCase to match the
+/// JSON the frontend writes and the `settings->>'seatLimit'` reads in [`seat_usage`].
+#[derive(Debug, Default, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OrgSettings {
+    /// Brand primary color as a CSS hex string (`#RGB` or `#RRGGBB`). Applied to
+    /// participant chrome as the `--primary` token.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_color: Option<String>,
+    /// Absolute http(s) or same-origin logo URL rendered on participant chrome.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo_url: Option<String>,
+    /// Short header text shown above participant questionnaires.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub participant_header: Option<String>,
+    /// Default visibility for newly created projects (E-RBAC-1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_visibility: Option<String>,
+    /// Seat cap (E-RBAC-4); enforced in [`seat_usage`] / [`enforce_seat_limit`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seat_limit: Option<i64>,
+    /// When true, org member roles are managed by the IdP and not editable
+    /// in-app (E-RBAC-6).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idp_managed_roles: Option<bool>,
+}
+
+/// True for `#RGB` / `#RRGGBB` CSS hex color strings (case-insensitive).
+fn is_valid_hex_color(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix('#') else {
+        return false;
+    };
+    (hex.len() == 3 || hex.len() == 6) && hex.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Validate the branding-relevant subset of `organizations.settings` on write.
+/// Rejects malformed color formats and oversized logo URLs / header text; leaves
+/// unknown keys untouched. A JSON `null` or absent settings is a no-op.
+pub fn validate_org_settings(settings: &serde_json::Value) -> Result<(), ApiError> {
+    if settings.is_null() {
+        return Ok(());
+    }
+    if !settings.is_object() {
+        return Err(ApiError::Validation(
+            "settings must be a JSON object".into(),
+        ));
+    }
+
+    let parsed: OrgSettings = serde_json::from_value(settings.clone())
+        .map_err(|e| ApiError::Validation(format!("invalid settings: {e}")))?;
+
+    if let Some(ref color) = parsed.primary_color {
+        if !is_valid_hex_color(color) {
+            return Err(ApiError::Validation(
+                "primaryColor must be a hex color like #4f46e5".into(),
+            ));
+        }
+    }
+    if let Some(ref url) = parsed.logo_url {
+        if url.len() > 2048 {
+            return Err(ApiError::Validation(
+                "logoUrl exceeds the 2048 character limit".into(),
+            ));
+        }
+        let ok = url.starts_with("https://") || url.starts_with("http://") || url.starts_with('/');
+        if !ok {
+            return Err(ApiError::Validation(
+                "logoUrl must be an absolute http(s) URL or a same-origin path".into(),
+            ));
+        }
+    }
+    if let Some(ref header) = parsed.participant_header {
+        if header.chars().count() > 200 {
+            return Err(ApiError::Validation(
+                "participantHeader exceeds the 200 character limit".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Lightweight, anonymously-readable branding for an organization (E-RBAC-8).
+/// The participant fillout chrome fetches this to theme itself. Non-sensitive
+/// by construction — only presentation fields, resolved with platform fallbacks
+/// on the client.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct OrgBranding {
+    pub organization_id: Uuid,
+    pub name: String,
+    /// Brand primary color (`settings.primaryColor`), or null for the platform default.
+    pub primary_color: Option<String>,
+    /// Logo URL — `settings.logoUrl` if set, else the legacy `logo_url` column.
+    pub logo_url: Option<String>,
+    /// Optional participant header text (`settings.participantHeader`).
+    pub participant_header: Option<String>,
+}
+
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct OrgMember {
     pub user_id: Uuid,
@@ -85,6 +189,23 @@ pub struct AddMemberRequest {
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct ChangeMemberRoleRequest {
     pub role: String,
+}
+
+/// Body for `POST /api/organizations/:id/transfer-ownership` (E-RBAC-5).
+#[derive(Debug, Deserialize, Validate, ToSchema)]
+pub struct TransferOwnershipRequest {
+    /// The org member who becomes the new owner. Must be an active member.
+    pub new_owner_user_id: Uuid,
+    /// Caller's current password — required to re-confirm a sensitive action.
+    pub password: String,
+    /// When true (default), the outgoing owner is demoted to `admin` in the
+    /// same transaction. When false, the org ends up with two owners.
+    #[serde(default = "default_demote")]
+    pub demote_previous_owner: bool,
+}
+
+fn default_demote() -> bool {
+    true
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
@@ -358,6 +479,52 @@ pub async fn get_organization(
     Ok(Json(org))
 }
 
+/// GET /api/organizations/:id/branding
+///
+/// Anonymous, lightweight branding read (E-RBAC-8). The participant fillout
+/// chrome fetches this to theme itself. `organizations` is RLS-exempt (ADR 0015),
+/// so this queries the pool directly like the public by-code questionnaire read —
+/// no auth, no per-request tx. Returns only presentation fields.
+#[utoipa::path(
+    get,
+    path = "/api/organizations/{id}/branding",
+    params(
+        ("id" = Uuid, Path, description = "Organization id")
+    ),
+    responses(
+        (status = 200, description = "Organization branding", body = OrgBranding),
+        (status = 404, description = "Organization not found", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["organizations"]
+)]
+pub async fn get_org_branding(
+    State(state): State<AppState>,
+    Path(org_id): Path<Uuid>,
+) -> Result<Json<OrgBranding>, ApiError> {
+    let org = sqlx::query_as::<_, Organization>(
+        r#"
+        SELECT id, name, slug, domain, logo_url, settings, created_at, updated_at
+        FROM organizations WHERE id = $1 AND deleted_at IS NULL
+        "#,
+    )
+    .bind(org_id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Organization not found".into()))?;
+
+    // Tolerate legacy / partially-shaped settings — fall back to defaults.
+    let settings: OrgSettings = serde_json::from_value(org.settings.clone()).unwrap_or_default();
+
+    Ok(Json(OrgBranding {
+        organization_id: org.id,
+        name: org.name,
+        primary_color: settings.primary_color,
+        // Prefer the structured settings key; fall back to the legacy column.
+        logo_url: settings.logo_url.or(org.logo_url),
+        participant_header: settings.participant_header,
+    }))
+}
+
 /// PATCH /api/organizations/:id
 #[utoipa::path(
     patch,
@@ -389,6 +556,11 @@ pub async fn update_organization(
     let mut tx = tx.tx().await?;
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
+
+    // Reject malformed branding before touching the DB (E-RBAC-8).
+    if let Some(ref settings) = body.settings {
+        validate_org_settings(settings)?;
+    }
 
     // Require at least admin role
     if !state
@@ -538,6 +710,113 @@ pub async fn delete_organization(
     ))
 }
 
+// ── Seats (E-RBAC-4) ─────────────────────────────────────────────────
+
+/// Seat usage for an organization. `limit` is null when no `seatLimit` is set
+/// in `organizations.settings` (unlimited). A "seat" is an active member or a
+/// pending invitation (an outstanding invitation reserves a prospective seat).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SeatUsageResponse {
+    /// Configured seat limit (`settings->>'seatLimit'`), or null when unlimited.
+    pub limit: Option<i64>,
+    /// Seats currently consumed (`active_members + pending_invitations`).
+    pub used: i64,
+    pub active_members: i64,
+    pub pending_invitations: i64,
+}
+
+/// Read `(seat_limit, active_members, pending_invitations)` for an org in one
+/// round-trip. Shared by the seats endpoint and the seat-limit enforcement in
+/// `add_member` / `create_invitation`.
+pub async fn seat_usage(
+    conn: &mut sqlx::PgConnection,
+    org_id: Uuid,
+) -> Result<(Option<i64>, i64, i64), ApiError> {
+    let row = sqlx::query_as::<_, (Option<i64>, i64, i64)>(
+        r#"
+        SELECT
+            (o.settings->>'seatLimit')::bigint AS seat_limit,
+            (SELECT COUNT(*) FROM organization_members m
+               WHERE m.organization_id = o.id AND m.status = 'active') AS active_members,
+            (SELECT COUNT(*) FROM organization_invitations i
+               WHERE i.organization_id = o.id
+                 AND i.accepted_at IS NULL
+                 AND i.expires_at > NOW()) AS pending_invitations
+        FROM organizations o
+        WHERE o.id = $1
+        "#,
+    )
+    .bind(org_id)
+    .fetch_optional(conn)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Organization not found".into()))?;
+    Ok(row)
+}
+
+/// Deny when adding one more seat would exceed the configured `seatLimit`.
+/// No-op when no limit is set.
+async fn enforce_seat_limit(
+    conn: &mut sqlx::PgConnection,
+    org_id: Uuid,
+) -> Result<(), ApiError> {
+    let (limit, active, pending) = seat_usage(conn, org_id).await?;
+    if let Some(limit) = limit {
+        let used = active + pending;
+        if used >= limit {
+            return Err(ApiError::SeatLimitReached(format!(
+                "Organization seat limit reached ({used} of {limit} seats used)"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// GET /api/organizations/:id/seats
+#[utoipa::path(
+    get,
+    path = "/api/organizations/{id}/seats",
+    params(
+        ("id" = Uuid, Path, description = "Organization id")
+    ),
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Seat usage", body = SeatUsageResponse),
+        (status = 403, description = "Access denied", body = crate::openapi::ErrorEnvelope),
+        (status = 404, description = "Organization not found", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["organizations"]
+)]
+pub async fn get_seats(
+    user: AuthenticatedUser,
+    tx: Tx,
+    Path(org_id): Path<Uuid>,
+) -> Result<Json<SeatUsageResponse>, ApiError> {
+    let mut tx = tx.tx().await?;
+
+    let is_member = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active')",
+    )
+    .bind(org_id)
+    .bind(user.user_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if !is_member {
+        return Err(ApiError::Forbidden("Not a member".into()));
+    }
+
+    let (limit, active_members, pending_invitations) = seat_usage(&mut **tx, org_id).await?;
+
+    Ok(Json(SeatUsageResponse {
+        limit,
+        used: active_members + pending_invitations,
+        active_members,
+        pending_invitations,
+    }))
+}
+
 // ── Members ──────────────────────────────────────────────────────────
 
 /// GET /api/organizations/:id/members
@@ -659,6 +938,20 @@ pub async fn add_member(
     .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
+
+    // Seat model (E-RBAC-4): a re-add / role change of an already-active member
+    // consumes no new seat; only a genuinely new active seat is gated.
+    let already_active = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active')",
+    )
+    .bind(org_id)
+    .bind(target_user)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    if !already_active {
+        enforce_seat_limit(&mut **tx, org_id).await?;
+    }
 
     sqlx::query(
         r#"
@@ -901,6 +1194,186 @@ pub async fn change_member_role(
     Ok(Json(serde_json::json!({ "message": "Member role updated" })))
 }
 
+/// Guarded, atomic org-ownership mutation used by [`transfer_org_ownership`].
+///
+/// Extracted from the handler so it can be exercised at the SQL level
+/// (`tests/ownership_transfer.rs`) without standing up the full `AppState`.
+/// Runs entirely on the caller's connection/transaction so every check and
+/// write commits or rolls back as a unit:
+///   1. the new owner must be an active member (rejects transfer to a
+///      non-member — the last-owner-safe sanctioned path),
+///   2. promote the new owner to `owner`,
+///   3. optionally demote the outgoing owner to `admin`,
+///   4. re-count owners and refuse to commit if the org would be left
+///      without one.
+pub async fn transfer_org_ownership_tx(
+    conn: &mut sqlx::PgConnection,
+    org_id: Uuid,
+    from_user_id: Uuid,
+    new_owner_user_id: Uuid,
+    demote_previous_owner: bool,
+) -> Result<(), ApiError> {
+    // (1) The new owner must be an active member of this org.
+    let is_member = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active')",
+    )
+    .bind(org_id)
+    .bind(new_owner_user_id)
+    .fetch_one(&mut *conn)
+    .await?;
+
+    if !is_member {
+        return Err(ApiError::BadRequest(
+            "New owner must be an active member of the organization".into(),
+        ));
+    }
+
+    // (2) Promote the new owner.
+    sqlx::query(
+        "UPDATE organization_members SET role = 'owner' WHERE organization_id = $1 AND user_id = $2 AND status = 'active'",
+    )
+    .bind(org_id)
+    .bind(new_owner_user_id)
+    .execute(&mut *conn)
+    .await?;
+
+    // (3) Optionally demote the outgoing owner. Skipped when transferring to
+    //     oneself (a no-op that must not strip the sole owner of the role).
+    if demote_previous_owner && from_user_id != new_owner_user_id {
+        sqlx::query(
+            "UPDATE organization_members SET role = 'admin' WHERE organization_id = $1 AND user_id = $2 AND status = 'active'",
+        )
+        .bind(org_id)
+        .bind(from_user_id)
+        .execute(&mut *conn)
+        .await?;
+    }
+
+    // (4) Never leave the org without an owner.
+    let owner_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM organization_members WHERE organization_id = $1 AND role = 'owner' AND status = 'active'",
+    )
+    .bind(org_id)
+    .fetch_one(&mut *conn)
+    .await?;
+
+    if owner_count < 1 {
+        return Err(ApiError::BadRequest(
+            "Ownership transfer would leave the organization without an owner".into(),
+        ));
+    }
+
+    Ok(())
+}
+
+/// POST /api/organizations/:id/transfer-ownership (E-RBAC-5)
+///
+/// The sanctioned, audited path to hand an organization to another member.
+/// Unlike `change_member_role` — which refuses to demote the last owner —
+/// this promotes the new owner *and* (by default) demotes the caller in one
+/// transaction, so the org is never left ownerless. The caller must be a
+/// current owner and re-confirm their password.
+#[utoipa::path(
+    post,
+    path = "/api/organizations/{id}/transfer-ownership",
+    request_body = TransferOwnershipRequest,
+    params(
+        ("id" = Uuid, Path, description = "Organization id")
+    ),
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Ownership transferred", body = crate::openapi::MessageResponse),
+        (status = 400, description = "Target is not a member / would leave no owner", body = crate::openapi::ErrorEnvelope),
+        (status = 401, description = "Password re-confirmation failed", body = crate::openapi::ErrorEnvelope),
+        (status = 403, description = "Caller is not an owner", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["organizations"]
+)]
+pub async fn transfer_org_ownership(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    client_ip: ClientIp,
+    tx: Tx,
+    Path(org_id): Path<Uuid>,
+    Json(body): Json<TransferOwnershipRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = tx.tx().await?;
+
+    // Caller must be a current owner of this org.
+    if !state
+        .rbac
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Owner)
+        .await?
+    {
+        return Err(ApiError::Forbidden(
+            "Only a current owner can transfer ownership".into(),
+        ));
+    }
+
+    // Re-confirm the caller's password for this sensitive action.
+    let hash = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT password_hash FROM users WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(user.user_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .flatten()
+    .ok_or_else(|| ApiError::Unauthorized("Password confirmation required".into()))?;
+
+    if !crate::auth::password::verify_password(&body.password, &hash)? {
+        return Err(ApiError::Unauthorized("Incorrect password".into()));
+    }
+
+    let previous_role = sqlx::query_scalar::<_, String>(
+        "SELECT role FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active'",
+    )
+    .bind(org_id)
+    .bind(user.user_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .unwrap_or_else(|| "owner".into());
+
+    transfer_org_ownership_tx(
+        &mut **tx,
+        org_id,
+        user.user_id,
+        body.new_owner_user_id,
+        body.demote_previous_owner,
+    )
+    .await?;
+
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::OrgOwnershipTransferred,
+            resource_type: resource::ORGANIZATION,
+            resource_id: Some(org_id),
+            metadata: serde_json::json!({
+                "transferred_from": user.user_id,
+                "transferred_to": body.new_owner_user_id,
+                "transferred_at": chrono::Utc::now().to_rfc3339(),
+                "previous_owner_demoted": body.demote_previous_owner
+                    && user.user_id != body.new_owner_user_id,
+                "previous_owner_new_role": if body.demote_previous_owner
+                    && user.user_id != body.new_owner_user_id
+                {
+                    "admin"
+                } else {
+                    previous_role.as_str()
+                },
+            }),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
+
+    Ok(Json(serde_json::json!({ "message": "Ownership transferred" })))
+}
+
 // ── Invitations ──────────────────────────────────────────────────────
 
 /// GET /api/organizations/:id/invitations
@@ -994,6 +1467,9 @@ pub async fn create_invitation(
     {
         return Err(ApiError::Forbidden("Requires admin role".into()));
     }
+
+    // Seat model (E-RBAC-4): a pending invitation reserves a prospective seat.
+    enforce_seat_limit(&mut **tx, org_id).await?;
 
     let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
 
@@ -2056,4 +2532,63 @@ pub async fn list_audit_events(
         events,
         next_cursor,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn valid_hex_colors_accepted() {
+        assert!(is_valid_hex_color("#fff"));
+        assert!(is_valid_hex_color("#4f46e5"));
+        assert!(is_valid_hex_color("#ABCDEF"));
+    }
+
+    #[test]
+    fn malformed_hex_colors_rejected() {
+        assert!(!is_valid_hex_color("4f46e5")); // missing '#'
+        assert!(!is_valid_hex_color("#12")); // too short
+        assert!(!is_valid_hex_color("#12345")); // wrong length
+        assert!(!is_valid_hex_color("#gggggg")); // non-hex
+        assert!(!is_valid_hex_color("rgb(0,0,0)")); // unsupported format
+    }
+
+    #[test]
+    fn validate_rejects_malformed_primary_color() {
+        let settings = json!({ "primaryColor": "not-a-color" });
+        assert!(validate_org_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn validate_accepts_well_formed_branding() {
+        let settings = json!({
+            "primaryColor": "#4f46e5",
+            "logoUrl": "https://cdn.example.com/logo.png",
+            "participantHeader": "Amescon Research Lab",
+            "seatLimit": 25,
+            // Unknown key must be tolerated (the settings UI stores this block).
+            "defaults": { "timeLimit": 30 }
+        });
+        assert!(validate_org_settings(&settings).is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_non_http_logo_url() {
+        let settings = json!({ "logoUrl": "javascript:alert(1)" });
+        assert!(validate_org_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn validate_rejects_oversized_participant_header() {
+        let settings = json!({ "participantHeader": "x".repeat(201) });
+        assert!(validate_org_settings(&settings).is_err());
+    }
+
+    #[test]
+    fn validate_noop_for_null_and_empty() {
+        assert!(validate_org_settings(&serde_json::Value::Null).is_ok());
+        assert!(validate_org_settings(&json!({})).is_ok());
+    }
 }

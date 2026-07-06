@@ -178,6 +178,53 @@
   // waits for the {#key} subtree remount.
   controller.presentFocusHook = () => void tick().then(() => formCardEl?.focus());
 
+  // ── Org branding (E-RBAC-8) ────────────────────────────────────────────
+  // Theme the participant chrome with the owning org's brand. `--primary` is an
+  // HSL triple (`H S% L%`) per the P1-T2 token contract, so a hex primaryColor is
+  // converted before it can drive `hsl(var(--primary))`. Everything falls back to
+  // the platform default token when a field is unset or branding is unavailable.
+  function hexToHslTriple(hex: string): string | null {
+    const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+    if (!match || !match[1]) return null;
+    let h = match[1];
+    if (h.length === 3)
+      h = h
+        .split('')
+        .map((c) => c + c)
+        .join('');
+    const r = parseInt(h.slice(0, 2), 16) / 255;
+    const g = parseInt(h.slice(2, 4), 16) / 255;
+    const b = parseInt(h.slice(4, 6), 16) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    let hue = 0;
+    let sat = 0;
+    const d = max - min;
+    if (d !== 0) {
+      sat = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) hue = (g - b) / d + (g < b ? 6 : 0);
+      else if (max === g) hue = (b - r) / d + 2;
+      else hue = (r - g) / d + 4;
+      hue /= 6;
+    }
+    return `${Math.round(hue * 360)} ${Math.round(sat * 100)}% ${Math.round(l * 100)}%`;
+  }
+
+  const brandPrimaryHsl = $derived(
+    data.branding?.primary_color ? hexToHslTriple(data.branding.primary_color) : null
+  );
+  // Override the `--primary` token on the fillout root only — scoped, so the rest
+  // of the app is untouched. Empty string leaves the default token in place.
+  const brandStyle = $derived(brandPrimaryHsl ? `--primary: ${brandPrimaryHsl};` : '');
+  // Logo / header ride above the non-runtime chrome screens (welcome, consent,
+  // completion). Hidden during the WebGL runtime so nothing overlays a stimulus.
+  const showBrandBar = $derived(
+    !!data.branding &&
+      (!!data.branding.logo_url || !!data.branding.participant_header) &&
+      controller.screen !== 'runtime'
+  );
+
   onMount(() => {
     // Track online/offline
     const handleOnline = () => controller.setOffline(false);
@@ -203,10 +250,23 @@
   on:resize={() => controller.handleResize()}
 />
 
-<div class="fillout-page" bind:this={container} data-testid="fillout-root">
+<div class="fillout-page" bind:this={container} data-testid="fillout-root" style={brandStyle}>
   <!-- Persistent SR-only live region (F094): survives screen switches so every
        question presentation is announced. -->
   <div class="sr-only" role="status" aria-live="polite">{controller.liveAnnouncement}</div>
+
+  <!-- Whitelabel branding (E-RBAC-8): org logo + participant header on the chrome
+       screens. Themed by the `--primary` override on the root above. -->
+  {#if showBrandBar}
+    <div class="brand-bar" data-testid="fillout-brand-bar">
+      {#if data.branding?.logo_url}
+        <img class="brand-logo" src={data.branding.logo_url} alt={data.branding.name} />
+      {/if}
+      {#if data.branding?.participant_header}
+        <span class="brand-header">{data.branding.participant_header}</span>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Persistent connectivity widget (E-OFF-6): online/offline, N answers pending,
        last-synced time, and a manual Sync-now control. Replaces the auto-hiding badge. -->
@@ -436,6 +496,34 @@
     justify-content: center;
     padding: 0.5rem;
     pointer-events: none;
+  }
+
+  /* Whitelabel brand bar (E-RBAC-8): centered logo + header above chrome screens. */
+  .brand-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 95;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    pointer-events: none;
+  }
+
+  .brand-logo {
+    max-height: 40px;
+    max-width: 180px;
+    width: auto;
+    object-fit: contain;
+  }
+
+  .brand-header {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: hsl(var(--foreground));
   }
 
   .unsynced-banner {

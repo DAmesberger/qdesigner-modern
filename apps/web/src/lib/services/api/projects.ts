@@ -131,4 +131,20 @@ export const projects = {
         })
       ).then(() => undefined),
   },
+  // E-RBAC-5: reassign the sole project owner. New owner must be an org
+  // member (auto-added to the project as owner if not already on it); any
+  // previous owner is demoted to admin. Caller must be project owner or org
+  // owner/admin. No generated SDK helper yet — call the client directly.
+  transferOwnership: (projectId: string, newOwnerUserId: string) =>
+    callSdk(() =>
+      apiClient.post<{ 200: { message: string } }, unknown, true, 'data'>({
+        security: [{ scheme: 'bearer', type: 'http' }],
+        url: '/api/projects/{id}/transfer-ownership',
+        responseStyle: 'data',
+        throwOnError: true,
+        path: { id: projectId },
+        body: { new_owner_user_id: newOwnerUserId },
+        headers: { 'Content-Type': 'application/json' },
+      })
+    ) as Promise<{ message: string }>,
 };

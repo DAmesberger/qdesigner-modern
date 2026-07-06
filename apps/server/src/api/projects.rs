@@ -541,6 +541,15 @@ pub struct UpdateProjectMemberRequest {
     pub role: String,
 }
 
+/// Body for `POST /api/projects/:id/transfer-ownership` (E-RBAC-5).
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct TransferProjectOwnershipRequest {
+    /// The user who becomes the new project owner. Must be an active member
+    /// of the project's parent organization (auto-added to the project as
+    /// `owner` if not already a project member).
+    pub new_owner_user_id: Uuid,
+}
+
 /// GET /api/projects/:id/members
 #[utoipa::path(
     get,
@@ -914,4 +923,168 @@ pub async fn remove_project_member(
     .await?;
 
     Ok(Json(serde_json::json!({ "message": "Member removed" })))
+}
+
+/// Guarded, atomic project-ownership mutation used by
+/// [`transfer_project_ownership`].
+///
+/// Extracted from the handler for SQL-level testing (`tests/ownership_transfer.rs`)
+/// without constructing the full `AppState`. Runs on the caller's transaction:
+///   1. the new owner must be an active member of `org_id` (rejects transfer
+///      to a non-member),
+///   2. upsert the new owner into `project_members` as `owner` (auto-add when
+///      they are an org member but not yet on the project),
+///   3. demote any *other* existing owner to `admin`,
+///   4. re-count owners and refuse to commit if the project would be left
+///      without one.
+pub async fn transfer_project_ownership_tx(
+    conn: &mut sqlx::PgConnection,
+    project_id: Uuid,
+    org_id: Uuid,
+    from_user_id: Uuid,
+    new_owner_user_id: Uuid,
+) -> Result<(), ApiError> {
+    // (1) New owner must be an active member of the project's parent org.
+    let is_org_member = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active')",
+    )
+    .bind(org_id)
+    .bind(new_owner_user_id)
+    .fetch_one(&mut *conn)
+    .await?;
+
+    if !is_org_member {
+        return Err(ApiError::BadRequest(
+            "New owner must be an active member of the organization".into(),
+        ));
+    }
+
+    // (2) Promote (or auto-add) the new owner.
+    sqlx::query(
+        r#"
+        INSERT INTO project_members (project_id, user_id, role)
+        VALUES ($1, $2, 'owner')
+        ON CONFLICT (project_id, user_id) DO UPDATE SET role = 'owner'
+        "#,
+    )
+    .bind(project_id)
+    .bind(new_owner_user_id)
+    .execute(&mut *conn)
+    .await?;
+
+    // (3) Demote every *other* current owner to admin so ownership is singular.
+    sqlx::query(
+        "UPDATE project_members SET role = 'admin' WHERE project_id = $1 AND user_id <> $2 AND role = 'owner'",
+    )
+    .bind(project_id)
+    .bind(new_owner_user_id)
+    .execute(&mut *conn)
+    .await?;
+
+    let _ = from_user_id;
+
+    // (4) Never leave the project without an owner.
+    let owner_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM project_members WHERE project_id = $1 AND role = 'owner'",
+    )
+    .bind(project_id)
+    .fetch_one(&mut *conn)
+    .await?;
+
+    if owner_count < 1 {
+        return Err(ApiError::BadRequest(
+            "Ownership transfer would leave the project without an owner".into(),
+        ));
+    }
+
+    Ok(())
+}
+
+/// POST /api/projects/:id/transfer-ownership (E-RBAC-5)
+///
+/// Reassigns the sole project owner. The caller must be the current project
+/// owner or an org owner/admin. The new owner must already be an org member;
+/// if they are not yet a project member they are auto-added as `owner`. Any
+/// previous project owner is demoted to `admin` in the same transaction.
+#[utoipa::path(
+    post,
+    path = "/api/projects/{id}/transfer-ownership",
+    request_body = TransferProjectOwnershipRequest,
+    params(
+        ("id" = Uuid, Path, description = "Project id")
+    ),
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Ownership transferred", body = crate::openapi::MessageResponse),
+        (status = 400, description = "Target is not a member / would leave no owner", body = crate::openapi::ErrorEnvelope),
+        (status = 403, description = "Caller may not transfer this project", body = crate::openapi::ErrorEnvelope),
+        (status = 404, description = "Project not found", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["projects"]
+)]
+pub async fn transfer_project_ownership(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    client_ip: ClientIp,
+    tx: Tx,
+    Path(project_id): Path<Uuid>,
+    Json(body): Json<TransferProjectOwnershipRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let mut tx = tx.tx().await?;
+
+    let org_id = access::get_project_org_id(&mut **tx, project_id).await?;
+
+    // Caller must be the project owner, or an org owner/admin.
+    let is_project_owner = state
+        .rbac
+        .has_project_role(
+            &mut **tx,
+            user.user_id,
+            project_id,
+            &crate::rbac::models::ProjectRole::Owner,
+        )
+        .await?;
+
+    let is_org_admin = state
+        .rbac
+        .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
+        .await?;
+
+    if !is_project_owner && !is_org_admin {
+        return Err(ApiError::Forbidden(
+            "Only the project owner or an org admin can transfer ownership".into(),
+        ));
+    }
+
+    transfer_project_ownership_tx(
+        &mut **tx,
+        project_id,
+        org_id,
+        user.user_id,
+        body.new_owner_user_id,
+    )
+    .await?;
+
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::ProjectOwnershipTransferred,
+            resource_type: resource::PROJECT,
+            resource_id: Some(project_id),
+            metadata: serde_json::json!({
+                "project_id": project_id,
+                "transferred_from": user.user_id,
+                "transferred_to": body.new_owner_user_id,
+                "transferred_at": chrono::Utc::now().to_rfc3339(),
+            }),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
+
+    Ok(Json(serde_json::json!({ "message": "Ownership transferred" })))
 }

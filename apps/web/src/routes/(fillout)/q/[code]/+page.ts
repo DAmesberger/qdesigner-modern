@@ -16,6 +16,7 @@ import type { FilloutSession } from '$lib/services/db/indexeddb';
 import type { Response as RuntimeResponse } from '$lib/shared';
 import type { QuestionnaireByCode, Session } from '$lib/api/generated/types.gen';
 import type { FilloutDefinition, FilloutQuestionnairePayload } from '$lib/fillout/types';
+import type { OrgBranding } from '$lib/services/api/organizations';
 
 export const ssr = false;
 
@@ -313,8 +314,30 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		}
 	}
 
+	// ── Org branding (E-RBAC-8) ───────────────────────────────────────────
+	// Theme the participant chrome with the owning org's brand. Anonymous read,
+	// strictly non-blocking (2s cap) — any failure or offline falls back to the
+	// platform defaults applied in +page.svelte. The org id rides on the by-code
+	// payload (and the cached row, once re-cached).
+	let branding: OrgBranding | null = null;
+	const organizationId = (latest as unknown as { organization_id?: string }).organization_id;
+	if (organizationId && navigator.onLine) {
+		try {
+			const res = await Promise.race([
+				fetch(`/api/organizations/${organizationId}/branding`),
+				new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+			]);
+			if (res && res.ok) {
+				branding = (await res.json()) as OrgBranding;
+			}
+		} catch {
+			// Non-fatal — platform defaults apply.
+		}
+	}
+
 	return {
 		questionnaire: shapeQuestionnaire(effective, projectName),
+		branding,
 		existingSession,
 		code,
 		participantId,

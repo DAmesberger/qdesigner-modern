@@ -44,6 +44,27 @@ export interface AuditListParams {
   limit?: number;
 }
 
+/** Org seat usage (E-RBAC-4). `limit` is null when no seatLimit is configured. */
+export interface SeatUsage {
+  limit: number | null;
+  used: number;
+  active_members: number;
+  pending_invitations: number;
+}
+
+/**
+ * Anonymously-readable org branding (E-RBAC-8). Fetched by the participant
+ * fillout chrome to theme itself. All presentation fields are nullable — the
+ * client falls back to platform defaults.
+ */
+export interface OrgBranding {
+  organization_id: string;
+  name: string;
+  primary_color: string | null;
+  logo_url: string | null;
+  participant_header: string | null;
+}
+
 export const organizations = {
   list: async () =>
     (await callSdk(() =>
@@ -107,6 +128,33 @@ export const organizations = {
       })
     ).then(() => undefined),
 
+  // Seats (E-RBAC-4). No generated SDK helper yet (the openapi that registers
+  // this route regenerates the contracts); call the client directly, matching
+  // the SDK's `(client).get({ url, path })` shape.
+  seats: (orgId: string): Promise<SeatUsage> =>
+    callSdk(() =>
+      apiClient.get<{ 200: SeatUsage }, unknown, true, 'data'>({
+        security: [{ scheme: 'bearer', type: 'http' }],
+        url: '/api/organizations/{id}/seats',
+        responseStyle: 'data',
+        throwOnError: true,
+        path: { id: orgId },
+      })
+    ) as Promise<SeatUsage>,
+
+  // Branding (E-RBAC-8). Anonymous, public read used to theme participant
+  // chrome — no auth. No generated SDK helper yet (contracts regenerate from
+  // the openapi that now registers this route); call the client directly.
+  branding: (orgId: string): Promise<OrgBranding> =>
+    callSdk(() =>
+      apiClient.get<{ 200: OrgBranding }, unknown, true, 'data'>({
+        url: '/api/organizations/{id}/branding',
+        responseStyle: 'data',
+        throwOnError: true,
+        path: { id: orgId },
+      })
+    ) as Promise<OrgBranding>,
+
   // Members
   members: {
     list: async (orgId: string) =>
@@ -151,6 +199,31 @@ export const organizations = {
           throwOnError: true,
           path: { id: orgId, user_id: userId },
           body: { role },
+          headers: { 'Content-Type': 'application/json' },
+        })
+      ) as Promise<{ message: string }>,
+    // E-RBAC-5: atomic ownership handover. Promotes `newOwnerUserId` to owner
+    // and (by default) demotes the caller to admin in one guarded tx. Requires
+    // the caller's password re-confirmation for the sensitive action. No
+    // generated SDK helper yet — call the client directly.
+    transferOwnership: (
+      orgId: string,
+      newOwnerUserId: string,
+      password: string,
+      demotePreviousOwner = true
+    ) =>
+      callSdk(() =>
+        apiClient.post<{ 200: { message: string } }, unknown, true, 'data'>({
+          security: [{ scheme: 'bearer', type: 'http' }],
+          url: '/api/organizations/{id}/transfer-ownership',
+          responseStyle: 'data',
+          throwOnError: true,
+          path: { id: orgId },
+          body: {
+            new_owner_user_id: newOwnerUserId,
+            password,
+            demote_previous_owner: demotePreviousOwner,
+          },
           headers: { 'Content-Type': 'application/json' },
         })
       ) as Promise<{ message: string }>,

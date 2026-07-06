@@ -19,6 +19,13 @@ pub enum ApiError {
     #[error("Conflict: {0}")]
     Conflict(String),
 
+    /// Org seat model (E-RBAC-4): adding a member or creating an invitation
+    /// would exceed the organization's configured `seatLimit`. Serializes as a
+    /// 409 carrying a stable `code: "seat_limit_reached"` so the frontend can
+    /// discriminate it from other conflicts.
+    #[error("Seat limit reached: {0}")]
+    SeatLimitReached(String),
+
     #[error("Validation error: {0}")]
     Validation(String),
 
@@ -63,6 +70,7 @@ impl IntoResponse for ApiError {
             ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+            ApiError::SeatLimitReached(msg) => (StatusCode::CONFLICT, msg.clone()),
             ApiError::Validation(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.clone()),
             ApiError::RateLimited => (
                 StatusCode::TOO_MANY_REQUESTS,
@@ -85,12 +93,18 @@ impl IntoResponse for ApiError {
             ApiError::Jwt(_) => (StatusCode::UNAUTHORIZED, "Invalid token".to_string()),
         };
 
-        let body = json!({
-            "error": {
-                "status": status.as_u16(),
-                "message": message,
-            }
+        let mut error_obj = json!({
+            "status": status.as_u16(),
+            "message": message,
         });
+
+        // Attach a stable machine-readable code for error variants the
+        // frontend needs to branch on (typed errors).
+        if let ApiError::SeatLimitReached(_) = &self {
+            error_obj["code"] = json!("seat_limit_reached");
+        }
+
+        let body = json!({ "error": error_obj });
 
         (status, axum::Json(body)).into_response()
     }

@@ -66,6 +66,8 @@ pub fn router(state: AppState) -> Router {
                 .patch(organizations::update_organization)
                 .delete(organizations::delete_organization),
         )
+        .route("/{id}/seats", get(organizations::get_seats))
+        .route("/{id}/branding", get(organizations::get_org_branding))
         .route(
             "/{id}/members",
             get(organizations::list_members).post(organizations::add_member),
@@ -77,6 +79,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/members/{user_id}/role",
             put(organizations::change_member_role),
+        )
+        .route(
+            "/{id}/transfer-ownership",
+            post(organizations::transfer_org_ownership),
         )
         .route(
             "/{id}/invitations",
@@ -165,6 +171,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/members/{uid}",
             patch(projects::update_project_member).delete(projects::remove_project_member),
+        )
+        .route(
+            "/{id}/transfer-ownership",
+            post(projects::transfer_project_ownership),
         )
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));

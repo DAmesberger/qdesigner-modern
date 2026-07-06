@@ -9,6 +9,7 @@
     Edit,
     BarChart3,
     Search,
+    Users2,
   } from 'lucide-svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import { appPaths } from '$lib/routing/paths';
@@ -130,6 +131,14 @@
             {/if}
           </div>
           <div class="mt-4 flex items-center gap-3 md:mt-0 md:ml-4">
+            <a
+              href={appPaths.projectMembers(data.project.id)}
+              class="inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-foreground bg-card hover:bg-muted focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+              data-testid="members-link"
+            >
+              <Users2 class="-ml-1 mr-2 h-5 w-5" />
+              Members
+            </a>
             <a
               href={appPaths.projectAnalytics(data.project.id)}
               class="inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-foreground bg-card hover:bg-muted focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"

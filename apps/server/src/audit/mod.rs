@@ -48,6 +48,12 @@ pub enum AuditAction {
     /// A member was (re)assigned a custom role, or had it cleared — the
     /// "permission granted/revoked" event of E-RBAC-3 step 8.
     MemberCustomRoleAssigned,
+    /// Organization ownership was transferred to another member — the
+    /// atomic "owner handover" of E-RBAC-5 (promotes the new owner, may
+    /// demote the outgoing owner, all in one guarded tx).
+    OrgOwnershipTransferred,
+    /// Project ownership was transferred to another member (E-RBAC-5).
+    ProjectOwnershipTransferred,
 }
 
 impl AuditAction {
@@ -69,6 +75,8 @@ impl AuditAction {
             AuditAction::RoleUpdated => "role.updated",
             AuditAction::RoleDeleted => "role.deleted",
             AuditAction::MemberCustomRoleAssigned => "member.custom_role_assigned",
+            AuditAction::OrgOwnershipTransferred => "organization.ownership_transferred",
+            AuditAction::ProjectOwnershipTransferred => "project.ownership_transferred",
         }
     }
 }

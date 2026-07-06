@@ -7,6 +7,8 @@
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import type { OrganizationMember } from '$lib/shared/types/api';
   import type { OrgRole } from '$lib/services/api/roles';
 
@@ -96,6 +98,49 @@
       toast.error('Failed to remove member');
     } finally {
       removingUserId = null;
+    }
+  }
+
+  // ── Ownership transfer (E-RBAC-5) ──────────────────────────────────
+  // Only a current owner may hand the org to another member. Unlike a role
+  // change, this promotes the target AND demotes the caller in one guarded
+  // server tx, so the org is never left ownerless. Password re-confirmation
+  // is required for the sensitive action.
+  let transferOpen = $state(false);
+  let transferTarget = $state<OrganizationMember | null>(null);
+  let transferPassword = $state('');
+  let transferDemote = $state(true);
+  let transferring = $state(false);
+
+  const canTransferOwnership = $derived(currentUserRole === 'owner');
+
+  function openTransfer(member: OrganizationMember) {
+    transferTarget = member;
+    transferPassword = '';
+    transferDemote = true;
+    transferOpen = true;
+  }
+
+  async function confirmTransfer() {
+    if (!currentOrg || !transferTarget || !transferPassword) return;
+    transferring = true;
+    try {
+      await api.organizations.members.transferOwnership(
+        currentOrg.id,
+        transferTarget.userId,
+        transferPassword,
+        transferDemote
+      );
+      toast.success('Ownership transferred');
+      transferOpen = false;
+      transferTarget = null;
+      transferPassword = '';
+      await loadMembers();
+    } catch (err) {
+      console.error('Error transferring ownership:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to transfer ownership');
+    } finally {
+      transferring = false;
     }
   }
 
@@ -317,14 +362,25 @@
                   {#if member.role === 'owner'}
                     <span class="text-sm text-muted-foreground">—</span>
                   {:else}
-                    <button
-                      type="button"
-                      class="inline-flex items-center px-3 py-1.5 rounded-md border border-border text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={removingUserId === member.userId}
-                      onclick={() => removeMember(member)}
-                    >
-                      {removingUserId === member.userId ? 'Removing…' : 'Remove'}
-                    </button>
+                    <div class="inline-flex items-center gap-2">
+                      {#if canTransferOwnership && member.userId !== currentUserId}
+                        <button
+                          type="button"
+                          class="inline-flex items-center px-3 py-1.5 rounded-md border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                          onclick={() => openTransfer(member)}
+                        >
+                          Transfer ownership
+                        </button>
+                      {/if}
+                      <button
+                        type="button"
+                        class="inline-flex items-center px-3 py-1.5 rounded-md border border-border text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={removingUserId === member.userId}
+                        onclick={() => removeMember(member)}
+                      >
+                        {removingUserId === member.userId ? 'Removing…' : 'Remove'}
+                      </button>
+                    </div>
                   {/if}
                 </td>
               </tr>
@@ -335,3 +391,57 @@
     </Card>
   {/if}
 </div>
+
+<Dialog bind:open={transferOpen} title="Transfer organization ownership" size="md">
+  <div class="space-y-4">
+    <p class="text-sm text-muted-foreground">
+      You are about to make
+      <span class="font-medium text-foreground">
+        {transferTarget?.user?.fullName ||
+          transferTarget?.user?.full_name ||
+          transferTarget?.user?.email ||
+          'this member'}
+      </span>
+      the owner of {currentOrg?.name || 'this organization'}. This is a privileged,
+      audited action.
+    </p>
+
+    <label class="flex items-start gap-2 text-sm text-foreground">
+      <input type="checkbox" bind:checked={transferDemote} class="mt-0.5" />
+      <span>
+        Step down to <span class="font-medium">admin</span> after the transfer.
+        Leave unchecked to keep your own owner role (the org will have two owners).
+      </span>
+    </label>
+
+    <div>
+      <label for="transfer-password" class="block text-sm font-medium text-foreground mb-1">
+        Confirm your password
+      </label>
+      <input
+        id="transfer-password"
+        type="password"
+        autocomplete="current-password"
+        bind:value={transferPassword}
+        placeholder="Your account password"
+        class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+      />
+    </div>
+  </div>
+
+  {#snippet footer()}
+    <div class="flex justify-end gap-2">
+      <Button variant="ghost" onclick={() => (transferOpen = false)} disabled={transferring}>
+        Cancel
+      </Button>
+      <Button
+        variant="primary"
+        loading={transferring}
+        disabled={!transferPassword || transferring}
+        onclick={confirmTransfer}
+      >
+        Transfer ownership
+      </Button>
+    </div>
+  {/snippet}
+</Dialog>
