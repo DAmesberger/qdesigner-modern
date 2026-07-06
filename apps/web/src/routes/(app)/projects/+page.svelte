@@ -1,8 +1,12 @@
 <script lang="ts">
   import { Plus, FolderOpen, Users, Calendar, ChevronRight, Search } from 'lucide-svelte';
   import { fly } from 'svelte/transition';
+  import { goto } from '$app/navigation';
   import { api } from '$lib/services/api';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import { appPaths } from '$lib/routing/paths';
   import { toast } from '$lib/stores/toast';
   import Select from '$lib/components/ui/forms/Select.svelte';
@@ -17,6 +21,7 @@
   let newProjectName = $state('');
   let newProjectCode = $state('');
   let newProjectDescription = $state('');
+  let creating = $state(false);
   let searchQuery = $state('');
   let sortBy = $state<'name' | 'date' | 'questionnaires'>('date');
 
@@ -50,8 +55,9 @@
   });
 
   async function createProject() {
-    if (!newProjectName.trim() || !newProjectCode.trim()) return;
+    if (!newProjectName.trim() || !newProjectCode.trim() || creating) return;
 
+    creating = true;
     try {
       const project = await api.projects.create({
         organizationId: data.organizationId,
@@ -61,14 +67,13 @@
       });
 
       showCreateModal = false;
-      if (typeof window !== 'undefined') {
-        window.location.href = appPaths.project(project.id);
-      }
+      await goto(appPaths.project(project.id));
     } catch (error) {
-      console.error('Error creating project:', error);
       toast.error('Failed to create project', {
         message: error instanceof Error ? error.message : 'Please try again.',
       });
+    } finally {
+      creating = false;
     }
   }
 
@@ -165,11 +170,8 @@
             >
               <button
                 onclick={() => {
-                  const url = appPaths.project(project.id);
                   if (project.id) {
-                    window.location.href = url;
-                  } else {
-                    console.error('Project ID is undefined');
+                    goto(appPaths.project(project.id));
                   }
                 }}
                 class="block w-full text-left p-6 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
@@ -222,37 +224,21 @@
 <!-- Create Project Modal -->
 <Dialog bind:open={showCreateModal} title="Create New Project" size="md" closable={false}>
   <div class="space-y-4">
-    <div>
-      <label for="project-name" class="block text-sm font-medium text-foreground mb-1">
-        Project Name
-      </label>
-      <input
-        type="text"
-        id="project-name"
-        bind:value={newProjectName}
-        class="mt-1 block w-full rounded-md border border-border shadow-sm focus:border-primary focus:ring-primary sm:text-sm px-3 py-2 bg-background text-foreground"
-        placeholder="My Research Project"
-      />
-    </div>
+    <FormGroup label="Project Name" id="project-name">
+      <Input id="project-name" bind:value={newProjectName} placeholder="My Research Project" />
+    </FormGroup>
 
-    <div>
-      <label for="project-code" class="block text-sm font-medium text-foreground mb-1">
-        Project Code
-      </label>
-      <input
-        type="text"
+    <FormGroup label="Project Code" id="project-code">
+      <Input
         id="project-code"
-        bind:value={newProjectCode}
-        class="mt-1 block w-full rounded-md border border-border shadow-sm focus:border-primary focus:ring-primary sm:text-sm uppercase px-3 py-2 bg-background text-foreground"
+        value={newProjectCode}
+        class="uppercase"
         placeholder="MRP001"
-        oninput={(e) => (e.currentTarget.value = e.currentTarget.value.toUpperCase())}
+        oninput={(e) => (newProjectCode = e.currentTarget.value.toUpperCase())}
       />
-    </div>
+    </FormGroup>
 
-    <div>
-      <label for="project-description" class="block text-sm font-medium text-foreground mb-1">
-        Description (optional)
-      </label>
+    <FormGroup label="Description (optional)" id="project-description">
       <textarea
         id="project-description"
         bind:value={newProjectDescription}
@@ -260,24 +246,21 @@
         class="mt-1 block w-full rounded-md border border-border shadow-sm focus:border-primary focus:ring-primary sm:text-sm px-3 py-2 bg-background text-foreground"
         placeholder="Brief description of your research project..."
       ></textarea>
-    </div>
+    </FormGroup>
   </div>
 
   {#snippet footer()}
     <div class="flex flex-row-reverse gap-3">
-      <button
+      <Button
         onclick={createProject}
-        disabled={!newProjectName.trim() || !newProjectCode.trim()}
-        class="inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary text-base font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        loading={creating}
+        disabled={!newProjectName.trim() || !newProjectCode.trim() || creating}
       >
         Create Project
-      </button>
-      <button
-        onclick={() => (showCreateModal = false)}
-        class="inline-flex justify-center rounded-md border border-border shadow-sm px-4 py-2 bg-card text-base font-medium text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary sm:text-sm"
-      >
+      </Button>
+      <Button variant="outline" disabled={creating} onclick={() => (showCreateModal = false)}>
         Cancel
-      </button>
+      </Button>
     </div>
   {/snippet}
 </Dialog>

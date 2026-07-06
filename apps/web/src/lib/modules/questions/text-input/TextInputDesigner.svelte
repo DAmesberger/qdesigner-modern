@@ -3,6 +3,8 @@
   import { X } from 'lucide-svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
 
   interface TextInputConfig {
     inputType: 'text' | 'number' | 'email' | 'tel' | 'url' | 'password';
@@ -108,42 +110,47 @@
   <!-- Placeholder -->
   <div class="form-group">
     <label for="placeholder">Placeholder Text</label>
-    <input
+    <Input
       id="placeholder"
       type="text"
-      bind:value={question.config.placeholder}
+      value={question.config.placeholder ?? ''}
+      oninput={(e) => (question.config.placeholder = e.currentTarget.value)}
       placeholder="Enter placeholder text..."
-      class="input"
     />
   </div>
 
   <!-- Text-specific options -->
   {#if question.config.inputType === 'text'}
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.multiline} class="checkbox" />
-        <span>Multi-line input (textarea)</span>
-      </label>
+      <Checkbox
+        id="text-multiline"
+        label="Multi-line input (textarea)"
+        checked={question.config.multiline ?? false}
+        onchange={(e) => (question.config.multiline = e.currentTarget.checked)}
+      />
     </div>
 
     {#if question.config.multiline}
       <div class="form-group">
         <label for="rows">Number of Rows</label>
-        <input
+        <Input
           id="rows"
           type="number"
-          bind:value={question.config.rows}
           min="2"
           max="20"
-          class="input"
+          value={question.config.rows != null ? String(question.config.rows) : ''}
+          oninput={(e) =>
+            (question.config.rows = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
         />
       </div>
 
       <div class="form-group">
-        <label class="checkbox-label">
-          <input type="checkbox" bind:checked={question.config.autoResize} class="checkbox" />
-          <span>Auto-resize height</span>
-        </label>
+        <Checkbox
+          id="text-auto-resize"
+          label="Auto-resize height"
+          checked={question.config.autoResize ?? false}
+          onchange={(e) => (question.config.autoResize = e.currentTarget.checked)}
+        />
       </div>
     {/if}
   {/if}
@@ -153,24 +160,37 @@
     <div class="form-row">
       <div class="form-group">
         <label for="min">Min Value</label>
-        <input id="min" type="number" bind:value={question.config.min} class="input" />
+        <Input
+          id="min"
+          type="number"
+          value={question.config.min != null ? String(question.config.min) : ''}
+          oninput={(e) =>
+            (question.config.min = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+        />
       </div>
 
       <div class="form-group">
         <label for="max">Max Value</label>
-        <input id="max" type="number" bind:value={question.config.max} class="input" />
+        <Input
+          id="max"
+          type="number"
+          value={question.config.max != null ? String(question.config.max) : ''}
+          oninput={(e) =>
+            (question.config.max = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+        />
       </div>
     </div>
 
     <div class="form-group">
       <label for="step">Step</label>
-      <input
+      <Input
         id="step"
         type="number"
-        bind:value={question.config.step}
         min="0"
         step="0.1"
-        class="input"
+        value={question.config.step != null ? String(question.config.step) : ''}
+        oninput={(e) =>
+          (question.config.step = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
       />
     </div>
   {/if}
@@ -181,23 +201,25 @@
     <div class="form-row">
       <div class="form-group">
         <label for="min-length">Min Length</label>
-        <input
+        <Input
           id="min-length"
           type="number"
-          bind:value={question.config.minLength}
           min="0"
-          class="input"
+          value={question.config.minLength != null ? String(question.config.minLength) : ''}
+          oninput={(e) =>
+            (question.config.minLength = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
         />
       </div>
 
       <div class="form-group">
         <label for="max-length">Max Length</label>
-        <input
+        <Input
           id="max-length"
           type="number"
-          bind:value={question.config.maxLength}
           min="0"
-          class="input"
+          value={question.config.maxLength != null ? String(question.config.maxLength) : ''}
+          oninput={(e) =>
+            (question.config.maxLength = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
         />
       </div>
     </div>
@@ -207,12 +229,13 @@
   {#if question.config.inputType !== 'email' && question.config.inputType !== 'url' && question.config.inputType !== 'tel'}
     <div class="form-group">
       <label for="pattern">Validation Pattern (RegEx)</label>
-      <input
+      <Input
         id="pattern"
         type="text"
-        bind:value={question.config.pattern}
+        class="font-mono"
+        value={question.config.pattern ?? ''}
+        oninput={(e) => (question.config.pattern = e.currentTarget.value)}
         placeholder="e.g., ^[A-Z]{2}\d{4}$"
-        class="input font-mono"
       />
       <p class="help-text">Regular expression for custom validation</p>
     </div>
@@ -220,10 +243,12 @@
 
   <!-- Spell Check -->
   <div class="form-group">
-    <label class="checkbox-label">
-      <input type="checkbox" bind:checked={question.config.spellCheck} class="checkbox" />
-      <span>Enable spell check</span>
-    </label>
+    <Checkbox
+      id="text-spell-check"
+      label="Enable spell check"
+      checked={question.config.spellCheck ?? false}
+      onchange={(e) => (question.config.spellCheck = e.currentTarget.checked)}
+    />
   </div>
 
   <!-- Suggestions -->
@@ -231,11 +256,11 @@
     <h4 class="section-title">Auto-complete Suggestions</h4>
 
     <div class="suggestions-input">
-      <input
+      <Input
         type="text"
+        class="flex-1"
         bind:value={newSuggestion}
         placeholder="Add a suggestion..."
-        class="input"
         onkeydown={(e) => e.key === 'Enter' && addSuggestion()}
       />
       <Button variant="secondary" size="sm" onclick={addSuggestion} disabled={!newSuggestion.trim()}>
@@ -248,13 +273,14 @@
         {#each question.config.suggestions as suggestion, i}
           <div class="suggestion-item">
             <span>{suggestion}</span>
-            <button
-              class="remove-btn"
+            <Button
+              variant="ghost"
+              size="sm"
               onclick={() => removeSuggestion(i)}
               aria-label="Remove suggestion"
             >
               <X size={16} />
-            </button>
+            </Button>
           </div>
         {/each}
       </div>
@@ -289,43 +315,6 @@
     color: hsl(var(--foreground));
   }
 
-  .input {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    background: hsl(var(--background));
-    transition: all 0.15s;
-  }
-
-  .input:hover {
-    border-color: hsl(var(--border));
-  }
-
-  .input:focus {
-    outline: none;
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
-  }
-
-  .font-mono {
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
-  .checkbox {
-    width: 1rem;
-    height: 1rem;
-    cursor: pointer;
-  }
-
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
@@ -353,10 +342,6 @@
     margin-bottom: 0.75rem;
   }
 
-  .suggestions-input .input {
-    flex: 1;
-  }
-
   .suggestions-list {
     display: flex;
     flex-direction: column;
@@ -374,18 +359,4 @@
     font-size: 0.875rem;
   }
 
-  .remove-btn {
-    padding: 0.25rem;
-    border: none;
-    background: none;
-    color: hsl(var(--muted-foreground));
-    cursor: pointer;
-    border-radius: 0.25rem;
-    transition: all 0.15s;
-  }
-
-  .remove-btn:hover {
-    background: hsl(var(--border));
-    color: hsl(var(--foreground));
-  }
 </style>

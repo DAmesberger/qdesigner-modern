@@ -2,6 +2,8 @@
   import type { Question } from '$lib/shared';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
 
   interface DateTimeConfig {
     mode: 'date' | 'time' | 'datetime';
@@ -83,20 +85,14 @@
   <!-- Date Format -->
   <div class="form-group">
     <label for="format" class="label-text">Display Format</label>
-    <input
-      id="format"
-      type="text"
-      bind:value={question.config.format}
-      placeholder="e.g., YYYY-MM-DD"
-      class="input"
-    />
+    <Input id="format" type="text" bind:value={question.config.format} placeholder="e.g., YYYY-MM-DD" />
     <div class="format-examples">
       <p class="help-text">Examples for {mode}:</p>
       <div class="example-chips">
         {#each formatExamples[mode] as example}
-          <button class="example-chip" onclick={() => (question.config.format = example)}>
+          <Button variant="outline" size="xs" class="font-mono" onclick={() => (question.config.format = example)}>
             {example}
-          </button>
+          </Button>
         {/each}
       </div>
     </div>
@@ -108,18 +104,22 @@
 
     {#if mode !== 'time'}
       <div class="form-group">
-        <label class="checkbox-label">
-          <input type="checkbox" bind:checked={question.config.showCalendar} class="checkbox" />
-          <span>Show calendar picker button</span>
-        </label>
+        <Checkbox
+          id="datetime-show-calendar"
+          label="Show calendar picker button"
+          checked={question.config.showCalendar ?? false}
+          onchange={(e) => (question.config.showCalendar = e.currentTarget.checked)}
+        />
       </div>
     {/if}
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.defaultToToday} class="checkbox" />
-        <span>Default to today's date/time</span>
-      </label>
+      <Checkbox
+        id="datetime-default-today"
+        label="Default to today's date/time"
+        checked={question.config.defaultToToday ?? false}
+        onchange={(e) => (question.config.defaultToToday = e.currentTarget.checked)}
+      />
     </div>
 
     {#if mode === 'time' || mode === 'datetime'}
@@ -144,13 +144,23 @@
 
       <div class="form-group">
         <label for="min-date">Minimum Date</label>
-        <input id="min-date" type="date" bind:value={question.config.minDate} class="input" />
+        <Input
+          id="min-date"
+          type="date"
+          value={question.config.minDate ?? ''}
+          oninput={(e) => (question.config.minDate = e.currentTarget.value || null)}
+        />
         <p class="help-text">Earliest date that can be selected</p>
       </div>
 
       <div class="form-group">
         <label for="max-date">Maximum Date</label>
-        <input id="max-date" type="date" bind:value={question.config.maxDate} class="input" />
+        <Input
+          id="max-date"
+          type="date"
+          value={question.config.maxDate ?? ''}
+          oninput={(e) => (question.config.maxDate = e.currentTarget.value || null)}
+        />
         <p class="help-text">Latest date that can be selected</p>
       </div>
 
@@ -158,11 +168,11 @@
       <div class="form-group">
         <span class="label-text">Disabled Dates</span>
         <div class="disabled-dates-input">
-          <input
+          <Input
             type="date"
+            class="flex-1"
             bind:value={newDisabledDate}
             placeholder="Select date to disable"
-            class="input"
           />
           <Button variant="secondary" size="sm" onclick={addDisabledDate} disabled={!newDisabledDate}>
             Add
@@ -174,13 +184,14 @@
             {#each question.config.disabledDates as date}
               <div class="disabled-date-item">
                 <span>{date}</span>
-                <button
-                  class="remove-btn"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onclick={() => removeDisabledDate(date)}
                   aria-label="Remove date"
                 >
                   ✕
-                </button>
+                </Button>
               </div>
             {/each}
           </div>
@@ -237,39 +248,6 @@
     color: hsl(var(--foreground));
   }
 
-  .input {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    background: hsl(var(--background));
-    transition: all 0.15s;
-  }
-
-  .input:hover {
-    border-color: hsl(var(--border));
-  }
-
-  .input:focus {
-    outline: none;
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
-  .checkbox {
-    width: 1rem;
-    height: 1rem;
-    cursor: pointer;
-  }
-
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
@@ -303,30 +281,10 @@
     margin-top: 0.25rem;
   }
 
-  .example-chip {
-    padding: 0.25rem 0.5rem;
-    background: hsl(var(--muted));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .example-chip:hover {
-    background: hsl(var(--border));
-    border-color: hsl(var(--border));
-  }
-
   /* Disabled dates */
   .disabled-dates-input {
     display: flex;
     gap: 0.5rem;
-  }
-
-  .disabled-dates-input .input {
-    flex: 1;
   }
 
   .disabled-dates-list {
@@ -345,19 +303,6 @@
     border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-  }
-
-  .remove-btn {
-    padding: 0.125rem;
-    border: none;
-    background: none;
-    color: hsl(var(--muted-foreground));
-    cursor: pointer;
-    line-height: 1;
-  }
-
-  .remove-btn:hover {
-    color: hsl(var(--destructive));
   }
 
   /* Preview */

@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
 
   interface NumberInputConfig {
     placeholder?: string;
@@ -51,12 +53,12 @@
   <!-- Placeholder -->
   <div class="form-group">
     <label for="placeholder">Placeholder Text</label>
-    <input
+    <Input
       id="placeholder"
       type="text"
-      bind:value={question.config.placeholder}
+      value={question.config.placeholder ?? ''}
+      oninput={(e) => (question.config.placeholder = e.currentTarget.value)}
       placeholder="Enter placeholder text..."
-      class="input"
     />
   </div>
 
@@ -66,38 +68,53 @@
     <div class="form-row">
       <div class="form-group">
         <label for="min">Minimum</label>
-        <input id="min" type="number" bind:value={question.config.min} class="input" />
+        <Input
+          id="min"
+          type="number"
+          value={question.config.min != null ? String(question.config.min) : ''}
+          oninput={(e) =>
+            (question.config.min = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+        />
       </div>
 
       <div class="form-group">
         <label for="max">Maximum</label>
-        <input id="max" type="number" bind:value={question.config.max} class="input" />
+        <Input
+          id="max"
+          type="number"
+          value={question.config.max != null ? String(question.config.max) : ''}
+          oninput={(e) =>
+            (question.config.max = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+        />
       </div>
     </div>
 
     <div class="form-row">
       <div class="form-group">
         <label for="step">Step</label>
-        <input
+        <Input
           id="step"
           type="number"
-          bind:value={question.config.step}
           min="0"
           step="any"
-          class="input"
+          value={question.config.step != null ? String(question.config.step) : ''}
+          oninput={(e) =>
+            (question.config.step = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
         />
         <p class="help-text">Increment for spin buttons and arrow keys</p>
       </div>
 
       <div class="form-group">
         <label for="decimal-places">Decimal Places</label>
-        <input
+        <Input
           id="decimal-places"
           type="number"
-          bind:value={question.config.decimalPlaces}
           min="0"
           max="10"
-          class="input"
+          value={question.config.decimalPlaces != null ? String(question.config.decimalPlaces) : ''}
+          oninput={(e) =>
+            (question.config.decimalPlaces =
+              e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
         />
         <p class="help-text">Leave empty for auto</p>
       </div>
@@ -110,23 +127,23 @@
     <div class="form-row">
       <div class="form-group">
         <label for="prefix">Prefix</label>
-        <input
+        <Input
           id="prefix"
           type="text"
-          bind:value={question.config.prefix}
+          value={question.config.prefix ?? ''}
+          oninput={(e) => (question.config.prefix = e.currentTarget.value)}
           placeholder="e.g. $"
-          class="input"
         />
       </div>
 
       <div class="form-group">
         <label for="suffix">Suffix</label>
-        <input
+        <Input
           id="suffix"
           type="text"
-          bind:value={question.config.suffix}
+          value={question.config.suffix ?? ''}
+          oninput={(e) => (question.config.suffix = e.currentTarget.value)}
           placeholder="e.g. kg"
-          class="input"
         />
       </div>
     </div>
@@ -136,14 +153,12 @@
   <div class="section">
     <h4 class="section-title">Display Options</h4>
     <div class="form-group">
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          bind:checked={question.config.showSpinButtons}
-          class="checkbox"
-        />
-        <span>Show spin buttons (up/down arrows)</span>
-      </label>
+      <Checkbox
+        id="number-spin-buttons"
+        label="Show spin buttons (up/down arrows)"
+        checked={question.config.showSpinButtons ?? false}
+        onchange={(e) => (question.config.showSpinButtons = e.currentTarget.checked)}
+      />
     </div>
   </div>
 </div>
@@ -173,39 +188,6 @@
     font-size: 0.875rem;
     font-weight: 500;
     color: #374151;
-  }
-
-  .input {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    background: white;
-    transition: all 0.15s;
-  }
-
-  .input:hover {
-    border-color: #d1d5db;
-  }
-
-  .input:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
-  .checkbox {
-    width: 1rem;
-    height: 1rem;
-    cursor: pointer;
   }
 
   .section {

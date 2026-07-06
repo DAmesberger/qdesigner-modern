@@ -1,5 +1,6 @@
 // Core primitives
 export { default as Button } from './Button.svelte';
+export { default as Skeleton } from './Skeleton.svelte';
 
 // Layout components
 export { default as AppShell } from './layout/AppShell.svelte';

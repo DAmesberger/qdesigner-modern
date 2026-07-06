@@ -11,6 +11,8 @@
   import { tourEngine } from '$lib/help/tours/TourEngine.svelte';
   import { dashboardWelcomeTour } from '$lib/help/tours/definitions/dashboardWelcome';
   import { helpStore } from '$lib/help/stores/helpStore.svelte';
+  import Skeleton from '$lib/components/ui/Skeleton.svelte';
+  import { lazyRender } from '$lib/components/ui/actions/lazyRender';
   import {
     Activity,
     ArrowRight,
@@ -44,6 +46,28 @@
     avgCompletionRate: 0,
   });
   let sparklineData = $state<Record<string, number[]>>({});
+
+  // Post-mount hydration flag: stat values and the activity feed come from the
+  // SSR load, so they render skeletons for the first client frame and fill in
+  // once mounted (no async wait — see WATCH note in the unit charter).
+  let hydrated = $state(false);
+
+  // Lazy-render bookkeeping: rows are revealed on first intersection so long
+  // lists don't mount hundreds of heavy nodes eagerly (see lazyRender action).
+  let visibleQuestionnaires = $state(new Set<string>());
+  let visibleActivities = $state(new Set<string>());
+
+  function revealQuestionnaire(id: string) {
+    if (visibleQuestionnaires.has(id)) return;
+    visibleQuestionnaires.add(id);
+    visibleQuestionnaires = new Set(visibleQuestionnaires);
+  }
+
+  function revealActivity(id: string) {
+    if (visibleActivities.has(id)) return;
+    visibleActivities.add(id);
+    visibleActivities = new Set(visibleActivities);
+  }
 
   let displayName = $derived(user?.fullName || user?.email?.split('@')[0] || 'Researcher');
   let statCards = $derived.by(() => [
@@ -178,6 +202,8 @@
   }
 
   onMount(() => {
+    hydrated = true;
+
     if (questionnaires.length > 0) {
       subscribeRealtime();
       loadSparklines();
@@ -382,7 +408,11 @@
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-sm font-medium text-muted-foreground">{stat.label}</p>
-            <p class="mt-3 text-4xl font-semibold tracking-tight text-foreground">{stat.value}</p>
+            {#if hydrated}
+              <p class="mt-3 text-4xl font-semibold tracking-tight text-foreground">{stat.value}</p>
+            {:else}
+              <Skeleton variant="rectangular" width="5rem" height="2.5rem" className="mt-3 rounded-md" />
+            {/if}
           </div>
           <div class={`rounded-2xl p-3 ${stat.iconClass}`}>
             <stat.icon class="h-6 w-6" />
@@ -465,7 +495,9 @@
         </div>
       {:else}
         <div class="space-y-4 p-6">
-          {#each questionnaires as questionnaire}
+          {#each questionnaires as questionnaire (questionnaire.questionnaire_id)}
+            <div use:lazyRender={{ id: questionnaire.questionnaire_id, onVisible: revealQuestionnaire }}>
+            {#if visibleQuestionnaires.has(questionnaire.questionnaire_id)}
             <button
               type="button"
               class="group block w-full overflow-hidden rounded-[28px] border border-border/70 bg-background/75 p-6 text-left transition hover:border-primary/40 hover:bg-accent/40"
@@ -515,7 +547,14 @@
               </div>
 
               <div class="mt-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                {#if sparklineData[questionnaire.questionnaire_id]?.length}
+                {#if sparklineData[questionnaire.questionnaire_id] === undefined}
+                  <!-- Sparkline data loads post-mount; hold a chart-shaped skeleton to avoid layout shift. -->
+                  <Skeleton
+                    variant="rounded"
+                    height="4.5rem"
+                    className="min-w-0 flex-1 rounded-3xl"
+                  />
+                {:else if sparklineData[questionnaire.questionnaire_id]?.length}
                   {@const values = sparklineData[questionnaire.questionnaire_id] ?? []}
                   <div class="flex min-w-0 flex-1 items-center gap-3 rounded-3xl border border-border/70 bg-card/80 px-4 py-3">
                     <div class="rounded-2xl bg-primary/10 p-2 text-primary">
@@ -555,6 +594,11 @@
                 </div>
               </div>
             </button>
+            {:else}
+              <!-- Fixed-height pulse placeholder until the row approaches the viewport. -->
+              <div class="h-64 animate-pulse rounded-[28px] border border-border/70 bg-background/60"></div>
+            {/if}
+            </div>
           {/each}
         </div>
       {/if}
@@ -570,10 +614,30 @@
       </div>
 
       <div class="p-6">
-        {#if recentActivity.length > 0}
+        {#if !hydrated && recentActivity.length === 0}
+          <!-- Skeleton rows while the SSR feed hydrates on the client. -->
           <ul class="space-y-4">
-            {#each recentActivity as activity}
+            {#each Array(3) as _, i (i)}
               <li class="rounded-[28px] border border-border/70 bg-background/75 p-4">
+                <div class="flex items-start gap-3">
+                  <Skeleton variant="rounded" width="2.75rem" height="2.75rem" />
+                  <div class="min-w-0 flex-1 space-y-2">
+                    <Skeleton variant="text" width="60%" height="1rem" />
+                    <Skeleton variant="text" width="80%" height="0.875rem" />
+                    <Skeleton variant="text" width="40%" height="0.75rem" />
+                  </div>
+                </div>
+              </li>
+            {/each}
+          </ul>
+        {:else if recentActivity.length > 0}
+          <ul class="space-y-4">
+            {#each recentActivity as activity, i (i)}
+              <li
+                class="rounded-[28px] border border-border/70 bg-background/75 p-4"
+                use:lazyRender={{ id: String(i), onVisible: revealActivity }}
+              >
+                {#if visibleActivities.has(String(i))}
                 <div class="flex items-start gap-3">
                   <div class={`rounded-2xl p-3 ${getActivityStatusColor(activity.status)}`}>
                     {#if activity.status === 'completed'}
@@ -607,6 +671,9 @@
                     </div>
                   </div>
                 </div>
+                {:else}
+                  <div class="h-20 animate-pulse rounded-2xl bg-background/60"></div>
+                {/if}
               </li>
             {/each}
           </ul>

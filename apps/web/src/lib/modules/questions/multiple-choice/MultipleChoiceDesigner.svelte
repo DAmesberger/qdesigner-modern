@@ -3,6 +3,9 @@
   import type { Question } from '$lib/shared';
   import { generateId } from '$lib/shared/utils/id';
   import { moduleRegistry } from '$lib/modules/registry';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
 
   interface MultipleChoiceConfig {
     responseType: { type: 'single' | 'multiple' };
@@ -164,7 +167,7 @@
 
     <div class="field">
       <label for="question-description">Description (optional)</label>
-      <input
+      <Input
         id="question-description"
         type="text"
         value={(question.display as any)?.description || ''}
@@ -179,7 +182,6 @@
           (onResponse || onUpdate)?.(updatedQuestion);
         }}
         placeholder="Additional context or instructions"
-        class="w-full"
       />
     </div>
   </div>
@@ -218,30 +220,34 @@
           <div class="option-header">
             <span class="option-number">{index + 1}</span>
             <div class="option-controls">
-              <button
-                class="icon-button"
+              <Button
+                variant="ghost"
+                size="xs"
                 onclick={() => moveOption(index, 'up')}
                 disabled={index === 0}
-                title="Move up"
+                aria-label="Move up"
               >
                 ↑
-              </button>
-              <button
-                class="icon-button"
+              </Button>
+              <Button
+                variant="ghost"
+                size="xs"
                 onclick={() => moveOption(index, 'down')}
                 disabled={index === (question.config?.options?.length || 0) - 1}
-                title="Move down"
+                aria-label="Move down"
               >
                 ↓
-              </button>
-              <button
-                class="icon-button danger"
+              </Button>
+              <Button
+                variant="ghost"
+                size="xs"
+                class="hover:text-destructive"
                 onclick={() => removeOption(index)}
                 disabled={(question.config?.options?.length || 0) <= 2}
-                title="Remove option"
+                aria-label="Remove option"
               >
                 ×
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -249,7 +255,7 @@
             <div class="field-row">
               <div class="field flex-1">
                 <label for={'label-' + index}>Label</label>
-                <input
+                <Input
                   id={'label-' + index}
                   type="text"
                   value={option.label}
@@ -260,7 +266,7 @@
 
               <div class="field" style="width: 120px">
                 <label for={'value-' + index}>Value</label>
-                <input
+                <Input
                   id={'value-' + index}
                   type="text"
                   value={option.value}
@@ -271,7 +277,7 @@
 
               <div class="field" style="width: 80px">
                 <label for={'icon-' + index}>Icon</label>
-                <input
+                <Input
                   id={'icon-' + index}
                   type="text"
                   value={option.icon || ''}
@@ -283,7 +289,7 @@
 
             <div class="field">
               <label for={'desc-' + index}>Description (optional)</label>
-              <input
+              <Input
                 id={'desc-' + index}
                 type="text"
                 value={option.description || ''}
@@ -296,7 +302,7 @@
             <div class="field-row">
               <div class="field">
                 <label for={'img-' + index}>Image URL (optional)</label>
-                <input
+                <Input
                   id={'img-' + index}
                   type="url"
                   value={option.image || ''}
@@ -318,34 +324,32 @@
 
               <div class="field" style="width: 80px">
                 <label for={'hotkey-' + index}>Hotkey</label>
-                <input
+                <Input
                   id={'hotkey-' + index}
                   type="text"
+                  maxLength={1}
                   value={option.hotkey || ''}
                   oninput={(e) =>
                     updateOption(index, { hotkey: e.currentTarget.value || undefined })}
                   placeholder="1"
-                  maxlength="1"
                 />
               </div>
             </div>
 
             {#if question.config?.responseType?.type === 'multiple'}
-              <label class="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={option.exclusive || false}
-                  onchange={() => toggleExclusive(index)}
-                />
-                <span>Exclusive option (deselects others when selected)</span>
-              </label>
+              <Checkbox
+                id={'exclusive-' + index}
+                label="Exclusive option (deselects others when selected)"
+                checked={option.exclusive || false}
+                onchange={() => toggleExclusive(index)}
+              />
             {/if}
           </div>
         </div>
       {/each}
     </div>
 
-    <button class="add-button" onclick={addOption}> + Add Option </button>
+    <Button variant="outline" size="sm" class="w-full mt-3" onclick={addOption}>+ Add Option</Button>
   </div>
 
   <div class="form-section">
@@ -386,12 +390,12 @@
     {#if question.config?.layout === 'grid'}
       <div class="field">
         <label for="grid-columns">Columns</label>
-        <input
+        <Input
           id="grid-columns"
           type="number"
           min="2"
           max="4"
-          value={question.config?.columns || 2}
+          value={String(question.config?.columns ?? 2)}
           oninput={(e) => updateConfig({ columns: parseInt(e.currentTarget.value) || 2 })}
         />
       </div>
@@ -400,23 +404,23 @@
 
   <div class="form-section">
     <h3>Options</h3>
-    <label class="checkbox-label">
-      <input
-        type="checkbox"
+    <div class="checkbox-label">
+      <Checkbox
+        id="mc-randomize"
+        label="Randomize option order"
         checked={question.config?.randomizeOptions || false}
         onchange={(e) => updateConfig({ randomizeOptions: e.currentTarget.checked })}
       />
-      <span>Randomize option order</span>
-    </label>
+    </div>
 
-    <label class="checkbox-label">
-      <input
-        type="checkbox"
+    <div class="checkbox-label">
+      <Checkbox
+        id="mc-other-option"
+        label={'Include "Other" option with text input'}
         checked={question.config?.otherOption || false}
         onchange={(e) => updateConfig({ otherOption: e.currentTarget.checked })}
       />
-      <span>Include "Other" option with text input</span>
-    </label>
+    </div>
   </div>
 </div>
 
@@ -483,30 +487,6 @@
     gap: 0.25rem;
   }
 
-  .icon-button {
-    padding: 0.25rem 0.5rem;
-    background: hsl(var(--muted));
-    border: none;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    font-size: 0.875rem;
-    transition: all 0.15s;
-  }
-
-  .icon-button:hover:not(:disabled) {
-    background: hsl(var(--accent));
-  }
-
-  .icon-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .icon-button.danger:hover:not(:disabled) {
-    background: hsl(var(--destructive) / 0.1);
-    color: hsl(var(--destructive));
-  }
-
   .option-fields {
     display: flex;
     flex-direction: column;
@@ -565,22 +545,4 @@
     margin-top: 0.5rem;
   }
 
-  .add-button {
-    margin-top: 0.75rem;
-    padding: 0.5rem 1rem;
-    border: 2px dashed hsl(var(--border));
-    border-radius: 0.375rem;
-    background: transparent;
-    color: hsl(var(--muted-foreground));
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-    width: 100%;
-  }
-
-  .add-button:hover {
-    border-color: hsl(var(--primary));
-    color: hsl(var(--primary));
-    background: hsl(var(--primary) / 0.05);
-  }
 </style>

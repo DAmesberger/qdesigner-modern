@@ -1,6 +1,6 @@
 <script lang="ts">
   interface Props {
-    type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search';
+    type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search' | 'date';
     value?: string;
     placeholder?: string;
     disabled?: boolean;
@@ -11,6 +11,9 @@
     name?: string;
     describedby?: string;
     pattern?: string;
+    min?: number | string;
+    max?: number | string;
+    step?: number | string;
     minLength?: number;
     maxLength?: number;
     inputmode?: 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search';
@@ -37,6 +40,9 @@
     name = undefined,
     describedby = undefined,
     pattern = undefined,
+    min = undefined,
+    max = undefined,
+    step = undefined,
     minLength = undefined,
     maxLength = undefined,
     inputmode = undefined,
@@ -72,6 +78,9 @@
   {readonly}
   {required}
   {pattern}
+  {min}
+  {max}
+  {step}
   minlength={minLength}
   maxlength={maxLength}
   inputmode={inputmode}

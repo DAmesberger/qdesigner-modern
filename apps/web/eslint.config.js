@@ -118,6 +118,36 @@ export default [
     },
   },
   {
+    // Design-system guard (P8-T5, F038): authoring surfaces must use the shipped
+    // `lib/components/ui` primitives (Input/Select/Checkbox/Button/FormGroup)
+    // instead of bespoke raw <input>/<button> markup. Warn-level so CI stays
+    // green while regressions surface in review. Participant surfaces
+    // (lib/fillout, the (fillout) route, and the module *render* components)
+    // keep bespoke styling by design and are out of scope; the ui primitives
+    // themselves are the intended raw-element home.
+    files: [
+      'src/routes/**/*.svelte',
+      'src/lib/components/**/*.svelte',
+      'src/lib/modules/**/*Designer.svelte',
+    ],
+    ignores: ['src/lib/components/ui/**', 'src/routes/(fillout)/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: "SvelteElement[name.name='input']",
+          message:
+            'Use the `Input`/`Checkbox` primitives from `$lib/components/ui` instead of a raw <input>. Participant-facing surfaces are exempt (see eslint.config.js).',
+        },
+        {
+          selector: "SvelteElement[name.name='button']",
+          message:
+            'Use the `Button` primitive from `$lib/components/ui` instead of a raw <button>. Participant-facing surfaces are exempt (see eslint.config.js).',
+        },
+      ],
+    },
+  },
+  {
     ignores: ['dist/', 'build/', '.svelte-kit/', 'node_modules/', 'playwright-report/', 'test-results/'],
   },
 ];

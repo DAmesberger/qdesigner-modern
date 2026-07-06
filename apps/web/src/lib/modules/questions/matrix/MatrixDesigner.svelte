@@ -4,6 +4,8 @@
   import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Edit, Trash } from 'lucide-svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
 
   interface MatrixRow {
     id: string;
@@ -161,17 +163,21 @@
     <h4 class="section-title">Display Options</h4>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.stickyHeaders} class="checkbox" />
-        <span>Sticky column headers</span>
-      </label>
+      <Checkbox
+        id="matrix-sticky-headers"
+        label="Sticky column headers"
+        checked={question.config.stickyHeaders ?? false}
+        onchange={(e) => (question.config.stickyHeaders = e.currentTarget.checked)}
+      />
     </div>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.alternateRowColors} class="checkbox" />
-        <span>Alternate row colors</span>
-      </label>
+      <Checkbox
+        id="matrix-alt-row-colors"
+        label="Alternate row colors"
+        checked={question.config.alternateRowColors ?? false}
+        onchange={(e) => (question.config.alternateRowColors = e.currentTarget.checked)}
+      />
     </div>
 
     <div class="form-group">
@@ -192,22 +198,18 @@
       {#each rows as row, index}
         {#if editingRow?.id === row.id}
           <div class="edit-item">
-            <input
+            <Input type="text" bind:value={editingRow.label} placeholder="Row label" />
+            <Input
               type="text"
-              bind:value={editingRow.label}
-              class="input"
-              placeholder="Row label"
-            />
-            <input
-              type="text"
-              bind:value={editingRow.description}
-              class="input"
+              value={editingRow.description ?? ''}
+              oninput={(e) => editingRow && (editingRow.description = e.currentTarget.value)}
               placeholder="Description (optional)"
             />
-            <label class="checkbox-label">
-              <input type="checkbox" bind:checked={editingRow.required} class="checkbox" />
-              <span>Required</span>
-            </label>
+            <Checkbox
+              label="Required"
+              checked={editingRow.required ?? false}
+              onchange={(e) => editingRow && (editingRow.required = e.currentTarget.checked)}
+            />
             <div class="edit-actions">
               <Button variant="primary" size="sm" onclick={() => updateRow(editingRow!)}> Save </Button>
               <Button variant="secondary" size="sm" onclick={() => (editingRow = null)}>
@@ -263,11 +265,11 @@
     </div>
 
     <div class="add-item">
-      <input
+      <Input
         type="text"
+        class="flex-1"
         bind:value={newRowLabel}
         placeholder="Add new row..."
-        class="input"
         onkeydown={(e) => e.key === 'Enter' && addRow()}
       />
       <Button variant="secondary" size="sm" onclick={addRow} disabled={!newRowLabel.trim()}>
@@ -284,24 +286,14 @@
       {#each columns as column, index}
         {#if editingColumn?.id === column.id}
           <div class="edit-item">
-            <input
-              type="text"
-              bind:value={editingColumn.label}
-              class="input"
-              placeholder="Column label"
-            />
+            <Input type="text" bind:value={editingColumn.label} placeholder="Column label" />
             {#if responseType !== 'scale'}
-              <input
-                type="text"
-                bind:value={editingColumn.value}
-                class="input"
-                placeholder="Value"
-              />
+              <Input type="text" bind:value={editingColumn.value} placeholder="Value" />
             {/if}
-            <input
+            <Input
               type="text"
-              bind:value={editingColumn.width}
-              class="input"
+              value={editingColumn.width ?? ''}
+              oninput={(e) => editingColumn && (editingColumn.width = e.currentTarget.value)}
               placeholder="Width (e.g., 100px, 20%)"
             />
             <div class="edit-actions">
@@ -365,19 +357,19 @@
     </div>
 
     <div class="add-item">
-      <input
+      <Input
         type="text"
+        class="flex-1"
         bind:value={newColumnLabel}
         placeholder="Column label..."
-        class="input"
         onkeydown={(e) => e.key === 'Enter' && addColumn()}
       />
       {#if responseType !== 'scale'}
-        <input
+        <Input
           type="text"
+          class="flex-1"
           bind:value={newColumnValue}
           placeholder="Value (optional)"
-          class="input"
           onkeydown={(e) => e.key === 'Enter' && addColumn()}
         />
       {/if}
@@ -406,39 +398,6 @@
     font-size: 0.875rem;
     font-weight: 500;
     color: hsl(var(--foreground));
-  }
-
-  .input {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    background: hsl(var(--background));
-    transition: all 0.15s;
-  }
-
-  .input:hover {
-    border-color: hsl(var(--border));
-  }
-
-  .input:focus {
-    outline: none;
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
-  .checkbox {
-    width: 1rem;
-    height: 1rem;
-    cursor: pointer;
   }
 
   .section {
@@ -529,8 +488,5 @@
     gap: 0.5rem;
   }
 
-  .add-item .input {
-    flex: 1;
-  }
 
 </style>

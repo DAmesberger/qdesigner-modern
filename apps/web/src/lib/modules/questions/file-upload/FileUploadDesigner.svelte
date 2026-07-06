@@ -2,6 +2,8 @@
   import type { Question } from '$lib/shared';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
 
   interface FileUploadConfig {
     accept?: string[];
@@ -101,11 +103,11 @@
   <div class="form-group">
     <span class="label-text">Accepted File Types</span>
     <div class="accept-types-input">
-      <input
+      <Input
         type="text"
+        class="flex-1"
         bind:value={newAcceptType}
         placeholder="e.g., .jpg, image/*, .pdf"
-        class="input"
         onkeydown={(e) => e.key === 'Enter' && addAcceptType()}
       />
       <Button variant="secondary" size="sm" onclick={addAcceptType} disabled={!newAcceptType}>
@@ -131,13 +133,14 @@
         {#each question.config.accept as type}
           <div class="accept-type-item">
             <span>{type}</span>
-            <button
-              class="remove-btn"
+            <Button
+              variant="ghost"
+              size="sm"
               onclick={() => removeAcceptType(type)}
               aria-label="Remove type"
             >
               ✕
-            </button>
+            </Button>
           </div>
         {/each}
       </div>
@@ -159,13 +162,14 @@
   <!-- File Count -->
   <div class="form-group">
     <label for="max-files">Maximum Files</label>
-    <input
+    <Input
       id="max-files"
       type="number"
-      bind:value={question.config.maxFiles}
       min="1"
       max="100"
-      class="input"
+      value={question.config.maxFiles != null ? String(question.config.maxFiles) : ''}
+      oninput={(e) =>
+        (question.config.maxFiles = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
     />
     <p class="help-text">Allow multiple file uploads (1 = single file only)</p>
   </div>
@@ -193,10 +197,12 @@
     </div>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.saveMetadata} class="checkbox" />
-        <span>Save file metadata (last modified, upload time)</span>
-      </label>
+      <Checkbox
+        id="file-save-metadata"
+        label="Save file metadata (last modified, upload time)"
+        checked={question.config.saveMetadata ?? false}
+        onchange={(e) => (question.config.saveMetadata = e.currentTarget.checked)}
+      />
     </div>
   </div>
 
@@ -205,24 +211,30 @@
     <h4 class="section-title">User Interface</h4>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.dragDrop} class="checkbox" />
-        <span>Enable drag & drop upload</span>
-      </label>
+      <Checkbox
+        id="file-drag-drop"
+        label="Enable drag & drop upload"
+        checked={question.config.dragDrop ?? false}
+        onchange={(e) => (question.config.dragDrop = e.currentTarget.checked)}
+      />
     </div>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.showPreview} class="checkbox" />
-        <span>Show file preview (images only)</span>
-      </label>
+      <Checkbox
+        id="file-show-preview"
+        label="Show file preview (images only)"
+        checked={question.config.showPreview ?? false}
+        onchange={(e) => (question.config.showPreview = e.currentTarget.checked)}
+      />
     </div>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.autoUpload} class="checkbox" />
-        <span>Auto-process files on selection</span>
-      </label>
+      <Checkbox
+        id="file-auto-upload"
+        label="Auto-process files on selection"
+        checked={question.config.autoUpload ?? false}
+        onchange={(e) => (question.config.autoUpload = e.currentTarget.checked)}
+      />
     </div>
   </div>
 
@@ -284,39 +296,6 @@
     color: hsl(var(--foreground));
   }
 
-  .input {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    background: hsl(var(--background));
-    transition: all 0.15s;
-  }
-
-  .input:hover {
-    border-color: hsl(var(--border));
-  }
-
-  .input:focus {
-    outline: none;
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
-  .checkbox {
-    width: 1rem;
-    height: 1rem;
-    cursor: pointer;
-  }
-
   .section {
     margin-top: 2rem;
     padding-top: 1.5rem;
@@ -345,10 +324,6 @@
     margin-bottom: 0.5rem;
   }
 
-  .accept-types-input .input {
-    flex: 1;
-  }
-
   .preset-selector {
     display: flex;
     gap: 0.5rem;
@@ -371,19 +346,6 @@
     border: 1px solid hsl(var(--border));
     border-radius: 0.375rem;
     font-size: 0.875rem;
-  }
-
-  .remove-btn {
-    padding: 0.125rem;
-    border: none;
-    background: none;
-    color: hsl(var(--muted-foreground));
-    cursor: pointer;
-    line-height: 1;
-  }
-
-  .remove-btn:hover {
-    color: hsl(var(--destructive));
   }
 
   /* Preview */

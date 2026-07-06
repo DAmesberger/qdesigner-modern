@@ -10,6 +10,7 @@
   import DescriptiveStatsWidget from '$lib/analytics/components/DescriptiveStatsWidget.svelte';
   import ReliabilityPanel from '$lib/components/analytics/ReliabilityPanel.svelte';
   import IRTPanel from '$lib/components/analytics/IRTPanel.svelte';
+  import Skeleton from '$lib/components/ui/Skeleton.svelte';
 
   interface Props {
     data: QuestionnaireAnalyticsData;
@@ -302,7 +303,15 @@
     </div>
 
     {#if loading}
-      <div class="h-48 flex items-center justify-center text-muted-foreground">Loading...</div>
+      <!-- Chart-shaped skeleton during the async timeseries refetch (interval change). -->
+      <div class="space-y-2">
+        <Skeleton variant="rounded" width="100%" height="12rem" />
+        <div class="flex items-center gap-4">
+          <Skeleton variant="text" width="4rem" />
+          <Skeleton variant="text" width="4rem" />
+          <Skeleton variant="text" width="6rem" className="ml-auto" />
+        </div>
+      </div>
     {:else if timeseries.length === 0}
       <div class="h-48 flex items-center justify-center text-muted-foreground">No data yet</div>
     {:else}

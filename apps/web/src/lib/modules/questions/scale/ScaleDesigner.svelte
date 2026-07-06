@@ -1,6 +1,9 @@
 <script lang="ts">
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
 
   interface ScaleConfig {
     min: number;
@@ -111,32 +114,32 @@
     <div class="form-row">
       <div class="field">
         <label for="scale-min">Minimum</label>
-        <input
+        <Input
           id="scale-min"
           type="number"
-          value={question.config?.min || 1}
+          value={String(question.config?.min ?? 1)}
           oninput={(e) => updateConfig({ min: parseInt(e.currentTarget.value) || 0 })}
         />
       </div>
 
       <div class="field">
         <label for="scale-max">Maximum</label>
-        <input
+        <Input
           id="scale-max"
           type="number"
-          value={question.config?.max || 10}
+          value={String(question.config?.max ?? 10)}
           oninput={(e) => updateConfig({ max: parseInt(e.currentTarget.value) || 10 })}
         />
       </div>
 
       <div class="field">
         <label for="scale-step">Step</label>
-        <input
+        <Input
           id="scale-step"
           type="number"
           min="0.1"
           step="0.1"
-          value={question.config?.step || 1}
+          value={String(question.config?.step ?? 1)}
           oninput={(e) => updateConfig({ step: parseFloat(e.currentTarget.value) || 1 })}
         />
       </div>
@@ -226,34 +229,34 @@
   <div class="form-section">
     <h3>Display Options</h3>
 
-    <label class="checkbox-label">
-      <input
-        type="checkbox"
+    <div class="checkbox-label">
+      <Checkbox
+        id="scale-show-value"
+        label="Show selected value"
         checked={question.config?.showValue ?? true}
         onchange={(e) => updateConfig({ showValue: e.currentTarget.checked })}
       />
-      <span>Show selected value</span>
-    </label>
+    </div>
 
-    <label class="checkbox-label">
-      <input
-        type="checkbox"
+    <div class="checkbox-label">
+      <Checkbox
+        id="scale-show-labels"
+        label="Show labels"
         checked={question.config?.showLabels ?? true}
         onchange={(e) => updateConfig({ showLabels: e.currentTarget.checked })}
       />
-      <span>Show labels</span>
-    </label>
+    </div>
 
     <div class="field">
       <label
         >Default Value (optional)
-        <input
+        <Input
           type="number"
           min={question.config.min}
           max={question.config.max}
           step={question.config.step}
           placeholder="No default"
-          value={question.config?.defaultValue || ''}
+          value={question.config?.defaultValue != null ? String(question.config.defaultValue) : ''}
           oninput={(e) =>
             updateConfig({
               defaultValue: e.currentTarget.value ? parseFloat(e.currentTarget.value) : undefined,
@@ -274,12 +277,12 @@
             <div class="field">
               <label
                 >Value
-                <input
+                <Input
                   type="number"
                   min={question.config.min}
                   max={question.config.max}
                   step={question.config.step}
-                  value={label.value}
+                  value={String(label.value)}
                   oninput={(e) =>
                     updateLabel(index, 'value', parseFloat(e.currentTarget.value) || 0)}
                 />
@@ -289,7 +292,7 @@
             <div class="field flex-1">
               <label
                 >Label
-                <input
+                <Input
                   type="text"
                   value={label.label}
                   oninput={(e) => updateLabel(index, 'label', e.currentTarget.value)}
@@ -298,15 +301,15 @@
               </label>
             </div>
 
-            <button class="remove-button" onclick={() => removeLabel(index)} title="Remove label">
+            <Button variant="ghost" size="sm" onclick={() => removeLabel(index)} aria-label="Remove label">
               ×
-            </button>
+            </Button>
           </div>
 
           <div class="field full-width">
             <label
               >Description (optional)
-              <input
+              <Input
                 type="text"
                 value={label.description || ''}
                 oninput={(e) =>
@@ -319,7 +322,7 @@
       {/each}
     </div>
 
-    <button class="add-button" onclick={addLabel}> + Add Label </button>
+    <Button variant="outline" size="sm" class="w-full mt-3" onclick={addLabel}>+ Add Label</Button>
   </div>
 </div>
 
@@ -374,19 +377,6 @@
     color: hsl(var(--foreground));
   }
 
-  .field input {
-    padding: 0.5rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-  }
-
-  .field input:focus {
-    outline: none;
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
-  }
-
   .radio-group {
     display: flex;
     flex-direction: column;
@@ -429,38 +419,4 @@
     margin-bottom: 0.5rem;
   }
 
-  .remove-button {
-    padding: 0.5rem 0.75rem;
-    background: hsl(var(--destructive) / 0.15);
-    color: hsl(var(--destructive));
-    border: none;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    font-size: 1.25rem;
-    line-height: 1;
-    transition: all 0.15s;
-  }
-
-  .remove-button:hover {
-    background: hsl(var(--destructive) / 0.2);
-  }
-
-  .add-button {
-    margin-top: 0.75rem;
-    padding: 0.5rem 1rem;
-    border: 2px dashed hsl(var(--border));
-    border-radius: 0.375rem;
-    background: transparent;
-    color: hsl(var(--muted-foreground));
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-    width: 100%;
-  }
-
-  .add-button:hover {
-    border-color: hsl(var(--primary));
-    color: hsl(var(--primary));
-    background: hsl(var(--primary) / 0.1);
-  }
 </style>

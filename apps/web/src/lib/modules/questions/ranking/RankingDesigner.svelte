@@ -4,6 +4,8 @@
   import { ChevronUp, ChevronDown, Edit, Copy, Trash } from 'lucide-svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
 
   interface RankingItem {
     id: string;
@@ -99,10 +101,9 @@
       {#each items as item, index}
         {#if editingItem?.id === item.id}
           <div class="edit-item">
-            <input
+            <Input
               type="text"
               bind:value={editingItem.label}
-              class="input"
               placeholder="Item label"
               onkeydown={(e) => e.key === 'Enter' && updateItem(editingItem!)}
             />
@@ -167,11 +168,11 @@
     </div>
 
     <div class="add-item">
-      <input
+      <Input
         type="text"
+        class="flex-1"
         bind:value={newItemLabel}
         placeholder="Add new item..."
-        class="input"
         onkeydown={(e) => e.key === 'Enter' && addItem()}
       />
       <Button variant="secondary" size="sm" onclick={addItem} disabled={!newItemLabel.trim()}>
@@ -197,17 +198,21 @@
     </div>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.showNumbers} class="checkbox" />
-        <span>Show rank numbers</span>
-      </label>
+      <Checkbox
+        id="ranking-show-numbers"
+        label="Show rank numbers"
+        checked={question.config.showNumbers ?? false}
+        onchange={(e) => (question.config.showNumbers = e.currentTarget.checked)}
+      />
     </div>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.animation} class="checkbox" />
-        <span>Enable drag animations</span>
-      </label>
+      <Checkbox
+        id="ranking-animation"
+        label="Enable drag animations"
+        checked={question.config.animation ?? false}
+        onchange={(e) => (question.config.animation = e.currentTarget.checked)}
+      />
     </div>
   </div>
 
@@ -216,17 +221,21 @@
     <h4 class="section-title">Behavior</h4>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.allowPartial} class="checkbox" />
-        <span>Allow partial ranking (not all items need to be ranked)</span>
-      </label>
+      <Checkbox
+        id="ranking-allow-partial"
+        label="Allow partial ranking (not all items need to be ranked)"
+        checked={question.config.allowPartial ?? false}
+        onchange={(e) => (question.config.allowPartial = e.currentTarget.checked)}
+      />
     </div>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.tieBreaking} class="checkbox" />
-        <span>Enable tie-breaking (allow equal ranks)</span>
-      </label>
+      <Checkbox
+        id="ranking-tie-breaking"
+        label="Enable tie-breaking (allow equal ranks)"
+        checked={question.config.tieBreaking ?? false}
+        onchange={(e) => (question.config.tieBreaking = e.currentTarget.checked)}
+      />
       {#if question.config.tieBreaking}
         <p class="help-text">Participants can assign the same rank to multiple items</p>
       {/if}
@@ -342,10 +351,6 @@
     gap: 0.5rem;
   }
 
-  .add-item .input {
-    flex: 1;
-  }
-
   .form-group {
     margin-bottom: 1rem;
   }
@@ -356,39 +361,6 @@
     font-size: 0.875rem;
     font-weight: 500;
     color: hsl(var(--foreground));
-  }
-
-  .input {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    background: hsl(var(--background));
-    transition: all 0.15s;
-  }
-
-  .input:hover {
-    border-color: hsl(var(--border));
-  }
-
-  .input:focus {
-    outline: none;
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
-  .checkbox {
-    width: 1rem;
-    height: 1rem;
-    cursor: pointer;
   }
 
   .help-text {

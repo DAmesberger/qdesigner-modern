@@ -37,9 +37,14 @@
       return;
     }
 
-    // For now, skip invitation check due to RLS issues
-    // TODO: Fix RLS policies for organization_invitations table
-    showCreateForm = true;
+    // Check for pending invitations addressed to this user's email.
+    // Fail open so onboarding can never dead-end if the fetch errors.
+    try {
+      pendingInvitations = await api.organizations.invitations.getPending(user.email);
+      if (pendingInvitations.length === 0) showCreateForm = true;
+    } catch {
+      showCreateForm = true;
+    }
   });
 
   async function handleAcceptInvitation(invitation: Invitation) {

@@ -2,6 +2,9 @@
   import type { Question } from '$lib/shared';
   import { X } from 'lucide-svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
 
   type RatingStyle = 'stars' | 'hearts' | 'thumbs' | 'numeric';
 
@@ -92,13 +95,13 @@
   <!-- Number of Levels -->
   <div class="form-group">
     <label for="levels">Number of Levels</label>
-    <input
+    <Input
       id="levels"
       type="number"
-      bind:value={question.config.levels}
       min="2"
       max="10"
-      class="input"
+      value={String(question.config.levels ?? 5)}
+      oninput={(e) => (question.config.levels = parseInt(e.currentTarget.value) || 2)}
     />
     <p class="help-text">How many rating options (2-10)</p>
   </div>
@@ -108,17 +111,21 @@
     <h4 class="section-title">Options</h4>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.allowHalf} class="checkbox" />
-        <span>Allow half-step ratings</span>
-      </label>
+      <Checkbox
+        id="rating-allow-half"
+        label="Allow half-step ratings"
+        checked={question.config.allowHalf ?? false}
+        onchange={(e) => (question.config.allowHalf = e.currentTarget.checked)}
+      />
     </div>
 
     <div class="form-group">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.showValue} class="checkbox" />
-        <span>Show numeric value</span>
-      </label>
+      <Checkbox
+        id="rating-show-value"
+        label="Show numeric value"
+        checked={question.config.showValue ?? false}
+        onchange={(e) => (question.config.showValue = e.currentTarget.checked)}
+      />
     </div>
   </div>
 
@@ -131,21 +138,23 @@
       {#each Array(question.config.levels || 5) as _, index}
         <div class="label-item">
           <span class="label-index">{index + 1}</span>
-          <input
-            type="text"
-            value={question.config.labels?.[index] ?? ''}
-            placeholder={index === 0 ? 'e.g. Poor' : index === (question.config.levels || 5) - 1 ? 'e.g. Excellent' : `Level ${index + 1}`}
-            oninput={(e) => updateLabel(index, e.currentTarget.value)}
-            class="input label-input"
-          />
+          <div class="label-input">
+            <Input
+              type="text"
+              value={question.config.labels?.[index] ?? ''}
+              placeholder={index === 0 ? 'e.g. Poor' : index === (question.config.levels || 5) - 1 ? 'e.g. Excellent' : `Level ${index + 1}`}
+              oninput={(e) => updateLabel(index, e.currentTarget.value)}
+            />
+          </div>
           {#if question.config.labels?.[index]}
-            <button
-              class="remove-btn"
+            <Button
+              variant="ghost"
+              size="sm"
               onclick={() => removeLabel(index)}
               aria-label="Remove label"
             >
               <X size={14} />
-            </button>
+            </Button>
           {/if}
         </div>
       {/each}
@@ -171,39 +180,6 @@
     font-size: 0.875rem;
     font-weight: 500;
     color: hsl(var(--foreground));
-  }
-
-  .input {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    background: hsl(var(--background));
-    transition: all 0.15s;
-  }
-
-  .input:hover {
-    border-color: hsl(var(--border));
-  }
-
-  .input:focus {
-    outline: none;
-    border-color: hsl(var(--primary));
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-  }
-
-  .checkbox {
-    width: 1rem;
-    height: 1rem;
-    cursor: pointer;
   }
 
   .section {
@@ -258,19 +234,4 @@
     flex: 1;
   }
 
-  .remove-btn {
-    padding: 0.25rem;
-    border: none;
-    background: none;
-    color: hsl(var(--muted-foreground));
-    cursor: pointer;
-    border-radius: 0.25rem;
-    transition: all 0.15s;
-    flex-shrink: 0;
-  }
-
-  .remove-btn:hover {
-    background: hsl(var(--border));
-    color: hsl(var(--foreground));
-  }
 </style>

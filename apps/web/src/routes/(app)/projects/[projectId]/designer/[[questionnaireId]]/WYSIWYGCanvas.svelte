@@ -7,7 +7,8 @@
   import { defaultTheme } from '$lib/shared';
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
-  import { Plus, Minus } from 'lucide-svelte';
+  import { Plus, Minus, ChevronUp, ChevronDown } from 'lucide-svelte';
+  import { onMount } from 'svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
   let questionnaireTheme = defaultTheme;
@@ -65,6 +66,48 @@
   let selectedQuestionId = $derived(
     designerStore.selectedItemType === 'question' ? designerStore.selectedItem?.id : null
   );
+
+  // Coarse-pointer (touch) detection: on touch devices the drag affordance is
+  // hard to reach, so the explicit move buttons are always shown. On fine
+  // pointers they appear only for the selected item. Mirrors the
+  // LeftSidebar/RightSidebar matchMedia drawer pattern.
+  let coarsePointer = $state(false);
+  onMount(() => {
+    const media = window.matchMedia('(pointer: coarse)');
+    const apply = () => (coarsePointer = media.matches);
+    apply();
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  });
+
+  // Tap/keyboard reorder — additive to svelte-dnd-action. Uses the collab- and
+  // autosave-integrated store method (takes fromIndex/toIndex, unlike the drag
+  // path which rebuilds the full id order via updateBlockQuestions).
+  function moveQuestion(index: number, dir: 'up' | 'down') {
+    const blockId = designerStore.currentBlock?.id;
+    if (!blockId) return;
+    const target = dir === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= items.length) return;
+    designerStore.reorderQuestionsInBlock(blockId, index, target);
+  }
+
+  function handleMoveClick(e: MouseEvent, index: number, dir: 'up' | 'down') {
+    // Stop propagation so the button never triggers item selection or the dnd
+    // pointer path.
+    e.stopPropagation();
+    moveQuestion(index, dir);
+  }
+
+  function handleItemKeydown(e: KeyboardEvent, index: number) {
+    if (!e.altKey) return;
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveQuestion(index, 'up');
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveQuestion(index, 'down');
+    }
+  }
 
   // --- List windowing (soft cap + lazy mount) -----------------------------
   // svelte-dnd-action requires a 1:1 DOM child <-> items mapping, so we keep
@@ -285,17 +328,54 @@
                 onfinalize={handleDndFinalize}
                 data-testid="designer-question-list"
               >
-                {#each items as item (item.id)}
+                {#each items as item, index (item.id)}
                   {@const isSelected = selectedQuestionId === item.id}
                   {@const shouldMount = !virtualize || mountedIds.has(item.id)}
+                  <!-- Alt+Arrow reorder is handled at the wrapper level so it fires when any
+                       focusable child (the question renderer) is focused; the wrapper itself
+                       is not a tab stop. -->
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
                   <div
                     animate:flip={{ duration: 300 }}
                     use:lazyMount={{ id: item.id, enabled: virtualize, root: scrollRoot }}
+                    onkeydown={(e) => handleItemKeydown(e, index)}
                     class="relative rounded-xl transition-all duration-200 {isSelected
                       ? 'ring-2 ring-primary shadow-[var(--shadow-glow)]'
                       : 'hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5'}"
                     data-testid={`designer-question-${item.id}`}
                   >
+                    {#if isSelected || coarsePointer}
+                      <!-- Tap/keyboard reorder affordance (additive to dnd). Alt+ArrowUp/Down
+                           on the focused item does the same via handleItemKeydown. -->
+                      <div
+                        class="absolute left-1 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-0.5 rounded-lg border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] p-0.5 shadow-[var(--shadow-sm)] backdrop-blur-[var(--glass-blur)]"
+                      >
+                        <button
+                          type="button"
+                          onclick={(e) => handleMoveClick(e, index, 'up')}
+                          onpointerdown={(e) => e.stopPropagation()}
+                          disabled={index === 0}
+                          class="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                          aria-label="Move question up"
+                          title="Move question up"
+                          data-testid={`designer-question-move-up-${item.id}`}
+                        >
+                          <ChevronUp class="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onclick={(e) => handleMoveClick(e, index, 'down')}
+                          onpointerdown={(e) => e.stopPropagation()}
+                          disabled={index === items.length - 1}
+                          class="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                          aria-label="Move question down"
+                          title="Move question down"
+                          data-testid={`designer-question-move-down-${item.id}`}
+                        >
+                          <ChevronDown class="h-4 w-4" />
+                        </button>
+                      </div>
+                    {/if}
                     {#if !shouldMount}
                       <!-- Lazy placeholder: keeps the dnd child slot + approximate height -->
                       <div

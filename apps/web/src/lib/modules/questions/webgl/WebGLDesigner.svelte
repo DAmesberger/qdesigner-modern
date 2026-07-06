@@ -2,6 +2,8 @@
   import type { Question } from '$lib/shared';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import Input from '$lib/components/ui/forms/Input.svelte';
+  import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
   import type { WebGLContent, WebGLConfig } from './model/webgl-config';
   import { normalizeWebGLQuestionConfig } from './model/webgl-config';
 
@@ -192,41 +194,38 @@
         {#if shapeContent.type === 'circle'}
           <div class="mb-4">
             <label for="radius">Radius (px)</label>
-            <input
+            <Input
               id="radius"
               type="number"
-              value={shapeContent.properties.radius || 50}
+              value={String(shapeContent.properties.radius ?? 50)}
               oninput={(e) => updateShapeProperty('radius', Number(e.currentTarget.value))}
               min="1"
               max="300"
-              class="input"
             />
           </div>
         {:else}
           <div class="mb-4">
             <label for="width">Width (px)</label>
-            <input
+            <Input
               id="width"
               type="number"
-              value={shapeContent.properties.width || 100}
+              value={String(shapeContent.properties.width ?? 100)}
               oninput={(e) => updateShapeProperty('width', Number(e.currentTarget.value))}
               min="1"
               max="500"
-              class="input"
             />
           </div>
 
           {#if shapeContent.type === 'rectangle'}
             <div class="mb-4">
               <label for="height">Height (px)</label>
-              <input
+              <Input
                 id="height"
                 type="number"
-                value={shapeContent.properties.height || 100}
+                value={String(shapeContent.properties.height ?? 100)}
                 oninput={(e) => updateShapeProperty('height', Number(e.currentTarget.value))}
                 min="1"
                 max="500"
-                class="input"
               />
             </div>
           {/if}
@@ -274,14 +273,14 @@
 
       <div class="mb-4">
         {#if question.config.stimulus.fixation}
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              bind:checked={question.config.stimulus.fixation.show}
-              class="w-4 h-4 cursor-pointer"
-            />
-            <span>Show fixation</span>
-          </label>
+          <Checkbox
+            id="webgl-fixation-show"
+            label="Show fixation"
+            checked={question.config.stimulus.fixation.show ?? false}
+            onchange={(e) =>
+              question.config.stimulus.fixation &&
+              (question.config.stimulus.fixation.show = e.currentTarget.checked)}
+          />
         {/if}
       </div>
 
@@ -299,14 +298,18 @@
 
         <div class="mb-4">
           <label for="fixation-duration">Duration (ms)</label>
-          <input
+          <Input
             id="fixation-duration"
             type="number"
-            bind:value={question.config.stimulus.fixation.duration}
             min="100"
             max="5000"
             step="100"
-            class="input"
+            value={question.config.stimulus.fixation.duration != null
+              ? String(question.config.stimulus.fixation.duration)
+              : ''}
+            oninput={(e) =>
+              question.config.stimulus.fixation &&
+              (question.config.stimulus.fixation.duration = Number(e.currentTarget.value))}
           />
         </div>
 
@@ -340,11 +343,11 @@
       <div class="mb-4">
         <span class="block mb-1.5 text-sm font-medium text-foreground">Valid Keys</span>
         <div class="flex gap-2 mb-2">
-          <input
+          <Input
             type="text"
+            class="flex-1"
             bind:value={newValidKey}
             placeholder="Enter key (e.g., 'a', 'Enter')"
-            class="input flex-1"
             onkeydown={(e) => e.key === 'Enter' && addValidKey()}
           />
           <Button variant="secondary" size="sm" onclick={addValidKey} disabled={!newValidKey}>
@@ -357,13 +360,14 @@
             {#each question.config.response.validKeys as key}
               <div class="flex items-center gap-2 px-3 py-1.5 bg-muted border border-border rounded-md">
                 <span class="font-mono text-sm font-medium text-foreground">{key === ' ' ? 'SPACE' : key.toUpperCase()}</span>
-                <button
-                  class="remove-btn"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onclick={() => removeValidKey(key)}
                   aria-label="Remove key"
                 >
                   ✕
-                </button>
+                </Button>
               </div>
             {/each}
           </div>
@@ -371,14 +375,12 @@
       </div>
 
       <div class="mb-4">
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            bind:checked={question.config.response.requireCorrect}
-            class="w-4 h-4 cursor-pointer"
-          />
-          <span>Require correct response</span>
-        </label>
+        <Checkbox
+          id="webgl-require-correct"
+          label="Require correct response"
+          checked={question.config.response.requireCorrect ?? false}
+          onchange={(e) => (question.config.response.requireCorrect = e.currentTarget.checked)}
+        />
       </div>
 
       {#if question.config.response.requireCorrect}
@@ -416,67 +418,75 @@
 
     <div class="mb-4">
       <label for="pre-delay">Pre-stimulus Delay (ms)</label>
-      <input
+      <Input
         id="pre-delay"
         type="number"
-        bind:value={question.config.timing.preDelay}
         min="0"
         max="10000"
         step="100"
-        class="input"
+        value={question.config.timing.preDelay != null ? String(question.config.timing.preDelay) : ''}
+        oninput={(e) => (question.config.timing.preDelay = Number(e.currentTarget.value))}
       />
     </div>
 
     <div class="mb-4">
       <label for="post-fixation-delay">Post-fixation Delay (ms)</label>
-      <input
+      <Input
         id="post-fixation-delay"
         type="number"
-        bind:value={question.config.timing.postFixationDelay}
         min="0"
         max="5000"
         step="100"
-        class="input"
+        value={question.config.timing.postFixationDelay != null
+          ? String(question.config.timing.postFixationDelay)
+          : ''}
+        oninput={(e) => (question.config.timing.postFixationDelay = Number(e.currentTarget.value))}
       />
     </div>
 
     <div class="mb-4">
       <label for="stimulus-duration">Stimulus Duration (ms)</label>
-      <input
+      <Input
         id="stimulus-duration"
         type="number"
-        bind:value={question.config.timing.stimulusDuration}
         min="0"
         max="10000"
         step="100"
-        class="input"
+        value={question.config.timing.stimulusDuration != null
+          ? String(question.config.timing.stimulusDuration)
+          : ''}
+        oninput={(e) => (question.config.timing.stimulusDuration = Number(e.currentTarget.value))}
       />
       <p class="mt-1 text-xs text-muted-foreground">0 = stimulus remains until response</p>
     </div>
 
     <div class="mb-4">
       <label for="response-duration">Response Timeout (ms)</label>
-      <input
+      <Input
         id="response-duration"
         type="number"
-        bind:value={question.config.timing.responseDuration}
         min="500"
         max="30000"
         step="100"
-        class="input"
+        value={question.config.timing.responseDuration != null
+          ? String(question.config.timing.responseDuration)
+          : ''}
+        oninput={(e) => (question.config.timing.responseDuration = Number(e.currentTarget.value))}
       />
     </div>
 
     <div class="mb-4">
       <label for="iti">Inter-trial Interval (ms)</label>
-      <input
+      <Input
         id="iti"
         type="number"
-        bind:value={question.config.timing.interTrialInterval}
         min="0"
         max="5000"
         step="100"
-        class="input"
+        value={question.config.timing.interTrialInterval != null
+          ? String(question.config.timing.interTrialInterval)
+          : ''}
+        oninput={(e) => (question.config.timing.interTrialInterval = Number(e.currentTarget.value))}
       />
     </div>
   </div>
@@ -498,27 +508,26 @@
     </div>
 
     <div class="mb-4">
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" bind:checked={question.config.rendering.vsync} class="w-4 h-4 cursor-pointer" />
-        <span>Enable V-Sync</span>
-      </label>
+      <Checkbox
+        id="webgl-vsync"
+        label="Enable V-Sync"
+        checked={question.config.rendering.vsync ?? false}
+        onchange={(e) => (question.config.rendering.vsync = e.currentTarget.checked)}
+      />
     </div>
 
     <div class="mb-4">
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input
-          type="checkbox"
-          bind:checked={question.config.rendering.antialias}
-          class="w-4 h-4 cursor-pointer"
-        />
-        <span>Enable Antialiasing</span>
-      </label>
+      <Checkbox
+        id="webgl-antialias"
+        label="Enable Antialiasing"
+        checked={question.config.rendering.antialias ?? false}
+        onchange={(e) => (question.config.rendering.antialias = e.currentTarget.checked)}
+      />
     </div>
   </div>
 </div>
 
 <style>
-  .input,
   .textarea {
     width: 100%;
     padding: 0.5rem 0.75rem;
@@ -527,19 +536,14 @@
     font-size: 0.875rem;
     background: hsl(var(--background));
     transition: all 0.15s;
-  }
-
-  .textarea {
     font-family: monospace;
     resize: vertical;
   }
 
-  .input:hover,
   .textarea:hover {
     border-color: hsl(var(--border));
   }
 
-  .input:focus,
   .textarea:focus {
     outline: none;
     border-color: hsl(var(--primary));
@@ -565,16 +569,4 @@
     gap: 0.5rem;
   }
 
-  .remove-btn {
-    padding: 0.125rem;
-    border: none;
-    background: none;
-    color: hsl(var(--muted-foreground));
-    cursor: pointer;
-    line-height: 1;
-  }
-
-  .remove-btn:hover {
-    color: hsl(var(--destructive));
-  }
 </style>
