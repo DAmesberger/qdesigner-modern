@@ -41,6 +41,13 @@ pub enum AuditAction {
     ProjectMemberAdded,
     ProjectMemberRoleChanged,
     ProjectMemberRemoved,
+    // Custom roles / granular permissions (E-RBAC-3).
+    RoleCreated,
+    RoleUpdated,
+    RoleDeleted,
+    /// A member was (re)assigned a custom role, or had it cleared — the
+    /// "permission granted/revoked" event of E-RBAC-3 step 8.
+    MemberCustomRoleAssigned,
 }
 
 impl AuditAction {
@@ -58,6 +65,10 @@ impl AuditAction {
             AuditAction::ProjectMemberAdded => "project_member.added",
             AuditAction::ProjectMemberRoleChanged => "project_member.role_changed",
             AuditAction::ProjectMemberRemoved => "project_member.removed",
+            AuditAction::RoleCreated => "role.created",
+            AuditAction::RoleUpdated => "role.updated",
+            AuditAction::RoleDeleted => "role.deleted",
+            AuditAction::MemberCustomRoleAssigned => "member.custom_role_assigned",
         }
     }
 }
@@ -71,6 +82,7 @@ pub mod resource {
     pub const DOMAIN: &str = "domain";
     pub const PROJECT: &str = "project";
     pub const PROJECT_MEMBER: &str = "project_member";
+    pub const ROLE: &str = "org_role";
 }
 
 /// One privileged action to append to the log.

@@ -20,6 +20,7 @@ pub mod media;
 pub mod organizations;
 pub mod projects;
 pub mod questionnaires;
+pub mod roles;
 pub mod sessions;
 pub mod templates;
 pub mod users;
@@ -109,6 +110,18 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/{id}/analytics", get(sessions::cross_project_analytics))
         .route("/{id}/audit", get(organizations::list_audit_events))
+        .route(
+            "/{id}/roles",
+            get(roles::list_roles).post(roles::create_role),
+        )
+        .route(
+            "/{id}/roles/{role_id}",
+            patch(roles::update_role).delete(roles::delete_role),
+        )
+        .route(
+            "/{id}/members/{user_id}/custom-role",
+            put(roles::assign_member_role),
+        )
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 

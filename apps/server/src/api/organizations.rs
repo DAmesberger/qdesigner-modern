@@ -69,6 +69,10 @@ pub struct OrgMember {
     pub role: String,
     pub status: String,
     pub joined_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Assigned custom role (E-RBAC-3), if any — its permissions override the
+    /// `role` tier's defaults for this member.
+    pub custom_role_id: Option<Uuid>,
+    pub custom_role_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
@@ -573,9 +577,11 @@ pub async fn list_members(
 
     let members = sqlx::query_as::<_, OrgMember>(
         r#"
-        SELECT u.id AS user_id, u.email, u.full_name, om.role, om.status, om.joined_at
+        SELECT u.id AS user_id, u.email, u.full_name, om.role, om.status, om.joined_at,
+               om.custom_role_id, r.name AS custom_role_name
         FROM organization_members om
         JOIN users u ON u.id = om.user_id
+        LEFT JOIN org_roles r ON r.id = om.custom_role_id
         WHERE om.organization_id = $1
         ORDER BY om.joined_at
         "#,

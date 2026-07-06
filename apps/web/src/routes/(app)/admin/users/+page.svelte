@@ -8,14 +8,17 @@
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import type { OrganizationMember } from '$lib/shared/types/api';
+  import type { OrgRole } from '$lib/services/api/roles';
 
   const ROLE_OPTIONS = ['owner', 'admin', 'member', 'viewer'] as const;
 
   let members = $state<OrganizationMember[]>([]);
+  let customRoles = $state<OrgRole[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let removingUserId = $state<string | null>(null);
   let updatingUserId = $state<string | null>(null);
+  let assigningUserId = $state<string | null>(null);
   let currentUserId = $state<string | null>(null);
 
   let currentOrg = $state<any>(null);
@@ -43,6 +46,13 @@
 
       currentOrg = orgs[0];
       await loadMembers();
+      // Custom roles are admin-only; failure just hides the assignment column.
+      try {
+        const res = await api.roles.list(currentOrg.id);
+        customRoles = res.roles.filter((r) => !r.is_system);
+      } catch {
+        customRoles = [];
+      }
     } catch (err) {
       console.error('Error loading data:', err);
       error = 'Failed to load data';
@@ -136,6 +146,32 @@
     }
   }
 
+  // Assign (or clear, with '') a custom role for a member (E-RBAC-3).
+  async function assignCustomRole(member: OrganizationMember, roleId: string) {
+    if (!currentOrg) return;
+    const next = roleId === '' ? null : roleId;
+    if ((member.customRoleId ?? null) === next) return;
+
+    const prev = member.customRoleId ?? null;
+    const prevName = member.customRoleName ?? null;
+    assigningUserId = member.userId;
+    member.customRoleId = next;
+    member.customRoleName = next ? (customRoles.find((r) => r.id === next)?.name ?? null) : null;
+    members = members; // optimistic
+    try {
+      await api.roles.assign(currentOrg.id, member.userId, next);
+      toast.success(next ? 'Custom role assigned' : 'Custom role cleared');
+    } catch (err) {
+      member.customRoleId = prev;
+      member.customRoleName = prevName;
+      members = members; // roll back
+      console.error('Error assigning custom role:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to assign custom role');
+    } finally {
+      assigningUserId = null;
+    }
+  }
+
   function getRoleBadge(role: string): {
     variant: 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info';
     label: string;
@@ -221,6 +257,9 @@
             <tr class="border-b border-border text-left">
               <th class="pb-3 text-sm font-medium text-muted-foreground">User</th>
               <th class="pb-3 text-sm font-medium text-muted-foreground">Role</th>
+              {#if canManageRoles && customRoles.length > 0}
+                <th class="pb-3 text-sm font-medium text-muted-foreground">Custom role</th>
+              {/if}
               <th class="pb-3 text-sm font-medium text-muted-foreground">Joined</th>
               <th class="pb-3 text-sm font-medium text-muted-foreground text-right">Actions</th>
             </tr>
@@ -255,6 +294,22 @@
                     <Badge {...getRoleBadge(member.role)} />
                   {/if}
                 </td>
+                {#if canManageRoles && customRoles.length > 0}
+                  <td class="py-3">
+                    <select
+                      class="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                      value={member.customRoleId ?? ''}
+                      disabled={assigningUserId === member.userId}
+                      aria-label="Assign custom role for {member.user?.email || 'member'}"
+                      onchange={(e) => assignCustomRole(member, e.currentTarget.value)}
+                    >
+                      <option value="">None</option>
+                      {#each customRoles as role}
+                        <option value={role.id}>{role.name}</option>
+                      {/each}
+                    </select>
+                  </td>
+                {/if}
                 <td class="py-3 text-sm text-muted-foreground">
                   {formatDate(member.joinedAt)}
                 </td>

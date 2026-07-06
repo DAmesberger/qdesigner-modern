@@ -19,6 +19,9 @@ export interface OrganizationMember {
   role: 'owner' | 'admin' | 'member' | 'viewer';
   status: 'active' | 'invited' | 'suspended';
   joinedAt: string;
+  /** Assigned custom role (E-RBAC-3); overrides the tier defaults when set. */
+  customRoleId?: string | null;
+  customRoleName?: string | null;
   user?: { id: string; email: string; fullName: string | null; full_name?: string | null };
 }
 

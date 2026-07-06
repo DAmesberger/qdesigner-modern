@@ -9,10 +9,13 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::access::{verify_project_read_access, verify_project_write_access};
+use crate::api::access::{
+    get_project_org_id, verify_project_read_access, verify_project_write_access,
+};
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
+use crate::rbac::models::Permission;
 use crate::state::AppState;
 
 // ── Models ───────────────────────────────────────────────────────────
@@ -348,6 +351,7 @@ pub async fn get_questionnaire(
     tags = ["questionnaires"]
 )]
 pub async fn update_questionnaire(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
@@ -359,6 +363,18 @@ pub async fn update_questionnaire(
     let mut tx = tx.tx().await?;
 
     verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
+    // Granular gate (E-RBAC-3): tightens for custom roles lacking
+    // questionnaire:write; pass-through for the built-in tiers.
+    let org_id = get_project_org_id(&mut **tx, path.id).await?;
+    state
+        .rbac
+        .require_permission(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            Permission::QuestionnaireWrite,
+        )
+        .await?;
 
     // Snapshot current state into questionnaire_versions before updating
     snapshot_questionnaire_version(&mut tx, path.qid, user.user_id).await?;
@@ -474,6 +490,7 @@ pub async fn update_questionnaire(
     tags = ["questionnaires"]
 )]
 pub async fn publish_questionnaire(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
@@ -481,6 +498,19 @@ pub async fn publish_questionnaire(
     let mut tx = tx.tx().await?;
 
     verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
+    // Granular gate (E-RBAC-3): the coarse project-write check above governs
+    // system roles; this additionally denies a custom role (e.g. a read-only
+    // "Analyst") that lacks questionnaire:publish, even at admin tier.
+    let org_id = get_project_org_id(&mut **tx, path.id).await?;
+    state
+        .rbac
+        .require_permission(
+            &mut **tx,
+            user.user_id,
+            org_id,
+            Permission::QuestionnairePublish,
+        )
+        .await?;
 
     snapshot_questionnaire_version(&mut tx, path.qid, user.user_id).await?;
 
@@ -723,6 +753,7 @@ struct ExportSessionMetadata {
     tags = ["questionnaires"]
 )]
 pub async fn export_responses(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
@@ -731,6 +762,12 @@ pub async fn export_responses(
     let mut tx = tx.tx().await?;
 
     verify_project_read_access(&mut **tx, user.user_id, path.id).await?;
+    // Granular gate (E-RBAC-3): denies custom roles lacking response:read.
+    let org_id = get_project_org_id(&mut **tx, path.id).await?;
+    state
+        .rbac
+        .require_permission(&mut **tx, user.user_id, org_id, Permission::ResponseRead)
+        .await?;
 
     // Verify questionnaire exists
     let exists = sqlx::query_scalar::<_, bool>(

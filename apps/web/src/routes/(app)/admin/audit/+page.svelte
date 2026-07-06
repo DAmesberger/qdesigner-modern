@@ -21,6 +21,10 @@
     'project_member.added': 'Project member added',
     'project_member.role_changed': 'Project member role changed',
     'project_member.removed': 'Project member removed',
+    'role.created': 'Custom role created',
+    'role.updated': 'Custom role updated',
+    'role.deleted': 'Custom role deleted',
+    'member.custom_role_assigned': 'Custom role assigned',
   };
 
   const PAGE_SIZE = 50;

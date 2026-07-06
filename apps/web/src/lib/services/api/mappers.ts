@@ -140,12 +140,21 @@ export function mapOrganization(raw: GeneratedOrganization): Organization {
 }
 
 export function mapOrganizationMember(raw: OrgMember, organizationId: string): OrganizationMember {
+  // custom_role_* were added to the server OrgMember (E-RBAC-3) after the
+  // committed OpenAPI snapshot; read them off the runtime payload without a
+  // full SDK regen.
+  const withCustom = raw as OrgMember & {
+    custom_role_id?: string | null;
+    custom_role_name?: string | null;
+  };
   return {
     organizationId,
     userId: String(raw.user_id ?? ''),
     role: (raw.role ?? 'member') as OrganizationMember['role'],
     status: (raw.status ?? 'active') as OrganizationMember['status'],
     joinedAt: raw.joined_at ?? new Date().toISOString(),
+    customRoleId: withCustom.custom_role_id ?? null,
+    customRoleName: withCustom.custom_role_name ?? null,
     user: {
       id: String(raw.user_id ?? ''),
       email: String(raw.email ?? ''),

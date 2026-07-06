@@ -29,6 +29,29 @@ pub async fn get_project_org_id<'e>(
     .ok_or_else(|| ApiError::NotFound("Project not found".into()))
 }
 
+/// Look up the organization that owns a questionnaire (via its project).
+///
+/// Used by the analytics/export handlers to resolve the org context needed
+/// for a granular [`RbacManager::require_permission`](crate::rbac::manager::RbacManager::require_permission)
+/// check after the coarse questionnaire-access gate has already run.
+pub async fn get_questionnaire_org_id<'e>(
+    executor: impl PgExecutor<'e>,
+    questionnaire_id: Uuid,
+) -> Result<Uuid, ApiError> {
+    sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT p.organization_id
+        FROM questionnaire_definitions qd
+        JOIN projects p ON p.id = qd.project_id
+        WHERE qd.id = $1 AND qd.deleted_at IS NULL AND p.deleted_at IS NULL
+        "#,
+    )
+    .bind(questionnaire_id)
+    .fetch_optional(executor)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))
+}
+
 /// Verify that `user_id` is an active member of `org_id`.
 pub async fn verify_org_membership<'e>(
     executor: impl PgExecutor<'e>,
