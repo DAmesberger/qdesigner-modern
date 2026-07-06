@@ -280,4 +280,94 @@ describe('VariableEngine', () => {
       });
     });
   });
+
+  // Guard tests for SERVER-COMPUTED VARIABLES (server-computed-variable /
+  // E-FEEDBACK-3). These prove ADDRESSABILITY of an injected server value under
+  // the P2-T2-hardened createSandboxedMath BEFORE the runtime/consumer story is
+  // built on top of it. If the object-member-access test (a) ever regresses,
+  // the runtime injection pass must pivot to auto-registered scalar companion
+  // variables (cohortAnxiety_mean) instead of relying on dot access.
+  describe('Server-computed variables (addressability gate)', () => {
+    it('(a) object-valued variable set via setVariable supports member access in a formula', () => {
+      const bundle: Variable = {
+        id: 'cohortAnxiety',
+        name: 'cohortAnxiety',
+        type: 'object',
+        scope: 'global',
+        defaultValue: { mean: 0, sd: 0, n: 0 }
+      };
+      engine.registerVariable(bundle);
+      engine.setVariable(
+        'cohortAnxiety',
+        { n: 142, mean: 42, sd: 5, median: 41, p25: 30, p75: 55 },
+        'server-sync'
+      );
+
+      // Member access on the injected object resolves under the sandbox.
+      expect(engine.evaluateFormula('cohortAnxiety.mean > 40').value).toBe(true);
+      expect(engine.evaluateFormula('cohortAnxiety.mean > 50').value).toBe(false);
+      // Nested through a built-in function (the piping AST path).
+      expect(engine.evaluateFormula('round(cohortAnxiety.mean, 1)').value).toBe(42);
+      // The injected value carries the documented 'server-sync' source.
+      expect(engine.exportState().cohortAnxiety.source).toBe('server-sync');
+    });
+
+    it('(b) a scalar server variable participates directly in evaluateCondition', () => {
+      const scalar: Variable = {
+        id: 'cohortMeanAnxiety',
+        name: 'cohortMeanAnxiety',
+        type: 'number',
+        scope: 'global',
+        defaultValue: 0
+      };
+      const score: Variable = {
+        id: 'score_total',
+        name: 'score_total',
+        type: 'number',
+        scope: 'global',
+        defaultValue: 0
+      };
+      engine.registerVariable(scalar);
+      engine.registerVariable(score);
+      engine.setVariable('cohortMeanAnxiety', 40, 'server-sync');
+      engine.setVariable('score_total', 55);
+
+      expect(engine.evaluateCondition('score_total > cohortMeanAnxiety')).toBe(true);
+      engine.setVariable('score_total', 30);
+      expect(engine.evaluateCondition('score_total > cohortMeanAnxiety')).toBe(false);
+    });
+
+    it('(c) an unset server variable falls back to its defaultValue', () => {
+      const scalar: Variable = {
+        id: 'cohortMeanAnxiety',
+        name: 'cohortMeanAnxiety',
+        type: 'number',
+        scope: 'global',
+        defaultValue: 25
+      };
+      engine.registerVariable(scalar);
+      // Never setVariable'd (offline, never synced): resolves to defaultValue.
+      expect(engine.getVariable('cohortMeanAnxiety')).toBe(25);
+      expect(engine.evaluateCondition('cohortMeanAnxiety > 20')).toBe(true);
+    });
+
+    it('(d) importState/exportState round-trips an injected server value (resume path)', () => {
+      const bundle: Variable = {
+        id: 'cohortAnxiety',
+        name: 'cohortAnxiety',
+        type: 'object',
+        scope: 'global'
+      };
+      engine.registerVariable(bundle);
+      engine.setVariable('cohortAnxiety', { mean: 42, n: 10 }, 'server-sync');
+      const state = engine.exportState();
+
+      const resumed = new VariableEngine();
+      resumed.registerVariable(bundle);
+      resumed.importState(state);
+
+      expect(resumed.evaluateFormula('cohortAnxiety.mean').value).toBe(42);
+      expect(resumed.exportState().cohortAnxiety.source).toBe('server-sync');
+    });
+  });
 });

@@ -182,7 +182,7 @@ pub struct SessionCompareQuery {
     pub right_participant_id: String,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct NumericStatsSummary {
     pub sample_count: usize,
     pub mean: Option<f64>,
@@ -1360,6 +1360,120 @@ pub(crate) struct CohortStatsRow {
 /// to deanonymize an individual participant's value.
 pub(crate) const MIN_COHORT_N: i64 = 5;
 
+// ── Server-computed variables (server-computed-variable / E-FEEDBACK-3) ──
+
+/// Query params for `GET /api/questionnaires/{id}/server-variables`. The client
+/// never sends filters — only an optional `version` selecting a pinned snapshot.
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct ServerVariablesQuery {
+    /// Optional `major.minor.patch` selecting a pinned questionnaire snapshot.
+    /// Absent → the latest published registry definition.
+    pub version: Option<String>,
+}
+
+/// One computed server-variable aggregate in the `/server-variables` response.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ServerVariableEntry {
+    /// Variable id from the definition.
+    pub id: String,
+    /// Variable name (the mathjs symbol consumers resolve).
+    pub name: String,
+    /// `variable` or `response` (from the declaration's `server.source`).
+    pub source: String,
+    /// Session variable name or question id being aggregated.
+    pub key: String,
+    /// Declared dataset-filter id, when the declaration carries one.
+    pub dataset_id: Option<String>,
+    /// Stable content hash of the `server` declaration (matches the TS
+    /// `declHash`), so the client can cross-check its local declaration and
+    /// safely reuse a cached row cross-version when byte-identical.
+    pub decl_hash: String,
+    /// Cohort size (populated even below the anonymity floor).
+    pub sample_count: usize,
+    /// Full stats, or `None` when withheld below the MIN_COHORT_N floor.
+    pub stats: Option<NumericStatsSummary>,
+}
+
+/// Response body for `GET /api/questionnaires/{id}/server-variables`.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct ServerVariablesResponse {
+    pub questionnaire_id: Uuid,
+    /// The `major.minor.patch` the aggregates were computed against.
+    pub version: String,
+    /// Server clock at aggregation time.
+    pub computed_at: chrono::DateTime<chrono::Utc>,
+    /// True when a `?version=` snapshot was requested but had been pruned, so the
+    /// latest registry declarations were evaluated instead.
+    pub fallback_registry: bool,
+    pub variables: Vec<ServerVariableEntry>,
+}
+
+/// Row returned by `public.fillout_dataset_stats` (full quartiles).
+#[derive(Debug, sqlx::FromRow)]
+pub(crate) struct DatasetStatsRow {
+    pub(crate) n: i64,
+    pub(crate) mean: Option<f64>,
+    pub(crate) std_dev: Option<f64>,
+    pub(crate) min: Option<f64>,
+    pub(crate) max: Option<f64>,
+    pub(crate) p10: Option<f64>,
+    pub(crate) p25: Option<f64>,
+    pub(crate) median: Option<f64>,
+    pub(crate) p75: Option<f64>,
+    pub(crate) p90: Option<f64>,
+    pub(crate) p95: Option<f64>,
+    pub(crate) p99: Option<f64>,
+}
+
+/// Canonical, whitespace-free JSON with recursively sorted object keys. Mirrors
+/// the TS `canonicalize` in `@qdesigner/questionnaire-core/serverVariables` so a
+/// declaration hashes identically on both sides. Arrays keep their order (order
+/// is semantic for `where[]`).
+fn canonical_json(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let parts: Vec<String> = keys
+                .into_iter()
+                .map(|k| {
+                    format!(
+                        "{}:{}",
+                        serde_json::to_string(k).unwrap_or_default(),
+                        canonical_json(&map[k])
+                    )
+                })
+                .collect();
+            format!("{{{}}}", parts.join(","))
+        }
+        serde_json::Value::Array(arr) => {
+            let parts: Vec<String> = arr.iter().map(canonical_json).collect();
+            format!("[{}]", parts.join(","))
+        }
+        other => serde_json::to_string(other).unwrap_or_default(),
+    }
+}
+
+/// cyrb53 over the canonical JSON of a `server` declaration. Byte-for-byte port
+/// of the TS `declHash`/`cyrb53` — iterates UTF-16 code units (JS `charCodeAt`),
+/// wraps at u32, and emits a zero-padded 14-hex-digit (53-bit) string.
+pub(crate) fn decl_hash(def: &serde_json::Value) -> String {
+    let s = canonical_json(def);
+    let mut h1: u32 = 0xdead_beef;
+    let mut h2: u32 = 0x41c6_ce57;
+    for ch in s.encode_utf16() {
+        let c = ch as u32;
+        h1 = (h1 ^ c).wrapping_mul(2_654_435_761);
+        h2 = (h2 ^ c).wrapping_mul(1_597_334_677);
+    }
+    h1 = (h1 ^ (h1 >> 16)).wrapping_mul(2_246_822_507);
+    h1 ^= (h2 ^ (h2 >> 13)).wrapping_mul(3_266_489_909);
+    h2 = (h2 ^ (h2 >> 16)).wrapping_mul(2_246_822_507);
+    h2 ^= (h1 ^ (h1 >> 13)).wrapping_mul(3_266_489_909);
+    let n: u64 = 4_294_967_296_u64 * ((h2 & 0x1F_FFFF) as u64) + (h1 as u64);
+    format!("{n:014x}")
+}
+
 /// Session-creation fields carried by the sync payload so a session that was
 /// created while OFFLINE (exists only on the client) can be materialized on the
 /// server at sync time. Optional: online sessions already exist and omit this.
@@ -1527,9 +1641,36 @@ pub struct TimeSeriesBucket {
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_numeric_stats, is_safe_filter_key, json_value_to_f64, parse_aggregate_source,
+        compute_numeric_stats, decl_hash, is_safe_filter_key, json_value_to_f64,
+        parse_aggregate_source,
     };
     use serde_json::json;
+
+    #[test]
+    fn decl_hash_matches_ts_reference() {
+        // Reference values captured from the TS `declHash` in
+        // `@qdesigner/questionnaire-core/serverVariables`. Key order is
+        // irrelevant (canonicalization sorts), proving cross-side agreement.
+        assert_eq!(
+            decl_hash(&json!({ "stat": "mean", "key": "k", "source": "variable" })),
+            "019cd5bc5cfdb6"
+        );
+        assert_eq!(
+            decl_hash(&json!({
+                "source": "response",
+                "key": "q1",
+                "dataset": {
+                    "id": "d1",
+                    "versionScope": "sameMajor",
+                    "where": [
+                        { "var": "sex", "op": "eq", "value": "f" },
+                        { "var": "age", "op": "gte", "value": 18 }
+                    ]
+                }
+            })),
+            "09dd82d0befea9"
+        );
+    }
 
     #[test]
     fn safe_filter_keys_pass() {

@@ -5036,6 +5036,72 @@
         }
       }
     },
+    "/api/questionnaires/{id}/server-variables": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "GET /api/questionnaires/{id}/server-variables",
+        "description": "Anonymous-safe batch of SERVER-COMPUTED VARIABLE aggregates\n(server-computed-variable / E-FEEDBACK-3). Structured like\n[`public_cohort_stats`]: a published-questionnaire gate (unpublished/missing\n→ 404 without existence probing), then a resolve of the definition JSONB\n(the latest published registry, or a pinned `questionnaire_snapshots` row\nwhen `?version=` is supplied), then — for each `server` declaration on\n`content.variables` (capped at 50) — one `fillout_dataset_stats` call over\nCOMPLETED sessions via the SECURITY DEFINER function.\n\nTHIS is the authorization model: the anonymous client sends zero filter data;\nonly the designer-published declarations are ever evaluated. The MIN_COHORT_N\nfloor applies per entry (n < 5 → count reported, stats withheld). Results are\ncached (Redis, in-memory fallback) keyed `srvvars:{qid}:{version}` for\n`SRV_VARS_TTL_SECS`, which also paces the auto-recalculation.",
+        "operationId": "public_server_variables",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Questionnaire id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "description": "Optional `major.minor.patch` selecting a pinned questionnaire snapshot.\nAbsent → the latest published registry definition.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Server-computed variable aggregates (stats null below the n<5 floor)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerVariablesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Questionnaire not found or not published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/{id}/sync": {
       "post": {
         "tags": [
@@ -7948,6 +8014,99 @@
         "properties": {
           "email": {
             "type": "string"
+          }
+        }
+      },
+      "ServerVariableEntry": {
+        "type": "object",
+        "description": "One computed server-variable aggregate in the `/server-variables` response.",
+        "required": [
+          "id",
+          "name",
+          "source",
+          "key",
+          "decl_hash",
+          "sample_count"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Variable id from the definition."
+          },
+          "name": {
+            "type": "string",
+            "description": "Variable name (the mathjs symbol consumers resolve)."
+          },
+          "source": {
+            "type": "string",
+            "description": "`variable` or `response` (from the declaration's `server.source`)."
+          },
+          "key": {
+            "type": "string",
+            "description": "Session variable name or question id being aggregated."
+          },
+          "dataset_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Declared dataset-filter id, when the declaration carries one."
+          },
+          "decl_hash": {
+            "type": "string",
+            "description": "Stable content hash of the `server` declaration (matches the TS\n`declHash`), so the client can cross-check its local declaration and\nsafely reuse a cached row cross-version when byte-identical."
+          },
+          "sample_count": {
+            "type": "integer",
+            "description": "Cohort size (populated even below the anonymity floor).",
+            "minimum": 0
+          },
+          "stats": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NumericStatsSummary",
+                "description": "Full stats, or `None` when withheld below the MIN_COHORT_N floor."
+              }
+            ]
+          }
+        }
+      },
+      "ServerVariablesResponse": {
+        "type": "object",
+        "description": "Response body for `GET /api/questionnaires/{id}/server-variables`.",
+        "required": [
+          "questionnaire_id",
+          "version",
+          "computed_at",
+          "fallback_registry",
+          "variables"
+        ],
+        "properties": {
+          "questionnaire_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string",
+            "description": "The `major.minor.patch` the aggregates were computed against."
+          },
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Server clock at aggregation time."
+          },
+          "fallback_registry": {
+            "type": "boolean",
+            "description": "True when a `?version=` snapshot was requested but had been pruned, so the\nlatest registry declarations were evaluated instead."
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServerVariableEntry"
+            }
           }
         }
       },

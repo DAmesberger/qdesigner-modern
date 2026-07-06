@@ -70,6 +70,97 @@ export interface Variable {
    * score rather than a raw answer variable.
    */
   metadata?: Record<string, unknown> & { scoreOf?: string };
+  /**
+   * Server-computed variable declaration (server-computed-variable / E-FEEDBACK-3).
+   * When present, the variable's VALUE is computed server-side across every
+   * completed session's data (via the `fillout_dataset_stats` SECURITY DEFINER
+   * function), fetched by the anonymous-safe `/server-variables` endpoint keyed to
+   * the PUBLISHED definition, cached version-pinned on the client, and injected into
+   * the one live VariableEngine at runtime construction — so it resolves OFFLINE
+   * from the last synced value and falls back to {@link Variable.defaultValue} when
+   * never synced. The client never sends filters; only these designer-published
+   * declarations are ever evaluated by the server.
+   */
+  server?: ServerComputationDef;
+}
+
+/**
+ * A single numeric statistic materialization for a server-computed variable.
+ * Present on {@link ServerComputationDef.stat} ⇒ SCALAR materialization
+ * (requires `variable.type === 'number'`). Absent ⇒ full stats OBJECT bundle
+ * (requires `variable.type === 'object'`).
+ */
+export type ServerStat =
+  | 'n'
+  | 'mean'
+  | 'sd'
+  | 'min'
+  | 'max'
+  | 'p10'
+  | 'p25'
+  | 'median'
+  | 'p75'
+  | 'p90'
+  | 'p95'
+  | 'p99';
+
+/**
+ * Dataset scoping for a server-computed variable. The server evaluates ONLY the
+ * predicates declared here — the anonymous client sends zero filter data, so this
+ * IS the authorization model. `where`-clauses are restricted to session variables
+ * in v1 (indexed via the `session_variable_index` projection from migration 00012).
+ */
+export interface DatasetFilter {
+  /** Stable id; participates in {@link declHash} for cache keying. */
+  id: string;
+  label?: string;
+  /**
+   * Version scoping against the pinned definition's `major.minor.patch`:
+   * - `any`       — every completed session, regardless of version.
+   * - `sameMajor` — only sessions sharing the resolved major (default).
+   * - `exact`     — only sessions at the exact resolved version.
+   */
+  versionScope?: 'any' | 'sameMajor' | 'exact';
+  /** ISO-8601 lower bound on `sessions.completed_at`. */
+  completedAfter?: string;
+  /** ISO-8601 upper bound on `sessions.completed_at`. */
+  completedBefore?: string;
+  /** Per-clause predicates over session variables (AND-combined). */
+  where?: Array<{
+    var: string;
+    op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in';
+    value: string | number | Array<string | number>;
+  }>;
+}
+
+/**
+ * Server-computed variable declaration. Rides in the same
+ * `questionnaire.variables[]` array as any other variable, so every existing
+ * consumer (flow conditions, piping, quotas, scripting, statistical feedback)
+ * resolves it with zero changes once the runtime injects its synced value.
+ */
+export interface ServerComputationDef {
+  /** Where the aggregated value comes from. */
+  source: 'variable' | 'response';
+  /**
+   * The session variable name (`source: 'variable'`, e.g. `score.anxiety.value`)
+   * or the question id (`source: 'response'`) aggregated across the cohort.
+   */
+  key: string;
+  /**
+   * Present ⇒ SCALAR materialization of the single statistic (requires
+   * `variable.type === 'number'`). Absent ⇒ full stats OBJECT bundle (requires
+   * `variable.type === 'object'`).
+   */
+  stat?: ServerStat;
+  /** Cohort scoping. Absent ⇒ every completed session at the same major. */
+  dataset?: DatasetFilter;
+  /**
+   * Render-anyway-with-warning threshold: a synced row older than this is still
+   * used (offline correctness beats freshness) but flagged stale for captions.
+   * Default 30 days.
+   */
+  staleAfterMs?: number;
 }
 
 export type VariableType =
@@ -273,6 +364,59 @@ export interface ScoringConfig {
   scales: ScaleScoringDef[];
 }
 
+// ============================================================================
+// Report Page Configuration (E-FEEDBACK-3)
+// ============================================================================
+
+/**
+ * A single widget on the participant-facing report page (E-FEEDBACK-3). Rides in
+ * the `questionnaire_definitions` JSON under `settings.report` (same precedent as
+ * `settings.scoring`), so it needs no DB migration. The report page is a pure
+ * CONSUMER of the completed session's variables — its cohort widgets bind
+ * `comparison.serverVariable` to an object-typed server-computed variable and read
+ * the bundle straight out of `session.variables`, with no network on the render
+ * path.
+ */
+export interface ReportWidget {
+  id: string;
+  type:
+    | 'score-tile'
+    | 'bar'
+    | 'box-cohort'
+    | 'radar-profile'
+    | 'distribution-with-marker'
+    | 'gauge'
+    | 'interpretive-text'
+    | 'results-table'
+    | 'completion-meta';
+  /** 12-column grid placement (shape copied from the analytics dashboard-builder). */
+  position: { x: number; y: number; w: number; h: number };
+  binding: { source: 'variable' | 'score'; key: string; field?: string };
+  comparison?: {
+    source: 'none' | 'norm-table' | 'custom-norm' | 'self-baseline' | 'server-variable';
+    /** NAME of an object-typed server-computed variable for the cohort band. */
+    serverVariable?: string;
+    normTableId?: string;
+    fallback: 'hide' | 'norm-table' | 'message';
+    fallbackNormTableId?: string;
+  };
+  interpretation?: string;
+  text?: string;
+}
+
+/**
+ * Participant-facing report page config (E-FEEDBACK-3). Absent ⇒ no report page.
+ */
+export interface ReportPageConfig {
+  enabled: boolean;
+  title?: string;
+  layout: { columns: 12; rowHeight: number; gap: number };
+  widgets: ReportWidget[];
+  enablePdfDownload?: boolean;
+  /** Fetch-skip window for the server-variable refresh; default 24h. */
+  refreshMs?: number;
+}
+
 export interface QuestionnaireSettings {
   allowBackNavigation?: boolean;
   showProgressBar?: boolean;
@@ -294,6 +438,12 @@ export interface QuestionnaireSettings {
    * `complete()` and persisted as namespaced `score.<scaleId>` session variables.
    */
   scoring?: ScoringConfig;
+  /**
+   * Participant-facing report page (E-FEEDBACK-3). Same definition-JSONB
+   * precedent as {@link ScoringConfig}. Its cohort widgets bind object-typed
+   * server-computed variables and render offline from the completed session.
+   */
+  report?: ReportPageConfig;
   metadata?: Record<string, DynamicValue>;
   /**
    * Live storage location for per-locale content translations (MOD-04, ADR 0022).

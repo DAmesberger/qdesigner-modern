@@ -10,6 +10,13 @@ export interface VariableValue {
   id: string;
   value: DynamicValue;
   timestamp: number;
+  /**
+   * Provenance of the current value. Recognized values: `'default'` (seeded from
+   * the variable's `defaultValue`), `'runtime'` (participant answer / computed),
+   * and `'server-sync'` (a SERVER-COMPUTED VARIABLE value injected at runtime
+   * construction from the last online sync — server-computed-variable /
+   * E-FEEDBACK-3). Free-form; other producers may set their own.
+   */
   source?: string;
 }
 

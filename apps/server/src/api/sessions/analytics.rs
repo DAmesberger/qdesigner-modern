@@ -3,7 +3,10 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
-use std::collections::HashSet;
+use redis::AsyncCommands;
+use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::api::access;
@@ -669,6 +672,296 @@ pub async fn public_cohort_stats(
         participant_count: n,
         stats,
     }))
+}
+
+// ── Server-computed variables (server-computed-variable / E-FEEDBACK-3) ──
+
+/// Hard cap on server-variable declarations evaluated per request (bounds the
+/// anonymous fan-out; mirrors the TS `MAX_SERVER_VARIABLES`).
+const MAX_SERVER_VARS: usize = 50;
+
+/// Redis / in-memory result-cache TTL, in seconds. Also the server-side
+/// auto-recalculate cadence: aggregates are recomputed at most once per window
+/// per (questionnaire, version).
+const SRV_VARS_TTL_SECS: i64 = 300;
+
+/// Process-local fallback cache used when Redis is absent. Maps the cache key to
+/// `(expires_at_unix, response_json)`.
+static SRV_VARS_MEM: OnceLock<Mutex<HashMap<String, (i64, String)>>> = OnceLock::new();
+
+fn srvvars_mem_cache() -> &'static Mutex<HashMap<String, (i64, String)>> {
+    SRV_VARS_MEM.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+async fn srvvars_cache_get(state: &AppState, key: &str) -> Option<ServerVariablesResponse> {
+    if let Some(client) = &state.redis {
+        if let Ok(mut conn) = client.get_multiplexed_async_connection().await {
+            let cached: redis::RedisResult<Option<String>> = conn.get(key).await;
+            if let Ok(Some(json)) = cached {
+                if let Ok(resp) = serde_json::from_str::<ServerVariablesResponse>(&json) {
+                    return Some(resp);
+                }
+            }
+        }
+    }
+    let now = chrono::Utc::now().timestamp();
+    let guard = srvvars_mem_cache().lock().await;
+    if let Some((expires, json)) = guard.get(key) {
+        if *expires > now {
+            if let Ok(resp) = serde_json::from_str::<ServerVariablesResponse>(json) {
+                return Some(resp);
+            }
+        }
+    }
+    None
+}
+
+async fn srvvars_cache_set(state: &AppState, key: &str, resp: &ServerVariablesResponse) {
+    let Ok(json) = serde_json::to_string(resp) else {
+        return;
+    };
+    if let Some(client) = &state.redis {
+        if let Ok(mut conn) = client.get_multiplexed_async_connection().await {
+            let _: redis::RedisResult<()> = conn.set_ex(key, &json, SRV_VARS_TTL_SECS as u64).await;
+        }
+    }
+    let expires = chrono::Utc::now().timestamp() + SRV_VARS_TTL_SECS;
+    let mut guard = srvvars_mem_cache().lock().await;
+    guard.insert(key.to_string(), (expires, json));
+}
+
+/// Parse a `major.minor.patch` triplet. Returns `None` on any malformed input.
+fn parse_semver_triplet(s: &str) -> Option<(i32, i32, i32)> {
+    let mut parts = s.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((major, minor, patch))
+}
+
+/// GET /api/questionnaires/{id}/server-variables
+///
+/// Anonymous-safe batch of SERVER-COMPUTED VARIABLE aggregates
+/// (server-computed-variable / E-FEEDBACK-3). Structured like
+/// [`public_cohort_stats`]: a published-questionnaire gate (unpublished/missing
+/// → 404 without existence probing), then a resolve of the definition JSONB
+/// (the latest published registry, or a pinned `questionnaire_snapshots` row
+/// when `?version=` is supplied), then — for each `server` declaration on
+/// `content.variables` (capped at 50) — one `fillout_dataset_stats` call over
+/// COMPLETED sessions via the SECURITY DEFINER function.
+///
+/// THIS is the authorization model: the anonymous client sends zero filter data;
+/// only the designer-published declarations are ever evaluated. The MIN_COHORT_N
+/// floor applies per entry (n < 5 → count reported, stats withheld). Results are
+/// cached (Redis, in-memory fallback) keyed `srvvars:{qid}:{version}` for
+/// `SRV_VARS_TTL_SECS`, which also paces the auto-recalculation.
+#[utoipa::path(
+    get,
+    path = "/api/questionnaires/{id}/server-variables",
+    params(
+        ("id" = Uuid, Path, description = "Questionnaire id"),
+        ServerVariablesQuery
+    ),
+    responses(
+        (status = 200, description = "Server-computed variable aggregates (stats null below the n<5 floor)", body = ServerVariablesResponse),
+        (status = 400, description = "Malformed version", body = crate::openapi::ErrorEnvelope),
+        (status = 404, description = "Questionnaire not found or not published", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["analytics"]
+)]
+pub async fn public_server_variables(
+    State(state): State<AppState>,
+    Path(questionnaire_id): Path<Uuid>,
+    Query(query): Query<ServerVariablesQuery>,
+) -> Result<Json<ServerVariablesResponse>, ApiError> {
+    // Optional pinned-version selector.
+    let requested_version = match query.version.as_deref().map(str::trim) {
+        Some(v) if !v.is_empty() => Some(
+            parse_semver_triplet(v)
+                .ok_or_else(|| ApiError::BadRequest("Invalid version (expected major.minor.patch)".into()))?,
+        ),
+        _ => None,
+    };
+
+    // Published-questionnaire gate + latest registry content/version. Missing OR
+    // non-published both surface as 404 so an unpublished id can't be probed.
+    let (status, def_major, def_minor, def_patch, registry_content) =
+        sqlx::query_as::<_, (String, i32, i32, i32, serde_json::Value)>(
+            "SELECT status, version_major, version_minor, version_patch, content \
+             FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(questionnaire_id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
+
+    if status != "published" {
+        return Err(ApiError::NotFound("Questionnaire not found".into()));
+    }
+
+    // The version the aggregates are scoped/pinned to (requested pin, else latest).
+    let (v_major, v_minor, v_patch) =
+        requested_version.unwrap_or((def_major, def_minor, def_patch));
+    let version_str = format!("{v_major}.{v_minor}.{v_patch}");
+
+    // Cache: one ≤50-declaration fan-out per TTL per (questionnaire, version).
+    let cache_key = format!("srvvars:{questionnaire_id}:{version_str}");
+    if let Some(cached) = srvvars_cache_get(&state, &cache_key).await {
+        return Ok(Json(cached));
+    }
+
+    // Resolve the definition content to extract declarations from. A pinned
+    // request reads the snapshot; a pruned snapshot falls back to the latest
+    // registry declarations (flagged) rather than 404ing.
+    let mut fallback_registry = false;
+    let content = if let Some((rmaj, rmin, rpat)) = requested_version {
+        let snapshot = sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT content FROM questionnaire_snapshots \
+             WHERE questionnaire_id = $1 AND version_major = $2 \
+               AND version_minor = $3 AND version_patch = $4 \
+             ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(questionnaire_id)
+        .bind(rmaj)
+        .bind(rmin)
+        .bind(rpat)
+        .fetch_optional(&state.pool)
+        .await?;
+        match snapshot {
+            Some(content) => content,
+            None => {
+                fallback_registry = true;
+                registry_content
+            }
+        }
+    } else {
+        registry_content
+    };
+
+    // Extract the server-computed declarations from content.variables (array).
+    let declarations = content
+        .get("variables")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut variables: Vec<ServerVariableEntry> = Vec::new();
+    for decl in declarations {
+        if variables.len() >= MAX_SERVER_VARS {
+            break;
+        }
+        let Some(server) = decl.get("server").filter(|s| s.is_object()) else {
+            continue;
+        };
+        let name = match decl.get("name").and_then(|v| v.as_str()) {
+            Some(n) if !n.is_empty() => n.to_string(),
+            _ => continue,
+        };
+        let id = decl
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&name)
+            .to_string();
+        let key = match server.get("key").and_then(|v| v.as_str()) {
+            Some(k) if !k.trim().is_empty() => k.trim().to_string(),
+            _ => continue,
+        };
+        // Only 'response' switches away from the default 'variable' source.
+        let source = if server.get("source").and_then(|v| v.as_str()) == Some("response") {
+            "response"
+        } else {
+            "variable"
+        };
+
+        let dataset = server.get("dataset").filter(|d| d.is_object());
+        let dataset_id = dataset
+            .and_then(|d| d.get("id"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+
+        // Build the server-side filter payload. The version components are
+        // ALWAYS server-injected (the client never sends them); versionScope
+        // defaults to 'sameMajor' (the DatasetFilter default).
+        let mut filter = serde_json::Map::new();
+        let version_scope = dataset
+            .and_then(|d| d.get("versionScope"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("sameMajor");
+        filter.insert("versionScope".into(), version_scope.into());
+        filter.insert("versionMajor".into(), v_major.into());
+        filter.insert("versionMinor".into(), v_minor.into());
+        filter.insert("versionPatch".into(), v_patch.into());
+        if let Some(d) = dataset {
+            for field in ["completedAfter", "completedBefore"] {
+                if let Some(val) = d.get(field).filter(|v| v.is_string()) {
+                    filter.insert(field.into(), val.clone());
+                }
+            }
+            if let Some(where_clauses) = d.get("where").filter(|w| w.is_array()) {
+                filter.insert("where".into(), where_clauses.clone());
+            }
+        }
+        let filter = serde_json::Value::Object(filter);
+
+        let row = sqlx::query_as::<_, DatasetStatsRow>(
+            "SELECT n, mean, std_dev, min, max, p10, p25, median, p75, p90, p95, p99 \
+             FROM public.fillout_dataset_stats($1, $2, $3, $4)",
+        )
+        .bind(questionnaire_id)
+        .bind(source)
+        .bind(&key)
+        .bind(&filter)
+        .fetch_one(&state.pool)
+        .await?;
+
+        let sample_count = row.n.max(0) as usize;
+        let stats = if row.n < MIN_COHORT_N {
+            // Below the anonymity floor: count only, every stat withheld.
+            None
+        } else {
+            Some(NumericStatsSummary {
+                sample_count,
+                mean: row.mean,
+                median: row.median,
+                std_dev: row.std_dev,
+                min: row.min,
+                max: row.max,
+                p10: row.p10,
+                p25: row.p25,
+                p50: row.median,
+                p75: row.p75,
+                p90: row.p90,
+                p95: row.p95,
+                p99: row.p99,
+            })
+        };
+
+        variables.push(ServerVariableEntry {
+            id,
+            name,
+            source: source.to_string(),
+            key,
+            dataset_id,
+            decl_hash: decl_hash(server),
+            sample_count,
+            stats,
+        });
+    }
+
+    let response = ServerVariablesResponse {
+        questionnaire_id,
+        version: version_str,
+        computed_at: chrono::Utc::now(),
+        fallback_registry,
+        variables,
+    };
+
+    srvvars_cache_set(&state, &cache_key, &response).await;
+
+    Ok(Json(response))
 }
 
 // ── Sync Endpoint ────────────────────────────────────────────────

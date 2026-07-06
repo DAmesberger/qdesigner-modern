@@ -602,6 +602,64 @@ export type SendVerificationCodeRequest = {
     email: string;
 };
 
+/**
+ * One computed server-variable aggregate in the `/server-variables` response.
+ */
+export type ServerVariableEntry = {
+    /**
+     * Variable id from the definition.
+     */
+    id: string;
+    /**
+     * Variable name (the mathjs symbol consumers resolve).
+     */
+    name: string;
+    /**
+     * `variable` or `response` (from the declaration's `server.source`).
+     */
+    source: string;
+    /**
+     * Session variable name or question id being aggregated.
+     */
+    key: string;
+    /**
+     * Declared dataset-filter id, when the declaration carries one.
+     */
+    dataset_id?: string | null;
+    /**
+     * Stable content hash of the `server` declaration (matches the TS
+     * `declHash`), so the client can cross-check its local declaration and
+     * safely reuse a cached row cross-version when byte-identical.
+     */
+    decl_hash: string;
+    /**
+     * Cohort size (populated even below the anonymity floor).
+     */
+    sample_count: number;
+    stats?: null | NumericStatsSummary;
+};
+
+/**
+ * Response body for `GET /api/questionnaires/{id}/server-variables`.
+ */
+export type ServerVariablesResponse = {
+    questionnaire_id: string;
+    /**
+     * The `major.minor.patch` the aggregates were computed against.
+     */
+    version: string;
+    /**
+     * Server clock at aggregation time.
+     */
+    computed_at: string;
+    /**
+     * True when a `?version=` snapshot was requested but had been pruned, so the
+     * latest registry declarations were evaluated instead.
+     */
+    fallback_registry: boolean;
+    variables: Array<ServerVariableEntry>;
+};
+
 export type Session = {
     id: string;
     questionnaire_id: string;
@@ -3491,6 +3549,46 @@ export type PublicCohortStatsResponses = {
 };
 
 export type PublicCohortStatsResponse = PublicCohortStatsResponses[keyof PublicCohortStatsResponses];
+
+export type PublicServerVariablesData = {
+    body?: never;
+    path: {
+        /**
+         * Questionnaire id
+         */
+        id: string;
+    };
+    query?: {
+        /**
+         * Optional `major.minor.patch` selecting a pinned questionnaire snapshot.
+         * Absent → the latest published registry definition.
+         */
+        version?: string | null;
+    };
+    url: '/api/questionnaires/{id}/server-variables';
+};
+
+export type PublicServerVariablesErrors = {
+    /**
+     * Malformed version
+     */
+    400: ErrorEnvelope;
+    /**
+     * Questionnaire not found or not published
+     */
+    404: ErrorEnvelope;
+};
+
+export type PublicServerVariablesError = PublicServerVariablesErrors[keyof PublicServerVariablesErrors];
+
+export type PublicServerVariablesResponses = {
+    /**
+     * Server-computed variable aggregates (stats null below the n<5 floor)
+     */
+    200: ServerVariablesResponse;
+};
+
+export type PublicServerVariablesResponse = PublicServerVariablesResponses[keyof PublicServerVariablesResponses];
 
 export type SyncSessionData = {
     body: SyncPayload;
