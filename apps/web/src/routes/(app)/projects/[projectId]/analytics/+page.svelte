@@ -8,6 +8,13 @@
 		type ResponseExportFormat,
 		type ScriptFormat,
 	} from '$lib/analytics/ResponseExportService';
+	import {
+		buildReactionTrialRows,
+		hasReactionTrialData,
+		exportReactionTrialsCsv,
+		exportReactionTrialsXlsx,
+	} from '$lib/analytics/reactionTrialExport';
+	import { TRIAL_ROW_COLUMNS } from '$lib/modules/questions/reaction-time/model/trialRow';
 	import type { QuestionnaireDefinition, SessionData, ExportRow } from '$lib/shared/types/api';
 	import type { PageData } from './$types';
 	import {
@@ -54,8 +61,34 @@
 			: 0
 	);
 
-	let analyticsTab = $state<'overview' | 'per-question'>('overview');
+	let analyticsTab = $state<'overview' | 'per-question' | 'per-trial'>('overview');
 	let exportData = $state<ExportRow[]>([]);
+
+	// E-REACT-5: long-format per-trial rows flattened from the reaction questions'
+	// value.responses[]. Empty when the dataset has no reaction-timing questions.
+	let reactionTrialRows = $derived(
+		exportData.length > 0 ? buildReactionTrialRows(exportData) : []
+	);
+	let hasTrialData = $derived(exportData.length > 0 && hasReactionTrialData(exportData));
+	// Columns surfaced in the on-screen preview (the CSV/XLSX carry all of them).
+	const TRIAL_PREVIEW_COLUMNS = [
+		'trial_number',
+		'block_id',
+		'condition',
+		'stimulus_kind',
+		'reaction_time_ms',
+		'raw_rt_ms',
+		'is_correct',
+		'timeout',
+		'anticipatory',
+		'onset_method',
+		'display_latency_ms',
+		'output_latency_ms',
+		'exclude_from_analysis',
+	] as const;
+	const TRIAL_PREVIEW_KEYS = TRIAL_PREVIEW_COLUMNS.map(
+		(header) => TRIAL_ROW_COLUMNS.find((c) => c.header === header)!.key
+	);
 
 	// Per-question analytics derived data
 	let questionAnalytics = $derived.by(() => {
@@ -121,9 +154,13 @@
 		}
 	});
 
-	// Load export data for per-question analytics when tab switches
+	// Load export data for per-question / per-trial analytics when tab switches
 	$effect(() => {
-		if (analyticsTab === 'per-question' && selectedQuestionnaireId && sessions.length > 0) {
+		if (
+			(analyticsTab === 'per-question' || analyticsTab === 'per-trial') &&
+			selectedQuestionnaireId &&
+			sessions.length > 0
+		) {
 			loadExportData();
 		}
 	});
@@ -206,6 +243,24 @@
 		} catch (err) {
 			console.error('Export failed:', err);
 			error = err instanceof Error ? err.message : 'Export failed';
+		} finally {
+			exportLoading = null;
+		}
+	}
+
+	async function handleTrialExport(format: 'csv' | 'xlsx') {
+		if (reactionTrialRows.length === 0) return;
+		exportLoading = `trials-${format}`;
+		try {
+			const name = selectedQuestionnaire?.name || 'export';
+			if (format === 'csv') {
+				exportReactionTrialsCsv(exportData, name);
+			} else {
+				await exportReactionTrialsXlsx(exportData, name);
+			}
+		} catch (err) {
+			console.error('Trial export failed:', err);
+			error = err instanceof Error ? err.message : 'Trial export failed';
 		} finally {
 			exportLoading = null;
 		}
@@ -500,6 +555,12 @@
 				>
 					Per Question
 				</button>
+				<button
+					onclick={() => { analyticsTab = 'per-trial'; }}
+					class="px-4 py-2 text-sm font-medium rounded-md transition-colors {analyticsTab === 'per-trial' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}"
+				>
+					Per Trial
+				</button>
 			</div>
 
 			{#if analyticsTab === 'per-question'}
@@ -602,6 +663,73 @@
 								</span>
 							</div>
 						</div>
+					</div>
+				{/if}
+			{:else if analyticsTab === 'per-trial'}
+				<!-- Per-Trial Long-Format (E-REACT-5) -->
+				{#if !hasTrialData}
+					<div class="text-center py-12 bg-card shadow rounded-lg">
+						<Timer class="mx-auto h-10 w-10 text-muted-foreground" />
+						<h4 class="mt-2 text-sm font-medium text-foreground">No per-trial data</h4>
+						<p class="mt-1 text-sm text-muted-foreground">
+							Long-format trial data appears once a reaction-timing question has been completed.
+						</p>
+					</div>
+				{:else}
+					<div class="bg-card shadow rounded-lg overflow-hidden">
+						<div class="px-6 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+							<div>
+								<h3 class="text-sm font-semibold text-foreground">Per-Trial Data (long format)</h3>
+								<p class="text-xs text-muted-foreground mt-0.5">
+									{reactionTrialRows.length} trials &mdash; one row per trial. Preview shows key columns; the export carries all {TRIAL_ROW_COLUMNS.length}.
+								</p>
+							</div>
+							<div class="flex items-center gap-2">
+								<button
+									onclick={() => handleTrialExport('csv')}
+									disabled={exportLoading !== null}
+									class="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
+								>
+									<Download class="h-4 w-4" /> CSV
+								</button>
+								<button
+									onclick={() => handleTrialExport('xlsx')}
+									disabled={exportLoading !== null}
+									class="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
+								>
+									<FileSpreadsheet class="h-4 w-4" /> XLSX
+								</button>
+							</div>
+						</div>
+						<div class="overflow-x-auto">
+							<table class="min-w-full divide-y divide-border text-xs">
+								<thead class="bg-muted">
+									<tr>
+										{#each TRIAL_PREVIEW_COLUMNS as header (header)}
+											<th scope="col" class="px-3 py-2 text-left font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+												{header}
+											</th>
+										{/each}
+									</tr>
+								</thead>
+								<tbody class="bg-card divide-y divide-border">
+									{#each reactionTrialRows.slice(0, 50) as trial, i (i)}
+										<tr class="{trial.excludeFromAnalysis ? 'bg-destructive/5' : 'hover:bg-accent'}">
+											{#each TRIAL_PREVIEW_KEYS as key (key)}
+												<td class="px-3 py-2 whitespace-nowrap font-mono text-foreground">
+													{trial[key] === null || trial[key] === undefined ? '--' : String(trial[key])}
+												</td>
+											{/each}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+						{#if reactionTrialRows.length > 50}
+							<div class="px-6 py-3 border-t border-border text-xs text-muted-foreground">
+								Showing first 50 of {reactionTrialRows.length} trials. Export for the full table.
+							</div>
+						{/if}
 					</div>
 				{/if}
 			{:else}
