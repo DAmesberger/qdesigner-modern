@@ -372,4 +372,80 @@ describe('WebGLRenderer', () => {
     // Already freed → no-op the second time.
     expect(renderer.deleteTexture(img)).toBe(false);
   });
+
+  // ---- F106 hoisted allocations ----
+
+  it('keeps the cached sortedLayers ascending across add/remove/clear (F106)', () => {
+    renderer = new WebGLRenderer({ canvas });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reads the private cache
+    const layersOf = () => (renderer as any).sortedLayers as number[];
+    const mk = (id: string, layer: number) => ({ id, layer, render: () => {} });
+
+    renderer.addRenderable(mk('a', 5));
+    renderer.addRenderable(mk('b', 1));
+    renderer.addRenderable(mk('c', 3));
+    expect(layersOf()).toEqual([1, 3, 5]);
+
+    // Reusing an existing layer key does not change the order.
+    renderer.addRenderable(mk('d', 3));
+    expect(layersOf()).toEqual([1, 3, 5]);
+
+    // Removing one of two renderables on layer 3 keeps the key (set non-empty).
+    renderer.removeRenderable('c');
+    expect(layersOf()).toEqual([1, 3, 5]);
+
+    // Emptying layer 3 drops the key and refreshes the cache.
+    renderer.removeRenderable('d');
+    expect(layersOf()).toEqual([1, 5]);
+
+    renderer.clearRenderables();
+    expect(layersOf()).toEqual([]);
+  });
+
+  it('drawGeometry writes clip-space positions identical to the old path (F106)', () => {
+    // Canvas is 800x600 (beforeEach). clipX=(x/w)*2-1, clipY=-((y/h)*2-1).
+    renderer = new WebGLRenderer({ canvas });
+    gl.bufferData.mockClear();
+
+    renderer.executeCommand({
+      type: 'drawRect',
+      params: { x: 0, y: 0, width: 800, height: 600, color: [1, 0, 0, 1] },
+    });
+
+    // First bufferData call uploads positions (the second uploads texcoords).
+    const positions = gl.bufferData.mock.calls[0]![1] as Float32Array;
+    expect(positions).toBeInstanceOf(Float32Array);
+    // Rect pixel verts: (0,0)(800,0)(0,600)(0,600)(800,0)(800,600).
+    expect(Array.from(positions)).toEqual([
+      -1, 1, // (0,0)
+      1, 1, // (800,0)
+      -1, -1, // (0,600)
+      -1, -1, // (0,600)
+      1, 1, // (800,0)
+      1, -1, // (800,600)
+    ]);
+  });
+
+  it('delivers a distinct FrameSample object to subscribers on each frame (F106)', () => {
+    renderer = new WebGLRenderer({ canvas });
+
+    const rafCallbacks: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+      rafCallbacks.push(cb);
+      return rafCallbacks.length;
+    });
+
+    const samples: unknown[] = [];
+    renderer.onFrame((sample) => samples.push(sample));
+
+    renderer.start();
+    // start() scheduled the first render; each render re-schedules the next.
+    rafCallbacks.shift()!(16);
+    rafCallbacks.shift()!(32);
+
+    expect(samples).toHaveLength(2);
+    // Fresh allocation per frame is a retention contract: ReactionEngine pushes
+    // each sample into its frameLog, so a pooled/reused object would corrupt it.
+    expect(samples[0]).not.toBe(samples[1]);
+  });
 });

@@ -79,10 +79,27 @@ export class WebGLRenderer {
 
   private renderables: Map<string, Renderable> = new Map();
   private renderablesByLayer: Map<number, Set<string>> = new Map();
+  /**
+   * Ascending layer keys, rebuilt only when the layer set changes (add/remove/
+   * clear). renderFrame iterates this instead of re-sorting the map keys every
+   * rAF tick (F106 — no per-frame array rebuild in the steady-state loop).
+   */
+  private sortedLayers: number[] = [];
   private stimulusStartTime = 0;
 
   private positionBuffer!: WebGLBuffer;
   private texCoordBuffer!: WebGLBuffer;
+
+  /**
+   * Grow-on-demand scratch buffers for drawGeometry (F106). Clip-space positions
+   * are written directly into positionScratch (no intermediate number[]); the
+   * per-draw texcoords go into texCoordScratch. Both only grow, never shrink, so
+   * a session settles at its peak size with zero per-draw allocation thereafter.
+   */
+  private positionScratch = new Float32Array(0);
+  private texCoordScratch = new Float32Array(0);
+  /** Default (all-zero) texcoord arrays, cached per vertex count for the fallback path. */
+  private defaultTexCoordsCache = new Map<number, Float32Array>();
   private matrixLocation!: WebGLUniformLocation;
   private colorLocation!: WebGLUniformLocation;
   private textureLocation!: WebGLUniformLocation;
@@ -359,22 +376,41 @@ export class WebGLRenderer {
         this.frameCount++;
 
         this.recordFrameTime(presentedDelta > 0 ? presentedDelta : delta);
-        this.renderFrame(currentTime, presentedDelta > 0 ? presentedDelta : delta);
       }
 
       this.updateFPS(currentTime);
 
-      const context = this.createRenderContext(currentTime, delta);
-      const sample: FrameSample = {
-        index: this.totalFrames,
-        now: currentTime,
-        delta,
-        presented: shouldPresent,
-        droppedSinceLast,
-      };
-      const stats = this.getStats();
-      for (const callback of this.frameCallbacks) {
-        callback(sample, stats, context);
+      // Build ONE RenderContext per rAF tick (F106): the render pass and the
+      // frame-callback dispatch previously each allocated a near-identical
+      // context. Renderables read only width/height/stimulusTime (never
+      // deltaTime), so a single object with deltaTime=delta drives both paths
+      // with bit-identical rendered output. The context is only built when it is
+      // actually consumed — a presented frame or a live subscriber.
+      const hasSubscribers = this.frameCallbacks.size > 0;
+      if (shouldPresent || hasSubscribers) {
+        const context = this.createRenderContext(currentTime, delta);
+
+        if (shouldPresent) {
+          this.renderFrame(context);
+        }
+
+        // Only allocate FrameSample/FrameStats when someone is subscribed (F106).
+        // These MUST stay freshly allocated per frame: ReactionEngine.
+        // subscribeFrameLogging pushes the sample into its frameLog for timing
+        // provenance, so pooling would corrupt the log.
+        if (hasSubscribers) {
+          const sample: FrameSample = {
+            index: this.totalFrames,
+            now: currentTime,
+            delta,
+            presented: shouldPresent,
+            droppedSinceLast,
+          };
+          const stats = this.getStats();
+          for (const callback of this.frameCallbacks) {
+            callback(sample, stats, context);
+          }
+        }
       }
 
       this.animationId = requestAnimationFrame(render);
@@ -417,7 +453,7 @@ export class WebGLRenderer {
     };
   }
 
-  private renderFrame(currentTime: number, deltaTime: number): void {
+  private renderFrame(context: RenderContext): void {
     if (this.contextLost) return;
     const gl = this.gl;
 
@@ -427,9 +463,7 @@ export class WebGLRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
 
-    const context = this.createRenderContext(currentTime, deltaTime);
-
-    const layers = Array.from(this.renderablesByLayer.keys()).sort((a, b) => a - b);
+    const layers = this.sortedLayers;
     for (const layer of layers) {
       const ids = this.renderablesByLayer.get(layer);
       if (!ids) continue;
@@ -783,14 +817,18 @@ export class WebGLRenderer {
     texture?: WebGLTexture
   ): void {
     const gl = this.gl;
-    const clipVertices = this.toClipSpace(pixelVertices);
+    const clipCount = this.writeClipSpace(pixelVertices);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(clipVertices), gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, this.positionScratch.subarray(0, clipCount), gl.DYNAMIC_DRAW);
 
-    const fallbackTex = this.defaultTexCoords(vertexCount);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texCoords || fallbackTex), gl.DYNAMIC_DRAW);
+    if (texCoords) {
+      const texData = this.writeTexCoords(texCoords);
+      gl.bufferData(gl.ARRAY_BUFFER, texData, gl.DYNAMIC_DRAW);
+    } else {
+      gl.bufferData(gl.ARRAY_BUFFER, this.defaultTexCoords(vertexCount), gl.DYNAMIC_DRAW);
+    }
 
     gl.uniform4fv(this.colorLocation, color);
     gl.uniform1i(this.useTextureLocation, useTexture ? 1 : 0);
@@ -805,26 +843,66 @@ export class WebGLRenderer {
     gl.drawArrays(primitive, 0, vertexCount);
   }
 
-  private toClipSpace(pixelVertices: number[]): number[] {
+  /**
+   * Convert pixel-space vertices to clip space, writing the result directly into
+   * the grow-on-demand positionScratch buffer (F106 — no intermediate number[]
+   * and no per-draw Float32Array). Returns the number of floats written (== the
+   * input length). Math is reproduced exactly from the previous toClipSpace:
+   * clipX = (x/w)*2-1, clipY = -((y/h)*2-1).
+   */
+  private writeClipSpace(pixelVertices: number[]): number {
     const width = this.canvas.width || 1;
     const height = this.canvas.height || 1;
-    const clipVertices: number[] = [];
+    const n = pixelVertices.length;
+    const scratch = this.ensurePositionScratch(n);
 
-    for (let i = 0; i < pixelVertices.length; i += 2) {
+    for (let i = 0; i < n; i += 2) {
       const x = pixelVertices[i] || 0;
       const y = pixelVertices[i + 1] || 0;
-      const clipX = (x / width) * 2 - 1;
-      const clipY = -((y / height) * 2 - 1);
-      clipVertices.push(clipX, clipY);
+      scratch[i] = (x / width) * 2 - 1;
+      scratch[i + 1] = -((y / height) * 2 - 1);
     }
 
-    return clipVertices;
+    return n;
   }
 
-  private defaultTexCoords(vertexCount: number): number[] {
-    const coords: number[] = [];
-    for (let i = 0; i < vertexCount; i++) {
-      coords.push(0, 0);
+  /** Copy caller-supplied texcoords into the grow-on-demand texCoordScratch buffer. */
+  private writeTexCoords(texCoords: number[]): Float32Array {
+    const n = texCoords.length;
+    const scratch = this.ensureTexCoordScratch(n);
+    for (let i = 0; i < n; i++) {
+      scratch[i] = texCoords[i]!;
+    }
+    return scratch.subarray(0, n);
+  }
+
+  /** Grow positionScratch to hold at least `capacity` floats; never shrinks. */
+  private ensurePositionScratch(capacity: number): Float32Array {
+    if (this.positionScratch.length < capacity) {
+      this.positionScratch = new Float32Array(capacity);
+    }
+    return this.positionScratch;
+  }
+
+  /** Grow texCoordScratch to hold at least `capacity` floats; never shrinks. */
+  private ensureTexCoordScratch(capacity: number): Float32Array {
+    if (this.texCoordScratch.length < capacity) {
+      this.texCoordScratch = new Float32Array(capacity);
+    }
+    return this.texCoordScratch;
+  }
+
+  /**
+   * Default (all-zero) texcoords for `vertexCount` vertices, cached per count so
+   * the fallback path allocates once per distinct vertex count (F106). The
+   * returned Float32Array is exactly `vertexCount * 2` floats of 0 — do not
+   * mutate it; callers upload it read-only.
+   */
+  private defaultTexCoords(vertexCount: number): Float32Array {
+    let coords = this.defaultTexCoordsCache.get(vertexCount);
+    if (!coords) {
+      coords = new Float32Array(vertexCount * 2);
+      this.defaultTexCoordsCache.set(vertexCount, coords);
     }
     return coords;
   }
@@ -918,6 +996,8 @@ export class WebGLRenderer {
     const layer = renderable.layer || 0;
     if (!this.renderablesByLayer.has(layer)) {
       this.renderablesByLayer.set(layer, new Set());
+      // New layer key → refresh the cached ascending order (F106).
+      this.rebuildSortedLayers();
     }
     this.renderablesByLayer.get(layer)!.add(renderable.id);
   }
@@ -934,6 +1014,8 @@ export class WebGLRenderer {
       layerSet.delete(id);
       if (layerSet.size === 0) {
         this.renderablesByLayer.delete(layer);
+        // Layer key removed → refresh the cached ascending order (F106).
+        this.rebuildSortedLayers();
       }
     }
   }
@@ -941,6 +1023,12 @@ export class WebGLRenderer {
   public clearRenderables(): void {
     this.renderables.clear();
     this.renderablesByLayer.clear();
+    this.rebuildSortedLayers();
+  }
+
+  /** Recompute the cached ascending layer keys iterated by renderFrame (F106). */
+  private rebuildSortedLayers(): void {
+    this.sortedLayers = Array.from(this.renderablesByLayer.keys()).sort((a, b) => a - b);
   }
 
   public markStimulusOnset(): void {
