@@ -16,8 +16,9 @@
   import type { SessionStatsSummary } from '$lib/shared/types/api';
   import BellCurveChart from './charts/BellCurveChart.svelte';
   import FeedbackChart from './charts/FeedbackChart.svelte';
+  import FeedbackTable from './charts/FeedbackTable.svelte';
   import GaugeChart from './charts/GaugeChart.svelte';
-  import type { ColorRule } from './charts/chart-utils';
+  import type { ColorRule, ScoreScaleSource } from './charts/chart-utils';
 
   interface Props {
     analytics?: any;
@@ -138,10 +139,47 @@
   // Check if we should use Chart.js or the simple CSS bars
   const useChartJs = $derived(
     config.chartType !== undefined &&
-      ['bar', 'line', 'radar', 'scatter', 'histogram', 'box', 'bell-curve', 'gauge'].includes(
-        config.chartType,
-      ),
+      [
+        'bar',
+        'line',
+        'radar',
+        'scatter',
+        'histogram',
+        'box',
+        'bell-curve',
+        'gauge',
+        'trajectory',
+        'table',
+      ].includes(config.chartType),
   );
+
+  // Per-scale sources for the `table` chart type: pair each interpreted scale's
+  // value/band with the T-score/percentile from its score.<scaleId> bundle
+  // (E-FEEDBACK-1), when the variable resolves to such an object.
+  const tableScales = $derived.by((): ScoreScaleSource[] => {
+    if (!scoreInterpretation) return [];
+    return scoreInterpretation.interpretations.map((interp) => {
+      const raw = variables[interp.config.variableId];
+      const bundle =
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? (raw as Record<string, unknown>)
+          : null;
+      const numField = (key: string): number | null => {
+        const v = bundle?.[key];
+        return typeof v === 'number' && Number.isFinite(v) ? v : null;
+      };
+      return {
+        label: interp.config.scaleName,
+        value: Number.isFinite(interp.score) ? interp.score : numField('value'),
+        tScore: numField('tScore'),
+        percentile: numField('percentile'),
+        band:
+          interp.range?.label ??
+          (typeof bundle?.band === 'string' ? (bundle.band as string) : null),
+        color: interp.range?.color ?? null,
+      };
+    });
+  });
 
   const summaryEntries = $derived.by((): Array<{ label: string; value: number | null }> => {
     if (!series?.summary) {
@@ -293,6 +331,13 @@
           {colorRules}
           cohortMean={cohortMean}
           cohortStdDev={cohortStdDev}
+        />
+      {:else if config.chartType === 'table'}
+        <FeedbackTable
+          {series}
+          scales={tableScales}
+          scoreName={config.title}
+          {colorRules}
         />
       {:else}
         <FeedbackChart

@@ -177,6 +177,159 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Reference bands (designable) — drawn as a Chart.js inline plugin
+// ---------------------------------------------------------------------------
+
+/**
+ * An inline Chart.js plugin that shades horizontal (or vertical) reference-band
+ * regions behind the plotted data from a set of {@link ColorRule}s (e.g. score
+ * interpretation ranges). Inline plugins passed via the chart config's
+ * `plugins: []` array do NOT require `Chart.register`, so this keeps the single
+ * centralized registration site (P5-T3) intact.
+ *
+ * @param rules ordered color rules (min/max/color)
+ * @param axis  which scale carries the value ('y' for bar/line/trajectory)
+ * @param alpha fill opacity for the band regions
+ */
+export function makeReferenceBandsPlugin(
+	rules: ColorRule[],
+	axis: 'x' | 'y' = 'y',
+	alpha = 0.1,
+	id = 'referenceBands',
+): AnyChartOptions {
+	return {
+		id,
+		beforeDatasetsDraw(chart: AnyChartOptions) {
+			if (!rules || rules.length === 0) return;
+			const scale = chart.scales?.[axis];
+			const area = chart.chartArea;
+			if (!scale || !area) return;
+			const ctx = chart.ctx as CanvasRenderingContext2D;
+			ctx.save();
+			for (const rule of rules) {
+				if (!Number.isFinite(rule.min) || !Number.isFinite(rule.max)) continue;
+				const a = scale.getPixelForValue(rule.min);
+				const b = scale.getPixelForValue(rule.max);
+				ctx.fillStyle = hexToRgba(rule.color, alpha);
+				if (axis === 'y') {
+					const top = Math.min(a, b);
+					const height = Math.abs(b - a);
+					ctx.fillRect(area.left, top, area.right - area.left, height);
+				} else {
+					const left = Math.min(a, b);
+					const width = Math.abs(b - a);
+					ctx.fillRect(left, area.top, width, area.bottom - area.top);
+				}
+			}
+			ctx.restore();
+		},
+	};
+}
+
+// ---------------------------------------------------------------------------
+// Table row-building (chart type: table)
+// ---------------------------------------------------------------------------
+
+/** A resolved score.<scaleId> bundle (E-FEEDBACK-1) as far as the table cares. */
+export interface ScoreScaleSource {
+	label: string;
+	value: number | null;
+	tScore?: number | null;
+	percentile?: number | null;
+	band?: string | null;
+	/** Band color (from the matched interpretation range), if any. */
+	color?: string | null;
+}
+
+export interface FeedbackTableRow {
+	label: string;
+	value: number | null;
+	tScore: number | null;
+	percentile: number | null;
+	band: string | null;
+	/** Resolved color for the band cell (rule color, or resolved from colorRules). */
+	color: string | null;
+}
+
+function num(value: number | null | undefined): number | null {
+	return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Build accessible table rows for the `table` chart type. When per-scale score
+ * sources (score.<scaleId> value/T/percentile/band) are supplied they win — one
+ * row per scale, richest data. Otherwise fall back to the raw `series.points`
+ * (label/value), coloring the band cell via `colorRules` when present.
+ */
+export function buildTableRows(
+	series: ChartSeriesContract | null | undefined,
+	scales: ScoreScaleSource[] = [],
+	colorRules: ColorRule[] = [],
+): FeedbackTableRow[] {
+	if (scales.length > 0) {
+		return scales.map((s) => {
+			const value = num(s.value);
+			const color =
+				s.color ?? (value !== null ? resolveColor(value, colorRules, '') || null : null);
+			return {
+				label: s.label,
+				value,
+				tScore: num(s.tScore),
+				percentile: num(s.percentile),
+				band: s.band ?? null,
+				color,
+			};
+		});
+	}
+
+	const points = series?.points ?? [];
+	return points.map((p) => {
+		const value = num(p.value);
+		const color = value !== null ? resolveColor(value, colorRules, '') || null : null;
+		return { label: p.label, value, tScore: null, percentile: null, band: null, color };
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Trajectory point ordering (chart type: trajectory)
+// ---------------------------------------------------------------------------
+
+export interface TrajectoryPoint {
+	label: string;
+	value: number | null;
+	/** Ordinal position along the trajectory (0-based, post-ordering). */
+	index: number;
+}
+
+/**
+ * Order a series' points into an administration trajectory (pre → mid → post).
+ * When every label ends in an integer (e.g. `RT-1`, `RT-2`, `RT-10`) the points
+ * are sorted by that trailing number so they read numerically rather than
+ * lexically; otherwise the given series order is preserved.
+ */
+export function buildTrajectoryPoints(
+	series: ChartSeriesContract | null | undefined,
+): TrajectoryPoint[] {
+	const points = series?.points ?? [];
+	const annotated = points.map((p, orig) => {
+		const match = /(\d+)\s*$/.exec(p.label ?? '');
+		return {
+			label: p.label,
+			value: typeof p.value === 'number' && Number.isFinite(p.value) ? p.value : null,
+			orig,
+			num: match ? parseInt(match[1]!, 10) : null,
+		};
+	});
+
+	const allNumbered = annotated.length > 0 && annotated.every((p) => p.num !== null);
+	const ordered = allNumbered
+		? [...annotated].sort((a, b) => a.num! - b.num! || a.orig - b.orig)
+		: annotated;
+
+	return ordered.map((p, index) => ({ label: p.label, value: p.value, index }));
+}
+
+// ---------------------------------------------------------------------------
 // Chart.js shared options
 // ---------------------------------------------------------------------------
 
@@ -192,7 +345,14 @@ export type AnyChartOptions = any;
 // Accessible text alternative (chart aria-label)
 // ---------------------------------------------------------------------------
 
-type FeedbackChartKind = 'bar' | 'line' | 'radar' | 'scatter' | 'histogram' | 'box';
+type FeedbackChartKind =
+	| 'bar'
+	| 'line'
+	| 'radar'
+	| 'scatter'
+	| 'histogram'
+	| 'box'
+	| 'trajectory';
 
 const CHART_TYPE_WORD: Record<FeedbackChartKind, string> = {
 	bar: 'Bar chart',
@@ -201,6 +361,7 @@ const CHART_TYPE_WORD: Record<FeedbackChartKind, string> = {
 	scatter: 'Scatter plot',
 	histogram: 'Histogram',
 	box: 'Box plot',
+	trajectory: 'Trajectory line chart',
 };
 
 /** Round to at most 2 decimals, dropping any trailing zeros. */
@@ -227,7 +388,20 @@ export function buildChartLabel(
 		return `${CHART_TYPE_WORD[chartType]} of cohort distribution, ${n} values`;
 	}
 
-	const label = scoreName?.trim() ? scoreName : 'Value';
+	const scoreLabel = scoreName?.trim() ? scoreName : 'Value';
+
+	// Trajectory summarizes the ordered administrations (pre → post).
+	if (chartType === 'trajectory') {
+		const ordered = buildTrajectoryPoints(series);
+		const parts = [`${CHART_TYPE_WORD.trajectory} of ${scoreLabel} across ${ordered.length} administrations.`];
+		for (const p of ordered) {
+			parts.push(`${p.label}: ${p.value != null ? formatScore(p.value) : 'no data'}.`);
+		}
+		if (cohortMean != null) parts.push(`Reference mean: ${formatScore(cohortMean)}.`);
+		return parts.join(' ');
+	}
+
+	const label = scoreLabel;
 	const parts: string[] = [`${CHART_TYPE_WORD[chartType]} of ${label}.`];
 
 	const primary = series?.points.find((p) => p.value != null);

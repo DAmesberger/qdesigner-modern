@@ -400,8 +400,10 @@
           <option value="scatter">Scatter</option>
           <option value="histogram">Histogram</option>
           <option value="box">Box Plot</option>
+          <option value="trajectory">Trajectory (repeated measures)</option>
           <option value="bell-curve">Bell Curve (Normal Distribution)</option>
           <option value="gauge">Gauge / Arc</option>
+          <option value="table">Table</option>
         </Select>
       </div>
 

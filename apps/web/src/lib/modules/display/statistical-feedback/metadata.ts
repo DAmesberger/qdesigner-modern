@@ -29,6 +29,8 @@ export const metadata: ModuleMetadata = {
       { value: 'scatter', label: 'Scatter Plot' },
       { value: 'histogram', label: 'Histogram' },
       { value: 'box', label: 'Box Plot' },
+      { value: 'trajectory', label: 'Trajectory (repeated measures)' },
+      { value: 'table', label: 'Table' },
     ],
   },
   defaultConfig: {

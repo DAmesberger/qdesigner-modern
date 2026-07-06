@@ -15,12 +15,21 @@
     resolveColor,
     hexToRgba,
     buildChartLabel,
+    buildTrajectoryPoints,
+    makeReferenceBandsPlugin,
     type ColorRule,
     type AnyChartOptions,
   } from './chart-utils';
   import type { ChartSeriesContract } from '$lib/services/sessionAnalytics';
 
-  type FeedbackChartType = 'bar' | 'line' | 'radar' | 'scatter' | 'histogram' | 'box';
+  type FeedbackChartType =
+    | 'bar'
+    | 'line'
+    | 'radar'
+    | 'scatter'
+    | 'histogram'
+    | 'box'
+    | 'trajectory';
 
   interface Props {
     series: ChartSeriesContract;
@@ -85,6 +94,9 @@
       case 'box':
         chartInstance = buildBox(canvasEl, labels, cohortValues ?? values);
         break;
+      case 'trajectory':
+        chartInstance = buildTrajectory(canvasEl);
+        break;
     }
 
     return () => {
@@ -92,6 +104,12 @@
       chartInstance = undefined;
     };
   });
+
+  // Designable reference bands (score-interpretation ranges) shaded behind the
+  // value axis. Inline plugins don't touch the centralized Chart.register site.
+  function bandPlugins(): AnyChartOptions[] {
+    return hasColorRules ? [makeReferenceBandsPlugin(colorRules, 'y')] : [];
+  }
 
   // -----------------------------------------------------------------------
   // Bar chart — grouped comparison with optional error bars
@@ -148,6 +166,7 @@
         type: 'bar',
         data: { labels: [scoreName], datasets },
         options: barOptions(false),
+        plugins: bandPlugins(),
       } as AnyChartOptions);
     }
 
@@ -169,6 +188,7 @@
       type: 'bar',
       data: { labels, datasets },
       options: barOptions(true),
+      plugins: bandPlugins(),
     } as AnyChartOptions);
   }
 
@@ -280,6 +300,105 @@
           },
         },
       } as AnyChartOptions,
+      plugins: bandPlugins(),
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // Trajectory — repeated-measures line over ordered administrations
+  // (pre → mid → post) with a shaded reference band behind the values.
+  // -----------------------------------------------------------------------
+  function buildTrajectory(canvas: HTMLCanvasElement): Chart {
+    const ordered = buildTrajectoryPoints(series);
+    const labels = ordered.map((p) => p.label);
+    const values = ordered.map((p) => p.value);
+
+    const pointColors = hasColorRules
+      ? values.map((v) => (v !== null ? resolveColor(v, colorRules, COLORS.participant) : COLORS.participant))
+      : values.map(() => COLORS.participant);
+
+    const datasets: AnyChartOptions[] = [
+      {
+        label: scoreName,
+        data: values,
+        borderColor: COLORS.participant,
+        backgroundColor: COLORS.participantFill,
+        borderWidth: 2.5,
+        fill: false,
+        tension: 0.25,
+        spanGaps: true,
+        pointRadius: 5,
+        pointBackgroundColor: pointColors,
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointHoverRadius: 7,
+      },
+    ];
+
+    // Reference mean line (±1 SD band drawn via the plugin below).
+    if (cohortMean !== null && Number.isFinite(cohortMean)) {
+      datasets.push({
+        label: 'Reference mean',
+        data: values.map(() => cohortMean),
+        borderColor: COLORS.mean,
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+        pointRadius: 0,
+        fill: false,
+        tension: 0,
+      });
+    }
+
+    // Bands: designable interpretation ranges, plus a normal reference band at
+    // mean ± 1 SD when a distribution is available (uses ColorRule regions).
+    const plugins: AnyChartOptions[] = [...bandPlugins()];
+    if (cohortMean !== null && cohortStdDev !== null && cohortStdDev > 0) {
+      plugins.push(
+        makeReferenceBandsPlugin(
+          [{ min: cohortMean - cohortStdDev, max: cohortMean + cohortStdDev, color: COLORS.curve }],
+          'y',
+          0.12,
+          'referenceNormalBand',
+        ),
+      );
+    }
+
+    return new Chart(canvas, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 500 },
+        scales: {
+          x: {
+            title: { display: true, text: 'Administration', color: COLORS.text, font: { size: 12 } },
+            grid: { display: false },
+            ticks: { color: COLORS.text, font: { size: 11 } },
+            border: { display: false },
+          },
+          y: {
+            title: { display: true, text: scoreName, color: COLORS.text, font: { size: 12 } },
+            grid: { color: COLORS.grid, drawTicks: false },
+            ticks: { color: COLORS.textLight, font: { size: 11 }, padding: 8 },
+            border: { display: false },
+          },
+        },
+        plugins: {
+          legend: {
+            display: datasets.length > 1,
+            position: 'bottom',
+            labels: { usePointStyle: true, padding: 16, font: { size: 11 } },
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            bodyFont: { size: 13 },
+            padding: { x: 12, y: 8 },
+            cornerRadius: 8,
+          },
+        },
+      } as AnyChartOptions,
+      plugins,
     });
   }
 

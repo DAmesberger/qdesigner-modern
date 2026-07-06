@@ -12,7 +12,10 @@ import {
 	resolveColor,
 	hexToRgba,
 	buildChartLabel,
+	buildTableRows,
+	buildTrajectoryPoints,
 	type ColorRule,
+	type ScoreScaleSource,
 } from './chart-utils';
 import type { ChartSeriesContract } from '$lib/services/sessionAnalytics';
 
@@ -253,5 +256,114 @@ describe('buildChartLabel', () => {
 
 	it('guards missing series and cohort stats', () => {
 		expect(buildChartLabel(null, 'bar', '', null, null, null)).toBe('Bar chart of Value.');
+	});
+
+	it('summarizes a trajectory by its ordered administrations', () => {
+		const traj: ChartSeriesContract = {
+			mode: 'self-baseline',
+			metric: 'mean',
+			points: [
+				{ label: 'Pre', value: 10 },
+				{ label: 'Post', value: 14 },
+			],
+		};
+		const label = buildChartLabel(traj, 'trajectory', 'Anxiety', 12, null, undefined);
+		expect(label).toBe(
+			'Trajectory line chart of Anxiety across 2 administrations. Pre: 10. Post: 14. Reference mean: 12.',
+		);
+	});
+});
+
+describe('buildTableRows', () => {
+	const series: ChartSeriesContract = {
+		mode: 'current-session',
+		metric: 'mean',
+		points: [
+			{ label: 'Anxiety', value: 12 },
+			{ label: 'Depression', value: 7 },
+		],
+	};
+
+	it('builds one row per point from series when no scales are supplied', () => {
+		const rows = buildTableRows(series);
+		expect(rows).toHaveLength(2);
+		expect(rows[0]).toMatchObject({ label: 'Anxiety', value: 12, tScore: null, percentile: null, band: null });
+		expect(rows[1]!.label).toBe('Depression');
+	});
+
+	it('colors the band cell from colorRules on the series fallback', () => {
+		const rules: ColorRule[] = [
+			{ min: 0, max: 9, color: '#22c55e', label: 'Low' },
+			{ min: 10, max: 20, color: '#ef4444', label: 'High' },
+		];
+		const rows = buildTableRows(series, [], rules);
+		expect(rows[0]!.color).toBe('#ef4444'); // value 12 → High
+		expect(rows[1]!.color).toBe('#22c55e'); // value 7 → Low
+	});
+
+	it('prefers per-scale sources (value/T/percentile/band) over raw points', () => {
+		const scales: ScoreScaleSource[] = [
+			{ label: 'Anxiety', value: 12, tScore: 65, percentile: 93, band: 'High', color: '#ef4444' },
+		];
+		const rows = buildTableRows(series, scales);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toEqual({
+			label: 'Anxiety',
+			value: 12,
+			tScore: 65,
+			percentile: 93,
+			band: 'High',
+			color: '#ef4444',
+		});
+	});
+
+	it('coerces non-finite score fields to null', () => {
+		const scales: ScoreScaleSource[] = [
+			{ label: 'Scale', value: NaN, tScore: Infinity, percentile: null, band: null },
+		];
+		const rows = buildTableRows(series, scales);
+		expect(rows[0]).toMatchObject({ value: null, tScore: null, percentile: null, band: null });
+	});
+});
+
+describe('buildTrajectoryPoints', () => {
+	it('preserves series order for non-numeric labels', () => {
+		const series: ChartSeriesContract = {
+			mode: 'self-baseline',
+			metric: 'mean',
+			points: [
+				{ label: 'Baseline', value: 10 },
+				{ label: 'Current', value: 14 },
+			],
+		};
+		const pts = buildTrajectoryPoints(series);
+		expect(pts.map((p) => p.label)).toEqual(['Baseline', 'Current']);
+		expect(pts.map((p) => p.index)).toEqual([0, 1]);
+	});
+
+	it('sorts numerically by a trailing integer label (T2 before T10)', () => {
+		const series: ChartSeriesContract = {
+			mode: 'current-session',
+			metric: 'mean',
+			points: [
+				{ label: 'RT-10', value: 3 },
+				{ label: 'RT-2', value: 1 },
+				{ label: 'RT-1', value: 0 },
+			],
+		};
+		const pts = buildTrajectoryPoints(series);
+		expect(pts.map((p) => p.label)).toEqual(['RT-1', 'RT-2', 'RT-10']);
+		expect(pts.map((p) => p.value)).toEqual([0, 1, 3]);
+		expect(pts.map((p) => p.index)).toEqual([0, 1, 2]);
+	});
+
+	it('coerces null/non-finite values and handles empty series', () => {
+		expect(buildTrajectoryPoints(null)).toEqual([]);
+		const series: ChartSeriesContract = {
+			mode: 'self-baseline',
+			metric: 'mean',
+			points: [{ label: 'Pre', value: null }],
+		};
+		expect(buildTrajectoryPoints(series)[0]).toEqual({ label: 'Pre', value: null, index: 0 });
 	});
 });
