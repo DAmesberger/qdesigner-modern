@@ -10,6 +10,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::audit::{self, resource, AuditAction, AuditEvent, ClientIp};
 use crate::auth::models::AuthenticatedUser;
 use crate::middleware::tx::Tx;
 use crate::error::ApiError;
@@ -376,6 +377,7 @@ pub async fn get_organization(
 pub async fn update_organization(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path(org_id): Path<Uuid>,
     Json(body): Json<UpdateOrgRequest>,
@@ -443,6 +445,34 @@ pub async fn update_organization(
         .await?
         .ok_or_else(|| ApiError::NotFound("Organization not found".into()))?;
 
+    let mut changed: Vec<&str> = Vec::new();
+    if body.name.is_some() {
+        changed.push("name");
+    }
+    if body.domain.is_some() {
+        changed.push("domain");
+    }
+    if body.logo_url.is_some() {
+        changed.push("logo_url");
+    }
+    if body.settings.is_some() {
+        changed.push("settings");
+    }
+
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::OrgUpdated,
+            resource_type: resource::ORGANIZATION,
+            resource_id: Some(org_id),
+            metadata: serde_json::json!({ "changed_fields": changed }),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
+
     Ok(Json(org))
 }
 
@@ -465,6 +495,7 @@ pub async fn update_organization(
 pub async fn delete_organization(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -483,6 +514,20 @@ pub async fn delete_organization(
         .bind(org_id)
         .execute(&mut **tx)
         .await?;
+
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::OrgDeleted,
+            resource_type: resource::ORGANIZATION,
+            resource_id: Some(org_id),
+            metadata: serde_json::json!({}),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
 
     Ok(Json(
         serde_json::json!({ "message": "Organization deleted" }),
@@ -565,6 +610,7 @@ pub async fn list_members(
 pub async fn add_member(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path(org_id): Path<Uuid>,
     Json(body): Json<AddMemberRequest>,
@@ -621,6 +667,24 @@ pub async fn add_member(
     .execute(&mut **tx)
     .await?;
 
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::MemberAdded,
+            resource_type: resource::ORG_MEMBER,
+            resource_id: Some(target_user),
+            metadata: serde_json::json!({
+                "target_user_id": target_user,
+                "email": body.email,
+                "role": body.role,
+            }),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
+
     Ok((
         axum::http::StatusCode::CREATED,
         Json(serde_json::json!({ "message": "Member added" })),
@@ -648,6 +712,7 @@ pub async fn add_member(
 pub async fn remove_member(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path((org_id, target_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -660,27 +725,27 @@ pub async fn remove_member(
         return Err(ApiError::Forbidden("Requires admin role".into()));
     }
 
+    // Capture the target's current role (for both the last-owner guard and
+    // the audit trail).
+    let target_role = sqlx::query_scalar::<_, String>(
+        "SELECT role FROM organization_members WHERE organization_id = $1 AND user_id = $2",
+    )
+    .bind(org_id)
+    .bind(target_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
     // Prevent removing the last owner
-    if target_id != user.user_id {
-        let target_role = sqlx::query_scalar::<_, String>(
-            "SELECT role FROM organization_members WHERE organization_id = $1 AND user_id = $2",
+    if target_id != user.user_id && target_role.as_deref() == Some("owner") {
+        let owner_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM organization_members WHERE organization_id = $1 AND role = 'owner' AND status = 'active'",
         )
         .bind(org_id)
-        .bind(target_id)
-        .fetch_optional(&mut **tx)
+        .fetch_one(&mut **tx)
         .await?;
 
-        if target_role.as_deref() == Some("owner") {
-            let owner_count = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM organization_members WHERE organization_id = $1 AND role = 'owner' AND status = 'active'",
-            )
-            .bind(org_id)
-            .fetch_one(&mut **tx)
-            .await?;
-
-            if owner_count <= 1 {
-                return Err(ApiError::BadRequest("Cannot remove the last owner".into()));
-            }
+        if owner_count <= 1 {
+            return Err(ApiError::BadRequest("Cannot remove the last owner".into()));
         }
     }
 
@@ -689,6 +754,23 @@ pub async fn remove_member(
         .bind(target_id)
         .execute(&mut **tx)
         .await?;
+
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::MemberRemoved,
+            resource_type: resource::ORG_MEMBER,
+            resource_id: Some(target_id),
+            metadata: serde_json::json!({
+                "target_user_id": target_id,
+                "role": target_role,
+            }),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
 
     Ok(Json(serde_json::json!({ "message": "Member removed" })))
 }
@@ -716,6 +798,7 @@ pub async fn remove_member(
 pub async fn change_member_role(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path((org_id, target_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<ChangeMemberRoleRequest>,
@@ -791,6 +874,24 @@ pub async fn change_member_role(
     .execute(&mut **tx)
     .await?;
 
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::MemberRoleChanged,
+            resource_type: resource::ORG_MEMBER,
+            resource_id: Some(target_id),
+            metadata: serde_json::json!({
+                "target_user_id": target_id,
+                "before": current_role,
+                "after": body.role,
+            }),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
+
     Ok(Json(serde_json::json!({ "message": "Member role updated" })))
 }
 
@@ -864,6 +965,7 @@ pub async fn list_invitations(
 pub async fn create_invitation(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path(org_id): Path<Uuid>,
     Json(body): Json<CreateInvitationRequest>,
@@ -903,6 +1005,23 @@ pub async fn create_invitation(
     .bind(expires_at)
     .bind(&body.custom_message)
     .fetch_one(&mut **tx)
+    .await?;
+
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::InvitationCreated,
+            resource_type: resource::INVITATION,
+            resource_id: Some(invitation.id),
+            metadata: serde_json::json!({
+                "email": body.email,
+                "role": body.role,
+            }),
+            ip: client_ip.0,
+        },
+    )
     .await?;
 
     // Send invitation email
@@ -1286,6 +1405,7 @@ pub async fn decline_invitation(
 pub async fn revoke_invitation(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path((org_id, invitation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -1298,24 +1418,38 @@ pub async fn revoke_invitation(
         return Err(ApiError::Forbidden("Requires admin role".into()));
     }
 
-    let rows_affected = sqlx::query(
+    let revoked_email = sqlx::query_scalar::<_, String>(
         r#"
         UPDATE organization_invitations
         SET status = 'revoked'
         WHERE id = $1 AND organization_id = $2 AND status = 'pending'
+        RETURNING email
         "#,
     )
     .bind(invitation_id)
     .bind(org_id)
-    .execute(&mut **tx)
-    .await?
-    .rows_affected();
+    .fetch_optional(&mut **tx)
+    .await?;
 
-    if rows_affected == 0 {
+    let Some(email) = revoked_email else {
         return Err(ApiError::NotFound(
             "Invitation not found or already processed".into(),
         ));
-    }
+    };
+
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::InvitationRevoked,
+            resource_type: resource::INVITATION,
+            resource_id: Some(invitation_id),
+            metadata: serde_json::json!({ "email": email }),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
 
     Ok(Json(serde_json::json!({ "message": "Invitation revoked" })))
 }
@@ -1444,6 +1578,7 @@ pub async fn create_domain(
 pub async fn verify_domain(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path((org_id, domain_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -1490,10 +1625,11 @@ pub async fn verify_domain(
         )));
     }
 
-    // Phase 3 (re-enter the tx): record the successful verification.
-    let rows_affected = {
+    // Phase 3 (re-enter the tx): record the successful verification and
+    // append the audit event on the same transaction.
+    {
         let mut tx = tx.tx().await?;
-        sqlx::query(
+        let rows_affected = sqlx::query(
             "UPDATE organization_domains SET verified_at = NOW(), last_verified_at = NOW() \
              WHERE id = $1 AND organization_id = $2",
         )
@@ -1501,11 +1637,25 @@ pub async fn verify_domain(
         .bind(org_id)
         .execute(&mut **tx)
         .await?
-        .rows_affected()
-    };
+        .rows_affected();
 
-    if rows_affected == 0 {
-        return Err(ApiError::NotFound("Domain not found".into()));
+        if rows_affected == 0 {
+            return Err(ApiError::NotFound("Domain not found".into()));
+        }
+
+        audit::record(
+            &mut **tx,
+            AuditEvent {
+                organization_id: org_id,
+                actor_user_id: user.user_id,
+                action: AuditAction::DomainVerified,
+                resource_type: resource::DOMAIN,
+                resource_id: Some(domain_id),
+                metadata: serde_json::json!({ "domain": domain }),
+                ip: client_ip.0,
+            },
+        )
+        .await?;
     }
 
     Ok(Json(serde_json::json!({
@@ -1753,4 +1903,151 @@ pub async fn check_auto_join(
             welcome_message: None,
         })),
     }
+}
+
+// ── Audit log (E-RBAC-2) ─────────────────────────────────────────────
+
+/// One row of the org audit timeline, joined with the actor's identity.
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
+pub struct AuditEventRecord {
+    pub id: Uuid,
+    pub organization_id: Uuid,
+    pub actor_user_id: Option<Uuid>,
+    pub actor_email: Option<String>,
+    pub actor_full_name: Option<String>,
+    pub action: String,
+    pub resource_type: String,
+    pub resource_id: Option<Uuid>,
+    pub metadata: serde_json::Value,
+    /// Actor IP as a plain host string (no netmask), or null.
+    pub ip: Option<String>,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Paginated audit-timeline page. `next_cursor` is present only when more
+/// rows may exist (the page came back full); pass it back as `cursor`.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuditListResponse {
+    pub events: Vec<AuditEventRecord>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct AuditListQuery {
+    /// Exact `action` string filter (e.g. `member.role_changed`).
+    pub action: Option<String>,
+    /// Filter to a single actor user id.
+    pub actor: Option<Uuid>,
+    /// Inclusive lower bound on `created_at` (RFC 3339).
+    pub from: Option<chrono::DateTime<chrono::Utc>>,
+    /// Inclusive upper bound on `created_at` (RFC 3339).
+    pub to: Option<chrono::DateTime<chrono::Utc>>,
+    /// Opaque keyset cursor from a prior page's `next_cursor`.
+    pub cursor: Option<String>,
+    /// Page size (1..=200, default 50).
+    pub limit: Option<i64>,
+}
+
+/// GET /api/organizations/:id/audit
+///
+/// Reverse-chronological, keyset-paginated audit timeline for one
+/// organization. Org admin/owner gated (defense-in-depth: the
+/// `audit_events_select` RLS policy also admits only active admins/owners).
+#[utoipa::path(
+    get,
+    path = "/api/organizations/{id}/audit",
+    params(
+        ("id" = Uuid, Path, description = "Organization id"),
+        AuditListQuery
+    ),
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Audit timeline page", body = AuditListResponse),
+        (status = 400, description = "Invalid cursor", body = crate::openapi::ErrorEnvelope),
+        (status = 403, description = "Access denied", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["organizations"]
+)]
+pub async fn list_audit_events(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    tx: Tx,
+    Path(org_id): Path<Uuid>,
+    Query(q): Query<AuditListQuery>,
+) -> Result<Json<AuditListResponse>, ApiError> {
+    let mut tx = tx.tx().await?;
+
+    if !state
+        .rbac
+        .has_org_role(&mut **tx, user.user_id, org_id, &crate::rbac::models::OrgRole::Admin)
+        .await?
+    {
+        return Err(ApiError::Forbidden("Requires admin role".into()));
+    }
+
+    let limit = q.limit.unwrap_or(50).clamp(1, 200);
+
+    // Keyset cursor: "<rfc3339 created_at>|<uuid id>". The id tie-breaks
+    // rows sharing a created_at so pages never skip or duplicate.
+    let (cursor_ts, cursor_id) = match q.cursor.as_deref() {
+        Some(c) => {
+            let (ts_str, id_str) = c
+                .split_once('|')
+                .ok_or_else(|| ApiError::BadRequest("Invalid cursor".into()))?;
+            let ts = chrono::DateTime::parse_from_rfc3339(ts_str)
+                .map_err(|_| ApiError::BadRequest("Invalid cursor timestamp".into()))?
+                .with_timezone(&chrono::Utc);
+            let id = Uuid::parse_str(id_str)
+                .map_err(|_| ApiError::BadRequest("Invalid cursor id".into()))?;
+            (Some(ts), Some(id))
+        }
+        None => (None, None),
+    };
+
+    let events = sqlx::query_as::<_, AuditEventRecord>(
+        r#"
+        SELECT ae.id, ae.organization_id, ae.actor_user_id,
+               u.email AS actor_email, u.full_name AS actor_full_name,
+               ae.action, ae.resource_type, ae.resource_id, ae.metadata,
+               host(ae.ip) AS ip, ae.created_at
+        FROM audit_events ae
+        LEFT JOIN users u ON u.id = ae.actor_user_id
+        WHERE ae.organization_id = $1
+          AND ($2::text IS NULL OR ae.action = $2)
+          AND ($3::uuid IS NULL OR ae.actor_user_id = $3)
+          AND ($4::timestamptz IS NULL OR ae.created_at >= $4)
+          AND ($5::timestamptz IS NULL OR ae.created_at <= $5)
+          AND ($6::timestamptz IS NULL
+               OR ae.created_at < $6
+               OR (ae.created_at = $6 AND ae.id < $7))
+        ORDER BY ae.created_at DESC, ae.id DESC
+        LIMIT $8
+        "#,
+    )
+    .bind(org_id)
+    .bind(&q.action)
+    .bind(q.actor)
+    .bind(q.from)
+    .bind(q.to)
+    .bind(cursor_ts)
+    .bind(cursor_id)
+    .bind(limit)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    // A full page means there may be more; emit a cursor from the last row.
+    let next_cursor = if events.len() as i64 == limit {
+        events
+            .last()
+            .and_then(|e| e.created_at.map(|ts| format!("{}|{}", ts.to_rfc3339(), e.id)))
+    } else {
+        None
+    };
+
+    Ok(Json(AuditListResponse {
+        events,
+        next_cursor,
+    }))
 }

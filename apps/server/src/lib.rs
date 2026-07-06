@@ -6,6 +6,7 @@
 //! module trees because main.rs no longer declares `mod x;` blocks.
 
 pub mod api;
+pub mod audit;
 pub mod auth;
 pub mod config;
 pub mod db;

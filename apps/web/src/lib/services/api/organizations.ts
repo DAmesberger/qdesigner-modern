@@ -15,6 +15,35 @@ import type {
   CrossProjectAnalyticsData,
 } from '$lib/shared/types/api';
 
+/** One row of the organization audit timeline (E-RBAC-2). */
+export interface AuditEventRecord {
+  id: string;
+  organization_id: string;
+  actor_user_id: string | null;
+  actor_email: string | null;
+  actor_full_name: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  metadata: Record<string, unknown>;
+  ip: string | null;
+  created_at: string | null;
+}
+
+export interface AuditListResponse {
+  events: AuditEventRecord[];
+  next_cursor: string | null;
+}
+
+export interface AuditListParams {
+  action?: string;
+  actor?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
+  limit?: number;
+}
+
 export const organizations = {
   list: async () =>
     (await callSdk(() =>
@@ -313,5 +342,29 @@ export const organizations = {
       })
     );
     return mapCrossProjectAnalytics(raw);
+  },
+
+  // Audit log (E-RBAC-2). No generated SDK helper yet (the openapi that
+  // registers this route regenerates the contracts); call the client
+  // directly, matching the SDK's `(client).get({ url, path, query })` shape.
+  audit: {
+    list: (orgId: string, params: AuditListParams = {}): Promise<AuditListResponse> =>
+      callSdk(() =>
+        apiClient.get<{ 200: AuditListResponse }, unknown, true, 'data'>({
+          security: [{ scheme: 'bearer', type: 'http' }],
+          url: '/api/organizations/{id}/audit',
+          responseStyle: 'data',
+          throwOnError: true,
+          path: { id: orgId },
+          query: {
+            action: params.action,
+            actor: params.actor,
+            from: params.from,
+            to: params.to,
+            cursor: params.cursor,
+            limit: params.limit,
+          },
+        })
+      ) as Promise<AuditListResponse>,
   },
 };

@@ -108,6 +108,7 @@ pub fn router(state: AppState) -> Router {
                 .delete(templates::delete_template),
         )
         .route("/{id}/analytics", get(sessions::cross_project_analytics))
+        .route("/{id}/audit", get(organizations::list_audit_events))
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 

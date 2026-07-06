@@ -9,7 +9,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::access::{verify_project_access, verify_project_write_access};
+use crate::api::access::{verify_project_read_access, verify_project_write_access};
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
@@ -180,7 +180,7 @@ pub async fn list_questionnaires(
     let mut tx = tx.tx().await?;
 
     // Verify access to the project
-    verify_project_access(&mut **tx, user.user_id, project_id).await?;
+    verify_project_read_access(&mut **tx, user.user_id, project_id).await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -308,7 +308,7 @@ pub async fn get_questionnaire(
 ) -> Result<Json<Questionnaire>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    verify_project_access(&mut **tx, user.user_id, path.id).await?;
+    verify_project_read_access(&mut **tx, user.user_id, path.id).await?;
 
     let q = sqlx::query_as::<_, Questionnaire>(
         r#"
@@ -730,7 +730,7 @@ pub async fn export_responses(
 ) -> Result<Response, ApiError> {
     let mut tx = tx.tx().await?;
 
-    verify_project_access(&mut **tx, user.user_id, path.id).await?;
+    verify_project_read_access(&mut **tx, user.user_id, path.id).await?;
 
     // Verify questionnaire exists
     let exists = sqlx::query_scalar::<_, bool>(
@@ -991,7 +991,7 @@ pub async fn list_versions(
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
-    verify_project_access(&mut **tx, user.user_id, project_id).await?;
+    verify_project_read_access(&mut **tx, user.user_id, project_id).await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);

@@ -111,6 +111,28 @@ impl RbacManager {
             .await?;
         Ok(role.is_some_and(|r| project_role_level(&r) >= project_role_level(required)))
     }
+
+    /// Whether the user may *read* the project under its org's
+    /// `projectVisibility` policy (E-RBAC-1).
+    ///
+    /// Convenience predicate delegating to
+    /// [`crate::api::access::verify_project_read_access`] so UI/gate call
+    /// sites can ask the same question without duplicating the SQL: org
+    /// `owner`/`admin`s and explicit project members always may; plain org
+    /// members may only under `'org'` visibility.
+    #[allow(dead_code)]
+    pub async fn has_project_read<'e>(
+        &self,
+        executor: impl PgExecutor<'e>,
+        user_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<bool, ApiError> {
+        match crate::api::access::verify_project_read_access(executor, user_id, project_id).await {
+            Ok(()) => Ok(true),
+            Err(ApiError::Forbidden(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

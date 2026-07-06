@@ -8,6 +8,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::api::access;
+use crate::audit::{self, resource, AuditAction, AuditEvent, ClientIp};
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
@@ -97,36 +98,97 @@ pub async fn list_projects(
     let offset = q.offset.unwrap_or(0);
 
     let projects = if let Some(org_id) = q.organization_id {
-        sqlx::query_as::<_, Project>(
-            r#"
-            SELECT p.id, p.organization_id, p.name, p.code, p.description, p.is_public,
-                   p.status, p.max_participants, p.irb_number, p.start_date, p.end_date,
-                   p.settings, p.created_at, p.updated_at
-            FROM projects p
-            JOIN organization_members om ON om.organization_id = p.organization_id
-            WHERE om.user_id = $1 AND om.status = 'active'
-              AND p.organization_id = $2
-              AND p.deleted_at IS NULL
-            ORDER BY p.updated_at DESC
-            LIMIT $3 OFFSET $4
-            "#,
-        )
-        .bind(user.user_id)
-        .bind(org_id)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&mut **tx)
-        .await?
+        // Scope by the org's projectVisibility policy (E-RBAC-1). Under the
+        // 'org' default every active member sees every project; under
+        // 'members' only org owners/admins and explicit project_members do.
+        match access::org_project_visibility(&mut **tx, org_id).await? {
+            access::ProjectVisibility::Org => {
+                sqlx::query_as::<_, Project>(
+                    r#"
+                    SELECT p.id, p.organization_id, p.name, p.code, p.description, p.is_public,
+                           p.status, p.max_participants, p.irb_number, p.start_date, p.end_date,
+                           p.settings, p.created_at, p.updated_at
+                    FROM projects p
+                    JOIN organization_members om ON om.organization_id = p.organization_id
+                    WHERE om.user_id = $1 AND om.status = 'active'
+                      AND p.organization_id = $2
+                      AND p.deleted_at IS NULL
+                    ORDER BY p.updated_at DESC
+                    LIMIT $3 OFFSET $4
+                    "#,
+                )
+                .bind(user.user_id)
+                .bind(org_id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&mut **tx)
+                .await?
+            }
+            access::ProjectVisibility::Members => {
+                sqlx::query_as::<_, Project>(
+                    r#"
+                    SELECT p.id, p.organization_id, p.name, p.code, p.description, p.is_public,
+                           p.status, p.max_participants, p.irb_number, p.start_date, p.end_date,
+                           p.settings, p.created_at, p.updated_at
+                    FROM projects p
+                    WHERE p.organization_id = $2
+                      AND p.deleted_at IS NULL
+                      AND (
+                        EXISTS (
+                            SELECT 1 FROM organization_members om
+                            WHERE om.organization_id = p.organization_id
+                              AND om.user_id = $1 AND om.status = 'active'
+                              AND om.role IN ('owner', 'admin')
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM project_members pm
+                            WHERE pm.project_id = p.id AND pm.user_id = $1
+                        )
+                      )
+                    ORDER BY p.updated_at DESC
+                    LIMIT $3 OFFSET $4
+                    "#,
+                )
+                .bind(user.user_id)
+                .bind(org_id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&mut **tx)
+                .await?
+            }
+        }
     } else {
+        // No org filter — evaluate each project against its OWN org's
+        // projectVisibility so mixed-visibility orgs resolve per row. This
+        // predicate mirrors access::verify_project_read_access exactly.
         sqlx::query_as::<_, Project>(
             r#"
             SELECT p.id, p.organization_id, p.name, p.code, p.description, p.is_public,
                    p.status, p.max_participants, p.irb_number, p.start_date, p.end_date,
                    p.settings, p.created_at, p.updated_at
             FROM projects p
-            JOIN organization_members om ON om.organization_id = p.organization_id
-            WHERE om.user_id = $1 AND om.status = 'active'
-              AND p.deleted_at IS NULL
+            JOIN organizations o ON o.id = p.organization_id
+            WHERE p.deleted_at IS NULL
+              AND (
+                EXISTS (
+                    SELECT 1 FROM organization_members om
+                    WHERE om.organization_id = p.organization_id
+                      AND om.user_id = $1 AND om.status = 'active'
+                      AND om.role IN ('owner', 'admin')
+                )
+                OR EXISTS (
+                    SELECT 1 FROM project_members pm
+                    WHERE pm.project_id = p.id AND pm.user_id = $1
+                )
+                OR (
+                    COALESCE(o.settings->>'projectVisibility', 'org') = 'org'
+                    AND EXISTS (
+                        SELECT 1 FROM organization_members om
+                        WHERE om.organization_id = p.organization_id
+                          AND om.user_id = $1 AND om.status = 'active'
+                    )
+                )
+              )
             ORDER BY p.updated_at DESC
             LIMIT $2 OFFSET $3
             "#,
@@ -234,19 +296,22 @@ pub async fn get_project(
 ) -> Result<Json<Project>, ApiError> {
     let mut tx = tx.tx().await?;
 
+    // Read access honours the org's projectVisibility policy (E-RBAC-1): org
+    // owners/admins and explicit project members always pass; plain org members
+    // pass only under 'org' visibility. Denied callers get 403 (not 404), so a
+    // confidential project's existence is not leaked.
+    access::verify_project_read_access(&mut **tx, user.user_id, project_id).await?;
+
     let project = sqlx::query_as::<_, Project>(
         r#"
         SELECT p.id, p.organization_id, p.name, p.code, p.description, p.is_public,
                p.status, p.max_participants, p.irb_number, p.start_date, p.end_date,
                p.settings, p.created_at, p.updated_at
         FROM projects p
-        JOIN organization_members om ON om.organization_id = p.organization_id
-        WHERE p.id = $1 AND om.user_id = $2 AND om.status = 'active'
-          AND p.deleted_at IS NULL
+        WHERE p.id = $1 AND p.deleted_at IS NULL
         "#,
     )
     .bind(project_id)
-    .bind(user.user_id)
     .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
@@ -397,6 +462,7 @@ pub async fn update_project(
 pub async fn delete_project(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -434,6 +500,20 @@ pub async fn delete_project(
         .bind(project_id)
         .execute(&mut **tx)
         .await?;
+
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::ProjectDeleted,
+            resource_type: resource::PROJECT,
+            resource_id: Some(project_id),
+            metadata: serde_json::json!({}),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
 
     Ok(Json(serde_json::json!({ "message": "Project deleted" })))
 }
@@ -484,7 +564,7 @@ pub async fn list_project_members(
 ) -> Result<Json<Vec<ProjectMember>>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    access::verify_project_access(&mut **tx, user.user_id, project_id).await?;
+    access::verify_project_read_access(&mut **tx, user.user_id, project_id).await?;
 
     let members = sqlx::query_as::<_, ProjectMember>(
         r#"
@@ -525,6 +605,7 @@ pub async fn list_project_members(
 pub async fn add_project_member(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path(project_id): Path<Uuid>,
     Json(body): Json<AddProjectMemberRequest>,
@@ -601,6 +682,25 @@ pub async fn add_project_member(
     .execute(&mut **tx)
     .await?;
 
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::ProjectMemberAdded,
+            resource_type: resource::PROJECT_MEMBER,
+            resource_id: Some(target_user),
+            metadata: serde_json::json!({
+                "project_id": project_id,
+                "target_user_id": target_user,
+                "email": body.email,
+                "role": body.role,
+            }),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
+
     Ok((
         axum::http::StatusCode::CREATED,
         Json(serde_json::json!({ "message": "Member added" })),
@@ -630,6 +730,7 @@ pub async fn add_project_member(
 pub async fn update_project_member(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path((project_id, target_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<UpdateProjectMemberRequest>,
@@ -684,6 +785,25 @@ pub async fn update_project_member(
         return Err(ApiError::NotFound("Project member not found".into()));
     }
 
+    let org_id = access::get_project_org_id(&mut **tx, project_id).await?;
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::ProjectMemberRoleChanged,
+            resource_type: resource::PROJECT_MEMBER,
+            resource_id: Some(target_id),
+            metadata: serde_json::json!({
+                "project_id": project_id,
+                "target_user_id": target_id,
+                "after": body.role,
+            }),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
+
     Ok(Json(serde_json::json!({ "message": "Member updated" })))
 }
 
@@ -709,6 +829,7 @@ pub async fn update_project_member(
 pub async fn remove_project_member(
     State(state): State<AppState>,
     user: AuthenticatedUser,
+    client_ip: ClientIp,
     tx: Tx,
     Path((project_id, target_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -772,6 +893,25 @@ pub async fn remove_project_member(
         .bind(target_id)
         .execute(&mut **tx)
         .await?;
+
+    let org_id = access::get_project_org_id(&mut **tx, project_id).await?;
+    audit::record(
+        &mut **tx,
+        AuditEvent {
+            organization_id: org_id,
+            actor_user_id: user.user_id,
+            action: AuditAction::ProjectMemberRemoved,
+            resource_type: resource::PROJECT_MEMBER,
+            resource_id: Some(target_id),
+            metadata: serde_json::json!({
+                "project_id": project_id,
+                "target_user_id": target_id,
+                "role": target_role,
+            }),
+            ip: client_ip.0,
+        },
+    )
+    .await?;
 
     Ok(Json(serde_json::json!({ "message": "Member removed" })))
 }
