@@ -141,8 +141,11 @@
     }
   });
 
-  // Cleanup on destroy
+  // Cleanup on destroy. Guard for SSR: Svelte runs onDestroy on the server during
+  // render teardown, where `document` is undefined (the scroll-lock $effect above is
+  // client-only, so there is nothing to clean up server-side).
   onDestroy(() => {
+    if (typeof document === 'undefined') return;
     document.body.style.overflow = '';
     document.body.style.paddingRight = '';
   });

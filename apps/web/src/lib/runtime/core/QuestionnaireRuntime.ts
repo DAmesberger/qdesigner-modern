@@ -719,6 +719,25 @@ export class QuestionnaireRuntime {
       defaultValue: this.config.questionnaire.pages.length,
     });
 
+    // Quota/eligibility flow variables (E-FLOW-7). FilloutPageController sets these
+    // unconditionally at session start, so they must be registered as built-ins here
+    // even when the questionnaire declares no quota cells / screener.
+    this.variableEngine.registerVariable({
+      id: '_quotaCell',
+      name: 'quotaCell',
+      type: 'string',
+      scope: 'global',
+      defaultValue: '',
+    });
+
+    this.variableEngine.registerVariable({
+      id: '_eligible',
+      name: 'eligible',
+      type: 'boolean',
+      scope: 'global',
+      defaultValue: true,
+    });
+
     this.injectServerVariables();
   }
 
