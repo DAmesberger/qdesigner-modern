@@ -201,7 +201,7 @@ pub async fn create_role(
     .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -291,7 +291,7 @@ pub async fn update_role(
     .ok_or_else(|| ApiError::NotFound("Role not found".into()))?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -360,7 +360,7 @@ pub async fn delete_role(
     .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -443,7 +443,7 @@ pub async fn assign_member_role(
     .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,

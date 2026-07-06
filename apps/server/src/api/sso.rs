@@ -373,7 +373,7 @@ pub async fn list_providers(
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<Vec<IdentityProviderRecord>>, ApiError> {
     let mut tx = tx.tx().await?;
-    require_org_owner(&state, &mut **tx, user.user_id, org_id).await?;
+    require_org_owner(&state, &mut tx, user.user_id, org_id).await?;
 
     let rows = sqlx::query_as::<_, IdpRow>(&format!(
         "SELECT {IDP_SELECT} FROM org_identity_providers WHERE organization_id = $1 ORDER BY created_at"
@@ -433,7 +433,7 @@ pub async fn create_provider(
     let group_claim = body.group_claim.unwrap_or_else(|| "groups".into());
 
     let mut tx = tx.tx().await?;
-    require_org_owner(&state, &mut **tx, user.user_id, org_id).await?;
+    require_org_owner(&state, &mut tx, user.user_id, org_id).await?;
 
     let row = sqlx::query_as::<_, IdpRow>(&format!(
         r#"
@@ -461,7 +461,7 @@ pub async fn create_provider(
     .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -533,7 +533,7 @@ pub async fn update_provider(
     };
 
     let mut tx = tx.tx().await?;
-    require_org_owner(&state, &mut **tx, user.user_id, org_id).await?;
+    require_org_owner(&state, &mut tx, user.user_id, org_id).await?;
 
     // COALESCE-driven partial update: each column keeps its current value when
     // the corresponding bind is NULL. `client_secret_enc` is handled by a
@@ -579,7 +579,7 @@ pub async fn update_provider(
     .ok_or_else(|| ApiError::NotFound("Identity provider not found".into()))?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -622,7 +622,7 @@ pub async fn delete_provider(
     Path((org_id, idp_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = tx.tx().await?;
-    require_org_owner(&state, &mut **tx, user.user_id, org_id).await?;
+    require_org_owner(&state, &mut tx, user.user_id, org_id).await?;
 
     let deleted =
         sqlx::query("DELETE FROM org_identity_providers WHERE id = $1 AND organization_id = $2")
@@ -637,7 +637,7 @@ pub async fn delete_provider(
     }
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -1171,7 +1171,7 @@ pub async fn sso_callback(
 
     // 3) Audit the federated login on the same tx.
     audit::record(
-        &mut *tx,
+        &mut tx,
         AuditEvent {
             organization_id: idp.organization_id,
             actor_user_id: user_id,

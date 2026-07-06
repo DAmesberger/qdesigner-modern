@@ -57,6 +57,11 @@ async fn build_fixture(pool: &PgPool) -> Fixture {
     .expect("project");
 
     let make_q = |name: &'static str| {
+        // Copy the Copy `project_id` into a fresh local so each `async move`
+        // owns it — this FnMut closure is called twice, so it cannot hand its
+        // captured binding to a `move` block directly. clippy's redundant_locals
+        // doesn't model the async-move capture requirement here.
+        #[allow(clippy::redundant_locals)]
         let project_id = project_id;
         async move {
             sqlx::query_scalar::<_, Uuid>(

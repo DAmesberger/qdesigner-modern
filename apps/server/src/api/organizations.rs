@@ -641,7 +641,7 @@ pub async fn update_organization(
     }
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -702,7 +702,7 @@ pub async fn delete_organization(
         .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -814,7 +814,7 @@ pub async fn get_seats(
         return Err(ApiError::Forbidden("Not a member".into()));
     }
 
-    let (limit, active_members, pending_invitations) = seat_usage(&mut **tx, org_id).await?;
+    let (limit, active_members, pending_invitations) = seat_usage(&mut tx, org_id).await?;
 
     Ok(Json(SeatUsageResponse {
         limit,
@@ -967,7 +967,7 @@ pub async fn add_member(
     .await?;
 
     if !already_active {
-        enforce_seat_limit(&mut **tx, org_id).await?;
+        enforce_seat_limit(&mut tx, org_id).await?;
     }
 
     sqlx::query(
@@ -984,7 +984,7 @@ pub async fn add_member(
     .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -1077,7 +1077,7 @@ pub async fn remove_member(
         .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -1236,7 +1236,7 @@ pub async fn change_member_role(
     .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -1405,7 +1405,7 @@ pub async fn transfer_org_ownership(
     .unwrap_or_else(|| "owner".into());
 
     transfer_org_ownership_tx(
-        &mut **tx,
+        &mut tx,
         org_id,
         user.user_id,
         body.new_owner_user_id,
@@ -1414,7 +1414,7 @@ pub async fn transfer_org_ownership(
     .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -1550,7 +1550,7 @@ pub async fn create_invitation(
     }
 
     // Seat model (E-RBAC-4): a pending invitation reserves a prospective seat.
-    enforce_seat_limit(&mut **tx, org_id).await?;
+    enforce_seat_limit(&mut tx, org_id).await?;
 
     let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
 
@@ -1571,7 +1571,7 @@ pub async fn create_invitation(
     .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -2006,7 +2006,7 @@ pub async fn revoke_invitation(
     };
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -2227,7 +2227,7 @@ pub async fn verify_domain(
         }
 
         audit::record(
-            &mut **tx,
+            &mut tx,
             AuditEvent {
                 organization_id: org_id,
                 actor_user_id: user.user_id,

@@ -1863,7 +1863,7 @@ mod tests {
     #[test]
     fn parses_numeric_json_values() {
         assert_eq!(json_value_to_f64(&json!(42)), Some(42.0));
-        assert_eq!(json_value_to_f64(&json!("3.14")), Some(3.14));
+        assert_eq!(json_value_to_f64(&json!("3.5")), Some(3.5));
         assert_eq!(json_value_to_f64(&json!(true)), Some(1.0));
         assert_eq!(json_value_to_f64(&json!({ "value": "5.5" })), Some(5.5));
         assert_eq!(json_value_to_f64(&json!({ "other": 1 })), None);

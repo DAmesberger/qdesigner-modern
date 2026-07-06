@@ -507,7 +507,7 @@ pub async fn delete_project(
         .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -697,7 +697,7 @@ pub async fn add_project_member(
     .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -801,7 +801,7 @@ pub async fn update_project_member(
 
     let org_id = access::get_project_org_id(&mut **tx, project_id).await?;
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -910,7 +910,7 @@ pub async fn remove_project_member(
 
     let org_id = access::get_project_org_id(&mut **tx, project_id).await?;
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,
@@ -1064,7 +1064,7 @@ pub async fn transfer_project_ownership(
     }
 
     transfer_project_ownership_tx(
-        &mut **tx,
+        &mut tx,
         project_id,
         org_id,
         user.user_id,
@@ -1073,7 +1073,7 @@ pub async fn transfer_project_ownership(
     .await?;
 
     audit::record(
-        &mut **tx,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
             actor_user_id: user.user_id,

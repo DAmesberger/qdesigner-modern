@@ -31,6 +31,7 @@ use common::fixture_pool;
 ///   - 1 completed session gender=female via the session_variables snapshot
 ///     (empty urlParams — exercises the COALESCE fallback),
 ///   - 1 IN-PROGRESS session gender=male (must NOT be counted).
+///
 /// Returns the questionnaire id.
 async fn seed(pool: &PgPool) -> Uuid {
     let user: Uuid = sqlx::query_scalar(

@@ -189,7 +189,7 @@ pub async fn sync_session(
             row.push("COALESCE(");
             row.push_bind_unseparated(&resp.metadata);
             row.push_unseparated("::jsonb, '{}'::jsonb)");
-            row.push_bind(&resp.client_id)
+            row.push_bind(resp.client_id)
                 .push_bind(&resp.timing_provenance);
         });
         builder.push(" ON CONFLICT (client_id) DO NOTHING");
@@ -213,7 +213,7 @@ pub async fn sync_session(
             row.push("COALESCE(");
             row.push_bind_unseparated(&evt.metadata);
             row.push_unseparated("::jsonb, '{}'::jsonb)");
-            row.push_bind(&evt.client_id);
+            row.push_bind(evt.client_id);
         });
         builder.push(" ON CONFLICT (client_id) DO NOTHING");
         let result = builder.build().execute(&mut **tx).await?;
