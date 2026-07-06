@@ -18,6 +18,10 @@
   let localMinTotalTime = $state(0);
   let localFlatlineThreshold = $state(0.8);
   let localAttentionFailures = $state(1);
+  // Whole-survey time limit (E-FLOW-5). Edited in minutes; stored as ms at the top level.
+  let localSurveyLimitMin = $state(0);
+  let localSurveyTimeoutAction = $state<'auto-submit' | 'terminate'>('auto-submit');
+  let localSurveyTimeoutMessage = $state('');
 
   $effect(() => {
     if (open) {
@@ -25,6 +29,12 @@
       localMinTotalTime = settings.minTotalTimeMs ?? 0;
       localFlatlineThreshold = settings.flatlineThreshold ?? 0.8;
       localAttentionFailures = settings.attentionFailureThreshold ?? 1;
+      const surveyMs = designerStore.questionnaire.settings.wholeSurveyTimeLimitMs ?? 0;
+      localSurveyLimitMin = surveyMs > 0 ? surveyMs / 60000 : 0;
+      localSurveyTimeoutAction =
+        designerStore.questionnaire.settings.onSurveyTimeout ?? 'auto-submit';
+      localSurveyTimeoutMessage =
+        designerStore.questionnaire.settings.surveyTimeoutMessage ?? '';
     }
   });
 
@@ -36,10 +46,19 @@
       attentionFailureThreshold: localAttentionFailures,
     };
 
+    const surveyMs =
+      Number.isFinite(localSurveyLimitMin) && localSurveyLimitMin > 0
+        ? Math.round(localSurveyLimitMin * 60000)
+        : undefined;
+
     designerStore.updateQuestionnaire({
       settings: {
         ...designerStore.questionnaire.settings,
         dataQuality: dq,
+        wholeSurveyTimeLimitMs: surveyMs,
+        onSurveyTimeout: surveyMs ? localSurveyTimeoutAction : undefined,
+        surveyTimeoutMessage:
+          surveyMs && localSurveyTimeoutMessage.trim() ? localSurveyTimeoutMessage.trim() : undefined,
       },
     });
 
@@ -115,6 +134,59 @@
             <p class="text-xs text-muted-foreground mt-1">
               Flag blocks where this fraction or more of responses match a repetitive pattern (same answer, alternating, or sequential).
             </p>
+          </div>
+        </div>
+
+        <!-- Whole-survey time limit (E-FLOW-5) -->
+        <div>
+          <h4 class="text-sm font-medium text-foreground mb-3">Survey Time Limit</h4>
+          <div class="space-y-3">
+            <div>
+              <label for="dq-survey-limit" class="block text-sm text-foreground mb-1">
+                Whole-survey limit (minutes)
+              </label>
+              <input
+                id="dq-survey-limit"
+                type="number"
+                min="0"
+                step="1"
+                bind:value={localSurveyLimitMin}
+                class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+                data-testid="dq-survey-limit"
+              />
+              <p class="text-xs text-muted-foreground mt-1">
+                End the session automatically after this many minutes. Set to 0 to disable.
+              </p>
+            </div>
+            {#if localSurveyLimitMin > 0}
+              <div>
+                <label for="dq-survey-action" class="block text-sm text-foreground mb-1">
+                  On timeout
+                </label>
+                <select
+                  id="dq-survey-action"
+                  bind:value={localSurveyTimeoutAction}
+                  class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+                  data-testid="dq-survey-action"
+                >
+                  <option value="auto-submit">Auto-submit (complete)</option>
+                  <option value="terminate">Terminate</option>
+                </select>
+              </div>
+              <div>
+                <label for="dq-survey-message" class="block text-sm text-foreground mb-1">
+                  Timeout message
+                </label>
+                <input
+                  id="dq-survey-message"
+                  type="text"
+                  bind:value={localSurveyTimeoutMessage}
+                  placeholder="Your time is up."
+                  class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+                  data-testid="dq-survey-message"
+                />
+              </div>
+            {/if}
           </div>
         </div>
 

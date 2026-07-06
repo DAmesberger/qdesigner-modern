@@ -52,6 +52,57 @@
     designerStore.questionnaire.settings.experimentalDesign?.conditions ?? []
   );
 
+  // --- Loop-over-a-list authoring (E-FLOW-4) ---------------------------------
+  // The runtime consumes LoopConfig.{values, source, loopVariableName, maxIterations}
+  // to repeat a battery once per value (roster looping). The legacy `iterations`
+  // count above is a separate, count-only mode; these fields drive value looping.
+
+  /** The loop object currently being edited (create or edit path). */
+  const activeLoop = $derived(
+    (editingBlock ? (editingBlock.loop as any) : (newBlock.loop as any)) ?? {}
+  );
+
+  /** Patch the active block's loop config in place (reactively persisted on save). */
+  function patchLoop(patch: Record<string, unknown>): void {
+    if (editingBlock) {
+      if (!editingBlock.loop) editingBlock.loop = {} as any;
+      Object.assign(editingBlock.loop as any, patch);
+    } else {
+      if (!newBlock.loop) newBlock.loop = {} as any;
+      Object.assign(newBlock.loop as any, patch);
+    }
+  }
+
+  /** Static values as newline-separated editable text. */
+  const loopValuesText = $derived(
+    Array.isArray(activeLoop.values) ? activeLoop.values.join('\n') : ''
+  );
+
+  function setLoopValuesText(text: string): void {
+    const values = text
+      .split('\n')
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0);
+    patchLoop({ values });
+  }
+
+  const loopSourceType = $derived((activeLoop.source?.type as string) ?? 'static');
+
+  /** Live iteration-count preview (step 8). Dynamic sources are runtime-resolved. */
+  const loopPreview = $derived.by(() => {
+    const cap = typeof activeLoop.maxIterations === 'number' ? activeLoop.maxIterations : undefined;
+    if (loopSourceType === 'static') {
+      const n = Array.isArray(activeLoop.values) ? activeLoop.values.length : 0;
+      const capped = cap ? Math.min(n, cap) : n;
+      return `${capped} iteration${capped === 1 ? '' : 's'}`;
+    }
+    const src =
+      loopSourceType === 'answer'
+        ? `answer of "${activeLoop.source?.questionId || '(unset)'}"`
+        : `variable "${activeLoop.source?.variableId || '(unset)'}"`;
+    return `resolved at runtime from ${src}${cap ? ` (max ${cap})` : ''}`;
+  });
+
   function togglePage(pageId: string) {
     expandedPages[pageId] = !expandedPages[pageId];
   }
@@ -561,6 +612,104 @@
                   class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
                   placeholder="e.g., score > 100"
                 />
+              </div>
+
+              <!-- Loop over a list (roster looping, E-FLOW-4) -->
+              <div class="border-t border-border/60 pt-3 mt-1">
+                <div class="flex items-center justify-between mb-1">
+                  <h5 class="text-sm font-medium text-foreground">Loop over a list (roster)</h5>
+                  <span class="text-xs text-muted-foreground">{loopPreview}</span>
+                </div>
+                <p class="text-xs text-muted-foreground mb-2">
+                  Repeats this block's questions once per value. Pipe the current value into
+                  prompts / options with <code>{'{{loopValue}}'}</code>.
+                </p>
+
+                <div class="mb-2">
+                  <label for="loop-source" class="block text-sm text-muted-foreground mb-1">Value source</label>
+                  <select
+                    id="loop-source"
+                    value={loopSourceType}
+                    onchange={(e) => {
+                      const type = e.currentTarget.value as 'static' | 'answer' | 'variable';
+                      patchLoop({ source: type === 'static' ? undefined : { type } });
+                    }}
+                    class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="static">Static list</option>
+                    <option value="answer">Prior question's answer</option>
+                    <option value="variable">Variable (array)</option>
+                  </select>
+                </div>
+
+                {#if loopSourceType === 'static'}
+                  <div class="mb-2">
+                    <label for="loop-values" class="block text-sm text-muted-foreground mb-1">Values (one per line)</label>
+                    <textarea
+                      id="loop-values"
+                      rows="4"
+                      value={loopValuesText}
+                      oninput={(e) => setLoopValuesText(e.currentTarget.value)}
+                      class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary font-mono text-sm"
+                      placeholder={'Mother\nFather\nSibling'}
+                    ></textarea>
+                  </div>
+                {:else if loopSourceType === 'answer'}
+                  <div class="mb-2">
+                    <label for="loop-answer-qid" class="block text-sm text-muted-foreground mb-1">Source question ID</label>
+                    <input
+                      id="loop-answer-qid"
+                      type="text"
+                      value={activeLoop.source?.questionId || ''}
+                      oninput={(e) =>
+                        patchLoop({ source: { type: 'answer', questionId: e.currentTarget.value } })}
+                      class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+                      placeholder="e.g., q_selected_people"
+                    />
+                  </div>
+                {:else}
+                  <div class="mb-2">
+                    <label for="loop-var-id" class="block text-sm text-muted-foreground mb-1">Source variable name</label>
+                    <input
+                      id="loop-var-id"
+                      type="text"
+                      value={activeLoop.source?.variableId || ''}
+                      oninput={(e) =>
+                        patchLoop({ source: { type: 'variable', variableId: e.currentTarget.value } })}
+                      class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+                      placeholder="e.g., stimulusList"
+                    />
+                  </div>
+                {/if}
+
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label for="loop-var-name" class="block text-sm text-muted-foreground mb-1">Loop variable name</label>
+                    <input
+                      id="loop-var-name"
+                      type="text"
+                      value={activeLoop.loopVariableName || ''}
+                      oninput={(e) => patchLoop({ loopVariableName: e.currentTarget.value || undefined })}
+                      class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+                      placeholder="loopValue"
+                    />
+                  </div>
+                  <div>
+                    <label for="loop-max" class="block text-sm text-muted-foreground mb-1">Max iterations</label>
+                    <input
+                      id="loop-max"
+                      type="number"
+                      min="1"
+                      value={activeLoop.maxIterations ?? ''}
+                      oninput={(e) => {
+                        const n = parseInt(e.currentTarget.value);
+                        patchLoop({ maxIterations: Number.isFinite(n) && n > 0 ? n : undefined });
+                      }}
+                      class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+                      placeholder="unbounded"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -1,4 +1,10 @@
 import type { Block, Page, Question, RandomizationConfig } from '$lib/shared';
+import {
+  buildIterationTuples,
+  resolveLoopValues,
+  type LoopResolutionContext,
+  type PresentedItemRef,
+} from './LoopExpansion';
 
 function xmur3(seed: string): () => number {
   let h = 1779033703 ^ seed.length;
@@ -71,6 +77,83 @@ export class BlockRandomizer {
         }
       } else {
         result.push(questionId);
+        seen.add(questionId);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Loop-aware page expansion (E-FLOW-4). Returns ordered per-iteration references
+   * instead of a flat, deduped id list: a `loop` block yields one reference per
+   * (question, iteration) so the runtime presents its battery once per iteration
+   * value, while non-loop blocks and page-level questions keep the historical
+   * dedup-and-order behaviour. Seeded question-order and iteration-order shuffles are
+   * applied here; value resolution + tuple assembly are delegated to LoopExpansion.
+   */
+  public expandPage(
+    page: Page,
+    questions: Map<string, Question>,
+    ctx: LoopResolutionContext = {}
+  ): PresentedItemRef[] {
+    const seen = new Set<string>();
+    const result: PresentedItemRef[] = [];
+
+    if (page.blocks && page.blocks.length > 0) {
+      for (const block of page.blocks) {
+        const loopValues = resolveLoopValues(block.loop, ctx);
+
+        if (loopValues.length > 0) {
+          // Real loop: expand into per-iteration references. Iteration ORDER is
+          // shuffled here (seeded) when requested; question order within an
+          // iteration is (re)randomized per iteration via `randomize`. Loop refs
+          // bypass the `seen` dedup so the same question repeats across iterations.
+          const orderedValues = block.loop?.shuffle
+            ? this.shuffle(loopValues, `loop:${block.id}`)
+            : loopValues;
+
+          result.push(
+            ...buildIterationTuples({
+              values: orderedValues,
+              loopVariableName: block.loop?.loopVariableName,
+              orderForIteration: (iterationIndex) =>
+                this.randomize(
+                  block.questions,
+                  block.randomization,
+                  `${block.id}:iter:${iterationIndex}`
+                ).filter((id) => questions.has(id)),
+            })
+          );
+          continue;
+        }
+
+        // Non-loop block: order + dedup exactly as `randomizePage` does.
+        for (const questionId of this.randomizeBlock(block)) {
+          if (!seen.has(questionId) && questions.has(questionId)) {
+            result.push({ questionId, iterationIndex: null });
+            seen.add(questionId);
+          }
+        }
+      }
+    }
+
+    for (const questionId of page.questions || []) {
+      if (seen.has(questionId)) continue;
+      const question = questions.get(questionId);
+      if (!question) continue;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic questionnaire payload
+      if ((question as any).randomize) {
+        const randomized = this.randomize([questionId], { type: 'all' }, `${page.id}:${questionId}`);
+        for (const id of randomized) {
+          if (!seen.has(id) && questions.has(id)) {
+            result.push({ questionId: id, iterationIndex: null });
+            seen.add(id);
+          }
+        }
+      } else {
+        result.push({ questionId, iterationIndex: null });
         seen.add(questionId);
       }
     }

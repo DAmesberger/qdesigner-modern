@@ -22,10 +22,13 @@ import { ResourceManager } from '../resources/ResourceManager';
 import { MediaValidator } from '../validation/MediaValidator';
 import { ResponseCollector, type ResponseCaptureMetadata } from './ResponseCollector';
 import type { FormQuestionHost } from './FormQuestionHost';
+import { TimerController, type TimerScope } from './TimerController';
 import { buildModuleRuntimeConfig } from './moduleConfigAdapter';
 import { BlockRandomizer } from './BlockRandomizer';
+import { iterationVarPrefix, DEFAULT_LOOP_VARIABLE_NAME } from './LoopExpansion';
 import { computeReactionTimeMs } from './reactionTiming';
 import { resolveFlowTargetPageIndex } from './flowTarget';
+import { orderFlowCandidates } from './FlowGraph';
 import { ScriptExecutor } from './ScriptExecutor';
 import { ConditionAssigner, getBlockOrder } from '../experimental';
 import { QualityReport } from '../quality/QualityReport';
@@ -33,6 +36,12 @@ import type { AttentionCheckConfig } from '../quality/AttentionCheck';
 import { resolveCarryForward, applyCarryForward } from './CarryForward';
 import type { CarryForwardConfig } from '$lib/shared';
 import { type ResumeState, RESUME_STATE_VERSION, isResumeStateCompatible } from './ResumeState';
+import type {
+  TimingConfig,
+  QuestionTimeoutAction,
+  PageTimeoutAction,
+  SurveyTimeoutAction,
+} from '$lib/shared';
 import { scoreScales } from '../feedback/ScaleScorer';
 import { parseNumeric } from '$lib/shared/utils/statistics';
 import { nanoid } from 'nanoid';
@@ -49,6 +58,19 @@ type DynamicValue = any;
  * `item.navigation` reads checked against the union base.
  */
 type PresentedQuestion = Question & { _carryForwardInitialValue?: unknown };
+
+/**
+ * A resolved page item ready to present, carrying its loop iteration context
+ * (E-FLOW-4). For a non-loop item `iterationIndex` is `null` and the loop fields are
+ * absent, so it behaves exactly as a bare question did before loops existed.
+ */
+interface PresentedItem {
+  question: Question;
+  iterationIndex: number | null;
+  loopValue?: unknown;
+  loopVariableName?: string;
+  iterationCount?: number;
+}
 
 /**
  * The last-synced aggregate for one SERVER-COMPUTED VARIABLE
@@ -136,7 +158,9 @@ export class QuestionnaireRuntime {
   private currentItemIndex = 0;
   private currentPage: Page | null = null;
   private currentQuestion: Question | null = null;
-  private currentPageItems: Question[] = [];
+  private currentPageItems: PresentedItem[] = [];
+  /** Loop iteration context of the item currently being presented (E-FLOW-4). */
+  private currentIteration: PresentedItem | null = null;
 
   private isRunning = false;
   private isPaused = false;
@@ -145,6 +169,16 @@ export class QuestionnaireRuntime {
   private currentAbortController: AbortController | null = null;
   private autoAdvanceTimeoutId: number | null = null;
   private pageTimerIntervalId: ReturnType<typeof setInterval> | null = null;
+
+  // Unified timer subsystem (E-FLOW-5): owns the survey / page / question deadline
+  // scopes against one monotonic clock, frozen by pause() and restored on resume.
+  private readonly timers: TimerController;
+  // The active question's warn point (ms from onset), so a countdown tick can flag the
+  // warning state before the hard deadline. Reset whenever a presentation is cleared.
+  private activeQuestionWarnAtMs: number | undefined = undefined;
+  // Set to a question id just before an auto-submit timeout requests its committed
+  // value, so handleCollectedResponse can stamp the resulting Response as timedOut.
+  private pendingTimeoutQuestionId: string | null = null;
 
   private readonly questionRuntimeCache = new Map<string, IQuestionRuntime>();
   private readonly loopIterations = new Map<string, number>();
@@ -203,6 +237,12 @@ export class QuestionnaireRuntime {
     );
     this.scriptExecutor = new ScriptExecutor();
 
+    // Unified timer subsystem (E-FLOW-5). Question-scope ticks are surfaced to the
+    // overlay so participants see a live countdown; page/survey ticks are internal.
+    this.timers = new TimerController({
+      onTick: (scope, remainingMs, totalMs) => this.handleTimerTick(scope, remainingMs, totalMs),
+    });
+
     const dq = config.questionnaire.settings.dataQuality;
     this.qualityReport = new QualityReport({
       speeder: {
@@ -213,6 +253,7 @@ export class QuestionnaireRuntime {
         threshold: dq?.flatlineThreshold,
       },
       attentionFailureThreshold: dq?.attentionFailureThreshold,
+      timeoutThreshold: dq?.attentionFailureThreshold,
     });
 
     this.initializeVariables();
@@ -358,6 +399,9 @@ export class QuestionnaireRuntime {
       loopIterationState: Object.fromEntries(this.loopIterations),
       variableSnapshot: this.variableEngine.exportState(),
       presentedItemIds: this.session.responses.map((r) => r.questionId),
+      // Preserve the remaining whole-survey budget so resume respects the original cap
+      // (E-FLOW-5, step 8). Undefined when no survey timer is armed.
+      surveyRemainingMs: this.timers.getRemaining('survey') ?? undefined,
       capturedAt: Date.now(),
     };
   }
@@ -499,11 +543,31 @@ export class QuestionnaireRuntime {
     if (resume) {
       this.pendingResume = null;
       this.restoreFromResumeState(resume);
+      // Whole-survey budget carried over from the prior session (E-FLOW-5, step 8):
+      // resume respects the original cap rather than restarting the clock.
+      this.armSurveyTimer(resume.surveyRemainingMs);
       await this.navigateToPage(resume.currentPageIndex);
       return;
     }
 
+    this.armSurveyTimer();
     await this.navigateToPage(0);
+  }
+
+  /**
+   * Arm the whole-survey deadline (E-FLOW-5, step 2) from
+   * `settings.wholeSurveyTimeLimitMs`. On expiry the configured `onSurveyTimeout`
+   * action (default `auto-submit`) completes the session with a timeout flag. No-op
+   * when no survey cap is declared. `initialRemainingMs` restores a carried-over budget.
+   */
+  private armSurveyTimer(initialRemainingMs?: number): void {
+    const limit = this.config.questionnaire.settings.wholeSurveyTimeLimitMs;
+    if (!limit || limit <= 0) return;
+    this.timers.arm('survey', {
+      deadlineMs: limit,
+      initialRemainingMs,
+      onExpire: () => this.handleSurveyTimeout(),
+    });
   }
 
   /**
@@ -534,6 +598,9 @@ export class QuestionnaireRuntime {
     this.isPaused = true;
     this.renderer?.stop();
     this.responseCollector.pause();
+    // Freeze all deadline scopes (E-FLOW-5, step 7) so backgrounding the tab does not
+    // consume the survey / page / question budgets.
+    this.timers.pauseAll();
   }
 
   public resume(): void {
@@ -542,6 +609,7 @@ export class QuestionnaireRuntime {
     this.isPaused = false;
     this.renderer?.start();
     this.responseCollector.resume();
+    this.timers.resumeAll();
   }
 
   public stop(): void {
@@ -550,6 +618,7 @@ export class QuestionnaireRuntime {
 
     this.cancelCurrentExecution();
     this.clearPageTimer();
+    this.timers.clearAll();
 
     if (this.session.status === 'in_progress') {
       this.session.status = 'abandoned';
@@ -744,12 +813,24 @@ export class QuestionnaireRuntime {
   }
 
   private registerQuestionVariables(question: Question): void {
-    const base = question.id;
-    const responseType = this.inferVariableType(question);
+    this.registerAnswerVariables(question.id, question.id, this.inferVariableType(question));
+  }
 
+  /**
+   * Register the `_value` / `_time` / `_rt` / `_correct` / `_onset` answer variables
+   * for a base id. Split out from {@link registerQuestionVariables} so loop iterations
+   * (E-FLOW-4) can lazily register an ITERATION-NAMESPACED set
+   * (`${questionId}__${iterationIndex}`) with a distinct interpolation name, keeping
+   * every iteration's answer retained at `complete()`.
+   */
+  private registerAnswerVariables(
+    base: string,
+    valueName: string,
+    responseType: Variable['type']
+  ): void {
     this.registerVariableIfMissing({
       id: `${base}_value`,
-      name: base,
+      name: valueName,
       type: responseType,
       scope: 'global',
       defaultValue: null,
@@ -786,6 +867,62 @@ export class QuestionnaireRuntime {
       scope: 'local',
       defaultValue: null,
     });
+  }
+
+  /**
+   * Publish the loop variables (E-FLOW-4) for the item about to be presented, and
+   * (for a looped item) lazily register its iteration-namespaced answer variables so
+   * the subsequent per-iteration writes never throw on an unregistered id.
+   *
+   * The loop variable is exposed under BOTH its configured name (default `loopValue`)
+   * and the fixed alias `loopValue`, plus `_iterationIndex` / `_iterationCount` flow
+   * variables so branching can act on loop position. For a non-loop item every one of
+   * these is reset to null so a stale value from an earlier loop can't leak into a
+   * later prompt.
+   */
+  private applyLoopContext(item: PresentedItem): void {
+    const looped = item.iterationIndex !== null && item.iterationIndex !== undefined;
+
+    if (looped) {
+      const prefix = iterationVarPrefix(item.question.id, item.iterationIndex);
+      this.registerAnswerVariables(prefix, prefix, this.inferVariableType(item.question));
+
+      const loopVarName = item.loopVariableName || DEFAULT_LOOP_VARIABLE_NAME;
+      this.setLoopVariable(loopVarName, item.loopValue);
+      if (loopVarName !== DEFAULT_LOOP_VARIABLE_NAME) {
+        this.setLoopVariable(DEFAULT_LOOP_VARIABLE_NAME, item.loopValue);
+      }
+      this.setLoopVariable('_iterationIndex', item.iterationIndex);
+      this.setLoopVariable('_iterationCount', item.iterationCount ?? null);
+    } else {
+      this.setLoopVariable(DEFAULT_LOOP_VARIABLE_NAME, null);
+      this.setLoopVariable('_iterationIndex', null);
+      this.setLoopVariable('_iterationCount', null);
+    }
+  }
+
+  /**
+   * Set a loop variable, (re)registering it with a type inferred from the current
+   * value so heterogeneous roster entries (string, number, object) all round-trip
+   * through VariableEngine.validateType without throwing. Never blocks navigation:
+   * a validation failure is swallowed (the prior value simply persists).
+   */
+  private setLoopVariable(name: string, value: unknown): void {
+    let type: Variable['type'];
+    if (Array.isArray(value)) type = 'array';
+    else if (value !== null && typeof value === 'object') type = 'object';
+    else if (typeof value === 'number') type = 'number';
+    else if (typeof value === 'boolean') type = 'boolean';
+    else type = 'string';
+
+    // registerVariable overwrites the type on the Map entry, so a later iteration
+    // whose value has a different shape re-types the variable cleanly.
+    this.variableEngine.registerVariable({ id: name, name, type, scope: 'global' });
+    try {
+      this.variableEngine.setVariable(name, value, 'loop');
+    } catch {
+      // Type mismatch on a heterogeneous source — keep prior value, don't halt.
+    }
   }
 
   private registerVariableIfMissing(variable: Variable): void {
@@ -882,7 +1019,7 @@ export class QuestionnaireRuntime {
     );
   }
 
-  private async navigateToPage(pageIndex: number): Promise<void> {
+  private async navigateToPage(pageIndex: number, anchorQuestionId?: string): Promise<void> {
     if (!this.isRunning) return;
 
     if (pageIndex < 0 || pageIndex >= this.config.questionnaire.pages.length) {
@@ -963,7 +1100,8 @@ export class QuestionnaireRuntime {
       if (pageHooks.onTimer) {
         const page = this.currentPage;
         const pageIdx = this.currentPageIndex;
-        const timerInterval = 1000; // Default: 1 second
+        // E-FLOW-5, step 3: cadence is configurable per page (was a hardcoded 1000ms).
+        const timerInterval = page.settings?.timerIntervalMs ?? 1000;
         this.pageTimerIntervalId = setInterval(() => {
           this.scriptExecutor.executeOnTimer(
             page.id,
@@ -977,13 +1115,67 @@ export class QuestionnaireRuntime {
       }
     }
 
+    // Arm the page time limit (E-FLOW-5, step 3) now that the visible landing page is
+    // settled. No-op when the page declares no limit (also clears any prior page timer).
+    this.armPageTimer();
+
     this.currentPageItems = this.getPageItems();
+
+    // Question-target anchoring (E-FLOW-8, step 6): when a flow rule targets a
+    // specific question rather than a whole page, land ON that question within the
+    // page instead of at its top. Robust against loop/randomization reordering
+    // because it searches the ACTUAL presented items. Only honoured on a fresh
+    // landing (no pending resume cursor already claimed currentItemIndex).
+    if (anchorQuestionId && this.currentItemIndex === 0) {
+      const anchorIdx = this.currentPageItems.findIndex(
+        (it) => it.question.id === anchorQuestionId
+      );
+      if (anchorIdx > 0) this.currentItemIndex = anchorIdx;
+    }
 
     this.config.onProgress?.(pageIndex + 1, this.config.questionnaire.pages.length);
     await this.showCurrentItem();
   }
 
-  private getPageItems(): Question[] {
+  /**
+   * Arm the current page's time limit (E-FLOW-5) from `page.settings.timeLimit`. On
+   * expiry it runs the configured `onTimeLimit` action (default `auto-advance`).
+   * Always (re)sets the `page` scope: a page with no limit clears any prior timer.
+   */
+  private armPageTimer(): void {
+    const page = this.currentPage;
+    const pageIndex = this.currentPageIndex;
+    const limit = page?.settings?.timeLimit;
+    if (!page || !limit || limit <= 0) {
+      this.timers.clear('page');
+      return;
+    }
+    const action: PageTimeoutAction = page.settings?.onTimeLimit ?? 'auto-advance';
+    this.timers.arm('page', {
+      deadlineMs: limit,
+      onExpire: () => {
+        void this.handlePageTimeout(pageIndex, action);
+      },
+    });
+  }
+
+  /**
+   * Handle a page time-limit expiry (E-FLOW-5): record it in the QualityReport timeout
+   * dimension, then either advance to the next page or terminate the session per config.
+   * Guarded against a stale fire from a page we already left.
+   */
+  private async handlePageTimeout(pageIndex: number, action: PageTimeoutAction): Promise<void> {
+    if (!this.isRunning || this.currentPageIndex !== pageIndex) return;
+    const page = this.config.questionnaire.pages[pageIndex];
+    this.qualityReport.timeout.record({ scope: 'page', action, pageId: page?.id });
+    if (action === 'terminate') {
+      this.completeWithTimeout({ scope: 'page', action });
+      return;
+    }
+    await this.navigateToPage(pageIndex + 1);
+  }
+
+  private getPageItems(): PresentedItem[] {
     if (!this.currentPage) return [];
 
     const page = this.applyExperimentalDesignToPage(this.currentPage);
@@ -991,12 +1183,55 @@ export class QuestionnaireRuntime {
     const questionMap = new Map(
       this.config.questionnaire.questions.map((question) => [question.id, question])
     );
-    const orderedIds = this.blockRandomizer.randomizePage(page, questionMap);
+    // Loop-aware expansion (E-FLOW-4): a `loop` block yields one ref per
+    // (question, iteration) instead of a deduped id — so the battery presents once
+    // per iteration value rather than collapsing to a single presentation.
+    const refs = this.blockRandomizer.expandPage(page, questionMap, {
+      responses: this.getResponseMap(),
+      variables: this.variableEngine.getAllVariables(),
+    });
 
-    return orderedIds
-      .map((id) => questionMap.get(id))
-      .filter((question): question is Question => Boolean(question))
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
+    const items: PresentedItem[] = [];
+    for (const ref of refs) {
+      const question = questionMap.get(ref.questionId);
+      if (!question) continue;
+      items.push({
+        question,
+        iterationIndex: ref.iterationIndex,
+        loopValue: ref.loopValue,
+        loopVariableName: ref.loopVariableName,
+        iterationCount: ref.iterationCount,
+      });
+    }
+
+    // Stable order-sort by `question.order` WITHIN each contiguous same-iteration run.
+    // Sorting the whole flattened list (the pre-loop behaviour) would interleave loop
+    // iterations; restricting the sort to a run preserves iteration grouping while
+    // keeping the historical intra-page ordering for non-loop pages.
+    return this.sortWithinIterationRuns(items);
+  }
+
+  /**
+   * Stable-sort each contiguous run of items that share the same `iterationIndex` by
+   * `question.order`, leaving the run boundaries (and thus loop-iteration grouping)
+   * intact. Array.prototype.sort is stable, so items with equal order keep expansion
+   * order.
+   */
+  private sortWithinIterationRuns(items: PresentedItem[]): PresentedItem[] {
+    const result: PresentedItem[] = [];
+    let runStart = 0;
+    const flushRun = (endExclusive: number) => {
+      const run = items.slice(runStart, endExclusive);
+      run.sort((a, b) => (a.question.order || 0) - (b.question.order || 0));
+      result.push(...run);
+    };
+    for (let i = 1; i <= items.length; i++) {
+      if (i === items.length || items[i]!.iterationIndex !== items[runStart]!.iterationIndex) {
+        flushRun(i);
+        runStart = i;
+      }
+    }
+    return result;
   }
 
   private applyExperimentalDesignToPage(page: Page): Page {
@@ -1045,16 +1280,28 @@ export class QuestionnaireRuntime {
   private async showCurrentItem(): Promise<void> {
     if (!this.isRunning || this.isPaused) return;
 
-    let item = this.currentPageItems[this.currentItemIndex];
-    if (!item) {
+    const itemRef = this.currentPageItems[this.currentItemIndex];
+    if (!itemRef) {
+      this.currentIteration = null;
       await this.handleFlowControl();
       return;
     }
 
+    // Loop context (E-FLOW-4): stash the iteration for the response/variable pipeline
+    // and publish the loop variable BEFORE anything reads variables — so visibility
+    // conditions, carry-forward and prompt interpolation all see `{{loopValue}}` /
+    // `_iterationIndex` / `_iterationCount` for THIS iteration.
+    this.currentIteration = itemRef;
+    this.applyLoopContext(itemRef);
+
+    let item = itemRef.question;
+
     // Resume fast-forward (E-OFF-1): silently advance past items answered in a prior
     // session so a rehydrated run lands on the first unanswered item without
     // re-presenting (which would create a duplicate response). Driven by the restored
-    // answer set, so it is robust to a partial progress-cursor write.
+    // answer set, so it is robust to a partial progress-cursor write. (Loop caveat:
+    // resume keys on question id, so a partially-answered loop resumes at its first
+    // question — acceptable until per-iteration resume cursors land.)
     if (this.resumeAnsweredIds?.has(item.id)) {
       this.currentItemIndex += 1;
       await this.showCurrentItem();
@@ -1298,9 +1545,141 @@ export class QuestionnaireRuntime {
         );
       },
     });
+
+    // Per-question response deadline (E-FLOW-5, step 4). No-op unless the item declares
+    // `timing.deadlineMs`; drives the overlay countdown and, on expiry, the configured action.
+    this.armQuestionDeadline(question, onsetTime);
+  }
+
+  /**
+   * Arm the active question's response deadline (E-FLOW-5) from `timing.deadlineMs`.
+   * The countdown surfaces to the overlay via {@link handleTimerTick}; on expiry the
+   * configured {@link QuestionTimeoutAction} (default `auto-submit`) runs.
+   */
+  private armQuestionDeadline(question: Question, onsetTime: number): void {
+    const timing = (question as { timing?: TimingConfig }).timing;
+    const deadlineMs = timing?.deadlineMs;
+    if (!deadlineMs || deadlineMs <= 0) return;
+
+    const action: QuestionTimeoutAction = timing?.onTimeout ?? 'auto-submit';
+    this.activeQuestionWarnAtMs = timing?.warnAtMs;
+    this.timers.arm('question', {
+      deadlineMs,
+      warnAtMs: timing?.warnAtMs,
+      onExpire: () => {
+        void this.handleQuestionDeadline(question, onsetTime, action);
+      },
+    });
+  }
+
+  /**
+   * Resolve a per-question deadline expiry (E-FLOW-5, step 4) per its configured action:
+   * `auto-submit` commits the partial value the participant entered (flagged timedOut),
+   * `skip` records an empty timed-out response, `terminate` ends the session, and `warn`
+   * leaves the question open (the participant was already warned). Every non-`warn`
+   * outcome is folded into the QualityReport timeout dimension.
+   */
+  private async handleQuestionDeadline(
+    question: Question,
+    onsetTime: number,
+    action: QuestionTimeoutAction
+  ): Promise<void> {
+    if (!this.isRunning || this.currentQuestion?.id !== question.id) return;
+
+    if (action === 'warn') {
+      // Soft deadline: the warning already surfaced via the countdown; keep waiting.
+      this.qualityReport.timeout.record({
+        scope: 'question',
+        action,
+        questionId: question.id,
+        pageId: this.currentPage?.id,
+        iterationIndex: this.currentIteration?.iterationIndex ?? undefined,
+      });
+      return;
+    }
+
+    this.qualityReport.timeout.record({
+      scope: 'question',
+      action,
+      questionId: question.id,
+      pageId: this.currentPage?.id,
+      iterationIndex: this.currentIteration?.iterationIndex ?? undefined,
+    });
+
+    if (action === 'terminate') {
+      this.completeWithTimeout({ scope: 'question', action, questionId: question.id });
+      return;
+    }
+
+    if (action === 'skip') {
+      await this.handleTimeout(question, onsetTime);
+      return;
+    }
+
+    // auto-submit: commit whatever the participant has entered so far, stamped timedOut.
+    const value = this.config.formHost?.getCurrentValue?.() ?? null;
+    this.pendingTimeoutQuestionId = question.id;
+    await this.handleCollectedResponse(question, onsetTime, value, {
+      source: 'timeout',
+      timestamp: performance.now(),
+      responseTimeMs: Math.max(0, performance.now() - onsetTime),
+    });
+  }
+
+  /** Surface a question-scope countdown tick to the overlay (E-FLOW-5, step 5). */
+  private handleTimerTick(scope: TimerScope, remainingMs: number, totalMs: number): void {
+    if (scope !== 'question') return;
+    const warnAt = this.activeQuestionWarnAtMs;
+    const warning = warnAt !== undefined && totalMs - remainingMs >= warnAt;
+    this.config.formHost?.updateTimer?.({ scope, remainingMs, totalMs, warning });
+  }
+
+  /**
+   * Complete the session as a timeout outcome (E-FLOW-5). A `terminate` action sets the
+   * session status to `timed_out` and records the reason (incl. any survey timeout
+   * message) into metadata; an `auto-submit` survey timeout completes normally but still
+   * records the timeout provenance so the dataset is honest about how it ended.
+   */
+  private completeWithTimeout(info: {
+    scope: TimerScope;
+    action: string;
+    questionId?: string;
+  }): void {
+    if (!this.session.metadata) this.session.metadata = {};
+    this.session.metadata.custom = {
+      ...this.session.metadata.custom,
+      timeoutTermination: {
+        scope: info.scope,
+        action: info.action,
+        questionId: info.questionId,
+        pageId: this.currentPage?.id,
+        message:
+          info.scope === 'survey'
+            ? this.config.questionnaire.settings.surveyTimeoutMessage
+            : undefined,
+        at: Date.now(),
+      },
+    };
+    this.complete(info.action === 'terminate' ? 'timed_out' : 'completed');
+  }
+
+  /**
+   * Whole-survey deadline expiry (E-FLOW-5, step 2): record it and end the session per
+   * `onSurveyTimeout` (default `auto-submit`).
+   */
+  private handleSurveyTimeout(): void {
+    const action: SurveyTimeoutAction =
+      this.config.questionnaire.settings.onSurveyTimeout ?? 'auto-submit';
+    this.qualityReport.timeout.record({ scope: 'survey', action });
+    this.completeWithTimeout({ scope: 'survey', action });
   }
 
   private clearPresentation(): void {
+    // Leaving the current question presentation: disarm its deadline and clear the
+    // overlay countdown (E-FLOW-5). Survey / page scopes persist.
+    this.timers.clear('question');
+    this.activeQuestionWarnAtMs = undefined;
+    this.config.formHost?.updateTimer?.(null);
     this.config.formHost?.clear();
     // Parity with the removed QuestionPresenter.clear() (Slice 5.2): drop any leftover
     // WebGL renderables so a form/display item after a reaction trial starts clean.
@@ -1367,6 +1746,7 @@ export class QuestionnaireRuntime {
       reactionTime,
       stimulusOnsetTime: onsetTime,
       valid: !runtimeResult.timedOut && validationResult.valid,
+      ...this.iterationFields(),
       metadata: runtimeResult.metadata,
     };
 
@@ -1421,6 +1801,11 @@ export class QuestionnaireRuntime {
     const timestamp = responseMetadata?.timestamp ?? performance.now();
     const reactionTime = responseMetadata?.responseTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
 
+    // Deadline auto-submit (E-FLOW-5): this commit was forced by the question timer, so
+    // stamp the Response timedOut and mark it invalid regardless of validation state.
+    const timedOut = this.pendingTimeoutQuestionId === question.id;
+    this.pendingTimeoutQuestionId = null;
+
     const response: Response = {
       id: nanoid(),
       questionId: question.id,
@@ -1429,7 +1814,9 @@ export class QuestionnaireRuntime {
       value,
       reactionTime,
       stimulusOnsetTime: onsetTime,
-      valid: validationResult.valid,
+      valid: validationResult.valid && !timedOut,
+      timedOut: timedOut || undefined,
+      ...this.iterationFields(),
       metadata: responseMetadata ? { firstInteraction: responseMetadata.responseTimeMs } : undefined,
     };
 
@@ -1475,6 +1862,8 @@ export class QuestionnaireRuntime {
       reactionTime: -1,
       stimulusOnsetTime: onsetTime,
       valid: false,
+      timedOut: true,
+      ...this.iterationFields(),
     };
 
     this.session.responses.push(response);
@@ -1489,6 +1878,17 @@ export class QuestionnaireRuntime {
     await this.showCurrentItem();
   }
 
+  /**
+   * Iteration provenance to stamp onto a Response being recorded (E-FLOW-4). Empty
+   * for a non-loop item, so its Response shape is unchanged. Read from the item
+   * currently being presented — one item is active at a time.
+   */
+  private iterationFields(): { iterationIndex?: number; loopValue?: unknown } {
+    const it = this.currentIteration;
+    if (!it || it.iterationIndex === null || it.iterationIndex === undefined) return {};
+    return { iterationIndex: it.iterationIndex, loopValue: it.loopValue };
+  }
+
   private updateQuestionVariables(
     question: Question,
     response: Response,
@@ -1501,18 +1901,40 @@ export class QuestionnaireRuntime {
     // in VariableEngine.validateType and — since this runs inside the fire-and-forget response
     // handler — surface as a silent unhandled rejection that halts navigation. Swallow only the
     // value write; timing/correctness variables below are always numeric/boolean and safe.
+    // Loop namespacing (E-FLOW-4): a looped answer is stored under an
+    // iteration-scoped prefix (`${id}__${iterationIndex}`) so every pass survives to
+    // complete(); for a non-loop item the prefix is the bare id (historical scheme).
+    const prefix = iterationVarPrefix(question.id, response.iterationIndex);
+    if (prefix !== question.id) {
+      // Ensure the iteration-namespaced variables exist before writing — covers the
+      // hydrate() replay path, which reaches updateQuestionVariables without having
+      // run applyLoopContext (idempotent when already registered on the live path).
+      this.registerAnswerVariables(prefix, prefix, this.inferVariableType(question));
+    }
+    this.writeAnswerVariables(prefix, response, isCorrect);
+
+    // For a looped item ALSO refresh the plain, un-namespaced answer variables
+    // (last-iteration wins) so scripts / carry-forward / conditions that key on the
+    // bare question id keep resolving to the most recent iteration's answer.
+    if (prefix !== question.id) {
+      this.writeAnswerVariables(question.id, response, isCorrect);
+    }
+  }
+
+  /** Write the five answer variables for a (possibly iteration-namespaced) base id. */
+  private writeAnswerVariables(base: string, response: Response, isCorrect: boolean | null): void {
     try {
-      this.variableEngine.setVariable(`${question.id}_value`, response.value, 'response');
+      this.variableEngine.setVariable(`${base}_value`, response.value, 'response');
     } catch (error) {
       console.warn(
-        `[runtime] value variable write failed for ${question.id}: ${
+        `[runtime] value variable write failed for ${base}: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
     }
-    this.variableEngine.setVariable(`${question.id}_time`, response.timestamp, 'response');
-    this.variableEngine.setVariable(`${question.id}_rt`, response.reactionTime ?? null, 'response');
-    this.variableEngine.setVariable(`${question.id}_correct`, isCorrect, 'response');
+    this.variableEngine.setVariable(`${base}_time`, response.timestamp, 'response');
+    this.variableEngine.setVariable(`${base}_rt`, response.reactionTime ?? null, 'response');
+    this.variableEngine.setVariable(`${base}_correct`, isCorrect, 'response');
   }
 
   private evaluateCustomCorrectness(question: Question, _value: DynamicValue): boolean | null {
@@ -1562,8 +1984,11 @@ export class QuestionnaireRuntime {
   private async handleFlowControl(): Promise<void> {
     const matchingRule = this.findMatchingFlowRule();
 
+    const fromPageId = this.currentPage?.id;
+
     if (matchingRule) {
       if (matchingRule.type === 'terminate') {
+        this.recordFlowPath(fromPageId, matchingRule, 'terminate');
         this.complete();
         return;
       }
@@ -1580,7 +2005,8 @@ export class QuestionnaireRuntime {
               matchingRule.target
             );
             if (targetIndex >= 0) {
-              await this.navigateToPage(targetIndex);
+              this.recordFlowPath(fromPageId, matchingRule, targetIndex);
+              await this.navigateToPage(targetIndex, this.flowTargetAnchor(matchingRule.target));
               return;
             }
             this.warnUnresolvedFlowTarget(matchingRule);
@@ -1595,7 +2021,8 @@ export class QuestionnaireRuntime {
             matchingRule.target
           );
           if (targetIndex >= 0) {
-            await this.navigateToPage(targetIndex);
+            this.recordFlowPath(fromPageId, matchingRule, targetIndex);
+            await this.navigateToPage(targetIndex, this.flowTargetAnchor(matchingRule.target));
             return;
           }
           this.warnUnresolvedFlowTarget(matchingRule);
@@ -1606,6 +2033,46 @@ export class QuestionnaireRuntime {
     await this.navigateToPage(this.currentPageIndex + 1);
   }
 
+  /**
+   * Append the resolved flow transition to `session.metadata.custom.flowPath`
+   * (E-FLOW-8, step 9) so the branch a participant actually took is auditable
+   * from the persisted session — not just inferable from answers.
+   */
+  private recordFlowPath(
+    fromPageId: string | undefined,
+    rule: FlowControl,
+    to: number | 'terminate'
+  ): void {
+    if (!this.session.metadata) this.session.metadata = {};
+    const pages = this.config.questionnaire.pages;
+    const toPageId = to === 'terminate' ? null : pages[to]?.id ?? null;
+    const prior = (this.session.metadata.custom?.flowPath as unknown[]) ?? [];
+    this.session.metadata.custom = {
+      ...this.session.metadata.custom,
+      flowPath: [
+        ...prior,
+        {
+          ruleId: rule.id,
+          type: rule.type,
+          fromPageId: fromPageId ?? null,
+          toPageId,
+          terminated: to === 'terminate',
+          at: Date.now(),
+        },
+      ],
+    };
+  }
+
+  /**
+   * When a flow target is a QUESTION id (not a page id), return it so
+   * {@link navigateToPage} can anchor the landing on that question within its
+   * page (E-FLOW-8, step 6). A page-id target returns `undefined` (land at top).
+   */
+  private flowTargetAnchor(target: string): string | undefined {
+    const isPage = this.config.questionnaire.pages.some((p) => p.id === target);
+    return isPage ? undefined : target;
+  }
+
   private warnUnresolvedFlowTarget(rule: FlowControl): void {
     console.warn(
       '[flow] rule %s target %s matches no page or question — falling through to next page',
@@ -1614,8 +2081,39 @@ export class QuestionnaireRuntime {
     );
   }
 
+  /**
+   * Find the flow rule that fires as control leaves the current page (E-FLOW-8).
+   *
+   * Only rules whose `source` scopes them to the current page are considered,
+   * plus global (unset-source) rules — so `from page 3 go to 7` and
+   * `from page 5 go to 9` can share a condition yet fire only from their own
+   * page. Candidates are ordered exactly as {@link buildFlowGraph} predicts —
+   * source-scoped before global, then priority descending, then declaration
+   * order — and the first whose condition evaluates truthy wins.
+   *
+   * A rule's `source` may be a page id or a question id (resolved to its page).
+   */
   private findMatchingFlowRule(): FlowControl | null {
-    for (const rule of this.config.questionnaire.flow || []) {
+    const flow = this.config.questionnaire.flow || [];
+    if (flow.length === 0) return null;
+
+    const pages = this.config.questionnaire.pages;
+    const currentPageIndex = this.currentPageIndex;
+
+    const candidates: Array<{ rule: FlowControl; scoped: boolean; index: number }> = [];
+    flow.forEach((rule, index) => {
+      if (!rule.source) {
+        candidates.push({ rule, scoped: false, index });
+        return;
+      }
+      // Source-scoped: keep only when it resolves to the page we are leaving.
+      const srcIdx = resolveFlowTargetPageIndex(pages, rule.source);
+      if (srcIdx === currentPageIndex) {
+        candidates.push({ rule, scoped: true, index });
+      }
+    });
+
+    for (const rule of orderFlowCandidates(candidates)) {
       const condition = rule.condition || 'true';
       const result = Boolean(this.variableEngine.evaluateFormula(condition).value);
       if (result) {
@@ -1688,11 +2186,13 @@ export class QuestionnaireRuntime {
     }
   }
 
-  private complete(): void {
+  private complete(status: 'completed' | 'timed_out' = 'completed'): void {
     if (!this.isRunning) return;
 
     this.isRunning = false;
-    this.session.status = 'completed';
+    // Deadline scopes are all resolved once the session ends (E-FLOW-5).
+    this.timers.clearAll();
+    this.session.status = status;
     this.session.endTime = Date.now();
 
     // Finalize speeder timing for the last page
@@ -1730,12 +2230,27 @@ export class QuestionnaireRuntime {
     for (const page of this.config.questionnaire.pages) {
       for (const block of page.blocks || []) {
         const blockQuestionIds = new Set(block.questions || []);
-        const blockValues = this.session.responses
-          .filter((r) => blockQuestionIds.has(r.questionId))
-          .map((r) => r.value);
+        const blockResponses = this.session.responses.filter((r) =>
+          blockQuestionIds.has(r.questionId)
+        );
 
-        if (blockValues.length > 0) {
-          this.qualityReport.flatliner.analyzeBlock(block.id, blockValues);
+        // Loop reconciliation (E-FLOW-4): analyze each iteration as its own block
+        // instance so a straight-lined pass is flagged per-iteration rather than
+        // diluted by mixing iterations (and so a legitimate roster where every pass
+        // shares an answer isn't flagged as one giant flatline). Non-loop responses
+        // (iterationIndex undefined) group under the bare block id, unchanged.
+        const byIteration = new Map<number | 'none', unknown[]>();
+        for (const r of blockResponses) {
+          const key = r.iterationIndex ?? 'none';
+          const bucket = byIteration.get(key) ?? [];
+          bucket.push(r.value);
+          byIteration.set(key, bucket);
+        }
+
+        for (const [key, values] of byIteration) {
+          if (values.length === 0) continue;
+          const blockId = key === 'none' ? block.id : `${block.id}__${key}`;
+          this.qualityReport.flatliner.analyzeBlock(blockId, values);
         }
       }
     }
@@ -1768,6 +2283,11 @@ export class QuestionnaireRuntime {
     }
 
     this.clearPageTimer();
+    // Guard against a question deadline firing after the item was torn down (E-FLOW-5,
+    // step 10). The survey / page scopes are managed by their own arm/clear paths.
+    this.timers.clear('question');
+    this.activeQuestionWarnAtMs = undefined;
+    this.config.formHost?.updateTimer?.(null);
     this.responseCollector.stop();
     this.config.formHost?.clear();
     this.renderer?.clearRenderables();

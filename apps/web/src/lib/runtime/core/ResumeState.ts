@@ -52,6 +52,13 @@ export interface ResumeState {
    * skip-set so a resumed page does not re-present a captured response (step 6).
    */
   presentedItemIds: string[];
+  /**
+   * Remaining whole-survey time budget in ms at capture (E-FLOW-5, step 8). Present
+   * only when `settings.wholeSurveyTimeLimitMs` was armed; on resume the survey timer
+   * re-arms with this remainder so the original cap is respected across a save-and-
+   * continue. Absent ⇒ no survey cap, or an older snapshot (survey re-arms fresh).
+   */
+  surveyRemainingMs?: number;
   /** Wall-clock capture time (ms epoch) — diagnostics / newest-wins selection. */
   capturedAt: number;
 }

@@ -26,6 +26,25 @@ export interface Response {
   allKeyPresses?: KeyPress[];
   valid: boolean;
   attempts?: number;
+  /**
+   * True when this response was produced by a per-question deadline elapsing
+   * (E-FLOW-5) rather than a deliberate participant submission. An `auto-submit`
+   * timeout carries the partial value with `timedOut: true`; a `skip` timeout carries
+   * a null value. Folded into the QualityReport timeout dimension so researchers can
+   * flag rushed / abandoned items.
+   */
+  timedOut?: boolean;
+  /**
+   * Zero-based loop iteration this response belongs to (E-FLOW-4). Absent for
+   * items presented outside a loop block. Combined with `questionId` it makes each
+   * looped answer distinct: exports emit one row per (questionId, iterationIndex).
+   */
+  iterationIndex?: number;
+  /**
+   * The loop item value active for the iteration that produced this response
+   * (roster entry, stimulus name, trial descriptor, …). Absent outside a loop.
+   */
+  loopValue?: unknown;
   metadata?: ResponseMetadata;
 }
 

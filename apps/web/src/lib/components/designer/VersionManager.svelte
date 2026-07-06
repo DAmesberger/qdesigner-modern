@@ -30,7 +30,7 @@
   );
 
   const bumpDescriptions = {
-    major: 'Breaking changes: questions added/removed/reordered, response keys changed',
+    major: 'Breaking changes: questions added/removed/reordered, response keys changed, flow/branch rules added or removed',
     minor: 'Content changes: question text/labels edited, new options added, page reordering',
     patch: 'Cosmetic changes: typo fixes, styling adjustments, description updates',
   } as const;

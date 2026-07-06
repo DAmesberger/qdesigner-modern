@@ -2,6 +2,21 @@ import type { Question } from '@qdesigner/questionnaire-core';
 import type { ResponseCaptureMetadata } from './ResponseCollector';
 import type { ModuleCategory } from '$lib/modules/types';
 import type { ModuleRuntimeConfig } from './moduleConfigAdapter';
+import type { TimerScope } from './TimerController';
+
+/**
+ * A live countdown state pushed to the overlay by the unified timer subsystem
+ * (E-FLOW-5). The runtime surfaces question-scope ticks so participants can see how
+ * long they have left; `null` (via {@link FormQuestionHost.updateTimer}) means no
+ * active deadline.
+ */
+export interface FormTimerState {
+  scope: TimerScope;
+  remainingMs: number;
+  totalMs: number;
+  /** True once the elapsed time has crossed the configured pre-deadline warn point. */
+  warning: boolean;
+}
 
 /**
  * A single item presented through the HTML overlay (form-style rendering path).
@@ -44,4 +59,15 @@ export interface FormHostPresentation {
 export interface FormQuestionHost {
   present(presentation: FormHostPresentation): void;
   clear(): void;
+  /**
+   * Push a live question-deadline countdown to the overlay (E-FLOW-5), or `null` to
+   * hide it. Optional — a host that does not render countdowns simply omits it.
+   */
+  updateTimer?(state: FormTimerState | null): void;
+  /**
+   * Return the value the participant has entered into the currently-mounted form
+   * component (E-FLOW-5). Used by an `auto-submit` deadline to commit the partial
+   * answer. Optional — absent ⇒ an auto-submit timeout commits `null`.
+   */
+  getCurrentValue?(): unknown;
 }

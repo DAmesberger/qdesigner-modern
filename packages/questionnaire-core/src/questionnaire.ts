@@ -182,6 +182,12 @@ export interface Page {
   layout?: LayoutConfig;
   conditions?: DisplayCondition[];
   script?: string;
+  /**
+   * Per-page runtime settings, including the enforced {@link PageSettings.timeLimit}
+   * (E-FLOW-5). Previously `PageSettings` was defined but never attached to a page;
+   * the unified timer subsystem reads `page.settings.timeLimit` to arm the page timer.
+   */
+  settings?: PageSettings;
 }
 
 export interface Block {
@@ -203,6 +209,19 @@ export interface FlowControl {
   condition: string; // Formula
   target?: string; // Page/Question ID for skip/branch
   iterations?: number; // For loops
+  /**
+   * Position scoping (E-FLOW-8). The page (or question) id this rule fires FROM.
+   * When set, the rule is only considered as control leaves that page/question;
+   * when unset the rule is global (considered from every page, legacy behaviour).
+   * A question-id source resolves to the page that contains the question.
+   */
+  source?: string;
+  /**
+   * Deterministic precedence among candidate rules at the same boundary
+   * (E-FLOW-8). Higher fires first; defaults to 0. Ties break by declaration
+   * order. Source-scoped rules always precede global (unset-source) rules.
+   */
+  priority?: number;
 }
 
 export interface ExperimentalCondition {
@@ -417,6 +436,14 @@ export interface ReportPageConfig {
   refreshMs?: number;
 }
 
+/**
+ * What the runtime does when the whole-survey time budget
+ * ({@link QuestionnaireSettings.wholeSurveyTimeLimitMs}) elapses (E-FLOW-5).
+ * - `auto-submit` — complete the session with whatever has been answered (default).
+ * - `terminate`   — end the session, surfacing {@link QuestionnaireSettings.surveyTimeoutMessage}.
+ */
+export type SurveyTimeoutAction = 'auto-submit' | 'terminate';
+
 export interface QuestionnaireSettings {
   allowBackNavigation?: boolean;
   showProgressBar?: boolean;
@@ -424,6 +451,16 @@ export interface QuestionnaireSettings {
   randomizationSeed?: string;
   timeZone?: string;
   language?: string;
+  /**
+   * Whole-survey time budget in ms (E-FLOW-5). Armed once at `start()`; frozen while
+   * the session is paused/backgrounded and (via ResumeState) preserved across a
+   * save-and-continue resume. Absent ⇒ no whole-survey cap.
+   */
+  wholeSurveyTimeLimitMs?: number;
+  /** Action when {@link wholeSurveyTimeLimitMs} elapses. Default `auto-submit`. */
+  onSurveyTimeout?: SurveyTimeoutAction;
+  /** Participant-facing message when the survey deadline terminates the session. */
+  surveyTimeoutMessage?: string;
   webgl?: WebGLSettings;
   requireConsent?: boolean;
   requireAuthentication?: boolean;
@@ -462,12 +499,28 @@ export interface QuestionSettings {
   randomize?: boolean;
 }
 
+/**
+ * What the runtime does when a page's {@link PageSettings.timeLimit} elapses
+ * (E-FLOW-5).
+ * - `auto-advance` — leave the current page and continue to the next (default).
+ * - `terminate`    — end the whole session (records a timeout outcome).
+ */
+export type PageTimeoutAction = 'auto-advance' | 'terminate';
+
 export interface PageSettings {
   showTitle?: boolean;
   showProgressBar?: boolean;
   allowNavigation?: boolean;
   autoAdvance?: boolean;
+  /** Maximum time in ms the participant may spend on this page (E-FLOW-5, enforced). */
   timeLimit?: number;
+  /** Action when {@link timeLimit} elapses. Default `auto-advance`. */
+  onTimeLimit?: PageTimeoutAction;
+  /**
+   * Cadence in ms for the page-script `onTimer` hook (E-FLOW-5). Replaces the
+   * previously hardcoded 1000ms interval. Default 1000.
+   */
+  timerIntervalMs?: number;
 }
 
 // ============================================================================
@@ -520,11 +573,35 @@ export type QuestionType = (typeof QuestionTypes)[keyof typeof QuestionTypes];
 // Common Configuration Types
 // ============================================================================
 
+/**
+ * What the runtime does when a per-question response deadline
+ * ({@link TimingConfig.deadlineMs}) elapses (E-FLOW-5).
+ * - `auto-submit` — commit whatever value the participant has entered so far, flagged
+ *   as timed out, and advance (default; the "speeded self-report" behaviour).
+ * - `skip`        — record an empty, invalid, timed-out response and advance.
+ * - `terminate`   — end the whole session.
+ * - `warn`        — surface a warning but keep the question open (soft deadline).
+ */
+export type QuestionTimeoutAction = 'auto-submit' | 'skip' | 'terminate' | 'warn';
+
 export interface TimingConfig {
   minTime?: number;
   maxTime?: number;
   showTimer?: boolean;
   warningTime?: number;
+  /**
+   * Per-question response deadline in ms (E-FLOW-5). When set, the form path arms a
+   * countdown from stimulus onset; on expiry it runs {@link onTimeout}. Absent ⇒ the
+   * question has no deadline (historical behaviour).
+   */
+  deadlineMs?: number;
+  /** Action when {@link deadlineMs} elapses. Default `auto-submit`. */
+  onTimeout?: QuestionTimeoutAction;
+  /**
+   * Optional pre-deadline warning point in ms from onset (E-FLOW-5). When the elapsed
+   * time crosses this, the countdown enters its warning style before the hard deadline.
+   */
+  warnAtMs?: number;
 }
 
 export interface NavigationConfig {
@@ -598,6 +675,39 @@ export interface LoopConfig {
   variable: string;
   values: DynamicValue[];
   shuffle?: boolean;
+  /**
+   * Name of the per-iteration loop variable exposed to interpolation and scripting
+   * (E-FLOW-4). The runtime sets this variable (and the fixed alias `loopValue`) to
+   * the current iteration's value before presenting each pass, so authored prompts /
+   * options can pipe `{{loopValue}}` or `{{<loopVariableName>}}`. Defaults to
+   * `loopValue` when omitted.
+   */
+  loopVariableName?: string;
+  /**
+   * Where the iteration values come from (E-FLOW-4). Absent ⇒ the static `values`
+   * list is used (backwards compatible).
+   */
+  source?: LoopSource;
+  /**
+   * Hard cap on the number of iterations. Guards against a runaway loop when the
+   * source is a dynamic answer / variable array. Applied after resolution and before
+   * expansion; a resolved list longer than this is truncated.
+   */
+  maxIterations?: number;
+}
+
+/**
+ * Source of a loop block's iteration values (E-FLOW-4).
+ * - `static`   — the block's own `LoopConfig.values` list (default).
+ * - `answer`   — the (array-coerced) answer of a prior multi-select question.
+ * - `variable` — an array-valued session variable.
+ */
+export interface LoopSource {
+  type: 'static' | 'answer' | 'variable';
+  /** For `answer`: the question id whose response supplies the roster/list. */
+  questionId?: string;
+  /** For `variable`: the variable name holding the array of iteration values. */
+  variableId?: string;
 }
 
 export interface WebGLSettings {

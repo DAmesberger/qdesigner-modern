@@ -9,7 +9,12 @@
   import CompletionScreen from '$lib/fillout/components/CompletionScreen.svelte';
   import { FilloutRuntime } from '$lib/fillout/runtime/FilloutRuntime';
   import ModularRenderer from '$lib/runtime/ModularRenderer.svelte';
-  import type { FormQuestionHost, FormHostPresentation } from '$lib/runtime/core/FormQuestionHost';
+  import type {
+    FormQuestionHost,
+    FormHostPresentation,
+    FormTimerState,
+  } from '$lib/runtime/core/FormQuestionHost';
+  import TimerDisplay from '$lib/components/ui/TimerDisplay.svelte';
   import { buildQuestionAnnouncement } from '$lib/fillout/a11y/announce';
   import type { ResumeState } from '$lib/runtime/core/ResumeState';
   import type { ConsentData, FilloutDefinition } from '$lib/fillout/types';
@@ -232,6 +237,8 @@
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- captured value spans every module answer shape
   let currentValue = $state<any>(undefined);
   let hasAnswered = $state(false);
+  // Live per-question countdown pushed by the runtime's TimerController (E-FLOW-5).
+  let timerState = $state<FormTimerState | null>(null);
   // A11y (F094/F098): persistent live region text + focus target for the form card.
   let liveAnnouncement = $state('');
   let formCardEl = $state<HTMLDivElement>();
@@ -267,6 +274,13 @@
       activePresentation = null;
       currentValue = undefined;
       hasAnswered = false;
+      timerState = null;
+    },
+    updateTimer(state) {
+      timerState = state;
+    },
+    getCurrentValue() {
+      return currentValue;
     },
   };
 
@@ -971,6 +985,15 @@
             bind:this={formCardEl}
             tabindex="-1"
           >
+            {#if timerState}
+              <div class="form-timer" data-testid="fillout-form-timer">
+                <TimerDisplay
+                  remainingMs={timerState.remainingMs}
+                  totalMs={timerState.totalMs}
+                  warning={timerState.warning}
+                />
+              </div>
+            {/if}
             {#key activePresentation.item.id}
               <ModularRenderer
                 item={activeItem}
@@ -1275,6 +1298,10 @@
     border-radius: 0.75rem;
     box-shadow: 0 10px 40px rgb(0 0 0 / 0.15);
     padding: 2rem;
+  }
+
+  .form-timer {
+    margin-bottom: 1.25rem;
   }
 
   .form-actions {

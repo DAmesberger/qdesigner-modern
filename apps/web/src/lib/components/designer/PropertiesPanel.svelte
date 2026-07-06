@@ -663,6 +663,89 @@
                   <span class="text-sm text-foreground">Required question</span>
                 </label>
 
+                <!-- Response deadline (E-FLOW-5) -->
+                <div class="border-t pt-3 mt-3">
+                  <span class="block text-sm font-medium text-foreground mb-2">Response deadline</span>
+                  <div class="grid grid-cols-2 gap-2">
+                    <div>
+                      <label
+                        for="deadline-secs-{questionItem.id}"
+                        class="block text-xs text-muted-foreground mb-1">Seconds (0 = none)</label
+                      >
+                      <input
+                        id="deadline-secs-{questionItem.id}"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={questionItem.timing?.deadlineMs ? questionItem.timing.deadlineMs / 1000 : 0}
+                        oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+                          const secs = Number(e.currentTarget.value);
+                          const ms = Number.isFinite(secs) && secs > 0 ? Math.round(secs * 1000) : undefined;
+                          updateQuestion({
+                            timing: { ...questionItem.timing, deadlineMs: ms },
+                          });
+                        }}
+                        class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
+                        data-testid="question-deadline-input"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        for="deadline-action-{questionItem.id}"
+                        class="block text-xs text-muted-foreground mb-1">On timeout</label
+                      >
+                      <Select
+                        id="deadline-action-{questionItem.id}"
+                        value={questionItem.timing?.onTimeout || 'auto-submit'}
+                        onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
+                          updateQuestion({
+                            timing: {
+                              ...questionItem.timing,
+                              onTimeout: e.currentTarget.value as
+                                | 'auto-submit'
+                                | 'skip'
+                                | 'terminate'
+                                | 'warn',
+                            },
+                          })}
+                        placeholder=""
+                      >
+                        <option value="auto-submit">Auto-submit</option>
+                        <option value="skip">Skip</option>
+                        <option value="warn">Warn only</option>
+                        <option value="terminate">Terminate</option>
+                      </Select>
+                    </div>
+                  </div>
+                  {#if questionItem.timing?.deadlineMs}
+                    <label
+                      for="deadline-warn-{questionItem.id}"
+                      class="block text-xs text-muted-foreground mt-2 mb-1"
+                      >Warn at (seconds before, 0 = off)</label
+                    >
+                    <input
+                      id="deadline-warn-{questionItem.id}"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={questionItem.timing?.warnAtMs !== undefined && questionItem.timing?.deadlineMs
+                        ? Math.max(0, (questionItem.timing.deadlineMs - questionItem.timing.warnAtMs) / 1000)
+                        : 0}
+                      oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+                        const before = Number(e.currentTarget.value);
+                        const deadline = questionItem.timing?.deadlineMs ?? 0;
+                        const warnAtMs =
+                          Number.isFinite(before) && before > 0
+                            ? Math.max(0, deadline - Math.round(before * 1000))
+                            : undefined;
+                        updateQuestion({ timing: { ...questionItem.timing, warnAtMs } });
+                      }}
+                      class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
+                      data-testid="question-warn-input"
+                    />
+                  {/if}
+                </div>
+
                 {#if supportsAttentionCheck}
                   <div class="border-t pt-3 mt-3">
                     <label class="flex items-center space-x-2">
@@ -929,6 +1012,52 @@
                 <option value="horizontal">Horizontal</option>
                 <option value="grid">Grid</option>
               </Select>
+            </div>
+
+            <!-- Page time limit (E-FLOW-5) -->
+            <div class="border-t pt-3">
+              <span class="block text-sm font-medium text-foreground mb-2">Page time limit</span>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label
+                    for="page-timelimit-{pageItem.id}"
+                    class="block text-xs text-muted-foreground mb-1">Seconds (0 = none)</label
+                  >
+                  <input
+                    id="page-timelimit-{pageItem.id}"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={pageItem.settings?.timeLimit ? pageItem.settings.timeLimit / 1000 : 0}
+                    oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+                      const secs = Number(e.currentTarget.value);
+                      const ms = Number.isFinite(secs) && secs > 0 ? Math.round(secs * 1000) : undefined;
+                      updatePageProperty('settings', { ...pageItem.settings, timeLimit: ms });
+                    }}
+                    class="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-primary bg-background text-foreground"
+                    data-testid="page-timelimit-input"
+                  />
+                </div>
+                <div>
+                  <label
+                    for="page-timelimit-action-{pageItem.id}"
+                    class="block text-xs text-muted-foreground mb-1">On timeout</label
+                  >
+                  <Select
+                    id="page-timelimit-action-{pageItem.id}"
+                    value={pageItem.settings?.onTimeLimit || 'auto-advance'}
+                    onchange={(e: Event & { currentTarget: HTMLSelectElement }) =>
+                      updatePageProperty('settings', {
+                        ...pageItem.settings,
+                        onTimeLimit: e.currentTarget.value as 'auto-advance' | 'terminate',
+                      })}
+                    placeholder=""
+                  >
+                    <option value="auto-advance">Auto-advance</option>
+                    <option value="terminate">Terminate</option>
+                  </Select>
+                </div>
+              </div>
             </div>
 
             <div>

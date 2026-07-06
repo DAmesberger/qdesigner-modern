@@ -3,15 +3,27 @@
   import type { FlowControl } from '$lib/shared/types/questionnaire';
   import { nanoid } from 'nanoid';
   import FlowControlEditor from './flow/FlowControlEditor.svelte';
+  import FlowGraphView from './FlowGraphView.svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
-  import { CornerDownRight, GitBranch, Repeat, Square, HelpCircle, Pencil, Trash2, Plus, Map } from 'lucide-svelte';
+  import { CornerDownRight, GitBranch, Repeat, Square, HelpCircle, Pencil, Trash2, Plus, Map, Network, AlertTriangle } from 'lucide-svelte';
   import HelpTip from '$lib/help/components/HelpTip.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import { buildFlowGraph } from '$lib/runtime/core/FlowGraph';
 
   // Use derived state instead of local state + subscribe
   let flowControls = $derived(designerStore.questionnaire.flow || []);
 
+  // Position-scoped branch-graph validation (E-FLOW-8): unreachable pages and
+  // unconditional loops are computed from the current pages + flow.
+  let graphReport = $derived(
+    buildFlowGraph({
+      pages: designerStore.questionnaire.pages || [],
+      flow: flowControls,
+    })
+  );
+
   let showFlowEditor = $state(false);
+  let showGraphView = $state(false);
   let editingFlow = $state<FlowControl | null>(null);
   let showAddFlow = $state(false);
 
@@ -20,6 +32,8 @@
     type: 'branch' as FlowControl['type'],
     condition: '',
     target: '',
+    source: '',
+    priority: undefined as number | undefined,
     iterations: undefined as number | undefined,
   });
 
@@ -67,6 +81,8 @@
       type: newFlow.type,
       condition: newFlow.condition,
       target: newFlow.target || undefined,
+      source: newFlow.source || undefined,
+      priority: newFlow.priority,
       iterations: newFlow.type === 'loop' ? newFlow.iterations : undefined,
     };
 
@@ -109,6 +125,8 @@
       type: 'branch',
       condition: '',
       target: '',
+      source: '',
+      priority: undefined,
       iterations: undefined,
     };
   }
@@ -142,6 +160,21 @@
     <h3 class="text-sm font-semibold text-foreground flex items-center gap-1">Flow Control <HelpTip helpKey="flowControl.overview" /></h3>
     <div class="flex gap-2">
       <button
+        onclick={() => (showGraphView = true)}
+        class="border border-border text-foreground hover:bg-accent hover:text-accent-foreground h-8 px-3 text-xs rounded-md relative"
+        title="Branch Graph & Validation"
+        aria-label="Open Branch Graph"
+        data-testid="flow-open-branch-graph"
+      >
+        <Network class="w-4 h-4" />
+        {#if graphReport.unreachablePageIndices.length > 0 || graphReport.cycles.length > 0}
+          <span
+            class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-warning"
+            data-testid="flow-graph-warn-dot"
+          ></span>
+        {/if}
+      </button>
+      <button
         onclick={() => (showFlowEditor = true)}
         class="border border-border text-foreground hover:bg-accent hover:text-accent-foreground h-8 px-3 text-xs rounded-md"
         title="Visual Flow Editor"
@@ -160,6 +193,28 @@
       </button>
     </div>
   </div>
+
+  {#if graphReport.unreachablePageIndices.length > 0 || graphReport.cycles.length > 0}
+    <button
+      onclick={() => (showGraphView = true)}
+      class="mb-3 w-full text-left rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground flex items-start gap-2"
+      data-testid="flow-inline-warning"
+    >
+      <AlertTriangle class="w-4 h-4 text-warning shrink-0 mt-0.5" />
+      <span>
+        {#if graphReport.unreachablePageIndices.length > 0}
+          {graphReport.unreachablePageIndices.length} unreachable page{graphReport
+            .unreachablePageIndices.length > 1
+            ? 's'
+            : ''}.
+        {/if}
+        {#if graphReport.cycles.length > 0}
+          {graphReport.cycles.length} unconditional loop{graphReport.cycles.length > 1 ? 's' : ''}.
+        {/if}
+        Open the branch graph to inspect.
+      </span>
+    </button>
+  {/if}
 
   {#if flowControls.length === 0}
     <div class="text-center py-8">
@@ -199,6 +254,16 @@
                   <code class="text-xs bg-muted px-2 py-1 rounded font-mono">{flow.condition}</code>
                 </div>
 
+                {#if flow.source}
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-muted-foreground">Fires from:</span>
+                    <span class="text-xs text-foreground">{getTargetLabel(flow.source)}</span>
+                    {#if flow.priority}
+                      <span class="text-xs text-muted-foreground">· priority {flow.priority}</span>
+                    {/if}
+                  </div>
+                {/if}
+
                 {#if flow.target}
                   <div class="flex items-center gap-2">
                     <span class="text-xs text-muted-foreground"
@@ -236,6 +301,8 @@
                     type: flow.type,
                     condition: flow.condition,
                     target: flow.target || '',
+                    source: flow.source || '',
+                    priority: flow.priority,
                     iterations: flow.iterations,
                   };
                   showAddFlow = true;
@@ -312,6 +379,38 @@
             </p>
           </div>
 
+          <!-- Source scoping (E-FLOW-8): fire only when leaving this page/question -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="flow-source" class="text-sm font-medium text-foreground mb-2 block">
+                Fires from
+              </label>
+              <Select id="flow-source" bind:value={newFlow.source} placeholder="Any page (global)">
+                <option value="">Any page (global)</option>
+                {#each availableTargets as target}
+                  <option value={target.id}>{target.label}</option>
+                {/each}
+              </Select>
+              <p class="text-xs text-muted-foreground mt-1">
+                Scope this rule to a single page/question boundary.
+              </p>
+            </div>
+            <div>
+              <label for="flow-priority" class="text-sm font-medium text-foreground mb-2 block">
+                Priority
+              </label>
+              <input
+                id="flow-priority"
+                type="number"
+                bind:value={newFlow.priority}
+                placeholder="0"
+                class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary"
+                data-testid="flow-priority-input"
+              />
+              <p class="text-xs text-muted-foreground mt-1">Higher fires first on ties.</p>
+            </div>
+          </div>
+
           <!-- Target (for skip/branch) -->
           {#if newFlow.type === 'skip' || newFlow.type === 'branch'}
             <div>
@@ -379,6 +478,8 @@
             type: newFlow.type,
             condition: newFlow.condition,
             target: newFlow.target || undefined,
+            source: newFlow.source || undefined,
+            priority: newFlow.priority,
             iterations: newFlow.iterations,
           });
           editingFlow = null;
@@ -408,5 +509,21 @@
 >
   <div class="min-h-[60vh]">
     <FlowControlEditor {flowControls} onUpdate={handleFlowUpdate} />
+  </div>
+</Dialog>
+
+<!-- Branch Graph & Validation Modal (E-FLOW-8) -->
+<Dialog
+  bind:open={showGraphView}
+  title="Branch Graph & Validation"
+  size="full"
+  onclose={() => { showGraphView = false; }}
+>
+  <div class="min-h-[60vh]">
+    <FlowGraphView
+      pages={designerStore.questionnaire.pages || []}
+      flow={flowControls}
+      variables={designerStore.questionnaire.variables || []}
+    />
   </div>
 </Dialog>

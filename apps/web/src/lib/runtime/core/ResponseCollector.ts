@@ -4,7 +4,7 @@ import type { Question, ResponseType } from '$lib/shared';
 type DynamicValue = any;
 
 export interface ResponseCaptureMetadata {
-  source: 'keyboard' | 'mouse' | 'touch' | 'programmatic';
+  source: 'keyboard' | 'mouse' | 'touch' | 'programmatic' | 'timeout';
   timestamp: number;
   responseTimeMs: number;
   rawEvent?: Event;

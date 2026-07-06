@@ -9,12 +9,14 @@ import type { FlatlineResult } from './FlatlineDetector';
 import { AttentionCheckValidator } from './AttentionCheck';
 import { SpeederDetector, type SpeederConfig } from './SpeederDetector';
 import { FlatlineDetector, type FlatlineConfig } from './FlatlineDetector';
+import { TimeoutTracker, type TimeoutReportData } from './TimeoutTracker';
 
 export type QualityFlag =
   | 'pass'
   | 'attention_fail'
   | 'speeder'
   | 'flatliner'
+  | 'timeout'
   | 'multiple_flags';
 
 export interface QualityReportData {
@@ -38,23 +40,29 @@ export interface QualityReportData {
     flaggedBlocks: string[];
     results: FlatlineResult[];
   };
+  /** Deadline-timeout occurrences across survey / page / question scopes (E-FLOW-5). */
+  timeout: TimeoutReportData;
 }
 
 export interface QualityConfig {
   speeder?: Partial<SpeederConfig>;
   flatliner?: Partial<FlatlineConfig>;
   attentionFailureThreshold?: number;
+  /** Question-level timeouts at or above which the session is flagged (E-FLOW-5). Default 1. */
+  timeoutThreshold?: number;
 }
 
 export class QualityReport {
   public readonly attention: AttentionCheckValidator;
   public readonly speeder: SpeederDetector;
   public readonly flatliner: FlatlineDetector;
+  public readonly timeout: TimeoutTracker;
 
   constructor(config?: QualityConfig) {
     this.attention = new AttentionCheckValidator(config?.attentionFailureThreshold ?? 1);
     this.speeder = new SpeederDetector(config?.speeder);
     this.flatliner = new FlatlineDetector(config?.flatliner);
+    this.timeout = new TimeoutTracker(config?.timeoutThreshold ?? 1);
   }
 
   /** Generate the final aggregated report. */
@@ -64,6 +72,7 @@ export class QualityReport {
     if (this.attention.hasFailed) individualFlags.push('attention_fail');
     if (this.speeder.isFlagged) individualFlags.push('speeder');
     if (this.flatliner.isFlagged) individualFlags.push('flatliner');
+    if (this.timeout.isFlagged) individualFlags.push('timeout');
 
     let overallFlag: QualityFlag = 'pass';
     if (individualFlags.length === 1) {
@@ -93,6 +102,7 @@ export class QualityReport {
         flaggedBlocks: this.flatliner.flaggedBlocks,
         results: this.flatliner.getResults(),
       },
+      timeout: this.timeout.toReport(),
     };
   }
 
@@ -100,5 +110,6 @@ export class QualityReport {
     this.attention.reset();
     this.speeder.reset();
     this.flatliner.reset();
+    this.timeout.reset();
   }
 }
