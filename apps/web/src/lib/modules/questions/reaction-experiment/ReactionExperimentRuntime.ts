@@ -9,6 +9,10 @@ import { mediaContentUrl } from '$lib/services/mediaService';
 import { computeDerivedReactionMetrics, aggregateReactionProvenance } from '$lib/modules/questions/reaction-time/model/reaction-scoring';
 import type { ReactionTaskType } from '$lib/modules/questions/reaction-time/model/reaction-schema';
 import {
+  compactPhaseTimeline,
+  type CompactPhaseMark,
+} from '$lib/modules/questions/reaction-time/model/trialRow';
+import {
   compileReactionExperimentPlan,
   normalizeReactionExperimentConfig,
 } from './model/reaction-experiment';
@@ -21,11 +25,21 @@ interface TrialResponse {
   blockId: string;
   condition: string | null;
   trialTemplateId: string | null;
+  /** Stimulus kind (`shape` | `text` | `image` | `video` | `audio` | `custom`). */
+  stimulusKind: string | null;
   key: string | null;
   reactionTime: number | null;
+  /** Signed raw reaction time (`response - onset`); may be negative. E-REACT-5. */
+  rawRtMs: number | null;
   isCorrect: boolean | null;
   timeout: boolean;
+  /** True when a response arrived before onset (a false start occurred). */
+  anticipatory: boolean;
+  /** Number of discarded pre-onset (anticipatory) responses. */
+  falseStartCount: number;
   stimulusOnsetTime: number | null;
+  /** Time the stimulus renderable was removed, else null. E-REACT-5. */
+  stimulusOffsetTime: number | null;
   expectedResponse: string | null;
   isTarget: boolean | null;
   responseTimingMethod: string | null;
@@ -36,6 +50,18 @@ interface TrialResponse {
   /** Gamepad responses: the button index that fired, else null. */
   gamepadButtonIndex: number | null;
   stimulusTimingMethod: string | null;
+  /** Visual display-latency compensation applied to the onset (visual only). E-REACT-5. */
+  displayLatencyMs: number | null;
+  /** Audio output-latency folded into the onset (audio only). E-REACT-5. */
+  outputLatencyMs: number | null;
+  /** How the stimulus offset was scheduled (E-REACT-3): raf | timeout | none. */
+  offsetMethod: string | null;
+  /** Measured exposure in frames for a frame-accurate (raf) offset, else null. */
+  actualDurationFrames: number | null;
+  /** Number of logged video frames (video stimuli only; else 0). E-REACT-5. */
+  videoFrameCount: number;
+  /** Compacted per-phase timeline for this trial. E-REACT-5. */
+  phaseTimeline: CompactPhaseMark[];
   frameStats: {
     fps: number;
     droppedFrames: number;
@@ -136,11 +162,16 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
         blockId: planned.metadata.blockId,
         condition: planned.metadata.condition || null,
         trialTemplateId: planned.metadata.trialTemplateId || null,
+        stimulusKind: planned.trial.stimulus?.kind ?? null,
         key,
         reactionTime: result.response?.reactionTimeMs ?? null,
+        rawRtMs: result.response?.rawRtMs ?? null,
         isCorrect: result.isCorrect,
         timeout: result.timeout,
+        anticipatory: result.anticipatory,
+        falseStartCount: result.falseStartCount,
         stimulusOnsetTime: result.stimulusOnsetTime,
+        stimulusOffsetTime: result.stimulusOffsetTime,
         expectedResponse: planned.metadata.expectedResponse || null,
         isTarget: planned.metadata.isTarget ?? null,
         responseTimingMethod: result.response?.timingMethod || null,
@@ -148,6 +179,12 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
         holdDurationMs: result.response?.holdDurationMs ?? null,
         gamepadButtonIndex: result.response?.gamepadButtonIndex ?? null,
         stimulusTimingMethod: result.stimulusTimingMethod || null,
+        displayLatencyMs: result.displayLatencyMs ?? null,
+        outputLatencyMs: result.outputLatencyMs ?? null,
+        offsetMethod: result.offsetMethod ?? null,
+        actualDurationFrames: result.actualDurationFrames ?? null,
+        videoFrameCount: result.videoFrames?.length ?? 0,
+        phaseTimeline: compactPhaseTimeline(result.phaseTimeline),
         frameStats: {
           fps: result.stats.fps,
           droppedFrames: result.stats.droppedFrames,

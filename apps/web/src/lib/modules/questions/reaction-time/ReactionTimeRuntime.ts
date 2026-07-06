@@ -7,9 +7,11 @@ import { ReactionEngine } from '$lib/runtime/reaction';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import { mediaContentUrl } from '$lib/services/mediaService';
 import { compileReactionPlan } from './model/reaction-compiler';
+import type { PlannedReactionTrial } from './model/reaction-plan-types';
 import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
 import { computeDerivedReactionMetrics, aggregateReactionProvenance } from './model/reaction-scoring';
 import type { ReactionTaskType } from './model/reaction-schema';
+import { compactPhaseTimeline, type CompactPhaseMark } from './model/trialRow';
 
 /**
  * Recursively rewrite every media reference in a freshly-normalized (mutable)
@@ -42,11 +44,21 @@ interface TrialResponse {
   blockId: string;
   condition: string | null;
   trialTemplateId: string | null;
+  /** Stimulus kind (`shape` | `text` | `image` | `video` | `audio` | `custom`). */
+  stimulusKind: string | null;
   key: string | null;
   reactionTime: number | null;
+  /** Signed raw reaction time (`response - onset`); may be negative. E-REACT-5. */
+  rawRtMs: number | null;
   isCorrect: boolean | null;
   timeout: boolean;
+  /** True when a response arrived before onset (a false start occurred). */
+  anticipatory: boolean;
+  /** Number of discarded pre-onset (anticipatory) responses. */
+  falseStartCount: number;
   stimulusOnsetTime: number | null;
+  /** Time the stimulus renderable was removed, else null. E-REACT-5. */
+  stimulusOffsetTime: number | null;
   expectedResponse: string | null;
   isTarget: boolean | null;
   responseTimingMethod: string | null;
@@ -57,6 +69,18 @@ interface TrialResponse {
   /** Gamepad responses: the button index that fired, else null. */
   gamepadButtonIndex: number | null;
   stimulusTimingMethod: string | null;
+  /** Visual display-latency compensation applied to the onset (visual only). E-REACT-5. */
+  displayLatencyMs: number | null;
+  /** Audio output-latency folded into the onset (audio only). E-REACT-5. */
+  outputLatencyMs: number | null;
+  /** How the stimulus offset was scheduled (E-REACT-3): raf | timeout | none. */
+  offsetMethod: string | null;
+  /** Measured exposure in frames for a frame-accurate (raf) offset, else null. */
+  actualDurationFrames: number | null;
+  /** Number of logged video frames (video stimuli only; else 0). E-REACT-5. */
+  videoFrameCount: number;
+  /** Compacted per-phase timeline for this trial. E-REACT-5. */
+  phaseTimeline: CompactPhaseMark[];
   frameStats: {
     fps: number;
     droppedFrames: number;
@@ -132,51 +156,49 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
     await engine.warmUpStimuli(blockStimuli);
 
     const allResponses: TrialResponse[] = [];
+    // E-REACT-4: how many practice passes each criterion-gated block actually
+    // took, surfaced in metadata for the researcher.
+    const practiceAttempts: Record<string, number> = {};
+    // Monotonic across every executed trial (including repeated practice passes)
+    // so each persisted response keeps a unique, ordered trial number.
+    let trialNumber = 0;
 
-    for (let index = 0; index < trialPlan.length; index++) {
-      const planned = trialPlan[index]!;
+    const runGroup = async (group: PlannedReactionTrial[]): Promise<TrialResponse[]> => {
+      const groupResponses: TrialResponse[] = [];
+      for (const planned of group) {
+        trialNumber += 1;
+        groupResponses.push(await this.runPlannedTrial(engine, planned, trialNumber, context));
+      }
+      return groupResponses;
+    };
 
-      engine.clearScheduledPhases();
-      const scheduledPhases = planned.metadata.scheduledPhases || [];
-      scheduledPhases.forEach((phase) => {
-        engine.schedulePhase(phase);
-      });
+    for (const group of groupIntoBlockRuns(trialPlan)) {
+      const criterion = group[0]?.metadata.practiceCriterion;
+      const isPracticeGroup = group.every((planned) => planned.metadata.isPractice);
 
-      const trialResult = await engine.runTrial(planned.trial, context.abortSignal);
+      if (criterion && isPracticeGroup) {
+        // Criterion-based practice (E-REACT-4): re-run the practice block until
+        // the participant's accuracy reaches the target or the attempt budget is
+        // spent, then advance to the test. Every attempt's trials are persisted;
+        // only test trials feed the scored averages downstream.
+        const maxAttempts = Math.max(1, criterion.maxAttempts);
+        const blockId = group[0]?.metadata.blockId ?? 'practice';
+        let attempts = 0;
 
-      const keyValue =
-        trialResult.response && typeof trialResult.response.value === 'string'
-          ? trialResult.response.value
-          : null;
+        while (attempts < maxAttempts) {
+          attempts += 1;
+          const attemptResponses = await runGroup(group);
+          allResponses.push(...attemptResponses);
+          if (practiceAccuracy(attemptResponses) >= criterion.minAccuracy) {
+            break;
+          }
+        }
 
-      allResponses.push({
-        trialId: planned.trial.id,
-        trialNumber: index + 1,
-        isPractice: planned.metadata.isPractice,
-        taskType: planned.metadata.taskType,
-        blockId: planned.metadata.blockId,
-        condition: planned.metadata.condition || null,
-        trialTemplateId: planned.metadata.trialTemplateId || null,
-        key: keyValue,
-        reactionTime: trialResult.response?.reactionTimeMs ?? null,
-        isCorrect: trialResult.isCorrect,
-        timeout: trialResult.timeout,
-        stimulusOnsetTime: trialResult.stimulusOnsetTime,
-        expectedResponse: planned.metadata.expectedResponse || null,
-        isTarget: planned.metadata.isTarget ?? null,
-        responseTimingMethod: trialResult.response?.timingMethod || null,
-        responseDevice: trialResult.response?.responseDevice || null,
-        holdDurationMs: trialResult.response?.holdDurationMs ?? null,
-        gamepadButtonIndex: trialResult.response?.gamepadButtonIndex ?? null,
-        stimulusTimingMethod: trialResult.stimulusTimingMethod || null,
-        frameStats: {
-          fps: trialResult.stats.fps,
-          droppedFrames: trialResult.stats.droppedFrames,
-          jitter: trialResult.stats.jitter,
-        },
-        invalid: trialResult.invalid ?? false,
-        invalidReason: trialResult.invalidReason ?? null,
-      });
+        practiceAttempts[blockId] = attempts;
+        continue;
+      }
+
+      allResponses.push(...(await runGroup(group)));
     }
 
     const testResponses = allResponses.filter((response) => !response.isPractice);
@@ -219,6 +241,8 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
         testTrials: testResponses.length,
         taskType: config.task.type,
         blockCount: new Set(allResponses.map((response) => response.blockId)).size,
+        // E-REACT-4: practice passes taken per criterion-gated block.
+        practiceAttempts,
         // C-PROVENANCE: roll per-trial timing up so reaction-time responses persist a
         // non-empty timing_provenance (parity with reaction-experiment).
         timingProvenance: aggregateReactionProvenance(testResponses, averageRT),
@@ -226,10 +250,112 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
     };
   }
 
+  /**
+   * Run one planned trial through the engine and map its result into a persisted
+   * {@link TrialResponse}. Extracted from the block loop so criterion-based
+   * practice (E-REACT-4) can re-run a group of trials without duplicating the
+   * scheduled-phase wiring and result mapping.
+   */
+  private async runPlannedTrial(
+    engine: ReactionEngine,
+    planned: PlannedReactionTrial,
+    trialNumber: number,
+    context: QuestionRuntimeContext
+  ): Promise<TrialResponse> {
+    engine.clearScheduledPhases();
+    const scheduledPhases = planned.metadata.scheduledPhases || [];
+    scheduledPhases.forEach((phase) => {
+      engine.schedulePhase(phase);
+    });
+
+    const trialResult = await engine.runTrial(planned.trial, context.abortSignal);
+
+    const keyValue =
+      trialResult.response && typeof trialResult.response.value === 'string'
+        ? trialResult.response.value
+        : null;
+
+    return {
+      trialId: planned.trial.id,
+      trialNumber,
+      isPractice: planned.metadata.isPractice,
+      taskType: planned.metadata.taskType,
+      blockId: planned.metadata.blockId,
+      condition: planned.metadata.condition || null,
+      trialTemplateId: planned.metadata.trialTemplateId || null,
+      stimulusKind: planned.trial.stimulus?.kind ?? null,
+      key: keyValue,
+      reactionTime: trialResult.response?.reactionTimeMs ?? null,
+      rawRtMs: trialResult.response?.rawRtMs ?? null,
+      isCorrect: trialResult.isCorrect,
+      timeout: trialResult.timeout,
+      anticipatory: trialResult.anticipatory,
+      falseStartCount: trialResult.falseStartCount,
+      stimulusOnsetTime: trialResult.stimulusOnsetTime,
+      stimulusOffsetTime: trialResult.stimulusOffsetTime,
+      expectedResponse: planned.metadata.expectedResponse || null,
+      isTarget: planned.metadata.isTarget ?? null,
+      responseTimingMethod: trialResult.response?.timingMethod || null,
+      responseDevice: trialResult.response?.responseDevice || null,
+      holdDurationMs: trialResult.response?.holdDurationMs ?? null,
+      gamepadButtonIndex: trialResult.response?.gamepadButtonIndex ?? null,
+      stimulusTimingMethod: trialResult.stimulusTimingMethod || null,
+      displayLatencyMs: trialResult.displayLatencyMs ?? null,
+      outputLatencyMs: trialResult.outputLatencyMs ?? null,
+      offsetMethod: trialResult.offsetMethod ?? null,
+      actualDurationFrames: trialResult.actualDurationFrames ?? null,
+      videoFrameCount: trialResult.videoFrames?.length ?? 0,
+      phaseTimeline: compactPhaseTimeline(trialResult.phaseTimeline),
+      frameStats: {
+        fps: trialResult.stats.fps,
+        droppedFrames: trialResult.stats.droppedFrames,
+        jitter: trialResult.stats.jitter,
+      },
+      invalid: trialResult.invalid ?? false,
+      invalidReason: trialResult.invalidReason ?? null,
+    };
+  }
+
   public teardown(): void {
     this.engine?.destroy();
     this.engine = null;
   }
+}
+
+/**
+ * Split a flat trial plan into consecutive runs that share a block id
+ * (E-REACT-4). A block "run" is the unit criterion-based practice re-runs — all
+ * of a practice block's trials (across its repetitions) form one group, followed
+ * by the next block's group.
+ */
+function groupIntoBlockRuns(plan: PlannedReactionTrial[]): PlannedReactionTrial[][] {
+  const groups: PlannedReactionTrial[][] = [];
+  let current: PlannedReactionTrial[] | null = null;
+  let currentBlockId: string | null = null;
+
+  for (const planned of plan) {
+    const blockId = planned.metadata.blockId;
+    if (!current || blockId !== currentBlockId) {
+      current = [];
+      currentBlockId = blockId;
+      groups.push(current);
+    }
+    current.push(planned);
+  }
+
+  return groups;
+}
+
+/**
+ * Proportion correct across the scored trials of a practice attempt (E-REACT-4).
+ * Trials whose correctness was not scored (`isCorrect === null`) are excluded;
+ * when nothing was scored the attempt counts as passing (accuracy 1) so a block
+ * without correctness scoring cannot loop forever.
+ */
+function practiceAccuracy(responses: TrialResponse[]): number {
+  const scored = responses.filter((response) => response.isCorrect !== null);
+  if (scored.length === 0) return 1;
+  return scored.filter((response) => response.isCorrect).length / scored.length;
 }
 
 function summarizeByDimension(

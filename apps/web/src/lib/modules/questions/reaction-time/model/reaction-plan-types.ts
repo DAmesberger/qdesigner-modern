@@ -1,6 +1,10 @@
 import type { ReactionTrialConfig } from '$lib/runtime/reaction';
 import type { ScheduledPhase } from '$lib/runtime/reaction';
-import type { NormalizedReactionConfig, ReactionTaskType } from './reaction-schema';
+import type {
+  NormalizedReactionConfig,
+  ReactionPracticeCriterion,
+  ReactionTaskType,
+} from './reaction-schema';
 
 export interface ReactionTrialMetadata {
   taskType: ReactionTaskType;
@@ -11,6 +15,13 @@ export interface ReactionTrialMetadata {
   condition?: string;
   trialTemplateId?: string;
   scheduledPhases?: ScheduledPhase[];
+  /**
+   * Criterion-based practice gating for this trial's block (E-REACT-4). Present
+   * only on study-block practice trials that define a criterion; the runtime
+   * groups consecutive trials by block and re-runs the practice group until the
+   * accuracy target is met or the attempt budget is exhausted.
+   */
+  practiceCriterion?: ReactionPracticeCriterion;
 }
 
 export interface PlannedReactionTrial {

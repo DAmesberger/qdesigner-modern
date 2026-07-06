@@ -7,7 +7,11 @@
   import { mediaService } from '$lib/services/mediaService';
   import { createLegacyStarterPayload } from './model/starter-templates';
   import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
-  import type { ReactionLegacyQuestionConfig, ReactionStudyConfig } from './model/reaction-schema';
+  import type {
+    ReactionFeedbackSettings,
+    ReactionLegacyQuestionConfig,
+    ReactionStudyConfig,
+  } from './model/reaction-schema';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
@@ -106,6 +110,7 @@
     };
     correctKey?: string;
     feedback?: boolean;
+    feedbackSettings?: ReactionFeedbackSettings;
     practice?: boolean;
     practiceTrials?: number;
     testTrials?: number;
@@ -120,6 +125,16 @@
   }
 
   let { question = $bindable(), organizationId = '', userId = '' }: Props = $props();
+
+  // E-REACT-4: feedback-shape editor state, mirrored back into the question
+  // config. Kept as a local $state proxy so the mode/duration/text inputs bind
+  // directly; the effect keeps question.config.feedbackSettings pointing at it.
+  let feedbackSettings = $state<ReactionFeedbackSettings>(
+    question.config.feedbackSettings ?? { mode: 'accuracy', durationMs: 800 }
+  );
+  $effect(() => {
+    question.config.feedbackSettings = feedbackSettings;
+  });
 
   // Key presets
   const keyPresets = [
@@ -367,6 +382,16 @@
     if (currentSerialized !== nextSerialized) {
       question.config.study = canonical;
     }
+  });
+
+  // E-REACT-4: mirror the feedback toggle + shape into the canonical study even
+  // once the visual block editor owns it (the sync effect above early-returns
+  // when blocks exist, but the block runtime reads `study`).
+  $effect(() => {
+    const study = question.config.study;
+    if (!study) return;
+    study.feedback = question.config.feedback !== false;
+    study.feedbackSettings = feedbackSettings;
   });
 
   $effect(() => {
@@ -1672,6 +1697,69 @@
         <span>Show feedback after each response</span>
       </label>
     </div>
+
+    {#if question.config.feedback}
+      <div class="mb-4 rounded-lg border border-border bg-muted/40 p-3 space-y-3">
+        <p class="text-xs text-muted-foreground">
+          Feedback is shown briefly after each trial's response window. It is display-only and never
+          contributes to scored reaction-time averages.
+        </p>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label for="feedback-mode">Feedback mode</label>
+            <Select id="feedback-mode" bind:value={feedbackSettings.mode}>
+              <option value="accuracy">Accuracy (Correct / Incorrect / Too slow)</option>
+              <option value="rt">Reaction time (ms)</option>
+              <option value="both">Both</option>
+            </Select>
+          </div>
+          <div>
+            <label for="feedback-duration">Feedback duration (ms)</label>
+            <input
+              id="feedback-duration"
+              type="number"
+              min="0"
+              max="10000"
+              step="50"
+              bind:value={feedbackSettings.durationMs}
+              class="input"
+            />
+          </div>
+        </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <label for="feedback-correct">Correct text</label>
+            <input
+              id="feedback-correct"
+              type="text"
+              placeholder="Correct"
+              bind:value={feedbackSettings.correctText}
+              class="input"
+            />
+          </div>
+          <div>
+            <label for="feedback-incorrect">Incorrect text</label>
+            <input
+              id="feedback-incorrect"
+              type="text"
+              placeholder="Incorrect"
+              bind:value={feedbackSettings.incorrectText}
+              class="input"
+            />
+          </div>
+          <div>
+            <label for="feedback-tooslow">Too-slow text</label>
+            <input
+              id="feedback-tooslow"
+              type="text"
+              placeholder="Too slow"
+              bind:value={feedbackSettings.tooSlowText}
+              class="input"
+            />
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
 
   <!-- Performance Settings -->

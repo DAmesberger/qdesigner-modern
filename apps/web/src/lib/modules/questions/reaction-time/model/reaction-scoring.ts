@@ -27,6 +27,39 @@ export interface ReactionProvenanceTrial {
   stimulusTimingMethod: string | null;
   responseTimingMethod: string | null;
   frameStats: { fps: number; droppedFrames: number; jitter: number };
+  /** How the stimulus offset was scheduled (E-REACT-3): raf | timeout | none. */
+  offsetMethod?: string | null;
+  /** Measured exposure in frames for a frame-accurate (raf) offset, else null. */
+  actualDurationFrames?: number | null;
+  /** Visual display-latency compensation applied to the onset (visual only). E-REACT-5. */
+  displayLatencyMs?: number | null;
+  /** Audio output-latency folded into the onset (audio only). E-REACT-5. */
+  outputLatencyMs?: number | null;
+}
+
+/** min / max / median across a set of latency samples, or null when empty. */
+export interface LatencyStats {
+  min: number;
+  max: number;
+  median: number;
+}
+
+/** Compute min/max/median of a numeric sample, or null when the sample is empty. */
+function latencyStats(values: number[]): LatencyStats | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
+  return { min: sorted[0]!, max: sorted[sorted.length - 1]!, median };
+}
+
+/** Non-null latency samples for a picked field across a set of trials. */
+function latencySamples(
+  trials: ReactionProvenanceTrial[],
+  pick: (t: ReactionProvenanceTrial) => number | null | undefined
+): number[] {
+  return trials.map(pick).filter((v): v is number => typeof v === 'number');
 }
 
 /** Most frequent non-null value in a list, or a fallback when all are null. */
@@ -62,6 +95,16 @@ export function aggregateReactionProvenance(
   const avg = (pick: (t: ReactionProvenanceTrial) => number) =>
     testResponses.reduce((sum, t) => sum + pick(t), 0) / n;
 
+  // Mean measured exposure across trials that used the frame-accurate (raf)
+  // offset; null when none did (E-REACT-3).
+  const framedExposures = testResponses
+    .map((t) => t.actualDurationFrames)
+    .filter((v): v is number => typeof v === 'number');
+  const meanActualDurationFrames =
+    framedExposures.length > 0
+      ? framedExposures.reduce((sum, v) => sum + v, 0) / framedExposures.length
+      : null;
+
   return {
     onsetMethod: dominant(
       testResponses.map((t) => t.stimulusTimingMethod),
@@ -71,7 +114,17 @@ export function aggregateReactionProvenance(
       testResponses.map((t) => t.responseTimingMethod),
       'performance.now'
     ),
+    // Dominant stimulus-offset scheduling method across the test trials.
+    offsetMethod: dominant(
+      testResponses.map((t) => t.offsetMethod ?? null),
+      'none'
+    ),
+    actualDurationFrames: meanActualDurationFrames,
     rawRtMs: averageRT,
+    // Per-trial latency spread (E-REACT-5) so the aggregate blob supports
+    // latency auditing without needing the full per-trial table.
+    displayLatencyStats: latencyStats(latencySamples(testResponses, (t) => t.displayLatencyMs)),
+    outputLatencyStats: latencyStats(latencySamples(testResponses, (t) => t.outputLatencyMs)),
     frameStats: {
       fps: avg((t) => t.frameStats.fps),
       droppedFrames: avg((t) => t.frameStats.droppedFrames),

@@ -63,6 +63,12 @@
   function removeTrial(block: ReactionStudyBlock, trialIndex: number) {
     block.trials = block.trials.filter((_, i) => i !== trialIndex);
   }
+
+  // E-REACT-4: criterion-based practice. Toggling this on a practice block makes
+  // the runtime re-run it until the accuracy target is met (or attempts run out).
+  function togglePracticeCriterion(block: ReactionStudyBlock, enabled: boolean) {
+    block.practiceCriterion = enabled ? { minAccuracy: 0.8, maxAttempts: 3 } : undefined;
+  }
 </script>
 
 <div class="block-editor-root">
@@ -109,6 +115,54 @@
                 <span>Randomize Trial Order</span>
               </label>
             </div>
+          </div>
+
+          <div class="criterion-block">
+            <label class="checkbox-label">
+              <input
+                class="checkbox"
+                type="checkbox"
+                checked={Boolean(block.practiceCriterion)}
+                onchange={(event) =>
+                  togglePracticeCriterion(block, (event.currentTarget as HTMLInputElement).checked)}
+              />
+              <span>Gate on accuracy criterion (practice)</span>
+            </label>
+            {#if block.practiceCriterion}
+              <p class="help-text">
+                Re-runs this block until the participant reaches the minimum accuracy or the attempt
+                budget is spent. Applies only when the block's trials are practice.
+              </p>
+              <div class="criterion-grid">
+                <div class="form-group">
+                  <span class="label-text">Min accuracy (%)</span>
+                  <input
+                    class="input"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={Math.round(block.practiceCriterion.minAccuracy * 100)}
+                    oninput={(event) => {
+                      const pct = Number((event.currentTarget as HTMLInputElement).value);
+                      if (block.practiceCriterion) {
+                        block.practiceCriterion.minAccuracy = Math.min(1, Math.max(0, pct / 100));
+                      }
+                    }}
+                  />
+                </div>
+                <div class="form-group">
+                  <span class="label-text">Max attempts</span>
+                  <input
+                    class="input"
+                    type="number"
+                    min="1"
+                    max="20"
+                    bind:value={block.practiceCriterion.maxAttempts}
+                  />
+                </div>
+              </div>
+            {/if}
           </div>
 
           <div class="block-trials-header">
@@ -191,6 +245,21 @@
     display: flex;
     gap: 0.45rem;
     align-items: center;
+  }
+
+  .criterion-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px dashed var(--border-color, #cfd8e3);
+    border-radius: 0.6rem;
+  }
+
+  .criterion-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.6rem;
   }
 
   .block-trials-header {

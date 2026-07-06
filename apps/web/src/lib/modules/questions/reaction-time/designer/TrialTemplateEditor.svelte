@@ -3,6 +3,8 @@
   import PhaseTimelineEditor from './PhaseTimelineEditor.svelte';
   import type { ReactionStudyTrialTemplate } from '../model/reaction-schema';
   import type { ReactionStimulusConfig } from '$lib/runtime/reaction';
+  import { framesForDurationMs, durationMsForFrames } from '$lib/runtime/reaction';
+  import { TimingGatekeeper } from '$lib/runtime/timing';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface Props {
@@ -78,6 +80,27 @@
       vertices: [],
       uniforms: {},
     };
+  }
+
+  // Live ms⇄frames conversion hint (E-REACT-3). Durations can be authored in ms
+  // OR frames; a frame count removes the stimulus on the exact vsync boundary
+  // (drift-free brief-exposure / masking / RSVP). Prefer the session's qualified
+  // mean frame interval; fall back to a 60Hz assumption when unqualified.
+  const frameIntervalMs = $derived(() => {
+    const measured = TimingGatekeeper.shared().getMeanFrameIntervalMs();
+    return measured > 0 ? measured : 1000 / 60;
+  });
+  const refreshHz = $derived(() => Math.round(1000 / frameIntervalMs()));
+
+  function conversionHint(ms?: number, frames?: number): string {
+    const hz = refreshHz();
+    if (frames && frames > 0) {
+      return `≈ ${Math.round(durationMsForFrames(frames, frameIntervalMs()))} ms at ${hz} Hz`;
+    }
+    if (ms && ms > 0) {
+      return `≈ ${framesForDurationMs(ms, frameIntervalMs())} frames at ${hz} Hz`;
+    }
+    return '';
   }
 </script>
 
@@ -183,10 +206,30 @@
     <div class="form-group">
       <span class="label-text">Cue Delay (ms)</span>
       <input class="input" type="number" min="0" max="30000" bind:value={trial.preStimulusDelayMs} />
+      {#if !trial.preStimulusDelayFrames && trial.preStimulusDelayMs}
+        <span class="hint">{conversionHint(trial.preStimulusDelayMs, undefined)}</span>
+      {/if}
+    </div>
+    <div class="form-group">
+      <span class="label-text">Cue Delay (frames)</span>
+      <input class="input" type="number" min="0" max="1800" bind:value={trial.preStimulusDelayFrames} />
+      {#if trial.preStimulusDelayFrames}
+        <span class="hint">{conversionHint(undefined, trial.preStimulusDelayFrames)} · overrides ms</span>
+      {/if}
     </div>
     <div class="form-group">
       <span class="label-text">Stimulus Duration (ms)</span>
       <input class="input" type="number" min="0" max="30000" bind:value={trial.stimulusDurationMs} />
+      {#if !trial.stimulusDurationFrames && trial.stimulusDurationMs}
+        <span class="hint">{conversionHint(trial.stimulusDurationMs, undefined)}</span>
+      {/if}
+    </div>
+    <div class="form-group">
+      <span class="label-text">Stimulus Duration (frames)</span>
+      <input class="input" type="number" min="0" max="1800" bind:value={trial.stimulusDurationFrames} />
+      {#if trial.stimulusDurationFrames}
+        <span class="hint">{conversionHint(undefined, trial.stimulusDurationFrames)} · frame-accurate offset</span>
+      {/if}
     </div>
     <div class="form-group">
       <span class="label-text">Response Timeout (ms)</span>
@@ -233,6 +276,12 @@
 
   .compact-grid {
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+
+  .hint {
+    font-size: 0.7rem;
+    color: var(--text-muted, #64748b);
+    margin-top: 0.15rem;
   }
 
   .checkbox-wrap {

@@ -1035,6 +1035,17 @@ export class WebGLRenderer {
     this.stimulusStartTime = performance.now();
   }
 
+  /**
+   * Total presented (vsync) frames since the loop started (E-REACT-3). Each
+   * emitted `FrameSample.index` carries this same running count for the frame it
+   * describes; the accessor is provided so a consumer can schedule an action N
+   * presented frames after onset (frame-accurate stimulus offset) without
+   * threading the sample through.
+   */
+  public getPresentedFrameCount(): number {
+    return this.totalFrames;
+  }
+
   public getContext(): WebGL2RenderingContext {
     return this.gl;
   }

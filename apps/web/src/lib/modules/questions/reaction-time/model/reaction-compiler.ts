@@ -10,6 +10,7 @@ import type { RGBAColor } from '$lib/shared';
 import type {
   ReactionStimulusConfig,
   ReactionTrialConfig,
+  ReactionTrialFeedbackConfig,
   ScheduledPhase,
 } from '$lib/runtime/reaction';
 import type { PlannedReactionTrial } from './reaction-plan-types';
@@ -33,6 +34,27 @@ export interface ReactionCompileContext {
 }
 
 export function compileReactionPlan(
+  config: NormalizedReactionConfig,
+  context: ReactionCompileContext
+): PlannedReactionTrial[] {
+  const plan = buildReactionPlan(config, context);
+
+  // E-REACT-4: attach the resolved trial-level feedback config to every planned
+  // trial in one pass, so each paradigm builder stays feedback-agnostic. A trial
+  // that already carries its own feedback (e.g. a custom template) is left as-is.
+  const feedback = buildTrialFeedback(config);
+  if (feedback) {
+    for (const planned of plan) {
+      if (planned.trial.feedback === undefined) {
+        planned.trial.feedback = feedback;
+      }
+    }
+  }
+
+  return plan;
+}
+
+function buildReactionPlan(
   config: NormalizedReactionConfig,
   context: ReactionCompileContext
 ): PlannedReactionTrial[] {
@@ -73,6 +95,32 @@ export function compileReactionPlan(
   }
 
   return buildStandardPlan(config);
+}
+
+/**
+ * Resolve the trial-level feedback config (E-REACT-4) from the normalized study
+ * config. Returns undefined when feedback is disabled. The mode defaults per
+ * paradigm — timed single-response tasks report the reaction time, forced-choice
+ * paradigms report accuracy — unless the author overrode it in `feedbackSettings`.
+ */
+function buildTrialFeedback(
+  config: NormalizedReactionConfig
+): ReactionTrialFeedbackConfig | undefined {
+  if (!config.feedback) return undefined;
+
+  const settings = config.feedbackSettings;
+  return {
+    show: true,
+    mode: settings?.mode ?? defaultFeedbackMode(config.task.type),
+    durationMs: settings?.durationMs ?? 800,
+    correctText: settings?.correctText,
+    incorrectText: settings?.incorrectText,
+    tooSlowText: settings?.tooSlowText,
+  };
+}
+
+function defaultFeedbackMode(taskType: NormalizedReactionConfig['task']['type']): 'accuracy' | 'rt' {
+  return taskType === 'standard' ? 'rt' : 'accuracy';
 }
 
 function buildStudyBlocksPlan(
@@ -126,6 +174,7 @@ function expandBlockTrials(
           condition: trialTemplate.condition,
           trialTemplateId: trialTemplate.id,
           scheduledPhases: trialTemplate.phases,
+          practiceCriterion: block.practiceCriterion,
         },
       });
     }
@@ -165,8 +214,10 @@ function trialFromTemplate(
       durationMs: fixationDurationMs,
     },
     preStimulusDelayMs: template.preStimulusDelayMs ?? scheduledCueDelay,
+    preStimulusDelayFrames: template.preStimulusDelayFrames,
     stimulus,
     stimulusDurationMs: template.stimulusDurationMs ?? scheduledStimulusDuration,
+    stimulusDurationFrames: template.stimulusDurationFrames,
     responseTimeoutMs: template.responseTimeoutMs ?? config.response.timeout,
     interTrialIntervalMs: template.interTrialIntervalMs ?? scheduledIti ?? 300,
     targetFPS: template.targetFPS ?? config.targetFPS,
@@ -532,8 +583,10 @@ function normalizeCustomTrial(
       sizePx: trial.fixation?.sizePx,
     },
     preStimulusDelayMs: trial.preStimulusDelayMs,
+    preStimulusDelayFrames: trial.preStimulusDelayFrames,
     stimulus,
     stimulusDurationMs: trial.stimulusDurationMs,
+    stimulusDurationFrames: trial.stimulusDurationFrames,
     responseTimeoutMs: trial.responseTimeoutMs ?? config.response.timeout,
     interTrialIntervalMs: trial.interTrialIntervalMs ?? 300,
     targetFPS: trial.targetFPS ?? config.targetFPS,

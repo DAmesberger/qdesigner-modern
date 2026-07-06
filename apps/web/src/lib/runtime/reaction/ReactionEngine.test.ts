@@ -530,6 +530,57 @@ describe('ReactionEngine', () => {
     engine.destroy();
   });
 
+  // ---- Feedback phase (E-REACT-4) ----
+
+  it('renders a feedback phase after the response window when feedback.show is set', async () => {
+    const { engine } = createEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'trial-feedback',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      correctResponse: 'f',
+      requireCorrect: true,
+      fixation: { enabled: false },
+      stimulus: { kind: 'text', text: 'GO' },
+      responseTimeoutMs: 200,
+      feedback: { show: true, mode: 'accuracy', durationMs: 20 },
+      targetFPS: 120,
+    });
+
+    setTimeout(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f' }));
+    }, 40);
+
+    const result = await resultPromise;
+
+    const phaseNames = result.phaseTimeline.map((p) => p.name);
+    expect(phaseNames).toContain('feedback');
+    // The feedback phase comes after the stimulus phase.
+    expect(phaseNames.indexOf('feedback')).toBeGreaterThan(phaseNames.indexOf('stimulus'));
+    expect(result.isCorrect).toBe(true);
+
+    engine.destroy();
+  });
+
+  it('does not render a feedback phase when no feedback config is present', async () => {
+    const { engine } = createEngine();
+
+    const result = await engine.runTrial({
+      id: 'trial-no-feedback',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'text', text: 'GO' },
+      responseTimeoutMs: 60,
+      targetFPS: 120,
+    });
+
+    expect(result.phaseTimeline.map((p) => p.name)).not.toContain('feedback');
+
+    engine.destroy();
+  });
+
   // ---- Trial result structure ----
 
   it('returns complete trial result structure', async () => {
@@ -1695,6 +1746,218 @@ describe('ReactionEngine — multi-channel capture (E-REACT-1)', () => {
 
     expect(result.response?.source).toBe('mouse');
     expect(result.isCorrect).toBe(false);
+
+    engine.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Frame-accurate stimulus offset + frame-count durations (E-REACT-3).
+//
+// Onset is already frame-exact; these tests pin the OFFSET to an exact presented
+// (vsync) frame rather than a drifting setTimeout, and assert the exposure is
+// verifiable per-trial via provenance (offsetMethod / actualDurationFrames).
+// ---------------------------------------------------------------------------
+
+/** Gatekeeper mock exposing a measured mean frame interval (calibrated device). */
+function fakeCalibratedGatekeeper(opts: { displayLatencyMs: number; meanFrameIntervalMs: number }) {
+  return {
+    qualify: vi.fn(async () => {}),
+    getEstimatedDisplayLatencyMs: () => opts.displayLatencyMs,
+    getMeanFrameIntervalMs: () => opts.meanFrameIntervalMs,
+  };
+}
+
+describe('ReactionEngine — frame-accurate offset (E-REACT-3)', () => {
+  it('removes a 3-frame stimulus on exactly the 3rd presented frame after onset', async () => {
+    const { engine, target, emitFrame, removed } = createMockEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'frame-offset',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'square', id: 'stim' },
+      stimulusDurationFrames: 3,
+      responseTimeoutMs: 1000,
+    });
+
+    await flush();
+    // Onset frame (frame 0 of the exposure).
+    emitFrame({ now: 1000, presented: true, index: 0 });
+
+    // Two more presented frames — the stimulus is STILL shown (3-frame exposure).
+    emitFrame({ now: 1016, presented: true, index: 1 });
+    emitFrame({ now: 1032, presented: true, index: 2 });
+    expect(removed).not.toContain('stim');
+
+    // The 3rd presented frame after onset removes it on the vsync boundary.
+    emitFrame({ now: 1048, presented: true, index: 3 });
+    expect(removed).toContain('stim');
+
+    // End the trial with a response so we can inspect the result.
+    dispatchKey(target, 'f', 2000);
+    const result = await resultPromise;
+
+    expect(result.offsetMethod).toBe('raf');
+    expect(result.actualDurationFrames).toBe(3);
+    // Offset stamped from the presenting frame's time, not a wall-clock timer.
+    expect(result.stimulusOffsetTime).toBe(1048);
+    expect(result.provenance.offsetMethod).toBe('raf');
+    expect(result.provenance.actualDurationFrames).toBe(3);
+
+    engine.destroy();
+  });
+
+  it('does not remove the stimulus before its frame count elapses even past the ms-equivalent time', async () => {
+    const { engine, emitFrame, removed } = createMockEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'frame-offset-hold',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      stimulusDurationFrames: 5,
+      responseTimeoutMs: 60,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true, index: 0 });
+    // Only 3 presented frames arrive — fewer than the 5-frame budget.
+    emitFrame({ now: 1016, presented: true, index: 1 });
+    emitFrame({ now: 1032, presented: true, index: 2 });
+    emitFrame({ now: 1048, presented: true, index: 3 });
+
+    const result = await resultPromise;
+
+    // Frame-count offset never fired (too few frames); the stimulus was removed
+    // at response-window close instead — offsetMethod falls back to 'none'.
+    expect(removed).toContain('stim');
+    expect(result.offsetMethod).toBe('none');
+    expect(result.actualDurationFrames).toBeNull();
+
+    engine.destroy();
+  });
+
+  it('converts a ms duration to a vsync-aligned frame budget on a calibrated device', async () => {
+    // displayLatency 0 keeps the onset unshifted; meanFrameInterval 16ms means a
+    // 48ms duration → 3 frames, removed on the raf path (not setTimeout).
+    const gatekeeper = fakeCalibratedGatekeeper({ displayLatencyMs: 0, meanFrameIntervalMs: 16 });
+    const { engine, target, emitFrame, removed } = createMockEngine({ gatekeeper });
+
+    const resultPromise = engine.runTrial({
+      id: 'ms-calibrated',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'square', id: 'stim' },
+      stimulusDurationMs: 48,
+      responseTimeoutMs: 1000,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true, index: 0 });
+    emitFrame({ now: 1016, presented: true, index: 1 });
+    emitFrame({ now: 1032, presented: true, index: 2 });
+    expect(removed).not.toContain('stim');
+    emitFrame({ now: 1048, presented: true, index: 3 });
+    expect(removed).toContain('stim');
+
+    dispatchKey(target, 'f', 2000);
+    const result = await resultPromise;
+
+    expect(result.offsetMethod).toBe('raf');
+    expect(result.actualDurationFrames).toBe(3);
+
+    engine.destroy();
+  });
+
+  it('falls back to a setTimeout offset for a ms duration on an uncalibrated device', async () => {
+    const { engine, target, emitFrame, removed } = createMockEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'ms-uncalibrated',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'square', id: 'stim' },
+      stimulusDurationMs: 30,
+      responseTimeoutMs: 1000,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true, index: 0 });
+    // No gatekeeper → no calibrated frame interval → setTimeout removes it.
+    await delay(60);
+    expect(removed).toContain('stim');
+
+    dispatchKey(target, 'f', 2000);
+    const result = await resultPromise;
+
+    expect(result.offsetMethod).toBe('timeout');
+    expect(result.actualDurationFrames).toBeNull();
+
+    engine.destroy();
+  });
+
+  it('advances a scheduled phase off the presented-frame counter when durationFrames is set', async () => {
+    const { engine, target, emitFrame } = createMockEngine();
+
+    engine.schedulePhase({ name: 'rsvp-item', durationMs: 0, durationFrames: 2, allowResponse: false });
+
+    const resultPromise = engine.runTrial({
+      id: 'phase-frames',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 1000,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true, index: 0 });
+    await flush();
+    // Respond to close the response window so the scheduled phase runs next.
+    dispatchKey(target, 'f', 1100);
+    await flush();
+    await flush();
+
+    // The scheduled phase now waits for exactly 2 presented frames.
+    emitFrame({ now: 1200, presented: true, index: 1 });
+    emitFrame({ now: 1216, presented: true, index: 2 });
+
+    const result = await resultPromise;
+
+    const phase = result.phaseTimeline.find((p) => p.name === 'rsvp-item');
+    expect(phase).toBeDefined();
+    expect(phase!.endTime).toBeGreaterThanOrEqual(phase!.startTime);
+
+    engine.clearScheduledPhases();
+    engine.destroy();
+  });
+
+  it('records offsetMethod=none for an open-ended stimulus with no duration', async () => {
+    const { engine, target, emitFrame } = createMockEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'open-ended',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 300,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true, index: 0 });
+    await flush();
+    dispatchKey(target, 'f', 1150);
+
+    const result = await resultPromise;
+
+    expect(result.offsetMethod).toBe('none');
+    expect(result.actualDurationFrames).toBeNull();
 
     engine.destroy();
   });

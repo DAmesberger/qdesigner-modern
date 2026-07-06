@@ -22,6 +22,24 @@ export interface ReactionFixationConfig {
   sizePx?: number;
 }
 
+/**
+ * Per-trial feedback config (E-REACT-4). When `show` is true the engine renders
+ * a short feedback message after the response window closes, for `durationMs`:
+ * - `accuracy`: Correct / Incorrect / Too slow (from the trial verdict).
+ * - `rt`: the measured reaction time in ms.
+ * - `both`: the verdict plus the reaction time.
+ * The `*Text` fields override the default verdict strings. Feedback is a display
+ * phase only — it captures no response and never contributes to scored RT.
+ */
+export interface ReactionTrialFeedbackConfig {
+  show: boolean;
+  mode: 'accuracy' | 'rt' | 'both';
+  durationMs: number;
+  correctText?: string;
+  incorrectText?: string;
+  tooSlowText?: string;
+}
+
 export interface ReactionStimulusBase {
   id?: string;
   position?: { x: number; y: number };
@@ -86,6 +104,15 @@ export type ReactionStimulusConfig =
 export interface ScheduledPhase {
   name: string;
   durationMs: number;
+  /**
+   * Frame-accurate phase length (E-REACT-3). When set (> 0) the phase advances
+   * on the presented-frame counter — it ends on the exact vsync boundary
+   * `durationFrames` presented frames in — instead of the `durationMs`
+   * `setTimeout`, which drifts up to a frame. `durationMs` remains the fallback
+   * for uncalibrated/time-based phases. Prerequisite for trustworthy RSVP /
+   * temporal-order timing (E-REACT-2).
+   */
+  durationFrames?: number;
   allowResponse?: boolean;
   /**
    * When true this phase RE-MARKS the stimulus onset: at the start of the phase
@@ -109,8 +136,24 @@ export interface ReactionTrialConfig {
   requireCorrect?: boolean;
   fixation?: ReactionFixationConfig;
   preStimulusDelayMs?: number;
+  /**
+   * Frame-accurate pre-stimulus delay (E-REACT-3). When set (> 0) the delay is
+   * counted in presented frames (vsync-aligned) rather than the `preStimulusDelayMs`
+   * `setTimeout`. Takes precedence over `preStimulusDelayMs` when both are given.
+   */
+  preStimulusDelayFrames?: number;
   stimulus: ReactionStimulusConfig;
   stimulusDurationMs?: number;
+  /**
+   * Frame-accurate stimulus exposure (E-REACT-3). When set (> 0) the stimulus is
+   * removed on the exact presented frame `stimulusDurationFrames` frames after
+   * onset (`offsetMethod === 'raf'`), giving drift-free brief-exposure / masking
+   * / RSVP durations. Takes precedence over `stimulusDurationMs`. When only
+   * `stimulusDurationMs` is given, a calibrated device converts it to a frame
+   * budget; an uncalibrated one falls back to `setTimeout` (`offsetMethod ===
+   * 'timeout'`).
+   */
+  stimulusDurationFrames?: number;
   responseTimeoutMs?: number;
   interTrialIntervalMs?: number;
   targetFPS?: number;
@@ -134,6 +177,11 @@ export interface ReactionTrialConfig {
    * value emitted when that button transitions unpressed→pressed.
    */
   gamepadButtonMap?: Record<number, string>;
+  /**
+   * Trial-level feedback (E-REACT-4). When present with `show === true`, the
+   * engine renders a feedback message after the response window closes.
+   */
+  feedback?: ReactionTrialFeedbackConfig;
 }
 
 export type TimingMethod =
@@ -143,6 +191,16 @@ export type TimingMethod =
   | 'raf'
   | 'gamepad.timestamp'
   | 'performance.now';
+
+/**
+ * How a stimulus offset was scheduled (E-REACT-3):
+ * - `raf`: removed on the exact presented (vsync) frame N frames after onset —
+ *   frame-count offset, or a calibrated ms→frames conversion. Frame-accurate.
+ * - `timeout`: removed by a `window.setTimeout` (a ms duration on an
+ *   uncalibrated device). Drifts up to a frame.
+ * - `none`: no duration configured; removed when the response window closed.
+ */
+export type ReactionOffsetMethod = 'raf' | 'timeout' | 'none';
 
 export interface ReactionResponseCapture {
   source: ReactionResponseMode;
@@ -241,6 +299,15 @@ export interface ReactionTrialProvenance {
   falseStartCount: number;
   /** True when the onset was produced by a degraded fallback path. */
   degraded: boolean;
+  /** How the stimulus offset was scheduled (E-REACT-3). */
+  offsetMethod: ReactionOffsetMethod;
+  /**
+   * Measured exposure in presented frames (`offsetFrameIndex - onsetFrameIndex`)
+   * for a vsync-aligned (`offsetMethod === 'raf'`) offset; null otherwise. Lets
+   * a researcher verify per-trial that a frame-counted stimulus was shown for
+   * exactly the requested number of frames.
+   */
+  actualDurationFrames?: number | null;
   frameStats: {
     fps: number;
     droppedFrames: number;
@@ -270,6 +337,17 @@ export interface ReactionTrialResult {
    * shown as a renderable (e.g. audio-only).
    */
   stimulusOffsetTime: number | null;
+  /**
+   * How the stimulus offset was scheduled (E-REACT-3): `raf` (vsync-aligned
+   * frame-count / calibrated ms→frames), `timeout` (uncalibrated ms setTimeout),
+   * or `none` (removed at response-window close).
+   */
+  offsetMethod: ReactionOffsetMethod;
+  /**
+   * Measured exposure in presented frames for a frame-accurate (`raf`) offset —
+   * `offsetFrameIndex - onsetFrameIndex` — or null for a timeout/none offset.
+   */
+  actualDurationFrames: number | null;
   stimulusTimingMethod?: TimingMethod;
   /** Visual display-latency compensation applied to the onset (visual only). */
   displayLatencyMs?: number;

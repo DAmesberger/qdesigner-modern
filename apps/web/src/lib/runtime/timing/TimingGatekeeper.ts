@@ -107,6 +107,19 @@ export class TimingGatekeeper {
   }
 
   /**
+   * Measured mean frame interval in milliseconds (E-REACT-3). Valid only after
+   * qualify() has run; returns 0 when unqualified so a caller converting a ms
+   * stimulus duration to a frame budget falls back to a time-based offset rather
+   * than counting frames against an unmeasured refresh rate. Equal to the
+   * modelled display latency (one frame from raf-time to photons), surfaced
+   * separately so the frame-count offset path reads an explicitly-named value.
+   */
+  getMeanFrameIntervalMs(): number {
+    if (!this.cachedResult) return 0;
+    return this.cachedResult.qualification.calibration.meanFrameInterval;
+  }
+
+  /**
    * Get the recommended timing method for a given stimulus kind.
    * Falls back to 'performance.now' if qualification hasn't run.
    */

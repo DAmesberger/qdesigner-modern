@@ -8,9 +8,20 @@ export type {
   ReactionTargetRegion,
   ReactionStimulusConfig,
   ReactionFixationConfig,
+  ReactionTrialFeedbackConfig,
   ScheduledPhase,
   TimingMethod,
+  ReactionOffsetMethod,
 } from './types';
+
+export {
+  resolveFeedbackVerdict,
+  resolveFeedbackRenderable,
+  DEFAULT_FEEDBACK_TEXT,
+} from './feedback/feedbackRenderable';
+export type { FeedbackVerdict, FeedbackRenderableSpec } from './feedback/feedbackRenderable';
+
+export { FrameCountdown, framesForDurationMs, durationMsForFrames } from './frameScheduler';
 
 export { pointInRegion } from './input/spatialHit';
 export { GamepadPoller } from './input/GamepadPoller';

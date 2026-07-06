@@ -20,6 +20,7 @@ import type { Renderable } from '$lib/renderer';
 import type { ResourceManager } from '../resources/ResourceManager';
 import type {
   ReactionEngineHooks,
+  ReactionOffsetMethod,
   ReactionResponseCapture,
   ReactionResponseMode,
   ReactionTrialConfig,
@@ -33,6 +34,8 @@ import type {
   VideoFrameSample,
 } from './types';
 import { computeReactionTimeMs, computeSignedReactionTimeMs } from '../core/reactionTiming';
+import { resolveFeedbackRenderable, resolveFeedbackVerdict } from './feedback/feedbackRenderable';
+import { FrameCountdown, framesForDurationMs } from './frameScheduler';
 import { GamepadPoller, type GamepadSource } from './input/GamepadPoller';
 import { pointInRegion } from './input/spatialHit';
 
@@ -80,6 +83,22 @@ interface DisplayLatencyProvider {
 }
 
 /**
+ * The optional calibrated-frame-interval accessor (E-REACT-3). Declared
+ * structurally so the engine reads a measured mean frame interval from the
+ * gatekeeper when present (used to convert a ms stimulus duration into a
+ * vsync-aligned frame budget) and degrades gracefully when it is absent.
+ */
+interface FrameIntervalProvider {
+  getMeanFrameIntervalMs(): number;
+}
+
+/** Offset stamped when a stimulus renderable is removed (E-REACT-3). */
+interface StimulusOffsetMark {
+  time: number;
+  method: ReactionOffsetMethod;
+}
+
+/**
  * The only surface the engine needs from a gatekeeper (CONTRACT-CAL): run
  * qualification once, then read the measured display latency. Typed structurally
  * (not as the concrete `TimingGatekeeper`) so tests can inject a light mock.
@@ -106,8 +125,13 @@ interface ResponseWaitResult {
 
 /** Controls the lifetime of the currently-shown stimulus renderable. */
 interface StimulusHandle {
-  /** Remove the visual stimulus and record its offset. Idempotent. */
-  removeStimulus: () => void;
+  /**
+   * Remove the visual stimulus and record its offset. Idempotent (first removal
+   * wins). An optional {@link StimulusOffsetMark} stamps the offset time and
+   * method — the frame-count path passes the presenting frame time + `raf`; the
+   * setTimeout path passes `timeout`; `finish()` passes nothing (→ `none`).
+   */
+  removeStimulus: (offset?: StimulusOffsetMark) => void;
   /** Close the stimulus phase, disable responses, ensure the visual is removed. */
   finish: () => void;
 }
@@ -170,8 +194,33 @@ export class ReactionEngine {
   private rvfcHandle: number | null = null;
   private rvfcVideo: HTMLVideoElement | null = null;
 
-  // Concurrent stimulus-duration timer (3.2).
+  // Concurrent stimulus-duration timer (3.2). Used only for the ms setTimeout
+  // fallback offset (uncalibrated device); the frame-count path uses the
+  // presented-frame countdown below (E-REACT-3).
   private stimulusDurationTimerId: number | null = null;
+
+  // Frame-accurate stimulus offset state (E-REACT-3). When a stimulus duration is
+  // expressed in frames (or a ms duration is converted on a calibrated device),
+  // the offset rides the presented-frame counter instead of setTimeout.
+  private stimulusFrameCountdown: FrameCountdown | null = null;
+  /** The current stimulus handle's removal, invoked when the countdown fires. */
+  private stimulusRemove: ((offset?: StimulusOffsetMark) => void) | null = null;
+  /** Presented-frame index of the onset frame (`FrameSample.index`). */
+  private stimulusOnsetFrameIndex: number | null = null;
+  /** Presented-frame index of the frame the stimulus was removed on (raf path). */
+  private stimulusOffsetFrameIndex: number | null = null;
+  /** How the offset was actually scheduled; set by whichever path removes first. */
+  private stimulusOffsetMethod: ReactionOffsetMethod = 'none';
+  /** Measured exposure in frames for a raf offset (`offset - onset` frame index). */
+  private stimulusActualDurationFrames: number | null = null;
+  /** Mean frame interval from the gatekeeper (ms→frames budget); 0 if uncalibrated. */
+  private calibratedFrameIntervalMs = 0;
+  /**
+   * Generic "await N presented frames" waiter (E-REACT-3), used by the
+   * frame-count pre-stimulus delay and frame-count scheduled phases. At most one
+   * is active at a time (those phases never overlap).
+   */
+  private frameWaiter: { remaining: number; resolve: () => void } | null = null;
 
   // Render-error abort state (4.1, CONTRACT-ERR). When the renderer reports a
   // texture-upload failure during a trial the stimulus is blank, so the trial is
@@ -346,11 +395,20 @@ export class ReactionEngine {
     if (this.gatekeeper && !this.gatekeeperRan) {
       await this.gatekeeper.qualify();
       this.gatekeeperRan = true;
-      const provider = this.gatekeeper as unknown as Partial<DisplayLatencyProvider>;
+      const provider = this.gatekeeper as unknown as Partial<DisplayLatencyProvider> &
+        Partial<FrameIntervalProvider>;
       this.displayLatencyMs =
         typeof provider.getEstimatedDisplayLatencyMs === 'function'
           ? provider.getEstimatedDisplayLatencyMs()
           : 0;
+      // Calibrated mean frame interval drives the ms→frames budget (E-REACT-3).
+      // Prefer an explicit accessor; the modelled display latency equals the
+      // mean frame interval (one frame from raf-time to photons), so fall back
+      // to it when only that is exposed.
+      this.calibratedFrameIntervalMs =
+        typeof provider.getMeanFrameIntervalMs === 'function'
+          ? provider.getMeanFrameIntervalMs()
+          : this.displayLatencyMs;
     }
 
     this.resetTrialState();
@@ -378,17 +436,14 @@ export class ReactionEngine {
 
       const stimulus = await this.runStimulus(config, timeline, signal);
 
-      // 3.2: run the stimulus-duration timer CONCURRENTLY with the response
-      // window. When the duration elapses we remove the visual stimulus (and
-      // record the offset) but keep the response window open until
-      // responseTimeoutMs — the stimulus is shown for stimulusDurationMs, not
-      // "response time + stimulusDurationMs".
-      if (config.stimulusDurationMs && config.stimulusDurationMs > 0) {
-        this.stimulusDurationTimerId = window.setTimeout(() => {
-          this.stimulusDurationTimerId = null;
-          stimulus.removeStimulus();
-        }, config.stimulusDurationMs);
-      }
+      // 3.2 / E-REACT-3: schedule the stimulus offset CONCURRENTLY with the
+      // response window. When the duration elapses we remove the visual stimulus
+      // (recording the offset) but keep the response window open until
+      // responseTimeoutMs — the stimulus is shown for its configured duration,
+      // not "response time + duration". Frame-accurate offset (vsync-aligned
+      // frame count) is preferred; a ms duration on an uncalibrated device falls
+      // back to setTimeout.
+      this.armStimulusOffset(config, stimulus);
 
       const timeoutMs = config.responseTimeoutMs ?? 2000;
       const waitResult = await this.waitForResponse(timeoutMs, signal);
@@ -409,8 +464,15 @@ export class ReactionEngine {
       }
       stimulus.finish();
 
+      const isCorrect = invalid ? null : this.evaluateCorrectness(config, response);
+
       // Aborted trials skip the tail phases — there is nothing left to measure.
       if (!invalid) {
+        // E-REACT-4: trial-level feedback. Rendered after the response window
+        // closes, before the inter-trial interval. A display-only phase — it
+        // captures no response, so it never contaminates scored RT.
+        await this.runFeedback(config, isCorrect, timeout, response, timeline, signal);
+
         for (const phase of this.scheduledPhases) {
           await this.runScheduledPhase(phase, timeline, signal);
         }
@@ -421,8 +483,6 @@ export class ReactionEngine {
           closePhase();
         }
       }
-
-      const isCorrect = invalid ? null : this.evaluateCorrectness(config, response);
       const stats = this.renderer.getStats();
 
       const provenance: ReactionTrialProvenance = {
@@ -435,6 +495,8 @@ export class ReactionEngine {
         falseStart: this.falseStartCount > 0,
         falseStartCount: this.falseStartCount,
         degraded: this.onsetDegraded,
+        offsetMethod: this.stimulusOffsetMethod,
+        actualDurationFrames: this.stimulusActualDurationFrames,
         frameStats: {
           fps: stats.fps,
           droppedFrames: stats.droppedFrames,
@@ -449,6 +511,8 @@ export class ReactionEngine {
         stimulusOnsetTime: this.stimulusOnsetTime,
         stimulusOnsetRawTime: this.stimulusOnsetRaw,
         stimulusOffsetTime: this.stimulusOffsetTime,
+        offsetMethod: this.stimulusOffsetMethod,
+        actualDurationFrames: this.stimulusActualDurationFrames,
         stimulusTimingMethod: this.stimulusTimingMethod,
         displayLatencyMs: this.onsetDisplayLatencyMs,
         outputLatencyMs: this.onsetOutputLatencyMs,
@@ -511,6 +575,15 @@ export class ReactionEngine {
     this.videoOnsetFramesWaited = 0;
     this.videoFrameRing = [];
 
+    // Frame-accurate offset state (E-REACT-3).
+    this.stimulusFrameCountdown = null;
+    this.stimulusRemove = null;
+    this.stimulusOnsetFrameIndex = null;
+    this.stimulusOffsetFrameIndex = null;
+    this.stimulusOffsetMethod = 'none';
+    this.stimulusActualDurationFrames = null;
+    this.frameWaiter = null;
+
     if (this.stimulusDurationTimerId != null) {
       clearTimeout(this.stimulusDurationTimerId);
       this.stimulusDurationTimerId = null;
@@ -553,12 +626,18 @@ export class ReactionEngine {
     timeline: ReactionPhaseMark[],
     signal?: AbortSignal
   ): Promise<void> {
+    const frames = config.preStimulusDelayFrames || 0;
     const delay = config.preStimulusDelayMs || 0;
-    if (delay <= 0) return;
+    // A frame-count delay takes precedence over a ms delay (E-REACT-3).
+    if (frames <= 0 && delay <= 0) return;
 
     const closePhase = this.openPhase('pre-stimulus-delay', timeline);
     this.responseEnabled = Boolean(config.allowResponseDuringPreStimulus);
-    await this.wait(delay, signal);
+    if (frames > 0) {
+      await this.waitFrames(frames, signal);
+    } else {
+      await this.wait(delay, signal);
+    }
     this.responseEnabled = false;
     closePhase();
   }
@@ -605,14 +684,15 @@ export class ReactionEngine {
       }
     }
 
-    const removeStimulus = () => {
+    const removeStimulus = (offset?: StimulusOffsetMark) => {
       if (removed) return;
       removed = true;
       if (renderableId != null) {
         this.renderer.removeRenderable(renderableId);
       }
       if (this.stimulusOffsetTime == null) {
-        this.stimulusOffsetTime = this.now();
+        this.stimulusOffsetTime = offset?.time ?? this.now();
+        this.stimulusOffsetMethod = offset?.method ?? 'none';
       }
     };
 
@@ -626,12 +706,54 @@ export class ReactionEngine {
     };
   }
 
+  /**
+   * Decide how the stimulus offset is scheduled (E-REACT-3):
+   * - `stimulusDurationFrames` (or a calibrated ms→frames conversion): a
+   *   presented-frame countdown removes the stimulus on the exact vsync boundary
+   *   N frames after onset (`offsetMethod === 'raf'`, drift-free).
+   * - `stimulusDurationMs` on an UNCALIBRATED device: fall back to `setTimeout`
+   *   (`offsetMethod === 'timeout'`, drifts up to a frame).
+   * - neither: no scheduled offset; the stimulus is removed at response-window
+   *   close (`offsetMethod === 'none'`).
+   */
+  private armStimulusOffset(config: ReactionTrialConfig, stimulus: StimulusHandle): void {
+    const explicitFrames =
+      config.stimulusDurationFrames && config.stimulusDurationFrames > 0
+        ? config.stimulusDurationFrames
+        : 0;
+
+    if (explicitFrames > 0) {
+      this.stimulusFrameCountdown = new FrameCountdown(explicitFrames);
+      this.stimulusRemove = stimulus.removeStimulus;
+      return;
+    }
+
+    if (config.stimulusDurationMs && config.stimulusDurationMs > 0) {
+      // Convert to a frame budget when the device is calibrated so the offset is
+      // vsync-aligned like an explicit frame count; else keep the ms setTimeout.
+      const frames = framesForDurationMs(config.stimulusDurationMs, this.calibratedFrameIntervalMs);
+      if (frames > 0) {
+        this.stimulusFrameCountdown = new FrameCountdown(frames);
+        this.stimulusRemove = stimulus.removeStimulus;
+        return;
+      }
+
+      this.stimulusDurationTimerId = window.setTimeout(() => {
+        this.stimulusDurationTimerId = null;
+        stimulus.removeStimulus({ time: this.now(), method: 'timeout' });
+      }, config.stimulusDurationMs);
+    }
+  }
+
   private async runScheduledPhase(
     phase: ScheduledPhase,
     timeline: ReactionPhaseMark[],
     signal?: AbortSignal
   ): Promise<void> {
-    if (phase.durationMs <= 0) return;
+    const frames = phase.durationFrames && phase.durationFrames > 0 ? phase.durationFrames : 0;
+    // A frame-count phase advances on the presented-frame counter (E-REACT-3);
+    // otherwise it rides the ms clock. Skip only when neither is positive.
+    if (frames <= 0 && phase.durationMs <= 0) return;
 
     const closePhase = this.openPhase(phase.name, timeline);
     this.responseEnabled = Boolean(phase.allowResponse);
@@ -643,9 +765,63 @@ export class ReactionEngine {
       this.resetStimulusOnsetForRemark();
     }
 
-    await this.wait(phase.durationMs, signal);
+    if (frames > 0) {
+      await this.waitFrames(frames, signal);
+    } else {
+      await this.wait(phase.durationMs, signal);
+    }
     this.responseEnabled = false;
     closePhase();
+  }
+
+  /**
+   * Render trial-level feedback (E-REACT-4). Draws a short verdict / reaction-time
+   * message centred on the canvas for `feedback.durationMs`, reusing the shared
+   * text canvas and the same texture-draw path as a text stimulus. Responses stay
+   * disabled during this phase, so feedback never contributes to scored RT.
+   */
+  private async runFeedback(
+    config: ReactionTrialConfig,
+    isCorrect: boolean | null,
+    timeout: boolean,
+    response: ReactionResponseCapture | null,
+    timeline: ReactionPhaseMark[],
+    signal?: AbortSignal
+  ): Promise<void> {
+    const feedback = config.feedback;
+    if (!feedback?.show || feedback.durationMs <= 0) return;
+
+    const verdict = resolveFeedbackVerdict(isCorrect, timeout);
+    const spec = resolveFeedbackRenderable(feedback, verdict, response?.reactionTimeMs ?? null);
+    if (!spec) return;
+
+    const closePhase = this.openPhase('feedback', timeline);
+    this.responseEnabled = false;
+
+    const canvas = this.createTextCanvas(spec.text, 56, 'Arial', spec.color);
+    const renderable: Renderable = {
+      id: 'reaction-feedback',
+      layer: 60,
+      render: (_gl, context) => {
+        const { x, y, width, height } = this.resolveBounds(
+          undefined,
+          context.width,
+          context.height,
+          canvas.width,
+          canvas.height
+        );
+        this.renderer.executeCommand({
+          type: 'drawTexture',
+          params: { texture: canvas, x, y, width, height },
+        });
+      },
+    };
+    this.renderer.addRenderable(renderable);
+
+    await this.wait(feedback.durationMs, signal).finally(() => {
+      this.renderer.removeRenderable(renderable.id);
+      closePhase();
+    });
   }
 
   private openPhase(name: string, timeline: ReactionPhaseMark[]): () => void {
@@ -669,14 +845,29 @@ export class ReactionEngine {
 
       if (!sample.presented) return;
 
+      // Generic "await N presented frames" waiter (E-REACT-3): ticks on every
+      // presented frame regardless of onset state (drives frame-count
+      // pre-stimulus delay and frame-count scheduled phases).
+      if (this.frameWaiter) {
+        this.frameWaiter.remaining -= 1;
+        if (this.frameWaiter.remaining <= 0) {
+          const waiter = this.frameWaiter;
+          this.frameWaiter = null;
+          waiter.resolve();
+        }
+      }
+
       if (this.pendingStimulusOnsetMark) {
         // Visual (raf) onset — apply the measured display latency (CONTRACT-CAL):
-        // recorded onset = rafFrameTime + displayLatencyMs.
+        // recorded onset = rafFrameTime + displayLatencyMs. This frame is the
+        // onset frame (frame 0 of the exposure); the frame-count offset counts
+        // subsequent presented frames.
         this.recordStimulusOnset({
           raw: sample.now,
           method: 'raf',
           displayLatencyMs: this.displayLatencyMs,
         });
+        this.stimulusOnsetFrameIndex = sample.index;
         return;
       }
 
@@ -697,7 +888,66 @@ export class ReactionEngine {
             method: 'raf',
             displayLatencyMs: this.displayLatencyMs,
           });
+          this.stimulusOnsetFrameIndex = sample.index;
         }
+        return;
+      }
+
+      // Past onset: advance the frame-accurate stimulus offset countdown
+      // (E-REACT-3). Removal happens on the exact presented frame N frames after
+      // onset, stamping the offset from this frame's time with offsetMethod='raf'.
+      this.advanceStimulusFrameOffset(sample.index, sample.now);
+    });
+  }
+
+  /**
+   * Advance the frame-accurate stimulus offset (E-REACT-3). Called once per
+   * presented frame after the onset frame. On the frame whose post-onset count
+   * reaches the configured duration, the stimulus is removed and its offset is
+   * stamped from the presenting frame's time (offsetMethod='raf'), with the
+   * measured exposure (`offsetFrameIndex - onsetFrameIndex`) recorded for
+   * per-trial verification. When the onset was stamped OFF the raf loop (rVFC /
+   * audio), the first presented frame at/after onset lazily becomes frame 0.
+   */
+  private advanceStimulusFrameOffset(frameIndex: number, frameNow: number): void {
+    if (this.stimulusOnsetTime == null) return;
+
+    if (this.stimulusOnsetFrameIndex == null) {
+      // Onset recorded off the raf loop — treat this frame as frame 0 (no count).
+      this.stimulusOnsetFrameIndex = frameIndex;
+      return;
+    }
+
+    const countdown = this.stimulusFrameCountdown;
+    if (!countdown || countdown.done) return;
+
+    if (countdown.advance()) {
+      this.stimulusFrameCountdown = null;
+      this.stimulusOffsetFrameIndex = frameIndex;
+      this.stimulusActualDurationFrames = frameIndex - this.stimulusOnsetFrameIndex;
+      this.stimulusRemove?.({ time: frameNow, method: 'raf' });
+      this.stimulusRemove = null;
+    }
+  }
+
+  /**
+   * Resolve after `frames` presented frames (E-REACT-3). Drives frame-count
+   * pre-stimulus delays and scheduled phases off the vsync-aligned frame counter
+   * rather than a drifting `setTimeout`. Rejects with an AbortError if signalled.
+   */
+  private waitFrames(frames: number, signal?: AbortSignal): Promise<void> {
+    if (frames <= 0) return Promise.resolve();
+
+    return new Promise<void>((resolve, reject) => {
+      this.frameWaiter = { remaining: frames, resolve };
+
+      if (signal) {
+        const abort = () => {
+          this.frameWaiter = null;
+          reject(new DOMException('Operation aborted', 'AbortError'));
+        };
+        signal.addEventListener('abort', abort, { once: true });
+        this.cleanupListeners.push(() => signal.removeEventListener('abort', abort));
       }
     });
   }
@@ -1043,6 +1293,10 @@ export class ReactionEngine {
     this.onsetDegraded = false;
     this.awaitingVideoOnset = false;
     this.pendingStimulusOnsetMark = true;
+    // Re-mark restarts frame counting: the next presented frame is the new
+    // frame 0 for any frame-accurate exposure/verification (E-REACT-3).
+    this.stimulusOnsetFrameIndex = null;
+    this.stimulusOffsetFrameIndex = null;
   }
 
   /**
@@ -1716,5 +1970,10 @@ export class ReactionEngine {
     this.responsePromise = null;
     this.pendingStimulusOnsetMark = false;
     this.awaitingVideoOnset = false;
+    // Drop any live frame-count offset/wait state (E-REACT-3) so it cannot leak
+    // into a subsequent trial.
+    this.stimulusFrameCountdown = null;
+    this.stimulusRemove = null;
+    this.frameWaiter = null;
   }
 }

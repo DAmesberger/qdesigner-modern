@@ -1,4 +1,6 @@
 import type {
+  ReactionFeedbackSettings,
+  ReactionPracticeCriterion,
   ReactionStudyBlock,
   ReactionStudyTrialTemplate,
 } from './reaction-schema';
@@ -174,6 +176,7 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
     },
     correctKey: ensureString(source.correctKey),
     feedback: source.feedback !== false,
+    feedbackSettings: normalizeFeedbackSettings(source.feedbackSettings),
     practice: Boolean(source.practice),
     practiceTrials: asInt(source.practiceTrials, 3, 0, 1000),
     testTrials: asInt(source.testTrials, 10, 1, 1000),
@@ -341,6 +344,7 @@ function normalizeStudyBlock(
   const name = ensureString(record.name) || `Block ${index + 1}`;
   const randomizeOrder = Boolean(record.randomizeOrder);
   const repetitions = asInt(record.repetitions, 1, 1, 50, 1);
+  const practiceCriterion = normalizePracticeCriterion(record.practiceCriterion);
 
   const trialsValue = Array.isArray(record.trials) ? record.trials : [];
   const trials = trialsValue
@@ -353,7 +357,52 @@ function normalizeStudyBlock(
     kind,
     randomizeOrder,
     repetitions,
+    ...(practiceCriterion ? { practiceCriterion } : {}),
     trials,
+  };
+}
+
+/**
+ * Validate a practice criterion (E-REACT-4). `minAccuracy` is clamped to [0,1]
+ * and `maxAttempts` to [1,20]. Returns undefined when the input is absent or the
+ * accuracy target is not a finite number.
+ */
+function normalizePracticeCriterion(value: unknown): ReactionPracticeCriterion | undefined {
+  const record = toRecord(value);
+  if (!record) return undefined;
+
+  const rawAccuracy = Number(record.minAccuracy);
+  if (!Number.isFinite(rawAccuracy)) return undefined;
+
+  return {
+    minAccuracy: Math.min(1, Math.max(0, rawAccuracy)),
+    maxAttempts: asInt(record.maxAttempts, 3, 1, 20, 3),
+  };
+}
+
+/**
+ * Validate feedback settings (E-REACT-4). Mode falls back to `accuracy`, the
+ * duration is clamped to a sane [0, 10000] ms window, and the override texts are
+ * kept only when non-empty. Returns undefined when nothing was supplied.
+ */
+function normalizeFeedbackSettings(value: unknown): ReactionFeedbackSettings | undefined {
+  const record = toRecord(value);
+  if (!record) return undefined;
+
+  const rawMode = ensureString(record.mode);
+  const mode: ReactionFeedbackSettings['mode'] =
+    rawMode === 'rt' || rawMode === 'both' || rawMode === 'accuracy' ? rawMode : 'accuracy';
+
+  const correctText = ensureString(record.correctText).trim();
+  const incorrectText = ensureString(record.incorrectText).trim();
+  const tooSlowText = ensureString(record.tooSlowText).trim();
+
+  return {
+    mode,
+    durationMs: asInt(record.durationMs, 800, 0, 10000, 800),
+    ...(correctText ? { correctText } : {}),
+    ...(incorrectText ? { incorrectText } : {}),
+    ...(tooSlowText ? { tooSlowText } : {}),
   };
 }
 

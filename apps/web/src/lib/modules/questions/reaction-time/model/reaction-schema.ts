@@ -43,12 +43,28 @@ export interface ReactionStudyTrialTemplate {
   fixationMs?: number;
   fixationType?: 'cross' | 'dot';
   preStimulusDelayMs?: number;
+  /** Frame-accurate cue delay (E-REACT-3); takes precedence over the ms value. */
+  preStimulusDelayFrames?: number;
   stimulusDurationMs?: number;
+  /** Frame-accurate stimulus exposure (E-REACT-3); takes precedence over the ms value. */
+  stimulusDurationFrames?: number;
   responseTimeoutMs?: number;
   interTrialIntervalMs?: number;
   targetFPS?: number;
   backgroundColor?: [number, number, number, number];
   phases?: ScheduledPhase[];
+}
+
+/**
+ * Criterion-based practice gating (E-REACT-4). When a practice block carries a
+ * criterion, the runtime re-runs the block (up to `maxAttempts`) until the
+ * participant's accuracy reaches `minAccuracy` before advancing to the test.
+ */
+export interface ReactionPracticeCriterion {
+  /** Minimum proportion correct [0,1] required to advance past the block. */
+  minAccuracy: number;
+  /** Maximum number of practice passes before advancing regardless. */
+  maxAttempts: number;
 }
 
 export interface ReactionStudyBlock {
@@ -57,6 +73,7 @@ export interface ReactionStudyBlock {
   kind: 'practice' | 'test' | 'custom';
   randomizeOrder?: boolean;
   repetitions?: number;
+  practiceCriterion?: ReactionPracticeCriterion;
   trials: ReactionStudyTrialTemplate[];
 }
 
@@ -142,6 +159,18 @@ export interface ReactionTaskConfig {
   customTrials: ReactionCustomTrial[];
 }
 
+/**
+ * Trial-level feedback settings (E-REACT-4). The boolean `feedback` toggle
+ * enables/disables feedback; these settings shape what is shown when enabled.
+ */
+export interface ReactionFeedbackSettings {
+  mode: 'accuracy' | 'rt' | 'both';
+  durationMs: number;
+  correctText?: string;
+  incorrectText?: string;
+  tooSlowText?: string;
+}
+
 export interface ReactionStudyConfig {
   schemaVersion: 1;
   task: ReactionTaskConfig;
@@ -170,6 +199,8 @@ export interface ReactionStudyConfig {
   };
   correctKey: string;
   feedback: boolean;
+  /** Shape of the feedback shown when `feedback` is enabled (E-REACT-4). */
+  feedbackSettings?: ReactionFeedbackSettings;
   practice: boolean;
   practiceTrials: number;
   testTrials: number;
@@ -206,6 +237,7 @@ export interface ReactionLegacyQuestionConfig {
   };
   correctKey?: string;
   feedback?: boolean;
+  feedbackSettings?: Partial<ReactionFeedbackSettings>;
   practice?: boolean;
   practiceTrials?: number;
   testTrials?: number;
