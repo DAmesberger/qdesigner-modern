@@ -11,6 +11,7 @@ import {
 	type ResumeSnapshot,
 } from '$lib/fillout/runtime/responseMapping';
 import { api } from '$lib/services/api';
+import { isResumeStateCompatible, type ResumeState } from '$lib/runtime/core/ResumeState';
 import type { FilloutSession } from '$lib/services/db/indexeddb';
 import type { Response as RuntimeResponse } from '$lib/shared';
 import type { QuestionnaireByCode, Session } from '$lib/api/generated/types.gen';
@@ -271,6 +272,28 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		}
 	}
 
+	// ── True save-and-continue resume state (E-FLOW-3, FIX-F12) ───────────────
+	// Complementary to the E-OFF-1 resumeSnapshot above: where the snapshot seeds prior
+	// answers + variables for replay (fast-forwarding from page 0), this carries the EXACT
+	// live cursor, loop counters, and full VariableEngine context so the runtime lands on
+	// the captured page/item without re-running earlier pages' side effects. Loaded from the
+	// same local session row, gated by isResumeStateCompatible against the pinned definition
+	// version (the same predicate the runtime re-applies in acceptResumeState). Left undefined
+	// on drift/absence — resume then falls back to the E-OFF-1 answer-cursor path alone, which
+	// is unaffected by this addition.
+	let resumeState: ResumeState | undefined;
+	if (resumeSessionId && !resumeCompleted) {
+		try {
+			const stored = await OfflineSessionService.getResumeState(resumeSessionId);
+			const pinnedVersion = (effective.definition as FilloutDefinition).version;
+			if (isResumeStateCompatible(stored, pinnedVersion)) {
+				resumeState = stored;
+			}
+		} catch {
+			// Pre-E-FLOW-3 row or IndexedDB unavailable — E-OFF-1 covers resume.
+		}
+	}
+
 	return {
 		questionnaire: shapeQuestionnaire(effective, projectName),
 		existingSession,
@@ -283,6 +306,11 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		resumeSnapshot,
 		resumeCompleted,
 		resumeFromDevice,
+		// True save-and-continue snapshot (E-FLOW-3, FIX-F12): passed to the runtime as
+		// `resumeFrom` alongside resumeSnapshot. Undefined ⇒ E-OFF-1 answer-cursor resume only.
+		resumeState,
+		// The session the resumeState belongs to, so a "Start over" choice can discard it.
+		resumeStateSessionId: resumeState ? resumeSessionId : null,
 		// The session id to continue when resuming without a server `existingSession`
 		// (offline reload, or an anonymous same-device reload the API won't return).
 		// Only set when there is progress to restore, so a fresh start still creates

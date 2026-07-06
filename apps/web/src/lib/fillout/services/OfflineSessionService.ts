@@ -156,6 +156,22 @@ export class OfflineSessionService {
 	}
 
 	/**
+	 * Discard the persisted {@link ResumeState} for a session (E-FLOW-3, FIX-F12). Called
+	 * when a participant chooses "Start over" on the welcome screen so a subsequent reload
+	 * does not silently resume the abandoned position. No-op when the row is absent.
+	 */
+	static async clearResumeState(sessionId: string): Promise<void> {
+		const session = await db.filloutSessions.get(sessionId);
+		if (!session) return;
+
+		await db.filloutSessions.update(sessionId, {
+			resumeState: undefined,
+			updatedAt: Date.now(),
+			synced: 0,
+		});
+	}
+
+	/**
 	 * Shallow-merge a metadata patch into an existing session row, preserving
 	 * prior keys, and re-arm synced:0 so FilloutUploadSync.collectSessionsToSync
 	 * ships the merged metadata (its payload carries session.metadata). No-op when

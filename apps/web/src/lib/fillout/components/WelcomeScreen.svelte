@@ -20,6 +20,16 @@
     languageOptions?: LocaleOption[];
     activeLocale?: string;
     onLocaleChange?: (code: string) => void;
+    /**
+     * A compatible save-and-continue snapshot exists for this session (E-FLOW-3, FIX-F12).
+     * When true (and both callbacks are supplied) the single Start action is replaced by a
+     * "Continue where you left off" / "Start over" choice.
+     */
+    hasResumeState?: boolean;
+    /** Resume from the saved position. */
+    onContinue?: () => void;
+    /** Discard the saved position and begin fresh at the first question. */
+    onStartOver?: () => void;
   }
 
   let {
@@ -31,7 +41,14 @@
     languageOptions = [],
     activeLocale = '',
     onLocaleChange,
+    hasResumeState = false,
+    onContinue,
+    onStartOver,
   }: Props = $props();
+
+  // Offer the resume choice only when the caller both flagged a compatible snapshot AND
+  // wired both actions; otherwise fall back to the unchanged single Start button.
+  const showResumeChoice = $derived(hasResumeState && !!onContinue && !!onStartOver);
 
   const welcomeText = $derived(welcomeMessage?.trim() ? welcomeMessage : questionnaire.description);
 
@@ -106,15 +123,37 @@
       {/if}
 
       <div class="actions">
-        <Button
-          variant="default"
-          size="lg"
-          onclick={onStart}
-          class="start-button"
-          data-testid="fillout-start-button"
-        >
-          Start Questionnaire
-        </Button>
+        {#if showResumeChoice}
+          <div class="resume-choice" data-testid="fillout-resume-choice">
+            <Button
+              variant="default"
+              size="lg"
+              onclick={onContinue}
+              class="start-button"
+              data-testid="fillout-continue-button"
+            >
+              Continue where you left off
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              onclick={onStartOver}
+              data-testid="fillout-start-over-button"
+            >
+              Start over
+            </Button>
+          </div>
+        {:else}
+          <Button
+            variant="default"
+            size="lg"
+            onclick={onStart}
+            class="start-button"
+            data-testid="fillout-start-button"
+          >
+            Start Questionnaire
+          </Button>
+        {/if}
       </div>
 
       {#if questionnaire.settings?.requireAuthentication || questionnaire.settings?.requireConsent}
@@ -222,6 +261,13 @@
 
   .actions {
     margin-bottom: 1.5rem;
+  }
+
+  .resume-choice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
   }
 
   :global(.start-button) {

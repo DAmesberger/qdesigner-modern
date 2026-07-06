@@ -11,6 +11,7 @@
   import { FilloutRuntime } from '$lib/fillout/runtime/FilloutRuntime';
   import ModularRenderer from '$lib/runtime/ModularRenderer.svelte';
   import type { FormQuestionHost, FormHostPresentation } from '$lib/runtime/core/FormQuestionHost';
+  import type { ResumeState } from '$lib/runtime/core/ResumeState';
   import type { ConsentData } from '$lib/fillout/types';
   import type { QuestionnaireSession } from '$lib/shared';
   import {
@@ -127,6 +128,13 @@
   // the right question, and a dismiss flag for the pinned-version-unavailable notice.
   let resumeNotice = $state<string | null>(null);
   let pinnedFallbackDismissed = $state(false);
+
+  // True save-and-continue snapshot (E-FLOW-3, FIX-F12). Mutable so a fresh-session create
+  // (or an explicit "Start over") can drop it — it must only ever be applied to the SAME
+  // session it was captured on, never a brand-new one. `resumeFrom` is passed into the
+  // FilloutRuntime config ALONGSIDE resumeSnapshot: hydrate seeds prior answers, resumeFrom
+  // restores the exact cursor/loop/variables and jumps to the captured page.
+  let activeResumeState = $state<ResumeState | undefined>(data.resumeState ?? undefined);
 
   // --- Timing qualification (Slice 3.4) -------------------------------------
   // Reaction paradigms depend on frame-exact stimulus onset. The session-wide
@@ -325,6 +333,19 @@
     }
   }
 
+  // "Start over" from the welcome-screen resume choice (E-FLOW-3, FIX-F12): discard the
+  // saved position (both the in-memory resumeFrom and the persisted ResumeState) so this
+  // and any future reload begin cleanly at index 0, then run the normal start flow. The
+  // fresh-create branches in createSessionAndStart mint a new session id, so no prior
+  // answers are hydrated — a true restart.
+  async function handleStartOver() {
+    activeResumeState = undefined;
+    if (data.resumeStateSessionId) {
+      await OfflineSessionService.clearResumeState(data.resumeStateSessionId).catch(() => {});
+    }
+    await handleStart();
+  }
+
   async function handleConsent(consentData: ConsentData) {
     await createSessionAndStart(consentData);
   }
@@ -432,6 +453,9 @@
             metadata,
           });
           session = created;
+          // A brand-new session id — a resumeFrom captured against a prior local session
+          // must NOT be applied here (it would restore an unrelated cursor/variables).
+          activeResumeState = undefined;
 
           // Server-side fingerprint dedup (slice 2.5): react to the typed `duplicate`
           // flag api.sessions.create() surfaces from the create response.
@@ -485,6 +509,8 @@
           questionnaire_id: offlineSession.questionnaireId,
           status: 'active',
         };
+        // Brand-new offline session — drop any prior-session resumeFrom (see above).
+        activeResumeState = undefined;
       }
 
       sessionStorage.setItem('qd_api_session_id', session.id);
@@ -557,6 +583,11 @@
         // runtime resumes at the first unanswered item rather than restarting at zero.
         resumeSnapshot: data.resumeSnapshot ?? undefined,
         resumeFromDevice: data.resumeFromDevice,
+        // True save-and-continue (E-FLOW-3, FIX-F12): restore the exact cursor / loop
+        // counters / variable context and jump straight to the captured page —
+        // complementary to resumeSnapshot, which seeds prior answers. Undefined ⇒ the
+        // E-OFF-1 answer-cursor resume alone (fresh starts clear activeResumeState below).
+        resumeFrom: activeResumeState ?? undefined,
         onComplete: async (completed) => {
           completedSession = completed;
           currentScreen = 'complete';
@@ -731,6 +762,9 @@
       questionnaire={definition}
       projectName={data.questionnaire.projectName}
       onStart={handleStart}
+      hasResumeState={!!activeResumeState}
+      onContinue={handleStart}
+      onStartOver={handleStartOver}
       {welcomeMessage}
       languageOptions={languageOptions}
       activeLocale={effectiveLocale}
