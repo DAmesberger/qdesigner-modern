@@ -10,6 +10,7 @@
     error?: boolean;
     id?: string;
     name?: string;
+    describedby?: string;
     class?: string;
     children?: Snippet;
     onchange?: (event: Event & { currentTarget: HTMLSelectElement }) => void;
@@ -24,6 +25,7 @@
     error = false,
     id = undefined,
     name = undefined,
+    describedby = undefined,
     class: className = '',
     children,
     onchange,
@@ -47,6 +49,8 @@
     {id}
     {name}
     {disabled}
+    aria-describedby={describedby}
+    aria-invalid={error ? 'true' : undefined}
     bind:value
     class={selectClasses}
     {onchange}

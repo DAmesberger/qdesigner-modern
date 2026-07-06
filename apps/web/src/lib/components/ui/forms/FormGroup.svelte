@@ -43,7 +43,7 @@
   </div>
 
   {#if error}
-    <p class="text-sm text-destructive" id="{id}-error">
+    <p class="text-sm text-destructive" id="{id}-error" role="alert">
       {error}
     </p>
   {:else if hint}

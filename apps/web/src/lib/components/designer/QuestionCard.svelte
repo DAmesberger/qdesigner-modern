@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
   import { designerStore } from '$lib/stores/designer.svelte';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { ChevronUp, ChevronDown, Pencil, Copy, Trash2 } from 'lucide-svelte';
 
   export let question: Question;
@@ -17,9 +18,16 @@
     designerStore.selectItem(question.id, 'question');
   }
 
-  function handleDelete(e: MouseEvent) {
+  async function handleDelete(e: MouseEvent) {
     e.stopPropagation();
-    if (confirm('Delete this question?')) {
+    if (
+      await confirmDialog({
+        title: 'Delete question?',
+        message: 'Delete this question?',
+        confirmLabel: 'Delete',
+        destructive: true,
+      })
+    ) {
       designerStore.deleteQuestion(question.id);
     }
   }

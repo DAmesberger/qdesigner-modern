@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { designerStore } from '$lib/stores/designer.svelte';
+  import { toast } from '$lib/stores/toast';
   import QuestionPalette from './QuestionPalette.svelte';
   import PageCanvas from './PageCanvas.svelte';
   import VariableManager from './VariableManager.svelte';
@@ -71,7 +72,9 @@
           const questionnaire = JSON.parse(text);
           designerStore.importQuestionnaire(questionnaire);
         } catch (error) {
-          alert('Invalid questionnaire file');
+          toast.error('Invalid questionnaire file', {
+            message: 'The selected file could not be parsed as a questionnaire.',
+          });
         }
       }
     };

@@ -39,8 +39,16 @@
   if (value === undefined) value = question.config.defaultValue || null;
 
   let sliderElement = $state<HTMLInputElement>();
+  let containerElement = $state<HTMLDivElement>();
   let isDragging = $state(false);
   let hoverValue = $state<number | null>(null);
+
+  // Discrete variants render as a radiogroup of radio buttons; continuous
+  // variants (slider/visual-analog) rely on the native range input's implicit
+  // slider role.
+  const isDiscrete = $derived(
+    question.config.displayType === 'buttons' || question.config.displayType === 'stars'
+  );
 
   // Calculate scale points
   const scalePoints = $derived(
@@ -129,6 +137,13 @@
     event.preventDefault();
     value = newValue;
     onResponse?.(newValue);
+
+    // Keep DOM focus on the newly-checked radio for discrete variants so the
+    // roving-tabindex focus ring tracks the arrow/Home/End selection.
+    if (isDiscrete) {
+      const target = containerElement?.querySelector<HTMLElement>(`[data-point="${newValue}"]`);
+      target?.focus();
+    }
   }
 
   // Visual analog scale helpers
@@ -146,15 +161,12 @@
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
   <div
+    bind:this={containerElement}
     class="scale-container flex flex-col gap-4 py-2 display-{question.config.displayType} orientation-{question.config
       .orientation || 'horizontal'}"
     onkeydown={handleKeyPress}
-    tabindex="0"
-    role="slider"
-    aria-valuemin={question.config.min}
-    aria-valuemax={question.config.max}
-    aria-valuenow={value || question.config.min}
-    aria-label="Rating scale"
+    role={isDiscrete ? 'radiogroup' : undefined}
+    aria-label={isDiscrete ? 'Rating scale' : undefined}
   >
     {#if question.config.displayType === 'slider'}
       <div class="relative py-8">
@@ -201,11 +213,14 @@
           <button
             class="scale-button"
             class:selected={value === point}
+            data-point={point}
             onclick={() => handleButtonClick(point)}
             onmouseenter={() => (hoverValue = point)}
             onmouseleave={() => (hoverValue = null)}
             {disabled}
-            aria-pressed={value === point}
+            role="radio"
+            aria-checked={value === point}
+            tabindex={value === point || (value == null && point === question.config.min) ? 0 : -1}
           >
             <span class="text-lg font-semibold">{point}</span>
             {#if question.config.showLabels}
@@ -229,8 +244,12 @@
           <button
             class="star-button"
             class:filled={value !== null && point <= value}
+            data-point={point}
             onclick={() => handleStarClick(point)}
             {disabled}
+            role="radio"
+            aria-checked={value === point}
+            tabindex={value === point || (value == null && point === question.config.min) ? 0 : -1}
             aria-label={`Rate ${point} out of ${question.config.max}`}
           >
             <svg viewBox="0 0 24 24" fill="currentColor">
@@ -279,10 +298,23 @@
 </BaseQuestion>
 
 <style>
-  .scale-container:focus {
+  /* Native range input carries the implicit slider role + valuemin/max/now;
+     give its thumb a visible keyboard focus treatment. */
+  .slider:focus-visible::-webkit-slider-thumb {
     outline: 2px solid hsl(var(--primary));
     outline-offset: 2px;
-    border-radius: 0.375rem;
+  }
+
+  .slider:focus-visible::-moz-range-thumb {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+
+  /* Visual-analog: the range input is opacity-0, so surface its focus on the
+     visible track. */
+  .va-track:has(input:focus-visible) {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
   }
 
   /* Slider — ::-webkit-slider-thumb pseudo-element */

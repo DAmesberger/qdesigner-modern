@@ -10,6 +10,7 @@
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
 
   let invitations: Invitation[] = [];
   let loading = true;
@@ -124,7 +125,15 @@
   }
 
   async function handleRevokeInvitation(invitationId: string) {
-    if (!confirm('Are you sure you want to revoke this invitation?')) return;
+    if (
+      !(await confirmDialog({
+        title: 'Revoke invitation?',
+        message: 'Are you sure you want to revoke this invitation?',
+        confirmLabel: 'Revoke',
+        destructive: true,
+      }))
+    )
+      return;
     if (!currentUser) return;
 
     const { success: revokeSuccess, error: revokeError } = await revokeInvitation(

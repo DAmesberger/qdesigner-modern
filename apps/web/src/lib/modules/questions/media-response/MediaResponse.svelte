@@ -625,6 +625,8 @@
     {#if phase === 'recorded'}
       <div class="playback-panel flex flex-col gap-4 border border-border rounded-xl overflow-hidden bg-card">
         {#if hasVideo}
+          <!-- Participant-recorded media has no authored caption source, so
+               there is no track to attach. -->
           <!-- svelte-ignore a11y_media_has_caption -->
           <video
             bind:this={videoPlaybackEl}

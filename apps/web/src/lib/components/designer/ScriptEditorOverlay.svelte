@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import type { Question, Variable } from '$lib/shared';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { X, AlignLeft, RotateCcw, ChevronRight, ChevronDown, Code } from 'lucide-svelte';
 
   interface Props {
@@ -80,8 +81,15 @@ export const hooks = {
     editor?.trigger('', 'editor.action.formatDocument', null);
   }
 
-  function handleReset() {
-    if (confirm('Reset script to template? Your changes will be lost.')) {
+  async function handleReset() {
+    if (
+      await confirmDialog({
+        title: 'Reset script?',
+        message: 'Reset script to template? Your changes will be lost.',
+        confirmLabel: 'Reset',
+        destructive: true,
+      })
+    ) {
       editor?.setValue(scriptTemplate);
     }
   }

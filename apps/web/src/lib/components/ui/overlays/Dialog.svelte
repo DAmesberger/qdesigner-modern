@@ -151,6 +151,15 @@
 <svelte:window onkeydown={handleEscape} />
 
 {#if open}
+  <!--
+    Justification for the suppression below: this is a decorative full-screen
+    wrapper (role="presentation") that only hosts the Tab/Shift+Tab focus trap.
+    It carries no interactive semantics of its own; the actual keyboard
+    dismissal path is Escape (svelte:window → handleEscape), and pointer
+    dismissal lives on the sibling backdrop button. onkeydown here exists solely
+    to keep focus inside the dialog, so a11y_no_noninteractive_element_interactions
+    is a false positive for this wrapper.
+  -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="fixed inset-0 z-50 flex items-center justify-center p-4"

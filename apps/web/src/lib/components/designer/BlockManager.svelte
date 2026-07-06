@@ -2,6 +2,7 @@
   import { designerStore } from '$lib/stores/designer.svelte';
   import type { Block, Question, ExperimentalCondition } from '$lib/shared';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import {
     ChevronRight, ChevronDown, Plus,
     FileText, Shuffle, GitFork, Repeat,
@@ -143,8 +144,15 @@
     editingBlock = null;
   }
 
-  function handleDeleteBlock(blockId: string) {
-    if (confirm('Delete this block? All questions in this block will be deleted.')) {
+  async function handleDeleteBlock(blockId: string) {
+    if (
+      await confirmDialog({
+        title: 'Delete block?',
+        message: 'Delete this block? All questions in this block will be deleted.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      })
+    ) {
       designerStore.deleteBlock(blockId);
     }
   }

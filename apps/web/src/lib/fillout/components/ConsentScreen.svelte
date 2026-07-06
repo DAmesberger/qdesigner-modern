@@ -3,6 +3,7 @@
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
   import { sanitizeHtml } from '$lib/services/markdownProcessor';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import type { ConsentCheckbox, ConsentData } from '$lib/fillout/types';
 
   interface Props {
@@ -79,11 +80,16 @@
     onAccept(consentData);
   }
 
-  function handleDecline() {
+  async function handleDecline() {
     if (
-      confirm(
-        'Are you sure you want to decline? You will not be able to participate in this study.'
-      )
+      await confirmDialog({
+        title: 'Decline participation?',
+        message:
+          'Are you sure you want to decline? You will not be able to participate in this study.',
+        confirmLabel: 'Decline',
+        cancelLabel: 'Go back',
+        destructive: true,
+      })
     ) {
       onDecline();
     }

@@ -66,13 +66,15 @@
             type="email"
             autocomplete="email"
             required
+            error={!!error}
+            describedby={error ? 'forgot-password-error' : undefined}
             bind:value={email}
             placeholder="Enter your email"
           />
         </FormGroup>
 
         {#if error}
-          <Alert variant="error">
+          <Alert variant="error" id="forgot-password-error">
             {error}
           </Alert>
         {/if}

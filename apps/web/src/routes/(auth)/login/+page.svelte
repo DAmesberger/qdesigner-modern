@@ -355,6 +355,8 @@
               type="email"
               autocomplete="email"
               required
+              error={!!error}
+              describedby={error ? 'login-error' : undefined}
               bind:value={email}
               placeholder="Enter your email"
               class="h-12 rounded-xl border border-border/80 bg-card/80 px-4 shadow-none dark:border-white/10 dark:bg-white/5"
@@ -380,6 +382,8 @@
                 type="password"
                 autocomplete="current-password"
                 required
+                error={!!error}
+                describedby={error ? 'login-error' : undefined}
                 bind:value={password}
                 placeholder="Enter your password"
                 class="h-12 rounded-xl border border-border/80 bg-card/80 px-4 shadow-none dark:border-white/10 dark:bg-white/5"
@@ -388,7 +392,7 @@
           </div>
 
           {#if error}
-            <Alert variant="error">
+            <Alert variant="error" id="login-error">
               {error}
             </Alert>
           {/if}

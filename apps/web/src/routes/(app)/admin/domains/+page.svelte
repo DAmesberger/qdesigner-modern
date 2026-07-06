@@ -8,6 +8,7 @@
     removeDomain,
     type DomainConfig,
   } from '$lib/services/domain-verification';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
@@ -164,7 +165,14 @@
   }
 
   async function handleRemoveDomain(domainId: string, domainName: string) {
-    if (!confirm(`Are you sure you want to remove ${domainName}? This cannot be undone.`)) {
+    if (
+      !(await confirmDialog({
+        title: 'Remove domain?',
+        message: `Are you sure you want to remove ${domainName}? This cannot be undone.`,
+        confirmLabel: 'Remove',
+        destructive: true,
+      }))
+    ) {
       return;
     }
 

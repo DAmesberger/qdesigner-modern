@@ -97,6 +97,16 @@
 	</button>
 
 	<!-- Full-screen overlay -->
+	<!--
+		This wrapper is a role="presentation" backdrop that hosts the SVG spotlight
+		mask and the spotlight ring; it cannot be a <button> because it contains that
+		non-interactive SVG structure. Its onclick only implements click-through for
+		interactive steps (handleBackdropClick) — it is NOT the tour's keyboard exit.
+		The keyboard path is fully covered elsewhere: Escape (handled here and on
+		svelte:window via handleKeydown) plus the always-present "Skip Tour" button
+		(aria-label "End tour") above. Hence the static-element-interaction lint is
+		suppressed intentionally.
+	-->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-[60]"

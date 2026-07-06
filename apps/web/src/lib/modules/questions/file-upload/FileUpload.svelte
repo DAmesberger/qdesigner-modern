@@ -55,6 +55,8 @@
   let files = $state<File[]>([]);
   let uploadProgress = $state<Map<string, number>>(new Map());
   let uploadErrors = $state<Map<string, string>>(new Map());
+  // Form-level (not per-file) validation message, e.g. the max-files guard.
+  let formError = $state<string | null>(null);
   let isDragging = $state(false);
   let fileInput: HTMLInputElement;
 
@@ -145,11 +147,12 @@
   // Process files
   function handleFiles(newFiles: File[]) {
     uploadErrors.clear();
+    formError = null;
 
     // Validate file count
     const totalFiles = files.length + newFiles.length;
     if (totalFiles > maxFiles) {
-      alert(`Maximum ${maxFiles} file${maxFiles > 1 ? 's' : ''} allowed`);
+      formError = `Maximum ${maxFiles} file${maxFiles > 1 ? 's' : ''} allowed`;
       return;
     }
 
@@ -409,6 +412,12 @@
       <button type="button" onclick={triggerFileInput} {disabled} class="upload-button px-6 py-3 bg-primary text-background border-none rounded-md text-base font-medium cursor-pointer transition-colors duration-200 hover:brightness-90 disabled:bg-muted-foreground disabled:cursor-not-allowed">
         Choose File{allowMultiple ? 's' : ''}
       </button>
+    {/if}
+
+    {#if formError}
+      <div class="mt-2 text-sm text-destructive" role="alert" data-testid="file-upload-form-error">
+        {formError}
+      </div>
     {/if}
 
     {#if files.length > 0}

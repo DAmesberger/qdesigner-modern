@@ -12,6 +12,7 @@
   let searchQuery = $state('');
   let selectedIndex = $state(0);
   let searchInput = $state<HTMLInputElement>();
+  let previousActiveElement: HTMLElement | null = null;
 
   // Filter commands based on search query
   let filteredCommands = $derived.by(() => {
@@ -161,6 +162,13 @@
         e.preventDefault();
         close();
         break;
+      case 'Tab':
+        // Focus trap: the search input is the only intended tab stop.
+        // Options are driven by ArrowUp/ArrowDown + aria-activedescendant,
+        // so keep focus on the input regardless of Tab/Shift+Tab.
+        e.preventDefault();
+        searchInput?.focus();
+        break;
     }
   }
 
@@ -183,11 +191,19 @@
     isOpen = false;
     searchQuery = '';
     selectedIndex = 0;
+    // Restore focus to the element that was focused before the palette opened.
+    previousActiveElement?.focus();
+    previousActiveElement = null;
   }
 
   // Focus input when opened
   $effect(() => {
     if (isOpen && searchInput) {
+      // Capture the pre-open focus BEFORE moving focus into the input,
+      // so close() can restore it (mirrors Dialog.svelte).
+      if (!previousActiveElement) {
+        previousActiveElement = document.activeElement as HTMLElement;
+      }
       searchInput.focus();
     }
   });
@@ -249,7 +265,12 @@
     class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl z-50"
     transition:fly={{ y: -20, duration: 200 }}
   >
-    <div class="bg-popover text-popover-foreground rounded-lg shadow-2xl overflow-hidden">
+    <div
+      class="bg-popover text-popover-foreground rounded-lg shadow-2xl overflow-hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
+    >
       <!-- Search Input -->
       <div class="border-b border-border">
         <div class="flex items-center px-4">
@@ -260,6 +281,11 @@
             onkeydown={handleKeydown}
             type="text"
             placeholder="Type a command or search..."
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="command-palette-listbox"
+            aria-autocomplete="list"
+            aria-activedescendant={filteredCommands.length ? `command-option-${selectedIndex}` : undefined}
             class="flex-1 px-3 py-4 bg-transparent text-foreground placeholder-muted-foreground focus:outline-none"
           />
           <kbd
@@ -271,7 +297,7 @@
       </div>
 
       <!-- Commands List -->
-      <div class="max-h-96 overflow-y-auto">
+      <div id="command-palette-listbox" role="listbox" class="max-h-96 overflow-y-auto">
         {#if filteredCommands.length === 0}
           <div class="px-4 py-8 text-center text-muted-foreground">
             No commands found for "{searchQuery}"
@@ -281,6 +307,7 @@
             {#each Object.entries(groupedCommands) as [category, categoryCommands], categoryIndex}
               <div>
                 <div
+                  role="presentation"
                   class="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider"
                 >
                   {category}
@@ -289,6 +316,9 @@
                   {@const globalIndex = filteredCommands.indexOf(command)}
                   <button
                     data-command-index={globalIndex}
+                    role="option"
+                    id={`command-option-${globalIndex}`}
+                    aria-selected={selectedIndex === globalIndex}
                     onclick={() => executeCommand(command)}
                     onmouseenter={() => (selectedIndex = globalIndex)}
                     class="w-full px-4 py-2 flex items-center justify-between hover:bg-accent transition-colors {selectedIndex === globalIndex ? 'bg-accent' : ''}"

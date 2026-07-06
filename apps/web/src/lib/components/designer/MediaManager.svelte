@@ -4,6 +4,8 @@
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
   import { designerStore } from '$lib/stores/designer.svelte';
+  import { toast } from '$lib/stores/toast';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import type {
     MediaAsset,
     MediaFilter,
@@ -251,7 +253,7 @@
       console.error('[MediaManager] Missing organizationId for upload');
       const message = contextError || 'Unable to upload: Missing organization context';
       uploadError = message;
-      alert(message);
+      toast.error('Upload error', { message });
       return;
     }
 
@@ -370,7 +372,15 @@
   }
 
   async function deleteSelected() {
-    if (!confirm(`Delete ${selectedIds.size} selected media files?`)) return;
+    if (
+      !(await confirmDialog({
+        title: 'Delete media?',
+        message: `Delete ${selectedIds.size} selected media files?`,
+        confirmLabel: 'Delete',
+        destructive: true,
+      }))
+    )
+      return;
 
     loading = true;
 

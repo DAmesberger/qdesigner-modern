@@ -36,6 +36,7 @@
       {value}
       {disabled}
       type="checkbox"
+      aria-describedby={description && id ? `${id}-description` : undefined}
       bind:checked
       class={checkboxClasses}
       {onchange}
@@ -49,7 +50,7 @@
         </label>
       {/if}
       {#if description}
-        <p class="text-muted-foreground">{description}</p>
+        <p class="text-muted-foreground" id={id ? `${id}-description` : undefined}>{description}</p>
       {/if}
     </div>
   {/if}

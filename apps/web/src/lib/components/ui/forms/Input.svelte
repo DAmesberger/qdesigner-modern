@@ -9,6 +9,7 @@
     error?: boolean;
     id?: string;
     name?: string;
+    describedby?: string;
     pattern?: string;
     minLength?: number;
     maxLength?: number;
@@ -34,6 +35,7 @@
     error = false,
     id = undefined,
     name = undefined,
+    describedby = undefined,
     pattern = undefined,
     minLength = undefined,
     maxLength = undefined,
@@ -74,6 +76,8 @@
   maxlength={maxLength}
   inputmode={inputmode}
   {autocomplete}
+  aria-describedby={describedby}
+  aria-invalid={error ? 'true' : undefined}
   bind:value
   class={inputClasses}
   {oninput}

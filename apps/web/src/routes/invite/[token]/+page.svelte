@@ -6,6 +6,7 @@
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { auth } from '$lib/services/auth';
   import {
     getInvitationByToken,
@@ -84,7 +85,14 @@
   async function handleDecline() {
     if (!invitation || !currentUser) return;
 
-    if (!confirm('Are you sure you want to decline this invitation?')) {
+    if (
+      !(await confirmDialog({
+        title: 'Decline invitation?',
+        message: 'Are you sure you want to decline this invitation?',
+        confirmLabel: 'Decline',
+        destructive: true,
+      }))
+    ) {
       return;
     }
 

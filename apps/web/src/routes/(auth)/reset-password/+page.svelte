@@ -130,6 +130,8 @@
             type="password"
             autocomplete="new-password"
             required
+            error={!!error}
+            describedby={error ? 'reset-password-error' : undefined}
             bind:value={newPassword}
             placeholder="Enter new password"
             minLength={8}
@@ -162,17 +164,23 @@
             type="password"
             autocomplete="new-password"
             required
+            error={!!error || (!!confirmPassword && !passwordsMatch)}
+            describedby={!!confirmPassword && !passwordsMatch
+              ? 'confirm-password-mismatch'
+              : error
+                ? 'reset-password-error'
+                : undefined}
             bind:value={confirmPassword}
             placeholder="Confirm new password"
             minLength={8}
           />
           {#if confirmPassword && !passwordsMatch}
-            <p class="mt-1 text-sm text-destructive">Passwords do not match</p>
+            <p class="mt-1 text-sm text-destructive" id="confirm-password-mismatch" role="alert">Passwords do not match</p>
           {/if}
         </FormGroup>
 
         {#if error}
-          <Alert variant="error">
+          <Alert variant="error" id="reset-password-error">
             {error}
           </Alert>
         {/if}

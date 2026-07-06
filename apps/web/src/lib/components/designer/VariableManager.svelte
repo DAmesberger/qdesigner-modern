@@ -10,6 +10,7 @@
   import { MAX_SERVER_VARIABLES } from '@qdesigner/questionnaire-core';
   import FormulaEditor from './FormulaEditor.svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { onMount } from 'svelte';
   import { Hash, Type, ToggleLeft, Calendar, Clock, List, Box, Zap, Target, HelpCircle, Pencil, Trash2, Network, Plus } from 'lucide-svelte';
   import HelpTip from '$lib/help/components/HelpTip.svelte';
@@ -297,8 +298,15 @@
     computationMode = 'static';
   }
 
-  function handleDeleteVariable(variableId: string) {
-    if (confirm('Delete this variable? This may break formulas that depend on it.')) {
+  async function handleDeleteVariable(variableId: string) {
+    if (
+      await confirmDialog({
+        title: 'Delete variable?',
+        message: 'Delete this variable? This may break formulas that depend on it.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      })
+    ) {
       designerStore.deleteVariable(variableId);
     }
   }

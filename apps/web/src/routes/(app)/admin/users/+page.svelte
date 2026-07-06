@@ -3,6 +3,7 @@
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
   import { toast } from '$lib/stores/toast';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
@@ -65,7 +66,15 @@
     if (!currentOrg) return;
 
     const name = member.user?.fullName || member.user?.full_name || member.user?.email || 'this member';
-    if (!confirm(`Remove ${name} from ${currentOrg.name || 'the organization'}?`)) return;
+    if (
+      !(await confirmDialog({
+        title: 'Remove member?',
+        message: `Remove ${name} from ${currentOrg.name || 'the organization'}?`,
+        confirmLabel: 'Remove',
+        destructive: true,
+      }))
+    )
+      return;
 
     removingUserId = member.userId;
     try {
@@ -98,7 +107,13 @@
 
     const name =
       member.user?.fullName || member.user?.full_name || member.user?.email || 'this member';
-    if (!confirm(`Change ${name}'s role to ${roleLabel(newRole)}?`)) {
+    if (
+      !(await confirmDialog({
+        title: 'Change role?',
+        message: `Change ${name}'s role to ${roleLabel(newRole)}?`,
+        confirmLabel: 'Change role',
+      }))
+    ) {
       members = members; // revert the <select> back to the current role
       return;
     }

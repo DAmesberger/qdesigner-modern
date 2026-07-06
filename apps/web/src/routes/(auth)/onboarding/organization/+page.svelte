@@ -164,6 +164,8 @@
                 id="org-name"
                 type="text"
                 required
+                error={!!error}
+                describedby={error ? 'onboarding-org-error' : 'org-name-hint'}
                 bind:value={organizationName}
                 placeholder="e.g., Acme Research Lab"
               />
@@ -171,7 +173,7 @@
           </div>
 
           {#if error}
-            <Alert variant="error">
+            <Alert variant="error" id="onboarding-org-error">
               {error}
             </Alert>
           {/if}

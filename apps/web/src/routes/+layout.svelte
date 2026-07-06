@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { auth } from '$lib/services/auth';
   import Toast from '$lib/components/ui/Toast.svelte';
+  import ConfirmDialogHost from '$lib/components/ui/overlays/ConfirmDialogHost.svelte';
   import OfflineIndicator from '$lib/components/ui/OfflineIndicator.svelte';
   import { theme } from '$lib/stores/theme';
   import { offline, requestPersistentStorage } from '$lib/services/offline';
@@ -52,4 +53,5 @@
 
 {@render children()}
 <Toast />
+<ConfirmDialogHost />
 <OfflineIndicator />

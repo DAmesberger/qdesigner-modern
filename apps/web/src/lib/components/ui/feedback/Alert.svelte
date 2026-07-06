@@ -5,6 +5,7 @@
     variant?: 'info' | 'success' | 'warning' | 'error';
     title?: string;
     dismissible?: boolean;
+    id?: string;
     class?: string;
     children?: import('svelte').Snippet;
   }
@@ -13,6 +14,7 @@
     variant = 'info',
     title = '',
     dismissible = false,
+    id = undefined,
     class: className = '',
     children,
   }: Props = $props();
@@ -38,7 +40,7 @@
 </script>
 
 {#if visible}
-  <div class="rounded-md p-4 {variantClasses[variant]} {className}">
+  <div {id} class="rounded-md p-4 {variantClasses[variant]} {className}">
     <div class="flex">
       <div class="shrink-0">
         <svg

@@ -262,6 +262,8 @@
               id="email"
               type="email"
               required
+              error={!!error}
+              describedby={error ? 'signup-error' : undefined}
               bind:value={email}
               placeholder="you@example.com"
             />
@@ -272,6 +274,8 @@
               id="password"
               type="password"
               required
+              error={!!error}
+              describedby={error ? 'signup-error' : undefined}
               bind:value={password}
               placeholder="Create a strong password"
               minLength={8}
@@ -310,7 +314,7 @@
           </div>
 
           {#if error}
-            <Alert variant="error">
+            <Alert variant="error" id="signup-error">
               {error}
             </Alert>
           {/if}
@@ -343,6 +347,8 @@
               id="verification-code"
               type="text"
               required
+              error={!!error}
+              describedby={error ? 'verification-error' : 'verification-code-hint'}
               bind:value={verificationCode}
               placeholder="000000"
               maxLength={6}
@@ -350,13 +356,13 @@
               autocomplete="one-time-code"
               class="text-center text-2xl tracking-widest"
             />
-            <p class="text-sm text-muted-foreground mt-2">
+            <p class="text-sm text-muted-foreground mt-2" id="verification-code-hint">
               Enter the 6-digit code sent to your email
             </p>
           </FormGroup>
 
           {#if error}
-            <Alert variant="error">
+            <Alert variant="error" id="verification-error">
               {error}
             </Alert>
           {/if}
