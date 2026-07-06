@@ -30,6 +30,17 @@
     onContinue?: () => void;
     /** Discard the saved position and begin fresh at the first question. */
     onStartOver?: () => void;
+    /**
+     * Show the photosensitivity advisory (F097). True when the questionnaire contains a
+     * reaction paradigm, which alternates high-contrast stimuli at 250-500ms ISIs.
+     */
+    showPhotosensitivityAdvisory?: boolean;
+    /**
+     * The participant's OS requests reduced motion. Used only to STRENGTHEN the advisory
+     * copy — timings are never altered per motion preference (that would break
+     * cross-participant data comparability); the accommodation is informed consent.
+     */
+    prefersReducedMotion?: boolean;
   }
 
   let {
@@ -44,6 +55,8 @@
     hasResumeState = false,
     onContinue,
     onStartOver,
+    showPhotosensitivityAdvisory = false,
+    prefersReducedMotion = false,
   }: Props = $props();
 
   // Offer the resume choice only when the caller both flagged a compatible snapshot AND
@@ -119,6 +132,28 @@
               for research purposes.
             </p>
           </div>
+        </div>
+      {/if}
+
+      {#if showPhotosensitivityAdvisory}
+        <div
+          class="photosensitivity-advisory bg-muted border-border text-foreground"
+          role="note"
+          data-testid="fillout-photosensitivity-advisory"
+        >
+          <h3 class="text-foreground">Photosensitivity warning</h3>
+          <p>
+            This task presents rapidly flashing and alternating high-contrast visual stimuli.
+            If you have photosensitive epilepsy or are otherwise sensitive to flashing lights,
+            please do not proceed &mdash; stop now and consult the researcher before continuing.
+          </p>
+          {#if prefersReducedMotion}
+            <p data-testid="fillout-photosensitivity-reduced-motion">
+              Your system requests reduced motion. This study's stimuli are timing-critical and
+              cannot be slowed without invalidating the measurement, so the flashing cannot be
+              reduced. Please take this into account when deciding whether to proceed.
+            </p>
+          {/if}
         </div>
       {/if}
 
@@ -257,6 +292,30 @@
 
   .instructions-content :global(li) {
     margin-bottom: 0.25rem;
+  }
+
+  .photosensitivity-advisory {
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 0.5rem;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 2rem;
+    text-align: left;
+  }
+
+  .photosensitivity-advisory h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .photosensitivity-advisory p {
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .photosensitivity-advisory p + p {
+    margin-top: 0.75rem;
   }
 
   .actions {

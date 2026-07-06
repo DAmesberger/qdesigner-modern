@@ -165,6 +165,16 @@
     hasReactionQuestion && requiresPrecisionTiming && qualification?.grade === 'red'
   );
 
+  // Photosensitivity accommodation (F097). Reaction paradigms alternate high-contrast
+  // stimuli at 250-500ms ISIs; we surface the OS reduced-motion preference to STRENGTHEN
+  // the advisory copy, but deliberately do NOT slow the ISIs — silently altering stimulus
+  // timing per participant would corrupt cross-participant data comparability. The
+  // accommodation is informed consent to proceed, not a timing change. Route is ssr=false
+  // so window is available; still guard for safety.
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
   // Shared Web Audio unlock. Created + resumed on a user gesture (welcome start /
   // consent accept) so the browser's document-scoped autoplay policy permits the
   // reaction engine's own AudioContext.resume() when it primes audio pre-trial.
@@ -769,6 +779,8 @@
       languageOptions={languageOptions}
       activeLocale={effectiveLocale}
       onLocaleChange={handleLocaleChange}
+      showPhotosensitivityAdvisory={hasReactionQuestion}
+      {prefersReducedMotion}
     />
   {:else if currentScreen === 'consent'}
     <ConsentScreen
@@ -819,11 +831,17 @@
       </div>
     {/if}
 
+    <!-- role="img" names the stimulus canvas for screen readers so it isn't an unnamed
+         graphic (F097); the Svelte a11y lint flags canvas+role but this is the intended,
+         WCAG-recommended pattern for giving a canvas an accessible name. -->
+    <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
     <canvas
       bind:this={canvas}
       class="fillout-canvas"
       width={window.innerWidth}
       height={window.innerHeight}
+      role="img"
+      aria-label="Reaction task stimulus display"
       data-testid="fillout-runtime-canvas"
     ></canvas>
 
