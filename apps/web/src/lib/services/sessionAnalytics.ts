@@ -23,10 +23,28 @@ export interface ChartPoint {
 }
 
 export interface ChartSeriesContract {
-  mode: 'current-session' | 'cohort' | 'participant-vs-cohort' | 'participant-vs-participant';
+  mode:
+    | 'current-session'
+    | 'cohort'
+    | 'participant-vs-cohort'
+    | 'participant-vs-participant'
+    | 'norm-table'
+    | 'self-baseline';
   metric: AnalyticsMetric;
   points: ChartPoint[];
+  /**
+   * Numeric summary tiles. Norm/baseline modes (E-FEEDBACK-2) populate the
+   * canonical keys `tScore`, `percentile`, `deltaFromBaseline`, and `rci`
+   * (reliable-change index) here so charts/summary tiles render them without a
+   * bespoke contract.
+   */
   summary?: Record<string, number | null>;
+  /**
+   * Human-readable provenance of the norm used (norm-table mode) — e.g.
+   * "GAD-7 general population (Löwe et al., 2008)". A string, so it rides
+   * alongside the numeric `summary` map rather than inside it.
+   */
+  normSource?: string;
   /** Distribution data for bell curve / histogram visualizations */
   distribution?: {
     mean: number;

@@ -8,9 +8,12 @@
   import type { ChartSeriesContract } from '$lib/services/sessionAnalytics';
   import {
     interpretMultipleScales,
+    interpretBandMessage,
     type MultiScaleInterpretation,
   } from '$lib/runtime/feedback/ScoreInterpreter';
   import { generateReport, type ReportConfig } from '$lib/runtime/feedback/ReportGenerator';
+  import { getNormTable, CUSTOM_NORM_TABLE_ID } from '$lib/runtime/feedback/normTables';
+  import type { SessionStatsSummary } from '$lib/shared/types/api';
   import BellCurveChart from './charts/BellCurveChart.svelte';
   import FeedbackChart from './charts/FeedbackChart.svelte';
   import GaugeChart from './charts/GaugeChart.svelte';
@@ -169,6 +172,56 @@
     return value.toFixed(3);
   }
 
+  /**
+   * Populate ReportGenerator.normativeStats from the selected norm (E-FEEDBACK-2)
+   * so the PDF's "Normative Comparison" section actually renders. Keyed by the
+   * current variable name — configure a Score Interpretation scale with the same
+   * variableId for the section to attach to it.
+   */
+  function buildNormativeStats(): Record<string, SessionStatsSummary> | undefined {
+    const ds = config.dataSource;
+    let mean: number | null = null;
+    let sd: number | null = null;
+    let n = 0;
+
+    if (ds.normTableId === CUSTOM_NORM_TABLE_ID && ds.customNorm) {
+      mean = ds.customNorm.mean;
+      sd = ds.customNorm.sd;
+    } else {
+      const norm = getNormTable(ds.normTableId);
+      if (norm) {
+        mean = norm.mean;
+        sd = norm.sd;
+        n = norm.n ?? 0;
+      }
+    }
+
+    if (mean === null || sd === null || !Number.isFinite(mean) || !Number.isFinite(sd)) {
+      return undefined;
+    }
+
+    const targetVar = ds.currentVariable || ds.key;
+    if (!targetVar) return undefined;
+
+    const summary: SessionStatsSummary = {
+      sampleCount: n,
+      mean,
+      median: null,
+      stdDev: sd,
+      min: null,
+      max: null,
+      p10: null,
+      p25: null,
+      p50: null,
+      p75: null,
+      p90: null,
+      p95: null,
+      p99: null,
+    };
+
+    return { [targetVar]: summary };
+  }
+
   async function handleDownloadReport(): Promise<void> {
     if (generatingReport) return;
     generatingReport = true;
@@ -177,6 +230,7 @@
         title: config.reportTitle || config.title,
         subtitle: config.subtitle || undefined,
         scoreConfigs: config.scoreInterpretation || [],
+        normativeStats: buildNormativeStats(),
         includeChart: true,
       };
       await generateReport(reportConfig, { variables });
@@ -269,6 +323,7 @@
   {#if scoreInterpretation && scoreInterpretation.interpretations.length > 0}
     <div class="grid gap-2" data-testid="stats-feedback-interpretations">
       {#each scoreInterpretation.interpretations as interp}
+        {@const bandMessage = interpretBandMessage(interp.range, variables)}
         <div class="interpretation-card grid rounded-lg border border-border bg-card" style="padding: 0.65rem 0.8rem; gap: 0.35rem" data-testid={`interpretation-${interp.config.scaleName}`}>
           <div class="flex justify-between items-center">
             <span class="font-semibold text-foreground" style="font-size: 0.82rem">{interp.config.scaleName}</span>
@@ -280,6 +335,9 @@
             </div>
             {#if interp.range.description}
               <p class="text-muted-foreground m-0" style="font-size: 0.78rem">{interp.range.description}</p>
+            {/if}
+            {#if bandMessage}
+              <p class="text-foreground m-0" style="font-size: 0.8rem; line-height: 1.4" data-testid={`interpretation-message-${interp.config.scaleName}`}>{bandMessage}</p>
             {/if}
           {:else}
             <div class="interp-badge inline-block rounded-full font-semibold w-fit bg-border text-muted-foreground" style="padding: 0.15rem 0.6rem; font-size: 0.72rem">No classification</div>

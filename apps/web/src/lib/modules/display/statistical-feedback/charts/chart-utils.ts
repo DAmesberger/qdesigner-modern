@@ -3,6 +3,7 @@
  */
 
 import { normalCDF } from '$lib/shared/utils/statistics';
+import type { ChartSeriesContract } from '$lib/services/sessionAnalytics';
 
 export { Chart } from '$lib/shared/charts';
 
@@ -186,3 +187,59 @@ export const BASE_FONT = {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyChartOptions = any;
+
+// ---------------------------------------------------------------------------
+// Accessible text alternative (chart aria-label)
+// ---------------------------------------------------------------------------
+
+type FeedbackChartKind = 'bar' | 'line' | 'radar' | 'scatter' | 'histogram' | 'box';
+
+const CHART_TYPE_WORD: Record<FeedbackChartKind, string> = {
+	bar: 'Bar chart',
+	line: 'Line chart',
+	radar: 'Radar chart',
+	scatter: 'Scatter plot',
+	histogram: 'Histogram',
+	box: 'Box plot',
+};
+
+/** Round to at most 2 decimals, dropping any trailing zeros. */
+function formatScore(value: number): string {
+	return String(Math.round(value * 100) / 100);
+}
+
+/**
+ * Build a screen-reader text alternative summarizing the plotted data for a
+ * participant-facing feedback chart. Used as the canvas `aria-label` so the
+ * numeric meaning (not just the color channel) is exposed to assistive tech.
+ */
+export function buildChartLabel(
+	series: ChartSeriesContract | null | undefined,
+	chartType: FeedbackChartKind,
+	scoreName: string,
+	cohortMean: number | null | undefined,
+	cohortStdDev: number | null | undefined,
+	cohortValues: number[] | null | undefined,
+): string {
+	// Distribution charts summarize the cohort sample size rather than a score.
+	if (chartType === 'histogram' || chartType === 'box') {
+		const n = cohortValues?.length ?? series?.points.length ?? 0;
+		return `${CHART_TYPE_WORD[chartType]} of cohort distribution, ${n} values`;
+	}
+
+	const label = scoreName?.trim() ? scoreName : 'Value';
+	const parts: string[] = [`${CHART_TYPE_WORD[chartType]} of ${label}.`];
+
+	const primary = series?.points.find((p) => p.value != null);
+	if (primary?.value != null) {
+		parts.push(`Your score: ${formatScore(primary.value)}.`);
+	}
+	if (cohortMean != null) {
+		parts.push(`Cohort mean: ${formatScore(cohortMean)}.`);
+	}
+	if (cohortStdDev != null) {
+		parts.push(`Cohort SD: ${formatScore(cohortStdDev)}.`);
+	}
+
+	return parts.join(' ');
+}

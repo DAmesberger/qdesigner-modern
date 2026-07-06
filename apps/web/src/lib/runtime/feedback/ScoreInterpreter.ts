@@ -7,6 +7,7 @@
  */
 
 import { parseNumeric } from '$lib/shared/utils/statistics';
+import { interpolateVariables } from '$lib/services/variableInterpolation';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +24,16 @@ export interface ScoreInterpretationRange {
   description: string;
   /** CSS / Tailwind-compatible colour string for visual feedback */
   color: string;
+  /**
+   * Optional piped narrative shown when the score lands in this band
+   * (E-FEEDBACK-6). Distinct from the short `description`: it is interpolated
+   * through the unified `{{…}}` / `${…}` interpolation against the participant's
+   * live variables, so it can reference their own values — e.g.
+   * `Your score of {{score.anxiety.value}} is in the {{score.anxiety.band}} range`.
+   * References the E-FEEDBACK-1 `score.<scaleId>` fields (`value`, `tScore`,
+   * `percentile`, `z`, `stanine`, `band`) plus any question variable.
+   */
+  message?: string;
 }
 
 export interface ScoreInterpreterConfig {
@@ -220,4 +231,50 @@ export function createDefaultScoreConfig(
     scaleName,
     ranges,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Band-message interpolation (E-FEEDBACK-6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build an interpolation scope that also exposes one level of dotted member
+ * access for object-valued variables. This lets a band message pipe
+ * `{{score.anxiety.value}}` / `{{score.anxiety.band}}` against the
+ * E-FEEDBACK-1 `score.<scaleId>` objects, which live in the variable map as a
+ * single key (`score.anxiety`) whose value is `{ value, tScore, percentile,
+ * band, … }`. Simple flat variables pass through unchanged.
+ */
+export function buildBandMessageScope(
+  variables: Record<string, unknown>
+): Record<string, unknown> {
+  const scope: Record<string, unknown> = { ...variables };
+  for (const [key, value] of Object.entries(variables)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      for (const [field, fieldValue] of Object.entries(value as Record<string, unknown>)) {
+        // Do not clobber an explicit flat key of the same dotted name.
+        const dotted = `${key}.${field}`;
+        if (!Object.hasOwn(scope, dotted)) {
+          scope[dotted] = fieldValue;
+        }
+      }
+    }
+  }
+  return scope;
+}
+
+/**
+ * Interpolate a matched range's piped narrative against the participant's live
+ * variables. Returns the empty string when the range is null or carries no
+ * (non-whitespace) message, so callers can guard rendering on a truthy result.
+ */
+export function interpretBandMessage(
+  range: ScoreInterpretationRange | null | undefined,
+  variables: Record<string, unknown>
+): string {
+  const template = range?.message;
+  if (!template || !template.trim()) {
+    return '';
+  }
+  return interpolateVariables(template, buildBandMessageScope(variables)).trim();
 }

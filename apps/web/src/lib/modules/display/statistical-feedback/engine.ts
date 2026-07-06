@@ -8,13 +8,31 @@ import type {
   ScoreInterpreterConfig,
   ScoreInterpretationRange,
 } from '$lib/runtime/feedback/ScoreInterpreter';
+import {
+  getNormTable,
+  reliableChangeIndex,
+  CUSTOM_NORM_TABLE_ID,
+  type NormTable,
+} from '$lib/runtime/feedback/normTables';
+import { NormativeScoreInterpreter } from '$lib/analytics/NormativeScoreInterpreter';
 import { parseNumeric } from '$lib/shared/utils/statistics';
 
 export type StatisticalSourceMode =
   | 'current-session'
   | 'cohort'
   | 'participant-vs-cohort'
-  | 'participant-vs-participant';
+  | 'participant-vs-participant'
+  | 'norm-table'
+  | 'self-baseline';
+
+/** Researcher-supplied inline norm used when `normTableId === CUSTOM_NORM_TABLE_ID`. */
+export interface CustomNormConfig {
+  label: string;
+  mean: number;
+  sd: number;
+  /** Optional test-retest reliability, enabling the reliable-change index. */
+  reliability?: number;
+}
 
 export interface StatisticalFeedbackDataSourceConfig {
   questionnaireId: string;
@@ -23,6 +41,20 @@ export interface StatisticalFeedbackDataSourceConfig {
   currentVariable: string;
   participantId: string;
   comparisonParticipantId: string;
+  /**
+   * Bundled norm id (E-FEEDBACK-2) used by `norm-table` mode — and optionally by
+   * `self-baseline` mode to derive the reliable-change index. `CUSTOM_NORM_TABLE_ID`
+   * selects the inline {@link CustomNormConfig}.
+   */
+  normTableId?: string;
+  /** Inline norm used when `normTableId === CUSTOM_NORM_TABLE_ID`. */
+  customNorm?: CustomNormConfig;
+  /**
+   * Variable holding the earlier-administration (baseline / pre-test) value for
+   * `self-baseline` mode. Typically piped in via urlParams or a prior session
+   * variable.
+   */
+  baselineVariable?: string;
 }
 
 export interface StatisticalFeedbackConfig {
@@ -59,6 +91,8 @@ export const defaultStatisticalFeedbackConfig: StatisticalFeedbackConfig = {
     currentVariable: '',
     participantId: '',
     comparisonParticipantId: '',
+    normTableId: '',
+    baselineVariable: '',
   },
   scoreInterpretation: [],
   enableReportDownload: false,
@@ -188,6 +222,51 @@ function resolveParticipantId(raw: string, variables: Record<string, unknown>): 
   return trimmed;
 }
 
+/** Coerce a resolved variable value (scalar or metric-bearing object) to a number. */
+function resolveNumericValue(
+  variableName: string,
+  variables: Record<string, unknown>,
+  metric: AnalyticsMetric
+): number | null {
+  const rawValue = resolveVariableValue(variableName, variables);
+  if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+    return metricValueFromObject(metric, rawValue as Record<string, unknown>);
+  }
+  return parseNumeric(rawValue);
+}
+
+/**
+ * The effective norm (bundled or inline custom) for norm/baseline modes.
+ * Returns `{ mean, sd, reliability?, label }` or null when unresolvable.
+ */
+function resolveEffectiveNorm(
+  dataSource: StatisticalFeedbackDataSourceConfig
+): { mean: number; sd: number; reliability?: number; label: string } | null {
+  if (dataSource.normTableId === CUSTOM_NORM_TABLE_ID) {
+    const custom = dataSource.customNorm;
+    if (!custom || !Number.isFinite(custom.mean) || !Number.isFinite(custom.sd)) {
+      return null;
+    }
+    return {
+      mean: custom.mean,
+      sd: custom.sd,
+      reliability: custom.reliability,
+      label: custom.label?.trim() || 'Custom norm',
+    };
+  }
+
+  const bundled: NormTable | undefined = getNormTable(dataSource.normTableId);
+  if (!bundled) return null;
+  return {
+    mean: bundled.mean,
+    sd: bundled.sd,
+    reliability: bundled.reliability,
+    label: bundled.label,
+  };
+}
+
+const normInterpreter = new NormativeScoreInterpreter();
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- normalizes unknown config shapes
 export function normalizeStatisticalFeedbackConfig(candidate: any): StatisticalFeedbackConfig {
   const config = candidate?.config || candidate || {};
@@ -215,12 +294,44 @@ export function normalizeStatisticalFeedbackConfig(candidate: any): StatisticalF
 export function validateStatisticalFeedbackConfig(config: StatisticalFeedbackConfig): string[] {
   const errors: string[] = [];
 
-  if (config.sourceMode !== 'current-session' && !config.dataSource.questionnaireId) {
+  // Cohort/comparison modes hit the analytics API and need a questionnaire + key.
+  // Norm-table and self-baseline are fully local and don't.
+  const needsQuestionnaire =
+    config.sourceMode === 'cohort' ||
+    config.sourceMode === 'participant-vs-cohort' ||
+    config.sourceMode === 'participant-vs-participant';
+
+  if (needsQuestionnaire && !config.dataSource.questionnaireId) {
     errors.push('Questionnaire ID is required for cohort/comparison modes.');
   }
 
-  if (config.sourceMode !== 'current-session' && !config.dataSource.key) {
+  if (needsQuestionnaire && !config.dataSource.key) {
     errors.push('Variable/question key is required for cohort/comparison modes.');
+  }
+
+  if (config.sourceMode === 'norm-table') {
+    if (!config.dataSource.currentVariable && !config.dataSource.key) {
+      errors.push('A current variable is required for norm-table mode.');
+    }
+    if (!config.dataSource.normTableId) {
+      errors.push('Select a norm table (or a custom norm) for norm-table mode.');
+    } else if (config.dataSource.normTableId === CUSTOM_NORM_TABLE_ID) {
+      const custom = config.dataSource.customNorm;
+      if (!custom || !Number.isFinite(custom.mean) || !Number.isFinite(custom.sd)) {
+        errors.push('Custom norm requires a numeric mean and SD.');
+      } else if (custom.sd <= 0) {
+        errors.push('Custom norm SD must be greater than 0.');
+      }
+    }
+  }
+
+  if (config.sourceMode === 'self-baseline') {
+    if (!config.dataSource.currentVariable && !config.dataSource.key) {
+      errors.push('A current variable is required for self-baseline mode.');
+    }
+    if (!config.dataSource.baselineVariable) {
+      errors.push('A baseline (pre-test) variable is required for self-baseline mode.');
+    }
   }
 
   if (config.sourceMode === 'participant-vs-participant') {
@@ -264,6 +375,99 @@ export async function resolveStatisticalFeedbackSeries(
       summary: {
         currentValue,
         pointCount: points.length,
+      },
+    };
+  }
+
+  // Norm-table mode (E-FEEDBACK-2): compare the participant's OWN local value
+  // against a shipped population norm. Fully offline — no network call.
+  if (config.sourceMode === 'norm-table') {
+    const variableName = config.dataSource.currentVariable || config.dataSource.key;
+    const participantValue = resolveNumericValue(variableName, variables, config.metric);
+    const norm = resolveEffectiveNorm(config.dataSource);
+
+    if (!norm) {
+      throw new Error(
+        'No norm selected. Pick a bundled norm table or supply a custom mean/SD.'
+      );
+    }
+
+    if (participantValue === null) {
+      return {
+        mode: 'norm-table',
+        metric: config.metric,
+        points: [
+          { label: 'You', value: null },
+          { label: norm.label, value: norm.mean },
+        ],
+        normSource: norm.label,
+        summary: { tScore: null, percentile: null, zScore: null },
+      };
+    }
+
+    const comparison = normInterpreter.generateNormativeComparison(participantValue, {
+      mean: norm.mean,
+      sd: norm.sd,
+      n: 0,
+    });
+
+    return {
+      mode: 'norm-table',
+      metric: config.metric,
+      points: [
+        { label: 'You', value: participantValue },
+        { label: norm.label, value: norm.mean },
+      ],
+      normSource: norm.label,
+      distribution: { mean: norm.mean, stdDev: norm.sd, n: 0 },
+      summary: {
+        tScore: Number.isFinite(comparison.tScore) ? comparison.tScore : null,
+        percentile: Number.isFinite(comparison.percentileRank)
+          ? comparison.percentileRank
+          : null,
+        zScore: Number.isFinite(comparison.zScore) ? comparison.zScore : null,
+      },
+    };
+  }
+
+  // Self-baseline mode (E-FEEDBACK-2): compare the current value against an
+  // earlier-administration (pre-test) value piped in as a variable. Emits a
+  // two-point [Baseline, Current] series with a delta and, when a norm with a
+  // reliability is referenced, a reliable-change index. Fully offline.
+  if (config.sourceMode === 'self-baseline') {
+    const currentName = config.dataSource.currentVariable || config.dataSource.key;
+    const baselineName = config.dataSource.baselineVariable || '';
+
+    if (!baselineName) {
+      throw new Error('A baseline variable is required for self-baseline mode.');
+    }
+
+    const currentValue = resolveNumericValue(currentName, variables, config.metric);
+    const baselineValue = resolveNumericValue(baselineName, variables, config.metric);
+
+    const delta =
+      currentValue !== null && baselineValue !== null ? currentValue - baselineValue : null;
+
+    let rci: number | null = null;
+    const norm = resolveEffectiveNorm(config.dataSource);
+    if (norm && baselineValue !== null && currentValue !== null) {
+      rci = reliableChangeIndex(baselineValue, currentValue, {
+        sd: norm.sd,
+        reliability: norm.reliability,
+      });
+    }
+
+    return {
+      mode: 'self-baseline',
+      metric: config.metric,
+      points: [
+        { label: 'Baseline', value: baselineValue },
+        { label: 'Current', value: currentValue },
+      ],
+      normSource: norm?.label,
+      summary: {
+        deltaFromBaseline: delta,
+        rci,
       },
     };
   }

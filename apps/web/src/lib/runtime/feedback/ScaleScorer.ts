@@ -19,6 +19,7 @@ import {
   NormativeScoreInterpreter,
   type NormData,
 } from '$lib/analytics/NormativeScoreInterpreter';
+import { getNormTable } from './normTables';
 
 export interface ScaleScoreResult {
   scaleId: string;
@@ -121,9 +122,13 @@ function scoreScale(
   };
 
   if (scale.norm && value !== null && Number.isFinite(value)) {
-    // `n` is unused by the z/T/stanine/percentile math (see NormativeScoreInterpreter);
-    // the ScaleNormData model carries only mean/sd/source, so pass n: 0.
-    const normData: NormData = { mean: scale.norm.mean, sd: scale.norm.sd, n: 0 };
+    // Prefer a bundled norm (E-FEEDBACK-2) when `normTableId` references one; fall
+    // back to the inline mean/sd otherwise. `n` is unused by the z/T/stanine/percentile
+    // math (see NormativeScoreInterpreter), so pass n: 0.
+    const bundled = getNormTable(scale.norm.normTableId);
+    const normData: NormData = bundled
+      ? { mean: bundled.mean, sd: bundled.sd, n: 0 }
+      : { mean: scale.norm.mean, sd: scale.norm.sd, n: 0 };
     const comparison = interpreter.generateNormativeComparison(value, normData);
     result.z = comparison.zScore;
     result.tScore = comparison.tScore;

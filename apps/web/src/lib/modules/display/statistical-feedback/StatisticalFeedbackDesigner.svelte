@@ -14,6 +14,8 @@
     DEFAULT_RANGE_COLORS,
     validateScoreInterpreterConfig,
   } from '$lib/runtime/feedback/ScoreInterpreter';
+  import { NORM_TABLES, CUSTOM_NORM_TABLE_ID } from '$lib/runtime/feedback/normTables';
+  import type { CustomNormConfig } from './engine';
   import HelpTip from '$lib/help/components/HelpTip.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
@@ -29,10 +31,32 @@
 
   const sourceModes: Array<{ value: StatisticalSourceMode; label: string }> = [
     { value: 'current-session', label: 'Current Session' },
+    { value: 'norm-table', label: 'Norm Table (bundled / offline)' },
+    { value: 'self-baseline', label: 'Self-Baseline (pre / post)' },
     { value: 'cohort', label: 'Cohort Aggregate' },
     { value: 'participant-vs-cohort', label: 'Participant vs Cohort' },
     { value: 'participant-vs-participant', label: 'Participant vs Participant' },
   ];
+
+  // Modes that resolve entirely from local variables (no analytics API call);
+  // they surface a "current variable" picker instead of a questionnaire/key pair.
+  const localModes: StatisticalSourceMode[] = [
+    'current-session',
+    'norm-table',
+    'self-baseline',
+  ];
+  const isLocalMode = $derived(localModes.includes(config.sourceMode));
+
+  const normTableOptions = NORM_TABLES.map((n) => ({ value: n.id, label: n.label }));
+
+  function updateCustomNorm(patch: Partial<CustomNormConfig>): void {
+    const existing: CustomNormConfig = config.dataSource.customNorm ?? {
+      label: 'Custom norm',
+      mean: 0,
+      sd: 1,
+    };
+    updateConfig({ dataSource: { customNorm: { ...existing, ...patch } } });
+  }
 
   const metricOptions = [
     { value: 'count', label: 'Count' },
@@ -83,6 +107,26 @@
       }))
     );
   });
+
+  // Tokens a band message can pipe (E-FEEDBACK-6): the E-FEEDBACK-1 scale-score
+  // fields (score.<id>.<field>) plus every declared question variable. Used by
+  // the per-band "Insert variable" helper.
+  const messageVariableOptions = $derived.by(() => {
+    const questionVars = (designerStore.questionnaire.variables || []).map((variable) => ({
+      value: variable.name,
+      label: variable.name,
+    }));
+    return [...scaleScoreOptions, ...questionVars];
+  });
+
+  function insertBandVariable(scaleIdx: number, rangeIdx: number, token: string): void {
+    if (!token) return;
+    const scale = (config.scoreInterpretation || [])[scaleIdx];
+    const existing = scale?.ranges[rangeIdx]?.message ?? '';
+    const needsSpace = existing.length > 0 && !/\s$/.test(existing);
+    const next = `${existing}${needsSpace ? ' ' : ''}{{${token}}}`;
+    updateRangeInScale(scaleIdx, rangeIdx, { message: next });
+  }
 
   const validationErrors = $derived(validateStatisticalFeedbackConfig(config));
 
@@ -366,7 +410,7 @@
       </div>
     </div>
 
-    {#if config.sourceMode === 'current-session'}
+    {#if isLocalMode}
       <div class="row">
         <label for="stats-current-variable">Current Variable</label>
         <Select
@@ -390,6 +434,125 @@
           {/if}
         </Select>
       </div>
+
+      {#if config.sourceMode === 'self-baseline'}
+        <div class="row">
+          <label for="stats-baseline-variable">Baseline (pre-test) Variable</label>
+          <Select
+            id="stats-baseline-variable"
+            value={config.dataSource.baselineVariable ?? ''}
+            onchange={(event) =>
+              updateConfig({
+                dataSource: {
+                  baselineVariable: (event.currentTarget as HTMLSelectElement).value,
+                },
+              })}
+          >
+            <option value="">Select baseline variable...</option>
+            {#each designerStore.questionnaire.variables as variable}
+              <option value={variable.name}>{variable.name}</option>
+            {/each}
+            {#if scaleScoreOptions.length > 0}
+              <optgroup label="Scale scores">
+                {#each scaleScoreOptions as option}
+                  <option value={option.value}>{option.label}</option>
+                {/each}
+              </optgroup>
+            {/if}
+          </Select>
+          <p class="hint">
+            The earlier administration's value, typically piped in via urlParams or a
+            prior session variable.
+          </p>
+        </div>
+      {/if}
+
+      {#if config.sourceMode === 'norm-table' || config.sourceMode === 'self-baseline'}
+        <div class="row" data-testid="stats-norm-table-row">
+          <label for="stats-norm-table" class="flex items-center gap-1">
+            {config.sourceMode === 'norm-table' ? 'Norm Table' : 'Norm Table (for reliable-change index)'}
+          </label>
+          <Select
+            id="stats-norm-table"
+            value={config.dataSource.normTableId ?? ''}
+            onchange={(event) =>
+              updateConfig({
+                dataSource: { normTableId: (event.currentTarget as HTMLSelectElement).value },
+              })}
+          >
+            <option value="">
+              {config.sourceMode === 'self-baseline' ? 'None (delta only)' : 'Select norm...'}
+            </option>
+            {#each normTableOptions as option}
+              <option value={option.value}>{option.label}</option>
+            {/each}
+            <option value={CUSTOM_NORM_TABLE_ID}>Custom norm (enter mean / SD)…</option>
+          </Select>
+        </div>
+
+        {#if config.dataSource.normTableId === CUSTOM_NORM_TABLE_ID}
+          <div class="custom-norm-card" data-testid="stats-custom-norm">
+            <div class="row">
+              <label for="custom-norm-label">Custom norm label</label>
+              <input
+                id="custom-norm-label"
+                class="input"
+                type="text"
+                value={config.dataSource.customNorm?.label ?? ''}
+                placeholder="e.g. Adult community sample"
+                oninput={(event) =>
+                  updateCustomNorm({ label: (event.currentTarget as HTMLInputElement).value })}
+              />
+            </div>
+            <div class="grid-two">
+              <div class="row">
+                <label for="custom-norm-mean">Mean</label>
+                <input
+                  id="custom-norm-mean"
+                  class="input"
+                  type="number"
+                  step="any"
+                  value={config.dataSource.customNorm?.mean ?? 0}
+                  oninput={(event) =>
+                    updateCustomNorm({ mean: Number((event.currentTarget as HTMLInputElement).value) })}
+                />
+              </div>
+              <div class="row">
+                <label for="custom-norm-sd">SD</label>
+                <input
+                  id="custom-norm-sd"
+                  class="input"
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={config.dataSource.customNorm?.sd ?? 1}
+                  oninput={(event) =>
+                    updateCustomNorm({ sd: Number((event.currentTarget as HTMLInputElement).value) })}
+                />
+              </div>
+            </div>
+            {#if config.sourceMode === 'self-baseline'}
+              <div class="row">
+                <label for="custom-norm-reliability">Test-retest reliability (optional, for RCI)</label>
+                <input
+                  id="custom-norm-reliability"
+                  class="input"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="1"
+                  value={config.dataSource.customNorm?.reliability ?? ''}
+                  placeholder="e.g. 0.84"
+                  oninput={(event) => {
+                    const raw = (event.currentTarget as HTMLInputElement).value;
+                    updateCustomNorm({ reliability: raw === '' ? undefined : Number(raw) });
+                  }}
+                />
+              </div>
+            {/if}
+          </div>
+        {/if}
+      {/if}
     {:else}
       <div class="grid-two">
         <div class="row">
@@ -593,8 +756,54 @@
               oninput={(event) =>
                 updateRangeInScale(scaleIdx, rangeIdx, { description: (event.currentTarget as HTMLInputElement).value })}
             />
+            <div class="band-message-field">
+              <textarea
+                class="input band-message-input"
+                rows="2"
+                data-testid={`band-message-${scaleIdx}-${rangeIdx}`}
+                value={range.message ?? ''}
+                placeholder={'Personalized message (optional). Pipe values with {{score.anxiety.value}}, {{score.anxiety.band}}…'}
+                title="Piped narrative shown when the score lands in this band"
+                oninput={(event) =>
+                  updateRangeInScale(scaleIdx, rangeIdx, { message: (event.currentTarget as HTMLTextAreaElement).value })}
+              ></textarea>
+              {#if messageVariableOptions.length > 0}
+                <Select
+                  value=""
+                  placeholder=""
+                  onchange={(event) => {
+                    const select = event.currentTarget as HTMLSelectElement;
+                    insertBandVariable(scaleIdx, rangeIdx, select.value);
+                    select.value = '';
+                  }}
+                >
+                  <option value="">Insert variable…</option>
+                  {#each messageVariableOptions as option}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </Select>
+              {/if}
+            </div>
           </div>
         {/each}
+
+        <!-- Rule summary (E-FEEDBACK-6): per-band read-out of the message that
+             will fire, so the researcher can self-verify coverage. -->
+        <div class="rule-summary" data-testid={`rule-summary-${scaleIdx}`}>
+          <span class="rule-summary-title">Band messages</span>
+          {#each scale.ranges as range}
+            <div class="rule-summary-row">
+              <span class="rule-band" style={`background-color: ${range.color};`}>
+                {range.label || 'Unnamed'} ({range.min}–{range.max})
+              </span>
+              {#if range.message && range.message.trim()}
+                <span class="rule-message">{range.message}</span>
+              {:else}
+                <span class="rule-message muted">No personalized message</span>
+              {/if}
+            </div>
+          {/each}
+        </div>
 
         {#if scaleValidationErrors[scaleIdx]?.length}
           <div class="validation scale-validation">
@@ -843,6 +1052,62 @@
     font-size: 0.78rem;
   }
 
+  .band-message-field {
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .band-message-input {
+    font-size: 0.78rem;
+    resize: vertical;
+    min-height: 2.4rem;
+    font-family: inherit;
+  }
+
+  .rule-summary {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px dashed hsl(var(--border));
+    border-radius: 0.5rem;
+    background: hsl(var(--background));
+  }
+
+  .rule-summary-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: hsl(var(--muted-foreground));
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .rule-summary-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .rule-band {
+    flex-shrink: 0;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.7rem;
+  }
+
+  .rule-message {
+    color: hsl(var(--foreground));
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .rule-message.muted {
+    color: hsl(var(--muted-foreground));
+    font-style: italic;
+  }
+
   .behavior {
     display: grid;
     gap: 0.5rem;
@@ -890,5 +1155,20 @@
 
   .scale-validation {
     font-size: 0.72rem;
+  }
+
+  .hint {
+    font-size: 0.72rem;
+    color: hsl(var(--muted-foreground));
+    margin: 0;
+  }
+
+  .custom-norm-card {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.6rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    background: hsl(var(--muted));
   }
 </style>

@@ -11,8 +11,10 @@ import {
 	paletteColorAlpha,
 	resolveColor,
 	hexToRgba,
+	buildChartLabel,
 	type ColorRule,
 } from './chart-utils';
+import type { ChartSeriesContract } from '$lib/services/sessionAnalytics';
 
 describe('normalPDF', () => {
 	it('peaks at the mean', () => {
@@ -213,5 +215,43 @@ describe('hexToRgba', () => {
 
 	it('handles white', () => {
 		expect(hexToRgba('#FFFFFF', 0.3)).toBe('rgba(255, 255, 255, 0.3)');
+	});
+});
+
+describe('buildChartLabel', () => {
+	const barSeries: ChartSeriesContract = {
+		mode: 'participant-vs-cohort',
+		metric: 'mean',
+		points: [
+			{ label: 'You', value: 42 },
+			{ label: 'Cohort', value: 38 },
+		],
+	};
+
+	it('summarizes a bar chart with participant score and cohort mean', () => {
+		const label = buildChartLabel(barSeries, 'bar', 'Anxiety score', 38, null, undefined);
+		expect(label).toBe('Bar chart of Anxiety score. Your score: 42. Cohort mean: 38.');
+	});
+
+	it('includes cohort SD when provided', () => {
+		const label = buildChartLabel(barSeries, 'line', 'Anxiety score', 38, 5, undefined);
+		expect(label).toBe(
+			'Line chart of Anxiety score. Your score: 42. Cohort mean: 38. Cohort SD: 5.',
+		);
+	});
+
+	it('summarizes a histogram by cohort sample size', () => {
+		const values = Array.from({ length: 100 }, (_, i) => i);
+		const label = buildChartLabel(barSeries, 'histogram', 'Anxiety score', null, null, values);
+		expect(label).toBe('Histogram of cohort distribution, 100 values');
+	});
+
+	it('summarizes a box plot by cohort sample size', () => {
+		const label = buildChartLabel(barSeries, 'box', 'Anxiety score', null, null, [1, 2, 3]);
+		expect(label).toBe('Box plot of cohort distribution, 3 values');
+	});
+
+	it('guards missing series and cohort stats', () => {
+		expect(buildChartLabel(null, 'bar', '', null, null, null)).toBe('Bar chart of Value.');
 	});
 });

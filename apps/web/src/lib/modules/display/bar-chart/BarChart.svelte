@@ -477,6 +477,38 @@
       },
     } as any);
   }
+  // Reduce the raw snippet data into readable {label, value} pairs for the
+  // canvas text alternative (F096). Values may be numbers, arrays, or objects.
+  function summarizePoints(data: any[]): { label: string; value: string }[] {
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter((d) => d && typeof d === 'object')
+      .map((d, i) => {
+        const label = d.id ?? d.label ?? `Item ${i + 1}`;
+        let value: string;
+        if (typeof d.value === 'number') {
+          value = String(d.value);
+        } else if (Array.isArray(d.value)) {
+          value = d.value.join(', ');
+        } else if (d.value != null && typeof d.value === 'object') {
+          value = Object.entries(d.value)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(', ');
+        } else {
+          value = String(d.value ?? 0);
+        }
+        return { label: String(label), value };
+      });
+  }
+
+  // Build the canvas aria-label from up to ~10 data points.
+  function barChartLabel(points: { label: string; value: string }[]): string {
+    if (points.length === 0) return 'Bar chart';
+    const shown = points.slice(0, 10).map((p) => `${p.label}: ${p.value}`);
+    const suffix = points.length > 10 ? `, and ${points.length - 10} more` : '';
+    return `Bar chart. ${shown.join(', ')}${suffix}`;
+  }
+
   // Action to handle chart data updates from snippet
   function chartDataAction(node: HTMLElement, data: any[]) {
     $effect(() => {
@@ -493,6 +525,7 @@
 
 <BaseAnalytics {analytics} {mode} {variables} {onInteraction}>
   {#snippet children(slotProps: { data: any[] })}
+    {@const points = summarizePoints(slotProps.data)}
     <div
       class="bar-chart"
       data-has-data={slotProps.data && slotProps.data.length > 0}
@@ -501,7 +534,14 @@
       {#if mode === 'edit'}
         <!-- In edit mode, show a preview chart if we have variables selected -->
         {#if (analytics.dataSource?.variables?.length ?? 0) > 0 || config.value}
-          <canvas bind:this={chartCanvas} class="chart-canvas"></canvas>
+          <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
+          <!-- role="img" + aria-label is the WAI-ARIA technique for an accessible canvas -->
+          <canvas
+            bind:this={chartCanvas}
+            class="chart-canvas"
+            role="img"
+            aria-label="Bar chart preview"
+          ></canvas>
           {#if chartCanvas}
             <!-- Chart updates are handled via $effect -->
           {/if}
@@ -513,7 +553,23 @@
           </div>
         {/if}
       {:else if mode === 'runtime' || mode === 'preview'}
-        <canvas bind:this={chartCanvas} class="chart-canvas"></canvas>
+        <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
+        <!-- role="img" + aria-label is the WAI-ARIA technique for an accessible canvas -->
+        <canvas
+          bind:this={chartCanvas}
+          class="chart-canvas"
+          role="img"
+          aria-label={barChartLabel(points)}
+        ></canvas>
+        {#if points.length > 0}
+          <!-- Full data enumeration for screen readers (F096): the canvas is
+               opaque to assistive tech, so mirror every data point in text. -->
+          <ul class="sr-only">
+            {#each points as p}
+              <li>{p.label}: {p.value}</li>
+            {/each}
+          </ul>
+        {/if}
         {#if chartCanvas}
           <!-- Chart updates are handled via $effect -->
         {/if}

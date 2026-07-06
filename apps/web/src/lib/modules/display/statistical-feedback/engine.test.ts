@@ -165,6 +165,180 @@ describe('statistical feedback engine', () => {
     expect(series.points[0]).toEqual({ label: 'Cohort', value: 75 });
   });
 
+  describe('norm-table mode (E-FEEDBACK-2, offline)', () => {
+    it('a participant value AT the norm mean yields 50th percentile / T=50', async () => {
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'norm-table',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            currentVariable: 'anxiety',
+            key: 'anxiety',
+            // GAD-7 general population: mean 2.95.
+            normTableId: 'gad7-general-population',
+          },
+        },
+        { anxiety: 2.95 },
+        'runtime'
+      );
+
+      expect(series.mode).toBe('norm-table');
+      expect(series.summary?.percentile).toBeCloseTo(50, 4);
+      expect(series.summary?.tScore).toBeCloseTo(50, 4);
+      expect(series.summary?.zScore).toBeCloseTo(0, 6);
+      expect(series.normSource).toContain('GAD-7');
+      // Two points: the participant and the norm mean.
+      expect(series.points[0]).toEqual({ label: 'You', value: 2.95 });
+      expect(series.points[1]?.value).toBeCloseTo(2.95, 6);
+    });
+
+    it('a value +1 SD above the mean yields ~84th percentile / T=60', async () => {
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'norm-table',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            currentVariable: 'anxiety',
+            key: 'anxiety',
+            // Custom norm: mean 10, sd 3 -> value 13 is +1 SD.
+            normTableId: '__custom__',
+            customNorm: { label: 'Adult community norm', mean: 10, sd: 3 },
+          },
+        },
+        { anxiety: 13 },
+        'runtime'
+      );
+
+      expect(series.summary?.zScore).toBeCloseTo(1, 6);
+      expect(series.summary?.tScore).toBeCloseTo(60, 6);
+      expect(series.summary?.percentile).toBeGreaterThan(83);
+      expect(series.summary?.percentile).toBeLessThan(85);
+      expect(series.normSource).toBe('Adult community norm');
+    });
+
+    it('throws when no norm is selected', async () => {
+      await expect(
+        resolveStatisticalFeedbackSeries(
+          {
+            ...defaultStatisticalFeedbackConfig,
+            sourceMode: 'norm-table',
+            metric: 'mean',
+            dataSource: {
+              ...defaultStatisticalFeedbackConfig.dataSource,
+              currentVariable: 'anxiety',
+              key: 'anxiety',
+              normTableId: '',
+            },
+          },
+          { anxiety: 5 },
+          'runtime'
+        )
+      ).rejects.toThrow(/norm/i);
+    });
+  });
+
+  describe('self-baseline mode (E-FEEDBACK-2, offline)', () => {
+    it('emits [Baseline, Current] with a positive delta and RCI when a norm is referenced', async () => {
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'self-baseline',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            currentVariable: 'post',
+            key: 'post',
+            baselineVariable: 'pre',
+            // Custom norm with reliability enables the RCI: SD 10, rel 0.84 -> SEM 4.
+            normTableId: '__custom__',
+            customNorm: { label: 'norm', mean: 20, sd: 10, reliability: 0.84 },
+          },
+        },
+        { pre: 20, post: 28 },
+        'runtime'
+      );
+
+      expect(series.mode).toBe('self-baseline');
+      expect(series.points).toEqual([
+        { label: 'Baseline', value: 20 },
+        { label: 'Current', value: 28 },
+      ]);
+      expect(series.summary?.deltaFromBaseline).toBe(8);
+      // RCI = (28 - 20) / (sqrt(2) * 4) ≈ 1.414, sign follows post - pre.
+      expect(series.summary?.rci).toBeGreaterThan(0);
+      expect(series.summary?.rci).toBeCloseTo(8 / (Math.SQRT2 * 4), 6);
+    });
+
+    it('a decline flips the delta and RCI sign', async () => {
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'self-baseline',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            currentVariable: 'post',
+            key: 'post',
+            baselineVariable: 'pre',
+            normTableId: '__custom__',
+            customNorm: { label: 'norm', mean: 20, sd: 10, reliability: 0.84 },
+          },
+        },
+        { pre: 28, post: 20 },
+        'runtime'
+      );
+
+      expect(series.summary?.deltaFromBaseline).toBe(-8);
+      expect(series.summary?.rci).toBeLessThan(0);
+    });
+
+    it('delta only (rci null) when no norm reliability is available', async () => {
+      const series = await resolveStatisticalFeedbackSeries(
+        {
+          ...defaultStatisticalFeedbackConfig,
+          sourceMode: 'self-baseline',
+          metric: 'mean',
+          dataSource: {
+            ...defaultStatisticalFeedbackConfig.dataSource,
+            currentVariable: 'post',
+            key: 'post',
+            baselineVariable: 'pre',
+            normTableId: '',
+          },
+        },
+        { pre: 10, post: 15 },
+        'runtime'
+      );
+
+      expect(series.summary?.deltaFromBaseline).toBe(5);
+      expect(series.summary?.rci).toBeNull();
+    });
+
+    it('throws when no baseline variable is configured', async () => {
+      await expect(
+        resolveStatisticalFeedbackSeries(
+          {
+            ...defaultStatisticalFeedbackConfig,
+            sourceMode: 'self-baseline',
+            metric: 'mean',
+            dataSource: {
+              ...defaultStatisticalFeedbackConfig.dataSource,
+              currentVariable: 'post',
+              key: 'post',
+              baselineVariable: '',
+            },
+          },
+          { post: 15 },
+          'runtime'
+        )
+      ).rejects.toThrow(/baseline/i);
+    });
+  });
+
   describe('F060 anonymous-safe cohort path (runtime)', () => {
     const cohortStatsPayload = {
       questionnaire_id: 'q1',

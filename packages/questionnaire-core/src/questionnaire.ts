@@ -235,6 +235,13 @@ export interface ScaleNormData {
   sd: number;
   /** Optional provenance label for the norm (e.g. "PHQ-9 general population, n=5000"). */
   source?: string;
+  /**
+   * When set, references a bundled norm from the shipped norm-table library
+   * (E-FEEDBACK-2, `apps/web/src/lib/runtime/feedback/normTables.ts`) instead of
+   * inline `mean`/`sd`. The runtime resolves the library entry and uses its
+   * mean/sd; `mean`/`sd` here then act as a fallback if the id is unknown.
+   */
+  normTableId?: string;
 }
 
 /**

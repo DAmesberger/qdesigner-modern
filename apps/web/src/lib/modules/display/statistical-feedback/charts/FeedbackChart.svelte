@@ -14,6 +14,7 @@
     generateCurvePoints,
     resolveColor,
     hexToRgba,
+    buildChartLabel,
     type ColorRule,
     type AnyChartOptions,
   } from './chart-utils';
@@ -48,6 +49,12 @@
   }: Props = $props();
 
   const hasColorRules = $derived(colorRules.length > 0);
+
+  // Screen-reader text alternative for the canvas (F096): exposes the plotted
+  // numeric meaning so the chart is not color-only for assistive tech.
+  const chartLabel = $derived.by(() =>
+    buildChartLabel(series, chartType, scoreName, cohortMean, cohortStdDev, cohortValues),
+  );
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
   let chartInstance: Chart | undefined;
@@ -640,5 +647,7 @@
 </script>
 
 <div style="height: {height}px;">
-  <canvas bind:this={canvasEl}></canvas>
+  <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role -->
+  <!-- role="img" + aria-label is the WAI-ARIA technique for an accessible canvas -->
+  <canvas bind:this={canvasEl} role="img" aria-label={chartLabel}></canvas>
 </div>
