@@ -20,6 +20,19 @@ export interface QuestionRuntimeContext {
   resourceManager: ResourceManager;
   responseCollector: ResponseCollector;
   abortSignal?: AbortSignal;
+  /**
+   * The active session id (E-REACT-6). Reaction runtimes fold it into the
+   * randomization seed root so within-block shuffles and the participant's
+   * counterbalance cell are deterministic per session and reproducible from the
+   * persisted seed + session id + cell.
+   */
+  sessionId?: string;
+  /**
+   * Monotonic participant counter (0-based) when the session carries one. Enables
+   * exactly-even systematic (round-robin / Latin-square) counterbalancing;
+   * absent, assignment falls back to a session-id hash.
+   */
+  participantNumber?: number;
 }
 
 export interface QuestionRuntimeResult {

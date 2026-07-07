@@ -16,7 +16,9 @@ const mockEngineState = {
   correctnessFor: (_call: number): boolean => true,
 };
 
-vi.mock('$lib/runtime/reaction', () => {
+vi.mock('$lib/runtime/reaction', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('$lib/runtime/reaction')>();
+
   class MockReactionEngine {
     constructor(_config: unknown) {}
     seedFromResourceManager(): void {}
@@ -61,7 +63,7 @@ vi.mock('$lib/runtime/reaction', () => {
     destroy(): void {}
   }
 
-  return { ReactionEngine: MockReactionEngine };
+  return { ...actual, ReactionEngine: MockReactionEngine };
 });
 
 import { ReactionTimeRuntime } from '../ReactionTimeRuntime';

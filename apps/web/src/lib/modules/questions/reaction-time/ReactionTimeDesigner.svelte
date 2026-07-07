@@ -4,6 +4,8 @@
   import MediaManagerModal from '$lib/components/designer/MediaManagerModal.svelte';
   import BlockEditor from '$lib/components/designer/reaction/BlockEditor.svelte';
   import TaskPresetFields from './designer/TaskPresetFields.svelte';
+  import StandardParadigmFields from './designer/StandardParadigmFields.svelte';
+  import CounterbalancingFields from './designer/CounterbalancingFields.svelte';
   import { mediaService } from '$lib/services/mediaService';
   import { createLegacyStarterPayload } from './model/starter-templates';
   import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
@@ -388,6 +390,15 @@
         <option value="flanker">Flanker (Eriksen)</option>
         <option value="iat">Implicit Association Test (IAT)</option>
         <option value="dot-probe">Dot-Probe</option>
+        <option value="go-nogo">Go / No-Go</option>
+        <option value="sart">SART</option>
+        <option value="simon">Simon</option>
+        <option value="posner">Posner Cueing</option>
+        <option value="visual-search">Visual Search</option>
+        <option value="sternberg">Sternberg Memory Search</option>
+        <option value="pvt">PVT (Psychomotor Vigilance)</option>
+        <option value="temporal-order">Temporal-Order Judgment</option>
+        <option value="rsvp">RSVP</option>
         <option value="custom">Custom Trial Plan</option>
       </Select>
       <Button variant="secondary" size="sm" class="mt-2" onclick={applyTaskStarter}>
@@ -396,6 +407,7 @@
     </div>
 
     <TaskPresetFields bind:question />
+    <StandardParadigmFields bind:question />
 
 
     {#if question.config.study}
@@ -407,6 +419,8 @@
         </p>
         <BlockEditor bind:blocks={question.config.study.blocks} />
       </div>
+
+      <CounterbalancingFields bind:schemes={question.config.study.counterbalance} />
     {/if}
   </div>
 
@@ -1034,6 +1048,24 @@
               7-block IAT ({question.config.task.iat.trialsPerBlock}/block)
             {:else if question.config.task.type === 'dot-probe'}
               {question.config.task.dotProbe.trialCount} dot-probe ({Math.round(question.config.task.dotProbe.congruentRatio * 100)}% congruent)
+            {:else if question.config.task.type === 'go-nogo'}
+              {question.config.task.goNoGo.trialCount} go/no-go ({Math.round(question.config.task.goNoGo.goRatio * 100)}% go)
+            {:else if question.config.task.type === 'sart'}
+              {question.config.task.sart.trialCount} SART (target {question.config.task.sart.targetDigit})
+            {:else if question.config.task.type === 'simon'}
+              {question.config.task.simon.trialCount} Simon ({Math.round(question.config.task.simon.congruentRatio * 100)}% congruent)
+            {:else if question.config.task.type === 'posner'}
+              {question.config.task.posner.trialCount} Posner ({Math.round(question.config.task.posner.validRatio * 100)}% valid)
+            {:else if question.config.task.type === 'visual-search'}
+              {question.config.task.visualSearch.trialCount} search (sizes {question.config.task.visualSearch.setSizes.join('/')})
+            {:else if question.config.task.type === 'sternberg'}
+              {question.config.task.sternberg.trialCount} Sternberg (sizes {question.config.task.sternberg.setSizes.join('/')})
+            {:else if question.config.task.type === 'pvt'}
+              {question.config.task.pvt.trialCount} PVT ({question.config.task.pvt.minIsiMs}–{question.config.task.pvt.maxIsiMs}ms ISI)
+            {:else if question.config.task.type === 'temporal-order'}
+              {question.config.task.temporalOrder.trialCount} TOJ ({question.config.task.temporalOrder.soaSetMs.length} SOAs)
+            {:else if question.config.task.type === 'rsvp'}
+              {question.config.task.rsvp.trialCount} RSVP ({question.config.task.rsvp.itemDurationMs}ms/item)
             {:else if question.config.task.type === 'custom'}
               {(question.config.study?.blocks || []).reduce(
                 (blockTotal, block) =>

@@ -3,7 +3,7 @@ import type {
   QuestionRuntimeContext,
   QuestionRuntimeResult,
 } from '$lib/runtime/core/question-runtime';
-import { ReactionEngine } from '$lib/runtime/reaction';
+import { ReactionEngine, assignCounterbalance } from '$lib/runtime/reaction';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import { mediaContentUrl } from '$lib/services/mediaService';
 import { compileReactionPlan } from './model/reaction-compiler';
@@ -89,6 +89,8 @@ interface TrialResponse {
   /** True when the trial was invalidated (e.g. stimulus render failed); not a genuine timeout. */
   invalid: boolean;
   invalidReason: string | null;
+  /** The participant's assigned counterbalance cell (E-REACT-6), or null when none. */
+  counterbalanceCell: string | null;
 }
 
 export class ReactionTimeRuntime implements IQuestionRuntime {
@@ -147,9 +149,26 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
     // from a cross-origin / expiring presigned URL (taints the texture and breaks
     // the offline cache key). Designer preview keeps the baked presigned URL.
     resolveConfigMediaToProxy(config);
+
+    // E-REACT-6: resolve the participant's counterbalance cell ONCE, so the same
+    // cell drives the compiled plan and is persisted for reproducibility + export.
+    const baseSeed =
+      context.questionnaire?.settings?.randomizationSeed ||
+      context.question?.id ||
+      'reaction-time';
+    const counterbalance = assignCounterbalance(config.counterbalance, {
+      seed: baseSeed,
+      sessionId: context.sessionId,
+      participantIndex: context.participantNumber,
+    });
+    const counterbalanceCell = counterbalance.cellKey || null;
+
     const trialPlan = compileReactionPlan(config, {
       questionnaire: context.questionnaire,
       question: context.question,
+      sessionId: context.sessionId,
+      participantIndex: context.participantNumber,
+      counterbalance,
     });
 
     const blockStimuli = trialPlan.map((planned) => planned.trial.stimulus).filter(Boolean);
@@ -167,7 +186,9 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       const groupResponses: TrialResponse[] = [];
       for (const planned of group) {
         trialNumber += 1;
-        groupResponses.push(await this.runPlannedTrial(engine, planned, trialNumber, context));
+        groupResponses.push(
+          await this.runPlannedTrial(engine, planned, trialNumber, context, counterbalanceCell)
+        );
       }
       return groupResponses;
     };
@@ -243,6 +264,10 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
         blockCount: new Set(allResponses.map((response) => response.blockId)).size,
         // E-REACT-4: practice passes taken per criterion-gated block.
         practiceAttempts,
+        // E-REACT-6: the participant's assigned counterbalance cell, persisted so
+        // the block/key/subset assignment is reproducible and exports as a column.
+        counterbalanceCell,
+        counterbalance: counterbalance.cell,
         // C-PROVENANCE: roll per-trial timing up so reaction-time responses persist a
         // non-empty timing_provenance (parity with reaction-experiment).
         timingProvenance: aggregateReactionProvenance(testResponses, averageRT),
@@ -260,7 +285,8 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
     engine: ReactionEngine,
     planned: PlannedReactionTrial,
     trialNumber: number,
-    context: QuestionRuntimeContext
+    context: QuestionRuntimeContext,
+    counterbalanceCell: string | null
   ): Promise<TrialResponse> {
     engine.clearScheduledPhases();
     const scheduledPhases = planned.metadata.scheduledPhases || [];
@@ -313,6 +339,7 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       },
       invalid: trialResult.invalid ?? false,
       invalidReason: trialResult.invalidReason ?? null,
+      counterbalanceCell,
     };
   }
 

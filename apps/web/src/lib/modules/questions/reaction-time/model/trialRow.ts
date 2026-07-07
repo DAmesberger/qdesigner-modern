@@ -82,6 +82,12 @@ export interface ReactionTrialRecord {
   /** True when the trial was invalidated (e.g. stimulus render failed). */
   invalid: boolean;
   invalidReason: string | null;
+  /**
+   * The participant's assigned counterbalance cell (E-REACT-6) as a compact key
+   * (e.g. `block-order=incompatible-first;key-mapping=reversed`), or null when the
+   * design declared no counterbalancing. Constant across a session's trials.
+   */
+  counterbalanceCell?: string | null;
 }
 
 /**
@@ -117,6 +123,8 @@ export interface ReactionTrialRow {
   sessionId: string;
   participantId: string | null;
   questionId: string;
+  /** The participant's counterbalance cell key (E-REACT-6), or null. */
+  counterbalanceCell: string | null;
   blockId: string;
   condition: string | null;
   trialNumber: number;
@@ -164,6 +172,7 @@ export const TRIAL_ROW_COLUMNS: ReadonlyArray<{ key: keyof ReactionTrialRow; hea
   { key: 'sessionId', header: 'session_id' },
   { key: 'participantId', header: 'participant_id' },
   { key: 'questionId', header: 'question_id' },
+  { key: 'counterbalanceCell', header: 'counterbalance_cell' },
   { key: 'blockId', header: 'block_id' },
   { key: 'condition', header: 'condition' },
   { key: 'trialNumber', header: 'trial_number' },
@@ -230,6 +239,7 @@ export function buildTrialRow(
     sessionId: context.sessionId,
     participantId: context.participantId ?? null,
     questionId: context.questionId,
+    counterbalanceCell: trial.counterbalanceCell ?? null,
     blockId: trial.blockId,
     condition: trial.condition ?? null,
     trialNumber: trial.trialNumber,

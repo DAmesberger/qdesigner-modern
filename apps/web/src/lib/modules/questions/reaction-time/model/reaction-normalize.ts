@@ -4,21 +4,30 @@ import type {
   ReactionStudyBlock,
   ReactionStudyTrialTemplate,
 } from './reaction-schema';
-import type { ScheduledPhase } from '$lib/runtime/reaction';
+import type { CounterbalanceScheme, ScheduledPhase } from '$lib/runtime/reaction';
 import type {
   DotProbeTaskConfig,
   DotProbeStimulusPair,
   FlankerTaskConfig,
+  GoNoGoTaskConfig,
   IATTaskConfig,
   NBackTaskConfig,
   NormalizedReactionConfig,
+  PosnerTaskConfig,
+  PvtTaskConfig,
   ReactionCustomTrial,
   ReactionLegacyQuestionConfig,
   ReactionResponseMode,
   ReactionStudyConfig,
   ReactionTargetRegion,
   ReactionTaskType,
+  RsvpTaskConfig,
+  SartTaskConfig,
+  SimonTaskConfig,
+  SternbergTaskConfig,
   StroopTaskConfig,
+  TemporalOrderTaskConfig,
+  VisualSearchTaskConfig,
 } from './reaction-schema';
 
 const DEFAULT_VALID_KEYS = ['f', 'j'];
@@ -52,6 +61,15 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
   const flanker: Partial<FlankerTaskConfig> = source.task?.flanker ?? {};
   const iat: Partial<IATTaskConfig> = source.task?.iat ?? {};
   const dotProbe: Partial<DotProbeTaskConfig> = source.task?.dotProbe ?? {};
+  const goNoGo: Partial<GoNoGoTaskConfig> = source.task?.goNoGo ?? {};
+  const sart: Partial<SartTaskConfig> = source.task?.sart ?? {};
+  const simon: Partial<SimonTaskConfig> = source.task?.simon ?? {};
+  const posner: Partial<PosnerTaskConfig> = source.task?.posner ?? {};
+  const visualSearch: Partial<VisualSearchTaskConfig> = source.task?.visualSearch ?? {};
+  const sternberg: Partial<SternbergTaskConfig> = source.task?.sternberg ?? {};
+  const pvt: Partial<PvtTaskConfig> = source.task?.pvt ?? {};
+  const temporalOrder: Partial<TemporalOrderTaskConfig> = source.task?.temporalOrder ?? {};
+  const rsvp: Partial<RsvpTaskConfig> = source.task?.rsvp ?? {};
 
   const dotProbePairs = Array.isArray(dotProbe.stimulusPairs)
     ? dotProbe.stimulusPairs
@@ -73,6 +91,12 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
 
   const stimulusType = normalizeStimulusType(source.stimulus?.type);
   const stimulusContent = ensureString(source.stimulus?.content) || (stimulusType === 'shape' ? 'circle' : '');
+
+  const counterbalance = normalizeCounterbalance(
+    source.counterbalance ??
+      root.counterbalance ??
+      toRecord(root.study)?.counterbalance
+  );
 
   return {
     schemaVersion: 1,
@@ -153,9 +177,130 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
         fixationMs: asInt(dotProbe.fixationMs, 500, 0, 10000),
         responseTimeoutMs: asInt(dotProbe.responseTimeoutMs, 2000, 100, 30000),
       },
+      goNoGo: {
+        trialCount: asInt(goNoGo.trialCount, 60, 1, 1000),
+        goRatio: asNumber(goNoGo.goRatio, 0.75, 0, 1),
+        goStimulus: ensureString(goNoGo.goStimulus) || 'GO',
+        noGoStimulus: ensureString(goNoGo.noGoStimulus) || 'STOP',
+        responseKey: ensureString(goNoGo.responseKey) || validKeys[0] || ' ',
+        stimulusDuration: asInt(goNoGo.stimulusDuration, 0, 0, 20000),
+        isi: asInt(goNoGo.isi, 500, 0, 20000),
+        fixationMs: asInt(goNoGo.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: asInt(goNoGo.responseTimeoutMs, 1000, 100, 20000),
+      },
+      sart: {
+        trialCount: asInt(sart.trialCount, 90, 1, 2000),
+        targetDigit: asInt(sart.targetDigit, 3, 0, 9),
+        digits: normalizeNumberArray(sart.digits, [1, 2, 3, 4, 5, 6, 7, 8, 9], 0, 9),
+        responseKey: ensureString(sart.responseKey) || validKeys[0] || ' ',
+        stimulusDuration: asInt(sart.stimulusDuration, 250, 0, 20000),
+        isi: asInt(sart.isi, 900, 0, 20000),
+        fixationMs: asInt(sart.fixationMs, 300, 0, 10000),
+        responseTimeoutMs: asInt(sart.responseTimeoutMs, 1150, 100, 20000),
+      },
+      simon: {
+        trialCount: asInt(simon.trialCount, 60, 1, 1000),
+        congruentRatio: asNumber(simon.congruentRatio, 0.5, 0, 1),
+        leftColor: ensureString(simon.leftColor) || 'blue',
+        rightColor: ensureString(simon.rightColor) || 'red',
+        leftKey: ensureString(simon.leftKey) || validKeys[0] || 'f',
+        rightKey: ensureString(simon.rightKey) || validKeys[1] || 'j',
+        stimulusDuration: asInt(simon.stimulusDuration, 0, 0, 20000),
+        isi: asInt(simon.isi, 500, 0, 20000),
+        fixationMs: asInt(simon.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: asInt(simon.responseTimeoutMs, 1500, 100, 20000),
+      },
+      posner: {
+        trialCount: asInt(posner.trialCount, 60, 1, 1000),
+        validRatio: asNumber(posner.validRatio, 0.8, 0, 1),
+        cueDurationMs: asInt(posner.cueDurationMs, 100, 0, 5000),
+        soaMs: asInt(posner.soaMs, 200, 0, 5000),
+        leftKey: ensureString(posner.leftKey) || validKeys[0] || 'f',
+        rightKey: ensureString(posner.rightKey) || validKeys[1] || 'j',
+        isi: asInt(posner.isi, 500, 0, 20000),
+        fixationMs: asInt(posner.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: asInt(posner.responseTimeoutMs, 1500, 100, 20000),
+      },
+      visualSearch: {
+        trialCount: asInt(visualSearch.trialCount, 60, 1, 1000),
+        setSizes: normalizeNumberArray(visualSearch.setSizes, [4, 8, 16], 1, 64),
+        targetPresentRatio: asNumber(visualSearch.targetPresentRatio, 0.5, 0, 1),
+        featureSearch: Boolean(visualSearch.featureSearch),
+        targetChar: ensureString(visualSearch.targetChar) || 'T',
+        distractorChars: normalizeStringArray(visualSearch.distractorChars, ['L', 'F', 'E']),
+        presentKey: ensureString(visualSearch.presentKey) || validKeys[1] || 'j',
+        absentKey: ensureString(visualSearch.absentKey) || validKeys[0] || 'f',
+        stimulusDuration: asInt(visualSearch.stimulusDuration, 0, 0, 20000),
+        isi: asInt(visualSearch.isi, 500, 0, 20000),
+        fixationMs: asInt(visualSearch.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: asInt(visualSearch.responseTimeoutMs, 3000, 100, 30000),
+      },
+      sternberg: {
+        trialCount: asInt(sternberg.trialCount, 60, 1, 1000),
+        setSizes: normalizeNumberArray(sternberg.setSizes, [2, 4, 6], 1, 12),
+        targetPresentRatio: asNumber(sternberg.targetPresentRatio, 0.5, 0, 1),
+        memoryItems: normalizeStringArray(sternberg.memoryItems, [
+          'B',
+          'C',
+          'D',
+          'F',
+          'G',
+          'H',
+          'J',
+          'K',
+          'L',
+          'M',
+          'N',
+          'P',
+        ]),
+        presentKey: ensureString(sternberg.presentKey) || validKeys[1] || 'j',
+        absentKey: ensureString(sternberg.absentKey) || validKeys[0] || 'f',
+        encodingMs: asInt(sternberg.encodingMs, 400, 0, 10000),
+        retentionMs: asInt(sternberg.retentionMs, 1000, 0, 20000),
+        isi: asInt(sternberg.isi, 500, 0, 20000),
+        fixationMs: asInt(sternberg.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: asInt(sternberg.responseTimeoutMs, 3000, 100, 30000),
+      },
+      pvt: {
+        trialCount: asInt(pvt.trialCount, 40, 1, 1000),
+        minIsiMs: asInt(pvt.minIsiMs, 2000, 0, 60000),
+        maxIsiMs: asInt(pvt.maxIsiMs, 10000, 0, 60000),
+        responseKey: ensureString(pvt.responseKey) || validKeys[0] || ' ',
+        responseTimeoutMs: asInt(pvt.responseTimeoutMs, 5000, 500, 60000),
+      },
+      temporalOrder: {
+        trialCount: asInt(temporalOrder.trialCount, 60, 1, 1000),
+        soaSetMs: normalizeNumberArray(temporalOrder.soaSetMs, [17, 33, 67, 133, 267], 1, 2000),
+        firstKey: ensureString(temporalOrder.firstKey) || validKeys[0] || 'f',
+        secondKey: ensureString(temporalOrder.secondKey) || validKeys[1] || 'j',
+        stimulusDuration: asInt(temporalOrder.stimulusDuration, 0, 0, 20000),
+        isi: asInt(temporalOrder.isi, 500, 0, 20000),
+        fixationMs: asInt(temporalOrder.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: asInt(temporalOrder.responseTimeoutMs, 3000, 100, 30000),
+      },
+      rsvp: {
+        trialCount: asInt(rsvp.trialCount, 40, 1, 1000),
+        streamLength: asInt(rsvp.streamLength, 12, 1, 100),
+        itemDurationMs: asInt(rsvp.itemDurationMs, 100, 10, 2000),
+        targetKey: ensureString(rsvp.targetKey) || validKeys[0] || ' ',
+        targetSet: normalizeStringArray(rsvp.targetSet, ['X', 'Z']),
+        distractorSet: normalizeStringArray(rsvp.distractorSet, [
+          'A',
+          'B',
+          'C',
+          'D',
+          'E',
+          'F',
+          'G',
+          'H',
+        ]),
+        fixationMs: asInt(rsvp.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: asInt(rsvp.responseTimeoutMs, 2000, 100, 30000),
+      },
       customTrials,
     },
     blocks: normalizedBlocks,
+    ...(counterbalance ? { counterbalance } : {}),
     stimulus: {
       type: stimulusType,
       content: stimulusContent,
@@ -208,17 +353,28 @@ function pickNormalizationSource(root: Record<string, unknown>): ReactionLegacyQ
   return typedRoot;
 }
 
+const REACTION_TASK_TYPES: readonly ReactionTaskType[] = [
+  'standard',
+  'n-back',
+  'stroop',
+  'flanker',
+  'iat',
+  'dot-probe',
+  'go-nogo',
+  'sart',
+  'simon',
+  'posner',
+  'visual-search',
+  'sternberg',
+  'pvt',
+  'temporal-order',
+  'rsvp',
+  'custom',
+];
+
 function normalizeTaskType(value: unknown): ReactionTaskType {
-  if (
-    value === 'standard' ||
-    value === 'n-back' ||
-    value === 'stroop' ||
-    value === 'flanker' ||
-    value === 'iat' ||
-    value === 'dot-probe' ||
-    value === 'custom'
-  ) {
-    return value;
+  if (typeof value === 'string' && (REACTION_TASK_TYPES as readonly string[]).includes(value)) {
+    return value as ReactionTaskType;
   }
 
   return 'standard';
@@ -306,6 +462,28 @@ function normalizeFlankerStimulusSet(value: unknown): [string, string] {
   return [left.slice(0, 1), right.slice(0, 1)];
 }
 
+/**
+ * Validate a numeric array (E-REACT-2). Each entry is coerced to a finite number
+ * clamped to [min,max] and rounded; empties fall back to the default set.
+ */
+function normalizeNumberArray(
+  value: unknown,
+  fallback: number[],
+  min: number,
+  max: number
+): number[] {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+
+  const values = value
+    .map((entry) => Number(entry))
+    .filter((entry) => Number.isFinite(entry))
+    .map((entry) => Math.round(Math.min(max, Math.max(min, entry))));
+
+  return values.length > 0 ? values : [...fallback];
+}
+
 function normalizeStringArray(value: unknown, fallback: string[]): string[] {
   if (!Array.isArray(value)) {
     return [...fallback];
@@ -317,6 +495,45 @@ function normalizeStringArray(value: unknown, fallback: string[]): string[] {
     .filter(Boolean);
 
   return values.length > 0 ? values : [...fallback];
+}
+
+const COUNTERBALANCE_FACTORS: ReadonlyArray<CounterbalanceScheme['factor']> = [
+  'block-order',
+  'key-mapping',
+  'stimulus-subset',
+];
+const COUNTERBALANCE_METHODS: ReadonlyArray<CounterbalanceScheme['method']> = [
+  'latin-square',
+  'round-robin',
+  'random',
+];
+
+/**
+ * Validate declared counterbalancing schemes (E-REACT-6). Keeps only schemes with
+ * a known factor, a known method, and at least one non-empty level; drops the rest.
+ * Returns undefined when nothing valid remains so the study omits the field.
+ */
+function normalizeCounterbalance(value: unknown): CounterbalanceScheme[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const schemes: CounterbalanceScheme[] = [];
+  for (const entry of value) {
+    const record = toRecord(entry);
+    if (!record) continue;
+
+    const factor = ensureString(record.factor) as CounterbalanceScheme['factor'];
+    if (!COUNTERBALANCE_FACTORS.includes(factor)) continue;
+
+    const rawMethod = ensureString(record.method) as CounterbalanceScheme['method'];
+    const method = COUNTERBALANCE_METHODS.includes(rawMethod) ? rawMethod : 'round-robin';
+
+    const levels = normalizeStringArray(record.levels, []).filter(Boolean);
+    if (levels.length === 0) continue;
+
+    schemes.push({ factor, method, levels });
+  }
+
+  return schemes.length > 0 ? schemes : undefined;
 }
 
 function normalizeStudyBlocks(value: unknown, defaultValidKeys: string[]): ReactionStudyBlock[] {

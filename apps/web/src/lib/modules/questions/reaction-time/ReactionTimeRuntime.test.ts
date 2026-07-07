@@ -31,7 +31,9 @@ interface MockTrialResult {
   };
 }
 
-vi.mock('$lib/runtime/reaction', () => {
+vi.mock('$lib/runtime/reaction', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('$lib/runtime/reaction')>();
+
   class MockReactionEngine {
     constructor(config: { gatekeeper?: unknown }) {
       mockEngineState.gatekeeperPassed = Boolean(config?.gatekeeper);
@@ -83,6 +85,7 @@ vi.mock('$lib/runtime/reaction', () => {
   }
 
   return {
+    ...actual,
     ReactionEngine: MockReactionEngine,
   };
 });

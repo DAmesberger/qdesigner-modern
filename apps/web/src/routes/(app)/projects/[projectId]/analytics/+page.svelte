@@ -79,6 +79,7 @@
 	// Columns surfaced in the on-screen preview (the CSV/XLSX carry all of them).
 	const TRIAL_PREVIEW_COLUMNS = [
 		'trial_number',
+		'counterbalance_cell',
 		'block_id',
 		'condition',
 		'stimulus_kind',

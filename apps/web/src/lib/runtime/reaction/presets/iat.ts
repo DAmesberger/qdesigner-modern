@@ -17,6 +17,14 @@ export interface IATPresetConfig {
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
+  /**
+   * Response key for the LEFT category/attribute (E-REACT-6 key-mapping
+   * counterbalancing). Defaults to `e`; swap with {@link rightKey} to reverse the
+   * key sides for the reversed key-mapping cell.
+   */
+  leftKey?: string;
+  /** Response key for the RIGHT category/attribute. Defaults to `i`. */
+  rightKey?: string;
 }
 
 export type IATBlockType =
@@ -69,6 +77,31 @@ const STANDARD_7_BLOCK: IATBlockType[] = [
 const LEFT_KEY = 'e';
 const RIGHT_KEY = 'i';
 
+/**
+ * The 7-block IAT sequence for a participant's assigned block-order cell
+ * (E-REACT-6). `compatible-first` is the canonical order; `incompatible-first`
+ * moves the reversed (incompatible) combined blocks ahead of the compatible ones
+ * — the standard order counterbalancing that removes the practice-order confound
+ * from the D-score. Both orders keep the compatible/reversed block TYPES intact,
+ * so {@link computeDScore} still partitions them correctly.
+ */
+export function iatBlockSequence(
+  order: 'compatible-first' | 'incompatible-first'
+): IATBlockType[] {
+  if (order === 'incompatible-first') {
+    return [
+      'reversed-category-practice',
+      'attribute-practice',
+      'reversed-combined-practice',
+      'reversed-combined-test',
+      'category-practice',
+      'combined-practice',
+      'combined-test',
+    ];
+  }
+  return STANDARD_7_BLOCK.slice();
+}
+
 export function createIATBlocks(config: IATPresetConfig): IATBlockConfig[] {
   if (config.categories.length !== 2) {
     throw new Error('IAT requires exactly 2 categories');
@@ -86,6 +119,8 @@ export function createIATBlocks(config: IATPresetConfig): IATBlockConfig[] {
   const sequence = config.blocksSequence ?? STANDARD_7_BLOCK;
   const trialsPerBlock = config.trialsPerBlock ?? 20;
   const practiceTrialsPerBlock = config.practiceTrialsPerBlock ?? 10;
+  const leftKey = config.leftKey ?? LEFT_KEY;
+  const rightKey = config.rightKey ?? RIGHT_KEY;
   const rng = config.rng || createSeededRng(config.seed || 'iat-default');
 
   const blocks: IATBlockConfig[] = [];
@@ -115,7 +150,7 @@ export function createIATBlocks(config: IATPresetConfig): IATBlockConfig[] {
         color: [1, 1, 1, 1],
       };
 
-      const correctKey = item.side === 'left' ? LEFT_KEY : RIGHT_KEY;
+      const correctKey = item.side === 'left' ? leftKey : rightKey;
 
       trials.push({
         id: `iat-b${blockIdx + 1}-t${t + 1}`,
@@ -127,7 +162,7 @@ export function createIATBlocks(config: IATPresetConfig): IATBlockConfig[] {
         expectedSide: item.side,
         expectedResponse: correctKey,
         responseMode: 'keyboard',
-        validKeys: [LEFT_KEY, RIGHT_KEY],
+        validKeys: [leftKey, rightKey],
         requireCorrect: true,
         correctResponse: correctKey,
         fixation: {

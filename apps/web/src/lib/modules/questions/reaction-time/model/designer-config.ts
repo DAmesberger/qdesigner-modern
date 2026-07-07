@@ -1,5 +1,17 @@
 import type { ReactionTrialConfig } from '$lib/runtime/reaction';
-import type { ReactionFeedbackSettings, ReactionStudyConfig } from './reaction-schema';
+import type {
+  GoNoGoTaskConfig,
+  PosnerTaskConfig,
+  PvtTaskConfig,
+  ReactionFeedbackSettings,
+  ReactionStudyConfig,
+  RsvpTaskConfig,
+  SartTaskConfig,
+  SimonTaskConfig,
+  SternbergTaskConfig,
+  TemporalOrderTaskConfig,
+  VisualSearchTaskConfig,
+} from './reaction-schema';
 
 /**
  * Designer-facing config shape for the reaction-time question editor. Extracted
@@ -13,6 +25,15 @@ export type ReactionTaskType =
   | 'flanker'
   | 'iat'
   | 'dot-probe'
+  | 'go-nogo'
+  | 'sart'
+  | 'simon'
+  | 'posner'
+  | 'visual-search'
+  | 'sternberg'
+  | 'pvt'
+  | 'temporal-order'
+  | 'rsvp'
   | 'custom';
 export type StimulusType = 'text' | 'shape' | 'image' | 'video' | 'audio';
 export type ResponseMode = 'keyboard' | 'mouse' | 'touch' | 'gamepad';
@@ -86,6 +107,15 @@ export interface ReactionTimeConfig {
       fixationMs: number;
       responseTimeoutMs: number;
     };
+    goNoGo: GoNoGoTaskConfig;
+    sart: SartTaskConfig;
+    simon: SimonTaskConfig;
+    posner: PosnerTaskConfig;
+    visualSearch: VisualSearchTaskConfig;
+    sternberg: SternbergTaskConfig;
+    pvt: PvtTaskConfig;
+    temporalOrder: TemporalOrderTaskConfig;
+    rsvp: RsvpTaskConfig;
     customTrials: Array<Partial<ReactionTrialConfig>>;
   };
   stimulus: {

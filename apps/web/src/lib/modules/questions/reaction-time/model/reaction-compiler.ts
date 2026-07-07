@@ -1,10 +1,27 @@
 import {
+  assignCounterbalance,
+  blockOrderPermutation,
   createDotProbeTrials,
   createFlankerTrials,
+  createGoNoGoTrials,
   createIATBlocks,
   createNBackTrials,
+  createPosnerTrials,
+  createPvtTrials,
+  createRsvpTrials,
+  createSartTrials,
+  createSimonTrials,
+  createSternbergTrials,
   createStroopTrials,
+  createTemporalOrderTrials,
+  createVisualSearchTrials,
+  findFactorAssignment,
   flattenIATTrials,
+  iatBlockSequence,
+} from '$lib/runtime/reaction';
+import type {
+  CounterbalanceAssignment,
+  CounterbalanceFactorAssignment,
 } from '$lib/runtime/reaction';
 import type { RGBAColor } from '$lib/shared';
 import type {
@@ -31,6 +48,26 @@ import type {
 export interface ReactionCompileContext {
   questionnaire?: { settings?: { randomizationSeed?: string } };
   question?: { id?: string };
+  /**
+   * Per-session id (E-REACT-6). Folds into the seed root so within-block shuffles
+   * vary per participant while staying reproducible from the persisted
+   * seed + session id + assigned cell. Also seeds the counterbalance assignment
+   * when `counterbalance` is not supplied.
+   */
+  sessionId?: string;
+  /**
+   * Monotonic participant counter (0-based). When present, systematic
+   * counterbalancing methods (round-robin / Latin-square) cycle off it for
+   * exactly-even coverage; absent, assignment falls back to a session-id hash.
+   */
+  participantIndex?: number;
+  /**
+   * Pre-computed counterbalance assignment (E-REACT-6). The runtime resolves the
+   * cell once (so it can persist it) and threads it in here so the applied
+   * transforms match the persisted cell exactly. When omitted, the compiler
+   * resolves it from `config.counterbalance` + `sessionId` / `participantIndex`.
+   */
+  counterbalance?: CounterbalanceAssignment;
 }
 
 export function compileReactionPlan(
@@ -58,43 +95,222 @@ function buildReactionPlan(
   config: NormalizedReactionConfig,
   context: ReactionCompileContext
 ): PlannedReactionTrial[] {
-  const seedRoot =
+  const baseSeed =
     context.questionnaire?.settings?.randomizationSeed ||
     context.question?.id ||
     'reaction-time';
 
-  if (config.blocks.length > 0) {
-    return buildStudyBlocksPlan(config, seedRoot);
+  // E-REACT-6: resolve the participant's counterbalance cell (or use the one the
+  // runtime already resolved + persisted). The session id folds into the seed
+  // root so within-block shuffles vary per participant but stay reproducible.
+  const assignment =
+    context.counterbalance ??
+    assignCounterbalance(config.counterbalance, {
+      seed: baseSeed,
+      sessionId: context.sessionId,
+      participantIndex: context.participantIndex,
+    });
+  const seedRoot = context.sessionId ? `${baseSeed}:s:${context.sessionId}` : baseSeed;
+
+  // Key-mapping counterbalancing: swap the two response keys at the config level
+  // so every paradigm builder derives the reversed mapping. IAT keeps its
+  // canonical e/i keys and swaps them inside buildIATPlan instead.
+  const keyMapping = findFactorAssignment(assignment, 'key-mapping');
+  const reverseKeys = keyMapping ? keyMapping.levelIndex % 2 === 1 : false;
+  const effective = reverseKeys ? swapResponseKeys(config) : config;
+
+  if (effective.blocks.length > 0) {
+    return buildStudyBlocksPlan(effective, seedRoot, assignment);
   }
 
-  if (config.task.type === 'n-back') {
-    return buildNBackPlan(config, seedRoot);
+  if (effective.task.type === 'n-back') {
+    return buildNBackPlan(effective, seedRoot);
   }
 
-  if (config.task.type === 'stroop') {
-    return buildStroopPlan(config, seedRoot);
+  if (effective.task.type === 'stroop') {
+    return buildStroopPlan(effective, seedRoot);
   }
 
-  if (config.task.type === 'flanker') {
-    return buildFlankerPlan(config, seedRoot);
+  if (effective.task.type === 'flanker') {
+    return buildFlankerPlan(effective, seedRoot);
   }
 
-  if (config.task.type === 'iat') {
-    return buildIATPlan(config, seedRoot);
+  if (effective.task.type === 'iat') {
+    return buildIATPlan(effective, seedRoot, assignment);
   }
 
-  if (config.task.type === 'dot-probe') {
-    return buildDotProbePlan(config, seedRoot);
+  if (effective.task.type === 'dot-probe') {
+    return buildDotProbePlan(effective, seedRoot);
   }
 
-  if (config.task.type === 'custom') {
-    const customPlan = buildCustomPlan(config);
+  if (effective.task.type === 'go-nogo') {
+    return buildGoNoGoPlan(effective, seedRoot);
+  }
+
+  if (effective.task.type === 'sart') {
+    return buildSartPlan(effective, seedRoot);
+  }
+
+  if (effective.task.type === 'simon') {
+    return buildSimonPlan(effective, seedRoot);
+  }
+
+  if (effective.task.type === 'posner') {
+    return buildPosnerPlan(effective, seedRoot);
+  }
+
+  if (effective.task.type === 'visual-search') {
+    return buildVisualSearchPlan(effective, seedRoot);
+  }
+
+  if (effective.task.type === 'sternberg') {
+    return buildSternbergPlan(effective, seedRoot);
+  }
+
+  if (effective.task.type === 'pvt') {
+    return buildPvtPlan(effective, seedRoot);
+  }
+
+  if (effective.task.type === 'temporal-order') {
+    return buildTemporalOrderPlan(effective, seedRoot);
+  }
+
+  if (effective.task.type === 'rsvp') {
+    return buildRsvpPlan(effective, seedRoot);
+  }
+
+  if (effective.task.type === 'custom') {
+    const customPlan = buildCustomPlan(effective);
     if (customPlan.length > 0) {
       return customPlan;
     }
   }
 
-  return buildStandardPlan(config);
+  return buildStandardPlan(effective);
+}
+
+/**
+ * Key-mapping counterbalancing (E-REACT-6). Returns a shallow clone of the config
+ * with every two-alternative response-key pair swapped: the global valid-key
+ * pair, each paradigm's dedicated left/right (or first/second, present/absent)
+ * keys, the correct key, and each study-block template's own key pair + correct
+ * response. Paradigms that key off `validKeys[0..1]` (flanker, dot-probe, study
+ * blocks) inherit the swap; the reversed cell therefore flips which physical key
+ * scores each response category.
+ */
+function swapResponseKeys(config: NormalizedReactionConfig): NormalizedReactionConfig {
+  const keys = config.response.validKeys;
+  if (keys.length < 2) return config;
+  const k0 = keys[0]!;
+  const k1 = keys[1]!;
+  const remapGlobal = (key: string | undefined): string | undefined =>
+    key === k0 ? k1 : key === k1 ? k0 : key;
+
+  const swappedValidKeys = [k1, k0, ...keys.slice(2)];
+
+  const task = config.task;
+  return {
+    ...config,
+    correctKey: remapGlobal(config.correctKey) ?? config.correctKey,
+    response: { ...config.response, validKeys: swappedValidKeys },
+    task: {
+      ...task,
+      nBack: { ...task.nBack, targetKey: task.nBack.nonTargetKey, nonTargetKey: task.nBack.targetKey },
+      simon: { ...task.simon, leftKey: task.simon.rightKey, rightKey: task.simon.leftKey },
+      posner: { ...task.posner, leftKey: task.posner.rightKey, rightKey: task.posner.leftKey },
+      temporalOrder: {
+        ...task.temporalOrder,
+        firstKey: task.temporalOrder.secondKey,
+        secondKey: task.temporalOrder.firstKey,
+      },
+      visualSearch: {
+        ...task.visualSearch,
+        presentKey: task.visualSearch.absentKey,
+        absentKey: task.visualSearch.presentKey,
+      },
+      sternberg: {
+        ...task.sternberg,
+        presentKey: task.sternberg.absentKey,
+        absentKey: task.sternberg.presentKey,
+      },
+    },
+    blocks: config.blocks.map((block) => ({
+      ...block,
+      trials: block.trials.map((trial) => {
+        const pair = trial.validKeys && trial.validKeys.length >= 2 ? trial.validKeys : keys;
+        const t0 = pair[0]!;
+        const t1 = pair[1]!;
+        const remap = (key: string | undefined): string | undefined =>
+          key === t0 ? t1 : key === t1 ? t0 : key;
+        return {
+          ...trial,
+          validKeys:
+            trial.validKeys && trial.validKeys.length >= 2
+              ? [trial.validKeys[1]!, trial.validKeys[0]!, ...trial.validKeys.slice(2)]
+              : trial.validKeys,
+          correctResponse: remap(trial.correctResponse),
+        };
+      }),
+    })),
+  };
+}
+
+/**
+ * Apply the participant's block-order and stimulus-subset counterbalancing
+ * (E-REACT-6) to a study-block list. Block order is permuted per the Latin-square
+ * row for the assigned level; stimulus-subset keeps only the trial templates
+ * tagged (via `condition`) with the assigned subset level (untagged templates are
+ * shared across subsets). Key-mapping was already baked into the config upstream.
+ */
+function applyCounterbalanceToBlocks(
+  blocks: ReactionStudyBlock[],
+  assignment: CounterbalanceAssignment
+): ReactionStudyBlock[] {
+  let result = blocks;
+
+  const blockOrder = findFactorAssignment(assignment, 'block-order');
+  if (blockOrder && result.length > 1) {
+    const permutation = blockOrderPermutation(blockOrder.levelIndex, result.length);
+    result = permutation.map((index) => result[index]).filter((block): block is ReactionStudyBlock => Boolean(block));
+  }
+
+  const subset = findFactorAssignment(assignment, 'stimulus-subset');
+  if (subset) {
+    result = result.map((block) => selectTrialSubset(block, subset));
+  }
+
+  return result;
+}
+
+/**
+ * Keep only the trial templates belonging to the assigned stimulus-subset level.
+ * A template is "tagged" for subsetting when its `condition` matches one of the
+ * declared subset levels; tagged templates for OTHER levels are dropped, tagged
+ * templates for the assigned level are kept, and untagged templates (no matching
+ * condition) are shared across every subset. A block with no tagged templates is
+ * returned unchanged so subsetting never empties an unrelated block.
+ */
+function selectTrialSubset(
+  block: ReactionStudyBlock,
+  subset: CounterbalanceFactorAssignment
+): ReactionStudyBlock {
+  const levelSet = new Set(subset.levels.map((level) => level.toLowerCase()));
+  const assigned = subset.level.toLowerCase();
+
+  const hasTagged = block.trials.some(
+    (trial) => trial.condition && levelSet.has(trial.condition.toLowerCase())
+  );
+  if (!hasTagged) return block;
+
+  const kept = block.trials.filter((trial) => {
+    const condition = trial.condition?.toLowerCase();
+    if (condition && levelSet.has(condition)) {
+      return condition === assigned;
+    }
+    return true;
+  });
+
+  return { ...block, trials: kept.length > 0 ? kept : block.trials };
 }
 
 /**
@@ -120,16 +336,20 @@ function buildTrialFeedback(
 }
 
 function defaultFeedbackMode(taskType: NormalizedReactionConfig['task']['type']): 'accuracy' | 'rt' {
-  return taskType === 'standard' ? 'rt' : 'accuracy';
+  // RT-only paradigms (simple reaction time, PVT) report the reaction time;
+  // forced-choice / inhibition paradigms report accuracy.
+  return taskType === 'standard' || taskType === 'pvt' ? 'rt' : 'accuracy';
 }
 
 function buildStudyBlocksPlan(
   config: NormalizedReactionConfig,
-  seedRoot: string
+  seedRoot: string,
+  assignment: CounterbalanceAssignment
 ): PlannedReactionTrial[] {
   const plan: PlannedReactionTrial[] = [];
+  const blocks = applyCounterbalanceToBlocks(config.blocks, assignment);
 
-  config.blocks.forEach((block, blockIndex) => {
+  blocks.forEach((block, blockIndex) => {
     const blockRepeats = Math.max(1, block.repetitions || 1);
 
     for (let repeatIndex = 0; repeatIndex < blockRepeats; repeatIndex++) {
@@ -436,8 +656,22 @@ function buildFlankerPlan(config: NormalizedReactionConfig, seedRoot: string): P
   });
 }
 
-function buildIATPlan(config: NormalizedReactionConfig, seedRoot: string): PlannedReactionTrial[] {
+function buildIATPlan(
+  config: NormalizedReactionConfig,
+  seedRoot: string,
+  assignment: CounterbalanceAssignment
+): PlannedReactionTrial[] {
   const iat = config.task.iat;
+
+  // E-REACT-6: block-order counterbalancing chooses the compatible- vs
+  // incompatible-first 7-block sequence; key-mapping swaps the canonical e/i key
+  // sides. Both are seeded from the participant's assigned cell.
+  const blockOrder = findFactorAssignment(assignment, 'block-order');
+  const order =
+    blockOrder && blockOrder.levelIndex % 2 === 1 ? 'incompatible-first' : 'compatible-first';
+  const keyMapping = findFactorAssignment(assignment, 'key-mapping');
+  const reverseKeys = keyMapping ? keyMapping.levelIndex % 2 === 1 : false;
+
   const blocks = createIATBlocks({
     categories: [
       { name: iat.category1Name, items: iat.category1Items },
@@ -447,6 +681,9 @@ function buildIATPlan(config: NormalizedReactionConfig, seedRoot: string): Plann
       { name: iat.attribute1Name, items: iat.attribute1Items },
       { name: iat.attribute2Name, items: iat.attribute2Items },
     ],
+    blocksSequence: iatBlockSequence(order),
+    leftKey: reverseKeys ? 'i' : 'e',
+    rightKey: reverseKeys ? 'e' : 'i',
     trialsPerBlock: iat.trialsPerBlock,
     practiceTrialsPerBlock: iat.practiceTrialsPerBlock,
     fixationMs: iat.fixationMs,
@@ -525,6 +762,307 @@ function buildDotProbePlan(
       },
     };
   });
+}
+
+function buildGoNoGoPlan(config: NormalizedReactionConfig, seedRoot: string): PlannedReactionTrial[] {
+  const goNoGo = config.task.goNoGo;
+  const shared = {
+    goRatio: goNoGo.goRatio,
+    goStimulus: goNoGo.goStimulus,
+    noGoStimulus: goNoGo.noGoStimulus,
+    responseKey: goNoGo.responseKey,
+    stimulusDuration: goNoGo.stimulusDuration || undefined,
+    isi: goNoGo.isi,
+    fixationMs: goNoGo.fixationMs,
+    responseTimeoutMs: goNoGo.responseTimeoutMs,
+    targetFPS: config.targetFPS,
+  };
+
+  const practice =
+    config.practice && config.practiceTrials > 0
+      ? createGoNoGoTrials({ ...shared, trialCount: config.practiceTrials, seed: `${seedRoot}:go-nogo:practice` })
+      : [];
+  const test = createGoNoGoTrials({ ...shared, trialCount: goNoGo.trialCount, seed: `${seedRoot}:go-nogo:test` });
+
+  return mapPracticeAndTest(practice, test, (trial, isPractice) => ({
+    trial,
+    metadata: {
+      taskType: 'go-nogo',
+      blockId: isPractice ? 'practice' : 'test',
+      isPractice,
+      condition: trial.condition,
+      isTarget: trial.isTarget,
+      expectedResponse: trial.expectedResponse || undefined,
+    },
+  }));
+}
+
+function buildSartPlan(config: NormalizedReactionConfig, seedRoot: string): PlannedReactionTrial[] {
+  const sart = config.task.sart;
+  const shared = {
+    targetDigit: sart.targetDigit,
+    digits: sart.digits,
+    responseKey: sart.responseKey,
+    stimulusDuration: sart.stimulusDuration || undefined,
+    isi: sart.isi,
+    fixationMs: sart.fixationMs,
+    responseTimeoutMs: sart.responseTimeoutMs,
+    targetFPS: config.targetFPS,
+  };
+
+  const practice =
+    config.practice && config.practiceTrials > 0
+      ? createSartTrials({ ...shared, trialCount: config.practiceTrials, seed: `${seedRoot}:sart:practice` })
+      : [];
+  const test = createSartTrials({ ...shared, trialCount: sart.trialCount, seed: `${seedRoot}:sart:test` });
+
+  return mapPracticeAndTest(practice, test, (trial, isPractice) => ({
+    trial,
+    metadata: {
+      taskType: 'sart',
+      blockId: isPractice ? 'practice' : 'test',
+      isPractice,
+      condition: trial.condition,
+      isTarget: trial.isTarget,
+      expectedResponse: trial.expectedResponse || undefined,
+    },
+  }));
+}
+
+function buildSimonPlan(config: NormalizedReactionConfig, seedRoot: string): PlannedReactionTrial[] {
+  const simon = config.task.simon;
+  const shared = {
+    congruentRatio: simon.congruentRatio,
+    colors: [
+      { name: simon.leftColor, rgba: toRgba(simon.leftColor), side: 'left' as const },
+      { name: simon.rightColor, rgba: toRgba(simon.rightColor), side: 'right' as const },
+    ] as [
+      { name: string; rgba: RGBAColor; side: 'left' },
+      { name: string; rgba: RGBAColor; side: 'right' },
+    ],
+    leftKey: simon.leftKey,
+    rightKey: simon.rightKey,
+    stimulusDuration: simon.stimulusDuration || undefined,
+    isi: simon.isi,
+    fixationMs: simon.fixationMs,
+    responseTimeoutMs: simon.responseTimeoutMs,
+    targetFPS: config.targetFPS,
+  };
+
+  const practice =
+    config.practice && config.practiceTrials > 0
+      ? createSimonTrials({ ...shared, trialCount: config.practiceTrials, seed: `${seedRoot}:simon:practice` })
+      : [];
+  const test = createSimonTrials({ ...shared, trialCount: simon.trialCount, seed: `${seedRoot}:simon:test` });
+
+  return mapPracticeAndTest(practice, test, (trial, isPractice) => ({
+    trial,
+    metadata: {
+      taskType: 'simon',
+      blockId: isPractice ? 'practice' : 'test',
+      isPractice,
+      condition: trial.congruency,
+      expectedResponse: trial.expectedResponse,
+    },
+  }));
+}
+
+function buildPosnerPlan(config: NormalizedReactionConfig, seedRoot: string): PlannedReactionTrial[] {
+  const posner = config.task.posner;
+  const shared = {
+    validRatio: posner.validRatio,
+    cueDurationMs: posner.cueDurationMs,
+    soaMs: posner.soaMs,
+    leftKey: posner.leftKey,
+    rightKey: posner.rightKey,
+    isi: posner.isi,
+    fixationMs: posner.fixationMs,
+    responseTimeoutMs: posner.responseTimeoutMs,
+    targetFPS: config.targetFPS,
+  };
+
+  const practice =
+    config.practice && config.practiceTrials > 0
+      ? createPosnerTrials({ ...shared, trialCount: config.practiceTrials, seed: `${seedRoot}:posner:practice` })
+      : [];
+  const test = createPosnerTrials({ ...shared, trialCount: posner.trialCount, seed: `${seedRoot}:posner:test` });
+
+  return mapPracticeAndTest(practice, test, (trial, isPractice) => ({
+    trial,
+    metadata: {
+      taskType: 'posner',
+      blockId: isPractice ? 'practice' : 'test',
+      isPractice,
+      condition: trial.validity,
+      expectedResponse: trial.expectedResponse,
+    },
+  }));
+}
+
+function buildVisualSearchPlan(
+  config: NormalizedReactionConfig,
+  seedRoot: string
+): PlannedReactionTrial[] {
+  const search = config.task.visualSearch;
+  const shared = {
+    setSizes: search.setSizes,
+    targetPresentRatio: search.targetPresentRatio,
+    featureSearch: search.featureSearch,
+    targetChar: search.targetChar,
+    distractorChars: search.distractorChars,
+    presentKey: search.presentKey,
+    absentKey: search.absentKey,
+    stimulusDuration: search.stimulusDuration || undefined,
+    isi: search.isi,
+    fixationMs: search.fixationMs,
+    responseTimeoutMs: search.responseTimeoutMs,
+    targetFPS: config.targetFPS,
+  };
+
+  const practice =
+    config.practice && config.practiceTrials > 0
+      ? createVisualSearchTrials({ ...shared, trialCount: config.practiceTrials, seed: `${seedRoot}:visual-search:practice` })
+      : [];
+  const test = createVisualSearchTrials({ ...shared, trialCount: search.trialCount, seed: `${seedRoot}:visual-search:test` });
+
+  return mapPracticeAndTest(practice, test, (trial, isPractice) => ({
+    trial,
+    metadata: {
+      taskType: 'visual-search',
+      blockId: isPractice ? 'practice' : 'test',
+      isPractice,
+      condition: trial.condition,
+      isTarget: trial.targetPresent,
+      expectedResponse: trial.expectedResponse,
+    },
+  }));
+}
+
+function buildSternbergPlan(config: NormalizedReactionConfig, seedRoot: string): PlannedReactionTrial[] {
+  const sternberg = config.task.sternberg;
+  const shared = {
+    setSizes: sternberg.setSizes,
+    targetPresentRatio: sternberg.targetPresentRatio,
+    memoryItems: sternberg.memoryItems,
+    presentKey: sternberg.presentKey,
+    absentKey: sternberg.absentKey,
+    encodingMs: sternberg.encodingMs,
+    retentionMs: sternberg.retentionMs,
+    isi: sternberg.isi,
+    fixationMs: sternberg.fixationMs,
+    responseTimeoutMs: sternberg.responseTimeoutMs,
+    targetFPS: config.targetFPS,
+  };
+
+  const practice =
+    config.practice && config.practiceTrials > 0
+      ? createSternbergTrials({ ...shared, trialCount: config.practiceTrials, seed: `${seedRoot}:sternberg:practice` })
+      : [];
+  const test = createSternbergTrials({ ...shared, trialCount: sternberg.trialCount, seed: `${seedRoot}:sternberg:test` });
+
+  return mapPracticeAndTest(practice, test, (trial, isPractice) => ({
+    trial,
+    metadata: {
+      taskType: 'sternberg',
+      blockId: isPractice ? 'practice' : 'test',
+      isPractice,
+      condition: trial.condition,
+      isTarget: trial.inSet,
+      expectedResponse: trial.expectedResponse,
+    },
+  }));
+}
+
+function buildPvtPlan(config: NormalizedReactionConfig, seedRoot: string): PlannedReactionTrial[] {
+  const pvt = config.task.pvt;
+  const shared = {
+    minIsiMs: pvt.minIsiMs,
+    maxIsiMs: pvt.maxIsiMs,
+    responseKey: pvt.responseKey,
+    responseTimeoutMs: pvt.responseTimeoutMs,
+    targetFPS: config.targetFPS,
+  };
+
+  const practice =
+    config.practice && config.practiceTrials > 0
+      ? createPvtTrials({ ...shared, trialCount: config.practiceTrials, seed: `${seedRoot}:pvt:practice` })
+      : [];
+  const test = createPvtTrials({ ...shared, trialCount: pvt.trialCount, seed: `${seedRoot}:pvt:test` });
+
+  return mapPracticeAndTest(practice, test, (trial, isPractice) => ({
+    trial,
+    metadata: {
+      taskType: 'pvt',
+      blockId: isPractice ? 'practice' : 'test',
+      isPractice,
+      condition: trial.condition,
+    },
+  }));
+}
+
+function buildTemporalOrderPlan(
+  config: NormalizedReactionConfig,
+  seedRoot: string
+): PlannedReactionTrial[] {
+  const toj = config.task.temporalOrder;
+  const shared = {
+    soaSetMs: toj.soaSetMs,
+    firstKey: toj.firstKey,
+    secondKey: toj.secondKey,
+    stimulusDuration: toj.stimulusDuration || undefined,
+    isi: toj.isi,
+    fixationMs: toj.fixationMs,
+    responseTimeoutMs: toj.responseTimeoutMs,
+    targetFPS: config.targetFPS,
+  };
+
+  const practice =
+    config.practice && config.practiceTrials > 0
+      ? createTemporalOrderTrials({ ...shared, trialCount: config.practiceTrials, seed: `${seedRoot}:temporal-order:practice` })
+      : [];
+  const test = createTemporalOrderTrials({ ...shared, trialCount: toj.trialCount, seed: `${seedRoot}:temporal-order:test` });
+
+  return mapPracticeAndTest(practice, test, (trial, isPractice) => ({
+    trial,
+    metadata: {
+      taskType: 'temporal-order',
+      blockId: isPractice ? 'practice' : 'test',
+      isPractice,
+      condition: trial.condition,
+      expectedResponse: trial.expectedResponse,
+    },
+  }));
+}
+
+function buildRsvpPlan(config: NormalizedReactionConfig, seedRoot: string): PlannedReactionTrial[] {
+  const rsvp = config.task.rsvp;
+  const shared = {
+    streamLength: rsvp.streamLength,
+    itemDurationMs: rsvp.itemDurationMs,
+    targetKey: rsvp.targetKey,
+    targetSet: rsvp.targetSet,
+    distractorSet: rsvp.distractorSet,
+    fixationMs: rsvp.fixationMs,
+    responseTimeoutMs: rsvp.responseTimeoutMs,
+    targetFPS: config.targetFPS,
+  };
+
+  const practice =
+    config.practice && config.practiceTrials > 0
+      ? createRsvpTrials({ ...shared, trialCount: config.practiceTrials, seed: `${seedRoot}:rsvp:practice` })
+      : [];
+  const test = createRsvpTrials({ ...shared, trialCount: rsvp.trialCount, seed: `${seedRoot}:rsvp:test` });
+
+  return mapPracticeAndTest(practice, test, (trial, isPractice) => ({
+    trial,
+    metadata: {
+      taskType: 'rsvp',
+      blockId: isPractice ? 'practice' : 'test',
+      isPractice,
+      condition: trial.condition,
+      expectedResponse: trial.expectedResponse,
+    },
+  }));
 }
 
 function buildCustomPlan(config: NormalizedReactionConfig): PlannedReactionTrial[] {

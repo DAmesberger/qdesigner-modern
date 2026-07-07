@@ -23,6 +23,22 @@ export type { FeedbackVerdict, FeedbackRenderableSpec } from './feedback/feedbac
 
 export { FrameCountdown, framesForDurationMs, durationMsForFrames } from './frameScheduler';
 
+// Participant-level counterbalancing (E-REACT-6)
+export {
+  assignCounterbalance,
+  blockOrderPermutation,
+  findFactorAssignment,
+  emptyCounterbalanceAssignment,
+} from './counterbalance';
+export type {
+  CounterbalanceFactor,
+  CounterbalanceMethod,
+  CounterbalanceScheme,
+  CounterbalanceFactorAssignment,
+  CounterbalanceAssignment,
+  CounterbalanceContext,
+} from './counterbalance';
+
 export { pointInRegion } from './input/spatialHit';
 export { GamepadPoller } from './input/GamepadPoller';
 export type {
@@ -40,8 +56,18 @@ export {
   createIATBlocks,
   flattenIATTrials,
   computeDScore,
+  iatBlockSequence,
   createDotProbeTrials,
   computeAttentionalBias,
+  createGoNoGoTrials,
+  createSartTrials,
+  createSimonTrials,
+  createPosnerTrials,
+  createVisualSearchTrials,
+  createSternbergTrials,
+  createPvtTrials,
+  createTemporalOrderTrials,
+  createRsvpTrials,
 } from './presets';
 
 export type {
@@ -65,4 +91,27 @@ export type {
   DotProbeStimulusPair,
   DotProbeCongruency,
   AttentionalBiasResult,
+  GoNoGoPresetConfig,
+  GoNoGoTrialConfig,
+  GoNoGoCondition,
+  SartPresetConfig,
+  SartTrialConfig,
+  SartCondition,
+  SimonPresetConfig,
+  SimonTrialConfig,
+  SimonColor,
+  SimonCongruency,
+  PosnerPresetConfig,
+  PosnerTrialConfig,
+  PosnerValidity,
+  VisualSearchPresetConfig,
+  VisualSearchTrialConfig,
+  SternbergPresetConfig,
+  SternbergTrialConfig,
+  PvtPresetConfig,
+  PvtTrialConfig,
+  TemporalOrderPresetConfig,
+  TemporalOrderTrialConfig,
+  RsvpPresetConfig,
+  RsvpTrialConfig,
 } from './presets';

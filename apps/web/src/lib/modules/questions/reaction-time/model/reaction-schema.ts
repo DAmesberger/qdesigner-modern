@@ -1,4 +1,5 @@
 import type {
+  CounterbalanceScheme,
   ReactionResponseMode,
   ReactionStimulusConfig,
   ReactionTargetRegion,
@@ -6,7 +7,7 @@ import type {
   ScheduledPhase,
 } from '$lib/runtime/reaction';
 
-export type { ReactionResponseMode, ReactionTargetRegion };
+export type { ReactionResponseMode, ReactionTargetRegion, CounterbalanceScheme };
 
 export type ReactionTaskType =
   | 'standard'
@@ -15,6 +16,15 @@ export type ReactionTaskType =
   | 'flanker'
   | 'iat'
   | 'dot-probe'
+  | 'go-nogo'
+  | 'sart'
+  | 'simon'
+  | 'posner'
+  | 'visual-search'
+  | 'sternberg'
+  | 'pvt'
+  | 'temporal-order'
+  | 'rsvp'
   | 'custom';
 
 export type ReactionStimulusType = 'text' | 'shape' | 'image' | 'video' | 'audio';
@@ -142,6 +152,115 @@ export interface DotProbeTaskConfig {
   responseTimeoutMs: number;
 }
 
+// --- Standard-paradigm library expansion (E-REACT-2). ---
+
+export interface GoNoGoTaskConfig {
+  trialCount: number;
+  goRatio: number;
+  goStimulus: string;
+  noGoStimulus: string;
+  responseKey: string;
+  stimulusDuration: number;
+  isi: number;
+  fixationMs: number;
+  responseTimeoutMs: number;
+}
+
+export interface SartTaskConfig {
+  trialCount: number;
+  targetDigit: number;
+  digits: number[];
+  responseKey: string;
+  stimulusDuration: number;
+  isi: number;
+  fixationMs: number;
+  responseTimeoutMs: number;
+}
+
+export interface SimonTaskConfig {
+  trialCount: number;
+  congruentRatio: number;
+  leftColor: string;
+  rightColor: string;
+  leftKey: string;
+  rightKey: string;
+  stimulusDuration: number;
+  isi: number;
+  fixationMs: number;
+  responseTimeoutMs: number;
+}
+
+export interface PosnerTaskConfig {
+  trialCount: number;
+  validRatio: number;
+  cueDurationMs: number;
+  soaMs: number;
+  leftKey: string;
+  rightKey: string;
+  isi: number;
+  fixationMs: number;
+  responseTimeoutMs: number;
+}
+
+export interface VisualSearchTaskConfig {
+  trialCount: number;
+  setSizes: number[];
+  targetPresentRatio: number;
+  featureSearch: boolean;
+  targetChar: string;
+  distractorChars: string[];
+  presentKey: string;
+  absentKey: string;
+  stimulusDuration: number;
+  isi: number;
+  fixationMs: number;
+  responseTimeoutMs: number;
+}
+
+export interface SternbergTaskConfig {
+  trialCount: number;
+  setSizes: number[];
+  targetPresentRatio: number;
+  memoryItems: string[];
+  presentKey: string;
+  absentKey: string;
+  encodingMs: number;
+  retentionMs: number;
+  isi: number;
+  fixationMs: number;
+  responseTimeoutMs: number;
+}
+
+export interface PvtTaskConfig {
+  trialCount: number;
+  minIsiMs: number;
+  maxIsiMs: number;
+  responseKey: string;
+  responseTimeoutMs: number;
+}
+
+export interface TemporalOrderTaskConfig {
+  trialCount: number;
+  soaSetMs: number[];
+  firstKey: string;
+  secondKey: string;
+  stimulusDuration: number;
+  isi: number;
+  fixationMs: number;
+  responseTimeoutMs: number;
+}
+
+export interface RsvpTaskConfig {
+  trialCount: number;
+  streamLength: number;
+  itemDurationMs: number;
+  targetKey: string;
+  targetSet: string[];
+  distractorSet: string[];
+  fixationMs: number;
+  responseTimeoutMs: number;
+}
+
 export type ReactionCustomTrial = Partial<ReactionTrialConfig> & {
   isPractice?: boolean;
   isTarget?: boolean;
@@ -156,6 +275,15 @@ export interface ReactionTaskConfig {
   flanker: FlankerTaskConfig;
   iat: IATTaskConfig;
   dotProbe: DotProbeTaskConfig;
+  goNoGo: GoNoGoTaskConfig;
+  sart: SartTaskConfig;
+  simon: SimonTaskConfig;
+  posner: PosnerTaskConfig;
+  visualSearch: VisualSearchTaskConfig;
+  sternberg: SternbergTaskConfig;
+  pvt: PvtTaskConfig;
+  temporalOrder: TemporalOrderTaskConfig;
+  rsvp: RsvpTaskConfig;
   customTrials: ReactionCustomTrial[];
 }
 
@@ -175,6 +303,14 @@ export interface ReactionStudyConfig {
   schemaVersion: 1;
   task: ReactionTaskConfig;
   blocks: ReactionStudyBlock[];
+  /**
+   * Participant-level counterbalancing schemes (E-REACT-6). Each scheme assigns
+   * every participant a level for one factor (block order / key mapping /
+   * stimulus subset) via Latin-square, round-robin, or random. The assigned cell
+   * is persisted per session so the design is reproducible and exports as a
+   * column. Absent / empty ⇒ the legacy single-order behaviour.
+   */
+  counterbalance?: CounterbalanceScheme[];
   stimulus: {
     type: ReactionStimulusType;
     content: string;
@@ -215,8 +351,18 @@ export interface ReactionLegacyQuestionConfig {
     flanker?: Partial<FlankerTaskConfig>;
     iat?: Partial<IATTaskConfig>;
     dotProbe?: Partial<DotProbeTaskConfig>;
+    goNoGo?: Partial<GoNoGoTaskConfig>;
+    sart?: Partial<SartTaskConfig>;
+    simon?: Partial<SimonTaskConfig>;
+    posner?: Partial<PosnerTaskConfig>;
+    visualSearch?: Partial<VisualSearchTaskConfig>;
+    sternberg?: Partial<SternbergTaskConfig>;
+    pvt?: Partial<PvtTaskConfig>;
+    temporalOrder?: Partial<TemporalOrderTaskConfig>;
+    rsvp?: Partial<RsvpTaskConfig>;
   };
   blocks?: ReactionStudyBlock[];
+  counterbalance?: CounterbalanceScheme[];
   stimulus?: {
     type?: ReactionStimulusType;
     content?: string;

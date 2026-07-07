@@ -1924,6 +1924,9 @@ export class QuestionnaireRuntime {
       resourceManager: this.resourceManager,
       responseCollector: this.responseCollector,
       abortSignal: this.currentAbortController.signal,
+      // E-REACT-6: seed per-session counterbalancing + within-block shuffles.
+      sessionId: this.session.id,
+      participantNumber: this.config.participantNumber,
     };
   }
 
