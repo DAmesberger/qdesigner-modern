@@ -91,6 +91,22 @@ pub async fn bootstrap_personas(
         },
     ];
 
+    let admin_user =
+        Uuid::parse_str("11111111-1111-1111-1111-111111111111").expect("valid admin UUID");
+
+    // Seed everything in ONE transaction with app.user_id = the admin persona. The
+    // admin-table mutation policies (organization_members / project_members /
+    // projects) admit `INSERT ... ON CONFLICT DO UPDATE` only with a valid
+    // app.user_id GUC — the DO UPDATE path needs the existing row visible under RLS,
+    // so a GUC-less bare-pool insert is denied. Without this each bootstrap 500s
+    // and, because the dev quick-login flow awaits this endpoint, dev login is
+    // blocked entirely (was F-26). One tx also makes the seed atomic.
+    let mut tx = state.pool.begin().await?;
+    sqlx::query("SELECT set_config('app.user_id', $1, true)")
+        .bind(admin_user.to_string())
+        .execute(&mut *tx)
+        .await?;
+
     let mut provisioned = Vec::with_capacity(personas.len());
 
     for persona in personas {
@@ -114,7 +130,7 @@ pub async fn bootstrap_personas(
         .bind(&email)
         .bind(persona.full_name)
         .bind(hash)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
 
         provisioned.push(json!({
@@ -135,8 +151,6 @@ pub async fn bootstrap_personas(
     let project_name = env_optional_string("DEV_PERSONA_PROJECT_NAME", "Test Project 1");
     let project_code = env_optional_string("DEV_PERSONA_PROJECT_CODE", "test-project-1");
 
-    let admin_user =
-        Uuid::parse_str("11111111-1111-1111-1111-111111111111").expect("valid admin UUID");
     let editor_user =
         Uuid::parse_str("22222222-2222-2222-2222-222222222222").expect("valid editor UUID");
     let viewer_user =
@@ -164,7 +178,7 @@ pub async fn bootstrap_personas(
     .bind(org_domain)
     .bind(json!({ "devSeeded": true, "source": "quick-login" }))
     .bind(admin_user)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
 
     for (user_id, role) in [
@@ -185,7 +199,7 @@ pub async fn bootstrap_personas(
         .bind(org_id)
         .bind(user_id)
         .bind(role)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
     }
 
@@ -215,7 +229,7 @@ pub async fn bootstrap_personas(
     .bind(&project_code)
     .bind(json!({ "devSeeded": true, "source": "quick-login" }))
     .bind(admin_user)
-    .execute(&state.pool)
+    .execute(&mut *tx)
     .await?;
 
     for (user_id, role) in [
@@ -235,9 +249,11 @@ pub async fn bootstrap_personas(
         .bind(project_id)
         .bind(user_id)
         .bind(role)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await?;
     }
+
+    tx.commit().await?;
 
     Ok(Json(json!({
         "ok": true,
