@@ -52,6 +52,24 @@ pub async fn get_questionnaire_org_id<'e>(
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))
 }
 
+/// Read an organization's data-residency region (E-RBAC-9), defaulting to
+/// `eu` when the org row is missing or the column is somehow NULL. Used to
+/// route new media/export storage keys under the org's region prefix.
+pub async fn org_data_region<'e>(
+    executor: impl PgExecutor<'e>,
+    org_id: Uuid,
+) -> Result<String, ApiError> {
+    let region = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT data_region FROM organizations WHERE id = $1",
+    )
+    .bind(org_id)
+    .fetch_optional(executor)
+    .await?
+    .flatten()
+    .unwrap_or_else(|| "eu".to_string());
+    Ok(region)
+}
+
 /// Verify that `user_id` is an active member of `org_id`.
 pub async fn verify_org_membership<'e>(
     executor: impl PgExecutor<'e>,
@@ -174,6 +192,12 @@ pub async fn org_project_visibility<'e>(
 /// unconditionally) for any project-confidential resource. Returns
 /// [`ApiError::Forbidden`] when the user may not read the project (including
 /// when the project does not exist, to avoid leaking existence).
+///
+/// E-RBAC-10: an active (non-expired) `resource_shares` grant on the project
+/// also admits read, so an external collaborator gains scoped visibility
+/// without any org/project membership. Guests never appear in the org project
+/// list (that path stays membership-scoped) — they reach the project only
+/// through this by-id gate and the "Shared with me" surface.
 pub async fn verify_project_read_access<'e>(
     executor: impl PgExecutor<'e>,
     user_id: Uuid,
@@ -207,6 +231,8 @@ pub async fn verify_project_read_access<'e>(
                           AND om.user_id = $2 AND om.status = 'active'
                     )
                 )
+                -- external guest with an active project share (E-RBAC-10)
+                OR public.user_has_active_share('project', p.id, $2)
               )
         )
         "#,
@@ -225,7 +251,9 @@ pub async fn verify_project_read_access<'e>(
 /// Verify that `user_id` can *write* to the given project.
 ///
 /// Write access is granted when the user is a project member with at least
-/// `editor` role, **or** an org-level `admin`/`owner`.
+/// `editor` role, **or** an org-level `admin`/`owner`, **or** (E-RBAC-10) holds
+/// an active `editor` `resource_shares` grant on the project — the scoped-edit
+/// path for an external collaborator. A `viewer` share never confers write.
 pub async fn verify_project_write_access<'e>(
     executor: impl PgExecutor<'e>,
     user_id: Uuid,
@@ -241,7 +269,7 @@ pub async fn verify_project_write_access<'e>(
             JOIN organization_members om ON om.organization_id = p.organization_id
             WHERE p.id = $1 AND om.user_id = $2 AND om.status = 'active'
               AND om.role IN ('owner', 'admin')
-        )
+        ) OR public.user_has_active_edit_share('project', $1, $2)
         "#,
     )
     .bind(project_id)
@@ -259,6 +287,12 @@ pub async fn verify_project_write_access<'e>(
 
 /// Verify that `user_id` has access to a questionnaire through its project's
 /// parent organization.
+///
+/// E-RBAC-10: an active `resource_shares` grant on the questionnaire itself, or
+/// on its parent project, also admits access — this is the analytics-sharing
+/// path (a guest reviewer in another org reads exactly the shared
+/// questionnaire's data and nothing else). The grant confers read/analytics
+/// only; org-management surfaces stay gated by membership.
 pub async fn verify_questionnaire_access<'e>(
     executor: impl PgExecutor<'e>,
     user_id: Uuid,
@@ -272,7 +306,7 @@ pub async fn verify_questionnaire_access<'e>(
             JOIN organization_members om ON om.organization_id = p.organization_id
             WHERE qd.id = $1 AND om.user_id = $2 AND om.status = 'active'
               AND qd.deleted_at IS NULL AND p.deleted_at IS NULL
-        )
+        ) OR public.user_can_read_questionnaire_via_share($1, $2)
         "#,
     )
     .bind(questionnaire_id)

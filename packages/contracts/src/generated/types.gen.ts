@@ -238,6 +238,11 @@ export type CreateOrgRequest = {
     slug?: string | null;
     domain?: string | null;
     logo_url?: string | null;
+    /**
+     * Data-residency region (E-RBAC-9). Chosen at creation and immutable in-app
+     * once the org owns data. Defaults to `eu` when omitted.
+     */
+    data_region?: string | null;
 };
 
 export type CreateProjectRequest = {
@@ -386,6 +391,32 @@ export type DomainRecord = {
     created_at?: string | null;
 };
 
+/**
+ * Body for `POST /api/organizations/{id}/erase`.
+ */
+export type EraseOrgRequest = {
+    /**
+     * Caller's current password, re-confirmed to authorize the destructive
+     * action.
+     */
+    password: string;
+    /**
+     * Typed confirmation — must equal the organization's slug (case
+     * insensitive), the standard "type the name to confirm" guard.
+     */
+    confirmation: string;
+};
+
+/**
+ * Summary returned by the erase endpoint.
+ */
+export type EraseResult = {
+    message: string;
+    projects_deleted: number;
+    sessions_deleted: number;
+    responses_deleted: number;
+};
+
 export type ErrorBody = {
     status: number;
     message: string;
@@ -393,6 +424,32 @@ export type ErrorBody = {
 
 export type ErrorEnvelope = {
     error: ErrorBody;
+};
+
+/**
+ * Public view of a `data_exports` job row.
+ */
+export type ExportJob = {
+    id: string;
+    organization_id: string;
+    /**
+     * pending | running | ready | failed | expired
+     */
+    status: string;
+    data_region: string;
+    size_bytes?: number | null;
+    created_at?: string | null;
+    completed_at?: string | null;
+    expires_at?: string | null;
+    /**
+     * Short-lived presigned download URL — present only when the artifact is
+     * ready and unexpired.
+     */
+    download_url?: string | null;
+    /**
+     * Operator-facing failure reason, present only on a failed job.
+     */
+    error?: string | null;
 };
 
 export type FilterGroup = {
@@ -676,6 +733,15 @@ export type Organization = {
     domain?: string | null;
     logo_url?: string | null;
     settings: unknown;
+    /**
+     * Data-residency region tag (E-RBAC-9), e.g. `eu`/`us`. Threaded into
+     * storage key prefixes; immutable in-app once the org owns data.
+     */
+    data_region: string;
+    /**
+     * When true, destructive tenant erasure is blocked (E-RBAC-9).
+     */
+    legal_hold: boolean;
     created_at?: string | null;
     updated_at?: string | null;
 };
@@ -1078,6 +1144,20 @@ export type SessionVariableRequest = {
     value: unknown;
     value_type?: string | null;
     source?: string | null;
+};
+
+/**
+ * Body for `PUT /api/organizations/{id}/data-region`.
+ */
+export type SetDataRegionRequest = {
+    data_region: string;
+};
+
+/**
+ * Body for `PUT /api/organizations/{id}/legal-hold`.
+ */
+export type SetLegalHoldRequest = {
+    legal_hold: boolean;
 };
 
 export type SubmitResponseRequest = {
@@ -2610,6 +2690,192 @@ export type ListAuditEventsResponses = {
 };
 
 export type ListAuditEventsResponse = ListAuditEventsResponses[keyof ListAuditEventsResponses];
+
+export type RequestExportData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/export';
+};
+
+export type RequestExportErrors = {
+    /**
+     * Requires owner role
+     */
+    403: ErrorEnvelope;
+    /**
+     * An export is already in progress
+     */
+    409: ErrorEnvelope;
+};
+
+export type RequestExportError = RequestExportErrors[keyof RequestExportErrors];
+
+export type RequestExportResponses = {
+    /**
+     * Export job accepted
+     */
+    202: ExportJob;
+};
+
+export type RequestExportResponse = RequestExportResponses[keyof RequestExportResponses];
+
+export type GetExportData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+        /**
+         * Export job id
+         */
+        job_id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/export/{job_id}';
+};
+
+export type GetExportErrors = {
+    /**
+     * Requires admin role
+     */
+    403: ErrorEnvelope;
+    /**
+     * Export job not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetExportError = GetExportErrors[keyof GetExportErrors];
+
+export type GetExportResponses = {
+    /**
+     * Export job status
+     */
+    200: ExportJob;
+};
+
+export type GetExportResponse = GetExportResponses[keyof GetExportResponses];
+
+export type EraseOrgData = {
+    body: EraseOrgRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/erase';
+};
+
+export type EraseOrgErrors = {
+    /**
+     * Confirmation mismatch
+     */
+    400: ErrorEnvelope;
+    /**
+     * Password incorrect
+     */
+    401: ErrorEnvelope;
+    /**
+     * Requires owner role
+     */
+    403: ErrorEnvelope;
+    /**
+     * Legal hold active — erasure blocked
+     */
+    409: ErrorEnvelope;
+};
+
+export type EraseOrgError = EraseOrgErrors[keyof EraseOrgErrors];
+
+export type EraseOrgResponses = {
+    /**
+     * Tenant data erased
+     */
+    200: EraseResult;
+};
+
+export type EraseOrgResponse = EraseOrgResponses[keyof EraseOrgResponses];
+
+export type SetDataRegionData = {
+    body: SetDataRegionRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/data-region';
+};
+
+export type SetDataRegionErrors = {
+    /**
+     * Requires owner role
+     */
+    403: ErrorEnvelope;
+    /**
+     * Immutable — org already owns data
+     */
+    409: ErrorEnvelope;
+    /**
+     * Unsupported region
+     */
+    422: ErrorEnvelope;
+};
+
+export type SetDataRegionError = SetDataRegionErrors[keyof SetDataRegionErrors];
+
+export type SetDataRegionResponses = {
+    /**
+     * Updated organization
+     */
+    200: Organization;
+};
+
+export type SetDataRegionResponse = SetDataRegionResponses[keyof SetDataRegionResponses];
+
+export type SetLegalHoldData = {
+    body: SetLegalHoldRequest;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/legal-hold';
+};
+
+export type SetLegalHoldErrors = {
+    /**
+     * Requires owner role
+     */
+    403: ErrorEnvelope;
+    /**
+     * Organization not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type SetLegalHoldError = SetLegalHoldErrors[keyof SetLegalHoldErrors];
+
+export type SetLegalHoldResponses = {
+    /**
+     * Updated organization
+     */
+    200: Organization;
+};
+
+export type SetLegalHoldResponse = SetLegalHoldResponses[keyof SetLegalHoldResponses];
 
 export type ListRolesData = {
     body?: never;

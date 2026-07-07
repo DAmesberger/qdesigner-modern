@@ -216,6 +216,10 @@
           <ScrollText class="h-5 w-5 text-primary mr-3" />
           <span class="text-foreground">Audit Log</span>
         </a>
+        <a href="/admin/data-privacy" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
+          <ShieldCheck class="h-5 w-5 text-primary mr-3" />
+          <span class="text-foreground">Data &amp; Privacy</span>
+        </a>
         <a href="/projects" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
           <ClipboardList class="h-5 w-5 text-primary mr-3" />
           <span class="text-foreground">View All Questionnaires</span>

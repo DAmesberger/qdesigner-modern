@@ -97,6 +97,15 @@ pub async fn register(
     // 409 Conflict rather than leaking a 500 on a benign duplicate race.
     .map_err(ApiError::from_db_error)?;
 
+    // Link any pending resource shares addressed to this email (E-RBAC-10 step
+    // 2): a project/questionnaire shared before this account existed becomes
+    // active on first sign-up. Best-effort — never block registration on it.
+    let _ = sqlx::query("SELECT public.resolve_pending_resource_shares($1, $2)")
+        .bind(&body.email)
+        .bind(user_id)
+        .execute(&state.pool)
+        .await;
+
     // Issue tokens
     let roles = vec!["user".to_string()];
     let (access_token, _claims) =
@@ -194,6 +203,14 @@ pub async fn login(
     if !password::verify_password(&body.password, hash)? {
         return Err(ApiError::Unauthorized("Invalid email or password".into()));
     }
+
+    // Link any pending resource shares addressed to this email (E-RBAC-10 step
+    // 2). Covers grants created before the user's first sign-in. Best-effort.
+    let _ = sqlx::query("SELECT public.resolve_pending_resource_shares($1, $2)")
+        .bind(&user.email)
+        .bind(user.id)
+        .execute(&state.pool)
+        .await;
 
     // Collect roles from org memberships
     let roles: Vec<String> = sqlx::query_scalar(

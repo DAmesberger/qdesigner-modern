@@ -268,7 +268,10 @@ pub async fn upload_media(
     }
 
     let size_bytes = bytes.len() as i64;
-    let storage_key = S3StorageService::generate_key(org_id, &filename);
+    // Route the object under the org's data-residency region prefix (E-RBAC-9):
+    // the storage-key namespace is the enforcement point for residency claims.
+    let region = crate::api::access::org_data_region(&mut **tx, org_id).await?;
+    let storage_key = S3StorageService::generate_region_key(&region, org_id, &filename);
 
     // Upload to S3
     state

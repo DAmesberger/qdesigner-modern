@@ -27,11 +27,13 @@
 		FileSpreadsheet,
 		MessageSquare,
 		PieChart,
+		Share2,
 		Timer,
 		XCircle,
 	} from 'lucide-svelte';
 	import { StatisticalEngine } from '$lib/analytics/StatisticalEngine';
 	import Select from '$lib/components/ui/forms/Select.svelte';
+	import ShareDialog from '$lib/components/ShareDialog.svelte';
 
 	interface Props {
 		data: PageData;
@@ -45,6 +47,10 @@
 	let error = $state<string | null>(null);
 	let exportLoading = $state<string | null>(null);
 	let exportMenuOpen = $state(false);
+
+	// Share the currently-selected questionnaire's analytics with an external
+	// collaborator/reviewer (E-RBAC-10).
+	let shareDialogOpen = $state(false);
 
 	let selectedQuestionnaire = $derived(
 		data.questionnaires.find((q: QuestionnaireDefinition) => q.id === selectedQuestionnaireId) ||
@@ -408,6 +414,16 @@
 									<option value={q.id}>{q.name}</option>
 								{/each}
 							</Select>
+
+							<!-- Share this questionnaire's analytics (E-RBAC-10) -->
+							<button
+								onclick={() => { shareDialogOpen = true; }}
+								disabled={!selectedQuestionnaireId}
+								class="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
+							>
+								<Share2 class="h-4 w-4" />
+								Share
+							</button>
 
 							<!-- Export dropdown -->
 							<div class="relative">
@@ -882,3 +898,10 @@
 		{/if}
 	</main>
 </div>
+
+<ShareDialog
+	bind:open={shareDialogOpen}
+	kind="questionnaire"
+	resourceId={selectedQuestionnaireId}
+	resourceName={selectedQuestionnaire?.name ?? ''}
+/>

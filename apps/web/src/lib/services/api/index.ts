@@ -6,6 +6,7 @@ import { scimTokens } from './scim-tokens';
 import { projects } from './projects';
 import { questionnaires } from './questionnaires';
 import { sessions } from './sessions';
+import { shares } from './shares';
 import { media } from './media';
 import { templates } from './templates';
 import { comments } from './comments';
@@ -22,6 +23,7 @@ export const api = {
   projects,
   questionnaires,
   sessions,
+  shares,
   media,
   templates,
   comments,

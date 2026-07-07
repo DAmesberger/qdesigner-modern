@@ -65,6 +65,28 @@ export interface OrgBranding {
   participant_header: string | null;
 }
 
+/** One org GDPR export job (E-RBAC-9). Snake-case mirrors the server DTO. */
+export interface ExportJob {
+  id: string;
+  organization_id: string;
+  status: string;
+  data_region: string;
+  size_bytes: number | null;
+  created_at: string | null;
+  completed_at: string | null;
+  expires_at: string | null;
+  download_url?: string | null;
+  error?: string | null;
+}
+
+/** Result of a guarded tenant erasure (E-RBAC-9). */
+export interface EraseResult {
+  message: string;
+  projects_deleted: number;
+  sessions_deleted: number;
+  responses_deleted: number;
+}
+
 export const organizations = {
   list: async () =>
     (await callSdk(() =>
@@ -439,5 +461,61 @@ export const organizations = {
           },
         })
       ) as Promise<AuditListResponse>,
+  },
+
+  // GDPR: data export / erasure / residency (E-RBAC-9).
+  gdpr: {
+    requestExport: (orgId: string): Promise<ExportJob> =>
+      callSdk(() =>
+        sdk.requestExport<true>({
+          client: apiClient,
+          responseStyle: 'data',
+          throwOnError: true,
+          path: { id: orgId },
+        })
+      ) as Promise<ExportJob>,
+    getExport: (orgId: string, jobId: string): Promise<ExportJob> =>
+      callSdk(() =>
+        sdk.getExport<true>({
+          client: apiClient,
+          responseStyle: 'data',
+          throwOnError: true,
+          path: { id: orgId, job_id: jobId },
+        })
+      ) as Promise<ExportJob>,
+    erase: (orgId: string, password: string, confirmation: string): Promise<EraseResult> =>
+      callSdk(() =>
+        sdk.eraseOrg<true>({
+          client: apiClient,
+          responseStyle: 'data',
+          throwOnError: true,
+          path: { id: orgId },
+          body: { password, confirmation },
+        })
+      ) as Promise<EraseResult>,
+    setDataRegion: async (orgId: string, dataRegion: string) =>
+      mapOrganization(
+        await callSdk(() =>
+          sdk.setDataRegion<true>({
+            client: apiClient,
+            responseStyle: 'data',
+            throwOnError: true,
+            path: { id: orgId },
+            body: { data_region: dataRegion },
+          })
+        )
+      ),
+    setLegalHold: async (orgId: string, legalHold: boolean) =>
+      mapOrganization(
+        await callSdk(() =>
+          sdk.setLegalHold<true>({
+            client: apiClient,
+            responseStyle: 'data',
+            throwOnError: true,
+            path: { id: orgId },
+            body: { legal_hold: legalHold },
+          })
+        )
+      ),
   },
 };

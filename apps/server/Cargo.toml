@@ -47,6 +47,10 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 yrs = "0.25.0"
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid", "preserve_order", "preserve_path_order"] }
 infer = "0.16"
+# Zip writer for the org GDPR export bundle (E-RBAC-9). default-features off
+# drops the bzip2/zstd/lzma/aes codecs; only the deflate path is pulled in
+# (flate2/miniz_oxide), keeping the dependency lean.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 # Optional DNS resolver, compiled only under the `dns-verify` feature. It backs
 # the domain-ownership TXT challenge in `api::organizations::verify_domain`
 # (F012). The default build deliberately cannot auto-verify a domain — it

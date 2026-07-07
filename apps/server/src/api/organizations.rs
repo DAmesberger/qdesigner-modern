@@ -39,6 +39,11 @@ pub struct Organization {
     pub domain: Option<String>,
     pub logo_url: Option<String>,
     pub settings: serde_json::Value,
+    /// Data-residency region tag (E-RBAC-9), e.g. `eu`/`us`. Threaded into
+    /// storage key prefixes; immutable in-app once the org owns data.
+    pub data_region: String,
+    /// When true, destructive tenant erasure is blocked (E-RBAC-9).
+    pub legal_hold: bool,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -50,6 +55,9 @@ pub struct CreateOrgRequest {
     pub slug: Option<String>,
     pub domain: Option<String>,
     pub logo_url: Option<String>,
+    /// Data-residency region (E-RBAC-9). Chosen at creation and immutable in-app
+    /// once the org owns data. Defaults to `eu` when omitted.
+    pub data_region: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
@@ -339,7 +347,8 @@ pub async fn list_organizations(
 
     let orgs = sqlx::query_as::<_, Organization>(
         r#"
-        SELECT o.id, o.name, o.slug, o.domain, o.logo_url, o.settings, o.created_at, o.updated_at
+        SELECT o.id, o.name, o.slug, o.domain, o.logo_url, o.settings,
+               o.data_region, o.legal_hold, o.created_at, o.updated_at
         FROM organizations o
         JOIN organization_members om ON om.organization_id = o.id
         WHERE om.user_id = $1 AND om.status = 'active' AND o.deleted_at IS NULL
@@ -383,6 +392,10 @@ pub async fn create_organization(
     // Generate slug from name if not provided
     let slug = body.slug.unwrap_or_else(|| slugify(&body.name));
 
+    // Residency region (E-RBAC-9): validated against the supported allowlist,
+    // defaulting to `eu`.
+    let data_region = crate::api::gdpr::normalize_data_region(body.data_region.as_deref())?;
+
     // Check slug uniqueness
     let exists =
         sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM organizations WHERE slug = $1)")
@@ -398,9 +411,10 @@ pub async fn create_organization(
 
     let org = sqlx::query_as::<_, Organization>(
         r#"
-        INSERT INTO organizations (id, name, slug, domain, logo_url, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, name, slug, domain, logo_url, settings, created_at, updated_at
+        INSERT INTO organizations (id, name, slug, domain, logo_url, data_region, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, name, slug, domain, logo_url, settings,
+                  data_region, legal_hold, created_at, updated_at
         "#,
     )
     .bind(org_id)
@@ -408,6 +422,7 @@ pub async fn create_organization(
     .bind(&slug)
     .bind(&body.domain)
     .bind(&body.logo_url)
+    .bind(&data_region)
     .bind(user.user_id)
     .fetch_one(&mut **tx)
     .await?;
@@ -467,7 +482,8 @@ pub async fn get_organization(
 
     let org = sqlx::query_as::<_, Organization>(
         r#"
-        SELECT id, name, slug, domain, logo_url, settings, created_at, updated_at
+        SELECT id, name, slug, domain, logo_url, settings,
+               data_region, legal_hold, created_at, updated_at
         FROM organizations WHERE id = $1 AND deleted_at IS NULL
         "#,
     )
@@ -503,7 +519,8 @@ pub async fn get_org_branding(
 ) -> Result<Json<OrgBranding>, ApiError> {
     let org = sqlx::query_as::<_, Organization>(
         r#"
-        SELECT id, name, slug, domain, logo_url, settings, created_at, updated_at
+        SELECT id, name, slug, domain, logo_url, settings,
+               data_region, legal_hold, created_at, updated_at
         FROM organizations WHERE id = $1 AND deleted_at IS NULL
         "#,
     )
@@ -602,7 +619,7 @@ pub async fn update_organization(
     sets.push("updated_at = NOW()".into());
 
     let sql = format!(
-        "UPDATE organizations SET {} WHERE id = $1 AND deleted_at IS NULL RETURNING id, name, slug, domain, logo_url, settings, created_at, updated_at",
+        "UPDATE organizations SET {} WHERE id = $1 AND deleted_at IS NULL RETURNING id, name, slug, domain, logo_url, settings, data_region, legal_hold, created_at, updated_at",
         sets.join(", ")
     );
 

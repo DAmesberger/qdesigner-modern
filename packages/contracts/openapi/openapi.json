@@ -2286,6 +2286,371 @@
         ]
       }
     },
+    "/api/organizations/{id}/export": {
+      "post": {
+        "tags": [
+          "gdpr"
+        ],
+        "summary": "POST /api/organizations/{id}/export",
+        "description": "Owner-gated. Enqueues an async export job: inserts a `pending`\n`data_exports` row, spawns a background task that serializes the whole\ntenant into a zip in object storage, and returns the job immediately.\nRefuses (409) when an export is already in flight for the org (belt to the\nroute's rate-limit layer).",
+        "operationId": "request_export",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Export job accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJob"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires owner role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An export is already in progress",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/export/{job_id}": {
+      "get": {
+        "tags": [
+          "gdpr"
+        ],
+        "summary": "GET /api/organizations/{id}/export/{job_id}",
+        "description": "Admin/owner-gated. Reports job status and, once the artifact is `ready` and\nunexpired, hands back a short-lived presigned download URL. A ready artifact\npast its TTL is reported as `expired` with no URL.",
+        "operationId": "get_export",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "description": "Export job id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Export job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportJob"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires admin role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Export job not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/erase": {
+      "post": {
+        "tags": [
+          "gdpr"
+        ],
+        "summary": "POST /api/organizations/{id}/erase",
+        "description": "Owner-gated, password + typed-confirmation guarded, blocked under a legal\nhold. Removes the tenant's participant data (deleting the org's projects\ncascades through questionnaires → sessions → responses / events / variables\n/ media rows) and soft-deletes the organization, retaining `audit_events`.",
+        "operationId": "erase_org",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EraseOrgRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Tenant data erased",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EraseResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Confirmation mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Password incorrect",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires owner role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Legal hold active — erasure blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/data-region": {
+      "put": {
+        "tags": [
+          "gdpr"
+        ],
+        "summary": "PUT /api/organizations/{id}/data-region",
+        "description": "Owner-gated. Sets the data-residency region, allowed ONLY while the org\nowns no data yet (no projects, no sessions) — a residency commitment is\nimmutable once data has landed under the current region's storage prefix.",
+        "operationId": "set_data_region",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDataRegionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires owner role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Immutable — org already owns data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unsupported region",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/legal-hold": {
+      "put": {
+        "tags": [
+          "gdpr"
+        ],
+        "summary": "PUT /api/organizations/{id}/legal-hold",
+        "description": "Owner-gated. Enables or releases the legal hold that blocks tenant erasure.",
+        "operationId": "set_legal_hold",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetLegalHoldRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires owner role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organization not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/organizations/{id}/roles": {
       "get": {
         "tags": [
@@ -8086,6 +8451,13 @@
               "string",
               "null"
             ]
+          },
+          "data_region": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data-residency region (E-RBAC-9). Chosen at creation and immutable in-app\nonce the org owns data. Defaults to `eu` when omitted."
           }
         }
       },
@@ -8563,6 +8935,51 @@
           }
         }
       },
+      "EraseOrgRequest": {
+        "type": "object",
+        "description": "Body for `POST /api/organizations/{id}/erase`.",
+        "required": [
+          "password",
+          "confirmation"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "Caller's current password, re-confirmed to authorize the destructive\naction."
+          },
+          "confirmation": {
+            "type": "string",
+            "description": "Typed confirmation — must equal the organization's slug (case\ninsensitive), the standard \"type the name to confirm\" guard."
+          }
+        }
+      },
+      "EraseResult": {
+        "type": "object",
+        "description": "Summary returned by the erase endpoint.",
+        "required": [
+          "message",
+          "projects_deleted",
+          "sessions_deleted",
+          "responses_deleted"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "projects_deleted": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sessions_deleted": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "responses_deleted": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "ErrorBody": {
         "type": "object",
         "required": [
@@ -8588,6 +9005,75 @@
         "properties": {
           "error": {
             "$ref": "#/components/schemas/ErrorBody"
+          }
+        }
+      },
+      "ExportJob": {
+        "type": "object",
+        "description": "Public view of a `data_exports` job row.",
+        "required": [
+          "id",
+          "organization_id",
+          "status",
+          "data_region"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "pending | running | ready | failed | expired"
+          },
+          "data_region": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "download_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Short-lived presigned download URL — present only when the artifact is\nready and unexpired."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Operator-facing failure reason, present only on a failed job."
           }
         }
       },
@@ -9504,7 +9990,9 @@
           "id",
           "name",
           "slug",
-          "settings"
+          "settings",
+          "data_region",
+          "legal_hold"
         ],
         "properties": {
           "id": {
@@ -9530,6 +10018,14 @@
             ]
           },
           "settings": {},
+          "data_region": {
+            "type": "string",
+            "description": "Data-residency region tag (E-RBAC-9), e.g. `eu`/`us`. Threaded into\nstorage key prefixes; immutable in-app once the org owns data."
+          },
+          "legal_hold": {
+            "type": "boolean",
+            "description": "When true, destructive tenant erasure is blocked (E-RBAC-9)."
+          },
           "created_at": {
             "type": [
               "string",
@@ -10865,6 +11361,30 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "SetDataRegionRequest": {
+        "type": "object",
+        "description": "Body for `PUT /api/organizations/{id}/data-region`.",
+        "required": [
+          "data_region"
+        ],
+        "properties": {
+          "data_region": {
+            "type": "string"
+          }
+        }
+      },
+      "SetLegalHoldRequest": {
+        "type": "object",
+        "description": "Body for `PUT /api/organizations/{id}/legal-hold`.",
+        "required": [
+          "legal_hold"
+        ],
+        "properties": {
+          "legal_hold": {
+            "type": "boolean"
           }
         }
       },

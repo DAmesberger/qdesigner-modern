@@ -133,30 +133,59 @@ impl RbacManager {
         org_id: Uuid,
         permission: Permission,
     ) -> Result<(), ApiError> {
-        let row = sqlx::query_as::<_, (Option<Vec<String>>,)>(
-            r#"
-            SELECT r.permissions
-            FROM organization_members om
-            LEFT JOIN org_roles r ON r.id = om.custom_role_id
-            WHERE om.organization_id = $1
-              AND om.user_id = $2
-              AND om.status = 'active'
-            "#,
-        )
-        .bind(org_id)
-        .bind(user_id)
-        .fetch_optional(executor)
-        .await?;
+        // One round-trip resolves three facts: is the caller an active member
+        // (`member_role`), do they carry a custom role (`custom_perms`), and —
+        // for a non-member — do they hold a live resource share in this org
+        // (`has_active_share`, E-RBAC-10). The `(SELECT 1) _one` base keeps
+        // exactly one row so a non-member still returns (NULL, NULL, has_share)
+        // rather than an empty set; `impl PgExecutor` is single-use so the three
+        // facts must come from a single statement.
+        let (member_role, custom_perms, has_active_share) =
+            sqlx::query_as::<_, (Option<String>, Option<Vec<String>>, bool)>(
+                r#"
+                SELECT
+                    om.role,
+                    r.permissions,
+                    EXISTS(
+                        SELECT 1 FROM resource_shares rs
+                        WHERE rs.grantee_user_id = $2
+                          AND rs.organization_id = $1
+                          AND (rs.expires_at IS NULL OR rs.expires_at > now())
+                    ) AS has_active_share
+                FROM (SELECT 1) AS _one
+                LEFT JOIN organization_members om
+                       ON om.organization_id = $1
+                      AND om.user_id = $2
+                      AND om.status = 'active'
+                LEFT JOIN org_roles r ON r.id = om.custom_role_id
+                "#,
+            )
+            .bind(org_id)
+            .bind(user_id)
+            .fetch_one(executor)
+            .await?;
 
-        match row {
-            // Not a member.
-            None => Err(ApiError::Forbidden(
-                "Not a member of this organization".into(),
-            )),
-            // System role: governed by the coarse checks — pass through.
-            Some((None,)) => Ok(()),
-            // Custom role: enforce the granular set.
-            Some((Some(perms),)) => {
+        match member_role {
+            // Not a member. The caller may still be an external guest holding
+            // an active resource share in this org (E-RBAC-10): the coarse gate
+            // (verify_project_read_access / verify_questionnaire_access) has
+            // already scoped them to the shared resource, and require_permission
+            // is only the custom-role *tightening* layer — a guest carries no
+            // custom role, so pass through when a live share exists, else deny.
+            None => {
+                if has_active_share {
+                    Ok(())
+                } else {
+                    Err(ApiError::Forbidden(
+                        "Not a member of this organization".into(),
+                    ))
+                }
+            }
+            // Member on a system role: governed by the coarse checks — pass through.
+            Some(_) if custom_perms.is_none() => Ok(()),
+            // Member on a custom role: enforce the granular set.
+            Some(_) => {
+                let perms = custom_perms.unwrap_or_default();
                 let granted = perms.iter().any(|p| p == permission.as_str());
                 if granted {
                     Ok(())

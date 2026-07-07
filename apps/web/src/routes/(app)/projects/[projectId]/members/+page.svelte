@@ -7,7 +7,8 @@
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Button from '$lib/components/ui/Button.svelte';
-  import { ArrowLeft, UserPlus } from 'lucide-svelte';
+  import ShareDialog from '$lib/components/ShareDialog.svelte';
+  import { ArrowLeft, UserPlus, Share2 } from 'lucide-svelte';
   import type { ProjectMember } from '$lib/api/generated/types.gen';
   import type { PageData } from './$types';
 
@@ -29,6 +30,10 @@
   let addEmail = $state('');
   let addRole = $state<string>('editor');
   let adding = $state(false);
+
+  // External sharing (E-RBAC-10) — grant a scoped, time-limited role to a
+  // collaborator/guest who is NOT (and need not become) an org member.
+  let shareDialogOpen = $state(false);
 
   const currentUserId = data.currentUserId;
 
@@ -218,10 +223,20 @@
       <ArrowLeft class="h-4 w-4 mr-1" />
       Back to {data.project.name}
     </a>
-    <h1 class="text-3xl font-bold text-foreground">Members</h1>
-    <p class="mt-2 text-muted-foreground">
-      Manage who can access and edit {data.project.name}.
-    </p>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 class="text-3xl font-bold text-foreground">Members</h1>
+        <p class="mt-2 text-muted-foreground">
+          Manage who can access and edit {data.project.name}.
+        </p>
+      </div>
+      {#if canManage}
+        <Button variant="outline" onclick={() => (shareDialogOpen = true)}>
+          <Share2 class="h-4 w-4 mr-2" />
+          Share externally
+        </Button>
+      {/if}
+    </div>
   </div>
 
   {#if error}
@@ -392,3 +407,10 @@
     {/if}
   </Card>
 </div>
+
+<ShareDialog
+  bind:open={shareDialogOpen}
+  kind="project"
+  resourceId={data.project.id}
+  resourceName={data.project.name}
+/>

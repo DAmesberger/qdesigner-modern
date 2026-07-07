@@ -212,6 +212,47 @@ impl S3StorageService {
             .unwrap_or("bin");
         format!("{org_id}/{id}.{ext}")
     }
+
+    /// Generate a unique, region-prefixed storage key for an upload
+    /// (E-RBAC-9 data residency). New media lands under
+    /// `{region}/{org_id}/{uuid}.{ext}` so a data-location commitment is
+    /// encoded in the object namespace — the enforcement point for
+    /// residency claims (and the seam a future bucket-per-region router
+    /// keys off). `region` is sanitized to a safe path segment.
+    pub fn generate_region_key(region: &str, org_id: Uuid, filename: &str) -> String {
+        let region = sanitize_region(region);
+        let id = Uuid::new_v4();
+        let ext = std::path::Path::new(filename)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("bin");
+        format!("{region}/{org_id}/{id}.{ext}")
+    }
+
+    /// Storage key for an org's GDPR export artifact (E-RBAC-9): a
+    /// region-prefixed, deterministic path keyed by the export job id.
+    pub fn export_key(region: &str, org_id: Uuid, job_id: Uuid) -> String {
+        let region = sanitize_region(region);
+        format!("{region}/exports/{org_id}/{job_id}.zip")
+    }
+}
+
+/// Reduce a residency region tag to a safe single path segment
+/// (lowercase alphanumerics + `-`), falling back to `eu` when empty. Keeps
+/// an operator-supplied region from injecting `/` or `..` into a key.
+fn sanitize_region(region: &str) -> String {
+    let cleaned: String = region
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let cleaned = cleaned.trim_matches('-').to_string();
+    if cleaned.is_empty() {
+        "eu".to_string()
+    } else {
+        cleaned
+    }
 }
 
 #[derive(Debug, serde::Serialize)]

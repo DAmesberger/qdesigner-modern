@@ -6,6 +6,10 @@ export interface Organization {
   domain: string | null;
   logoUrl: string | null;
   settings: Record<string, unknown>;
+  /** Data-residency region tag (E-RBAC-9), e.g. `eu`/`us`. */
+  dataRegion: string;
+  /** When true, destructive tenant erasure is blocked (E-RBAC-9). */
+  legalHold: boolean;
   subscriptionTier: string;
   subscriptionStatus: string;
   createdBy: string | null;

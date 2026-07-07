@@ -131,6 +131,8 @@ export function mapOrganization(raw: GeneratedOrganization): Organization {
     domain: raw.domain ?? null,
     logoUrl: raw.logo_url ?? null,
     settings: (raw.settings as Record<string, unknown>) ?? {},
+    dataRegion: (raw as { data_region?: string }).data_region ?? 'eu',
+    legalHold: (raw as { legal_hold?: boolean }).legal_hold ?? false,
     subscriptionTier: 'free',
     subscriptionStatus: 'active',
     createdBy: null,

@@ -80,6 +80,25 @@ pub enum AuditAction {
     ScimUserProvisioned,
     /// A directory connector deactivated a member via SCIM (active=false).
     ScimUserDeactivated,
+    // GDPR data export / erasure / residency (E-RBAC-9).
+    /// An owner requested an org-scoped GDPR data export (DSAR bundle).
+    OrgExportRequested,
+    /// A ready export artifact's presigned download URL was issued (the
+    /// closest server-observable "downloaded" event; audited once).
+    OrgExportDownloaded,
+    /// An owner executed a guarded tenant data erasure (participant data
+    /// removed; audit_events retained through the erasure per compliance).
+    OrgDataErased,
+    /// An org's data-residency region was set (create-time / pre-data only).
+    OrgDataRegionSet,
+    /// An org's legal hold was enabled or released.
+    OrgLegalHoldChanged,
+    // Cross-project / external-guest sharing (E-RBAC-10).
+    /// A project or questionnaire was shared with a (possibly external) user
+    /// by email, granting a scoped, optionally time-limited role.
+    ShareCreated,
+    /// A previously-granted resource share was revoked.
+    ShareRevoked,
 }
 
 impl AuditAction {
@@ -114,6 +133,13 @@ impl AuditAction {
             AuditAction::ScimTokenRevoked => "scim_token.revoked",
             AuditAction::ScimUserProvisioned => "scim.user_provisioned",
             AuditAction::ScimUserDeactivated => "scim.user_deactivated",
+            AuditAction::OrgExportRequested => "organization.export_requested",
+            AuditAction::OrgExportDownloaded => "organization.export_downloaded",
+            AuditAction::OrgDataErased => "organization.data_erased",
+            AuditAction::OrgDataRegionSet => "organization.data_region_set",
+            AuditAction::OrgLegalHoldChanged => "organization.legal_hold_changed",
+            AuditAction::ShareCreated => "share.created",
+            AuditAction::ShareRevoked => "share.revoked",
         }
     }
 }
@@ -132,6 +158,8 @@ pub mod resource {
     pub const API_KEY: &str = "api_key";
     pub const SCIM_TOKEN: &str = "scim_token";
     pub const SCIM_USER: &str = "scim_user";
+    pub const DATA_EXPORT: &str = "data_export";
+    pub const SHARE: &str = "resource_share";
 }
 
 /// One privileged action to append to the log.
