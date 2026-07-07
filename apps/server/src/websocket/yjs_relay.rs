@@ -85,71 +85,83 @@ async fn handle_sync(
     let sync_type = payload[0];
     let sync_payload = &payload[1..];
     let room_lock = yjs_store.get_or_create_room(questionnaire_id).await;
-    let room = room_lock.lock().await;
 
     let mut responses: Vec<Vec<u8>> = Vec::new();
+    // Binary state to flush to `yjs_state` after releasing the room lock (so the
+    // DB write never blocks other operations on this room).
+    let mut persist_snapshot: Option<Vec<u8>> = None;
 
-    match sync_type {
-        MSG_SYNC_STEP1 => {
-            // Client sends its state vector. We reply with our diff (step2).
-            let state_vector = match decode_var_uint8_array(sync_payload) {
-                Ok(value) => value,
-                Err(error) => {
-                    tracing::warn!("Yjs sync step1 decode error for {questionnaire_id}: {error}");
-                    return responses;
-                }
-            };
+    {
+        let mut room = room_lock.lock().await;
 
-            match room.encode_diff(state_vector) {
-                Ok(diff) => {
-                    // Build: [MSG_SYNC, MSG_SYNC_STEP2, ...diff]
-                    let mut frame =
-                        Vec::with_capacity(2 + encoded_var_uint_len(diff.len()) + diff.len());
-                    frame.push(MSG_SYNC);
-                    frame.push(MSG_SYNC_STEP2);
-                    encode_var_uint(diff.len(), &mut frame);
-                    frame.extend_from_slice(&diff);
-                    responses.push(frame);
+        match sync_type {
+            MSG_SYNC_STEP1 => {
+                // Client sends its state vector. We reply with our diff (step2).
+                match decode_var_uint8_array(sync_payload) {
+                    Ok(state_vector) => match room.encode_diff(state_vector) {
+                        Ok(diff) => {
+                            // Build: [MSG_SYNC, MSG_SYNC_STEP2, ...diff]
+                            let mut frame = Vec::with_capacity(
+                                2 + encoded_var_uint_len(diff.len()) + diff.len(),
+                            );
+                            frame.push(MSG_SYNC);
+                            frame.push(MSG_SYNC_STEP2);
+                            encode_var_uint(diff.len(), &mut frame);
+                            frame.extend_from_slice(&diff);
+                            responses.push(frame);
 
-                    // Also send our state vector back so the client can send us its diff.
-                    let sv = room.encode_state_vector();
-                    let mut sv_frame =
-                        Vec::with_capacity(2 + encoded_var_uint_len(sv.len()) + sv.len());
-                    sv_frame.push(MSG_SYNC);
-                    sv_frame.push(MSG_SYNC_STEP1);
-                    encode_var_uint(sv.len(), &mut sv_frame);
-                    sv_frame.extend_from_slice(&sv);
-                    responses.push(sv_frame);
-                }
-                Err(e) => {
-                    tracing::warn!("Yjs sync step1 error for {questionnaire_id}: {e}");
+                            // Also send our state vector back so the client can send us its diff.
+                            let sv = room.encode_state_vector();
+                            let mut sv_frame =
+                                Vec::with_capacity(2 + encoded_var_uint_len(sv.len()) + sv.len());
+                            sv_frame.push(MSG_SYNC);
+                            sv_frame.push(MSG_SYNC_STEP1);
+                            encode_var_uint(sv.len(), &mut sv_frame);
+                            sv_frame.extend_from_slice(&sv);
+                            responses.push(sv_frame);
+                        }
+                        Err(e) => {
+                            tracing::warn!("Yjs sync step1 error for {questionnaire_id}: {e}");
+                        }
+                    },
+                    Err(error) => {
+                        tracing::warn!(
+                            "Yjs sync step1 decode error for {questionnaire_id}: {error}"
+                        );
+                    }
                 }
             }
-        }
-        MSG_SYNC_STEP2 | MSG_SYNC_UPDATE => {
-            // Client sends an update or step2 diff. Apply to our doc.
-            let update = match decode_var_uint8_array(sync_payload) {
-                Ok(value) => value,
-                Err(error) => {
-                    tracing::warn!("Yjs update decode error for {questionnaire_id}: {error}");
-                    return responses;
+            MSG_SYNC_STEP2 | MSG_SYNC_UPDATE => {
+                // Client sends an update or step2 diff. Apply to our doc.
+                match decode_var_uint8_array(sync_payload) {
+                    Ok(update) => {
+                        if let Err(e) = room.apply_update(update) {
+                            tracing::warn!("Yjs update error for {questionnaire_id}: {e}");
+                        } else {
+                            // Debounced persistence of the authoritative binary state.
+                            persist_snapshot = YjsStore::take_persist_snapshot(&mut room);
+                        }
+
+                        // Relay to other subscribers.
+                        ws_state.broadcast_binary(
+                            &format!("designer:{questionnaire_id}"),
+                            raw_frame.to_vec(),
+                            Some(*conn_id),
+                        );
+                    }
+                    Err(error) => {
+                        tracing::warn!("Yjs update decode error for {questionnaire_id}: {error}");
+                    }
                 }
-            };
-
-            if let Err(e) = room.apply_update(update) {
-                tracing::warn!("Yjs update error for {questionnaire_id}: {e}");
             }
+            _ => {
+                tracing::debug!("Unknown Yjs sync sub-type: {sync_type}");
+            }
+        }
+    }
 
-            // Relay to other subscribers.
-            ws_state.broadcast_binary(
-                &format!("designer:{questionnaire_id}"),
-                raw_frame.to_vec(),
-                Some(*conn_id),
-            );
-        }
-        _ => {
-            tracing::debug!("Unknown Yjs sync sub-type: {sync_type}");
-        }
+    if let Some(bytes) = persist_snapshot {
+        yjs_store.persist(questionnaire_id, &bytes).await;
     }
 
     responses

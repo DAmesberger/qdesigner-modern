@@ -152,7 +152,9 @@ async fn main() {
     }
 
     // ── Yjs Store ────────────────────────────────────────────────────
-    let yjs_store = websocket::yjs_store::YjsStore::new();
+    // Pool-backed: the store is the sole seeder of each collaborative document
+    // (loads/persists the authoritative CRDT binary from `yjs_state`).
+    let yjs_store = websocket::yjs_store::YjsStore::new(pool.clone());
 
     // ── Revoked-access-token purger ───────────────────────────────────
     // revoked_tokens entries only matter until the access token would have

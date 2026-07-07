@@ -297,12 +297,12 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
     };
 
     Some(AppState {
-        pool,
+        pool: pool.clone(),
         jwt_manager: Arc::new(jwt_manager),
         rbac: Arc::new(RbacManager::new()),
         storage,
         websocket_state: Arc::new(WebSocketState::new()),
-        yjs_store: YjsStore::new(),
+        yjs_store: YjsStore::new(pool),
         redis: None,
         rate_limiter: RateLimiter::new(10_000, 60, None),
         verify_send_limiter: RateLimiter::new(10_000, 60, None),

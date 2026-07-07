@@ -212,12 +212,37 @@
         questionnaireId,
         token,
       });
-      // Register collab with the store so mutations flow through Yjs
-      designerStore.setCollab(collab);
-      // Sync Yjs changes (local + remote) back into the designer store
-      collabCleanup = collab.onChange((updated) => {
-        designerStore.applyRemoteUpdate(updated);
+
+      // The server is the sole seeder, so the Y.Doc starts EMPTY and only fills
+      // once its first sync with the server arrives. Until we hand off, the store
+      // keeps the local commit path + REST autosave — routing edits through an
+      // empty CRDT would wipe the canvas (lookup-free ops) or drop the edit
+      // (lookup ops no-op). We only reconcile the store from the doc AFTER handoff.
+      let handedOff = false;
+      const offChange = collab.onChange((updated) => {
+        if (handedOff) designerStore.applyRemoteUpdate(updated);
       });
+      const offSynced = collab.onSynced(() => {
+        if (!collab) return;
+        const docQ = collab.getQuestionnaire();
+        const docHasContent = docQ.pages.length > 0 || docQ.questions.length > 0;
+        const storeHasContent =
+          designerStore.questionnaire.pages.length > 0 ||
+          designerStore.questionnaire.questions.length > 0;
+        // Hand off only when the synced doc actually carries the questionnaire (or
+        // both are legitimately empty). If the doc synced empty while the store has
+        // REST content (e.g. the server could not seed the room), stay on the local
+        // path rather than wiping the canvas.
+        if (docHasContent || !storeHasContent) {
+          handedOff = true;
+          designerStore.applyRemoteUpdate(docQ);
+          designerStore.setCollab(collab);
+        }
+      });
+      collabCleanup = () => {
+        offChange();
+        offSynced();
+      };
     }
   }
 

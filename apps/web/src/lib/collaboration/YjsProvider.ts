@@ -41,6 +41,7 @@ export class YjsProvider {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
   private connectionListeners = new Set<(connected: boolean) => void>();
+  private syncedListeners = new Set<() => void>();
 
   private readonly questionnaireId: string;
   private readonly token: string;
@@ -100,12 +101,29 @@ export class YjsProvider {
     this.awareness.off('update', this.onAwarenessUpdate);
     this.awareness.destroy();
     this.connectionListeners.clear();
+    this.syncedListeners.clear();
   }
 
   onConnectionChange(cb: (connected: boolean) => void): () => void {
     this.connectionListeners.add(cb);
     cb(this.connected);
     return () => this.connectionListeners.delete(cb);
+  }
+
+  /**
+   * Fire when the doc completes a sync with the server (initial or post-reconnect).
+   * Callers use this to defer handing edits to the CRDT until the authoritative
+   * server state has arrived — before that the doc is empty. Fires immediately if
+   * already synced.
+   */
+  onSynced(cb: () => void): () => void {
+    this.syncedListeners.add(cb);
+    if (this.synced) cb();
+    return () => this.syncedListeners.delete(cb);
+  }
+
+  private notifySynced(): void {
+    for (const cb of this.syncedListeners) cb();
   }
 
   // -----------------------------------------------------------------------
@@ -180,6 +198,7 @@ export class YjsProvider {
         }
         if (!this.synced) {
           this.synced = true;
+          this.notifySynced();
         }
         break;
       }

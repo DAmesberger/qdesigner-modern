@@ -55,13 +55,25 @@ export class CollaborativeDesigner {
   // Lifecycle
   // -----------------------------------------------------------------------
 
-  /** Load a questionnaire into the Y.Doc and optionally connect. */
+  /**
+   * Load a questionnaire into the Y.Doc and optionally connect.
+   *
+   * When connecting, the client must NOT seed the doc from JSON: the server room
+   * is the sole seeder and streams the authoritative CRDT via sync. Seeding here
+   * would mint independent CRDT items that concatenate with the server's on sync,
+   * duplicating every page/block (identical IDs) — the corruption this fixes.
+   * The designer store is already populated from REST for immediate display, and
+   * `onChange` reconciles it to the synced state once sync completes.
+   *
+   * Offline / local-only (no options) has no server, so it seeds locally.
+   */
   init(questionnaire: Questionnaire, options?: CollaborativeDesignerOptions): void {
-    questionnaireToYDoc(questionnaire, this.doc);
     this.startObserving();
 
     if (options) {
       this.connect(options);
+    } else {
+      questionnaireToYDoc(questionnaire, this.doc);
     }
   }
 
@@ -111,6 +123,19 @@ export class CollaborativeDesigner {
   onConnectionChange(cb: (connected: boolean) => void): () => void {
     if (this.provider) {
       return this.provider.onConnectionChange(cb);
+    }
+    return () => {};
+  }
+
+  /**
+   * Fire when the doc has completed its first sync with the server (and again on
+   * each resync after a reconnect). Used to defer routing store mutations through
+   * the CRDT until the authoritative server state has arrived — the doc is empty
+   * before then. No-op in offline/local-only mode (no provider).
+   */
+  onSynced(cb: () => void): () => void {
+    if (this.provider) {
+      return this.provider.onSynced(cb);
     }
     return () => {};
   }
