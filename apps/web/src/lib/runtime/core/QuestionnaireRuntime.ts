@@ -2,6 +2,7 @@ import type {
   Questionnaire,
   Question,
   Page,
+  Block,
   FlowControl,
   QuestionnaireSession,
   Response,
@@ -25,6 +26,7 @@ import type { FormQuestionHost } from './FormQuestionHost';
 import { TimerController, type TimerScope } from './TimerController';
 import { buildModuleRuntimeConfig } from './moduleConfigAdapter';
 import { BlockRandomizer } from './BlockRandomizer';
+import { AdaptiveController, type CATEstimate } from './AdaptiveController';
 import { iterationVarPrefix, DEFAULT_LOOP_VARIABLE_NAME } from './LoopExpansion';
 import { computeReactionTimeMs } from './reactionTiming';
 import { resolveFlowTargetPageIndex } from './flowTarget';
@@ -70,6 +72,38 @@ interface PresentedItem {
   loopValue?: unknown;
   loopVariableName?: string;
   iterationCount?: number;
+  /**
+   * Adaptive item-bank entry sentinel (E-FLOW-1). When set, this item is not presented
+   * directly; reaching it in showCurrentItem hands control to the CAT loop for the block
+   * with this id, which dynamically selects and presents items until its stopping rule
+   * fires. `question` is a placeholder (the first resolvable bank item) never shown.
+   */
+  adaptiveBlockId?: string;
+}
+
+/** One administered step in an adaptive block's CAT trajectory (E-FLOW-1). */
+interface AdaptiveStep {
+  questionId: string;
+  correct: boolean;
+  theta: number;
+  se: number;
+}
+
+/**
+ * The persisted record of one adaptive block's administration (E-FLOW-1). Accumulated
+ * live and snapshotted into `session.metadata.custom.adaptive` on every step so the
+ * offline-first persistence path (P1-T1) carries the administered item ids and the
+ * running theta / SE trajectory.
+ */
+interface AdaptiveRecord {
+  blockId: string;
+  itemBankId?: string;
+  steps: AdaptiveStep[];
+  theta: number;
+  se: number;
+  itemsAdministered: number;
+  thetaReportVariable?: string;
+  complete: boolean;
 }
 
 /**
@@ -194,6 +228,18 @@ export class QuestionnaireRuntime {
 
   private assignedCondition: string | null = null;
   private conditionBlockOrder: number[] | null = null;
+
+  // Adaptive item-bank block (CAT/IRT, E-FLOW-1). Non-null only while an adaptive block
+  // is being administered: `adaptiveController` drives dynamic maximum-information item
+  // selection, `adaptiveBlock` carries its config, and `adaptivePresentedId` guards the
+  // response handler so the CAT update fires exactly for the item the controller just
+  // selected (and never for an ordinary form question).
+  private adaptiveController: AdaptiveController | null = null;
+  private adaptiveBlock: Block | null = null;
+  private adaptivePresentedId: string | null = null;
+  // Per-block CAT trajectories, snapshotted into session.metadata.custom.adaptive so the
+  // offline persistence path (P1-T1) carries the administered items + running theta/SE.
+  private readonly adaptiveRecords: AdaptiveRecord[] = [];
 
   // Resumable sessions (E-OFF-1): the set of question ids already answered in a
   // prior session, seeded by hydrate(). While non-null, showCurrentItem
@@ -738,7 +784,60 @@ export class QuestionnaireRuntime {
       defaultValue: true,
     });
 
+    // Adaptive-testing ability-estimate variables (CAT/IRT, E-FLOW-1). Registered
+    // unconditionally so downstream feedback panels and flow conditions can read
+    // `theta` / `thetaSE` / `adaptiveItemsAdministered` even before (or without) any
+    // adaptive block — and so `thetaSE` is a valid flow-condition variable (step 9),
+    // letting a researcher branch on measurement precision. `thetaSE` defaults to a
+    // large finite sentinel so `thetaSE <= 0.3` reads false until a CAT runs.
+    this.variableEngine.registerVariable({
+      id: '_theta',
+      name: 'theta',
+      type: 'number',
+      scope: 'global',
+      defaultValue: 0,
+    });
+
+    this.variableEngine.registerVariable({
+      id: '_thetaSE',
+      name: 'thetaSE',
+      type: 'number',
+      scope: 'global',
+      defaultValue: 999,
+    });
+
+    this.variableEngine.registerVariable({
+      id: '_adaptiveItemsAdministered',
+      name: 'adaptiveItemsAdministered',
+      type: 'number',
+      scope: 'global',
+      defaultValue: 0,
+    });
+
+    this.registerAdaptiveReportVariables();
+
     this.injectServerVariables();
+  }
+
+  /**
+   * Register the per-block `thetaReportVariable` targets declared by any adaptive block
+   * (E-FLOW-1, step 6) so a researcher-named ability variable exists up front for
+   * feedback / branching, resolving to its default until the CAT writes the estimate.
+   */
+  private registerAdaptiveReportVariables(): void {
+    for (const page of this.config.questionnaire.pages) {
+      for (const block of page.blocks || []) {
+        const reportVar = block.type === 'adaptive' ? block.adaptive?.thetaReportVariable : undefined;
+        if (!reportVar) continue;
+        this.registerVariableIfMissing({
+          id: reportVar,
+          name: reportVar,
+          type: 'number',
+          scope: 'global',
+          defaultValue: 0,
+        });
+      }
+    }
   }
 
   /**
@@ -1223,10 +1322,24 @@ export class QuestionnaireRuntime {
     const questionMap = new Map(
       this.config.questionnaire.questions.map((question) => [question.id, question])
     );
+
+    // Adaptive item-bank blocks (E-FLOW-1) are administered DYNAMICALLY, not statically
+    // expanded: their `questions` are the calibrated bank, and the CAT selector — not the
+    // page order — decides which and how many are shown. Strip them from the static
+    // expansion and append one entry sentinel per adaptive block after the page's static
+    // items; showCurrentItem hands control to the CAT loop when it reaches the sentinel.
+    const adaptiveBlocks = (page.blocks || []).filter(
+      (block) => block.type === 'adaptive' && block.adaptive && block.adaptive.items?.length
+    );
+    const staticPage: Page =
+      adaptiveBlocks.length > 0
+        ? { ...page, blocks: (page.blocks || []).filter((block) => block.type !== 'adaptive') }
+        : page;
+
     // Loop-aware expansion (E-FLOW-4): a `loop` block yields one ref per
     // (question, iteration) instead of a deduped id — so the battery presents once
     // per iteration value rather than collapsing to a single presentation.
-    const refs = this.blockRandomizer.expandPage(page, questionMap, {
+    const refs = this.blockRandomizer.expandPage(staticPage, questionMap, {
       responses: this.getResponseMap(),
       variables: this.variableEngine.getAllVariables(),
     });
@@ -1248,7 +1361,34 @@ export class QuestionnaireRuntime {
     // Sorting the whole flattened list (the pre-loop behaviour) would interleave loop
     // iterations; restricting the sort to a run preserves iteration grouping while
     // keeping the historical intra-page ordering for non-loop pages.
-    return this.sortWithinIterationRuns(items);
+    const ordered = this.sortWithinIterationRuns(items);
+
+    // Append the adaptive-block sentinels after the static items (E-FLOW-1). The
+    // sentinel's `question` is a placeholder (never presented) that only satisfies the
+    // PresentedItem type; the adaptive branch in showCurrentItem keys off adaptiveBlockId.
+    for (const block of adaptiveBlocks) {
+      const anchor = this.resolveAdaptiveAnchorQuestion(block, questionMap);
+      if (!anchor) continue; // bank items reference no known question — nothing to administer
+      ordered.push({ question: anchor, iterationIndex: null, adaptiveBlockId: block.id });
+    }
+
+    return ordered;
+  }
+
+  /**
+   * The placeholder question parked on an adaptive-block sentinel: the first bank item
+   * that resolves to a real question. Never presented — it only satisfies the
+   * PresentedItem type until the CAT loop selects the actual items to administer.
+   */
+  private resolveAdaptiveAnchorQuestion(
+    block: Block,
+    questionMap: Map<string, Question>
+  ): Question | null {
+    for (const item of block.adaptive?.items || []) {
+      const question = questionMap.get(item.id);
+      if (question) return question;
+    }
+    return null;
   }
 
   /**
@@ -1324,6 +1464,16 @@ export class QuestionnaireRuntime {
     if (!itemRef) {
       this.currentIteration = null;
       await this.handleFlowControl();
+      return;
+    }
+
+    // Adaptive item-bank entry (E-FLOW-1): the sentinel hands control to the CAT loop,
+    // which dynamically selects and presents items until its stopping rule fires and then
+    // advances past the sentinel. Handled before loop/visibility/resume logic below —
+    // the sentinel is not an ordinary presented item.
+    if (itemRef.adaptiveBlockId) {
+      this.currentIteration = null;
+      await this.enterAdaptiveBlock(itemRef.adaptiveBlockId);
       return;
     }
 
@@ -1862,7 +2012,14 @@ export class QuestionnaireRuntime {
 
     this.session.responses.push(response);
 
-    const isCorrect = this.evaluateCustomCorrectness(question, value);
+    // Adaptive item-bank items (E-FLOW-1) score correctness via the CAT scoring keys
+    // (step 5); everything else uses the shared custom-correctness path. Computing it
+    // once here keeps `${id}_correct` and the CAT update in agreement.
+    const inAdaptive =
+      this.adaptiveController !== null && this.adaptivePresentedId === question.id;
+    const isCorrect = inAdaptive
+      ? this.evaluateAdaptiveCorrectness(question, value)
+      : this.evaluateCustomCorrectness(question, value);
     this.updateQuestionVariables(question, response, isCorrect);
 
     // Validate attention check if configured
@@ -1885,6 +2042,13 @@ export class QuestionnaireRuntime {
 
     // Save-and-continue boundary (E-FLOW-3): persist the resume cursor before advancing.
     this.emitResumeState();
+
+    // Adaptive administration (E-FLOW-1): feed the scored response back to the CAT and let
+    // it select the next item (or finalize the block) instead of the linear item advance.
+    if (inAdaptive) {
+      await this.handleAdaptiveResponse(question, isCorrect === true);
+      return;
+    }
 
     this.currentItemIndex += 1;
     await this.showCurrentItem();
@@ -1975,6 +2139,278 @@ export class QuestionnaireRuntime {
     this.variableEngine.setVariable(`${base}_time`, response.timestamp, 'response');
     this.variableEngine.setVariable(`${base}_rt`, response.reactionTime ?? null, 'response');
     this.variableEngine.setVariable(`${base}_correct`, isCorrect, 'response');
+  }
+
+  // ==========================================================================
+  // Adaptive item-bank administration (CAT/IRT, E-FLOW-1)
+  // ==========================================================================
+
+  /**
+   * Enter an adaptive block: build the CAT controller from its calibrated bank, seed a
+   * trajectory record (so partial progress is captured even before completion), and hand
+   * off to the presentation loop. A misconfigured block (missing / empty bank) is skipped
+   * rather than stalling the run.
+   */
+  private async enterAdaptiveBlock(blockId: string): Promise<void> {
+    const block = this.findBlockById(blockId);
+    const config = block?.adaptive;
+    if (!block || !config || !config.items?.length) {
+      this.currentItemIndex += 1;
+      await this.showCurrentItem();
+      return;
+    }
+
+    this.adaptiveBlock = block;
+    this.adaptiveController = new AdaptiveController(config.items, {
+      maxItems: config.maxItems,
+      seThreshold: config.seThreshold,
+      exposureControl: config.exposureControl,
+      exposureTopK: config.exposureTopK,
+    });
+    this.adaptivePresentedId = null;
+
+    // Fresh record for this administration (drop any stale one from a prior re-entry).
+    const existing = this.adaptiveRecords.findIndex((record) => record.blockId === blockId);
+    if (existing >= 0) this.adaptiveRecords.splice(existing, 1);
+    this.adaptiveRecords.push({
+      blockId,
+      itemBankId: config.itemBankId,
+      steps: [],
+      theta: 0,
+      se: this.finiteSE(this.adaptiveController.getEstimate().se),
+      itemsAdministered: 0,
+      thetaReportVariable: config.thetaReportVariable,
+      complete: false,
+    });
+    this.writeAdaptiveSnapshot();
+
+    await this.presentNextAdaptiveItem();
+  }
+
+  /**
+   * Present the next CAT-selected item, or finalize the block when the controller's
+   * stopping rule has fired / the bank is exhausted / the selected item resolves to no
+   * known form question. Adaptive bank items MUST be form-style questions (they route
+   * through the overlay + handleCollectedResponse, where the CAT update is wired).
+   */
+  private async presentNextAdaptiveItem(): Promise<void> {
+    const controller = this.adaptiveController;
+    if (!controller) return;
+
+    const nextId = controller.isComplete() ? null : controller.nextQuestionId();
+    const question = nextId
+      ? this.config.questionnaire.questions.find((q) => q.id === nextId)
+      : undefined;
+
+    if (!nextId || !question) {
+      await this.exitAdaptiveBlock();
+      return;
+    }
+
+    const metadata = moduleRegistry.get(question.type);
+    if (!metadata) {
+      console.warn(
+        `[adaptive] bank item "${question.id}" has unknown module type "${question.type}" — ending adaptive block`
+      );
+      await this.exitAdaptiveBlock();
+      return;
+    }
+
+    this.adaptivePresentedId = question.id;
+    this.currentQuestion = question;
+    this.currentIteration = null;
+    // Reset loop context so a stale {{loopValue}} from an earlier block can't leak in.
+    this.applyLoopContext({ question, iterationIndex: null });
+
+    this.config.onQuestionPresented?.({
+      questionId: question.id,
+      questionType: question.type,
+      pageId: this.currentPage?.id,
+      pageIndex: this.currentPageIndex,
+      itemIndex: this.currentItemIndex,
+      category: metadata.category,
+      timestamp: performance.now(),
+    });
+
+    await this.presentQuestion(question, metadata);
+  }
+
+  /**
+   * Feed one scored response back into the CAT (E-FLOW-1, step 4c–d): update the ability
+   * estimate, mirror it to the `_theta` / `_thetaSE` session variables, append it to the
+   * trajectory, then select and present the next item.
+   */
+  private async handleAdaptiveResponse(question: Question, correct: boolean): Promise<void> {
+    const controller = this.adaptiveController;
+    if (!controller) {
+      this.currentItemIndex += 1;
+      await this.showCurrentItem();
+      return;
+    }
+
+    const estimate = controller.submit(question.id, correct);
+    this.writeAdaptiveVariables(estimate);
+
+    const record = this.currentAdaptiveRecord();
+    if (record) {
+      record.steps.push({
+        questionId: question.id,
+        correct,
+        theta: estimate.theta,
+        se: this.finiteSE(estimate.se),
+      });
+      record.theta = estimate.theta;
+      record.se = this.finiteSE(estimate.se);
+      record.itemsAdministered = estimate.responsesCount;
+    }
+    this.writeAdaptiveSnapshot();
+
+    this.adaptivePresentedId = null;
+    await this.presentNextAdaptiveItem();
+  }
+
+  /**
+   * Finalize the active adaptive block: write the final estimate, mark the trajectory
+   * record complete, tear down the controller, and advance past the sentinel to the next
+   * page item (E-FLOW-1, step 4e).
+   */
+  private async exitAdaptiveBlock(): Promise<void> {
+    const controller = this.adaptiveController;
+    if (controller) {
+      const estimate = controller.getEstimate();
+      this.writeAdaptiveVariables(estimate);
+      const record = this.currentAdaptiveRecord();
+      if (record) {
+        record.theta = estimate.theta;
+        record.se = this.finiteSE(estimate.se);
+        record.itemsAdministered = estimate.responsesCount;
+        record.complete = true;
+      }
+      this.writeAdaptiveSnapshot();
+    }
+
+    this.adaptiveController = null;
+    this.adaptiveBlock = null;
+    this.adaptivePresentedId = null;
+
+    await this.clearPresentation();
+    this.currentItemIndex += 1;
+    await this.showCurrentItem();
+  }
+
+  /**
+   * Mirror the running ability estimate into session variables (E-FLOW-1, step 4d/6):
+   * the built-in `_theta` / `_thetaSE` / `_adaptiveItemsAdministered` and, when the block
+   * declares one, the researcher-named `thetaReportVariable`. SE is written as a finite
+   * value so it round-trips through JSON and the number validator.
+   */
+  private writeAdaptiveVariables(estimate: CATEstimate): void {
+    this.variableEngine.setVariable('_theta', estimate.theta, 'adaptive');
+    this.variableEngine.setVariable('_thetaSE', this.finiteSE(estimate.se), 'adaptive');
+    this.variableEngine.setVariable(
+      '_adaptiveItemsAdministered',
+      estimate.responsesCount,
+      'adaptive'
+    );
+
+    const reportVar = this.adaptiveBlock?.adaptive?.thetaReportVariable;
+    if (reportVar) {
+      this.registerVariableIfMissing({
+        id: reportVar,
+        name: reportVar,
+        type: 'number',
+        scope: 'global',
+        defaultValue: 0,
+      });
+      try {
+        this.variableEngine.setVariable(reportVar, estimate.theta, 'adaptive');
+      } catch {
+        // Non-numeric target with the same name — ignore rather than halt the CAT loop.
+      }
+    }
+  }
+
+  /**
+   * Resolve an adaptive item's raw response to the boolean correctness the CAT consumes
+   * (E-FLOW-1, step 5). Prefers an explicit per-item scoring key (correctValue /
+   * threshold) from the block config, then falls back to the shared custom-correctness
+   * formula path so an item that already carries a custom validation rule Just Works.
+   */
+  private evaluateAdaptiveCorrectness(question: Question, value: DynamicValue): boolean | null {
+    const scoring = this.adaptiveBlock?.adaptive?.scoring?.find(
+      (rule) => rule.questionId === question.id
+    );
+    if (scoring) {
+      if (scoring.correctValue !== undefined) {
+        return this.answersMatch(value, scoring.correctValue);
+      }
+      if (typeof scoring.threshold === 'number') {
+        const numeric = parseNumeric(value);
+        return numeric !== null && numeric >= scoring.threshold;
+      }
+    }
+    return this.evaluateCustomCorrectness(question, value);
+  }
+
+  /** Loose equality for an adaptive scoring key, coercing by the key's primitive type. */
+  private answersMatch(value: unknown, key: string | number | boolean): boolean {
+    if (value === key) return true;
+    if (typeof key === 'number') {
+      const numeric = parseNumeric(value);
+      return numeric !== null && numeric === key;
+    }
+    if (typeof key === 'boolean') {
+      return Boolean(value) === key;
+    }
+    return String(value) === String(key);
+  }
+
+  /** The trajectory record for the block currently being administered (last-wins). */
+  private currentAdaptiveRecord(): AdaptiveRecord | undefined {
+    const id = this.adaptiveBlock?.id;
+    if (!id) return undefined;
+    for (let i = this.adaptiveRecords.length - 1; i >= 0; i--) {
+      if (this.adaptiveRecords[i]!.blockId === id) return this.adaptiveRecords[i];
+    }
+    return undefined;
+  }
+
+  private findBlockById(blockId: string): Block | null {
+    for (const page of this.config.questionnaire.pages) {
+      for (const block of page.blocks || []) {
+        if (block.id === blockId) return block;
+      }
+    }
+    return null;
+  }
+
+  /** Clamp a possibly-infinite SE to a finite sentinel for persistence / branching. */
+  private finiteSE(se: number): number {
+    return Number.isFinite(se) ? se : 999;
+  }
+
+  /**
+   * Snapshot every adaptive block's trajectory into `session.metadata.custom.adaptive`
+   * (E-FLOW-1, step 7) so the offline-first persistence path carries the administered
+   * item ids + running theta/SE. Called on every step and at completion; idempotent.
+   */
+  private writeAdaptiveSnapshot(): void {
+    if (this.adaptiveRecords.length === 0) return;
+    if (!this.session.metadata) this.session.metadata = {};
+    this.session.metadata.custom = {
+      ...this.session.metadata.custom,
+      adaptive: this.adaptiveRecords.map((record) => ({
+        blockId: record.blockId,
+        itemBankId: record.itemBankId,
+        itemsAdministered: record.itemsAdministered,
+        theta: record.theta,
+        se: record.se,
+        complete: record.complete,
+        thetaReportVariable: record.thetaReportVariable,
+        administeredItemIds: record.steps.map((step) => step.questionId),
+        trajectory: record.steps,
+      })),
+    };
   }
 
   private evaluateCustomCorrectness(question: Question, _value: DynamicValue): boolean | null {
@@ -2250,6 +2686,10 @@ export class QuestionnaireRuntime {
     // Compute subscale / normative scores (E-FEEDBACK-1) BEFORE the snapshot so the
     // namespaced `score.<scaleId>` values are captured into session.variables and persisted.
     this.applyScaleScores();
+
+    // Finalize the adaptive-block trajectory snapshot (E-FLOW-1, step 7) so a session that
+    // ends mid-CAT (e.g. survey timeout) still carries the administered items + theta/SE.
+    this.writeAdaptiveSnapshot();
 
     const allVariables = this.variableEngine.getAllVariables();
     for (const [variableId, value] of Object.entries(allVariables)) {

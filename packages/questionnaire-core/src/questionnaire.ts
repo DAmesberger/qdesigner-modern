@@ -194,13 +194,101 @@ export interface Block {
   id: string;
   pageId: string;
   name?: string;
-  type: 'standard' | 'randomized' | 'conditional' | 'loop';
+  type: 'standard' | 'randomized' | 'conditional' | 'loop' | 'adaptive';
   questions: string[]; // Question IDs
   layout?: LayoutConfig;
   randomization?: RandomizationConfig;
   loop?: LoopConfig;
   conditions?: DisplayCondition[];
   condition?: string; // Experimental condition this block belongs to
+  /**
+   * Adaptive (CAT/IRT) item-bank configuration (E-FLOW-1). Present only when
+   * `type === 'adaptive'`. Turns this block's `questions` into an adaptively
+   * administered item bank: at each step the runtime selects the maximum-Fisher-
+   * information item at the running ability estimate, presents it, updates the
+   * estimate from the scored response, and stops once the standard error reaches
+   * {@link AdaptiveBlockConfig.seThreshold} or {@link AdaptiveBlockConfig.maxItems}
+   * items have been administered.
+   */
+  adaptive?: AdaptiveBlockConfig;
+}
+
+// ============================================================================
+// Adaptive Testing (CAT / IRT) Configuration (E-FLOW-1)
+// ============================================================================
+
+/**
+ * IRT 3PL calibration for one item in an adaptive block's bank (E-FLOW-1). `id` is
+ * the QUESTION id the calibration applies to; `a`/`b`/`c` are the discrimination /
+ * difficulty / pseudo-guessing parameters. Structurally identical to the analytics
+ * `CATSession` item shape, so the runtime hands it straight to the selector.
+ */
+export interface CATItem {
+  /** Question id this calibration applies to (must be one of {@link Block.questions}). */
+  id: string;
+  /** Discrimination (a). */
+  a: number;
+  /** Difficulty (b), on the theta scale. */
+  b: number;
+  /** Pseudo-guessing lower asymptote (c). Defaults to 0. */
+  c?: number;
+}
+
+/**
+ * Item-exposure control strategy for adaptive selection (E-FLOW-1, step 10).
+ * - `none`        — always administer the single maximum-information item (default).
+ * - `randomesque` — pick uniformly at random among the top-k most informative items,
+ *   spreading exposure across the bank so a handful of items are not over-exposed.
+ */
+export type AdaptiveExposureControl = 'none' | 'randomesque';
+
+/**
+ * Per-item scoring key mapping a raw questionnaire response to the boolean
+ * correct/endorsed outcome the CAT update consumes (E-FLOW-1, step 5). Lets a
+ * multiple-choice / scale item resolve to 0/1 without a bespoke custom-correctness
+ * formula on the question.
+ */
+export interface AdaptiveItemScoring {
+  /** Question id this rule scores (matches {@link CATItem.id}). */
+  questionId: string;
+  /**
+   * The response value that scores CORRECT/endorsed. When the participant's answer
+   * equals this (after light numeric/string/boolean coercion) the item scores 1.
+   */
+  correctValue?: string | number | boolean;
+  /**
+   * For numeric / scale items with no single `correctValue`: the answer scores 1 when
+   * it is greater than or equal to this threshold (an endorsement cut).
+   */
+  threshold?: number;
+}
+
+/**
+ * Adaptive (CAT/IRT) item-bank block configuration (E-FLOW-1). Rides in the
+ * questionnaire-definition JSON on {@link Block.adaptive} (no DB migration). The
+ * runtime builds a maximum-information 3PL selector from {@link items}, presents the
+ * mapped questions one at a time, updates the ability estimate after each answer, and
+ * stops when the standard error falls to {@link seThreshold} or {@link maxItems} is
+ * reached — writing the running estimate to the `_theta` / `_thetaSE` session
+ * variables (readable by feedback panels and flow conditions).
+ */
+export interface AdaptiveBlockConfig {
+  /** Optional label/id for the calibrated bank this block draws from. */
+  itemBankId?: string;
+  /** Per-question 3PL calibration. Each `id` must be one of the block's `questions`. */
+  items: CATItem[];
+  /** Hard cap on administered items (default 30). */
+  maxItems?: number;
+  /** Stop once the ability standard error reaches this value (default 0.3). */
+  seThreshold?: number;
+  /** Optional session variable NAME to also receive the final theta estimate. */
+  thetaReportVariable?: string;
+  /** Item-exposure control strategy (default `none`). */
+  exposureControl?: AdaptiveExposureControl;
+  /** Top-k pool size for `randomesque` exposure control (default 3). */
+  exposureTopK?: number;
+  /** Optional per-item response→correctness scoring keys. */
+  scoring?: AdaptiveItemScoring[];
 }
 
 export interface FlowControl {

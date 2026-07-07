@@ -1,8 +1,9 @@
 <script lang="ts">
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
-  import type { Block, Question, ExperimentalCondition } from '$lib/shared';
+  import type { Block, Question, ExperimentalCondition, AdaptiveBlockConfig } from '$lib/shared';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import AdaptiveBlockEditor from '$lib/components/designer/AdaptiveBlockEditor.svelte';
   import { confirmDialog } from '$lib/stores/confirm.svelte';
   import {
     ChevronRight, ChevronDown, Plus,
@@ -38,6 +39,7 @@
     { type: 'randomized' as const, name: 'Randomized Block', description: 'Questions appear in random order' },
     { type: 'conditional' as const, name: 'Conditional Block', description: 'Block shown based on conditions' },
     { type: 'loop' as const, name: 'Loop Block', description: 'Repeat questions multiple times' },
+    { type: 'adaptive' as const, name: 'Adaptive Block', description: 'CAT/IRT item bank — items adapt to ability' },
   ];
 
   let newBlock = $state({
@@ -47,7 +49,21 @@
     conditions: [] as any[],
     randomization: { enabled: false, preserveLast: 0 } as any,
     loop: { iterations: 1, iterationVariable: '', exitCondition: '' } as any,
+    adaptive: undefined as AdaptiveBlockConfig | undefined,
   });
+
+  /**
+   * The adaptive config being edited, created on demand. It is a reference into the
+   * active block (create or edit path) so AdaptiveBlockEditor mutates it in place.
+   */
+  function ensureAdaptive(): AdaptiveBlockConfig {
+    if (editingBlock) {
+      if (!editingBlock.adaptive) editingBlock.adaptive = { items: [] };
+      return editingBlock.adaptive;
+    }
+    if (!newBlock.adaptive) newBlock.adaptive = { items: [] };
+    return newBlock.adaptive;
+  }
 
   let experimentalConditions = $derived(
     designerStore.questionnaire.settings.experimentalDesign?.conditions ?? []
@@ -163,6 +179,7 @@
           condition: newBlock.condition || undefined,
           randomization: newBlock.type === 'randomized' ? { ...newBlock.randomization } : undefined,
           loop: newBlock.type === 'loop' ? { ...newBlock.loop } : undefined,
+          adaptive: newBlock.type === 'adaptive' ? (newBlock.adaptive ?? { items: [] }) : undefined,
         });
       }
     }
@@ -174,6 +191,7 @@
       conditions: [],
       randomization: { enabled: false, preserveLast: 0 } as any,
       loop: { iterations: 1, iterationVariable: '', exitCondition: '' },
+      adaptive: undefined,
     };
     showAddBlock = false;
     addBlockPageId = null;
@@ -192,6 +210,7 @@
       conditions: editingBlock.conditions,
       randomization: editingBlock.randomization,
       loop: editingBlock.loop as any,
+      adaptive: editingBlock.type === 'adaptive' ? (editingBlock.adaptive ?? { items: [] }) : undefined,
     });
     editingBlock = null;
   }
@@ -314,6 +333,7 @@
                         {:else if block.type === 'randomized'}<Shuffle class="w-3.5 h-3.5" />
                         {:else if block.type === 'conditional'}<GitFork class="w-3.5 h-3.5" />
                         {:else if block.type === 'loop'}<Repeat class="w-3.5 h-3.5" />
+                        {:else if block.type === 'adaptive'}<BarChart3 class="w-3.5 h-3.5" />
                         {:else}<FileText class="w-3.5 h-3.5" />
                         {/if}
                       </span>
@@ -455,6 +475,7 @@
                     {:else if blockType.type === 'randomized'}<Shuffle class="w-5 h-5" />
                     {:else if blockType.type === 'conditional'}<GitFork class="w-5 h-5" />
                     {:else if blockType.type === 'loop'}<Repeat class="w-5 h-5" />
+                    {:else if blockType.type === 'adaptive'}<BarChart3 class="w-5 h-5" />
                     {/if}
                   </span>
                   <div>
@@ -714,6 +735,14 @@
               </div>
             </div>
           </div>
+        {/if}
+
+        {#if (editingBlock ? editingBlock.type : newBlock.type) === 'adaptive'}
+          <AdaptiveBlockEditor
+            config={ensureAdaptive()}
+            questionIds={editingBlock ? (editingBlock.questions ?? []) : []}
+            allQuestions={designerStore.questionnaire.questions}
+          />
         {/if}
   </div>
 
