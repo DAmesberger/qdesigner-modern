@@ -7708,6 +7708,386 @@
           }
         }
       }
+    },
+    "/api/series": {
+      "get": {
+        "tags": [
+          "series"
+        ],
+        "summary": "GET /api/series?questionnaire_id=… — list series for a questionnaire.",
+        "operationId": "list_series",
+        "parameters": [
+          {
+            "name": "questionnaire_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Series for a questionnaire",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SeriesRecord"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "series"
+        ],
+        "summary": "POST /api/series — create a study series for a questionnaire.",
+        "operationId": "create_series",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSeriesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Series created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesRecord"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access to questionnaire",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/series/{id}": {
+      "patch": {
+        "tags": [
+          "series"
+        ],
+        "summary": "PATCH /api/series/{id} — update series definition / reminder copy.",
+        "operationId": "update_series",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Series id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSeriesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Series updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesRecord"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Series not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/series/{id}/enroll": {
+      "post": {
+        "tags": [
+          "series"
+        ],
+        "summary": "POST /api/series/{id}/enroll — enroll a participant and materialize the\nprompt window (all waves for fixed/random; wave 0 for event).",
+        "operationId": "enroll",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Series id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Participant enrolled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "No access to series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/series/{id}/enrollments": {
+      "get": {
+        "tags": [
+          "series"
+        ],
+        "summary": "GET /api/series/{id}/enrollments — list enrollments for a series.",
+        "operationId": "list_enrollments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Series id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enrollments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EnrollmentRecord"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/series/prompt/{resume_token}": {
+      "get": {
+        "tags": [
+          "series"
+        ],
+        "summary": "GET /api/series/prompt/{resume_token} — resolve a reminder link to the\ncurrent wave (+ pinned version + `_waveIndex` / `_seriesElapsedDays`).\nMarks the current wave's prompt opened.",
+        "operationId": "resolve_prompt",
+        "parameters": [
+          {
+            "name": "resume_token",
+            "in": "path",
+            "description": "Enrollment resume token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resolved prompt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesPromptResolution"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/series/prompt/{resume_token}/complete": {
+      "post": {
+        "tags": [
+          "series"
+        ],
+        "summary": "POST /api/series/prompt/{resume_token}/complete — advance the enrollment\nafter a wave is completed. Binds the session to the wave prompt and\nschedules the next wave (materialized already for fixed/random; computed\nnow for event).",
+        "operationId": "complete_prompt",
+        "parameters": [
+          {
+            "name": "resume_token",
+            "in": "path",
+            "description": "Enrollment resume token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompletePromptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Enrollment advanced",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompletePromptResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/series/prompt/{resume_token}/unsubscribe": {
+      "post": {
+        "tags": [
+          "series"
+        ],
+        "summary": "POST /api/series/prompt/{resume_token}/unsubscribe — opt out. Flips the\nenrollment to `withdrawn`; the scheduler stops sending (its due scan\nfilters `status='active'`).",
+        "operationId": "unsubscribe_prompt",
+        "parameters": [
+          {
+            "name": "resume_token",
+            "in": "path",
+            "description": "Enrollment resume token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unsubscribed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsubscribeResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8227,6 +8607,53 @@
           }
         }
       },
+      "CompletePromptRequest": {
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The fillout session that completed this wave."
+          },
+          "wave_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The wave that was completed. Defaults to the enrollment's current\nwave when omitted."
+          }
+        }
+      },
+      "CompletePromptResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Enrollment status after advancing: `active` (more waves) or\n`completed` (series finished)."
+          },
+          "next_wave_index": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "next_prompt_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "ConditionCount": {
         "type": "object",
         "required": [
@@ -8585,6 +9012,58 @@
           }
         }
       },
+      "CreateSeriesRequest": {
+        "type": "object",
+        "required": [
+          "questionnaire_id",
+          "name"
+        ],
+        "properties": {
+          "questionnaire_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "schedule_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One of `fixed` | `random-interval` | `event`. Defaults to `fixed`."
+          },
+          "wave_defs": {
+            "description": "Array of wave definitions (see `schedule::WaveDef`)."
+          },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reminder_subject": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reminder_body": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "random_seed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Base seed for reproducible `random-interval` schedules."
+          }
+        }
+      },
       "CreateSessionRequest": {
         "type": "object",
         "required": [
@@ -8630,6 +9109,14 @@
               "null"
             ],
             "description": "Client-generated browser fingerprint hash used for create-time\nduplicate-participation detection. Optional; when omitted we fall\nback to `metadata->>'fingerprint'` for backward compatibility."
+          },
+          "resume_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "E-FLOW-2: when this session materializes a longitudinal/EMA series\nwave (opened from a reminder link), the enrollment's `resume_token`.\nStored on `sessions.resume_token` so the wave binds back to its\nprompt in the dataset."
           }
         }
       },
@@ -8927,6 +9414,115 @@
             ]
           },
           "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "EnrollRequest": {
+        "type": "object",
+        "required": [
+          "contact_channel"
+        ],
+        "properties": {
+          "participant_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_channel": {
+            "type": "string",
+            "description": "Delivery address for `channel_kind` (an email address for `email`)."
+          },
+          "channel_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only `email` is supported today. Defaults to `email`."
+          }
+        }
+      },
+      "EnrollResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EnrollmentRecord"
+          },
+          {
+            "type": "object",
+            "required": [
+              "resume_link",
+              "materialized_waves"
+            ],
+            "properties": {
+              "resume_link": {
+                "type": "string",
+                "description": "Absolute participant resume link (also delivered by every reminder)."
+              },
+              "materialized_waves": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Number of prompts materialized at enrollment (all waves for\nfixed/random schedules; 1 for event schedules)."
+              }
+            }
+          }
+        ]
+      },
+      "EnrollmentRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "series_id",
+          "contact_channel",
+          "channel_kind",
+          "status",
+          "resume_token",
+          "current_wave_index"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "series_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "participant_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contact_channel": {
+            "type": "string"
+          },
+          "channel_kind": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "next_prompt_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "resume_token": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "current_wave_index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "enrolled_at": {
             "type": [
               "string",
               "null"
@@ -11006,6 +11602,152 @@
           }
         }
       },
+      "SeriesPromptResolution": {
+        "type": "object",
+        "description": "What the participant client needs to open the correct wave from a\nreminder link. `wave_index` + `series_elapsed_days` are exposed to the\nruntime as the `_waveIndex` / `_seriesElapsedDays` flow variables.",
+        "required": [
+          "enrollment_id",
+          "series_id",
+          "questionnaire_id",
+          "questionnaire_code",
+          "wave_index",
+          "total_waves",
+          "series_elapsed_days",
+          "status"
+        ],
+        "properties": {
+          "enrollment_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "series_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "questionnaire_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "questionnaire_code": {
+            "type": "string"
+          },
+          "wave_index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "wave_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "total_waves": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "series_elapsed_days": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Whole days since enrollment (floor). Seeds `_seriesElapsedDays`."
+          },
+          "status": {
+            "type": "string",
+            "description": "Enrollment status: `active` | `completed` | `withdrawn`."
+          },
+          "scheduled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the CURRENT wave's prompt is scheduled (for the \"come back\nlater\" state when it is in the future)."
+          },
+          "next_prompt_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the NEXT wave is due (participant \"come back later\" copy)."
+          },
+          "version_major": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "version_minor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "version_patch": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "SeriesRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "questionnaire_id",
+          "name",
+          "schedule_kind",
+          "wave_defs",
+          "timezone",
+          "reminder_subject",
+          "reminder_body",
+          "random_seed",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "questionnaire_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "schedule_kind": {
+            "type": "string"
+          },
+          "wave_defs": {},
+          "timezone": {
+            "type": "string"
+          },
+          "reminder_subject": {
+            "type": "string"
+          },
+          "reminder_body": {
+            "type": "string"
+          },
+          "random_seed": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "ServerVariableEntry": {
         "type": "object",
         "description": "One computed server-variable aggregate in the `/server-variables` response.",
@@ -11755,6 +12497,17 @@
           }
         }
       },
+      "UnsubscribeResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
       "UpdateCommentRequest": {
         "type": "object",
         "properties": {
@@ -12033,6 +12786,49 @@
           }
         }
       },
+      "UpdateSeriesRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "schedule_kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "wave_defs": {},
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reminder_subject": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reminder_body": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`active` | `archived`."
+          }
+        }
+      },
       "UpdateSessionRequest": {
         "type": "object",
         "properties": {
@@ -12283,6 +13079,10 @@
     {
       "name": "sessions",
       "description": "Questionnaire fillout sessions and persisted data"
+    },
+    {
+      "name": "series",
+      "description": "Longitudinal / EMA study series scheduling and enrollment"
     },
     {
       "name": "analytics",

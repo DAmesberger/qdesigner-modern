@@ -5,6 +5,7 @@ import { apiKeys } from './api-keys';
 import { scimTokens } from './scim-tokens';
 import { projects } from './projects';
 import { questionnaires } from './questionnaires';
+import { series } from './series';
 import { sessions } from './sessions';
 import { shares } from './shares';
 import { media } from './media';
@@ -22,6 +23,7 @@ export const api = {
   scimTokens,
   projects,
   questionnaires,
+  series,
   sessions,
   shares,
   media,

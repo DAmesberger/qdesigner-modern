@@ -68,6 +68,8 @@ export const sessions = {
     versionMajor?: number;
     versionMinor?: number;
     versionPatch?: number;
+    /** E-FLOW-2: bind a longitudinal/EMA wave session to its series enrollment. */
+    resumeToken?: string;
   }) =>
     callSdk(() =>
       createSessionRequest<true>({
@@ -82,6 +84,7 @@ export const sessions = {
           version_major: data.versionMajor,
           version_minor: data.versionMinor,
           version_patch: data.versionPatch,
+          resume_token: data.resumeToken,
         },
       })
     ).then((raw) => ({

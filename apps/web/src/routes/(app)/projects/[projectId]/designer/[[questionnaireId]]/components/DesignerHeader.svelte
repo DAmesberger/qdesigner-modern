@@ -2,7 +2,9 @@
   import { appPaths } from '$lib/routing/paths';
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
-  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator, LayoutDashboard } from 'lucide-svelte';
+  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator, LayoutDashboard, CalendarClock } from 'lucide-svelte';
+  import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import StudySeriesDesigner from '$lib/components/designer/StudySeriesDesigner.svelte';
   import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
   import DistributionPanel from './DistributionPanel.svelte';
   import ExperimentalDesignPanel from '$lib/components/designer/ExperimentalDesignPanel.svelte';
@@ -26,6 +28,7 @@
   let titleInput = $state<HTMLInputElement | undefined>();
   let showDistribution = $state(false);
   let showExperimentalDesign = $state(false);
+  let showStudySeries = $state(false);
   let showDataQuality = $state(false);
   let showScaleScoring = $state(false);
   let showQuotas = $state(false);
@@ -233,6 +236,20 @@
     Design
   </button>
 
+  <!-- Study series (longitudinal / EMA) button -->
+  {#if questionnaireId}
+    <button
+      type="button"
+      class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
+      onclick={() => (showStudySeries = true)}
+      data-testid="designer-study-series-button"
+      title="Longitudinal / EMA study series"
+    >
+      <CalendarClock class="h-3.5 w-3.5" />
+      Series
+    </button>
+  {/if}
+
   <!-- Data quality button -->
   <button
     type="button"
@@ -333,6 +350,12 @@
 />
 
 <ExperimentalDesignPanel bind:open={showExperimentalDesign} />
+
+{#if questionnaireId}
+  <Dialog bind:open={showStudySeries} title="Study series" size="lg">
+    <StudySeriesDesigner {questionnaireId} />
+  </Dialog>
+{/if}
 
 <DataQualityPanel bind:open={showDataQuality} />
 

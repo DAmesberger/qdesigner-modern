@@ -141,6 +141,14 @@ export interface RuntimeConfig {
    */
   serverAssignment?: { condition: string; conditionIndex: number };
   /**
+   * Longitudinal / EMA study-series context (E-FLOW-2) when this session
+   * materializes a series wave opened from a reminder link. Exposed to
+   * formulas / branching as the `_waveIndex` (0-based wave) and
+   * `_seriesElapsedDays` (whole days since enrollment) flow variables, so a
+   * questionnaire can differ across waves (e.g. baseline vs follow-up items).
+   */
+  seriesContext?: { waveIndex: number; seriesElapsedDays: number };
+  /**
    * Last-synced SERVER-COMPUTED VARIABLE aggregates, keyed by variable id
    * (server-computed-variable / E-FEEDBACK-3). {@link initializeVariables} injects
    * each into the one VariableEngine as a `'server-sync'` value so server-computed
@@ -764,6 +772,30 @@ export class QuestionnaireRuntime {
       scope: 'global',
       defaultValue: this.config.questionnaire.pages.length,
     });
+
+    // Longitudinal / EMA study-series flow variables (E-FLOW-2). Registered
+    // unconditionally (default 0) so branching that references {{waveIndex}}
+    // resolves even for a non-series session; seeded from the resolved prompt
+    // when the fillout entry carries a ?token= link.
+    const series = this.config.seriesContext;
+    this.variableEngine.registerVariable({
+      id: '_waveIndex',
+      name: 'waveIndex',
+      type: 'number',
+      scope: 'global',
+      defaultValue: series?.waveIndex ?? 0,
+    });
+    this.variableEngine.registerVariable({
+      id: '_seriesElapsedDays',
+      name: 'seriesElapsedDays',
+      type: 'number',
+      scope: 'global',
+      defaultValue: series?.seriesElapsedDays ?? 0,
+    });
+    if (series) {
+      this.variableEngine.setVariable('_waveIndex', series.waveIndex, 'system');
+      this.variableEngine.setVariable('_seriesElapsedDays', series.seriesElapsedDays, 'system');
+    }
 
     // Quota/eligibility flow variables (E-FLOW-7). FilloutPageController sets these
     // unconditionally at session start, so they must be registered as built-ins here

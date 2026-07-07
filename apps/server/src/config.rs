@@ -33,6 +33,12 @@ pub struct Config {
     // CORS
     pub cors_origins: Vec<String>,
 
+    // Public origin of the participant-facing SvelteKit app, used to build
+    // absolute links in outbound email (e.g. the E-FLOW-2 series resume
+    // link `{public_app_origin}/q/{code}?token=…`). Defaults to the first
+    // CORS origin (the app origin) when `PUBLIC_APP_ORIGIN` is unset.
+    pub public_app_origin: String,
+
     // Server
     pub server_host: String,
     pub server_port: u16,
@@ -65,6 +71,8 @@ impl Config {
             .and_then(|v| v.parse().ok())
             .unwrap_or(4173);
         let default_app_origin = format!("http://{}:{}", app_host, app_port);
+        let public_app_origin =
+            std::env::var("PUBLIC_APP_ORIGIN").unwrap_or_else(|_| default_app_origin.clone());
 
         let jwt_access_expiry_secs: u64 = std::env::var("JWT_ACCESS_EXPIRY_SECS")
             .ok()
@@ -99,6 +107,7 @@ impl Config {
                 .split(',')
                 .map(|s| s.trim().to_string())
                 .collect(),
+            public_app_origin,
             server_host: env_or("SERVER_HOST", "0.0.0.0"),
             server_port: std::env::var("SERVER_PORT")
                 .ok()

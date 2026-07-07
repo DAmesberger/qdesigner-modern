@@ -220,6 +220,19 @@ pub async fn create_session(
     .fetch_one(&mut **tx)
     .await?;
 
+    // E-FLOW-2: bind a longitudinal/EMA wave session back to its series
+    // enrollment. Done as a separate runtime UPDATE (rather than widening
+    // the compile-checked INSERT macro, which would need a `.sqlx`
+    // regeneration). Admitted by the dual-path RLS via the `app.session_id`
+    // GUC set to `new_session_id` above.
+    if let Some(resume_token) = body.resume_token {
+        sqlx::query("UPDATE sessions SET resume_token = $1 WHERE id = $2")
+            .bind(resume_token)
+            .bind(new_session_id)
+            .execute(&mut **tx)
+            .await?;
+    }
+
     // Broadcast session.created via WebSocket
     state.websocket_state.broadcast(WsMessage {
         channel: format!("questionnaire:{}", session.questionnaire_id),

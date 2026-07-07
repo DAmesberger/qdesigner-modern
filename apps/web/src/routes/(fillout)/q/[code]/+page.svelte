@@ -24,6 +24,7 @@
     FilloutPageController,
     type FilloutRuntimeInputs,
   } from '$lib/fillout/FilloutPageController.svelte';
+  import { SeriesEnrollmentService } from '$lib/fillout/services/SeriesEnrollmentService';
 
   interface Props {
     data: PageData;
@@ -36,6 +37,40 @@
   // flow; this view stays presentational — locale selection, screen rendering, and event
   // forwarding to controller methods. See lib/fillout/FilloutPageController.svelte.ts.
   const controller = new FilloutPageController(data);
+
+  // --- Longitudinal / EMA series gate (E-FLOW-2) ----------------------------
+  // A `?token=` reminder link either (a) unsubscribes, (b) lands on a wave that
+  // is not open yet / already finished ("come back later"), or (c) opens the
+  // current wave normally. (a)/(b) intercept BEFORE the runtime starts so no
+  // premature session is created; (c) falls through to the normal fillout with
+  // the wave pinned + `_waveIndex` seeded.
+  const seriesPrompt = $derived(data.seriesPrompt ?? null);
+  const seriesUnsubscribe = $derived(Boolean(data.seriesUnsubscribe && data.seriesToken));
+  const seriesComeBackLater = $derived(
+    !seriesUnsubscribe &&
+      !!seriesPrompt &&
+      (seriesPrompt.status !== 'active' ||
+        (!!seriesPrompt.scheduled_at &&
+          new Date(seriesPrompt.scheduled_at).getTime() > Date.now()))
+  );
+  const seriesGateActive = $derived(seriesUnsubscribe || seriesComeBackLater);
+  const seriesNextTime = $derived(
+    seriesPrompt?.next_prompt_at ?? seriesPrompt?.scheduled_at ?? null
+  );
+  let seriesUnsubDone = $state(false);
+  let seriesUnsubFailed = $state(false);
+
+  function formatSeriesTime(iso: string | null | undefined): string {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+    } catch {
+      return iso;
+    }
+  }
 
   // --- Content translation (MOD-04, ADR 0022) -------------------------------
   // The definition is a FilloutDefinition (core Questionnaire + the top-level
@@ -232,8 +267,18 @@
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    controller.startSyncEngine();
-    controller.initFromLoad();
+    // E-FLOW-2 series gate: unsubscribe / come-back-later intercept the runtime
+    // so no premature wave session is created. Only the normal (current-wave)
+    // path starts the fillout.
+    if (seriesUnsubscribe && data.seriesToken) {
+      void SeriesEnrollmentService.unsubscribe(data.seriesToken).then((ok) => {
+        seriesUnsubDone = ok;
+        seriesUnsubFailed = !ok;
+      });
+    } else if (!seriesGateActive) {
+      controller.startSyncEngine();
+      controller.initFromLoad();
+    }
 
     return () => {
       controller.dispose();
@@ -289,7 +334,44 @@
     </div>
   {/if}
 
-  {#if controller.error}
+  {#if seriesUnsubscribe}
+    <!-- E-FLOW-2: reminder opt-out. Withdraws the enrollment; the scheduler
+         stops sending (its due scan filters status='active'). -->
+    <div class="series-gate" data-testid="fillout-series-unsubscribe">
+      <EmptyState
+        title="Unsubscribed"
+        description={seriesUnsubFailed
+          ? 'We could not process your request. The link may have expired.'
+          : seriesUnsubDone
+            ? 'You will no longer receive reminders for this study.'
+            : 'Processing your request…'}
+      />
+    </div>
+  {:else if seriesComeBackLater}
+    <!-- E-FLOW-2: the current wave is not open yet, or the study is complete. -->
+    <div class="series-gate" data-testid="fillout-series-comeback">
+      {#if seriesPrompt?.status === 'completed'}
+        <EmptyState
+          title="Study complete"
+          description="You have completed all waves of this study. Thank you for taking part."
+        />
+      {:else if seriesPrompt?.status === 'withdrawn'}
+        <EmptyState
+          title="You have unsubscribed"
+          description="You are no longer enrolled in this study."
+        />
+      {:else}
+        <EmptyState
+          title="Come back soon"
+          description={seriesNextTime
+            ? `Your next questionnaire${
+                seriesPrompt?.wave_label ? ` (${seriesPrompt.wave_label})` : ''
+              } opens on ${formatSeriesTime(seriesNextTime)}. We'll email you a reminder.`
+            : 'Your next questionnaire is not open yet. We\'ll email you a reminder when it is.'}
+        />
+      {/if}
+    </div>
+  {:else if controller.error}
     <div class="error-container" data-testid="fillout-error">
       <EmptyState
         title="Unable to load questionnaire"
@@ -561,13 +643,16 @@
   }
 
   .loading-container,
-  .error-container {
+  .error-container,
+  .series-gate {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     height: 100vh;
     gap: 1rem;
+    padding: 1.5rem;
+    text-align: center;
   }
 
   .loading-text {

@@ -3,6 +3,7 @@ import { error } from '@sveltejs/kit';
 import { FilloutContentCache } from '$lib/fillout/services/FilloutContentCache';
 import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionService';
 import { OfflineResponsePersistence } from '$lib/fillout/services/OfflineResponsePersistence';
+import { SeriesEnrollmentService } from '$lib/fillout/services/SeriesEnrollmentService';
 import {
 	storedResponseToRuntime,
 	serverResponseToRuntime,
@@ -122,6 +123,19 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	// Check for existing participant session via URL params
 	const participantId = url.searchParams.get('pid');
 	const sessionId = url.searchParams.get('sid');
+
+	// ── Longitudinal / EMA series resume link (E-FLOW-2) ──────────────────
+	// A reminder link carries ?token=<enrollment resume_token>. Resolve it to
+	// the current wave (index, elapsed days, status, next prompt time) so the
+	// runtime can pin the wave, seed _waveIndex / _seriesElapsedDays, and post
+	// completion back. Strictly non-blocking: a bad/expired token or offline
+	// falls through to a plain fillout.
+	const seriesToken = url.searchParams.get('token');
+	const seriesUnsubscribe = url.searchParams.get('unsubscribe') === '1';
+	let seriesPrompt = null;
+	if (seriesToken && navigator.onLine) {
+		seriesPrompt = await SeriesEnrollmentService.resolve(seriesToken);
+	}
 
 	// Extract project name safely
 	let projectName: string | undefined;
@@ -358,5 +372,10 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		// Only set when there is progress to restore, so a fresh start still creates
 		// a new session rather than adopting an empty local one.
 		resumeSessionId: resumeSnapshot ? resumeSessionId : null,
+		// Longitudinal / EMA series (E-FLOW-2): the reminder-link token, the
+		// resolved wave prompt, and whether the link is an unsubscribe request.
+		seriesToken,
+		seriesPrompt,
+		seriesUnsubscribe,
 	};
 };

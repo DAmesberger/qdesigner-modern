@@ -289,6 +289,7 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         smtp_port,
         smtp_from: "noreply@qdesigner.local".into(),
         cors_origins: vec!["http://localhost:4173".into()],
+        public_app_origin: "http://localhost:4173".into(),
         server_host: "127.0.0.1".into(),
         server_port: 4100,
         sso_encryption_key: None,

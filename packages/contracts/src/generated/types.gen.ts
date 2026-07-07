@@ -152,6 +152,28 @@ export type ComparisonDelta = {
     z_score?: number | null;
 };
 
+export type CompletePromptRequest = {
+    /**
+     * The fillout session that completed this wave.
+     */
+    session_id: string;
+    /**
+     * The wave that was completed. Defaults to the enrollment's current
+     * wave when omitted.
+     */
+    wave_index?: number | null;
+};
+
+export type CompletePromptResponse = {
+    /**
+     * Enrollment status after advancing: `active` (more waves) or
+     * `completed` (series finished).
+     */
+    status: string;
+    next_wave_index?: number | null;
+    next_prompt_at?: string | null;
+};
+
 export type ConditionCount = {
     condition_name?: string | null;
     count: number;
@@ -284,6 +306,26 @@ export type CreateScimTokenResponse = {
     scim_token: ScimTokenRecord;
 };
 
+export type CreateSeriesRequest = {
+    questionnaire_id: string;
+    name: string;
+    /**
+     * One of `fixed` | `random-interval` | `event`. Defaults to `fixed`.
+     */
+    schedule_kind?: string | null;
+    /**
+     * Array of wave definitions (see `schedule::WaveDef`).
+     */
+    wave_defs?: unknown;
+    timezone?: string | null;
+    reminder_subject?: string | null;
+    reminder_body?: string | null;
+    /**
+     * Base seed for reproducible `random-interval` schedules.
+     */
+    random_seed?: number | null;
+};
+
 export type CreateSessionRequest = {
     questionnaire_id: string;
     participant_id?: string | null;
@@ -298,6 +340,13 @@ export type CreateSessionRequest = {
      * back to `metadata->>'fingerprint'` for backward compatibility.
      */
     fingerprint?: string | null;
+    /**
+     * E-FLOW-2: when this session materializes a longitudinal/EMA series
+     * wave (opened from a reminder link), the enrollment's `resume_token`.
+     * Stored on `sessions.resume_token` so the wave binds back to its
+     * prompt in the dataset.
+     */
+    resume_token?: string | null;
 };
 
 /**
@@ -389,6 +438,43 @@ export type DomainRecord = {
     email_blacklist: Array<string>;
     welcome_message?: string | null;
     created_at?: string | null;
+};
+
+export type EnrollRequest = {
+    participant_ref?: string | null;
+    /**
+     * Delivery address for `channel_kind` (an email address for `email`).
+     */
+    contact_channel: string;
+    /**
+     * Only `email` is supported today. Defaults to `email`.
+     */
+    channel_kind?: string | null;
+};
+
+export type EnrollResponse = EnrollmentRecord & {
+    /**
+     * Absolute participant resume link (also delivered by every reminder).
+     */
+    resume_link: string;
+    /**
+     * Number of prompts materialized at enrollment (all waves for
+     * fixed/random schedules; 1 for event schedules).
+     */
+    materialized_waves: number;
+};
+
+export type EnrollmentRecord = {
+    id: string;
+    series_id: string;
+    participant_ref?: string | null;
+    contact_channel: string;
+    channel_kind: string;
+    status: string;
+    next_prompt_at?: string | null;
+    resume_token: string;
+    current_wave_index: number;
+    enrolled_at?: string | null;
 };
 
 /**
@@ -1023,6 +1109,55 @@ export type SendVerificationCodeRequest = {
 };
 
 /**
+ * What the participant client needs to open the correct wave from a
+ * reminder link. `wave_index` + `series_elapsed_days` are exposed to the
+ * runtime as the `_waveIndex` / `_seriesElapsedDays` flow variables.
+ */
+export type SeriesPromptResolution = {
+    enrollment_id: string;
+    series_id: string;
+    questionnaire_id: string;
+    questionnaire_code: string;
+    wave_index: number;
+    wave_label?: string | null;
+    total_waves: number;
+    /**
+     * Whole days since enrollment (floor). Seeds `_seriesElapsedDays`.
+     */
+    series_elapsed_days: number;
+    /**
+     * Enrollment status: `active` | `completed` | `withdrawn`.
+     */
+    status: string;
+    /**
+     * When the CURRENT wave's prompt is scheduled (for the "come back
+     * later" state when it is in the future).
+     */
+    scheduled_at?: string | null;
+    /**
+     * When the NEXT wave is due (participant "come back later" copy).
+     */
+    next_prompt_at?: string | null;
+    version_major?: number | null;
+    version_minor?: number | null;
+    version_patch?: number | null;
+};
+
+export type SeriesRecord = {
+    id: string;
+    questionnaire_id: string;
+    name: string;
+    schedule_kind: string;
+    wave_defs: unknown;
+    timezone: string;
+    reminder_subject: string;
+    reminder_body: string;
+    random_seed: number;
+    status: string;
+    created_at?: string | null;
+};
+
+/**
  * One computed server-variable aggregate in the `/server-variables` response.
  */
 export type ServerVariableEntry = {
@@ -1304,6 +1439,10 @@ export type TransferProjectOwnershipRequest = {
     new_owner_user_id: string;
 };
 
+export type UnsubscribeResponse = {
+    status: string;
+};
+
 export type UpdateCommentRequest = {
     body?: string | null;
     resolved?: boolean | null;
@@ -1375,6 +1514,19 @@ export type UpdateQuestionnaireRequest = {
 export type UpdateRoleRequest = {
     name?: string | null;
     permissions?: Array<string> | null;
+};
+
+export type UpdateSeriesRequest = {
+    name?: string | null;
+    schedule_kind?: string | null;
+    wave_defs?: unknown;
+    timezone?: string | null;
+    reminder_subject?: string | null;
+    reminder_body?: string | null;
+    /**
+     * `active` | `archived`.
+     */
+    status?: string | null;
 };
 
 export type UpdateSessionRequest = {
@@ -5497,3 +5649,217 @@ export type UploadSessionMediaResponses = {
 };
 
 export type UploadSessionMediaResponse = UploadSessionMediaResponses[keyof UploadSessionMediaResponses];
+
+export type ListSeriesData = {
+    body?: never;
+    path?: never;
+    query: {
+        questionnaire_id: string;
+    };
+    url: '/api/series';
+};
+
+export type ListSeriesResponses = {
+    /**
+     * Series for a questionnaire
+     */
+    200: Array<SeriesRecord>;
+};
+
+export type ListSeriesResponse = ListSeriesResponses[keyof ListSeriesResponses];
+
+export type CreateSeriesData = {
+    body: CreateSeriesRequest;
+    path?: never;
+    query?: never;
+    url: '/api/series';
+};
+
+export type CreateSeriesErrors = {
+    /**
+     * No access to questionnaire
+     */
+    403: ErrorEnvelope;
+};
+
+export type CreateSeriesError = CreateSeriesErrors[keyof CreateSeriesErrors];
+
+export type CreateSeriesResponses = {
+    /**
+     * Series created
+     */
+    201: SeriesRecord;
+};
+
+export type CreateSeriesResponse = CreateSeriesResponses[keyof CreateSeriesResponses];
+
+export type UpdateSeriesData = {
+    body: UpdateSeriesRequest;
+    path: {
+        /**
+         * Series id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/series/{id}';
+};
+
+export type UpdateSeriesErrors = {
+    /**
+     * Series not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type UpdateSeriesError = UpdateSeriesErrors[keyof UpdateSeriesErrors];
+
+export type UpdateSeriesResponses = {
+    /**
+     * Series updated
+     */
+    200: SeriesRecord;
+};
+
+export type UpdateSeriesResponse = UpdateSeriesResponses[keyof UpdateSeriesResponses];
+
+export type EnrollData = {
+    body: EnrollRequest;
+    path: {
+        /**
+         * Series id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/series/{id}/enroll';
+};
+
+export type EnrollErrors = {
+    /**
+     * No access to series
+     */
+    403: ErrorEnvelope;
+};
+
+export type EnrollError = EnrollErrors[keyof EnrollErrors];
+
+export type EnrollResponses = {
+    /**
+     * Participant enrolled
+     */
+    201: EnrollResponse;
+};
+
+export type EnrollResponse2 = EnrollResponses[keyof EnrollResponses];
+
+export type ListEnrollmentsData = {
+    body?: never;
+    path: {
+        /**
+         * Series id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/series/{id}/enrollments';
+};
+
+export type ListEnrollmentsResponses = {
+    /**
+     * Enrollments
+     */
+    200: Array<EnrollmentRecord>;
+};
+
+export type ListEnrollmentsResponse = ListEnrollmentsResponses[keyof ListEnrollmentsResponses];
+
+export type ResolvePromptData = {
+    body?: never;
+    path: {
+        /**
+         * Enrollment resume token
+         */
+        resume_token: string;
+    };
+    query?: never;
+    url: '/api/series/prompt/{resume_token}';
+};
+
+export type ResolvePromptErrors = {
+    /**
+     * Unknown or invalid token
+     */
+    404: ErrorEnvelope;
+};
+
+export type ResolvePromptError = ResolvePromptErrors[keyof ResolvePromptErrors];
+
+export type ResolvePromptResponses = {
+    /**
+     * Resolved prompt
+     */
+    200: SeriesPromptResolution;
+};
+
+export type ResolvePromptResponse = ResolvePromptResponses[keyof ResolvePromptResponses];
+
+export type CompletePromptData = {
+    body: CompletePromptRequest;
+    path: {
+        /**
+         * Enrollment resume token
+         */
+        resume_token: string;
+    };
+    query?: never;
+    url: '/api/series/prompt/{resume_token}/complete';
+};
+
+export type CompletePromptErrors = {
+    /**
+     * Unknown or invalid token
+     */
+    404: ErrorEnvelope;
+};
+
+export type CompletePromptError = CompletePromptErrors[keyof CompletePromptErrors];
+
+export type CompletePromptResponses = {
+    /**
+     * Enrollment advanced
+     */
+    200: CompletePromptResponse;
+};
+
+export type CompletePromptResponse2 = CompletePromptResponses[keyof CompletePromptResponses];
+
+export type UnsubscribePromptData = {
+    body?: never;
+    path: {
+        /**
+         * Enrollment resume token
+         */
+        resume_token: string;
+    };
+    query?: never;
+    url: '/api/series/prompt/{resume_token}/unsubscribe';
+};
+
+export type UnsubscribePromptErrors = {
+    /**
+     * Unknown or invalid token
+     */
+    404: ErrorEnvelope;
+};
+
+export type UnsubscribePromptError = UnsubscribePromptErrors[keyof UnsubscribePromptErrors];
+
+export type UnsubscribePromptResponses = {
+    /**
+     * Unsubscribed
+     */
+    200: UnsubscribeResponse;
+};
+
+export type UnsubscribePromptResponse = UnsubscribePromptResponses[keyof UnsubscribePromptResponses];

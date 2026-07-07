@@ -40,6 +40,11 @@ pub struct CreateSessionRequest {
     /// duplicate-participation detection. Optional; when omitted we fall
     /// back to `metadata->>'fingerprint'` for backward compatibility.
     pub fingerprint: Option<String>,
+    /// E-FLOW-2: when this session materializes a longitudinal/EMA series
+    /// wave (opened from a reminder link), the enrollment's `resume_token`.
+    /// Stored on `sessions.resume_token` so the wave binds back to its
+    /// prompt in the dataset.
+    pub resume_token: Option<Uuid>,
 }
 
 /// Response for `POST /api/sessions`. Flattens the created [`Session`] and

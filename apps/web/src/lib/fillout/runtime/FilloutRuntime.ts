@@ -32,6 +32,13 @@ export interface FilloutRuntimeConfig {
 	 * straight through so the runtime prefers it over the local ConditionAssigner.
 	 */
 	serverAssignment?: { condition: string; conditionIndex: number };
+	/**
+	 * Longitudinal / EMA series wave context (E-FLOW-2). Passed straight through
+	 * into the wrapped {@link RuntimeConfig} so the runtime exposes `_waveIndex`
+	 * / `_seriesElapsedDays` to branching. Set by FilloutPageController from the
+	 * resolved reminder-link prompt.
+	 */
+	seriesContext?: { waveIndex: number; seriesElapsedDays: number };
 	formHost?: FormQuestionHost;
 	enableOfflineSync?: boolean;
 	syncInterval?: number;

@@ -14,6 +14,7 @@ pub mod error;
 pub mod middleware;
 pub mod openapi;
 pub mod rbac;
+pub mod series;
 pub mod state;
 pub mod storage;
 pub mod websocket;

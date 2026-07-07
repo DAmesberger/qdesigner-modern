@@ -196,7 +196,15 @@ impl Modify for SecurityAddon {
         api::media::get_media,
         api::media::stream_media_content,
         api::media::delete_media,
-        api::media::upload_session_media
+        api::media::upload_session_media,
+        api::series::create_series,
+        api::series::list_series,
+        api::series::update_series,
+        api::series::enroll,
+        api::series::list_enrollments,
+        api::series::resolve_prompt,
+        api::series::complete_prompt,
+        api::series::unsubscribe_prompt
     ),
     components(
         schemas(
@@ -336,7 +344,17 @@ impl Modify for SecurityAddon {
             api::media::MediaUploadRequest,
             api::media::SessionMediaAsset,
             api::media::SessionMediaWithUrl,
-            api::media::SessionMediaUploadRequest
+            api::media::SessionMediaUploadRequest,
+            api::series::SeriesRecord,
+            api::series::CreateSeriesRequest,
+            api::series::UpdateSeriesRequest,
+            api::series::EnrollmentRecord,
+            api::series::EnrollRequest,
+            api::series::EnrollResponse,
+            api::series::SeriesPromptResolution,
+            api::series::CompletePromptRequest,
+            api::series::CompletePromptResponse,
+            api::series::UnsubscribeResponse
         )
     ),
     modifiers(&SecurityAddon),
@@ -355,6 +373,7 @@ impl Modify for SecurityAddon {
         (name = "templates", description = "Reusable question templates"),
         (name = "media", description = "Organization and session media assets"),
         (name = "sessions", description = "Questionnaire fillout sessions and persisted data"),
+        (name = "series", description = "Longitudinal / EMA study series scheduling and enrollment"),
         (name = "analytics", description = "Aggregated analytics and filtering")
     )
 )]

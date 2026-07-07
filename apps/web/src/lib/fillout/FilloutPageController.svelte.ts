@@ -17,6 +17,7 @@ import { OfflineSessionService } from '$lib/fillout/services/OfflineSessionServi
 import { FilloutContentCache } from '$lib/fillout/services/FilloutContentCache';
 import { FilloutUploadSync, type SyncResult } from '$lib/fillout/services/FilloutUploadSync';
 import { OfflineResponsePersistence } from '$lib/fillout/services/OfflineResponsePersistence';
+import { SeriesEnrollmentService } from '$lib/fillout/services/SeriesEnrollmentService';
 import { SyncLedger } from '$lib/fillout/services/integrity/SyncLedger';
 import { QuotaService } from '$lib/fillout/services/QuotaService';
 import { FraudDetectionService } from '$lib/fillout/services/FraudDetectionService';
@@ -28,7 +29,7 @@ import { ensureModulesRegistered } from '$lib/modules/register-all';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import type { GatekeeperResult } from '$lib/runtime/timing';
 import type { FilloutRuntime, FilloutRuntimeConfig } from '$lib/fillout/runtime/FilloutRuntime';
-import type { Session } from '$lib/api/generated/types.gen';
+import type { Session, SeriesPromptResolution } from '$lib/api/generated/types.gen';
 import type { ResumeSnapshot } from '$lib/fillout/runtime/responseMapping';
 
 /**
@@ -52,6 +53,16 @@ export interface FilloutPageData {
   resumeState?: ResumeState;
   resumeStateSessionId: string | null;
   resumeSessionId: string | null;
+  /**
+   * Longitudinal / EMA series wave context (E-FLOW-2), resolved in `load`
+   * from a `?token=` reminder link. `seriesToken` is the enrollment resume
+   * token (bound onto the created session + used for the completion
+   * callback); `seriesPrompt` carries the wave index + elapsed days for the
+   * `_waveIndex` / `_seriesElapsedDays` flow variables. Both null for a
+   * plain (non-series) fillout.
+   */
+  seriesToken?: string | null;
+  seriesPrompt?: SeriesPromptResolution | null;
 }
 
 /**
@@ -549,6 +560,9 @@ export class FilloutPageController {
             versionMinor: data.questionnaire.versionMinor ?? 0,
             versionPatch: data.questionnaire.versionPatch ?? 0,
             metadata,
+            // E-FLOW-2: bind this session to its series enrollment so the wave
+            // prompt resolves back to it in the dataset.
+            resumeToken: data.seriesToken ?? undefined,
           });
           this.session = created;
           // E-FLOW-6: seed counterbalancing + between-subjects assignment from the server's
@@ -778,6 +792,14 @@ export class FilloutPageController {
         participantNumber: this.participantNumber,
         conditionGroupCounts: this.conditionGroupCounts,
         serverAssignment: this.serverAssignment,
+        // E-FLOW-2: expose the series wave + elapsed days to branching
+        // (`_waveIndex` / `_seriesElapsedDays`) when opened from a reminder link.
+        seriesContext: this.data.seriesPrompt
+          ? {
+              waveIndex: this.data.seriesPrompt.wave_index,
+              seriesElapsedDays: this.data.seriesPrompt.series_elapsed_days,
+            }
+          : undefined,
         formHost: this.formHost,
         enableOfflineSync: true,
         serverVariables,
@@ -850,6 +872,18 @@ export class FilloutPageController {
 
     // Mark offline session complete
     await this.services.offlineSession.completeSession(this.session.id).catch(() => {});
+
+    // E-FLOW-2: post completion back so the series advances the enrollment and
+    // schedules the next wave. Best-effort — the wave's answers are already
+    // persisted via the offline-first write path; a failed callback only delays
+    // the next reminder, so it never blocks the completion screen.
+    if (this.data.seriesToken) {
+      void SeriesEnrollmentService.complete(
+        this.data.seriesToken,
+        this.session.id,
+        this.data.seriesPrompt?.wave_index
+      ).catch(() => {});
+    }
 
     // Trigger sync
     this.syncEngine?.syncNow();

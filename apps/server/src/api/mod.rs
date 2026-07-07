@@ -10,6 +10,7 @@ use crate::middleware::api_key::set_api_key_context;
 use crate::middleware::fillout_rls_context::set_fillout_rls_context;
 use crate::middleware::rate_limit::rate_limit_middleware;
 use crate::middleware::rls_context::set_rls_context;
+use crate::middleware::series_rls_context::set_series_rls_context;
 use crate::state::AppState;
 
 pub mod access;
@@ -25,6 +26,7 @@ pub mod projects;
 pub mod questionnaires;
 pub mod roles;
 pub mod scim;
+pub mod series;
 pub mod sessions;
 pub mod shares;
 pub mod sso;
@@ -364,6 +366,45 @@ pub fn router(state: AppState) -> Router {
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context))
         .merge(media_content_routes);
 
+    // Longitudinal / EMA study series (E-FLOW-2). The researcher surface
+    // runs under the standard `set_rls_context` (JWT → app.user_id); the
+    // anonymous participant surface (`/prompt/{token}/…`) runs under
+    // `set_series_rls_context` (URL token → app.enrollment_token). Merged
+    // like `media_routes` so both live under one `/api/series` nest, each
+    // keeping its own middleware stack. The participant `…/complete` and
+    // `…/unsubscribe` writes are rate-limited (anonymous, session-URL-only
+    // credential).
+    let series_public_routes = Router::new()
+        .route("/prompt/{token}", get(series::resolve_prompt))
+        .route(
+            "/prompt/{token}/complete",
+            post(series::complete_prompt).route_layer(axum_mw::from_fn_with_state(
+                state.clone(),
+                rate_limit_middleware,
+            )),
+        )
+        .route(
+            "/prompt/{token}/unsubscribe",
+            post(series::unsubscribe_prompt).route_layer(axum_mw::from_fn_with_state(
+                state.clone(),
+                rate_limit_middleware,
+            )),
+        )
+        .layer(CatchPanicLayer::new())
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            set_series_rls_context,
+        ));
+
+    let series_routes = Router::new()
+        .route("/", get(series::list_series).post(series::create_series))
+        .route("/{id}", patch(series::update_series))
+        .route("/{id}/enroll", post(series::enroll))
+        .route("/{id}/enrollments", get(series::list_enrollments))
+        .layer(CatchPanicLayer::new())
+        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context))
+        .merge(series_public_routes);
+
     // Anonymous SSO federation entry points (E-RBAC-6). No RLS context — the
     // start/callback flow provisions users/members on the app pool directly and
     // `resolve` is a public domain probe. Rate-limited like the auth routes.
@@ -447,6 +488,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/invitations", invitation_routes)
         .nest("/api/questionnaires", questionnaire_routes)
         .nest("/api/sessions", session_routes)
+        .nest("/api/series", series_routes)
         .nest("/api/media", media_routes)
         .nest("/api/sso", sso_routes)
         .nest("/api/v1", machine_routes)

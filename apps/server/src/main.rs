@@ -195,6 +195,14 @@ async fn main() {
         config: Arc::new(config.clone()),
     };
 
+    // ── Series scheduler (E-FLOW-2) ───────────────────────────────────
+    // Background tick that scans due longitudinal/EMA prompts, sends the
+    // reminder via the SMTP path, and advances the scheduler cursor. Runs
+    // for the process lifetime (fire-and-forget, like the revoked-token
+    // purger above). Uses SECURITY DEFINER functions so the non-BYPASSRLS
+    // app pool can still see the cross-tenant due set.
+    qdesigner_server::series::spawn_scheduler(state.clone());
+
     // ── Router ───────────────────────────────────────────────────────
     let app = api::router(state)
         .layer(axum::middleware::from_fn(csrf_middleware))
