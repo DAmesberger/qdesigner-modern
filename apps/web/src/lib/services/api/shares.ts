@@ -63,6 +63,7 @@ export const shares = {
     callSdk(
       () =>
         apiClient.get({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: `/api/${base(kind)}/{id}/shares`,
           path: { id: resourceId },
         }) as unknown as Promise<ShareRecord[]>
@@ -77,6 +78,7 @@ export const shares = {
     callSdk(
       () =>
         apiClient.post({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: `/api/${base(kind)}/{id}/shares`,
           path: { id: resourceId },
           body,
@@ -92,6 +94,7 @@ export const shares = {
     callSdk(
       () =>
         apiClient.delete({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: `/api/${base(kind)}/{id}/shares/{share_id}`,
           path: { id: resourceId, share_id: shareId },
         }) as unknown as Promise<{ message: string }>
@@ -102,6 +105,7 @@ export const shares = {
     callSdk(
       () =>
         apiClient.get({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/shares/shared-with-me',
         }) as unknown as Promise<SharedResource[]>
     ),

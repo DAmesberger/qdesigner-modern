@@ -245,7 +245,25 @@ async fn authorize_channel(pool: &PgPool, user_id: Uuid, channel: &str) -> bool 
         None => return false,
     };
 
-    sqlx::query_scalar::<_, bool>(
+    // `project_members` (and `projects`) are RLS-bound and the app connects as
+    // the non-BYPASSRLS `qdesigner_app` role, so this membership probe must run
+    // inside a transaction that sets the `app.user_id` GUC — otherwise the RLS
+    // SELECT policy hides every row and EXISTS is always false, wrongly rejecting
+    // the channel and breaking collaborative designer sessions.
+    let mut tx = match pool.begin().await {
+        Ok(tx) => tx,
+        Err(_) => return false,
+    };
+    if sqlx::query("SELECT set_config('app.user_id', $1, true)")
+        .bind(user_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .is_err()
+    {
+        return false;
+    }
+
+    let authorized = sqlx::query_scalar::<_, bool>(
         r#"
         SELECT EXISTS(
             SELECT 1 FROM project_members pm
@@ -257,9 +275,13 @@ async fn authorize_channel(pool: &PgPool, user_id: Uuid, channel: &str) -> bool 
     )
     .bind(user_id)
     .bind(questionnaire_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await
-    .unwrap_or(false)
+    .unwrap_or(false);
+
+    // Read-only probe — release the transaction without persisting anything.
+    let _ = tx.rollback().await;
+    authorized
 }
 
 /// Extract the resource UUID from a channel string like "designer:{uuid}" or "questionnaire:{uuid}".

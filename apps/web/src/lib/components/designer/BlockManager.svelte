@@ -170,18 +170,20 @@
 
     designerStore.addBlock(targetPageId, newBlock.type);
 
-    const page = designerStore.questionnaire.pages.find(p => p.id === targetPageId);
-    if (page && page.blocks && page.blocks.length > 0) {
-      const latestBlock = page.blocks[page.blocks.length - 1];
-      if (latestBlock) {
-        designerStore.updateBlock(latestBlock.id, {
-          name: newBlock.name,
-          condition: newBlock.condition || undefined,
-          randomization: newBlock.type === 'randomized' ? { ...newBlock.randomization } : undefined,
-          loop: newBlock.type === 'loop' ? { ...newBlock.loop } : undefined,
-          adaptive: newBlock.type === 'adaptive' ? (newBlock.adaptive ?? { items: [] }) : undefined,
-        });
-      }
+    // Use the id addBlock just recorded rather than re-deriving the "last block"
+    // from the reactive questionnaire view — under the collaborative Y.Doc path
+    // that view can lag the write, so blocks[length-1] would target the wrong
+    // (or a stale) block and the adaptive/randomization/loop config would be
+    // dropped or applied to the wrong block.
+    const newBlockId = designerStore.currentBlockId;
+    if (newBlockId) {
+      designerStore.updateBlock(newBlockId, {
+        name: newBlock.name,
+        condition: newBlock.condition || undefined,
+        randomization: newBlock.type === 'randomized' ? { ...newBlock.randomization } : undefined,
+        loop: newBlock.type === 'loop' ? { ...newBlock.loop } : undefined,
+        adaptive: newBlock.type === 'adaptive' ? (newBlock.adaptive ?? { items: [] }) : undefined,
+      });
     }
 
     newBlock = {

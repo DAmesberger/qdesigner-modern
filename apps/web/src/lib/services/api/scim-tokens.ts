@@ -31,6 +31,7 @@ export const scimTokens = {
     callSdk(
       () =>
         apiClient.get({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/scim-tokens',
           path: { id: orgId },
         }) as unknown as Promise<ScimTokenRecord[]>
@@ -40,6 +41,7 @@ export const scimTokens = {
     callSdk(
       () =>
         apiClient.post({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/scim-tokens',
           path: { id: orgId },
           body: { name: name ?? null },
@@ -50,6 +52,7 @@ export const scimTokens = {
     callSdk(
       () =>
         apiClient.delete({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/scim-tokens/{token_id}',
           path: { id: orgId, token_id: tokenId },
         }) as unknown as Promise<{ message: string }>

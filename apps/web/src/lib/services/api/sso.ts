@@ -61,6 +61,7 @@ export const sso = {
     callSdk(
       () =>
         apiClient.get({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/sso',
           path: { id: orgId },
         }) as unknown as Promise<IdentityProvider[]>
@@ -70,6 +71,7 @@ export const sso = {
     callSdk(
       () =>
         apiClient.post({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/sso',
           path: { id: orgId },
           body,
@@ -80,6 +82,7 @@ export const sso = {
     callSdk(
       () =>
         apiClient.patch({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/sso/{idp_id}',
           path: { id: orgId, idp_id: idpId },
           body,
@@ -90,6 +93,7 @@ export const sso = {
     callSdk(
       () =>
         apiClient.delete({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/sso/{idp_id}',
           path: { id: orgId, idp_id: idpId },
         }) as unknown as Promise<{ message: string }>
@@ -103,6 +107,7 @@ export const sso = {
     callSdk(
       () =>
         apiClient.get({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/sso/resolve',
           query: { email },
         }) as unknown as Promise<SsoResolveResult>

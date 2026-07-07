@@ -34,6 +34,7 @@ export const roles = {
     callSdk(
       () =>
         apiClient.get({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/roles',
           path: { id: orgId },
         }) as unknown as Promise<RolesListResponse>
@@ -43,6 +44,7 @@ export const roles = {
     callSdk(
       () =>
         apiClient.post({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/roles',
           path: { id: orgId },
           body,
@@ -57,6 +59,7 @@ export const roles = {
     callSdk(
       () =>
         apiClient.patch({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/roles/{role_id}',
           path: { id: orgId, role_id: roleId },
           body,
@@ -67,6 +70,7 @@ export const roles = {
     callSdk(
       () =>
         apiClient.delete({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/roles/{role_id}',
           path: { id: orgId, role_id: roleId },
         }) as unknown as Promise<{ deleted: boolean }>
@@ -81,6 +85,7 @@ export const roles = {
     callSdk(
       () =>
         apiClient.put({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/members/{user_id}/custom-role',
           path: { id: orgId, user_id: userId },
           body: { custom_role_id: customRoleId },

@@ -7,7 +7,11 @@
   import { onMount } from 'svelte';
   import { Monitor, MessageSquare, CheckSquare, Star, Type, Grid3x3, ListOrdered, Calendar, Paperclip, Pen, FlaskConical, Plus, Loader2 } from 'lucide-svelte';
 
-  const HIDDEN_LEGACY_TYPES = new Set(['reaction-time', 'webgl']);
+  // `reaction-time` hosts the standard-paradigm library (E-REACT-2: Go/No-Go,
+  // SART, Simon, Posner, visual search, Sternberg, PVT, temporal-order, RSVP) via
+  // its StandardParadigmFields editor, so it must be addable. Only `webgl` (the
+  // raw low-level module) stays hidden as legacy.
+  const HIDDEN_LEGACY_TYPES = new Set(['webgl']);
 
   // Module categories with display configuration
   const categories = [

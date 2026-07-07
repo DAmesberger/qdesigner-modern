@@ -43,6 +43,7 @@ export const apiKeys = {
     callSdk(
       () =>
         apiClient.get({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/api-keys',
           path: { id: orgId },
         }) as unknown as Promise<ApiKeyRecord[]>
@@ -53,6 +54,7 @@ export const apiKeys = {
     callSdk(
       () =>
         apiClient.post({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/api-keys',
           path: { id: orgId },
           body,
@@ -64,6 +66,7 @@ export const apiKeys = {
     callSdk(
       () =>
         apiClient.delete({
+          security: [{ scheme: 'bearer', type: 'http' }],
           url: '/api/organizations/{id}/api-keys/{key_id}',
           path: { id: orgId, key_id: keyId },
         }) as unknown as Promise<{ message: string }>
