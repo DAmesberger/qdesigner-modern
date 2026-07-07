@@ -1,0 +1,974 @@
+[
+  {
+    "id": "F001",
+    "dim": "FE-Sec",
+    "sev": "high",
+    "title": "Researcher-authored content rendered as raw HTML via marked + {@html} without sanitization (stored XSS)",
+    "evidence": "apps/web/src/lib/services/markdownProcessor.ts:7-12,71,117 (marked.use with NO sanitizer; marked passes raw HTML through by default); consumed via {@html} at apps/web/src/lib/modules/questions/shared/BaseQuestion.svelte:296,305 (question title/description in fillout), apps/web/src/lib/modules/display/text-instruction/TextInstruction.svelte:159, apps/web/src/lib/wysiwyg/QuestionVisualRenderer.svelte:457,471,492,512,517 (via mediaHandling.processContentWithMediaSync -> processMarkdownContentSync, mediaHandling.ts:76-96), and apps/web/src/lib/fillout/components/ConsentScreen.svelte:110 ({@html content} with no processing at all). Contrast: apps/web/src/lib/modules/display/text/TextDisplay.svelte:6,66 correctly uses DOMPurify.sanitize, and isomorphic-dompurify is already a dependency (apps/web/package.json:84).",
+    "detail": "processMarkdownContent/Sync parse questionnaire text (titles, descriptions, instructions, consent) to HTML with marked and no sanitize step, then Svelte injects it with {@html} into the public fillout runtime. Any HTML in that content (e.g. `<img src=x onerror=...>`) executes in every participant's browser, and in the collaborative design",
+    "rec": "Route ALL markdown/HTML that reaches {@html} through DOMPurify.sanitize (as TextDisplay already does), ideally centralized inside processMarkdownContent/Sync so every caller (BaseQuestion, TextInstruction, QuestionVisualRenderer, ConsentScreen) is covered by construction. Sanitize AFTER marked.parse and after variable interpolation."
+  },
+  {
+    "id": "F002",
+    "dim": "FE-Sec",
+    "sev": "high",
+    "title": "Script sandbox escapable via bracket-notation constructor chain; ScriptExecutor runs on the main thread with DOM access and no timeout",
+    "evidence": "apps/web/src/lib/runtime/core/ScriptExecutor.ts:11-12 (BANNED_PROPERTY_ACCESS is a dot-only regex), :202-216 (Proxy get-trap only guards sandbox free-var lookups), :224-225 (new Function('sandbox','with(sandbox){...}') executed on the MAIN thread), :333-340 hooks invoked synchronously with no timeout. Same dot-only guard in packages/scripting-engine/src/ScriptWorker.ts:45,124,157-170. The security test itself documents the gap: apps/web/src/lib/runtime/core/ScriptExecutor.security.test.ts:29-30,79-81 ('Property-chain access ... bypasses the Proxy — the ScriptWorker provides full isolation') — but ScriptExecutor does NOT use the Worker. PoC (run in this session) confirmed `[]['constructor']['constructor']('return this')()` passes BANNED_PROPERTY_ACCESS and returns the real global object.",
+    "detail": "Researcher `question.settings.script` hooks execute via new Function+with(sandbox) directly on the participant's main thread. The regex only matches `.constructor`, so `['constructor']` (or `['con'+'structor']`) is not rejected, and the Proxy get-trap only intercepts scope-chain lookups — property access on a real literal like `[]` is ung",
+    "rec": "Do not rely on regex+Proxy for isolation on the main thread. Move all researcher script execution into the Web Worker path (which at least has a hard terminate() timeout), and harden the worker sandbox against bracket-notation constructor access (deny computed member access to constructor/prototype, or evaluate via the AST evaluator only)"
+  },
+  {
+    "id": "F003",
+    "dim": "FE-Sec",
+    "sev": "high",
+    "title": "JWT access and refresh tokens stored in localStorage (XSS-exfiltratable, durable takeover)",
+    "evidence": "apps/web/src/lib/services/auth.ts:11 (STORAGE_KEY='qdesigner-auth'), :322-334 storeSession writes accessToken AND refreshToken to localStorage as JSON, :336-345 read back on init. Token attached as Authorization: Bearer at apps/web/src/lib/api/runtime.ts:6-17 (no cookie auth).",
+    "detail": "Both tokens are readable by any JS on the origin. Combined with the XSS (finding 1) and sandbox-escape (finding 2) vectors, an attacker exfiltrates the long-lived refresh token and gains persistent account takeover, not just a session-scoped one. The Bearer-only design is good for CSRF but pushes all trust onto XSS resistance, which the r",
+    "rec": "Store the refresh token in an httpOnly, Secure, SameSite=strict cookie handled by the server; keep only a short-lived access token in memory (not localStorage). At minimum, get the refresh token out of JS-reachable storage."
+  },
+  {
+    "id": "F004",
+    "dim": "FE-Sec",
+    "sev": "medium",
+    "title": "Worker script sandbox also escapable; 'use strict' guard is inert",
+    "evidence": "packages/scripting-engine/src/ScriptWorker.ts:45 (dot-only BANNED_PATTERN), :157-170 (get-trap only on sandbox proxy), :172-173 (wrappedCode = '\"use strict\";' + script placed INSIDE `with(sandbox){...}`, so it is not a directive prologue and does not enable strict mode). Same pattern in packages/scripting-engine/src/ScriptEngine.ts:217.",
+    "detail": "The same bracket-notation constructor bypass applies inside the Worker. Escape yields the Worker global scope (self) — no DOM, but fetch/XMLHttpRequest/importScripts are available, so the `context` passed in (variables, answers) can be exfiltrated to an attacker host from the participant's origin. The `\"use strict\"` intended to block impl",
+    "rec": "Harden the worker sandbox against computed constructor/prototype access (not just dotted forms), and put the `\"use strict\"` at the true start of the Function body (or rely on the AST evaluator). Consider a strict CSP on the worker to block network egress."
+  },
+  {
+    "id": "F005",
+    "dim": "FE-Sec",
+    "sev": "low",
+    "title": "Sensitive participant data unencrypted in IndexedDB; content and presigned URLs logged to console",
+    "evidence": "apps/web/src/lib/services/db/indexeddb.ts:154-198 (filloutSessions/filloutResponses/filloutVariables stored in plaintext, no encryption); auth token also plaintext in localStorage (auth.ts:322). apps/web/src/lib/services/markdownProcessor.ts:171-208 console.log of full content, media array, and resolved media URLs (which for designer preview are presigned, signature-bearing).",
+    "detail": "Offline-first fillout persists psychological-research responses unencrypted in the browser until synced/cleared — a concern on shared/kiosk devices common in research settings. Verbose console logging of content and presigned media URLs leaks data into the browser console.",
+    "rec": "Purge fillout IndexedDB tables on completion/sync and on a shared-device 'end session' action; consider at-rest encryption for response data. Remove the debug console.log statements in markdownProcessor (they also log presigned URLs)."
+  },
+  {
+    "id": "F006",
+    "dim": "BE-Sec",
+    "sev": "high",
+    "title": "Rate limiting keyed on client-controlled X-Forwarded-For bypasses brute-force protection on auth endpoints",
+    "evidence": "rate_limit.rs:86-97 — for requests with no AuthenticatedUser in extensions the key is request.headers().get(\"x-forwarded-for\") used verbatim (fallback \"unknown\"). mod.rs:28-46 — auth_routes (login/register/verify-email/verify/send/resend/password-reset/confirm) attach ONLY the rate_limit layer; no auth extractor runs before it, so AuthenticatedUser is never present and the key is always the raw XFF header.",
+    "detail": "The XFF header is fully attacker-controlled. Rotating its value yields a fresh max_requests-per-window bucket per request (Redis key ratelimit:{key}, in-memory HashMap keyed by the same string). Even behind an appending proxy (\"attacker_val, real_ip\") the attacker-controlled prefix keeps each key unique. This nullifies the only server-sid",
+    "rec": "Derive the client identity from the socket peer address (ConnectInfo) or a trusted-proxy-count index into XFF; never key on the raw header. Combine with a per-account/per-email counter for auth endpoints."
+  },
+  {
+    "id": "F007",
+    "dim": "BE-Sec",
+    "sev": "low",
+    "title": "No maximum password length (hardening gap) — stated Argon2 DoS mechanism is overstated",
+    "evidence": "models.rs:50,76,118 — LoginRequest/RegisterRequest/PasswordResetConfirm validate only length(min=8), no max. password.rs:9-16 — hash_password feeds password.as_bytes() to Argon2::default().",
+    "detail": "The code facts are correct: there is no max password length. But the claimed impact is wrong. Argon2's cost is fixed by its memory/time/parallelism parameters and is independent of input length — the password is folded into a single Blake2b pre-hash (H0) before the memory-hard phase, so a multi-MB password adds only a cheap linear Blake2b",
+    "rec": "Add length(max = 128) (or similar) to the three password fields, primarily as input hygiene / body-size bounding. Do not rely on it to prevent Argon2 DoS — that framing is inaccurate."
+  },
+  {
+    "id": "F008",
+    "dim": "BE-Sec",
+    "sev": "low",
+    "title": "WebSocket JWT transmitted in the URL query string",
+    "evidence": "websocket/handler.rs:18-33 — WsQuery { token: String }; token read from /api/ws?token=<jwt> and passed to verify_access_token. main.rs:194 — TraceLayer::new_for_http().",
+    "detail": "The access token is a query parameter on the upgrade GET (CWE-598). Real exposure is narrower than the finding states: a WebSocket handshake does not emit a Referer, and the URL is not navigated to so browser history is largely irrelevant; TraceLayer::new_for_http() records the URI at DEBUG (its default), so it is NOT emitted under the de",
+    "rec": "Pass the token via the Sec-WebSocket-Protocol subprotocol header or an Authorization header on the upgrade, or issue a single-use short-TTL ticket exchanged out of band; keep bearer tokens out of URLs."
+  },
+  {
+    "id": "F009",
+    "dim": "BE-Sec",
+    "sev": "medium",
+    "title": "Email-verification code is 6 digits with no per-account attempt limit or lockout, and send has no rate cap or user-existence check",
+    "evidence": "auth.rs:492-535 — verify_code does a single SELECT EXISTS on email+code with expires_at>NOW() and used_at IS NULL; no attempt counter, no lockout, no invalidation after N failures. auth.rs:394 — code = format!(\"{:06}\", gen_range(100_000..1_000_000)). auth.rs:526 — on match, UPDATE users SET email_verified=true WHERE email=$1. auth.rs:388-409 — send_verification_code upserts a code for ANY email with no user-existence check and no send-rate cap.",
+    "detail": "The 900k-value space over a 10-minute window is brute-forceable, and combined with finding #1's rate-limit bypass there is effectively no throttle. A successful guess sets email_verified=true for an arbitrary registered email (no auth required to call verify_code). send_verification_code also emails any address unconditionally (email-bomb",
+    "rec": "Add a per-email attempt counter with lockout after ~5 failures, invalidate the code on lockout, lengthen the code or shorten TTL, and rate-limit send/resend per email independent of the IP-based limiter."
+  },
+  {
+    "id": "F010",
+    "dim": "BE-Sec",
+    "sev": "medium",
+    "title": "Anonymous session media upload has no size/content-type/magic-byte validation and full-buffers the file in memory",
+    "evidence": "media.rs:526-591 — upload_session_media takes only State + Path<session_id> + Multipart (no AuthenticatedUser); it checks only that the session exists and status=='active' (:532-541), reads field.bytes().to_vec() into a Vec<u8> (:558-562), and builds the S3 key with the raw client filename (:571). No DefaultBodyLimit/RequestBodyLimit override exists (grep clean). upload_media (:135) shares the no-validation pattern.",
+    "detail": "Any caller who knows an active session UUID (the URL-as-credential model) can upload arbitrary bytes with an unvalidated content_type and no MIME allowlist or magic-byte check, stored under a key containing the raw filename. Today the only bound is axum's implicit 2 MB DefaultBodyLimit; if raised/disabled for legitimate large stimuli the ",
+    "rec": "Require and enforce a content-length/size cap, a MIME allowlist with magic-byte sniffing, and sanitize/drop the client filename from the key; consider streaming to storage rather than buffering, and gate anonymous uploads behind the session's active questionnaire needing them."
+  },
+  {
+    "id": "F011",
+    "dim": "BE-Sec",
+    "sev": "low",
+    "title": "RLS anonymous session-INSERT branches do not constrain sessions.user_id (defense-in-depth gap)",
+    "evidence": "00021_fillout_dual_policies.sql — sessions_insert_dual WITH CHECK admits via is_super_admin() OR user-GUC match OR session-GUC match (sessions.id = current_app_session_id()) OR the bootstrap branch (current_app_user_id() IS NULL AND current_app_session_id() IS NULL). None of the anonymous-admitting branches reference the user_id column. sessions.rs:409 — session_user_id = user.as_ref().map(|u| u.user_id) (NULL for anonymous), so the handler writes it correctly today.",
+    "detail": "Confirmed and slightly broader than stated: not only the bootstrap branch but also the session-GUC branch admits an anonymous INSERT without checking the written user_id, so RLS — the layer meant to backstop a compromised/buggy handler — would not stop an anonymous INSERT that set user_id to a victim's id. No forgery is possible today bec",
+    "rec": "Add WITH CHECK constraints so anonymous branches require sessions.user_id IS NULL and the user branch requires user_id = current_app_user_id()."
+  },
+  {
+    "id": "F012",
+    "dim": "BE-Sec",
+    "sev": "low",
+    "title": "Dev bootstrap endpoint enable-in-prod via env var, and verify_domain auto-verifies with no ownership proof",
+    "evidence": "mod.rs:270-292 + dev.rs:44-65 — /api/dev/bootstrap-personas is mounted only when cfg!(debug_assertions) || DEV_HELPERS_ENABLED in {1,true,yes,on}, and the handler re-checks dev_helpers_enabled(). organizations.rs:1495-1527 — verify_domain requires OrgRole::Admin (has_org_role at :1505) then unconditionally UPDATE organization_domains SET verified_at=NOW() (\"In development, auto-verify\") with no DNS/ownership challenge.",
+    "detail": "bootstrap-personas is double-gated and provisions fixed-UUID personas only from env-provided passwords, so it is not a default-cred backdoor — but a release build with DEV_HELPERS_ENABLED=true exposes deterministic persona provisioning. verify_domain lets any org admin mark ANY domain (including a public email provider) verified with zero",
+    "rec": "Compile the dev router out of release builds (cfg(debug_assertions) only, drop the env escape hatch), and replace verify_domain's auto-verify with a real DNS TXT/HTTP ownership challenge before it backs any auto-join."
+  },
+  {
+    "id": "F013",
+    "dim": "BE-Sec",
+    "sev": "info",
+    "title": "Login user-enumeration timing side channel",
+    "evidence": "auth.rs:115-135 — on missing user the handler returns Unauthorized at :126 (fetch_optional...ok_or_else) and on missing password_hash at :131, both BEFORE verify_password runs at :133. Existing users always pay the Argon2 verify cost.",
+    "detail": "The response body is identical (\"Invalid email or password\") but response time differs measurably: non-existent/no-hash accounts skip Argon2 verification, existent accounts do not. This enables email enumeration. Low impact alone; more useful combined with finding #1's rate-limit bypass.",
+    "rec": "Perform a dummy Argon2 verify against a fixed decoy hash when the user/hash is absent so all paths pay comparable cost."
+  },
+  {
+    "id": "F014",
+    "dim": "Missing",
+    "sev": "high",
+    "title": "Quota management is hollow for multi-cell/demographic quotas — server returns total completions for every quota",
+    "evidence": "sessions.rs:2706-2715 — explicit comment 'For now, return total_completed as the current count' then `current: total_completed, is_full: total_completed >= target` pushed for EVERY enabled quota inside the loop, ignoring each quota's `condition`. Client QuotaService.checkQuotas (QuotaService.ts:53-97) evaluates each quota's condition only against `currentValues` (the urlParams Map built at +page.svelte:419-424) and flags a quota full when `conditionMatches && status.isFull`. The status.current/isFull is the server's total, not the per-cell count.",
+    "detail": "Fully confirmed on both server and client. Per-cell counting does not exist: every quota cell receives current=total_completed and is_full=(total>=cellTarget). A male respondent whose urlParam matches gender==male gets blocked once TOTAL completions reach the male cell's target, regardless of how many completions were actually male. Only ",
+    "rec": "Compute per-quota counts server-side by evaluating each quota's condition against completed sessions' stored demographic/response values (or maintain per-cell counters at completion time), and return real current/is_full per quota. Re-check quotas after in-survey demographic questions, not just from urlParams, and enforce on the offline/s"
+  },
+  {
+    "id": "F015",
+    "dim": "Missing",
+    "sev": "medium",
+    "title": "Question-level skip/branch/loop targets are a designer illusion — runtime resolves targets against pages only",
+    "evidence": "FlowControlManager.svelte:42-56 pushes both page targets and question targets (label `Q: ...`, type 'question') into availableTargets. QuestionnaireRuntime.handleFlowControl (lines 1128-1168) resolves skip/branch (1157) and loop (1144) targets exclusively via `this.config.questionnaire.pages.findIndex(page => page.id === matchingRule.target)`; on -1 it falls through to `navigateToPage(currentPageIndex + 1)` (1168).",
+    "detail": "Confirmed. Page ids and question ids are distinct namespaces, so a question-id target never matches a page, findIndex returns -1, and the branch/skip/loop silently no-ops into linear next-page navigation. Authors can wire screening/branching logic to a specific question in the designer and it will be discarded at fillout with no error. Me",
+    "rec": "Either resolve question-id targets to their containing page (and optionally scroll/anchor to the question) in handleFlowControl, or restrict FlowControlManager's target list to pages only so the designer cannot offer targets the runtime can't honor."
+  },
+  {
+    "id": "F016",
+    "dim": "Missing",
+    "sev": "medium",
+    "title": "Domain-based auto-join cannot be completed through the product — verification is a stub",
+    "evidence": "admin/domains/+page.svelte:129-140 — handleVerifyDomain performs no DNS TXT / .well-known check; it only sets a `notice` string stating 'Automated domain verification is not available yet ... auto-join stays disabled for unverified domains.'",
+    "detail": "Confirmed and honestly stubbed (the comment notes a prior version auto-verified unconditionally and was correctly removed). The Add Domain flow (success message at line 120) and updateDomainConfig with autoJoinEnabled exist, but domains remain Pending forever because no code path can transition them to Verified. The advertised org auto-jo",
+    "rec": "Implement server-side DNS TXT or .well-known token verification and a verify endpoint, or clearly mark the feature as roadmap/hidden until then."
+  },
+  {
+    "id": "F017",
+    "dim": "Missing",
+    "sev": "medium",
+    "title": "Onboarding invitation discovery disabled — invited users who skip the token link create a new org",
+    "evidence": "onboarding/organization/+page.svelte:40-42 — '// For now, skip invitation check due to RLS issues / TODO: Fix RLS policies for organization_invitations table'; onMount unconditionally sets `showCreateForm = true` after the orgs.length check.",
+    "detail": "Confirmed. Token-based accept (handleAcceptInvitation -> api.organizations.invitations.accept, lines 45-58) works, but the passive discovery path is bypassed: a user with a pending invitation who signs up without clicking the emailed token lands directly on the create-organization form. The practical consequence (tenancy fragmentation — i",
+    "rec": "Resolve the RLS policy on organization_invitations so onboarding can list pending invitations by the user's email and offer join-vs-create."
+  },
+  {
+    "id": "F018",
+    "dim": "Missing",
+    "sev": "low",
+    "title": "Cross-project/org-wide analytics is wired at the API layer but has no UI entry point; local compute module is dead code",
+    "evidence": "Server route exists: api/mod.rs:106 `/{id}/analytics -> sessions::cross_project_analytics`. Client method exists: api.ts:752-767 crossProjectAnalytics. Grep for `crossProjectAnalytics` across apps/web/src returns only its own definition (api.ts:754) — no route/component caller. Grep for `from '.../analytics/CrossProjectAnalytics'` / `CrossProjectAnalytics.getInstance` returns zero external importers; the class in lib/analytics/CrossProjectAnalytics.ts is unreferenced.",
+    "detail": "Confirmed. A full server endpoint plus typed client method for org-wide cross-project analytics exist with no UI that invokes them, and the standalone CrossProjectAnalytics engine class has no importers (dead code). Low severity is correct — unsurfaced capability plus dead code, not a user-facing defect.",
+    "rec": "Either surface the capability from the org analytics page (replace its per-questionnaire re-aggregation with the endpoint) or remove the unused client method and CrossProjectAnalytics.ts."
+  },
+  {
+    "id": "F019",
+    "dim": "Missing",
+    "sev": "low",
+    "title": "No self-service account deletion (right-to-erasure friction)",
+    "evidence": "settings/+page.svelte:150-159 — Account card states 'Self-service account deletion is not yet available. To permanently delete your account ... contact your organization administrator or email support.' No delete action/button is rendered.",
+    "detail": "Confirmed and honestly labeled. For a platform storing participant and researcher PII this is a GDPR right-to-erasure completeness gap, though it's a disclosed absence rather than a broken control. Low severity is appropriate.",
+    "rec": "Add a self-service delete-account flow (with confirmation + backend cascade/anonymization) or document the manual erasure SLA."
+  },
+  {
+    "id": "F020",
+    "dim": "UI/UX",
+    "sev": "high",
+    "title": "Participant-facing fillout screens broken by incomplete Tailwind v4 HSL-triplet migration",
+    "evidence": "variables.css declares tokens as bare HSL triplets (--muted: 210 40% 96.1%, --background/--card/--primary etc.). app.css:30-80 @theme inline confirms these only become colors via hsl(var(--token)). Scoped component CSS feeds the raw triplet directly: WelcomeScreen.svelte:136 background:var(--background), :193 .instructions{background:var(--muted)}; ConsentScreen.svelte:189/253/278 background:var(--muted|--background), :271/318 color:var(--destructive), :295 border 1px solid var(--border); LanguagePicker.svelte:56/79; +page.svelte:786 .loading-progress{background:var(--muted)}, :794 .progress-bar{background:var(--primary)}, :856 .form-card{background:var(--card,#ffffff)}. All resolve to invalid values like 'background: 210 40% 96.1%' and are dropped. CompletionScreen.svelte:161-277 correctly uses semantic utilities (bg-background, bg-muted, text-muted-foreground, border-border), proving an incomplete migration.",
+    "detail": "The .form-card fallback var(--card,#ffffff) never engages because --card IS defined (as a triplet), so the container hosting every form-style question renders with no background over the canvas; the load progress bar, muted surface boxes (.instructions/.consent-checkboxes/.signature-section), input borders and the language-picker active p",
+    "rec": "Migrate these scoped styles to either the semantic utilities (bg-muted, text-muted-foreground, border-border, bg-primary) as CompletionScreen already does, or wrap each token in hsl(var(--token)). Grep the fillout tree for 'var(--' color usages."
+  },
+  {
+    "id": "F021",
+    "dim": "UI/UX",
+    "sev": "medium",
+    "title": "Native alert()/confirm() dialogs bypass the styled Dialog/Toast system",
+    "evidence": "13 .svelte files use alert()/confirm(). Verified: ConsentScreen.svelte:95 confirm() in participant decline flow; QuestionCard.svelte:22, BlockManager.svelte:147, VariableManager.svelte:96, ScriptEditorOverlay.svelte:84, MediaManager.svelte:254/373, Designer.svelte:74 alert('Invalid questionnaire file'); admin/domains:167, admin/invitations:127, admin/users:68/101, invite/[token]:87. A styled Dialog (lib/components/ui/overlays/Dialog.svelte) and Toast (lib/components/ui/Toast.svelte + lib/stores/toast.ts) exist.",
+    "detail": "Native dialogs are unstyleable, ignore dark mode and block the main thread — most jarring in the participant consent-decline path and for surfacing errors. This is a consistency/polish defect, not a functional break.",
+    "rec": "Replace destructive confirmations with the Dialog component and error notices with the Toast store."
+  },
+  {
+    "id": "F022",
+    "dim": "UI/UX",
+    "sev": "low",
+    "title": "Designer drag-drop is touch-hostile (HTML5 DnD), but responsive fallbacks exist",
+    "evidence": "WYSIWYGCanvas.svelte:203-204 uses ondrop/ondragover (HTML5 DnD, does not fire on touch). Designer +page:273-303 is a fixed h-screen three-column layout. BUT the claim overstates impact: BOTH sidebars become mobile drawers — LeftSidebar.svelte:37 AND RightSidebar.svelte:40 use matchMedia('(max-width:767px)') with dedicated drawer markup (LeftSidebar:207, RightSidebar:174). A click/tap add path also exists: WYSIWYGCanvas empty-state onclick=openAddPanel (:256, fn at :182), plus DesignerCommandPalette.addQuestion. So touch users are NOT hitting a 'silently dead canvas'.",
+    "detail": "The genuine defect is narrower than stated: dragging a question type from the palette and drag-reordering are unusable on touch, and there's no tap-to-reorder affordance. But adding questions works via the add panel / command palette, and the columns collapse to drawers rather than colliding, so the finding's 'effectively desktop-only / n",
+    "rec": "Add a pointer:coarse move-up/down affordance for reordering; the add flow already degrades acceptably via openAddPanel."
+  },
+  {
+    "id": "F023",
+    "dim": "UI/UX",
+    "sev": "low",
+    "title": "~250 console.* statements ship to production incl. participant runtime and PII",
+    "evidence": "grep counted 250 console.* across lib+routes (analyst said ~258; close). 25 within lib/fillout + routes/(fillout). Verified leftovers: projects/+page.svelte:169 console.log('Navigating to:',...); +layout.svelte:23-31 '[Layout] Starting module registration...'; login/+page.svelte:186 console.log('Login successful, user:', signedInUser.email) — logs the user's email (PII).",
+    "detail": "Debug logging persists on the anonymous participant surface and around auth. The login PII log is the sharpest concrete instance.",
+    "rec": "Strip debug logs (or gate behind a dev flag / logger) especially in fillout and auth paths; never log email."
+  },
+  {
+    "id": "F024",
+    "dim": "UI/UX",
+    "sev": "low",
+    "title": "Project create modal uses raw inputs, full-page reloads, and lacks in-flight submit feedback",
+    "evidence": "projects/+page.svelte:234-268 hand-rolls <input>/<textarea> with duplicated utility-class strings instead of the shared Input component; :64-65 and :171 navigate via window.location.href (full reload) rather than goto; Create button disabled={!newProjectName.trim() || !newProjectCode.trim()} — never disables while the request is in flight.",
+    "detail": "Diverges from the design system (login uses Input + Button loading prop). The hard reload flashes the page and the always-enabled-during-submit button invites double-submits with no spinner. Note the modal IS a Dialog with a footer snippet, so the wrapper is fine; only the fields/nav/loading-state are the issue.",
+    "rec": "Use Input/FormGroup, goto() for SPA nav, and Button's loading prop tied to the in-flight state."
+  },
+  {
+    "id": "F025",
+    "dim": "UI/UX",
+    "sev": "low",
+    "title": "Skeleton primitive nearly unused across async surfaces",
+    "evidence": "lib/components/ui/Skeleton.svelte exists but is referenced in only 2 components besides its definition: SaveLoadToolbar.svelte and VersionManager.svelte. Dashboard/projects async surfaces render straight from load data or pop in post-mount.",
+    "detail": "A missed-consistency opportunity rather than a defect — perceived load quality is uneven (layout shift / pop-in) on data-heavy views.",
+    "rec": "Apply Skeleton to dashboard stat cards, sparklines, and list loads."
+  },
+  {
+    "id": "F026",
+    "dim": "UI/UX",
+    "sev": "info",
+    "title": "God components concentrate interaction logic",
+    "evidence": "Line counts verified exactly: ReactionLabWorkspace.svelte 1959, PropertiesPanel.svelte 1108, StatisticsBuilder.svelte 891, MediaManager.svelte 698.",
+    "detail": "Not a user-visible bug; raises the odds of divergent one-off UI (validation/feedback/keyboard handling) drifting from the rest of the designer over time.",
+    "rec": "Extract sub-panels/hooks incrementally when touched."
+  },
+  {
+    "id": "F027",
+    "dim": "Svelte5",
+    "sev": "medium",
+    "title": "$derived(() => …) used as a callable value — defeats memoization (14 sites)",
+    "evidence": "CompletionScreen.svelte:112 `const effectiveRedirectUrl = $derived(() => redirectUrl() || panelRedirectUrl())` invoked as `effectiveRedirectUrl()` at :116; same pattern at :46/:54/:63/:94. Confirmed at ConsentScreen.svelte:58 (called :70), TextDisplay.svelte:128 (called :150 `style={contentStyle()}`), IRTPanel.svelte:61/:76 (tifData() called in tifPath at :77), QuestionRenderer.svelte:131, WelcomeScreen.svelte:39. `grep '$derived((…) =>'` = 14 hits; `$derived.by` = 45 hits, confirming the codebase knows the correct form.",
+    "detail": "Each `const x = $derived(() => expr)` wraps a function literal that reads no reactive state at creation, so the derived has no dependencies, memoizes a stable function reference once, and re-runs the full body on every `x()` call. Reactivity still flows because the reads happen inside the consumer's effect/render scope, so there is no cor",
+    "rec": "Replace `$derived(() => …)` with `$derived.by(() => …)` and drop the call parens at use sites, or inline as a plain expression where trivial."
+  },
+  {
+    "id": "F028",
+    "dim": "Svelte5",
+    "sev": "medium",
+    "title": "Half-migrated QuestionCard.svelte is a latent reactivity trap",
+    "evidence": "QuestionCard.svelte:6-10 props via `export let question/index/isSelected/blockId/pageId`; :12-13 `let isDragOver = false; let dropPosition: 'before'|'after'|null = null` as bare reactive locals; :156-169 modern Svelte 5 `ondragover`/`ondragleave`/`ondrop`/`ondragstart`/`onclick`/`onkeydown` attributes; drop indicators keyed on `isDragOver`/`dropPosition` at :162 and :301. Zero runes present in the file. Live via PageCanvas.svelte per the finding.",
+    "detail": "The component runs in Svelte 4 legacy mode (no runes, so `let` locals are still reactive) while already using Svelte 5 event attributes. It compiles and works today. The trap: adding any rune later flips the file to runes mode, at which point `isDragOver`/`dropPosition` become plain non-reactive variables and the drag highlight/drop indic",
+    "rec": "Finish the migration: `$props()` for the five props, `$state()` for isDragOver/dropPosition."
+  },
+  {
+    "id": "F029",
+    "dim": "Svelte5",
+    "sev": "medium",
+    "title": "Cluster of fully-legacy Svelte 4 routes/components still shipping (incl. core login)",
+    "evidence": "login/+page.svelte:23-27 bare `let` state, :36-37 `$:` + `$page` (0 runes in file); admin/users/+page.svelte:23-24 `$:`, :231 `on:change`, :254 `on:click`; admin/invitations/+page.svelte:210 `<form on:submit|preventDefault=…>`; admin/domains/+page.svelte:226 same modifier syntax; ThemeProvider.svelte:15-16 `export let` + :99 `<slot />`; style-guide/+page.svelte:6 `$app/stores` + `$:` at :6.",
+    "detail": "All verified rune-free, so they compile in legacy mode. They include the core auth login and admin member/role/domain management. Each carries the same silent-break risk as QuestionCard if a rune is later added, and `on:submit|preventDefault` has no runes-mode equivalent, so a naive migration must rewrite the handler to call `e.preventDef",
+    "rec": "Migrate these to runes ($props/$state/$derived) and native event handlers; explicitly handle the preventDefault modifier during conversion."
+  },
+  {
+    "id": "F030",
+    "dim": "Svelte5",
+    "sev": "low",
+    "title": "Config-default $effects mutate bound props instead of normalizing on load",
+    "evidence": "MediaResponseDesigner.svelte:53-61 `$effect` writes seven `question.config.*` defaults; BarChart.svelte:75-82 `$effect` sets `analytics.dataSource = {…}`; DrawingDesigner.svelte:59-… `$effect` seeds `question.config = {…}`. Each is guarded (`if (!question.config.x)` / `if (!analytics.dataSource)`) so it self-terminates.",
+    "detail": "These seed parent-owned prop objects from inside the reactive graph. Guards prevent looping, but writing to props in `$effect` entangles initialization with reactivity, re-runs on every dependency change, and mutates state owned by the parent as a side effect — 'derive-with-fallback' logic forced through an effect. Correct today; low.",
+    "rec": "Normalize defaults once at construction (in the parent factory / on load) or read through a `$derived` fallback rather than mutating props in an effect."
+  },
+  {
+    "id": "F031",
+    "dim": "Svelte5",
+    "sev": "low",
+    "title": "Effect writes state that a $derived should own",
+    "evidence": "AppLoader.svelte:64-69 `$effect` assigns `currentStage` (a `$state`) purely from `stages.find(s => s.status==='loading')`. PropertiesPanel.svelte:366-370 `$effect` resets `bulkOptionDraft = formatChoiceOptions(questionItem)` when `questionItem && isChoiceQuestion`.",
+    "detail": "AppLoader is a textbook derived-as-effect adding a redundant $state cell and reactivity hop — CONFIRMED. One nuance the analyst glossed: the effect only assigns when an activeStage exists (guard at :66), so it retains the last message when nothing is loading; a straight `$derived` swap would need an explicit fallback, so it is not a 1:1 r",
+    "rec": "Make currentStage a `$derived` (with a fallback for no active stage). For PropertiesPanel, key the reset on selected-item identity, not deep questionItem changes, to avoid clobbering the draft."
+  },
+  {
+    "id": "F032",
+    "dim": "Svelte5",
+    "sev": "low",
+    "title": "Deprecated $app/stores ($page) used across ~10 modules",
+    "evidence": "`import { page } from '$app/stores'` confirmed in (app)/+layout.svelte:2, (app)/+error.svelte:2, (fillout)/+error.svelte:2, AppShell.svelte:2, SaveLoadToolbar.svelte:4, VersionManager.svelte:5, style-guide/+page.svelte:6, plus login/+page.svelte (uses `$page.url`).",
+    "detail": "All read navigation state via the deprecated auto-subscription `$app/stores` / `$page` idiom. SvelteKit 2.12+ prefers fine-grained `$app/state` (`page.url`, no `$`). Works today; keeps these files on the store-subscription mechanism the rest of the codebase moved away from. Low.",
+    "rec": "Migrate to `import { page } from '$app/state'` and `page.url` (drop the `$`)."
+  },
+  {
+    "id": "F033",
+    "dim": "Svelte5",
+    "sev": "info",
+    "title": "ThemeProvider defines a competing writable theme store with a never-unsubscribed subscription",
+    "evidence": "ThemeProvider.svelte:1-8 module-context `writable` `themeMode`/`customTheme`; :72-76 instance-level `themeMode.subscribe(mode => { setThemeMode(mode); })` with no captured/called unsubscribe; `grep ThemeProvider` shows the sole importer is StyleGuide.svelte (transitively only the dev /style-guide route).",
+    "detail": "Confirmed dead-weight: a legacy `writable` theme store parallel to the live `$lib/stores/theme.ts`, plus an uncleaned instance subscription that would leak on remount. Two clarifications to avoid overstating: (1) the subscribe callback calls setThemeMode → themeMode.set, but Svelte's safe_not_equal short-circuits equal primitives, so it i",
+    "rec": "Delete ThemeProvider (and StyleGuide's use of it) or fold onto the live theme store; if kept, capture and call the unsubscribe in onDestroy."
+  },
+  {
+    "id": "F034",
+    "dim": "Components",
+    "sev": "high",
+    "title": "Ambient god-store singleton is the dominant coupling mechanism; zero Context API isolation",
+    "evidence": "designer.svelte.ts:1132 ends with `export const designerStore = new DesignerStore()`. grep: 31 .svelte files import designerStore; `grep -rhoE 'designerStore\\.\\w+' | sort -u` = exactly 91 distinct members; 23 `$state` fields (lines 110-148, the 24th `$state` hit is a comment on line 36); ~52-60 methods. `setContext(` = 0 matches repo-wide; every `getContext` hit is `canvas.getContext('webgl2'/'2d')`, none is Svelte context. RightSidebar.svelte:144 and :197 render `<PropertiesPanel />` with no props; PropertiesPanel reads state off the singleton directly.",
+    "detail": "Confirmed exactly. The counts are accurate (91 distinct members verbatim, 23 state fields, 0 setContext). This is a genuine architectural constraint: no injection seam, so designer components cannot be mounted in isolation or driven by a mock. Caveat: the analyst's linkage to 'the Phase 4 TODO (handler/round-trip tests missing)' is a slig",
+    "rec": "Introduce a Context API seam (setContext/getContext) wrapping the designer store so components receive it via context, enabling isolated mounting and a mockable boundary; optionally narrow the surface by splitting the 91-member store into role-scoped sub-stores exposed through context."
+  },
+  {
+    "id": "F035",
+    "dim": "Components",
+    "sev": "high",
+    "title": "Two parallel reaction designer stacks duplicate block/trial/phase editing; one escapes the module-registry contract",
+    "evidence": "reaction-time/metadata.ts:27 registers ReactionTimeDesigner.svelte (1704 lines), which imports ./designer/BlockEditor (dir contains BlockEditor, TrialTemplateEditor, ResponseMappingEditor, PhaseTimelineEditor). reaction-experiment/metadata.ts:24 registers the 48-line ReactionExperimentDesigner.svelte, whose only action is openLab() → `designerStore.openReactionLab(question.id)` (line 19). The real editor ReactionLabWorkspace.svelte (1959 lines) is invoked NOT via registry but via route fork at +page.svelte:286 (`{:else if designerStore.reactionLabQuestion}`, mounted line 287). Confirmed ReactionLabWorkspace imports only Button/MediaManagerModal/ScriptEditorOverlay/ReactionStagePreview — grep for BlockEditor/TrialTemplate/PhaseTimeline/ResponseMapping inside it returns ZERO, proving it re-implements block/trial/phase editing inline rather than reusing reaction-time/designer/*.",
+    "detail": "Fully confirmed. Both stacks edit the same blocks→trials→phases model with no shared sub-editors. The registry escape hatch is real: ReactionExperimentDesigner renders in PropertiesPanel like every other module but merely sets a global flag (reactionLabQuestionId) that a route-level special case reads to take over the whole canvas — the s",
+    "rec": "Extract the shared block/trial/phase sub-editors into a reusable set consumed by both stacks, and either fold ReactionLabWorkspace back under the ModuleComponents.designer contract or formalize the full-canvas takeover as a documented capability rather than an ad-hoc route fork."
+  },
+  {
+    "id": "F036",
+    "dim": "Components",
+    "sev": "high",
+    "title": "ReactionLabWorkspace is an under-decomposed god component (1959 lines)",
+    "evidence": "ReactionLabWorkspace.svelte = 1959 lines; grep counts 16 `$state` fields and 41 `function ` declarations; only 4 child components imported (Button, MediaManagerModal, ScriptEditorOverlay, ReactionStagePreview). Inline block/trial/phase editing (no reuse of reaction-time sub-editors, verified in #2), plus resizable-pane state and inline tab panels/asset picker.",
+    "detail": "Confirmed. 1959 lines with 16 state fields and 41 functions in a single component, with block/trial/phase editing, pane-resize logic, and an asset picker all inline, is a genuine navigability/review/test burden. Note it does import MediaManagerModal (so it reuses that modal), yet still carries additional inline asset-picker wiring — the a",
+    "rec": "Decompose into a shell plus extracted panes (outline/presets/assets/randomization), a reusable ResizablePanes primitive, and the shared block/trial/phase sub-editors from finding #2."
+  },
+  {
+    "id": "F037",
+    "dim": "Components",
+    "sev": "medium",
+    "title": "PropertiesPanel mixes registry dispatch with large hardcoded per-type sections",
+    "evidence": "PropertiesPanel.svelte (1108 lines): correct dynamic dispatch via `moduleRegistry.loadComponent(type, 'designer')` at line 248, but also hand-codes inline sections — CarryForward imports/config (lines 3,13,16), attention-check derived + tab (lines 40,60), save-template modal state/handlers (lines 47,67-111). grep: 30 `{#if}`/`{:else if}` branches, 15 `$derived`.",
+    "detail": "Confirmed. Branch count (30), derived count (15), the loadComponent dispatch at 248, and the presence of bespoke inline sections (attention-check, carry-forward, save-template modal, choice options, page/variable editors) all verified. The tension is real: the dynamic module-designer half is undermined by cross-cutting features baked into",
+    "rec": "Move cross-cutting configurators (attention-check, carry-forward, choice options) beside the modules they configure or into dedicated sub-components, and split the page/variable editors out of PropertiesPanel."
+  },
+  {
+    "id": "F038",
+    "dim": "Components",
+    "sev": "medium",
+    "title": "Low reuse of UI primitives — bespoke form markup dominates",
+    "evidence": "Across 179 .svelte files: 411 raw `<input` vs 18 `<Input` component usages; 388 raw `<button` vs 118 `<Button`; only 67/179 files import from lib/components/ui. ui/index.ts catalog confirmed thin: Button, Input, Select, Checkbox, FormGroup, Card, Dialog, Alert, Badge, EmptyState, Spinner, AppShell (12 primitives).",
+    "detail": "Confirmed exactly once component tags are matched loosely (multiline `<Input\\n...>` invocations): Input=18, Button=118, matching the analyst's numbers precisely; raw counts 411/388 also match. Form inputs are almost never routed through the shared Input primitive (18 of 429 total input surfaces), so label/error/spacing/focus/a11y wiring i",
+    "rec": "Adopt Input/Button/FormGroup across designer and route components; add a lint rule flagging raw `<input>`/`<button>` outside the ui package to arrest regression."
+  },
+  {
+    "id": "F039",
+    "dim": "Components",
+    "sev": "medium",
+    "title": "ReactionTimeDesigner remains a god component despite partial sub-editor extraction",
+    "evidence": "ReactionTimeDesigner.svelte = 1704 lines; imports ./designer/BlockEditor (line 6) which nests TrialTemplateEditor→ResponseMappingEditor+PhaseTimelineEditor (dir listing confirms all four). Parent still retains 14 `$state` and 5 `$effect` (grep), plus ~20 functions.",
+    "detail": "Confirmed. The nested BlockEditor chain is the right instinct, but the top-level file still owns 1704 lines with 14 state fields and 5 effects of configuration/orchestration. It is the largest registered module designer. Medium is appropriate given the partial extraction already done; one could argue high on raw size, but the ongoing deco",
+    "rec": "Continue lifting configuration state and orchestration out of the parent into the existing sub-editor chain or a dedicated store slice."
+  },
+  {
+    "id": "F040",
+    "dim": "Components",
+    "sev": "low",
+    "title": "Fillout entry page is a heavy service orchestrator",
+    "evidence": "(fillout)/q/[code]/+page.svelte = 909 lines; grep 21 `$state`, 17 `$derived`. Imports OfflineSessionService (22), FilloutOfflineSyncService (23), QuotaService (25), FraudDetectionService (26), TimingGatekeeper (29); instantiates `new FilloutSyncEngine(...)` at line 245 and uses FilloutRuntime; FraudDetectionService.checkAll invoked at 313.",
+    "detail": "Confirmed. All cited service imports/instantiations present; line/state/derived counts match. As the sole client-side fillout entry it legitimately wires many services, but concentrating all lifecycle state and 6+ service instances in one .svelte makes the offline/consent/timing flow hard to follow and untestable without a DOM. Low severi",
+    "rec": "Extract a headless FilloutController/orchestrator that owns service wiring and lifecycle state, leaving the .svelte as a thin view — enabling unit tests without a DOM."
+  },
+  {
+    "id": "F041",
+    "dim": "Dup",
+    "sev": "medium",
+    "title": "Two ScoreInterpreter modules with overlapping logic and colliding type names",
+    "evidence": "runtime/feedback/ScoreInterpreter.ts: interface ScoreInterpretation {score,range,config,percentileInRange} (L35-44), interpretScore (L70) with predicate `config.ranges.find(range => score >= range.min && score <= range.max)` (L78-80), ScoreInterpretationRange {min,max,label,description,color} (L13). analytics/ScoreInterpreter.ts: interface ScoreInterpretation {score,maxScore,percentage,label,description,color} (L13-20), class method interpretScore (L126) with predicate `ranges.find(r => score >= r.min && score <= r.max)` (L134), ScoreRange {min,max,label,description,color} (L47). Two exported types literally named ScoreInterpretation with different shapes; near-identical range interfaces.",
+    "detail": "The duplicated core predicate and the same-named-but-different-shaped ScoreInterpretation interfaces are real. BUT the analyst OVERSTATED the impact: the claim that 'statistical-feedback and ReportGenerator both import from BOTH files, so the colliding names sit in the same consumer graph — a real footgun' is false. Grep of all imports sh",
+    "rec": "Rename one interface (e.g. NormativeScoreInterpretation in analytics) and factor the shared range-match predicate + Range shape into one shared type module to prevent the two from silently diverging or colliding if the import graphs ever merge."
+  },
+  {
+    "id": "F042",
+    "dim": "Dup",
+    "sev": "medium",
+    "title": "normalCDF (Abramowitz & Stegun approximation) copy-pasted in four files",
+    "evidence": "Identical constants a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911 and identical Math.SQRT2 rational form at: analytics/ScoreInterpreter.ts:85 (export), modules/display/statistical-feedback/charts/chart-utils.ts:100 (export), runtime/feedback/ReportGenerator.ts:342 (private fn), analytics/PowerAnalysis.ts:397 (private method). All four read verbatim the same algorithm.",
+    "detail": "Fully confirmed — four verbatim copies of a numerical primitive whose correctness feeds percentile ranks, z-to-percentile conversions, and power analysis. chart-utils.ts already EXPORTS a shared normalCDF (and normalPDF/percentileFromZ/generateCurvePoints), so at least three of the four could import it. The analyst's related note is also ",
+    "rec": "Promote one normalCDF (e.g. chart-utils or a new math-utils module) to canonical and have ScoreInterpreter, ReportGenerator, and PowerAnalysis import it."
+  },
+  {
+    "id": "F043",
+    "dim": "Dup",
+    "sev": "medium",
+    "title": "mathjs sandbox BUILTIN_FUNCTIONS table duplicated across scripting-engine and analytics",
+    "evidence": "packages/scripting-engine/src/VariableEngine.ts:10-38 and apps/web/src/lib/analytics/ScoringPipeline.ts:25-45 declare an essentially identical BUILTIN_FUNCTIONS object (disabled stubs import/createUnit/simplify/derivative all throwing; custom IF/NOW/TIME_SINCE/COUNT/SUM/AVG/CONCAT/LENGTH/RANDOM/RANDINT) and both call math.import(BUILTIN_FUNCTIONS,{override:true}). ScoringPipeline.ts:4 comment says 'mathjs, matching VariableEngine' and L21 'Set up mathjs with the same built-in functions as VariableEngine'.",
+    "detail": "Confirmed verbatim copy (only trivial `(a,b)` vs `(a:number,b:number)` annotation differences). The security-relevant framing is fair: the two share disabled-function hardening stubs, and a future hardening change to VariableEngine would not propagate to ScoringPipeline. Nuance the analyst omitted: per CLAUDE.md the real sandbox boundary ",
+    "rec": "Export the BUILTIN_FUNCTIONS table (and the configured math instance) from scripting-engine and import it into ScoringPipeline so the disabled-function set has one source of truth."
+  },
+  {
+    "id": "F044",
+    "dim": "Dup",
+    "sev": "medium",
+    "title": "mean/variance and number-coercion helpers reimplemented despite a canonical StatisticalEngine",
+    "evidence": "function mean(values:number[]) — runtime/reaction/presets/iat.ts:308 `(sum,v)=>sum+v`, runtime/reaction/presets/dotProbe.ts:168 `(sum,v)=>sum+v`, modules/questions/reaction-time/model/reaction-scoring.ts:129 `(sum,value)=>sum+value`; parseNumeric duplicated: runtime/feedback/ScoreInterpreter.ts:227 parseNumericValue and modules/display/statistical-feedback/engine.ts:69 parseNumeric (both: number->number, string->Number(), boolean->1/0). analytics/StatisticalEngine.ts:49 calculateDescriptiveStats exists as the canonical home.",
+    "detail": "Confirmed. The three reaction mean() copies are functionally identical (one uses param name `value` instead of `v`, so 'byte-identical' is a slight overstatement — they are semantically identical). The two number-coercion helpers are functionally identical. StatisticalEngine.calculateDescriptiveStats is the canonical mean/median/sd comput",
+    "rec": "Export a small mean()/parseNumeric from a shared util (or reuse StatisticalEngine) and import at the reaction-preset and feedback-engine call sites."
+  },
+  {
+    "id": "F045",
+    "dim": "Dup",
+    "sev": "medium",
+    "title": "Chart.js registration and categorical color palette re-declared across many chart sites",
+    "evidence": "Chart.register at 4 sites: analytics/DataVisualization.ts:36, analytics/components/CohortComparison.svelte:15, analytics/components/HistogramWidget.svelte:17, modules/display/statistical-feedback/charts/chart-utils.ts:26 (which also `export { Chart }` at L46). Byte-identical palette ['#3B82F6','#EF4444','#10B981','#F59E0B','#8B5CF6', …] at analytics/index.ts:443, analytics/DataVisualization.ts:55, components/analytics/IRTPanel.svelte:90; near-copies at components/designer/StatisticsBuilder.svelte:86 (['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4']), modules/display/bar-chart/BarChart.svelte:94, and chart-utils.ts:65 COLORS.palette (same colors, reordered).",
+    "detail": "Confirmed. chart-utils.ts registers Chart and re-exports it plus a COLORS palette, yet three analytics widgets independently import from 'chart.js' and re-run Chart.register with their own component lists, and at least three files carry the identical blue/red/green/amber/violet array (plus 2-3 near-copies with different ordering). The reg",
+    "rec": "Centralize Chart.register and the categorical palette in chart-utils (already exports Chart+COLORS) and import from there in the analytics widgets."
+  },
+  {
+    "id": "F046",
+    "dim": "Dup",
+    "sev": "low",
+    "title": "Hand-mapped API types carry duplicated snake_case + camelCase fields",
+    "evidence": "services/api.ts mapProject (L311) returns BOTH organizationId (L317) & organization_id (L332), createdAt (L329) & created_at (L333), updatedAt (L330) & updated_at (L334), questionnaireCount (L331) & questionnaire_count (L335). mapQuestionTemplate (L340) repeats the pattern (organizationId L346 & organization_id L358, createdBy & created_by L359, etc.).",
+    "detail": "Confirmed exactly as described. This is an intentional bridging pattern (hand-written camelCase domain types must interoperate with generated snake_case contracts), not accidental copy-paste — the analyst frames it correctly. It doubles the readable field surface and is a real but low-severity divergence risk (one code path reads created_",
+    "rec": "Pick one naming convention for the domain layer and normalize at the API boundary once, rather than emitting both conventions from every mapper."
+  },
+  {
+    "id": "F047",
+    "dim": "Dup",
+    "sev": "info",
+    "title": "Fragmented fillout service layer with misleading sibling names (not true duplication)",
+    "evidence": "fillout/services/ contains FilloutSyncEngine.ts (SyncResult{sessionsSynced,responsesSynced,eventsSynced,variablesSynced}, pushes to server via api — upstream), FilloutOfflineSyncService.ts (header: 'Manages downloading and caching questionnaires for offline fillout' — downstream), ResponsePersistenceService.ts (imports OfflineResponsePersistence + FilloutSyncEngine, orchestration wrapper), plus OfflineResponsePersistence, OfflineSessionService, SessionManagementService, QuestionnaireAccessService, QuotaService — all distinct.",
+    "detail": "Confirmed as an accurate REFUTATION of the scout's 'overlapping persistence services' claim. The two *Sync* files sync opposite directions (FilloutSyncEngine uploads responses/events/vars; FilloutOfflineSyncService downloads/caches definitions+media and does GC), and the other services are genuinely distinct concerns. This is fragmentatio",
+    "rec": "No consolidation needed; rename FilloutSyncEngine→FilloutUploadSync and FilloutOfflineSyncService→FilloutContentCache to remove the sibling-name confusion."
+  },
+  {
+    "id": "F048",
+    "dim": "Dead",
+    "sev": "high",
+    "title": "Three superseded parallel service classes shipped but orphaned (OfflinePersistenceService, CrossProjectAnalytics, QuestionnaireAccessService)",
+    "evidence": "grep -rn across apps/web/src: `OfflinePersistenceService` appears only at lib/services/offlinePersistence.ts:15 (its own definition, 342 lines). `QuestionnaireAccessService` appears only at lib/fillout/services/QuestionnaireAccessService.ts:19 (173 lines). `CrossProjectAnalytics` (the class) appears only inside lib/analytics/CrossProjectAnalytics.ts (34-61, 254 lines); every api.ts hit is the *type* `CrossProjectAnalyticsData` (from lib/shared/types/api.ts:373) or `mapCrossProjectAnalytics` (api.ts:193), not the class. lib/analytics/index.ts barrel exports StatisticalEngine/ScoreInterpreter/etc. but NOT CrossProjectAnalytics. No dynamic import() of any of the three (only StatisticsBuilder's internal `import('chart.js')`). Live superseding path confirmed: OfflineResponsePersistence.ts is imported by FilloutSyncEngine.ts + tests.",
+    "detail": "All three claims hold exactly. The class name of each appears only within its own file; the api.ts matches for CrossProjectAnalytics are a distinct type + mapper, correctly distinguished by the analyst. These read as core infrastructure by name, so the supersession-trap framing is accurate.",
+    "rec": "Delete offlinePersistence.ts, analytics/CrossProjectAnalytics.ts, and fillout/services/QuestionnaireAccessService.ts, or add a deprecation ADR if retention is intended."
+  },
+  {
+    "id": "F049",
+    "dim": "Dead",
+    "sev": "high",
+    "title": "Four designer components (2,124 lines) never wired into the designer",
+    "evidence": "grep -rn for each component name across all files returns ZERO matches — not even a self-reference (Svelte files don't contain their own name), meaning no `import X from` statement anywhere. Files confirmed present with matching sizes: StatisticsBuilder.svelte 891, QuestionDesigner.svelte 245, FeedbackTemplateBuilder.svelte 344, FraudPreventionPanel.svelte 334 = 2,124 lines. No dynamic import() references them.",
+    "detail": "Fully confirmed as orphaned UI. I did not independently verify the git-blame provenance dates (84b53de / bc60b1e) but the zero-reference status is definitive regardless of history.",
+    "rec": "Remove the four unmounted designer components; the live designer uses PropertiesPanel + module-registry components."
+  },
+  {
+    "id": "F050",
+    "dim": "Dead",
+    "sev": "medium",
+    "title": "Four orphaned utility modules (errorHandler, question-migration, responseTypeGuards, BeaconPulse)",
+    "evidence": "handleAPIError/showErrorToast/UserFriendlyError referenced only within errorHandler.ts (115 lines; showErrorToast calls handleAPIError internally, no external consumer). migrateQuestion/migrateQuestions only within question-migration.ts (498 lines; migrateQuestions calls migrateQuestion internally). isScaleResponse and its siblings (isSelectResponse/isTextResponse/etc.) have zero hits outside responseTypeGuards.ts (122 lines). BeaconPulse: zero grep matches anywhere = unmounted (54 lines). Live toast alternative confirmed present at lib/stores/toast.ts, consumed by autoSave/designer stores.",
+    "detail": "~789 lines, all four orphaned. errorHandler.ts being a dead parallel toast/error path vs. the live lib/stores/toast is corroborated.",
+    "rec": "Delete the four modules, or wire responseTypeGuards into the runtime if the discriminators are intended API."
+  },
+  {
+    "id": "F051",
+    "dim": "Dead",
+    "sev": "medium",
+    "title": "Dead display/blocks module island (BaseVisualization + types)",
+    "evidence": "grep for `BaseVisualization` across apps/web/src returns zero matches → nothing imports it (395 lines). blocks/shared/types.ts is 51 lines. register-all.ts registers display modules bar-chart, text, text-instruction, statistical-feedback (lines 59-77) — `blocks` is NOT among them; grep for 'blocks' in register-all.ts finds only unrelated comment/media-display lines. Total ~446 lines self-contained island.",
+    "detail": "Confirmed: the module registry never reaches lib/modules/display/blocks/. BaseVisualization imports ./types internally but nothing imports BaseVisualization.",
+    "rec": "Delete lib/modules/display/blocks/ or register it if the analytics-block base is still planned."
+  },
+  {
+    "id": "F052",
+    "dim": "Dead",
+    "sev": "low",
+    "title": "Unused npm dependencies (papaparse, tailwind forms/typography plugins, autoprefixer, postcss)",
+    "evidence": "package.json declares papaparse (dep, line 117) + @types/papaparse (devDep, 69); grep 'papaparse' in src = no matches. @tailwindcss/forms (61) + @tailwindcss/typography (62) present but app.css has only `@import \"tailwindcss\"` + a variables import — no `@plugin` directive. No postcss.config.* or tailwind.config.* files exist; vite.config.ts:59 wires Tailwind v4 via @tailwindcss/vite. autoprefixer (74) + postcss (86) declared but unreferenced by any build step.",
+    "detail": "All claims hold. Downgraded from medium to low: only papaparse is a runtime dep; the rest are devDeps affecting install size only, not correctness or shipped bundle. papaparse-vs-exceljs/jszip split confirmed (exceljs line 108, jszip 110 present).",
+    "rec": "Drop papaparse/@types/papaparse (CSV handled by exceljs/jszip) and, if truly Tailwind-v4-only with no postcss step, the forms/typography plugins + autoprefixer + postcss."
+  },
+  {
+    "id": "F053",
+    "dim": "Dead",
+    "sev": "low",
+    "title": "test-runtime harness route ships to production as a lazy chunk",
+    "evidence": "routes/test-runtime/ contains +page.ts, +page.svelte, harness.ts. +page.ts guards with `HARNESS_ENABLED = import.meta.env.DEV || VITE_ENABLE_TEST_RUNTIME === 'true'` and throws error(404) in load when disabled (ssr=false, prerender=false). +page.svelte:3 statically imports './harness', with the same env guard around the global install.",
+    "detail": "Accurate and, as the analyst states, well-handled rather than a defect: double-guarded to 404 in prod. The only residue is that the static `import './harness'` emits a route-split chunk into the prod build (fetched only on navigation, which then 404s). Effectively info-level; kept at low.",
+    "rec": "Optional: gate the harness import behind a dynamic import inside the enabled-branch so the chunk isn't emitted at all in prod builds."
+  },
+  {
+    "id": "F054",
+    "dim": "Dead",
+    "sev": "info",
+    "title": "Duplicate ScoreInterpreter basename across two live subsystems (ReportGenerator part overstated)",
+    "evidence": "Two live ScoreInterpreter files with distinct consumers: lib/runtime/feedback/ScoreInterpreter.ts (consumed by CompletionScreen.svelte + statistical-feedback module engine/designer) and lib/analytics/ScoreInterpreter.ts (consumed by analytics/index.ts, ScoringPipeline.ts, ScoreInterpreter.test.ts). ReportGenerator exists only ONCE — lib/runtime/feedback/ReportGenerator.ts (consumed by CompletionScreen + StatisticalFeedback); no second ReportGenerator class exists (grep 'class ReportGenerator' / analytics ReportGenerator = none).",
+    "detail": "Neither is dead — correctly a readability/info note. The analyst OVERSTATED by pairing ReportGenerator with ScoreInterpreter as a duplicated name: only ScoreInterpreter is genuinely duplicated across the two subsystems. ReportGenerator is not duplicated.",
+    "rec": "Rename one ScoreInterpreter (e.g. FeedbackScoreInterpreter vs AnalyticsScoreInterpreter) to prevent grep-conflation during future dead-code triage."
+  },
+  {
+    "id": "F055",
+    "dim": "Offline",
+    "sev": "high",
+    "title": "Session variables never persist: FilloutRuntime reads a second, never-populated VariableEngine and saves via a server-only API",
+    "evidence": "FilloutRuntime.ts:54 `this.variableEngine = new VariableEngine()` (never registered/set/populated); :324-326 getVariables() returns this.variableEngine.getAllVariables(); :238-241 updateProgress iterates that map and calls persistenceService.saveVariable. The real engine is QuestionnaireRuntime.ts:123 (private), populated at initializeVariables 336-368, condition 393/402, and per-response updateQuestionVariables 1078-1081. ResponsePersistenceService.ts:169-180 saveVariable → api.sessions.upsertVariable (network PUT, catch-and-log, NO IndexedDB write).",
+    "detail": "Two independent, compounding bugs, both real. (1) FilloutRuntime's own VariableEngine is a distinct instance from the one QuestionnaireRuntime actually computes into; nothing ever writes to it, so getVariables() returns {} and the for-loop at 239-241 never iterates — saveVariable is never even reached at runtime. (2) Even if it read the c",
+    "rec": "Have FilloutRuntime read QuestionnaireRuntime's engine (or drop the duplicate entirely) and route variable saves through OfflineResponsePersistence.saveVariable (offline-first) rather than the server-only api call."
+  },
+  {
+    "id": "F056",
+    "dim": "Offline",
+    "sev": "high",
+    "title": "Computed variables and quality report produced at completion are dropped (never written to IndexedDB or synced)",
+    "evidence": "QuestionnaireRuntime.complete() writes session.metadata.qualityReport (:1200) and pushes every computed variable into session.variables (:1202-1209) using the correct engine, then calls onComplete(session) (:1214). FilloutRuntime.handleComplete (:259-271) only calls persistenceService.completeSession() (status='completed' PUT). Page onComplete (+page.svelte:504-523) sets UI screen + OfflineSessionService.completeSession(session.id) + syncEngine.syncNow() — none write session.variables/qualityReport. FilloutSyncEngine.syncSession sends session.metadata from the Dexie FilloutSession row (:220), a different object than the runtime session.metadata carrying qualityReport.",
+    "detail": "Confirmed: the runtime session object holding the final variable snapshot, quality report (speeder/flatliner/attention), and assignedCondition/conditionIndex flows to onComplete but nothing serializes it to IndexedDB or the sync payload. Condition is seeded/recomputable; the quality report is partially recomputable (flatliner from stored ",
+    "rec": "On completion, persist session.variables and session.metadata.qualityReport into the Dexie FilloutSession/filloutVariables records so FilloutSyncEngine carries them to the server."
+  },
+  {
+    "id": "F057",
+    "dim": "Offline",
+    "sev": "medium",
+    "title": "The only IndexedDB variable writer is dead code, so FilloutSyncEngine's variable sync is always empty",
+    "evidence": "grep shows OfflineResponsePersistence.saveVariable (OfflineResponsePersistence.ts:96-105, db.filloutVariables.put) is called ONLY from test files (OfflineResponsePersistence.test.ts:53-54, offline-roundtrip.test.ts:165-166,316) — no runtime caller. The runtime path (FilloutRuntime.ts:240) goes through ResponsePersistenceService.saveVariable (server-only). FilloutSyncEngine.ts:176 getUnsyncedVariables, :202-205 maps into payload, :237 markVariablesSynced. FilloutOfflineSyncService.ts:268 unsynced-variable branch iterates db.filloutVariables (never written).",
+    "detail": "Confirmed end-to-end: the offline variable pipeline (writer → getUnsyncedVariables → sync payload → markSynced → protectedVersionKeys) is fully wired but has no production producer, so getUnsyncedVariables always returns [], variables sent to the server is always empty, and the protectedVersionKeys unsynced-variable branch at :268 is iner",
+    "rec": "Wire the runtime variable-save path to OfflineResponsePersistence.saveVariable; this single change activates both the persistence and the already-built sync/protection machinery."
+  },
+  {
+    "id": "F058",
+    "dim": "Offline",
+    "sev": "low",
+    "title": "Redundant unconditional server round-trips fire for offline/client-UUID sessions",
+    "evidence": "FilloutRuntime.ts:82,88-94 startSession() calls SessionManagementService.startSession unconditionally (not navigator.onLine-guarded); SessionManagementService.ts:117-124 issues api.sessions.update({status:'in_progress',...}). ResponsePersistenceService.ts:129-144 updateSessionProgress → api.sessions.update on every response. All wrapped in try/catch with console.error. The defused ordering hazard comment is at FilloutRuntime.ts:218-225.",
+    "detail": "Confirmed: both calls are unconditional and fire-and-forget. For an offline-created client-UUID session with no server row, these PUTs hit a non-existent session once connectivity returns. The exact status code (404 vs 401/403 for anonymous callers) is inferred, not proven from this code, but the calls are demonstrably wasted effort dupli",
+    "rec": "Guard these updates behind an online + server-session-exists check, or remove them since FilloutSyncEngine already materializes the session idempotently at sync time."
+  },
+  {
+    "id": "F059",
+    "dim": "Offline",
+    "sev": "info",
+    "title": "Variable formulas using RANDOM()/NOW() are non-deterministic — offline recompute does not hold for them",
+    "evidence": "VariableEngine.ts:24 NOW=()=>Date.now(); :25 TIME_SINCE=Date.now()-timestamp; :34 RANDOM=()=>Math.random(); :35 RANDINT=Math.floor(Math.random()*...). Unseeded. (Cited as 24-35; exact.)",
+    "detail": "Confirmed. Block/question randomization is seeded/deterministic (BlockRandomizer + settings.randomizationSeed||id), but these formula builtins use unseeded Math.random / Date.now, so any variable formula depending on them cannot be reproduced from persisted inputs. This is inherent to the function semantics, not an offline-specific defect",
+    "rec": "If reproducibility is required for such variables, persist the computed values (see #1/#2) rather than relying on recompute, and/or seed RANDOM/RANDINT from the session seed."
+  },
+  {
+    "id": "F060",
+    "dim": "Feedback",
+    "sev": "high",
+    "title": "Cohort & participant-comparison feedback modes are dead for anonymous fillout participants",
+    "evidence": "apps/server/src/api/sessions.rs:652-661 aggregate_sessions(user: AuthenticatedUser, ...) then access::verify_questionnaire_access(&mut **tx, user.user_id, query.questionnaire_id); :711-720 compare_sessions identical. engine.ts:267-338: cohort/participant-vs-cohort/participant-vs-participant all call sessionAnalyticsService.aggregate/compare -> api.ts:1213-1256 aggregateSessionsRequest/compareSessionsRequest (throwOnError:true). StatisticalFeedback.svelte:45-62 loadSeries() catch -> renders {label:'No data', value:null}. StatisticalFeedbackDesigner.svelte:30-34 offers all four sourceModes.",
+    "detail": "The AuthenticatedUser extractor is the hard blocker: a public /q/[code] participant sends no JWT, so /api/sessions/aggregate|compare 401 before any RLS is even consulted. Even an authenticated non-owner would be denied by verify_questionnaire_access. loadSeries swallows the error and substitutes a single null 'No data' point, so the flags",
+    "rec": "Add an anonymous-safe aggregation path (server-side precomputed cohort norms keyed by questionnaire+version, or a public read endpoint that returns only aggregate stats with no per-session leakage), or gate these source modes in the designer as researcher-preview-only and warn they won't render for participants."
+  },
+  {
+    "id": "F061",
+    "dim": "Feedback",
+    "sev": "high",
+    "title": "Text-feedback ${variable} interpolation runs against a disconnected singleton the runtime never populates",
+    "evidence": "TextDisplay.svelte:56 scriptingEngine.interpolateVariables(content) (no context arg); TextInstruction at src/lib/modules/display/text-instruction/TextInstruction.svelte uses scriptingEngine.getAllVariables(). scriptingEngine.ts:127-140 interpolates only ${...} against getAllVariables(); :244-264 reads its own variables Map + responseCache. grep of runtime/ + fillout/ finds ZERO scriptingEngine.setVariable/setVariables calls. TextDisplayDesigner.svelte:315 teaches ${variableName}. ModularRenderer.svelte:6,122-133 interpolates config/text/instruction via variableInterpolation.ts:19 which matches {{...}} using the real runtime variables prop (page.svelte:667 passes activePresentation.variables).",
+    "detail": "Two syntaxes, two stores. At fillout ModularRenderer interpolates {{var}} with the live runtime variables (formula-computed vars included) BEFORE mounting TextDisplay — so {{totalScore}} works. TextDisplay then runs a SECOND ${var} pass against the scriptingEngine singleton, whose VariableEngine is never fed the runtime's computed variabl",
+    "rec": "Unify on one interpolation path: either feed the runtime VariableEngine's values into scriptingEngine before render, or drop TextDisplay's ${} pass and let ModularRenderer's {{}} interpolation handle it — then fix the designer help text to teach the syntax that actually works."
+  },
+  {
+    "id": "F062",
+    "dim": "Feedback",
+    "sev": "high",
+    "title": "Statistical-feedback panel auto-dismisses (~3.5s) with no designer control to prevent it",
+    "evidence": "QuestionnaireRuntime.ts:838-843: for non-instruction (display/analytics) items, duration = timing?.duration || item.displayDuration || 2500, and scheduleAutoAdvance fires unless item.autoAdvance !== false. statistical-feedback/metadata.ts:65-66 sets autoAdvance:true, displayDuration:3500. StatisticalFeedbackDesigner.svelte: grep for autoAdvance/displayDuration/Continue/require returns nothing — no control exists. StatisticalFeedback.svelte:312-328 renders the runtime-only Download Report (PDF) button.",
+    "detail": "statistical-feedback is a display-category item, so presentNonInteractiveItem schedules auto-advance after 3500ms with no opt-out surfaced in the designer. A chart + interpretation card + a Download-Report button self-dismisses before a participant can read it or click download. Auto-advance only runs at real fillout runtime (not designer",
+    "rec": "Add an autoAdvance/requireContinue toggle (and duration field) to StatisticalFeedbackDesigner; default feedback panels with a download button to require an explicit Continue."
+  },
+  {
+    "id": "F063",
+    "dim": "Feedback",
+    "sev": "medium",
+    "title": "'Download Report (PDF)' invokes the browser print dialog, not a file download",
+    "evidence": "ReportGenerator.ts:8-13 header comment claims a dependency-free canvas->minimal-PDF-byte-stream builder; actual printHTMLAsPDF (declared ~line 14) creates a hidden iframe, writes HTML, and calls iframe.contentWindow?.print(). StatisticalFeedback.svelte:324 button label 'Download Report (PDF)'. No test files for ReportGenerator (runtime/feedback/ contains only ReportGenerator.ts + ScoreInterpreter.ts, no *.test.*).",
+    "detail": "The doc comment materially misdescribes the implementation. The participant clicking a button labeled 'Download Report (PDF)' gets the OS print dialog and must manually choose Save-as-PDF; behavior varies by browser and can be popup/print-blocked. No unit coverage.",
+    "rec": "Either fix the label/UX to 'Print Report' or implement an actual PDF blob download; correct the misleading header comment; add a smoke test."
+  },
+  {
+    "id": "F064",
+    "dim": "Feedback",
+    "sev": "low",
+    "title": "Production debug console.log in the live fillout feedback render path (BarChart + BaseAnalytics)",
+    "evidence": "BarChart.svelte has 11 console.* (lines 150-153 log config/dataSource/variables, 164/215/306/317/351/502 log render internals). BaseAnalytics is at src/lib/modules/display/shared/analytics/BaseAnalytics.svelte (NOT shared/analytics/ as cited) with 9 console.* (lines 78-102 log dataSource.variables and participant variable values on every computeData).",
+    "detail": "Confirmed shipped debug logging on the participant render path, including logging participant variable values (BaseAnalytics:80,85) to the console on each $effect/computeData pass. Path in the finding was slightly wrong (missing modules/display/ prefix) but the file and line ranges match. Real but low: console noise + minor per-render cos",
+    "rec": "Strip the console.log calls (keep console.error) or gate behind a dev flag; downgrade from medium to low."
+  },
+  {
+    "id": "F065",
+    "dim": "Feedback",
+    "sev": "low",
+    "title": "Interpretation range 'description' is rendered at runtime but not editable in the designer",
+    "evidence": "StatisticalFeedbackDesigner.svelte:164 addRangeToScale creates ranges with description:''; the three preset ranges (lines 121-123) carry description text; grep shows description only at 121/122/123/164 — no bound input in the range row editor. StatisticalFeedback.svelte:281 renders {interp.range.description} inside {#if interp.range} with NO guard on description being non-empty. ReportGenerator.ts:186 also renders escape(range.description).",
+    "detail": "Any researcher-added band gets an empty description and there is no field to fill it, so an empty <p> renders for that band at runtime and in the PDF. Only the three factory presets show text. Minor cosmetic/designability gap — an empty paragraph is nearly invisible; downgrade medium->low.",
+    "rec": "Add a description input to the range row editor (and guard the runtime <p> with {#if interp.range.description})."
+  },
+  {
+    "id": "F066",
+    "dim": "Feedback",
+    "sev": "low",
+    "title": "Two co-named ScoreInterpreter implementations; runtime/feedback variant untested",
+    "evidence": "src/lib/analytics/ScoreInterpreter.ts (class, T-scores/stanines/norms) has src/lib/analytics/ScoreInterpreter.test.ts. src/lib/runtime/feedback/ScoreInterpreter.ts (range-band interpreter driving participant bands + PDF) has no test; runtime/feedback/ dir holds only ScoreInterpreter.ts + ReportGenerator.ts. ",
+    "detail": "Two distinct modules share the name with different APIs/consumers, a real trace-confusion hazard, and the participant-facing one (plus ReportGenerator) is untested while engine.ts/chart-utils.ts are covered. Correctly low.",
+    "rec": "Rename the runtime one (e.g. RangeBandInterpreter) and add unit tests for band classification + report rendering."
+  },
+  {
+    "id": "F067",
+    "dim": "Arch",
+    "sev": "medium",
+    "title": "OpenAPI codegen bypassed on the response path — hand-written map*(raw: any) mappers re-type generated DTOs",
+    "evidence": "api.ts:136-436 contains 13 mapper functions (mapStatsSummary/mapAggregateData/mapCompareData/mapCrossProjectAnalytics/mapOrganization/mapOrganizationMember/mapInvitation/mapProject/mapQuestionTemplate/mapMediaAsset/mapDomainConfig/mapVerificationResult/mapConditionCounts), each `(raw: any)` behind an eslint-disable, doing defensive dual-reads e.g. api.ts:232 `raw.created_at ?? raw.createdAt`. Generated DTOs are snake_case (types.gen.ts:44 organization_id, :75/:119 created_at). grep counts exactly 155 `raw.`/`: any`/`as any` refs in the 1642-line file.",
+    "detail": "Confirmed. The generated SDK is trusted only on the request side; every response is normalized from an untyped snake_case blob into a camelCase domain type by hand, so the hand-mappers — not the OpenAPI schema — are the real source of truth for response shapes. A backend field rename compiles clean and fails at runtime. Two accuracy nits ",
+    "rec": "Type the `raw` params with the generated response DTOs and drive the snake→camel transform from a single typed adapter (or generate camelCase types), so a schema change breaks the build rather than production. Correct the count to 13 mappers."
+  },
+  {
+    "id": "F068",
+    "dim": "Arch",
+    "sev": "low",
+    "title": "ScoreInterpreter name collision — one class plus a same-named function module, not 'two classes'",
+    "evidence": "runtime/feedback/ScoreInterpreter.ts exports FUNCTIONS only (interpretScore:70, interpretMultipleScales:102, validateScoreInterpreterConfig:129, createDefaultScoreConfig:176) plus interfaces — no `class ScoreInterpreter`. analytics/ScoreInterpreter.ts exports `class ScoreInterpreter` (:121) plus normative/percentile helpers (normalCDF:85). Both files export an interface named `ScoreInterpretation`. runtime/feedback version is live (modules/display/statistical-feedback/*, CompletionScreen.svelte, ReportGenerator.ts); analytics version is effectively dead (see #2).",
+    "detail": "The collision is real but overstated. It is one class (analytics) plus a function-based module of the same filename (runtime/feedback) that also share an exported interface name `ScoreInterpretation` — not 'two ScoreInterpreter classes'. The two modules do have divergent jobs (range→label labeling vs normative/percentile/T-scores), so the",
+    "rec": "Downgrade to low. Rename one module (e.g. analytics/NormativeScoreInterpreter) and the duplicated `ScoreInterpretation` interface to disambiguate; note that the analytics one is a dead-code candidate per #2."
+  },
+  {
+    "id": "F069",
+    "dim": "Arch",
+    "sev": "low",
+    "title": "UiStore is a redundant non-reactive mirror of the designer facade's $state",
+    "evidence": "stores/designer/UiStore.ts holds a plain `state: UiState` (viewMode/activePanel/showPreview/showCommandPalette/rightPanelPinned) and returns copies via `{ ...this.state }` (:26). designer.svelte.ts:139-143 redeclares the same fields as `$state`; syncUiState is called at :158,302,306,310,315,320,332,340 and defined at :1123. UiStore's only unique behavior is localStorage persist/sync of rightPanelPinned (persistToStorage:70, syncFromStorage:59).",
+    "detail": "Confirmed exactly as described. Every UI mutation round-trips UiStore (authoritative plain object) then re-copies into the reactive runes mirror. Aside from the single persisted field (rightPanelPinned), UiStore is indirection over state the facade must hold reactively anyway. Note a small naming skew the analyst glossed: UiStore calls it",
+    "rec": "Collapse UiStore into the facade's $state and extract only the localStorage persist/restore into a tiny helper."
+  },
+  {
+    "id": "F070",
+    "dim": "Arch",
+    "sev": "low",
+    "title": "Type-only cycle between questionnaire.ts and translation.ts in questionnaire-core",
+    "evidence": "questionnaire.ts:6 `import type { QuestionnaireTranslations } from './translation'` and re-export :11 `export * from './translation'`; translation.ts:18 `import type { Questionnaire } from './questionnaire'`. madge --circular reports this cycle.",
+    "detail": "Confirmed: both edges are `import type`, erased at runtime, so no load-order hazard today. One correction: the analyst's 'the only cycle madge finds' is imprecise — my madge run (521 files) reported TWO cycles: this one, plus a value-level cycle in generated code, packages/contracts/src/generated/client/types.gen.ts ↔ utils.gen.ts. The se",
+    "rec": "Keep low. Optionally hoist the shared type to a leaf module to break the structural cycle before anyone adds a value import; note the generated-client cycle separately (owned by codegen, not hand-fixable)."
+  },
+  {
+    "id": "F071",
+    "dim": "Arch",
+    "sev": "info",
+    "title": "God-service api.ts and god-components at the top of the designer",
+    "evidence": "api.ts is 1642 lines, one ApiClient partitioned into resource sub-objects at organizations:470, projects:772, questionnaires:902, sessions:1043, media:1325, templates:1405, comments:1502, users:1554. ReactionLabWorkspace.svelte = 78093 bytes / 1959 lines (under routes/(app)/.../designer/.../components/); ReactionTimeDesigner.svelte = 62069 bytes / 1704 lines; PropertiesPanel.svelte = 45805 bytes / 1108 lines.",
+    "detail": "Confirmed. api.ts is large but internally namespaced (line numbers match exactly), so it reads as a co-located API surface rather than a tangle. The three designer Svelte files are the real concentration-of-coordination risk. Minor path nit: ReactionLabWorkspace lives under the route's local components/ dir, not a top-level lib path, but ",
+    "rec": "Info only. If addressed, split the designer god-components before touching api.ts (the API file's sub-object structure keeps it navigable)."
+  },
+  {
+    "id": "F072",
+    "dim": "Test",
+    "sev": "high",
+    "title": "DB-backed Rust integration tests silently skip-pass when the database is unreachable (false green)",
+    "evidence": "rls_enforcement.rs:37-58 get_test_pool returns Option via `PgPool::connect(&url).await.ok()`; skip guard at :226-229 `let Some(pool) = get_test_pool().await else { eprintln!(\"skipping...\"); return; }`. Same `Option<PgPool>` + `else { return; }` pattern confirmed by grep in rbac_integration.rs (8 guards), bump_version_semver.rs (5), sync_session_dedup.rs (3), rls_context.rs (1), revoked_tokens_purge.rs (1), plus 7 in rls_enforcement.rs = 25 total. auth_flows.rs (8 tests) is pure crypto, no DB.",
+    "detail": "Early `return` (not panic) means cargo test counts the skipped test as PASSED. Locally, `.env.development` exists in the working tree (untracked but present), so get_test_pool reads it and points DATABASE_URL at the app DSN localhost:15434; with docker down the connect fails silently and all 25 DB tests skip-pass — a fully green backend s",
+    "rec": "Make DB unavailability a hard failure in CI (e.g. a required env flag `REQUIRE_DB=1` that panics instead of returning), or gate these tests behind a cargo feature so a green run cannot occur without the DB. At minimum fail if DATABASE_URL is set but connect fails."
+  },
+  {
+    "id": "F073",
+    "dim": "Test",
+    "sev": "high",
+    "title": "No migration step provisions schema for `cargo test`; CI runs against a bare Postgres",
+    "evidence": "Migrations invoked ONLY via `sqlx::migrate!(\"./migrations\")` at db/mod.rs:19 and :40, both called from app startup (main.rs); grep of apps/server/tests/*.rs for `migrate!`/`Migrator`/`run_migrations` returns nothing. ci.yml:82-84 runs `cargo test` with a fresh `postgres:18-alpine` service, no migrate step, no app boot.",
+    "detail": "`.env.development` is untracked (git ls-files empty), so in CI it is absent and get_test_pool falls back to CI's `DATABASE_URL` = the superuser DSN against an empty DB. connect succeeds, then fixture INSERTs (e.g. rbac_integration.rs:61 INSERT INTO users) hit non-existent tables and panic — so the backend job would ERROR (red), not under-",
+    "rec": "Add a schema-provisioning step to the CI backend job (run `run_migrations_with_url` via a small bin, or a `sqlx migrate run` step, or boot the app once) before `cargo test`; or have the test harness apply `sqlx::migrate!` against a throwaway pool in a `#[ctor]`/once-cell setup."
+  },
+  {
+    "id": "F074",
+    "dim": "Test",
+    "sev": "high",
+    "title": "HTTP handler round-trips (auth/sessions/questionnaires) have no automatically-run test coverage",
+    "evidence": "auth_flows.rs:1-9 documents the gap ('Handler-level integration tests (full HTTP round-trip) are deferred') and tests only argon2+JWT. grep for `ServiceExt`/`oneshot`/`axum_test`/`Router::`/`tower::` across apps/server/tests returns nothing — no tower/axum request harness. grep for `access::` in tests finds only comments (rls_enforcement.rs:253-286, rbac_integration.rs:340-350) — the api/access::* mutation-authz gate is never invoked by any test. fullstack lane not in any workflow (grep of .github/workflows for 'fullstack' empty).",
+    "detail": "Request validation, error mapping, CSRF/rate-limit middleware wiring, and — most consequentially — the `api/access::verify_project_write_access` gate that ADR 0013 designates as THE authorization check (since RLS mutation policies are permissive WITH CHECK (true)) are never exercised end-to-end by an automatically-run test. rls_enforcemen",
+    "rec": "Add a tower/axum-test harness that constructs AppState and drives auth/sessions/questionnaires handlers through real requests, with dedicated cases asserting api/access::* denies cross-tenant mutations; wire the fullstack e2e lane into a CI job with a real backend service."
+  },
+  {
+    "id": "F075",
+    "dim": "Test",
+    "sev": "medium",
+    "title": "fullstack and visual e2e lanes never run in CI — real-backend/visual coverage is manual-only",
+    "evidence": "ci.yml:141 runs `pnpm test:e2e:smoke` (project smoke-chromium); e2e-nightly.yml:34 runs `pnpm test:e2e:regression:all`. Neither invokes test:e2e:fullstack (project fullstack-chromium) or test:e2e:visual (visual-chromium); grep of .github/workflows for 'fullstack'/'visual' is empty. Lanes exist: playwright.config.ts projects fullstack-chromium/visual-chromium; e2e/fullstack/*.fullstack.spec.ts and committed baselines e2e/regression/*.visual.regression.spec.ts-snapshots/*.png present.",
+    "detail": "Confirmed. The smoke job (ci.yml:116-151) declares no service containers and playwright.config.ts:68 webServer.command is `pnpm dev` (frontend only), so the job runs only client-side designer flow with no backend. The fullstack spec depends on provisionWorkspace(request) hitting a real API, so it cannot even run in the smoke job's environ",
+    "rec": "Add a CI job (nightly or PR) that provisions the backend stack (postgres+redis+minio+mailpit) and runs test:e2e:fullstack and test:e2e:visual so baselines are enforced."
+  },
+  {
+    "id": "F076",
+    "dim": "Test",
+    "sev": "medium",
+    "title": "Svelte component tests are effectively absent (2 of 179 components)",
+    "evidence": "179 `.svelte` files under apps/web/src (find count). Only src/lib/runtime/core/fillout-form-capture.test.ts imports @testing-library/svelte and calls render() — grep for both patterns returns exactly this one file. It covers MultipleChoice.svelte + Matrix.svelte.",
+    "detail": "Confirmed exactly. Scout-flagged god components (ReactionLabWorkspace.svelte 78KB, ReactionTimeDesigner 62KB, PropertiesPanel 45KB) have no unit/component tests; their rendering/props/event-wiring is only reachable via Playwright regression (slower, coarser, and the fullstack lane isn't in CI). Regressions land without a fast failing test",
+    "rec": "Add @testing-library/svelte component tests for the high-risk designer surfaces (at least the god components and shared form/property widgets), asserting prop binding and event dispatch."
+  },
+  {
+    "id": "F077",
+    "dim": "Test",
+    "sev": "medium",
+    "title": "Media (S3/MinIO) and email-verification paths have no unit/integration coverage",
+    "evidence": "grep for `minio|s3|storage|smtp|mailpit|send_email|presign` across apps/server/tests returns nothing. ci.yml backend job (lines 27-49) declares only postgres + redis service containers — no MinIO, no MailPit — despite ci.yml:15-20 setting MINIO_*/SMTP_* env vars that point at unprovisioned endpoints.",
+    "detail": "Confirmed. Media upload/presign, the same-origin fillout media proxy (ADR 0023 D1: cache key/immutable/Range), and registration email-verification token issuance are verified only by the manual fullstack/MailPit e2e flow (which isn't in CI, per #4). Range handling and presigning are correctness-sensitive for offline media + COEP and are u",
+    "rec": "Add integration tests for the storage client and media proxy (Range/caching headers) against a testcontainers MinIO, and for verification-token issuance against a captured/mock SMTP; provision those services in the CI job that runs them."
+  },
+  {
+    "id": "F078",
+    "dim": "Test",
+    "sev": "low",
+    "title": "Backend CI connects as the BYPASSRLS superuser, not the qdesigner_app role",
+    "evidence": "ci.yml:11 `DATABASE_URL: postgresql://qdesigner:qdesigner@localhost:5432/qdesigner` — the SUPERUSER+BYPASSRLS bootstrap role. Only rls_enforcement.rs:199-215 compensates via CREATE ROLE ... NOBYPASSRLS + `SET LOCAL ROLE`; the other DB tests run queries as the connecting superuser.",
+    "detail": "Confirmed. Non-RLS integration tests execute with BYPASSRLS + full privileges, so a regression depending on the restricted qdesigner_app grants (DML/USAGE only) — e.g. a query touching a table/sequence the app role lacks access to — would pass in CI yet fail in production, which connects as qdesigner_app. Low severity is correct; it is a ",
+    "rec": "Point the integration test DSN at a non-BYPASSRLS role (or create qdesigner_app in the CI postgres and use it), reserving the superuser DSN for fixture seeding only."
+  },
+  {
+    "id": "F079",
+    "dim": "Rust",
+    "sev": "high",
+    "title": "No compile-time-checked SQL — sqlx's headline safety feature is entirely forgone",
+    "evidence": "grep across apps/server/src: 0 occurrences of query!/query_as!/query_scalar! macros; 185 runtime sqlx::query/query_as/query_scalar calls in api/. Verified concrete sites: sessions.rs:1042 (QuestionnaireSummary query_as with 6-col SELECT mapped by column order), sessions.rs:3356-3366 (6-tuple FromRow bound to a hand-built SELECT). error.rs:59-64 maps sqlx::Error → generic 500.",
+    "detail": "Every SQL statement uses the runtime string API, so column renames, typos, arity mistakes and Rust/schema type drift surface only at runtime as ApiError::Database → 500. The 6-tuple FromRow in filter_sessions and the many hand-written FromRow structs in sessions.rs must be kept in manual lockstep with SQL column order. Analyst said '~200 ",
+    "rec": "Adopt query_as!/query! macros incrementally (requires DATABASE_URL or offline sqlx-data at build time), starting with the highest-churn queries in sessions.rs, to move column/type/arity errors to compile time."
+  },
+  {
+    "id": "F080",
+    "dim": "Rust",
+    "sev": "high",
+    "title": "api/sessions.rs is a 3585-line god-file spanning 6+ unrelated concerns",
+    "evidence": "wc -l = 3585. Handler inventory confirms mixed concerns: create_session(361), check_duplicate/fraud(512), list_sessions(573), aggregate_sessions(652), compare_sessions(711), dashboard_summary(810), cross_project_analytics(948), get_session/responses/events/variables(1206-1363), submit_response(1507), submit_events(1594), upsert_variable(1664), condition_counts(2589), quota_status(2651), sync_session(2827), filter_sessions(3144), timeseries(3478).",
+    "detail": "One file mixes session lifecycle, response/event ingestion, session-variable normalization/persistence, five+ analytics endpoints, offline sync, dynamic filtering, fraud detection and timeseries. organizations.rs (1739) and questionnaires.rs (1249) are milder instances of the same pattern (confirmed via wc -l).",
+    "rec": "Split sessions.rs into modules by concern (sessions/crud.rs, sessions/analytics.rs, sessions/ingestion.rs, sessions/sync.rs, sessions/filter.rs), sharing FromRow structs via a submodule."
+  },
+  {
+    "id": "F081",
+    "dim": "Rust",
+    "sev": "medium",
+    "title": "~73 copies of a panic-prone transaction-unwrap boilerplate the Tx extractor was meant to eliminate",
+    "evidence": "projects.rs:94-97 shows the exact pattern `let mut guard = tx.lock().await; let tx = guard.as_mut().expect(\"rls_context middleware placed a transaction\");`. Counts: 85 total .expect() in api/, 73 carrying the exact 'rls_context middleware placed a transaction' message.",
+    "detail": "The claim is confirmed but the analyst's numbers are slightly overstated: 73 copies (not '~80'), 85 total .expect() (not 98). The .expect() is a latent panic if a route is ever wired without the rls_context middleware; CatchPanicLayer converts it to a 500 on the groups that mount it. In practice reachability requires a route-wiring mistak",
+    "rec": "Have the Tx extractor (or a helper method on it) return the &mut Tx directly as Result<_, ApiError::Internal>, eliminating the per-handler lock()+as_mut().expect() and the panic path."
+  },
+  {
+    "id": "F082",
+    "dim": "Rust",
+    "sev": "medium",
+    "title": "DB constraint violations are never mapped — concurrent duplicate inserts surface as 500 instead of 409",
+    "evidence": "0 occurrences of as_database_error/is_unique_violation/.code() across apps/server/src. auth.rs register: SELECT EXISTS(...users WHERE email=$1) at line 36, ApiError::Conflict at 42, then plain INSERT INTO users at 54 with no ON CONFLICT (grep confirms ON CONFLICT appears only at auth.rs:402 for verification codes). error.rs:59-64 routes sqlx::Error to generic 500.",
+    "detail": "Create endpoints follow SELECT-EXISTS-then-INSERT, a TOCTOU race: two concurrent requests with the same unique key both pass EXISTS, then one INSERT trips the unique constraint → sqlx::Error → 500 instead of 409. No handler inspects err.as_database_error().code() to recover the intended status. Confirmed for register; pattern reused acros",
+    "rec": "Add ON CONFLICT DO NOTHING/RETURNING or map err.as_database_error() SQLSTATE 23505 to ApiError::Conflict in a shared helper."
+  },
+  {
+    "id": "F083",
+    "dim": "Rust",
+    "sev": "medium",
+    "title": "N+1 query pattern in cross_project_analytics loop",
+    "evidence": "sessions.rs:1036 `for &qid in &questionnaire_ids` issues summary query_as (1042, fetch_optional per qid), timing query_scalar (1073, fetch_all per qid), and load_numeric_samples (1095) once per qid when a key is provided — ~3 sequential round-trips per questionnaire, all inside the request tx. Raw samples accumulated in all_timing_values/all_variable_values/variable_means (1089,1102,1100) for pairwise Pearson correlation (1148-1158).",
+    "detail": "Latency scales ~3K with questionnaire count K, and memory scales with total sample count (every numeric sample retained). Confirmed as written. Degrades sharply for large orgs; not a correctness bug.",
+    "rec": "Batch the per-questionnaire summary/timing into set-based queries using WHERE questionnaire_id = ANY($1) with GROUP BY; stream/aggregate samples instead of retaining all raw values."
+  },
+  {
+    "id": "F084",
+    "dim": "Rust",
+    "sev": "low",
+    "title": "filter_sessions binds typed columns as text — bad input yields 500 instead of 400 (possibly broader)",
+    "evidence": "sessions.rs:3180-3213 field_expr comes from a match allowlist (typed columns r.reaction_time_us=bigint at 3185, s.started_at/completed_at=timestamptz at 3183-3184); metadata.*/variable.* keys pass is_safe_filter_key. sessions.rs:3215-3220 value_str is always stringified; 3224-3255 clauses are `{field_expr} <op> ${param_idx}` with the value pushed as String and bound as text.",
+    "detail": "Injection defense is sound (allowlist + $N params + clamped limit/offset). But every value binds as text against typed columns, so a non-numeric value on a bigint or an unparseable timestamp is rejected by Postgres at execution → DB error → 500 instead of 422/400. NOTE — the analyst may have understated this: because sqlx binds a Rust Str",
+    "rec": "Parse/validate values against the target column type and bind them typed (i64/DateTime), returning 422 on parse failure; or add explicit ::text casts on both sides only where text comparison is intended."
+  },
+  {
+    "id": "F085",
+    "dim": "Rust",
+    "sev": "low",
+    "title": "CatchPanicLayer coverage is inconsistent — auth and websocket routes are unguarded",
+    "evidence": "mod.rs: user(50), org(107), project(151), invitation(165), questionnaire(184), session(222), media_content(237), media(246) each mount .layer(CatchPanicLayer::new()). auth_routes(28-46) mounts only rate_limit_middleware, no CatchPanicLayer. ws_route(250) mounts none.",
+    "detail": "Confirmed. The auth group runs argon2 verify, JWT signing and DB writes on unauthenticated traffic yet has no panic guard, so a panic there is not uniformly converted to a clean 500 like the rest of the API. Auth routes don't use the RLS tx so there is no rollback concern — purely a defense-in-depth inconsistency on the most exposed surfa",
+    "rec": "Add .layer(CatchPanicLayer::new()) to auth_routes and ws_route (or apply it once at the base router)."
+  },
+  {
+    "id": "F086",
+    "dim": "Rust",
+    "sev": "info",
+    "title": "Widespread #[allow(dead_code)] and error-swallowing unwrap_or_default hide signal",
+    "evidence": "22 #[allow(dead_code)] across apps/server/src, including error.rs:6 (whole ApiError enum). auth.rs:147 (login) and auth.rs:236 (refresh) call `.fetch_all(&state.pool).await.unwrap_or_default()` on the organization_members role lookup; roles then default to vec![\"user\"] at 149-153.",
+    "detail": "Blanket allow(dead_code) on the ApiError enum (and AppState per analyst) suppresses the compiler from flagging genuinely unused variants/fields. Separately, login/refresh swallow a DB error on the org-role lookup: a transient DB failure silently downgrades the user to the default 'user' role and still mints a token, an availability-over-c",
+    "rec": "Replace enum-wide allow(dead_code) with targeted allows or remove unused variants; propagate the roles-lookup error with `?` (or log + explicit fallback with a comment) rather than unwrap_or_default()."
+  },
+  {
+    "id": "F087",
+    "dim": "Types",
+    "sev": "high",
+    "title": "Fillout runtime consumes the questionnaire definition as `any` at the participant-facing entry",
+    "evidence": "(fillout)/q/[code]/+page.svelte:42 `const rawDefinition = $derived(data.questionnaire.definition as any)`; :130 `const questionList = $derived((definition?.questions ?? []) as any[])`; :224 `handleOverlayResponse(value: any)`; :295 `handleConsent(consentData: any)`. All four lines verified verbatim, each carrying an eslint-disable-no-explicit-any comment.",
+    "detail": "The generated definition type is widened to `any` at line 42, and the question list that drives the isFormStyle() WebGL-vs-DOM fork (via `questionList.some(q => ...q?.type)` at :132/:138) is explicitly re-cast to `any[]` at :130. One nuance the analyst overstated: `definition` at :56 is actually typed as `Questionnaire` (the return type o",
+    "rec": "Define an extended `FilloutDefinition` interface (Questionnaire + the chrome/consent/settings fields the page reads) and type `rawDefinition`/`questionList` against it; type `handleOverlayResponse`/`handleConsent` params with the module response union rather than `any`."
+  },
+  {
+    "id": "F088",
+    "dim": "Types",
+    "sev": "high",
+    "title": "The runtime→module v1 contract (QuestionRuntimeContext/Result + moduleConfigAdapter) is 100% `any`",
+    "evidence": "runtime/core/question-runtime.ts:15 `question: any`, :17 `questionnaire?: any`, :28 `value: any`, :33 `metadata?: Record<string, any>`; runtime/core/moduleConfigAdapter.ts:13 `type DynamicValue = any` aliased and used throughout `normalizeChoiceOptions`, `buildModuleRuntimeConfig`, etc. All verified verbatim.",
+    "detail": "QuestionRuntimeContext/QuestionRuntimeResult are the IQuestionRuntime contract every module implements (both WebGL reaction runtimes and DOM form modules), and moduleConfigAdapter is the ADR-0018 impedance layer. Both are fully `any`, so field renames, wrong option shapes, or missing prompts between the engine and modules produce zero com",
+    "rec": "Type `question` against the questionnaire-core `Question` union and `value`/`metadata` against a module-response type; give moduleConfigAdapter a real `ModuleRuntimeConfig` output interface so the reshape is type-checked."
+  },
+  {
+    "id": "F089",
+    "dim": "Types",
+    "sev": "high",
+    "title": "api client discards generated contract types via `raw: any` mappers and `as unknown as` casts",
+    "evidence": "services/api.ts: ~15 `map*(raw: any)` functions (mapAggregateData:156, mapCompareData:167, mapCrossProjectAnalytics:193, mapOrganization:231, …) doing unchecked `raw.snake ?? raw.camel` reads; `as unknown as Promise<SessionData>` at :1064, :1090, :1111, :1121; `sessions.sync` at :1293 `body: Record<string, unknown>` then `body as GeneratedSyncPayload` at :1300. All verified.",
+    "detail": "Every mapper laundering a generated payload through `raw: any` loses the compile-time contract: a server field rename yields a silent `undefined`→default with no error. The strongest genuine drift vector is `sessions.sync` (the ADR-0023 D2 offline write path): its body is accepted as `Record<string, unknown>` and blind-cast to `GeneratedS",
+    "rec": "Type mapper inputs against the generated response types (`raw: OrganizationResponse` etc.) so field renames break the build; type `sessions.sync` body as `GeneratedSyncPayload` directly instead of `Record<string, unknown>` + cast."
+  },
+  {
+    "id": "F090",
+    "dim": "Types",
+    "sev": "medium",
+    "title": "Designer god components bypass the shipped discriminated-union type guards with `(question as any)`",
+    "evidence": "PropertiesPanel.svelte:279-281 `(question as any).responseType/.response/.display`; :152 `updateQuestion(updates: Partial<Question> & { config?: any })` writing back `as any` (:182, :184); type guards DO exist (`isSingleChoiceQuestion` at questionnaire.ts:1080, `isMultipleChoiceQuestion` :1084 — analyst said 1056+, off by ~24 lines but guards confirmed present).",
+    "detail": "questionnaire-core ships a full discriminated `Question` union with type guards, but the largest designer components cast to `any` to reach `display`/`responseType`/`response` then write back `as any`, turning the property/block editors that mutate the authored model into an unchecked surface. I verified PropertiesPanel and questionnaire.",
+    "rec": "Narrow via the existing type guards before touching type-specific fields; type `updateQuestion` config against a real config type; if Block is genuinely missing randomization/loop/conditions, add them rather than casting."
+  },
+  {
+    "id": "F091",
+    "dim": "Types",
+    "sev": "medium",
+    "title": "`DynamicValue = any` baked into the domain base type partially opens the otherwise-strong union",
+    "evidence": "questionnaire.ts:52 `type DynamicValue = any`; BaseQuestion uses it at :808 (attentionCheck.correctAnswer), :813 `settings?: Record<string, DynamicValue>`, :814 `response?: DynamicValue // Loosely typed to allow access before narrowing`, :815 validation, :817 stimulus, :818 responseOptions. Verified (analyst's cited :811 for settings is actually :813, :816-818 is :815-818 — minor line drift, content confirmed).",
+    "detail": "The discriminated union is well-designed but its base carries deliberate `any` holes (explicitly commented 'Loosely typed to allow access before narrowing') so callers can touch response/stimulus/settings pre-narrowing. This is precisely what lets the god-component `(question as any)` accesses typecheck, and it spreads `any` through anyth",
+    "rec": "Replace `DynamicValue` on structured fields with `unknown` (forces narrowing at use sites) and reserve `any` only where genuinely open; push type-specific fields down into the union members instead of the base."
+  },
+  {
+    "id": "F092",
+    "dim": "Types",
+    "sev": "medium",
+    "title": "SessionManagementService sends snake_case payloads through `as any`, masking a possible contract mismatch",
+    "evidence": "fillout/services/SessionManagementService.ts:90 `const session = data as unknown as Session`; :98-102, :118-123, :131-136, :143-147, :157-164 all `api.sessions.update(id, { last_activity_at/started_at/state_snapshot, status: 'not_started'|'paused'|... } as any)`; :277 `getLocalSession(): any`. All verified.",
+    "detail": "api.sessions.update expects `Partial<SessionData>`; this service passes snake_case fields and status literals ('not_started','paused','abandoned') through `as any`, so TS cannot confirm those fields/enum values exist in the contract. A `Session` type distinct from `SessionData` is introduced via `as unknown as Session`, so two session sha",
+    "rec": "Reconcile the `Session`/`SessionData` shapes into one type, make `sessions.update` accept the actual server wire shape, and drop the `as any` so field/enum typos surface at compile time."
+  },
+  {
+    "id": "F093",
+    "dim": "Types",
+    "sev": "low",
+    "title": "scripting-engine `any` is confined to editor tooling / worker declarations (low runtime risk)",
+    "evidence": "ScriptEngine.ts:232,235,250,254 `Record<string, any>`/`any[]` verified to live inside the template string returned by `getTypeDefinitions()` (Monaco IntelliSense .d.ts blob); types.ts:41 `implementation: (...args: any[]) => unknown` verified as a documented variadic function-table signature. MonacoConfig.ts lines not re-opened but the pattern (untyped monaco-editor API) is credible.",
+    "detail": "Correctly assessed as non-hazardous: the ScriptEngine `any`s are text inside a declare-const string used only for editor autocomplete, carrying no runtime type risk; the function-table `(...args: any[]) => unknown` is a reasonable heterogeneous-implementation signature with an eslint-disable explaining callers narrow via `FormulaFunction.",
+    "rec": "No action required; optionally tighten the function-table implementation type per-category if a stricter dispatch is desired later."
+  },
+  {
+    "id": "F094",
+    "dim": "A11y",
+    "sev": "high",
+    "title": "Fillout advances between questions without moving focus or announcing the change",
+    "evidence": "(fillout)/q/[code]/+page.svelte:663 `{#key activePresentation.item.id}` re-mounts ModularRenderer; submitOverlayAnswer at :229-234 only calls presentation.onSubmit. A full-file grep for `aria-live|role=|.focus(|tabindex|<h1|<h2` on the fillout +page.svelte returned ZERO matches — there is no focus management, live region, or heading anywhere on the runtime screen.",
+    "detail": "The {#key} block tears down and recreates the entire ModularRenderer subtree on every question. The previously-focused Continue button is removed, so keyboard focus falls to <body> and the user must re-Tab from the top each question; no live region announces the new question. The page's own status-bar (562-594) is the only region and carr",
+    "rec": "On question change, move focus programmatically to the new question region (tabindex=-1 + .focus()) or a heading, and add an aria-live=polite region announcing question N of M / the new prompt."
+  },
+  {
+    "id": "F095",
+    "dim": "A11y",
+    "sev": "high",
+    "title": "Keyboard focus is invisible on multiple-choice and matrix radio/checkbox controls",
+    "evidence": "MultipleChoice.svelte:464-468 `.choice-input { position:absolute; opacity:0; pointer-events:none }`; the only `focus:` in the file (:387) is on the free-text 'other' input, not the choice. Matrix.svelte:413-417/446-450 hide `.radio-input`/`.checkbox-input`; grep of both components shows `:checked +` and text-input `focus:` rules only — no `:focus`/`:focus-within` rule tied to the hidden input's indicator.",
+    "detail": "Native radio/checkbox inputs are used (arrow/space work), but the input is opacity:0 and the custom indicator styles only :checked/:hover. A keyboard user sees no focus ring on either of the two most common answer types — WCAG 2.4.7 (Focus Visible, AA) failure on the highest-traffic controls. pointer-events:none affects only the mouse, so",
+    "rec": "Add `.choice-input:focus-visible + .choice-indicator` (and Matrix equivalents) rules that draw a visible ring, mirroring the design-system Button's focus-visible treatment."
+  },
+  {
+    "id": "F096",
+    "dim": "A11y",
+    "sev": "medium",
+    "title": "Participant-facing charts render as bare <canvas> with no text alternative",
+    "evidence": "FeedbackChart.svelte:642-643 `<canvas bind:this={canvasEl}>` with no role/aria/table; BarChart.svelte:524 and :536 `<canvas class=\"chart-canvas\">` likewise; BaseAnalytics wrapper has no aria/heading/title. The canvas elements genuinely carry zero accessibility affordances.",
+    "detail": "The canvas-has-no-text-alternative claim is CONFIRMED (WCAG 1.1.1 applies to the chart, and colorRules encode meaning with no non-color channel). BUT the analyst OVERSTATED impact: StatisticalFeedback.svelte renders substantial adjacent text — an <h3> title (:193), subtitle (:195), a numeric summary block (`summaryEntries`, :257-266) and ",
+    "rec": "Give each canvas role=img + an aria-label summarizing the result, and/or a visually-hidden data table. For BarChart specifically add a text summary since it has no adjacent text at all."
+  },
+  {
+    "id": "F097",
+    "dim": "A11y",
+    "sev": "medium",
+    "title": "WebGL reaction stimuli have no reduced-motion or photosensitivity handling",
+    "evidence": "grep for `reduced-motion|prefers-reduced|photosensitiv|epilep` across lib/runtime/reaction and lib/renderer returns NONE. The only guard is app.css:217 `@media (prefers-reduced-motion: reduce)` which sets animation/transition-duration/scroll-behavior only — cannot touch canvas/rAF. ISI presets confirmed: stroop.ts:111=250, dotProbe.ts:113=500, flanker.ts:132=250 (also iat.ts:140=250, nBack.ts:84=250). Fillout canvas (:651-657) has no role/aria.",
+    "detail": "Confirmed exactly. The global CSS motion guard is purely declarative CSS and does nothing for the WebGL requestAnimationFrame stimulus loop that presents rapidly alternating high-contrast stimuli at short ISIs. No prefers-reduced-motion branch in the engine, no photosensitive-content advisory before the task, no canvas label. Reaction tas",
+    "rec": "Add a pre-task photosensitivity advisory and, where paradigm allows, a prefers-reduced-motion accommodation (longer ISIs / reduced flashing); label the canvas."
+  },
+  {
+    "id": "F098",
+    "dim": "A11y",
+    "sev": "medium",
+    "title": "Question prompts are non-heading <div>s; no heading structure on the fillout screen",
+    "evidence": "BaseQuestion.svelte:295 `<div class=\"question-title\" id=\"question-{question.id}-title\">` inside role=\"region\" (:272) with aria-labelledby (:273). Full-file grep of the fillout +page.svelte found no <h1>/<h2> at all.",
+    "detail": "Confirmed. Each question is a labelled region (reasonable), but the prompt is a div not a heading and the runtime page has no heading hierarchy or page-level H1 naming the study. Screen-reader heading navigation has nothing to jump to, compounding the #1 focus gap.",
+    "rec": "Render the question title as a heading (e.g. role=heading/aria-level or an <h2>) and add a page-level H1 identifying the study."
+  },
+  {
+    "id": "F099",
+    "dim": "A11y",
+    "sev": "medium",
+    "title": "Form fields do not wire aria-describedby to hints/errors or set aria-invalid",
+    "evidence": "FormGroup.svelte:46 emits `id=\"{id}-error\"`, :50 emits `id=\"{id}-hint\"`. Input.svelte (props :2-25, markup :64-86) exposes no aria-describedby/aria-invalid and only swaps ring color on error (:55-58, `ring-destructive`). Select.svelte grep for `aria-|describedby|invalid` returns NONE.",
+    "detail": "Confirmed. FormGroup generates stable error/hint ids implying intent to associate, but neither primitive references them via aria-describedby, and neither sets aria-invalid when error is true. The error is signalled by ring color only — a color-only cue (WCAG 1.4.1) — and is not programmatically linked (WCAG 1.3.1/3.3.1). Screen-reader us",
+    "rec": "Add aria-describedby (pointing at the FormGroup error/hint ids) and aria-invalid props to Input/Select, and pair the color cue with text/icon."
+  },
+  {
+    "id": "F100",
+    "dim": "A11y",
+    "sev": "medium",
+    "title": "Scale control mixes an ARIA slider role with discrete buttons",
+    "evidence": "Scale.svelte:153 container `role=\"slider\"` (tabindex=0, aria-valuemin/max :154-155) wraps `displayType==='buttons'` <button>s (:201, aria-pressed) and `stars` <button>s (:229). aria-valuenow=`value || question.config.min` (:156) so unanswered reports min. Visual-analog range input is `opacity-0` (:266); the only focus style is `.scale-container:focus` (:282), which does not apply when the inner range holds focus.",
+    "detail": "Confirmed. A role=slider containing multiple focusable buttons is invalid ARIA (button variants should be a radiogroup); aria-valuenow always reports a concrete number, misrepresenting the unanswered state; and the opacity-0 range in the visual-analog variant has no visible focus because the container :focus rule can't match the inner inp",
+    "rec": "Use role=radiogroup + role=radio for the button/star variants; only keep role=slider for the true range variant, style :focus-visible on the actual range input, and omit/adjust aria-valuenow when unset."
+  },
+  {
+    "id": "F101",
+    "dim": "A11y",
+    "sev": "medium",
+    "title": "CommandPalette lacks dialog semantics, listbox pattern, and focus trap",
+    "evidence": "CommandPalette.svelte:248 palette container is a plain <div> (no role=dialog/aria-modal/aria-label); backdrop button has aria-label (:244) but the panel does not. Results (:290) are <button>s with no role=option/aria-selected; search input (:257-264) has no role=combobox/aria-activedescendant. close() (:182-186) only resets state — no focus restore. No focus trap. Active item tracked solely by `bg-accent` class (:294).",
+    "detail": "Confirmed on every sub-claim. Arrow-key selection has no programmatic exposure, so a screen-reader user typing in the box is not told which result is active; Tab is not trapped so focus can leave the visually-covering overlay; focus is not returned to the trigger on close. Designer-facing, so medium is correct.",
+    "rec": "Add role=dialog/aria-modal/aria-label to the panel, implement the combobox+listbox pattern (aria-activedescendant, role=option/aria-selected), trap Tab within the panel, and restore focus to the opener on close."
+  },
+  {
+    "id": "F102",
+    "dim": "A11y",
+    "sev": "low",
+    "title": "Heavy reliance on muted-foreground for small text is borderline on contrast",
+    "evidence": "themes/variables.css:7 light `--muted-foreground: 215.4 16.3% 46.9%` (= approx #64748b / slate-500). Computed relative luminance ~0.171 → contrast ~4.76:1 on pure white, ~4.57:1 on the actual `--background: 210 40% 98%` (:3). Used for hints (FormGroup :50), descriptions, placeholders, and Scale/summary text at 0.7–0.875rem throughout.",
+    "detail": "Confirmed as an advisory: the value PASSES WCAG AA (4.5:1) but only by a thin margin (~4.57–4.76:1), and it is used pervasively for the smallest text and placeholders. It is not a failure today; the risk is regression if any muted-surface background darkens behind it. Correctly framed as low/advisory by the analyst.",
+    "rec": "Add an explicit contrast check to CI/design tokens and slightly darken --muted-foreground (or forbid it on non-background surfaces) to buy margin above 4.5:1."
+  },
+  {
+    "id": "F103",
+    "dim": "Perf",
+    "sev": "high",
+    "title": "Full mathjs (create(all)) eagerly bundled + instantiated on public fillout route",
+    "evidence": "VariableEngine.ts:7-8 `const factories = all; const math = create(factories)` runs at module top level. Static import chain proven: (fillout)/q/[code]/+page.svelte:11 statically imports FilloutRuntime; FilloutRuntime.ts:4 statically imports VariableEngine and constructs it at :54; QuestionnaireRuntime.ts:19 imports VariableEngine, :123 `new VariableEngine()` in ctor. vite.config.ts:73 `if (id.includes('mathjs')) return 'mathjs'` isolates the chunk but the import is static so the chunk is a hard route dependency.",
+    "detail": "create(all) explicitly pulls the entire mathjs factory map (no tree-shaking) — matrices, complex, units, symbolic derivative/simplify — even though import/createUnit/simplify/derivative are then stubbed to throw via BUILTIN_FUNCTIONS. The module-level side effect runs once when the route JS evaluates, so every participant on every questio",
+    "rec": "Lazy-load the mathjs-backed VariableEngine behind a dynamic import() gated on the questionnaire actually declaring computed variables, or replace create(all) with a create({...}) of only the used factories to enable tree-shaking."
+  },
+  {
+    "id": "F104",
+    "dim": "Perf",
+    "sev": "high",
+    "title": "N+1 query loop in compare-analytics endpoint",
+    "evidence": "sessions.rs:1036 `for &qid in &questionnaire_ids` with per-iteration awaits: summary GROUP BY query at :1042 (.fetch_optional at :1064), timing query at :1073 (.fetch_all at :1083), and conditional load_numeric_samples at :1095. Valid-id set fetched once with `q.id = ANY($2)` at :1002-1016.",
+    "detail": "Each questionnaire costs 2 serial round-trips (summary + timing), or 3 when a variable key is supplied (+ samples load), all awaited sequentially inside one request transaction. Comparing 10 questionnaires = ~20-30 serial DB round-trips. The pattern is a genuine N+1 fan-out. One caveat on severity: this is an authenticated admin/analytics",
+    "rec": "Collapse to set-based queries using `WHERE questionnaire_id = ANY($ids) GROUP BY questionnaire_id` for summary and timing, and batch the samples load, then bucket results in Rust — turning 2-3N round-trips into ~3 total."
+  },
+  {
+    "id": "F105",
+    "dim": "Perf",
+    "sev": "medium",
+    "title": "Offline-sync upsert issues one round-trip per response/event/variable",
+    "evidence": "sessions.rs:2932-2955 per-response INSERT loop (`.execute(&mut **tx)` at :2949), :2958-2978 per-event INSERT loop (:2972), :2981-3002 per-variable persist loop (persist_session_variable at :2991). Each iteration is a single-row awaited execute.",
+    "detail": "This is the FilloutSyncEngine.syncNow write path. A reaction-time experiment flushed after being offline can carry dozens-to-hundreds of trial responses plus interaction events; each row is a separate serialized INSERT ... ON CONFLICT (client_id) DO NOTHING round-trip. Atomicity is fine (single tx), but wall-clock latency scales linearly ",
+    "rec": "Batch via multi-row INSERT (UNNEST arrays or QueryBuilder push_values) preserving the ON CONFLICT dedup, or sqlx COPY, to collapse N round-trips into a handful."
+  },
+  {
+    "id": "F106",
+    "dim": "Perf",
+    "sev": "medium",
+    "title": "WebGLRenderer allocates per-frame and per-draw on the reaction-timing hot path",
+    "evidence": "WebGLRenderer.ts:432 `Array.from(this.renderablesByLayer.keys()).sort(...)` every renderFrame; :367 and :430 two createRenderContext object allocations per frame (:409-418 returns fresh object); :368-374 FrameSample object per frame; drawGeometry :786 toClipSpace returns new number[]; :789 and :793 two `new Float32Array(...)` per draw with gl.DYNAMIC_DRAW re-upload.",
+    "detail": "All cited allocations exist as described. renderFrame rebuilds+sorts the layer-key array every rAF tick regardless of set changes, and builds two RenderContext objects (one for frameCallbacks at :367, one inside renderFrame at :430) plus a FrameSample each frame; drawGeometry allocates a clip-space array and two typed arrays per draw and ",
+    "rec": "Hoist a reusable RenderContext/FrameSample and a cached sorted-layer array (invalidated on renderable add/remove), and reuse preallocated Float32Arrays / persistent VBOs (or bufferSubData) in drawGeometry."
+  },
+  {
+    "id": "F107",
+    "dim": "Perf",
+    "sev": "low",
+    "title": "~258 console.* calls ship because the production build strips none",
+    "evidence": "grep of src/lib + src/routes (excluding *.test./*.spec.) = 258 console.* calls; 39 within lib/fillout + lib/runtime. vite.config.ts:67 `minify: mode === 'production' ? 'esbuild' : false` with no `esbuild: { drop: ['console'] }` and no `define`/`pure` config anywhere in the file.",
+    "detail": "Counts reproduced exactly (258 total, 39 in fillout/runtime hot path). esbuild minify does not drop console by default, so all statements ship to production — mild bundle bloat, real string-formatting cost when hit in per-question/timing loops, and a minor info-leak surface (internal state in participant consoles). Low is correct.",
+    "rec": "Add `esbuild: { drop: ['console', 'debugger'] }` (or a guarded logger) for production builds; keep intentional user-facing warnings behind an explicit logger that survives the drop."
+  },
+  {
+    "id": "F108",
+    "dim": "Perf",
+    "sev": "info",
+    "title": "Every authenticated request pays a transaction + set_config GUC round-trip",
+    "evidence": "rls_context.rs:44 `state.pool.begin()` and :46-52 `SELECT set_config('app.user_id', $1, true), set_config('app.user_role', $2, true)` executed before the handler for every request with an extractable user (guard at :40).",
+    "detail": "Accurately described. Every authenticated request opens a BEGIN, runs the two-arg set_config query, and commits — a fixed per-request latency floor even for read-only endpoints. This is the deliberate ADR 0011 defense-in-depth posture, not a defect. Correctly classified info.",
+    "rec": "None required; if a specific high-QPS read endpoint becomes latency-bound, consider a BYPASSRLS read path or folding set_config into the first handler query rather than a separate round-trip."
+  }
+]
