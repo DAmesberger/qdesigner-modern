@@ -4,7 +4,6 @@
     FileText,
     Users,
     Calendar,
-    MoreVertical,
     Play,
     Edit,
     BarChart3,
@@ -13,10 +12,11 @@
   } from 'lucide-svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import ProjectActionsMenu from '$lib/components/ProjectActionsMenu.svelte';
+  import QuestionnaireActionsMenu from '$lib/components/QuestionnaireActionsMenu.svelte';
   import { appPaths } from '$lib/routing/paths';
   import { goto } from '$app/navigation';
   import Select from '$lib/components/ui/forms/Select.svelte';
-  import type { Project } from '$lib/shared/types/api';
+  import type { Project, QuestionnaireDefinition } from '$lib/shared/types/api';
   import type { PageData } from './$types';
 
   interface Props {
@@ -33,6 +33,9 @@
 
   // Local, mutable view so a rename/archive reflects in the header immediately.
   let project = $state<Project>(data.project);
+  // Local, mutable copy so questionnaire lifecycle actions (rename/duplicate/
+  // archive/delete) reflect in the list without a full reload.
+  let questionnaires = $state<QuestionnaireDefinition[]>(data.questionnaires);
 
   const currentProjectRole = $derived(
     (data.members ?? []).find((m) => m.user_id === data.currentUserId)?.role ?? null
@@ -58,8 +61,20 @@
     await goto(appPaths.projects());
   }
 
+  function onQuestionnaireUpdated(updated: QuestionnaireDefinition) {
+    questionnaires = questionnaires.map((q) => (q.id === updated.id ? { ...q, ...updated } : q));
+  }
+
+  function onQuestionnaireDuplicated(created: QuestionnaireDefinition) {
+    questionnaires = [created, ...questionnaires];
+  }
+
+  function onQuestionnaireDeleted(questionnaireId: string) {
+    questionnaires = questionnaires.filter((q) => q.id !== questionnaireId);
+  }
+
   let filteredQuestionnaires = $derived.by(() => {
-    let result = data.questionnaires;
+    let result = questionnaires;
     if (searchQuery) {
       const term = searchQuery.toLowerCase();
       result = result.filter((item) => item.name.toLowerCase().includes(term));
@@ -215,7 +230,7 @@
   </div>
 
   <main class="px-4 sm:px-6 lg:px-8 py-8">
-    {#if data.questionnaires.length === 0}
+    {#if questionnaires.length === 0}
       <div class="text-center py-12">
         <FileText class="mx-auto h-12 w-12 text-muted-foreground" />
         <h3 class="mt-2 text-sm font-medium text-foreground">No questionnaires</h3>
@@ -342,12 +357,16 @@
                         >
                           <Edit class="h-5 w-5" />
                         </button>
-                        <button
-                          class="text-muted-foreground hover:text-foreground"
-                          title="More options"
-                        >
-                          <MoreVertical class="h-5 w-5" />
-                        </button>
+                        <QuestionnaireActionsMenu
+                          {questionnaire}
+                          projectId={data.project.id}
+                          {canManage}
+                          canDelete={canManage}
+                          onRenamed={onQuestionnaireUpdated}
+                          onArchived={onQuestionnaireUpdated}
+                          onDuplicated={onQuestionnaireDuplicated}
+                          onDeleted={onQuestionnaireDeleted}
+                        />
                       </div>
                     </div>
                   </div>
