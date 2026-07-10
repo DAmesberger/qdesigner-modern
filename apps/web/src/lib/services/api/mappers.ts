@@ -232,6 +232,7 @@ export function mapProject(raw: GeneratedProject): Project {
     createdBy: null,
     createdAt,
     updatedAt,
+    questionnaireCount: raw.questionnaire_count ?? undefined,
   };
 }
 

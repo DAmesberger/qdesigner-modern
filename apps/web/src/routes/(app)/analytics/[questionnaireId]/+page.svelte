@@ -340,7 +340,7 @@
           <!-- Sessions completed (line) -->
           <path
             d={chartPath(timeseries.map(b => b.sessions_completed), 600, 180)}
-            fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="4,2"
+            fill="none" stroke="hsl(var(--success))" stroke-width="2" stroke-dasharray="4,2"
             stroke-linecap="round" stroke-linejoin="round"
           />
         </svg>

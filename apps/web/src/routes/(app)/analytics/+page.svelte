@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { SvelteSet } from 'svelte/reactivity';
   import type {
     QuestionnaireSummary,
@@ -351,7 +352,7 @@
             {#each paged as q}
               <tr
                 class="border-b border-border/50 hover:bg-background/30 cursor-pointer transition-colors"
-                onclick={() => window.location.href = `/analytics/${q.id}`}
+                onclick={() => goto(`/analytics/${q.id}`)}
               >
                 <td
                   class="px-4 py-3"
@@ -382,7 +383,7 @@
                       <path
                         d={sparklinePath(sparklineValues(q.id), 80, 20)}
                         fill="none"
-                        stroke="#6366f1"
+                        stroke="hsl(var(--primary))"
                         stroke-width="1.5"
                         stroke-linecap="round"
                         stroke-linejoin="round"

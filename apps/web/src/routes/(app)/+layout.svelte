@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import { goto } from '$app/navigation';
   import { fade } from 'svelte/transition';
   import AppShell from '$lib/components/ui/layout/AppShell.svelte';
   import { ws } from '$lib/services/ws';
@@ -56,9 +57,7 @@
   // organization, send them to onboarding regardless of which app page they hit.
   $effect(() => {
     if (data.user && !data.organizationId) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/onboarding/organization';
-      }
+      void goto('/onboarding/organization');
     }
   });
 </script>

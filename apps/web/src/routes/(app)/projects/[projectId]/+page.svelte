@@ -104,12 +104,12 @@
     if (!questionnaireName.trim()) return;
 
     // Navigate to designer with new questionnaire context
-    if (typeof window !== 'undefined') {
-      window.location.href = appPaths.projectDesignerNew(data.project.id, {
+    await goto(
+      appPaths.projectDesignerNew(data.project.id, {
         name: questionnaireName,
         description: questionnaireDescription,
-      });
-    }
+      })
+    );
   }
 
   function formatDate(date: string | Date) {
@@ -343,14 +343,8 @@
                           {/if}
                         {/if}
                         <button
-                          onclick={() => {
-                            if (typeof window !== 'undefined') {
-                              window.location.href = appPaths.projectDesigner(
-                                data.project.id,
-                                questionnaire.id
-                              );
-                            }
-                          }}
+                          onclick={() =>
+                            goto(appPaths.projectDesigner(data.project.id, questionnaire.id))}
                           class="text-muted-foreground hover:text-foreground"
                           title="Edit questionnaire"
                           data-testid={`questionnaire-edit-${questionnaire.id}`}

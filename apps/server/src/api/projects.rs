@@ -33,6 +33,12 @@ pub struct Project {
     pub settings: serde_json::Value,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Number of non-deleted questionnaires in this project. Populated by the
+    /// list handler's aggregate subquery; absent (defaults to `None`) on the
+    /// single-row get/create/update paths.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[sqlx(default)]
+    pub questionnaire_count: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
@@ -107,7 +113,9 @@ pub async fn list_projects(
                     r#"
                     SELECT p.id, p.organization_id, p.name, p.code, p.description, p.is_public,
                            p.status, p.max_participants, p.irb_number, p.start_date, p.end_date,
-                           p.settings, p.created_at, p.updated_at
+                           p.settings, p.created_at, p.updated_at,
+                           (SELECT COUNT(*) FROM questionnaire_definitions qd
+                            WHERE qd.project_id = p.id AND qd.deleted_at IS NULL) AS questionnaire_count
                     FROM projects p
                     JOIN organization_members om ON om.organization_id = p.organization_id
                     WHERE om.user_id = $1 AND om.status = 'active'
@@ -129,7 +137,9 @@ pub async fn list_projects(
                     r#"
                     SELECT p.id, p.organization_id, p.name, p.code, p.description, p.is_public,
                            p.status, p.max_participants, p.irb_number, p.start_date, p.end_date,
-                           p.settings, p.created_at, p.updated_at
+                           p.settings, p.created_at, p.updated_at,
+                           (SELECT COUNT(*) FROM questionnaire_definitions qd
+                            WHERE qd.project_id = p.id AND qd.deleted_at IS NULL) AS questionnaire_count
                     FROM projects p
                     WHERE p.organization_id = $2
                       AND p.deleted_at IS NULL
@@ -165,7 +175,9 @@ pub async fn list_projects(
             r#"
             SELECT p.id, p.organization_id, p.name, p.code, p.description, p.is_public,
                    p.status, p.max_participants, p.irb_number, p.start_date, p.end_date,
-                   p.settings, p.created_at, p.updated_at
+                   p.settings, p.created_at, p.updated_at,
+                   (SELECT COUNT(*) FROM questionnaire_definitions qd
+                    WHERE qd.project_id = p.id AND qd.deleted_at IS NULL) AS questionnaire_count
             FROM projects p
             JOIN organizations o ON o.id = p.organization_id
             WHERE p.deleted_at IS NULL

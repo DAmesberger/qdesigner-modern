@@ -6,13 +6,11 @@
     Users,
     FileText,
     BarChart3,
-    Clock,
     Mail,
     Globe,
     ClipboardList,
     Settings,
     CheckCircle,
-    Activity,
     ScrollText,
     ShieldCheck,
     KeyRound,
@@ -50,67 +48,17 @@
     }
   }
 
-  function formatRelativeTime(dateStr: string | null): string {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffSec = Math.floor(diffMs / 1000);
-    const diffMin = Math.floor(diffSec / 60);
-    const diffHr = Math.floor(diffMin / 60);
-    const diffDay = Math.floor(diffHr / 24);
-
-    if (diffSec < 60) return 'just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
-    if (diffHr < 24) return `${diffHr}h ago`;
-    if (diffDay < 30) return `${diffDay}d ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
-  function formatCompletionTime(ms: number | null): string {
-    if (ms == null || ms === 0) return '--';
-    const totalSec = Math.floor(ms / 1000);
-    const min = Math.floor(totalSec / 60);
-    const sec = totalSec % 60;
-    if (min === 0) return `${sec}s`;
-    return `${min}m ${sec}s`;
-  }
-
   function formatRate(rate: number): string {
     return `${Math.round(rate * 100)}%`;
-  }
-
-  function statusColor(status: string): string {
-    switch (status) {
-      case 'completed':
-        return 'text-success';
-      case 'in_progress':
-        return 'text-info';
-      case 'abandoned':
-        return 'text-destructive';
-      default:
-        return 'text-muted-foreground';
-    }
-  }
-
-  function statusLabel(status: string): string {
-    switch (status) {
-      case 'completed':
-        return 'Completed';
-      case 'in_progress':
-        return 'In Progress';
-      case 'abandoned':
-        return 'Abandoned';
-      default:
-        return status;
-    }
   }
 </script>
 
 <div class="p-8">
   <div class="mb-8">
     <h1 class="text-3xl font-bold text-foreground">Admin Dashboard</h1>
-    <p class="mt-2 text-muted-foreground">Manage your questionnaires and view analytics</p>
+    <p class="mt-2 text-muted-foreground">
+      Organization overview and quick access to management tools
+    </p>
   </div>
 
   {#if error}
@@ -184,7 +132,7 @@
     {/if}
   </div>
 
-  <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+  <div class="grid grid-cols-1 gap-6">
     <!-- Quick Actions -->
     <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
       <h3 class="text-lg font-semibold text-foreground mb-4">Quick Actions</h3>
@@ -239,94 +187,5 @@
         </a>
       </div>
     </div>
-
-    <!-- Recent Activity -->
-    <div class="rounded-lg border border-border bg-card p-5 shadow-sm">
-      <h3 class="text-lg font-semibold text-foreground mb-4">Recent Activity</h3>
-      {#if loading}
-        <div class="space-y-4">
-          {#each Array(3) as _}
-            <div class="flex items-start">
-              <div class="h-8 w-8 animate-pulse rounded-full bg-muted"></div>
-              <div class="ml-3 flex-1">
-                <div class="h-3 w-40 animate-pulse rounded bg-muted mb-2"></div>
-                <div class="h-2 w-28 animate-pulse rounded bg-muted"></div>
-              </div>
-            </div>
-          {/each}
-        </div>
-      {:else if dashboard && dashboard.recent_activity.length > 0}
-        <div class="space-y-3">
-          {#each dashboard.recent_activity as activity}
-            <div class="flex items-start">
-              <div class="flex-shrink-0">
-                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                  <Activity class="h-4 w-4 {statusColor(activity.status)}" />
-                </div>
-              </div>
-              <div class="ml-3 min-w-0">
-                <p class="text-sm text-foreground truncate">{activity.questionnaire_name}</p>
-                <p class="text-xs text-muted-foreground">
-                  <span class={statusColor(activity.status)}>{statusLabel(activity.status)}</span>
-                  {#if activity.started_at}
-                    &middot; {formatRelativeTime(activity.started_at)}
-                  {/if}
-                  {#if activity.participant_id}
-                    &middot; {activity.participant_id}
-                  {/if}
-                </p>
-              </div>
-            </div>
-          {/each}
-        </div>
-      {:else}
-        <p class="text-sm text-muted-foreground">No recent activity</p>
-      {/if}
-    </div>
   </div>
-
-  <!-- Questionnaires Table -->
-  {#if loading}
-    <div class="mt-6 rounded-lg border border-border bg-card p-5 shadow-sm">
-      <div class="h-5 w-40 animate-pulse rounded bg-muted mb-4"></div>
-      <div class="space-y-3">
-        {#each Array(3) as _}
-          <div class="h-10 w-full animate-pulse rounded bg-muted"></div>
-        {/each}
-      </div>
-    </div>
-  {:else if dashboard && dashboard.questionnaires.length > 0}
-    <div class="mt-6 rounded-lg border border-border bg-card p-5 shadow-sm">
-      <h3 class="text-lg font-semibold text-foreground mb-4">Questionnaires</h3>
-      <div class="overflow-x-auto">
-        <table class="w-full">
-          <thead>
-            <tr class="border-b border-border text-left">
-              <th class="pb-3 text-sm font-medium text-muted-foreground">Name</th>
-              <th class="pb-3 text-sm font-medium text-muted-foreground">Status</th>
-              <th class="pb-3 text-sm font-medium text-muted-foreground text-right">Responses</th>
-              <th class="pb-3 text-sm font-medium text-muted-foreground text-right">Completed</th>
-              <th class="pb-3 text-sm font-medium text-muted-foreground text-right">Avg. Time</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-border">
-            {#each dashboard.questionnaires as q}
-              <tr class="hover:bg-muted/50 transition-colors">
-                <td class="py-3 text-sm font-medium text-foreground">{q.name}</td>
-                <td class="py-3">
-                  <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
-                    {q.status === 'published' ? 'bg-success/10 text-success' : q.status === 'draft' ? 'bg-warning/10 text-warning' : 'bg-muted text-muted-foreground'}">
-                    {q.status}
-                  </span>
-                </td>
-                <td class="py-3 text-sm text-muted-foreground text-right">{q.total_responses}</td>
-                <td class="py-3 text-sm text-muted-foreground text-right">{q.completed_sessions}</td>
-                <td class="py-3 text-sm text-muted-foreground text-right">{formatCompletionTime(q.avg_completion_time_ms)}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  {/if}
 </div>

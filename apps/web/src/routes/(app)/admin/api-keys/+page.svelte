@@ -3,6 +3,7 @@
   import { api } from '$lib/services/api';
   import type { ApiKeyRecord } from '$lib/services/api/api-keys';
   import { confirmDialog } from '$lib/stores/confirm.svelte';
+  import { toast } from '$lib/stores/toast';
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
@@ -36,8 +37,9 @@
 
   let loading = $state(true);
   let saving = $state(false);
+  // Page-level load failure only (persists in place of the list); transient
+  // create/revoke feedback goes through toast.
   let error = $state<string | null>(null);
-  let success = $state<string | null>(null);
 
   let currentOrg = $state<{ id: string; name: string } | null>(null);
   let keys = $state<ApiKeyRecord[]>([]);
@@ -101,14 +103,12 @@
 
   async function handleCreate() {
     if (!currentOrg) return;
-    error = null;
-    success = null;
     if (!formName.trim()) {
-      error = 'A name is required';
+      toast.error('A name is required');
       return;
     }
     if (formScopes.size === 0) {
-      error = 'Select at least one scope';
+      toast.error('Select at least one scope');
       return;
     }
     saving = true;
@@ -120,12 +120,14 @@
       });
       newKey = res.key;
       copied = false;
-      success = 'API key created — copy it now, it will not be shown again.';
+      toast.success('API key created', {
+        message: 'Copy it now — it will not be shown again.',
+      });
       showAddForm = false;
       resetForm();
       await loadKeys();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to create API key';
+      toast.error(err instanceof Error ? err.message : 'Failed to create API key');
     } finally {
       saving = false;
     }
@@ -150,13 +152,12 @@
       destructive: true,
     });
     if (!ok) return;
-    error = null;
     try {
       await api.apiKeys.revoke(currentOrg.id, k.id);
-      success = 'API key revoked';
+      toast.success('API key revoked');
       await loadKeys();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to revoke API key';
+      toast.error(err instanceof Error ? err.message : 'Failed to revoke API key');
     }
   }
 
@@ -186,9 +187,6 @@
 
   {#if error}
     <Alert variant="error" class="mb-4">{error}</Alert>
-  {/if}
-  {#if success}
-    <Alert variant="success" class="mb-4">{success}</Alert>
   {/if}
 
   {#if newKey}

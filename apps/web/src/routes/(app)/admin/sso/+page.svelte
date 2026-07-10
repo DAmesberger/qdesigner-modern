@@ -14,11 +14,13 @@
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
+  import { toast } from '$lib/stores/toast';
 
   let loading = $state(true);
   let saving = $state(false);
+  // Page-level load failure only (persists in place of the list); transient
+  // create/update/revoke feedback goes through toast.
   let error = $state<string | null>(null);
-  let success = $state<string | null>(null);
 
   let currentOrg = $state<{ id: string; name: string } | null>(null);
   let providers = $state<IdentityProvider[]>([]);
@@ -105,18 +107,18 @@
 
   async function createScimToken() {
     if (!currentOrg) return;
-    error = null;
-    success = null;
     saving = true;
     try {
       const res = await api.scimTokens.create(currentOrg.id, scimTokenName.trim() || undefined);
       scimNewToken = res.token;
       scimCopied = false;
       scimTokenName = '';
-      success = 'SCIM token created — copy it now, it will not be shown again.';
+      toast.success('SCIM token created', {
+        message: 'Copy it now — it will not be shown again.',
+      });
       await loadScimTokens();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to create SCIM token';
+      toast.error(err instanceof Error ? err.message : 'Failed to create SCIM token');
     } finally {
       saving = false;
     }
@@ -141,13 +143,12 @@
       destructive: true,
     });
     if (!ok) return;
-    error = null;
     try {
       await api.scimTokens.revoke(currentOrg.id, t.id);
-      success = 'SCIM token revoked';
+      toast.success('SCIM token revoked');
       await loadScimTokens();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to revoke SCIM token';
+      toast.error(err instanceof Error ? err.message : 'Failed to revoke SCIM token');
     }
   }
 
@@ -167,11 +168,9 @@
 
   async function handleAdd() {
     if (!currentOrg) return;
-    error = null;
-    success = null;
     const map = parseGroupMap(form.group_role_map_text);
     if (map === null) {
-      error = 'Group → role map must be a JSON object, e.g. {"lab-admins": "admin"}';
+      toast.error('Group → role map must be a JSON object, e.g. {"lab-admins": "admin"}');
       return;
     }
     saving = true;
@@ -190,12 +189,12 @@
         enabled: form.enabled,
       };
       await api.sso.create(currentOrg.id, body);
-      success = 'Identity provider created';
+      toast.success('Identity provider created');
       showAddForm = false;
       form = emptyForm();
       await loadProviders();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to create identity provider';
+      toast.error(err instanceof Error ? err.message : 'Failed to create identity provider');
     } finally {
       saving = false;
     }
@@ -212,11 +211,9 @@
 
   async function saveEdit(p: IdentityProvider) {
     if (!currentOrg) return;
-    error = null;
-    success = null;
     const map = parseGroupMap(editGroupMapText);
     if (map === null) {
-      error = 'Group → role map must be a JSON object';
+      toast.error('Group → role map must be a JSON object');
       return;
     }
     saving = true;
@@ -229,11 +226,11 @@
       };
       if (editNewSecret) body.client_secret = editNewSecret;
       await api.sso.update(currentOrg.id, p.id, body);
-      success = 'Identity provider updated';
+      toast.success('Identity provider updated');
       editingId = null;
       await loadProviders();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to update identity provider';
+      toast.error(err instanceof Error ? err.message : 'Failed to update identity provider');
     } finally {
       saving = false;
     }
@@ -241,12 +238,11 @@
 
   async function toggleEnabled(p: IdentityProvider) {
     if (!currentOrg) return;
-    error = null;
     try {
       await api.sso.update(currentOrg.id, p.id, { enabled: !p.enabled });
       await loadProviders();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to update identity provider';
+      toast.error(err instanceof Error ? err.message : 'Failed to update identity provider');
     }
   }
 
@@ -259,13 +255,12 @@
       destructive: true,
     });
     if (!ok) return;
-    error = null;
     try {
       await api.sso.remove(currentOrg.id, p.id);
-      success = 'Identity provider deleted';
+      toast.success('Identity provider deleted');
       await loadProviders();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to delete identity provider';
+      toast.error(err instanceof Error ? err.message : 'Failed to delete identity provider');
     }
   }
 </script>
@@ -286,9 +281,6 @@
 
   {#if error}
     <Alert variant="error" class="mb-4">{error}</Alert>
-  {/if}
-  {#if success}
-    <Alert variant="success" class="mb-4">{success}</Alert>
   {/if}
 
   {#if showAddForm}

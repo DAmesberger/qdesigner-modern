@@ -8,11 +8,13 @@
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import { toast } from '$lib/stores/toast';
 
   let loading = $state(true);
   let saving = $state(false);
+  // Page-level load failure only (persists in place of the form); transient
+  // save/validation feedback goes through toast.
   let error: string | null = $state(null);
-  let success: string | null = $state(null);
 
   let currentOrg: any = $state(null);
 
@@ -115,8 +117,6 @@
     if (!currentOrg) return;
 
     savingDefaults = true;
-    error = null;
-    success = null;
 
     try {
       // Store defaults in organization metadata via the existing update API.
@@ -137,9 +137,9 @@
         settings: nextSettings,
       });
       currentOrg.settings = nextSettings;
-      success = 'Defaults saved successfully';
+      toast.success('Defaults saved successfully');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to save defaults';
+      toast.error(err instanceof Error ? err.message : 'Failed to save defaults');
     } finally {
       savingDefaults = false;
     }
@@ -153,19 +153,17 @@
     if (trimmed !== '') {
       const parsed = parseInt(trimmed, 10);
       if (!Number.isFinite(parsed) || parsed < 1) {
-        error = 'Seat limit must be a positive whole number, or blank for unlimited';
+        toast.error('Seat limit must be a positive whole number, or blank for unlimited');
         return;
       }
       if (seatUsage && parsed < seatUsage.used) {
-        error = `Seat limit cannot be below current usage (${seatUsage.used} seats in use)`;
+        toast.error(`Seat limit cannot be below current usage (${seatUsage.used} seats in use)`);
         return;
       }
       seatLimit = parsed;
     }
 
     savingSeats = true;
-    error = null;
-    success = null;
     try {
       const nextSettings = { ...(currentOrg.settings ?? {}), seatLimit };
       await api.organizations.update(currentOrg.id, {
@@ -174,9 +172,9 @@
       });
       currentOrg.settings = nextSettings;
       seatUsage = await api.organizations.seats(currentOrg.id);
-      success = seatLimit == null ? 'Seat limit removed (unlimited)' : 'Seat limit saved';
+      toast.success(seatLimit == null ? 'Seat limit removed (unlimited)' : 'Seat limit saved');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to save seat limit';
+      toast.error(err instanceof Error ? err.message : 'Failed to save seat limit');
     } finally {
       savingSeats = false;
     }
@@ -187,18 +185,16 @@
 
     const color = brandingPrimaryColor.trim();
     if (color && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color)) {
-      error = 'Primary color must be a hex value like #4f46e5';
+      toast.error('Primary color must be a hex value like #4f46e5');
       return;
     }
     const logo = brandingLogoUrl.trim();
     if (logo && !(logo.startsWith('http://') || logo.startsWith('https://') || logo.startsWith('/'))) {
-      error = 'Logo URL must be an absolute http(s) URL or a same-origin path';
+      toast.error('Logo URL must be an absolute http(s) URL or a same-origin path');
       return;
     }
 
     savingBranding = true;
-    error = null;
-    success = null;
     try {
       // Merge into the whole settings object so we never clobber defaults/seatLimit.
       const nextSettings = {
@@ -212,9 +208,9 @@
         settings: nextSettings,
       });
       currentOrg.settings = nextSettings;
-      success = 'Branding saved successfully';
+      toast.success('Branding saved successfully');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to save branding';
+      toast.error(err instanceof Error ? err.message : 'Failed to save branding');
     } finally {
       savingBranding = false;
     }
@@ -224,8 +220,6 @@
     if (!currentOrg) return;
 
     savingAccess = true;
-    error = null;
-    success = null;
     try {
       const nextSettings = {
         ...(currentOrg.settings ?? {}),
@@ -236,9 +230,9 @@
         settings: nextSettings,
       });
       currentOrg.settings = nextSettings;
-      success = 'Access defaults saved successfully';
+      toast.success('Access defaults saved successfully');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to save access defaults';
+      toast.error(err instanceof Error ? err.message : 'Failed to save access defaults');
     } finally {
       savingAccess = false;
     }
@@ -248,16 +242,14 @@
     if (!currentOrg) return;
 
     saving = true;
-    error = null;
-    success = null;
 
     try {
       await api.organizations.update(currentOrg.id, {
         name: orgName,
       });
-      success = 'Settings saved successfully';
+      toast.success('Settings saved successfully');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to save settings';
+      toast.error(err instanceof Error ? err.message : 'Failed to save settings');
     } finally {
       saving = false;
     }
@@ -275,12 +267,6 @@
   {#if error}
     <div class="mb-4">
       <Alert variant="error">{error}</Alert>
-    </div>
-  {/if}
-
-  {#if success}
-    <div class="mb-4">
-      <Alert variant="success">{success}</Alert>
     </div>
   {/if}
 

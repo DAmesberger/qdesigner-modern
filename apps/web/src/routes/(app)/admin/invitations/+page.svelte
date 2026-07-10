@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
   import { createInvitation, revokeInvitation, type Invitation } from '$lib/services/invitations';
+  import { toast } from '$lib/stores/toast';
+  import type { User } from '$lib/shared/types/auth';
+  import type { Organization } from '$lib/shared/types/api';
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
@@ -12,37 +14,25 @@
   import Select from '$lib/components/ui/forms/Select.svelte';
   import { confirmDialog } from '$lib/stores/confirm.svelte';
 
-  let invitations: Invitation[] = [];
-  let loading = true;
-  let error: string | null = null;
-  let success: string | null = null;
+  let invitations = $state<Invitation[]>([]);
+  let loading = $state(true);
+  // Page-level load failure only (persists in place of the list); transient
+  // send/revoke/copy feedback goes through toast.
+  let error = $state<string | null>(null);
 
   // New invitation form
-  let showNewInviteForm = false;
-  let inviteEmail = '';
-  let inviteRole: 'member' | 'admin' | 'viewer' = 'member';
-  let inviteMessage = '';
-  let inviteLoading = false;
+  let showNewInviteForm = $state(false);
+  let inviteEmail = $state('');
+  let inviteRole = $state<'member' | 'admin' | 'viewer'>('member');
+  let inviteMessage = $state('');
+  let inviteLoading = $state(false);
 
   // Current user and organization
-  interface User {
-    id: string;
-    auth_id: string;
-    email: string;
-    full_name?: string;
-  }
+  let currentUser = $state<User | null>(null);
+  let currentOrg = $state<Organization | null>(null);
 
-  interface Organization {
-    id: string;
-    name: string;
-    slug: string;
-  }
-
-  let currentUser: User | null = null;
-  let currentOrg: Organization | null = null;
-
-  onMount(async () => {
-    await loadData();
+  $effect(() => {
+    void loadData();
   });
 
   async function loadData() {
@@ -51,17 +41,18 @@
       const user = await auth.getUser();
       if (!user) return;
 
-      currentUser = user as unknown as User;
+      currentUser = user;
 
       // Get user's organizations
       const orgs = await api.organizations.list();
-      if (!orgs || orgs.length === 0) {
+      const first = orgs?.[0];
+      if (!first) {
         error = 'You do not have permission to manage invitations';
         loading = false;
         return;
       }
 
-      currentOrg = orgs[0] as unknown as Organization;
+      currentOrg = first;
 
       // Load invitations
       await loadInvitations();
@@ -101,10 +92,9 @@
     if (!inviteEmail || !currentOrg || !currentUser) return;
 
     inviteLoading = true;
-    error = null;
-    success = null;
 
-    const { data, error: inviteError } = await createInvitation({
+    const sentToEmail = inviteEmail;
+    const { error: inviteError } = await createInvitation({
       organizationId: currentOrg.id,
       email: inviteEmail,
       role: inviteRole,
@@ -112,9 +102,9 @@
     });
 
     if (inviteError) {
-      error = inviteError;
+      toast.error(inviteError);
     } else {
-      success = `Invitation sent to ${inviteEmail}`;
+      toast.success(`Invitation sent to ${sentToEmail}`);
       inviteEmail = '';
       inviteMessage = '';
       showNewInviteForm = false;
@@ -142,9 +132,9 @@
     );
 
     if (revokeError) {
-      error = revokeError;
+      toast.error(revokeError);
     } else {
-      success = 'Invitation revoked';
+      toast.success('Invitation revoked');
       await loadInvitations();
     }
   }
@@ -201,14 +191,6 @@
     <div class="mb-4">
       <Alert variant="error">
         {error}
-      </Alert>
-    </div>
-  {/if}
-
-  {#if success}
-    <div class="mb-4">
-      <Alert variant="success">
-        {success}
       </Alert>
     </div>
   {/if}
@@ -326,7 +308,7 @@
                     navigator.clipboard.writeText(
                       `${window.location.origin}/invite/${invitation.token}`
                     );
-                    success = 'Invitation link copied to clipboard';
+                    toast.success('Invitation link copied to clipboard');
                   }}
                 >
                   Copy Link

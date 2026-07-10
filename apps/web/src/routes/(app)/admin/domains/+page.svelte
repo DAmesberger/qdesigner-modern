@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { auth } from '$lib/services/auth';
   import { api } from '$lib/services/api';
   import {
@@ -10,6 +9,9 @@
     type DomainConfig,
   } from '$lib/services/domain-verification';
   import { confirmDialog } from '$lib/stores/confirm.svelte';
+  import { toast } from '$lib/stores/toast';
+  import type { User } from '$lib/shared/types/auth';
+  import type { Organization } from '$lib/shared/types/api';
   import Card from '$lib/components/ui/layout/Card.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
@@ -18,30 +20,38 @@
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
-  let domains: DomainConfig[] = [];
-  let loading = true;
-  let error: string | null = null;
-  let success: string | null = null;
-  let notice: string | null = null;
+  // Editable auto-join settings tracked per domain while its Settings panel is open.
+  interface DomainEditSettings {
+    autoJoinEnabled: boolean;
+    includeSubdomains: boolean;
+    defaultRole: string;
+    welcomeMessage: string;
+  }
+
+  let domains = $state<DomainConfig[]>([]);
+  let loading = $state(true);
+  // Page-level load failure only (persists in place of the list); transient
+  // add/verify/update/remove feedback goes through toast.
+  let error = $state<string | null>(null);
 
   // Add domain form
-  let showAddDomainForm = false;
-  let newDomain = '';
-  let addingDomain = false;
+  let showAddDomainForm = $state(false);
+  let newDomain = $state('');
+  let addingDomain = $state(false);
 
   // Domain verification (DNS TXT ownership check) in-flight id
-  let verifyingDomainId: string | null = null;
+  let verifyingDomainId = $state<string | null>(null);
 
   // Current user and organization
-  let currentUser: any = null;
-  let currentOrg: any = null;
+  let currentUser = $state<User | null>(null);
+  let currentOrg = $state<Organization | null>(null);
 
   // Domain settings
-  let editingDomain: string | null = null;
-  let domainSettings: Record<string, any> = {};
+  let editingDomain = $state<string | null>(null);
+  let domainSettings = $state<Record<string, DomainEditSettings>>({});
 
-  onMount(async () => {
-    await loadData();
+  $effect(() => {
+    void loadData();
   });
 
   async function loadData() {
@@ -54,13 +64,14 @@
 
       // Get user's organizations
       const orgs = await api.organizations.list();
-      if (!orgs || orgs.length === 0) {
+      const first = orgs?.[0];
+      if (!first) {
         error = 'Only organization owners can manage domains';
         loading = false;
         return;
       }
 
-      currentOrg = orgs[0];
+      currentOrg = first;
 
       // Load domains
       await loadDomains();
@@ -93,14 +104,16 @@
         createdAt: d.createdAt,
       }));
       // Initialize settings for each domain
+      const next: Record<string, DomainEditSettings> = {};
       domains.forEach((domain) => {
-        domainSettings[domain.id] = {
+        next[domain.id] = {
           autoJoinEnabled: domain.autoJoinEnabled,
           includeSubdomains: domain.includeSubdomains,
           defaultRole: domain.defaultRole,
           welcomeMessage: domain.welcomeMessage || '',
         };
       });
+      domainSettings = next;
     } catch (err) {
       console.error('Error loading domains:', err);
       error = 'Failed to load domains';
@@ -111,18 +124,19 @@
     if (!newDomain || !currentOrg || !currentUser) return;
 
     addingDomain = true;
-    error = null;
-    success = null;
 
-    const { data, error: addError } = await addDomain({
+    const addedDomain = newDomain;
+    const { error: addError } = await addDomain({
       organizationId: currentOrg.id,
       domain: newDomain.toLowerCase().trim(),
     });
 
     if (addError) {
-      error = addError;
+      toast.error(addError);
     } else {
-      success = `Domain ${newDomain} added. Please verify ownership to enable auto-join.`;
+      toast.success('Domain added', {
+        message: `Verify ownership of ${addedDomain} to enable auto-join.`,
+      });
       newDomain = '';
       showAddDomainForm = false;
       await loadDomains();
@@ -138,23 +152,24 @@
     // guidance (no fake success, so auto-join stays disabled for unproven
     // domains).
     if (!currentOrg) return;
-    error = null;
-    success = null;
-    notice = null;
     verifyingDomainId = domainId;
 
     try {
       const result = await verifyDomain(currentOrg.id, domainId);
       if (result.success) {
-        success = 'Domain ownership verified. Auto-join is now enabled for this domain.';
+        toast.success('Domain verified', {
+          message: 'Auto-join is now enabled for this domain.',
+        });
         await loadDomains();
       } else {
-        notice =
-          result.error ??
-          'Domain ownership could not be verified. Add the DNS TXT record shown below, then retry — DNS changes can take a few minutes to propagate.';
+        toast.info('Domain not yet verified', {
+          message:
+            result.error ??
+            'Add the DNS TXT record shown below, then retry — DNS changes can take a few minutes to propagate.',
+        });
       }
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to verify domain';
+      toast.error(err instanceof Error ? err.message : 'Failed to verify domain');
     } finally {
       verifyingDomainId = null;
     }
@@ -176,11 +191,11 @@
     });
 
     if (result.success) {
-      success = 'Domain settings updated';
+      toast.success('Domain settings updated');
       editingDomain = null;
       await loadDomains();
     } else {
-      error = result.error || 'Failed to update settings';
+      toast.error(result.error || 'Failed to update settings');
     }
   }
 
@@ -199,10 +214,10 @@
     const result = await removeDomain(currentOrg!.id, domainId);
 
     if (result.success) {
-      success = 'Domain removed';
+      toast.success('Domain removed');
       await loadDomains();
     } else {
-      error = result.error || 'Failed to remove domain';
+      toast.error(result.error || 'Failed to remove domain');
     }
   }
 
@@ -233,18 +248,6 @@
   {#if error}
     <Alert variant="error" class="mb-4">
       {error}
-    </Alert>
-  {/if}
-
-  {#if success}
-    <Alert variant="success" class="mb-4">
-      {success}
-    </Alert>
-  {/if}
-
-  {#if notice}
-    <Alert variant="info" class="mb-4">
-      {notice}
     </Alert>
   {/if}
 
@@ -379,13 +382,14 @@
                   <p>Value: {domain.verificationToken}</p>
                 </div>
               </Alert>
-            {:else if editingDomain === domain.id}
+            {:else if editingDomain === domain.id && domainSettings[domain.id]}
+              {@const settings = domainSettings[domain.id]!}
               <div class="space-y-4 border-t pt-4">
                 <FormGroup label="Auto-join Settings">
                   <label class="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      bind:checked={domainSettings[domain.id].autoJoinEnabled}
+                      bind:checked={settings.autoJoinEnabled}
                       class="rounded"
                     />
                     <span>Enable automatic joining for users from this domain</span>
@@ -396,7 +400,7 @@
                   <label class="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      bind:checked={domainSettings[domain.id].includeSubdomains}
+                      bind:checked={settings.includeSubdomains}
                       class="rounded"
                     />
                     <span>Include all subdomains (*.{domain.domain})</span>
@@ -406,7 +410,7 @@
                 <FormGroup label="Default Role" id={`role-${domain.id}`}>
                   <Select
                     id={`role-${domain.id}`}
-                    bind:value={domainSettings[domain.id].defaultRole}
+                    bind:value={settings.defaultRole}
                     placeholder=""
                   >
                     <option value="viewer">Viewer</option>
@@ -417,7 +421,7 @@
                 <FormGroup label="Welcome Message" id={`welcome-${domain.id}`}>
                   <textarea
                     id={`welcome-${domain.id}`}
-                    bind:value={domainSettings[domain.id].welcomeMessage}
+                    bind:value={settings.welcomeMessage}
                     rows="3"
                     class="w-full rounded-md border-border bg-background px-3 py-2"
                     placeholder="Optional message shown to users who join via this domain..."

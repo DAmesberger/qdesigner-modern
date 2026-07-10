@@ -875,6 +875,12 @@ export type Project = {
     settings: unknown;
     created_at?: string | null;
     updated_at?: string | null;
+    /**
+     * Number of non-deleted questionnaires in this project. Populated by the
+     * list handler's aggregate subquery; absent (defaults to `None`) on the
+     * single-row get/create/update paths.
+     */
+    questionnaire_count?: number | null;
 };
 
 export type ProjectMember = {

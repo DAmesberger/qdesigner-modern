@@ -10,6 +10,7 @@
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import { toast } from '$lib/stores/toast';
 
   const REGIONS: { value: string; label: string }[] = [
     { value: 'eu', label: 'European Union (eu)' },
@@ -21,8 +22,10 @@
   ];
 
   let loading = $state(true);
+  // Page-level load failure only (persists in place of the content); transient
+  // region/hold/export/erase feedback goes through toast. The erasure result
+  // summary (`eraseDone`) stays inline as a persistent destructive-action record.
   let error = $state<string | null>(null);
-  let success = $state<string | null>(null);
   let org = $state<Organization | null>(null);
 
   // Residency
@@ -80,14 +83,12 @@
   async function saveRegion() {
     if (!org) return;
     savingRegion = true;
-    error = null;
-    success = null;
     try {
       org = await api.organizations.gdpr.setDataRegion(org.id, region);
       region = org.dataRegion;
-      success = 'Data region updated';
+      toast.success('Data region updated');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to set data region';
+      toast.error(err instanceof Error ? err.message : 'Failed to set data region');
     } finally {
       savingRegion = false;
     }
@@ -96,14 +97,12 @@
   async function toggleHold(next: boolean) {
     if (!org) return;
     savingHold = true;
-    error = null;
-    success = null;
     try {
       org = await api.organizations.gdpr.setLegalHold(org.id, next);
       legalHold = org.legalHold;
-      success = legalHold ? 'Legal hold enabled' : 'Legal hold released';
+      toast.success(legalHold ? 'Legal hold enabled' : 'Legal hold released');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to update legal hold';
+      toast.error(err instanceof Error ? err.message : 'Failed to update legal hold');
       legalHold = org.legalHold; // revert optimistic state
     } finally {
       savingHold = false;
@@ -113,13 +112,11 @@
   async function requestExport() {
     if (!org) return;
     requesting = true;
-    error = null;
-    success = null;
     try {
       exportJob = await api.organizations.gdpr.requestExport(org.id);
       schedulePoll();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to request export';
+      toast.error(err instanceof Error ? err.message : 'Failed to request export');
     } finally {
       requesting = false;
     }
@@ -137,18 +134,16 @@
       if (exportJob.status === 'pending' || exportJob.status === 'running') {
         schedulePoll();
       } else if (exportJob.status === 'failed') {
-        error = `Export failed${exportJob.error ? `: ${exportJob.error}` : ''}`;
+        toast.error(`Export failed${exportJob.error ? `: ${exportJob.error}` : ''}`);
       }
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to poll export status';
+      toast.error(err instanceof Error ? err.message : 'Failed to poll export status');
     }
   }
 
   async function eraseOrgData() {
     if (!org) return;
     erasing = true;
-    error = null;
-    success = null;
     eraseDone = null;
     try {
       const result = await api.organizations.gdpr.erase(
@@ -160,7 +155,7 @@
       erasePassword = '';
       eraseConfirmation = '';
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Erasure failed';
+      toast.error(err instanceof Error ? err.message : 'Erasure failed');
     } finally {
       erasing = false;
     }
@@ -185,9 +180,6 @@
 
   {#if error}
     <div class="mb-4"><Alert variant="error">{error}</Alert></div>
-  {/if}
-  {#if success}
-    <div class="mb-4"><Alert variant="success">{success}</Alert></div>
   {/if}
 
   {#if loading}

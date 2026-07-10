@@ -10948,6 +10948,14 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "questionnaire_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Number of non-deleted questionnaires in this project. Populated by the\nlist handler's aggregate subquery; absent (defaults to `None`) on the\nsingle-row get/create/update paths."
           }
         }
       },
