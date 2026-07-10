@@ -76,7 +76,7 @@ describe('QuotaService', () => {
 					id: 'q-male',
 					name: 'Male',
 					target: 2,
-					condition: 'gender == male',
+					condition: 'gender == "male"',
 					overQuotaAction: 'terminate',
 					enabled: true,
 				},
@@ -84,7 +84,7 @@ describe('QuotaService', () => {
 					id: 'q-female',
 					name: 'Female',
 					target: 2,
-					condition: 'gender == female',
+					condition: 'gender == "female"',
 					overQuotaAction: 'terminate',
 					enabled: true,
 				},
@@ -119,7 +119,7 @@ describe('QuotaService', () => {
 					id: 'q-male',
 					name: 'Male',
 					target: 1,
-					condition: 'gender == male',
+					condition: 'gender == "male"',
 					overQuotaAction: 'terminate',
 					enabled: true,
 				},
@@ -169,7 +169,7 @@ describe('QuotaService', () => {
 					id: 'q-male',
 					name: 'Male',
 					target: 1,
-					condition: 'gender == male',
+					condition: 'gender == "male"',
 					overQuotaAction: 'terminate',
 					enabled: true,
 				},
@@ -328,5 +328,118 @@ describe('QuotaService interlocking cells (E-FLOW-7)', () => {
 		expect(res.allowed).toBe(true);
 		expect(res.unchecked).toBe(true);
 		expect(res.cellKey).toBe('age=25-34|gender=male');
+	});
+});
+
+describe('QuotaService.evaluateQuotaCondition (F-45: real formula evaluation)', () => {
+	const vars = (entries: Array<[string, unknown]>) => new Map<string, unknown>(entries);
+
+	it('treats a blank/empty condition as a catch-all match (true)', async () => {
+		expect(await QuotaService.evaluateQuotaCondition('', vars([]))).toBe(true);
+		expect(await QuotaService.evaluateQuotaCondition('   ', vars([]))).toBe(true);
+	});
+
+	it('evaluates literal true / false through the engine', async () => {
+		expect(await QuotaService.evaluateQuotaCondition('true', vars([]))).toBe(true);
+		expect(await QuotaService.evaluateQuotaCondition('false', vars([]))).toBe(false);
+	});
+
+	it('matches a single string-equality comparison (backward compat)', async () => {
+		expect(
+			await QuotaService.evaluateQuotaCondition('gender == "male"', vars([['gender', 'male']]))
+		).toBe(true);
+		expect(
+			await QuotaService.evaluateQuotaCondition('gender == "male"', vars([['gender', 'female']]))
+		).toBe(false);
+		expect(
+			await QuotaService.evaluateQuotaCondition('gender != "male"', vars([['gender', 'female']]))
+		).toBe(true);
+	});
+
+	it('matches single numeric comparisons across all operators', async () => {
+		expect(await QuotaService.evaluateQuotaCondition('age >= 18', vars([['age', 18]]))).toBe(true);
+		expect(await QuotaService.evaluateQuotaCondition('age >= 18', vars([['age', 17]]))).toBe(false);
+		expect(await QuotaService.evaluateQuotaCondition('age < 65', vars([['age', 40]]))).toBe(true);
+		expect(await QuotaService.evaluateQuotaCondition('age > 21', vars([['age', 21]]))).toBe(false);
+		expect(await QuotaService.evaluateQuotaCondition('age <= 30', vars([['age', 30]]))).toBe(true);
+	});
+
+	it('coerces string-typed variable values in numeric comparisons', async () => {
+		// Live answers often arrive as strings; loose `>=` coercion still compares.
+		expect(await QuotaService.evaluateQuotaCondition('age >= 18', vars([['age', '25']]))).toBe(
+			true
+		);
+	});
+
+	it('evaluates a compound AND condition (both sides must hold)', async () => {
+		const cond = 'gender == "male" && age >= 18';
+		expect(
+			await QuotaService.evaluateQuotaCondition(cond, vars([['gender', 'male'], ['age', 30]]))
+		).toBe(true);
+		expect(
+			await QuotaService.evaluateQuotaCondition(cond, vars([['gender', 'male'], ['age', 15]]))
+		).toBe(false);
+		expect(
+			await QuotaService.evaluateQuotaCondition(cond, vars([['gender', 'female'], ['age', 30]]))
+		).toBe(false);
+	});
+
+	it('evaluates a compound OR condition (either side suffices)', async () => {
+		const cond = 'country == "US" || country == "CA"';
+		expect(
+			await QuotaService.evaluateQuotaCondition(cond, vars([['country', 'CA']]))
+		).toBe(true);
+		expect(
+			await QuotaService.evaluateQuotaCondition(cond, vars([['country', 'MX']]))
+		).toBe(false);
+	});
+
+	it('respects parentheses / operator grouping', async () => {
+		const cond = '(age >= 18 && age <= 65) && gender == "female"';
+		expect(
+			await QuotaService.evaluateQuotaCondition(cond, vars([['age', 40], ['gender', 'female']]))
+		).toBe(true);
+		expect(
+			await QuotaService.evaluateQuotaCondition(cond, vars([['age', 70], ['gender', 'female']]))
+		).toBe(false);
+	});
+
+	// The load-bearing regression: the old regex stub returned TRUE for ANY
+	// compound condition (its `^var op value$` pattern never matched), silently
+	// gating respondents against a full quota they should not have matched. The
+	// real evaluator returns the CORRECT false here.
+	it('FAIL-PRE / PASS-POST: a non-matching compound returns false (stub returned true)', async () => {
+		const nonMatching = 'gender == "male" && age >= 30';
+		expect(
+			await QuotaService.evaluateQuotaCondition(
+				nonMatching,
+				vars([['gender', 'male'], ['age', 25]])
+			)
+		).toBe(false);
+	});
+
+	it('treats an unknown variable as non-matching (undefined comparison is falsy)', async () => {
+		// `income` is absent from the respondent's variables → resolves undefined.
+		expect(
+			await QuotaService.evaluateQuotaCondition('income > 50000', vars([['age', 40]]))
+		).toBe(false);
+	});
+
+	it('fails NON-MATCHING and warns on a syntax parse error', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		expect(
+			await QuotaService.evaluateQuotaCondition('gender ==', vars([['gender', 'male']]))
+		).toBe(false);
+		expect(warn).toHaveBeenCalled();
+		warn.mockRestore();
+	});
+
+	it('fails NON-MATCHING and warns on an evaluation error (unknown function)', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		expect(
+			await QuotaService.evaluateQuotaCondition('NONEXISTENT(age)', vars([['age', 40]]))
+		).toBe(false);
+		expect(warn).toHaveBeenCalled();
+		warn.mockRestore();
 	});
 });

@@ -166,7 +166,7 @@ export class QuotaService {
 				if (!status) continue;
 
 				// Check if this quota's condition matches the current respondent
-				const conditionMatches = this.evaluateQuotaCondition(
+				const conditionMatches = await this.evaluateQuotaCondition(
 					quota.condition,
 					currentValues
 				);
@@ -349,63 +349,68 @@ export class QuotaService {
 		}
 	}
 
-	static evaluateQuotaCondition(
+	/**
+	 * Lazily-loaded scripting engine. QuotaService sits on the fillout critical
+	 * path (statically imported by FilloutPageController), so the engine is pulled
+	 * in via a dynamic import — only when a non-trivial quota condition is actually
+	 * evaluated — to keep the parser/AST-evaluator off the startup bundle (mirrors
+	 * how FilloutRuntime defers the VariableEngine → mathjs subgraph). The promise
+	 * is memoized so repeated quota checks share one module load.
+	 */
+	private static enginePromise: Promise<
+		typeof import('@qdesigner/scripting-engine')
+	> | null = null;
+
+	private static loadEngine(): Promise<typeof import('@qdesigner/scripting-engine')> {
+		if (!this.enginePromise) {
+			this.enginePromise = import('@qdesigner/scripting-engine');
+		}
+		return this.enginePromise;
+	}
+
+	/**
+	 * Evaluate a quota's targeting condition against the respondent's live
+	 * in-survey variables via the SAME `FormulaParser` the designer validates
+	 * quota conditions with (see `validateQuotaCondition`). This replaces a former
+	 * regex stub that understood only a single `var <op> value` comparison and
+	 * silently allowed (returned `true` for) every compound / parenthesized /
+	 * function-call condition — so any non-trivial quota never gated.
+	 *
+	 * Semantics:
+	 *  - Empty / blank condition ⇒ catch-all TRUE (documented behavior; this is
+	 *    the only path that avoids loading the engine).
+	 *  - A truthy evaluation result ⇒ the condition MATCHES this respondent.
+	 *  - A parse or evaluation error ⇒ NON-MATCHING (returns `false`) plus a
+	 *    `console.warn`. A broken quota condition means the author's targeting is
+	 *    itself broken; failing NON-MATCHING keeps the quota from counting/gating
+	 *    this respondent (rather than the stub's silent allow-through, which
+	 *    corrupted quotas). Callers only ever gate on `match && isFull`, so a
+	 *    non-match simply removes this quota from consideration for the respondent.
+	 */
+	static async evaluateQuotaCondition(
 		condition: string,
 		values: Map<string, unknown>
-	): boolean {
-		if (!condition || condition.trim() === '') return true;
+	): Promise<boolean> {
+		const trimmed = (condition ?? '').trim();
+		if (trimmed === '') return true; // catch-all quota
 
-		try {
-			// Simple condition evaluation: supports basic comparisons
-			// Format: "variableName == value" or "variableName != value"
-			// or just "true" / "1" for catch-all quotas
-			const trimmed = condition.trim();
+		const { FormulaEvaluator } = await this.loadEngine();
+		const evaluator = new FormulaEvaluator({
+			variables: new Map(),
+			// The respondent's live variables resolve as identifiers in the formula.
+			responses: values,
+		});
 
-			if (trimmed === 'true' || trimmed === '1') return true;
-			if (trimmed === 'false' || trimmed === '0') return false;
-
-			// Parse simple comparison: var == val, var != val, var > val, var < val
-			const match = trimmed.match(
-				/^([a-zA-Z_][a-zA-Z0-9_]*)\s*(==|!=|>=|<=|>|<)\s*(.+)$/
+		const result = evaluator.evaluate(trimmed);
+		if (result.error) {
+			console.warn(
+				`[QuotaService] quota condition "${condition}" failed to evaluate; ` +
+					`treating as non-matching:`,
+				result.error
 			);
-			if (!match) return true; // Unknown format, allow by default
-
-			const [, varName, operator, rawValue] = match as RegExpMatchArray;
-			const actual = values.get(varName!);
-
-			// Parse the comparison value
-			let expected: unknown;
-			const rv = rawValue!.trim();
-			if (rv.startsWith('"') && rv.endsWith('"')) {
-				expected = rv.slice(1, -1);
-			} else if (rv === 'true') {
-				expected = true;
-			} else if (rv === 'false') {
-				expected = false;
-			} else if (!isNaN(Number(rv))) {
-				expected = Number(rv);
-			} else {
-				expected = rv;
-			}
-
-			switch (operator) {
-				case '==':
-					return String(actual) === String(expected);
-				case '!=':
-					return String(actual) !== String(expected);
-				case '>':
-					return Number(actual) > Number(expected);
-				case '<':
-					return Number(actual) < Number(expected);
-				case '>=':
-					return Number(actual) >= Number(expected);
-				case '<=':
-					return Number(actual) <= Number(expected);
-				default:
-					return true;
-			}
-		} catch {
-			return true; // On error, allow by default
+			return false;
 		}
+
+		return Boolean(result.value);
 	}
 }
