@@ -121,6 +121,17 @@ export class DesignerStore {
   // identical error toasts (e.g. a persistent failure re-hit by the 30s
   // autosave loop); cleared on the next successful save.
   private lastSaveErrorToast: string | null = null;
+  // F-48: single-flight guard so exactly ONE create is ever dispatched for a
+  // questionnaire that has no server id yet. Concurrent/queued autosave ticks
+  // (30s interval + 2.5s debounce + Cmd+S + beforeunload) await this instead of
+  // each POSTing their own create — every extra create collided on the
+  // (project_id, name, version) unique key and 500'd in an endless retry loop.
+  private createInFlight: Promise<boolean> | null = null;
+  // F-48: once a create has failed because a questionnaire with this name already
+  // exists server-side, stop re-POSTing the same create every tick. Keyed by
+  // name+version so a rename lifts the block (and never overwrites the existing
+  // row's content by "adopting" it).
+  private blockedCreateSignature: string | null = null;
 
   // Navigation state
   currentPageId = $state<string | null>(null);
@@ -381,20 +392,32 @@ export class DesignerStore {
     });
 
     if (this.projectId) {
+      // Register this create in the single-flight guard (F-48) so a save tick
+      // that fires before init() assigns the id can't dispatch a second,
+      // colliding create — it awaits this one and then updates by id.
+      const createPromise = (async () => {
+        try {
+          const persisted = await this.persistenceService.createQuestionnaire(this.projectId!, {
+            name: draft.name,
+            description: draft.description,
+            content: {
+              ...draft,
+              created: draft.created.toISOString(),
+              modified: draft.modified.toISOString(),
+            },
+            settings: draft.settings as Record<string, unknown>,
+          });
+          return persisted.id;
+        } catch (error) {
+          this.saveError = error instanceof Error ? error.message : 'Failed to create questionnaire';
+          return '';
+        }
+      })();
+      this.createInFlight = createPromise.then((id) => id !== '');
       try {
-        const persisted = await this.persistenceService.createQuestionnaire(this.projectId, {
-          name: draft.name,
-          description: draft.description,
-          content: {
-            ...draft,
-            created: draft.created.toISOString(),
-            modified: draft.modified.toISOString(),
-          },
-          settings: draft.settings as Record<string, unknown>,
-        });
-        createdId = persisted.id;
-      } catch (error) {
-        this.saveError = error instanceof Error ? error.message : 'Failed to create questionnaire';
+        createdId = await createPromise;
+      } finally {
+        this.createInFlight = null;
       }
     }
 
@@ -880,26 +903,112 @@ export class DesignerStore {
     }
   }
 
+  /**
+   * The single chokepoint every save trigger routes through — the autosave
+   * interval, the debounced save-on-edit, Cmd+S, in-app navigation and tab-close
+   * flushes. It decides create-vs-update once per call and single-flights the
+   * create so a questionnaire is only ever POSTed once (F-48).
+   */
   async saveQuestionnaire(): Promise<boolean> {
+    if (!this.projectId) {
+      this.saveError = 'Missing project ID';
+      return false;
+    }
+
+    // A create is already running for this not-yet-persisted questionnaire: wait
+    // for it rather than dispatching a second, colliding create. The winner sets
+    // the id; this call then persists the latest content via UPDATE below.
+    if (!this.questionnaire.id && this.createInFlight) {
+      await this.createInFlight.catch(() => false);
+    }
+
+    if (this.questionnaire.id) {
+      return this.runUpdate();
+    }
+
+    // No id and no create in flight → we own the single-flight create.
+    const inFlight = this.runCreate();
+    this.createInFlight = inFlight;
+    try {
+      return await inFlight;
+    } finally {
+      if (this.createInFlight === inFlight) {
+        this.createInFlight = null;
+      }
+    }
+  }
+
+  /** name + semver signature used to block a doomed same-name create (F-48). */
+  private createSignature(): string {
+    const q = this.questionnaire;
+    return `${q.name}|${q.versionMajor}.${q.versionMinor}.${q.versionPatch}`;
+  }
+
+  private async runCreate(): Promise<boolean> {
+    // A same-name create already failed as a server-side conflict — don't hammer
+    // the create endpoint every autosave tick. A rename (new signature) lifts it.
+    if (this.blockedCreateSignature === this.createSignature()) {
+      return false;
+    }
+
     this.isLoading = true;
     this.saveError = null;
-
     try {
-      if (!this.projectId) {
-        throw new Error('Missing project ID');
-      }
-
       const result = await this.persistenceService.save({
-        projectId: this.projectId,
+        projectId: this.projectId!,
         questionnaire: this.questionnaire,
       });
 
       if (!result.success) {
+        // A sibling create won the race and set the id while we were in flight —
+        // adopt it and switch to update instead of re-creating.
+        if (this.questionnaire.id) {
+          return await this.runUpdate();
+        }
+        // A row with this name already exists server-side: stop retrying the
+        // create (it can only ever 409/500 again) and tell the author how to
+        // recover. We deliberately do NOT adopt+overwrite that row — it may be a
+        // different questionnaire that merely shares the name.
+        if (await this.createConflictExists()) {
+          this.blockedCreateSignature = this.createSignature();
+          this.saveError = `A questionnaire named “${this.questionnaire.name}” already exists in this project.`;
+          this.surfaceSaveError(
+            'Rename to save',
+            `A questionnaire named “${this.questionnaire.name}” already exists in this project. Rename it to save.`
+          );
+          return false;
+        }
         throw new Error(result.error || 'Save failed');
       }
 
       if (result.id && !this.questionnaire.id) {
         this.questionnaire.id = result.id;
+      }
+      this.blockedCreateSignature = null;
+      this.lastSaved = Date.now();
+      this.isDirty = false;
+      this.lastSaveErrorToast = null;
+      return true;
+    } catch (error) {
+      this.saveError = error instanceof Error ? error.message : 'Unknown save error';
+      this.surfaceSaveError('Failed to save questionnaire', this.saveError);
+      return false;
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private async runUpdate(): Promise<boolean> {
+    this.isLoading = true;
+    this.saveError = null;
+    try {
+      const result = await this.persistenceService.save({
+        projectId: this.projectId!,
+        questionnaire: this.questionnaire,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Save failed');
       }
 
       this.lastSaved = Date.now();
@@ -908,16 +1017,33 @@ export class DesignerStore {
       return true;
     } catch (error) {
       this.saveError = error instanceof Error ? error.message : 'Unknown save error';
-      // Surface the failure to the user instead of only flipping the red
-      // save-status dot. Dedupe identical consecutive errors so the autosave
-      // loop can't stack a wall of non-dismissing error toasts.
-      if (this.saveError !== this.lastSaveErrorToast) {
-        toast.error('Failed to save questionnaire', { message: this.saveError });
-        this.lastSaveErrorToast = this.saveError;
-      }
+      this.surfaceSaveError('Failed to save questionnaire', this.saveError);
       return false;
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  /** Does a questionnaire with the current name already exist in this project? */
+  private async createConflictExists(): Promise<boolean> {
+    try {
+      const existing = await this.persistenceService.list(this.projectId!);
+      return existing.some((item) => item.name === this.questionnaire.name);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Surface a save failure via a toast, deduping identical consecutive messages
+   * so the autosave loop can't stack a wall of non-dismissing error toasts.
+   * Cleared on the next successful save.
+   */
+  private surfaceSaveError(title: string, message?: string): void {
+    const key = message ?? title;
+    if (key !== this.lastSaveErrorToast) {
+      toast.error(title, message ? { message } : undefined);
+      this.lastSaveErrorToast = key;
     }
   }
 
