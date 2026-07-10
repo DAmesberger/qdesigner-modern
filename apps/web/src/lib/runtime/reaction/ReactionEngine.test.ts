@@ -919,6 +919,11 @@ function createMockRenderer() {
   let errorCb: ((info: { source: string; error: unknown }) => void) | null = null;
   const added: string[] = [];
   const removed: string[] = [];
+  // F-56: model the visible scene + explicit single-frame presents so a test can
+  // assert an overlay was actually PRESENTED (drawn), not merely added to the scene.
+  const renderablesById = new Map<string, { id: string }>();
+  const presentedFrames: string[][] = [];
+  let running = false;
   const stats: FrameStats = {
     fps: 120,
     frameTime: 8.3,
@@ -932,16 +937,30 @@ function createMockRenderer() {
     setTargetFPS: vi.fn(),
     setVSync: vi.fn(),
     setBackgroundColor: vi.fn(),
-    clearRenderables: vi.fn(),
-    start: vi.fn(),
-    stop: vi.fn(),
+    clearRenderables: vi.fn(() => {
+      renderablesById.clear();
+    }),
+    start: vi.fn(() => {
+      running = true;
+    }),
+    stop: vi.fn(() => {
+      running = false;
+    }),
     destroy: vi.fn(),
     executeCommand: vi.fn(),
+    invalidateTexture: vi.fn(),
     addRenderable: vi.fn((renderable: { id: string }) => {
       added.push(renderable.id);
+      renderablesById.set(renderable.id, renderable);
     }),
     removeRenderable: vi.fn((id: string) => {
       removed.push(id);
+      renderablesById.delete(id);
+    }),
+    // F-56: an explicit single-frame present records a snapshot of the scene's
+    // renderable ids — the set that would be drawn on that frame.
+    renderOnce: vi.fn(() => {
+      presentedFrames.push([...renderablesById.keys()]);
     }),
     markStimulusOnset: vi.fn(),
     getStats: () => stats,
@@ -979,7 +998,15 @@ function createMockRenderer() {
     errorCb?.(info);
   };
 
-  return { renderer: renderer as unknown as WebGLRenderer, emitFrame, emitError, added, removed };
+  return {
+    renderer: renderer as unknown as WebGLRenderer,
+    emitFrame,
+    emitError,
+    added,
+    removed,
+    presentedFrames,
+    isRunning: () => running,
+  };
 }
 
 function createMockEngine(opts?: {
@@ -2685,6 +2712,130 @@ describe('ReactionEngine — Layer-2 media gate (ADR 0026)', () => {
     await engine.gateBlockMedia([{ kind: 'shape', shape: 'circle', id: '1' }]);
     // No preparing overlay renderable was ever added.
     expect(added).not.toContain('reaction-stimulus-gate');
+    engine.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F-56 — the gate overlay must actually PRESENT while the gate holds. The gate
+// runs between blocks with no trial driving the render loop, so adding the
+// overlay renderable is not enough — a frame must be painted on every overlay
+// change, or a stalled gate shows a blank canvas (RT-3 live-QA: 55s of zero
+// pixels). These assert presentation (via the renderer double's renderOnce
+// snapshots), not just scene membership.
+// ---------------------------------------------------------------------------
+
+describe('ReactionEngine — gate overlay presentation (F-56)', () => {
+  it('presents a frame containing the gate overlay while a stalled gate holds', async () => {
+    vi.useFakeTimers();
+    try {
+      const { engine, added, presentedFrames } = createMockEngine();
+      // A load that never settles — the exact F-54 stall the gate holds through.
+      (
+        engine as unknown as { loadImage: () => Promise<HTMLImageElement | null> }
+      ).loadImage = () => new Promise<HTMLImageElement | null>(() => {});
+
+      const controller = new AbortController();
+      const gate = engine
+        .gateBlockMedia([{ kind: 'image', src: 'stalled.png', id: '1' }], controller.signal)
+        .catch(() => {});
+
+      // The very first progress tick (0 of N) fires synchronously; let it settle.
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Added AND presented: the pre-fix bug added the renderable but never painted it.
+      expect(added).toContain('reaction-stimulus-gate');
+      expect(presentedFrames.some((frame) => frame.includes('reaction-stimulus-gate'))).toBe(true);
+
+      // Cross the per-asset budget so the gate lands on the fail-closed screen, which
+      // must ALSO be presented (not just added) while the gate keeps holding.
+      const framesBefore = presentedFrames.length;
+      await vi.advanceTimersByTimeAsync(STIMULUS_PREP_TIMEOUT_MS + 5);
+      expect(presentedFrames.length).toBeGreaterThan(framesBefore);
+      expect(
+        presentedFrames
+          .slice(framesBefore)
+          .some((frame) => frame.includes('reaction-stimulus-gate'))
+      ).toBe(true);
+
+      controller.abort();
+      await gate;
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('presents a frame on every progress tick, then a cleared frame on success', async () => {
+    const { engine, removed, presentedFrames } = createMockEngine();
+
+    // Drive the progress callback deterministically: three ticks then success.
+    (
+      engine as unknown as {
+        prepareBlockStimuli: (
+          stimuli: unknown,
+          onProgress?: (p: { done: number; total: number }) => void
+        ) => Promise<StimulusPrepResult>;
+      }
+    ).prepareBlockStimuli = async (_stimuli, onProgress) => {
+      onProgress?.({ done: 0, total: 2 });
+      onProgress?.({ done: 1, total: 2 });
+      onProgress?.({ done: 2, total: 2 });
+      return { total: 2, prepared: 2, failures: [] };
+    };
+
+    await engine.gateBlockMedia([{ kind: 'image', src: 'x.png', id: '1' }]);
+
+    // Each of the three progress ticks paints the overlay once.
+    const overlayFrames = presentedFrames.filter((frame) =>
+      frame.includes('reaction-stimulus-gate')
+    );
+    expect(overlayFrames.length).toBeGreaterThanOrEqual(3);
+
+    // On success the overlay is torn down AND a final frame is presented WITHOUT it,
+    // so the overlay never lingers into the first trial.
+    expect(removed).toContain('reaction-stimulus-gate');
+    const lastFrame = presentedFrames[presentedFrames.length - 1];
+    expect(lastFrame).not.toContain('reaction-stimulus-gate');
+
+    engine.destroy();
+  });
+
+  it('presents the fail-closed overlay and retries on a pointer gesture — without stopping the loop', async () => {
+    const { engine, target, added, presentedFrames, renderer, isRunning } = createMockEngine();
+    // The shared loop is running (as under the fillout runtime) before the gate.
+    renderer.start();
+    expect(isRunning()).toBe(true);
+
+    let attempts = 0;
+    (
+      engine as unknown as { prepareBlockStimuli: () => Promise<StimulusPrepResult> }
+    ).prepareBlockStimuli = async () => {
+      attempts += 1;
+      return attempts === 1
+        ? { total: 1, prepared: 0, failures: [{ src: 'x.png', kind: 'image' as const }] }
+        : { total: 1, prepared: 1, failures: [] };
+    };
+
+    const gate = engine.gateBlockMedia([{ kind: 'image', src: 'x.png', id: '1' }]);
+    await flush();
+
+    // The fail-closed refusal is not just added — it is presented on the canvas.
+    expect(added).toContain('reaction-stimulus-gate');
+    expect(presentedFrames.some((frame) => frame.includes('reaction-stimulus-gate'))).toBe(true);
+
+    // A POINTER retry gesture (not only keydown) resolves the held gate. jsdom has
+    // no PointerEvent constructor, so a plain typed Event stands in — the handler
+    // keys off the event type, not any pointer-specific fields.
+    target.dispatchEvent(new Event('pointerdown'));
+    await gate;
+    expect(attempts).toBe(2);
+
+    // The gate never tore down the shared render loop — subsequent trials still paint.
+    expect(renderer.stop).not.toHaveBeenCalled();
+    expect(isRunning()).toBe(true);
+
     engine.destroy();
   });
 });

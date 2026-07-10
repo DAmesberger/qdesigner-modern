@@ -444,6 +444,20 @@ export class WebGLRenderer {
     }
   }
 
+  /**
+   * Present exactly one frame immediately, outside the rAF loop (F-56). Runs a full
+   * clear + layer pass over the current renderables — identical to a loop tick, just
+   * driven synchronously by the caller. Used by overlay states that must paint while
+   * no trial is driving the loop (e.g. the reaction Layer-2 decode gate, which holds
+   * between blocks with no rAF-driven trial running). Safe to call whether or not the
+   * loop is running: it neither starts, stops, nor schedules the loop, so it never
+   * spins a second loop and leaves loop state (`animationId`) untouched.
+   */
+  public renderOnce(): void {
+    if (this.contextLost) return;
+    this.renderFrame(this.createRenderContext(performance.now(), 0));
+  }
+
   private updateFPS(currentTime: number): void {
     if (currentTime - this.lastFPSUpdate >= this.fpsUpdateInterval) {
       const elapsed = currentTime - this.lastFPSUpdate;

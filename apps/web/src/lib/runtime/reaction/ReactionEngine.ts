@@ -843,6 +843,13 @@ export class ReactionEngine {
       };
       this.renderer.addRenderable(this.gateOverlayRenderable);
     }
+
+    // F-56: present the freshly-drawn overlay immediately. The gate holds between
+    // blocks with no trial driving the render loop, so we cannot rely on an external
+    // rAF tick to paint the "Preparing…"/fail-closed state — a stalled gate would
+    // otherwise show a blank canvas. renderOnce() draws one frame now (a no-op-safe
+    // single present that never disturbs the loop) so every overlay change is visible.
+    this.renderer.renderOnce?.();
   }
 
   /** Remove the gate overlay renderable (the block is starting, or the gate ended). */
@@ -850,6 +857,9 @@ export class ReactionEngine {
     if (this.gateOverlayRenderable) {
       this.renderer.removeRenderable(this.gateOverlayRenderable.id);
       this.gateOverlayRenderable = null;
+      // F-56: paint the cleared state so the overlay does not linger on-screen into
+      // the first trial when no other frame is imminent (e.g. a standalone engine).
+      this.renderer.renderOnce?.();
     }
   }
 
