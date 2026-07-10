@@ -148,14 +148,18 @@ F-42 sync retry-forever fix `b736dbd` · F-45 quota evaluation fix `9fece4e`.
 gating (2nd session correctly hit "Study Full" where the old stub allowed),
 report grid drag + preview, undo/redo/Tools/delete-confirm/translation bars,
 media dims + letterboxing, admin toasts + non-zero counts, no console errors.
-Found F-46 (dead empty-state upload CTA — fix in flight). Inconclusive: the
-QA agent could not locate the 9-paradigm ISI min/max fields (checked presets +
-trial fields, not the standard-paradigm selector) — **human spot-check
-recommended**; headless WebGL trials would not advance (M3's REACTION-SMOKE
-previously proved this path in-browser; likely automation env) — **human
-smoke recommended**. Demo-data note: the seeded "Reaction Time Study" now
-contains a plain MC question (drift predating this pass); rebuild it if it
-should demo RT. Deferred from R4: onboarding-wizard rework (optional).
+Found F-46 (dead empty-state upload CTA — fixed `81865aa`; the later QA
+retraction confirmed the fix). QA follow-up RESOLVED the ISI question: the
+Min/Max ISI fields live under the PVT paradigm (only paradigm with an ISI
+range by design; validation fires — "minimum cannot exceed the maximum") —
+R4-4 fully PASS, no human check needed. Fresh live evidence captured for
+R4-1 (en↔de chrome flip incl. progress chip) and all four R4-6 sub-items
+(progress toggle both ways, consent checkbox+signature gating, no crash).
+Remaining human smoke: WebGL trials advancing in a REAL browser (headless
+automation couldn't drive frame-timed WebGL; M3's REACTION-SMOKE previously
+proved it). New: F-47 (no UI entry opens MediaManager manage mode → assets
+undeletable from the designer). Demo-data note: rebuild the seeded "Reaction
+Time Study" (drifted to a plain MC question). Deferred: onboarding wizard.
 
 | Unit | Title | Detail |
 |---|---|---|
