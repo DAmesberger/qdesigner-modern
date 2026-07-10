@@ -164,12 +164,19 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
     // cache before its first trial, behind a visible preparing state, fail-closed
     // if any asset can't be prepared. Gated per block so no network I/O or decode
     // ever happens inside a running block.
-    let gatedBlockId: string | null = null;
+    //
+    // F-54: `hasGated` guarantees the FIRST block is always gated. The previous
+    // `blockId !== gatedBlockId` guard seeded with `null` skipped the gate entirely
+    // for a first block whose `blockId` was itself `null` (`null !== null` is
+    // false), letting that block run with un-prepared stimuli.
+    let gatedBlockId: string | null | undefined;
+    let hasGated = false;
 
     for (let index = 0; index < trialPlan.length; index++) {
       const planned = trialPlan[index]!;
 
-      if (planned.metadata.blockId !== gatedBlockId) {
+      if (!hasGated || planned.metadata.blockId !== gatedBlockId) {
+        hasGated = true;
         gatedBlockId = planned.metadata.blockId;
         const blockStimuli = trialPlan
           .filter((p) => p.metadata.blockId === gatedBlockId)

@@ -476,11 +476,16 @@ export interface ReactionTrialProvenance {
    */
   measuredRefreshRateHz?: number | null;
   /**
-   * Set to `'visibility'` when the tab was backgrounded / lost focus during the
-   * trial (W-3, ADR 0027 record mode). The trial still completes and records its
-   * RT; this flags that the timing may be unreliable. Absent for a clean trial.
+   * Set when the trial's timing cannot be trusted (ADR 0027 record mode). Absent
+   * for a clean trial.
+   * - `'visibility'`: the tab was backgrounded / lost focus during the trial
+   *   (W-3). The trial still completes and records its RT; the timing may be
+   *   unreliable.
+   * - `'no-stimulus'`: a visual stimulus never reached the renderer (F-54
+   *   belt-and-braces). Onset was never armed against real pixels, so any RT is
+   *   measured against a blank screen — the trial is marked invalid, not timed.
    */
-  invalidated?: 'visibility' | null;
+  invalidated?: 'visibility' | 'no-stimulus' | null;
   /** Number of visibility/focus-loss events observed during the trial (W-3). */
   visibilityLossCount?: number;
   /**

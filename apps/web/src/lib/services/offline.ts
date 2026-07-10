@@ -1,6 +1,19 @@
 import { writable, derived } from 'svelte/store';
 import { browser, dev } from '$app/environment';
 
+/**
+ * F-55: which Cache-API stores the dev cleanup is allowed to purge. It clears the
+ * SW-owned app-shell/precache stores (`qdesigner-*`, `fillout-*`) so HMR isn't
+ * shadowed by stale caches — but NOT the fillout media content cache
+ * (`fillout-media-v*`, FilloutContentCache.MEDIA_CACHE_NAME). That is the
+ * offline-first Layer-1 media store; wiping it on every dev layout mount raced and
+ * clobbered Layer-1 caching so it could never be exercised in dev.
+ */
+export function isDevPurgeableCache(key: string): boolean {
+  if (key.startsWith('fillout-media-')) return false;
+  return key.startsWith('qdesigner-') || key.startsWith('fillout-');
+}
+
 interface OfflineState {
   isOnline: boolean;
   isServiceWorkerReady: boolean;
@@ -27,14 +40,16 @@ function createOfflineStore() {
       const registrations = await navigator.serviceWorker.getRegistrations();
       await Promise.all(registrations.map((entry) => entry.unregister()));
 
+      // F-55: purge the SW-owned app-shell/precache stores, but preserve the
+      // fillout media content cache (see isDevPurgeableCache).
       const cacheKeys = await caches.keys();
       await Promise.all(
-        cacheKeys
-          .filter((key) => key.startsWith('qdesigner-') || key.startsWith('fillout-'))
-          .map((key) => caches.delete(key))
+        cacheKeys.filter(isDevPurgeableCache).map((key) => caches.delete(key))
       );
 
-      console.log('[Offline] Development mode: cleared existing service workers and caches');
+      console.log(
+        '[Offline] Development mode: cleared existing service workers and caches (kept fillout-media)'
+      );
     } catch (error) {
       console.warn('[Offline] Development cleanup failed:', error as Error);
     }

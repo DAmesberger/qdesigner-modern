@@ -105,6 +105,16 @@ const VIDEO_ONSET_RAF_FALLBACK_FRAMES = 2;
  */
 const AUDIO_RESUME_TIMEOUT_MS = 500;
 
+/**
+ * Hard per-asset timeout for the Layer-2 decode gate (F-54). A load that neither
+ * resolves NOR errors — an aborted/hung request that fires no `load` and no
+ * `error` event — must not stall the gate forever (which would silently let the
+ * running block draw blank stimuli when the enumeration is later bypassed). Each
+ * asset's load+decode races this budget; exceeding it counts the asset as a
+ * PREPARATION FAILURE, feeding the existing fail-closed retry path.
+ */
+export const STIMULUS_PREP_TIMEOUT_MS = 15000;
+
 /** Progress of the Layer-2 per-block decode gate (ADR 0026). */
 export interface StimulusPrepProgress {
   /** Assets fully loaded + decoded so far. */
@@ -344,6 +354,16 @@ export class ReactionEngine {
   // AFTER the renderable is queued (W-9).
   private videoStimulusHasRvfc = false;
 
+  // No-stimulus corruption guard (F-54 belt-and-braces). `stimulusExpectedVisual`
+  // is true for any stimulus that SHOULD draw pixels (everything but audio);
+  // `stimulusRenderablePresented` flips true only when the stimulus renderable is
+  // actually handed to the renderer. A visual stimulus that expected pixels but
+  // never presented any (a missed/failed media asset) invalidates the trial —
+  // making silent blank-block corruption structurally visible even if a future
+  // enumeration hole bypasses the Layer-2 gate.
+  private stimulusExpectedVisual = false;
+  private stimulusRenderablePresented = false;
+
   // Layer-2 decode gate overlay (ADR 0026): a canvas + renderable that shows the
   // visible "Preparing stimuli… N of M" / fail-closed state on the reaction canvas
   // between blocks. Reused across gates; torn down on gate completion and destroy.
@@ -578,14 +598,15 @@ export class ReactionEngine {
     for (const stimulus of media) {
       if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
 
-      let ok = false;
-      if (stimulus.kind === 'image') {
-        ok = await this.decodeImageToCache(stimulus.src, signal);
-      } else if (stimulus.kind === 'video') {
-        ok = (await this.fetchVideoBlobToCache(stimulus.src, signal)) != null;
-      } else {
-        ok = await this.decodeAudioToCache(stimulus.src, signal);
-      }
+      // F-54: race the load+decode against a hard timeout so a request that never
+      // resolves NOR errors becomes a preparation FAILURE (fail-closed) instead of
+      // hanging the gate forever.
+      const ok = await this.prepareOneWithTimeout(stimulus, signal);
+
+      // A genuine trial abort (not the internal prep timeout) still propagates as
+      // an AbortError rather than a fail-closed retry — including when it lands
+      // mid-await of the final asset.
+      if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
 
       if (!ok) failures.push({ src: stimulus.src, kind: stimulus.kind });
       done += 1;
@@ -593,6 +614,58 @@ export class ReactionEngine {
     }
 
     return { total, prepared: total - failures.length, failures };
+  }
+
+  /**
+   * Load + decode a single media asset, kind-dispatched. Extracted so
+   * {@link prepareOneWithTimeout} can wrap the whole per-asset prep in one race.
+   */
+  private async prepareOne(
+    stimulus: Extract<ReactionStimulusConfig, { kind: 'image' | 'video' | 'audio' }>,
+    signal?: AbortSignal
+  ): Promise<boolean> {
+    if (stimulus.kind === 'image') {
+      return this.decodeImageToCache(stimulus.src, signal);
+    }
+    if (stimulus.kind === 'video') {
+      return (await this.fetchVideoBlobToCache(stimulus.src, signal)) != null;
+    }
+    return this.decodeAudioToCache(stimulus.src, signal);
+  }
+
+  /**
+   * Prepare one asset, but never wait longer than {@link STIMULUS_PREP_TIMEOUT_MS}
+   * (F-54). Resolves to the prep outcome, or `false` when the budget elapses first.
+   * On timeout an internal AbortController fires so the underlying load tears down
+   * (image/video/audio helpers resolve to a miss on abort); the external trial
+   * signal is chained so a real abort also cancels the load. The timeout resolving
+   * the race independently is the guard even if a load ignores the signal.
+   */
+  private async prepareOneWithTimeout(
+    stimulus: Extract<ReactionStimulusConfig, { kind: 'image' | 'video' | 'audio' }>,
+    signal?: AbortSignal
+  ): Promise<boolean> {
+    const controller = new AbortController();
+    const onExternalAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener('abort', onExternalAbort, { once: true });
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<false>((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort(); // best-effort teardown of the underlying load
+        resolve(false);
+      }, STIMULUS_PREP_TIMEOUT_MS);
+    });
+
+    try {
+      return await Promise.race([this.prepareOne(stimulus, controller.signal), timeout]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onExternalAbort);
+    }
   }
 
   private isMediaStimulus(
@@ -901,10 +974,21 @@ export class ReactionEngine {
       const timeoutMs = config.responseTimeoutMs ?? 2000;
       const waitResult = await this.waitForResponse(timeoutMs, signal);
 
-      // 4.1: a render error mid-trial (blank stimulus) invalidates the trial — the
-      // captured timestamp, if any, was measured against nothing shown, so it is
-      // discarded and no RT is reported.
-      const invalid = this.renderErrorDuringTrial;
+      // A trial is invalid when its stimulus never reliably reached the screen, so
+      // any captured timestamp was measured against nothing shown — discarded, no
+      // RT reported. Two independent causes:
+      // - 4.1 render error mid-trial (CONTRACT-ERR): a texture upload threw.
+      // - F-54 no-stimulus: a visual stimulus produced no renderable at all (a
+      //   missed/failed media asset the Layer-2 gate should have caught). This is
+      //   the belt-and-braces backstop that keeps a blank block from persisting
+      //   clean-looking NULL rows even if a future enumeration hole reappears.
+      const noStimulus = this.stimulusExpectedVisual && !this.stimulusRenderablePresented;
+      const invalid = this.renderErrorDuringTrial || noStimulus;
+      const invalidReason = this.renderErrorDuringTrial
+        ? (this.renderErrorReason ?? 'stimulus-render-failed')
+        : noStimulus
+          ? 'no-stimulus'
+          : undefined;
       const response = invalid ? null : waitResult.response;
       const timeout = invalid ? true : waitResult.timeout;
 
@@ -956,7 +1040,7 @@ export class ReactionEngine {
         crossOriginIsolated: this.readCrossOriginIsolated(),
         timerResolutionMs: this.measureTimerResolutionMs(),
         measuredRefreshRateHz: this.measuredRefreshRateHz(),
-        invalidated: this.visibilityInvalidated ? 'visibility' : null,
+        invalidated: noStimulus ? 'no-stimulus' : this.visibilityInvalidated ? 'visibility' : null,
         visibilityLossCount: this.visibilityLossCount,
         visibilityLossPhases:
           this.visibilityLossPhases.length > 0 ? [...this.visibilityLossPhases] : [],
@@ -987,7 +1071,7 @@ export class ReactionEngine {
         isCorrect,
         timeout,
         invalid,
-        invalidReason: invalid ? (this.renderErrorReason ?? 'stimulus-render-failed') : undefined,
+        invalidReason,
         frameLog,
         phaseTimeline: timeline,
         stats,
@@ -1055,6 +1139,9 @@ export class ReactionEngine {
     this.videoOnsetFramesWaited = 0;
     this.videoStimulusHasRvfc = false;
     this.videoFrameRing = [];
+
+    this.stimulusExpectedVisual = false;
+    this.stimulusRenderablePresented = false;
 
     // Frame-accurate offset state (E-REACT-3).
     this.stimulusFrameCountdown = null;
@@ -1144,12 +1231,19 @@ export class ReactionEngine {
     this.awaitingVideoOnset = false;
     this.videoOnsetFramesWaited = 0;
 
+    // F-54: every stimulus kind except audio is expected to draw pixels. If one
+    // that should draw never presents a renderable (a missed/failed media asset),
+    // runTrial invalidates the trial rather than time an RT against a blank screen.
+    this.stimulusExpectedVisual = !!stimulus && stimulus.kind !== 'audio';
+    this.stimulusRenderablePresented = false;
+
     const renderable = await this.createStimulusRenderable(stimulus, signal);
 
     let renderableId: string | null = null;
     let removed = false;
     if (renderable) {
       renderableId = renderable.id;
+      this.stimulusRenderablePresented = true;
       this.renderer.addRenderable(renderable);
 
       // Now arm onset detection appropriate to the stimulus kind (W-9: only once

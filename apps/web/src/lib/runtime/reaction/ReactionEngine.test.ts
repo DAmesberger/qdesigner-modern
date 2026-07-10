@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ReactionEngine, type StimulusPrepResult } from './ReactionEngine';
+import { ReactionEngine, STIMULUS_PREP_TIMEOUT_MS, type StimulusPrepResult } from './ReactionEngine';
 import { createPvtTrials } from './presets/pvt';
 import type { ReactionTrialConfig } from './types';
 import type { WebGLRenderer } from '$lib/renderer';
@@ -2582,7 +2582,7 @@ describe('ReactionEngine — Layer-2 media gate (ADR 0026)', () => {
   });
 
   it('gateBlockMedia refuses to start, then retries on a gesture until the block is ready', async () => {
-    const { engine, target } = createMockEngine();
+    const { engine, target, added, removed } = createMockEngine();
 
     let attempts = 0;
     (
@@ -2596,13 +2596,88 @@ describe('ReactionEngine — Layer-2 media gate (ADR 0026)', () => {
 
     const gate = engine.gateBlockMedia([{ kind: 'image', src: 'x.png', id: '1' }]);
     await flush();
+    // The fail-closed canvas overlay is actually reachable (F-54): the gate renders
+    // its own "Preparing…"/refusal renderable on the reaction canvas — this is the
+    // block-level decode gate, distinct from the page-level R2-5 media screen.
+    expect(added).toContain('reaction-stimulus-gate');
     // First attempt failed → the gate is holding on the honest retry screen. A retry
     // gesture drives the second (successful) attempt and resolves the gate.
     target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
     await gate;
 
     expect(attempts).toBe(2);
+    // The overlay is torn down once the block is ready to start.
+    expect(removed).toContain('reaction-stimulus-gate');
     engine.destroy();
+  });
+
+  it('times out a stalled asset load and fails it closed (F-54)', async () => {
+    vi.useFakeTimers();
+    try {
+      const { engine } = createMockEngine();
+      // A load that fires NEITHER load NOR error — the aborted/hung request that
+      // let a block run blank. Without the hard timeout the gate hangs forever.
+      (
+        engine as unknown as { loadImage: () => Promise<HTMLImageElement | null> }
+      ).loadImage = () => new Promise<HTMLImageElement | null>(() => {});
+
+      const resultPromise = engine.prepareBlockStimuli([
+        { kind: 'image', src: 'stalled.png', id: '1' },
+      ]);
+
+      // Before the budget elapses the prep is still pending (the load never settles).
+      await vi.advanceTimersByTimeAsync(STIMULUS_PREP_TIMEOUT_MS - 1);
+      // Crossing the budget converts the stall into a preparation FAILURE.
+      await vi.advanceTimersByTimeAsync(2);
+
+      const result = await resultPromise;
+      expect(result.total).toBe(1);
+      expect(result.prepared).toBe(0);
+      expect(result.failures).toEqual([{ src: 'stalled.png', kind: 'image' }]);
+
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a stalled block never starts a trial — gateBlockMedia holds on the fail-closed screen (F-54)', async () => {
+    vi.useFakeTimers();
+    try {
+      const { engine, added } = createMockEngine();
+      (
+        engine as unknown as { loadImage: () => Promise<HTMLImageElement | null> }
+      ).loadImage = () => new Promise<HTMLImageElement | null>(() => {});
+
+      const controller = new AbortController();
+      let resolved = false;
+      const gate = engine
+        .gateBlockMedia([{ kind: 'image', src: 'stalled.png', id: '1' }], controller.signal)
+        .then(
+          () => {
+            resolved = true;
+          },
+          () => {
+            // aborted — expected teardown path
+          }
+        );
+
+      // Drive the first prep attempt past its per-asset timeout.
+      await vi.advanceTimersByTimeAsync(STIMULUS_PREP_TIMEOUT_MS + 5);
+      // The gate must be holding on the fail-closed overlay — NOT resolved (which
+      // would let the block start and run blank stimuli).
+      expect(resolved).toBe(false);
+      expect(added).toContain('reaction-stimulus-gate');
+
+      // Abort to settle the held gate cleanly (a real trial abort ends the wait).
+      controller.abort();
+      await gate;
+      expect(resolved).toBe(false);
+
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('is a no-op for a block that references no media', async () => {
@@ -2653,5 +2728,71 @@ describe('ReactionEngine — W-9 onset arming order', () => {
     expect(result.stimulusOnsetRawTime).toBe(1016);
 
     engine.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F-54 — no-stimulus invalidation: a visual stimulus that never reached the
+// renderer must not produce a clean-looking, timed-out trial. Belt-and-braces
+// so a future enumeration hole in the Layer-2 gate is structurally visible.
+// ---------------------------------------------------------------------------
+
+describe('ReactionEngine — no-stimulus invalidation (F-54)', () => {
+  it('invalidates a trial whose visual stimulus never presented a renderable', async () => {
+    const { engine, emitFrame } = createMockEngine();
+    // The image never loads (a missed/failed asset) → createStimulusRenderable
+    // returns null → no renderable is ever handed to the renderer.
+    (
+      engine as unknown as { loadImage: () => Promise<HTMLImageElement | null> }
+    ).loadImage = async () => null;
+
+    const resultPromise = engine.runTrial({
+      id: 'blank-image',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'image', src: 'missing.png', id: 'stim' },
+      responseTimeoutMs: 40,
+    });
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+
+    const result = await resultPromise;
+
+    expect(result.invalid).toBe(true);
+    expect(result.invalidReason).toBe('no-stimulus');
+    expect(result.provenance.invalidated).toBe('no-stimulus');
+    // No RT is reported against a blank screen.
+    expect(result.response).toBeNull();
+
+    engine.destroy();
+  });
+
+  it('does NOT invalidate an audio-only trial that legitimately draws no renderable', async () => {
+    const restore = installMockAudioContext();
+    try {
+      const { engine } = createMockEngine();
+      seedAudioBuffer(engine, 'a.mp3');
+
+      const result = await engine.runTrial({
+        id: 'audio-only',
+        responseMode: 'keyboard',
+        validKeys: ['f'],
+        fixation: { enabled: false },
+        stimulus: { kind: 'audio', src: 'a.mp3', autoplay: true },
+        responseTimeoutMs: 40,
+      });
+
+      // Audio presents no visual renderable by design — it must not be flagged
+      // no-stimulus (its onset came from the AudioContext clock).
+      expect(result.invalid).toBe(false);
+      expect(result.invalidReason).toBeUndefined();
+      expect(result.provenance.invalidated).toBeNull();
+      expect(result.stimulusTimingMethod).toBe('audioContext');
+
+      engine.destroy();
+    } finally {
+      restore();
+    }
   });
 });
