@@ -18,6 +18,8 @@
   import { moduleRegistry } from '$lib/modules/registry';
   import ScriptEditorOverlay from '$lib/components/designer/ScriptEditorOverlay.svelte';
   import TourOverlay from '$lib/help/components/TourOverlay.svelte';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
+  import { isEditableTarget } from '$lib/components/designer/designerKeyboard';
 
   interface Props {
     data: PageData;
@@ -242,11 +244,29 @@
     }
   }
 
+  // F-39: destructive keyboard actions route through the shared confirmDialog
+  // (matching the canvas + Structure-tree button paths). deleteSelected covers
+  // question / block / variable; pages are deleted elsewhere.
+  async function confirmAndDeleteSelected() {
+    const kind = designerStore.selectedItemKind;
+    if (!designerStore.selectedItem || (kind !== 'question' && kind !== 'block' && kind !== 'variable')) {
+      return;
+    }
+    if (
+      await confirmDialog({
+        title: `Delete ${kind}?`,
+        message: `Delete this ${kind}? This cannot be undone.`,
+        confirmLabel: 'Delete',
+        destructive: true,
+      })
+    ) {
+      designerStore.deleteSelected();
+    }
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     const isMeta = event.ctrlKey || event.metaKey;
-    const target = event.target as HTMLElement | null;
-    const isInput =
-      target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
+    const isInput = isEditableTarget(event.target);
 
     if (isMeta) {
       const key = event.key.toLowerCase();
@@ -312,9 +332,9 @@
     }
 
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      if (!isInput) {
+      if (!isInput && designerStore.selectedItem) {
         event.preventDefault();
-        designerStore.deleteSelected();
+        void confirmAndDeleteSelected();
       }
     }
 

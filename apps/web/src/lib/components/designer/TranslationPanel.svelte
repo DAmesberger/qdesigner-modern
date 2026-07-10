@@ -13,6 +13,11 @@
   import Button from '$lib/components/ui/Button.svelte';
   import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { Languages, Plus, X } from 'lucide-svelte';
+  import {
+    countTranslatedStrings,
+    localeCompleteness,
+    type LocaleCompleteness,
+  } from './translationCompleteness';
 
   // Content translation (MOD-04, ADR 0022) — participant-facing questionnaire
   // content, NOT the app UI (that is Paraglide / ADR 0019).
@@ -85,29 +90,20 @@
     newLocaleLabel = '';
   }
 
-  // Count the non-empty translated strings stored for a locale so the confirm
-  // copy is honest about how much content the author is about to discard.
-  function countTranslations(bundle: LocaleTranslation | undefined): number {
-    if (!bundle) return 0;
-    let count = 0;
-    for (const q of Object.values(bundle.questions ?? {})) {
-      if (q.prompt && q.prompt.trim()) count += 1;
-      for (const label of Object.values(q.options ?? {})) {
-        if (label && label.trim()) count += 1;
-      }
+  // Per-locale completeness against the base-present translatable slots, computed
+  // from the same translation structures rendered below (see
+  // ./translationCompleteness for the pure, unit-tested helpers).
+  let completeness = $derived.by<Record<LocaleCode, LocaleCompleteness>>(() => {
+    const map: Record<LocaleCode, LocaleCompleteness> = {};
+    for (const locale of translationLocales) {
+      map[locale] = localeCompleteness(questionnaire, designerStore.contentTranslations[locale]);
     }
-    for (const p of Object.values(bundle.pages ?? {})) {
-      if (p.title && p.title.trim()) count += 1;
-    }
-    for (const value of Object.values(bundle.chrome ?? {})) {
-      if (value && value.trim()) count += 1;
-    }
-    return count;
-  }
+    return map;
+  });
 
   async function removeLocale(code: LocaleCode) {
     const name = getLocaleLabel(questionnaire, code);
-    const n = countTranslations(designerStore.contentTranslations[code]);
+    const n = countTranslatedStrings(designerStore.contentTranslations[code]);
     const message =
       n === 0
         ? `Remove ${name}? It has no translations yet. This cannot be undone.`
@@ -182,6 +178,9 @@
         >
           <button type="button" class="cursor-pointer" onclick={() => (pickedLocale = locale)}>
             {getLocaleLabel(questionnaire, locale)} · {locale}
+            {#if completeness[locale] && completeness[locale].total > 0}
+              <span class="opacity-80"> · {completeness[locale].percent}%</span>
+            {/if}
           </button>
           <button
             type="button"
@@ -195,6 +194,43 @@
         </span>
       {/each}
     </div>
+
+    <!-- Per-locale completeness (R4-5) -->
+    {#if translationLocales.length > 0}
+      <ul class="mb-3 flex flex-col gap-2" data-testid="translation-completeness">
+        {#each translationLocales as locale (locale)}
+          {@const c = completeness[locale]}
+          <li class="flex items-center gap-3" data-testid={`translation-progress-${locale}`}>
+            <span class="w-28 shrink-0 truncate text-xs text-foreground" title={getLocaleLabel(questionnaire, locale)}>
+              {getLocaleLabel(questionnaire, locale)}
+            </span>
+            <div
+              class="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={c?.percent ?? 0}
+              aria-label={`${getLocaleLabel(questionnaire, locale)} translation completeness`}
+            >
+              <div
+                class="h-full rounded-full bg-primary transition-all duration-200"
+                style="width: {c?.percent ?? 0}%"
+              ></div>
+            </div>
+            <span class="w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+              {#if c && c.total > 0}
+                {c.done}/{c.total}
+                {#if c.missing > 0}
+                  <span class="text-warning">· {c.missing} left</span>
+                {/if}
+              {:else}
+                nothing to translate
+              {/if}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
 
     <div class="flex flex-wrap items-end gap-2">
       <label class="flex flex-col gap-1">

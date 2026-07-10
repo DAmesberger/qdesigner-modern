@@ -2,7 +2,8 @@
   import { appPaths } from '$lib/routing/paths';
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
-  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator, LayoutDashboard, CalendarClock } from 'lucide-svelte';
+  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator, LayoutDashboard, CalendarClock, Undo2, Redo2, Wrench, ChevronDown } from 'lucide-svelte';
+  import { fly } from 'svelte/transition';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import StudySeriesDesigner from '$lib/components/designer/StudySeriesDesigner.svelte';
   import ThemeToggle from '$lib/components/ui/ThemeToggle.svelte';
@@ -33,6 +34,42 @@
   let showScaleScoring = $state(false);
   let showQuotas = $state(false);
   let showReportPage = $state(false);
+  let showTools = $state(false);
+
+  const canUndo = $derived(designerStore.canUndo);
+  const canRedo = $derived(designerStore.canRedo);
+
+  // Modifier-key hint for the undo/redo tooltips (⌘ on macOS, Ctrl elsewhere).
+  const metaKeyLabel =
+    typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+
+  // Tools overflow menu items — the modal-launching secondary actions grouped
+  // out of the always-visible header (R4-5). `show` flips the matching dialog.
+  type ToolItem = { label: string; icon: typeof Wrench; run: () => void; when?: () => boolean };
+  const toolItems: ToolItem[] = [
+    { label: 'Experimental design', icon: FlaskConical, run: () => (showExperimentalDesign = true) },
+    {
+      label: 'Study series',
+      icon: CalendarClock,
+      run: () => (showStudySeries = true),
+      when: () => Boolean(questionnaireId),
+    },
+    { label: 'Data quality', icon: ShieldCheck, run: () => (showDataQuality = true) },
+    { label: 'Scale scoring', icon: Calculator, run: () => (showScaleScoring = true) },
+    { label: 'Quotas', icon: Target, run: () => (showQuotas = true) },
+    { label: 'Report page', icon: LayoutDashboard, run: () => (showReportPage = true) },
+    { label: 'Share', icon: Share2, run: () => (showDistribution = true) },
+  ];
+
+  function runTool(item: ToolItem) {
+    showTools = false;
+    item.run();
+  }
+
+  function toggleTools(e: MouseEvent) {
+    e.stopPropagation();
+    showTools = !showTools;
+  }
 
   $effect(() => {
     titleValue = questionnaireName || 'Untitled Questionnaire';
@@ -93,6 +130,8 @@
     await designerStore.publishQuestionnaire();
   }
 </script>
+
+<svelte:window onclick={() => { if (showTools) showTools = false; }} />
 
 <header
   class="flex h-11 items-center gap-3 px-3 bg-[hsl(var(--glass-bg))] backdrop-blur-[var(--glass-blur)] border-b border-[hsl(var(--glass-border))] shadow-[var(--shadow-sm)]"
@@ -218,91 +257,76 @@
     <PanelLeft class="h-4 w-4" />
   </button>
 
-  <!-- Experimental design button -->
-  <button
-    type="button"
-    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
-    onclick={() => (showExperimentalDesign = true)}
-    data-testid="designer-experimental-design-button"
-    title="Experimental Design"
-  >
-    <FlaskConical class="h-3.5 w-3.5" />
-    Design
-  </button>
-
-  <!-- Study series (longitudinal / EMA) button -->
-  {#if questionnaireId}
+  <!-- Undo / redo (primary, always visible on desktop) -->
+  <div class="hidden sm:flex items-center rounded-md border border-border" role="group" aria-label="History">
     <button
       type="button"
-      class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
-      onclick={() => (showStudySeries = true)}
-      data-testid="designer-study-series-button"
-      title="Longitudinal / EMA study series"
+      class="inline-flex items-center rounded-l-md px-2 py-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors duration-150 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground disabled:cursor-not-allowed"
+      onclick={() => designerStore.undo()}
+      disabled={!canUndo}
+      data-testid="designer-undo-button"
+      aria-label="Undo"
+      title={`Undo (${metaKeyLabel}+Z)`}
     >
-      <CalendarClock class="h-3.5 w-3.5" />
-      Series
+      <Undo2 class="h-3.5 w-3.5" />
     </button>
-  {/if}
+    <div class="h-4 w-px bg-border"></div>
+    <button
+      type="button"
+      class="inline-flex items-center rounded-r-md px-2 py-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors duration-150 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground disabled:cursor-not-allowed"
+      onclick={() => designerStore.redo()}
+      disabled={!canRedo}
+      data-testid="designer-redo-button"
+      aria-label="Redo"
+      title={`Redo (${metaKeyLabel}+Shift+Z)`}
+    >
+      <Redo2 class="h-3.5 w-3.5" />
+    </button>
+  </div>
 
-  <!-- Data quality button -->
-  <button
-    type="button"
-    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
-    onclick={() => (showDataQuality = true)}
-    data-testid="designer-data-quality-button"
-    title="Data Quality"
-  >
-    <ShieldCheck class="h-3.5 w-3.5" />
-    Quality
-  </button>
+  <!-- Tools overflow menu (secondary modal-launching actions) -->
+  <div class="relative hidden sm:block">
+    <button
+      type="button"
+      class="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150 {showTools ? 'bg-accent text-accent-foreground' : ''}"
+      onclick={toggleTools}
+      data-testid="designer-tools-button"
+      aria-haspopup="menu"
+      aria-expanded={showTools}
+      title="Tools"
+    >
+      <Wrench class="h-3.5 w-3.5" />
+      Tools
+      <ChevronDown class="h-3 w-3 transition-transform duration-150 {showTools ? 'rotate-180' : ''}" />
+    </button>
 
-  <!-- Scale scoring button -->
-  <button
-    type="button"
-    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
-    onclick={() => (showScaleScoring = true)}
-    data-testid="designer-scale-scoring-button"
-    title="Scale Scoring"
-  >
-    <Calculator class="h-3.5 w-3.5" />
-    Scoring
-  </button>
-
-  <!-- Quotas button -->
-  <button
-    type="button"
-    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
-    onclick={() => (showQuotas = true)}
-    data-testid="designer-quotas-button"
-    title="Quota Management"
-  >
-    <Target class="h-3.5 w-3.5" />
-    Quotas
-  </button>
-
-  <!-- Report page button -->
-  <button
-    type="button"
-    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
-    onclick={() => (showReportPage = true)}
-    data-testid="designer-report-page-button"
-    title="Report Page"
-  >
-    <LayoutDashboard class="h-3.5 w-3.5" />
-    Report
-  </button>
-
-  <!-- Share button -->
-  <button
-    type="button"
-    class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150"
-    onclick={() => (showDistribution = true)}
-    data-testid="designer-share-button"
-    title="Share"
-  >
-    <Share2 class="h-3.5 w-3.5" />
-    Share
-  </button>
+    {#if showTools}
+      <div
+        transition:fly={{ y: -8, duration: 150 }}
+        class="absolute right-0 top-full mt-2 w-52 rounded-lg border border-border bg-popover text-popover-foreground shadow-[var(--shadow-lg)] z-50 py-1"
+        role="menu"
+        tabindex="-1"
+        data-testid="designer-tools-menu"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => { if (e.key === 'Escape') showTools = false; }}
+      >
+        {#each toolItems as item (item.label)}
+          {#if !item.when || item.when()}
+            <button
+              type="button"
+              role="menuitem"
+              class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-foreground hover:bg-accent hover:text-accent-foreground transition-colors duration-100"
+              onclick={() => runTool(item)}
+              data-testid={`designer-tools-item-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+            >
+              <item.icon class="h-4 w-4 text-muted-foreground" />
+              {item.label}
+            </button>
+          {/if}
+        {/each}
+      </div>
+    {/if}
+  </div>
 
   <!-- Version manager (bump / publish / history) -->
   {#if questionnaireId}

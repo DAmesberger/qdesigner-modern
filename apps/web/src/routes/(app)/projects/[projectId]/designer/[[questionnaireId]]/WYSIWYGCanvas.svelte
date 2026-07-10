@@ -7,9 +7,10 @@
   import { defaultTheme } from '$lib/shared';
   import { dndzone } from 'svelte-dnd-action';
   import { flip } from 'svelte/animate';
-  import { Plus, Minus, ChevronUp, ChevronDown } from 'lucide-svelte';
+  import { Plus, Minus, ChevronUp, ChevronDown, Trash2 } from 'lucide-svelte';
   import { onMount } from 'svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
 
   let questionnaireTheme = defaultTheme;
   let showTestRunner = $state(false);
@@ -187,6 +188,28 @@
     designerStore.updateQuestion(questionId, updates);
   }
 
+  // F-39: every canvas delete path (the hover affordance and the
+  // QuestionVisualRenderer context-menu "Delete") is confirm-gated, matching the
+  // Structure-tree QuestionCard. The keyboard Delete path is gated separately in
+  // the designer +page.svelte via the same shared confirmDialog.
+  async function confirmAndDelete(questionId: string) {
+    if (
+      await confirmDialog({
+        title: 'Delete question?',
+        message: 'Delete this question? This cannot be undone.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      })
+    ) {
+      designerStore.deleteQuestion(questionId);
+    }
+  }
+
+  async function handleDeleteClick(e: MouseEvent, questionId: string) {
+    e.stopPropagation();
+    await confirmAndDelete(questionId);
+  }
+
   function addQuestionOfType(type = 'text-input') {
     const firstPage = designerStore.questionnaire.pages[0];
     const firstBlock = firstPage?.blocks?.[0];
@@ -339,11 +362,29 @@
                     animate:flip={{ duration: 300 }}
                     use:lazyMount={{ id: item.id, enabled: virtualize, root: scrollRoot }}
                     onkeydown={(e) => handleItemKeydown(e, index)}
-                    class="relative rounded-xl transition-all duration-200 {isSelected
+                    class="group relative rounded-xl transition-all duration-200 {isSelected
                       ? 'ring-2 ring-primary shadow-[var(--shadow-glow)]'
                       : 'hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5'}"
                     data-testid={`designer-question-${item.id}`}
                   >
+                    <!-- Visible, confirm-gated delete affordance (F-39). Shown on
+                         hover on fine pointers and always on the selected item /
+                         touch devices, so delete is discoverable without the
+                         right-click context menu or the keyboard. -->
+                    <button
+                      type="button"
+                      onclick={(e) => handleDeleteClick(e, item.id)}
+                      onpointerdown={(e) => e.stopPropagation()}
+                      class="absolute right-1 top-1 z-20 rounded-lg border border-[hsl(var(--glass-border))] bg-[hsl(var(--glass-bg))] p-1 text-destructive shadow-[var(--shadow-sm)] backdrop-blur-[var(--glass-blur)] transition-opacity hover:bg-destructive/10 {isSelected ||
+                      coarsePointer
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover:opacity-100'}"
+                      aria-label="Delete question"
+                      title="Delete question"
+                      data-testid={`designer-question-delete-${item.id}`}
+                    >
+                      <Trash2 class="h-4 w-4" />
+                    </button>
                     {#if isSelected || coarsePointer}
                       <!-- Tap/keyboard reorder affordance (additive to dnd). Alt+ArrowUp/Down
                            on the focused item does the same via handleItemKeydown. -->
@@ -413,7 +454,7 @@
                           selected={designerStore.selectedItem?.id === item.id}
                           onselect={() => designerStore.selectItem(item.id, 'question')}
                           onupdate={(updates: any) => handleQuestionUpdate(item.id, updates)}
-                          ondelete={() => designerStore.deleteQuestion(item.id)}
+                          ondelete={() => void confirmAndDelete(item.id)}
                           oneditproperties={() => {
                             if (item.question.type === 'reaction-experiment') {
                               designerStore.openReactionLab(item.id);
