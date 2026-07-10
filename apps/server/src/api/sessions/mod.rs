@@ -11,7 +11,6 @@
 //! - [`analytics`] — aggregate/compare/dashboard/cross-project/timeseries.
 //! - [`quotas`] — condition counts and quota status.
 //! - [`sync`] — offline sync batch handler.
-//! - [`filter`] — dynamic session filtering.
 //!
 //! `mod.rs` re-exports each handler module with a `pub use` glob so the
 //! generated `__path_<fn>` items land at `api::sessions::*`, keeping the
@@ -20,7 +19,6 @@
 
 mod analytics;
 mod crud;
-mod filter;
 mod ingestion;
 mod models;
 mod quotas;
@@ -28,7 +26,6 @@ mod sync;
 
 pub use analytics::*;
 pub use crud::*;
-pub use filter::*;
 pub use ingestion::*;
 pub(crate) use models::*;
 pub use quotas::*;

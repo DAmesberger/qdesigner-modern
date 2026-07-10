@@ -477,5 +477,3 @@ fn resolve_configured_cell_target(settings: &serde_json::Value, cell_key: &str) 
     }
     None
 }
-
-// ── Filter Endpoint ──────────────────────────────────────────────

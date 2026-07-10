@@ -256,9 +256,25 @@ export class ReactionTimeStorage extends BaseQuestionStorage {
     const secondHalfRT = secondHalf.reduce((sum, d) => sum + d.rt, 0) / secondHalf.length;
     const improvement = ((firstHalfRT - secondHalfRT) / firstHalfRT) * 100;
     
-    // Accuracy trend would be calculated similarly if needed
-    const accuracyTrend = 0; // Simplified for now
-    
+    // Accuracy trend: Pearson correlation between trial number and correctness
+    // (correct → 1, incorrect → 0), mirroring the RT-trend formula above.
+    // Reuses meanTrial / denomTrial already computed for the RT trend.
+    const meanCorrect =
+      trialData.reduce((sum, d) => sum + (d.correct ? 1 : 0), 0) / trialData.length;
+
+    let accNumerator = 0;
+    let accDenomCorrect = 0;
+
+    trialData.forEach(d => {
+      const c = d.correct ? 1 : 0;
+      accNumerator += (d.trial - meanTrial) * (c - meanCorrect);
+      accDenomCorrect += Math.pow(c - meanCorrect, 2);
+    });
+
+    const accuracyTrend = denomTrial > 0 && accDenomCorrect > 0
+      ? accNumerator / (Math.sqrt(denomTrial) * Math.sqrt(accDenomCorrect))
+      : 0;
+
     return {
       rtTrend,
       accuracyTrend,

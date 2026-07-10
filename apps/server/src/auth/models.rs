@@ -102,14 +102,6 @@ impl SessionView {
     }
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct DevSessionRequest {
-    #[serde(default)]
-    pub email: Option<String>,
-    #[serde(default)]
-    pub full_name: Option<String>,
-}
-
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct RegisterRequest {
     #[validate(email(message = "Invalid email address"))]
@@ -121,11 +113,6 @@ pub struct RegisterRequest {
     ))]
     pub password: String,
     pub full_name: Option<String>,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct VerifyEmailRequest {
-    pub token: String,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]

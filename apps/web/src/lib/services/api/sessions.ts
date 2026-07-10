@@ -4,18 +4,15 @@ import {
   compareSessions as compareSessionsRequest,
   createSession as createSessionRequest,
   dashboardSummary as dashboardSummaryRequest,
-  filterSessions as filterSessionsRequest,
   getEvents as getEventsRequest,
   getResponses as getResponsesRequest,
   getSession as getSessionRequest,
   getVariables as getVariablesRequest,
   listSessions as listSessionsRequest,
   submitEvents as submitEventsRequest,
-  submitResponse as submitResponseRequest,
   syncSession as syncSessionRequest,
   timeseries as timeseriesRequest,
   updateSession as updateSessionRequest,
-  upsertVariable as upsertVariableRequest,
 } from '$lib/api/generated/sdk.gen';
 import * as sdk from '$lib/api/generated/sdk.gen';
 import type {
@@ -27,14 +24,12 @@ import { mapSession, mapAggregateData, mapCompareData } from './mappers';
 import type {
   SessionAggregateData,
   SessionCompareData,
-  ResponseSubmission,
   SessionResponseRecord,
   InteractionEventRecord,
   SessionVariableRecord,
   DashboardSummary,
   SessionMediaUploadResponse,
   TimeSeriesBucket,
-  FilterResponse,
 } from '$lib/shared/types/api';
 
 export const sessions = {
@@ -98,18 +93,6 @@ export const sessions = {
       assignedConditionIndex:
         typeof raw.assigned_condition_index === 'number' ? raw.assigned_condition_index : null,
     })),
-  checkDuplicate: (questionnaireId: string, fingerprint: string) =>
-    callSdk(() =>
-      sdk.checkDuplicate<true>({
-        client: apiClient,
-        responseStyle: 'data',
-        throwOnError: true,
-        body: {
-          questionnaire_id: questionnaireId,
-          fingerprint,
-        },
-      })
-    ) as Promise<{ is_duplicate: boolean; previous_completions: number }>,
   get: (id: string) =>
     callSdk(() =>
       getSessionRequest<true>({
@@ -129,24 +112,6 @@ export const sessions = {
         body: data,
       })
     ).then(mapSession),
-  submitResponses: (sessionId: string, responses: ResponseSubmission[]) =>
-    callSdk(() =>
-      submitResponseRequest<true>({
-        client: apiClient,
-        responseStyle: 'data',
-        throwOnError: true,
-        path: { id: sessionId },
-        body: {
-          responses: responses.map((response) => ({
-            question_id: response.questionId,
-            value: response.value,
-            reaction_time_us: response.reactionTimeUs,
-            presented_at: response.presentedAt,
-            answered_at: response.answeredAt,
-          })),
-        },
-      })
-    ) as Promise<{ count: number }>,
   submitEvents: (sessionId: string, events: unknown[]) =>
     callSdk(() =>
       submitEventsRequest<true>({
@@ -157,24 +122,6 @@ export const sessions = {
         body: events as GeneratedInteractionEventRequest[],
       })
     ) as Promise<{ count: number }>,
-  upsertVariable: (
-    sessionId: string,
-    data: { name: string; value: unknown; valueType?: string; source?: string }
-  ) =>
-    callSdk(() =>
-      upsertVariableRequest<true>({
-        client: apiClient,
-        responseStyle: 'data',
-        throwOnError: true,
-        path: { id: sessionId },
-        body: {
-          name: data.name,
-          value: data.value,
-          value_type: data.valueType,
-          source: data.source,
-        },
-      })
-    ) as Promise<{ success: boolean }>,
   getResponses: (
     sessionId: string,
     params?: { questionId?: string; limit?: number; offset?: number }
@@ -280,26 +227,6 @@ export const sessions = {
       })
     ) as Promise<TimeSeriesBucket[]>;
   },
-  filter: (body: {
-    questionnaire_id: string;
-    groups: {
-      logic: string;
-      rules: { field: string; operator: string; value: unknown; value2?: unknown }[];
-    }[];
-    logic?: string;
-    source?: string;
-    key?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<FilterResponse> =>
-    callSdk(() =>
-      filterSessionsRequest<true>({
-        client: apiClient,
-        responseStyle: 'data',
-        throwOnError: true,
-        body,
-      })
-    ) as Promise<FilterResponse>,
   sync: (sessionId: string, body: GeneratedSyncPayload) =>
     callSdk(() =>
       syncSessionRequest<true>({

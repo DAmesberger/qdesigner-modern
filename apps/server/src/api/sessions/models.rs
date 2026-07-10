@@ -93,30 +93,6 @@ pub struct ResponseRecord {
     pub client_id: Option<Uuid>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct SubmitResponseRequest {
-    #[serde(alias = "questionId")]
-    pub question_id: String,
-    pub value: serde_json::Value,
-    /// Microsecond-precision reaction time (BIGINT).
-    #[serde(alias = "reactionTimeUs")]
-    pub reaction_time_us: Option<i64>,
-    #[serde(alias = "presentedAt")]
-    pub presented_at: Option<chrono::DateTime<chrono::Utc>>,
-    #[serde(alias = "answeredAt")]
-    pub answered_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-#[serde(untagged)]
-pub enum SubmitResponsesPayload {
-    Single(SubmitResponseRequest),
-    Batch {
-        responses: Vec<SubmitResponseRequest>,
-    },
-}
-
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct InteractionEventRecord {
     pub id: Uuid,
@@ -145,16 +121,6 @@ pub struct ResponseListQuery {
     pub question_id: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct SessionVariableRequest {
-    pub name: String,
-    pub value: Value,
-    #[serde(default, alias = "valueType")]
-    pub value_type: Option<String>,
-    #[serde(default)]
-    pub source: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -340,20 +306,6 @@ pub struct DashboardStats {
 pub(crate) enum AggregateSource {
     Variable,
     Response,
-}
-
-// ── Fraud prevention ────────────────────────────────────────────────
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CheckDuplicateRequest {
-    pub questionnaire_id: Uuid,
-    pub fingerprint: String,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CheckDuplicateResponse {
-    pub is_duplicate: bool,
-    pub previous_completions: i64,
 }
 
 // ── Between-subjects arm assignment (E-FLOW-6) ───────────────────────
@@ -1152,25 +1104,6 @@ pub(crate) fn normalize_session_status(status: &str) -> Result<String, ApiError>
     Ok(normalized.to_string())
 }
 
-pub(crate) async fn ensure_session_active<'e>(
-    executor: impl sqlx::PgExecutor<'e>,
-    session_id: Uuid,
-) -> Result<(), ApiError> {
-    let status = sqlx::query_scalar!(
-        r#"SELECT status as "status!" FROM sessions WHERE id = $1"#,
-        session_id
-    )
-    .fetch_optional(executor)
-    .await?
-    .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
-
-    if status != "active" {
-        return Err(ApiError::BadRequest("Session is not active".into()));
-    }
-
-    Ok(())
-}
-
 pub(crate) async fn ensure_session_exists<'e>(
     executor: impl sqlx::PgExecutor<'e>,
     session_id: Uuid,
@@ -1187,39 +1120,6 @@ pub(crate) async fn ensure_session_exists<'e>(
     }
 
     Ok(())
-}
-
-pub(crate) async fn insert_response<'e>(
-    executor: impl sqlx::PgExecutor<'e>,
-    session_id: Uuid,
-    response: &SubmitResponseRequest,
-) -> Result<ResponseRecord, ApiError> {
-    let metadata = response
-        .metadata
-        .clone()
-        .unwrap_or_else(|| serde_json::json!({}));
-
-    let inserted = sqlx::query_as!(
-        ResponseRecord,
-        r#"
-        INSERT INTO responses (session_id, question_id, value, reaction_time_us,
-                               presented_at, answered_at, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, session_id, question_id, value, reaction_time_us,
-                  presented_at, answered_at, metadata as "metadata!", created_at, client_id
-        "#,
-        session_id,
-        &response.question_id,
-        &response.value,
-        response.reaction_time_us,
-        response.presented_at,
-        response.answered_at,
-        metadata,
-    )
-    .fetch_one(executor)
-    .await?;
-
-    Ok(inserted)
 }
 
 pub(crate) fn pearson_correlation(x: &[f64], y: &[f64]) -> Option<f64> {
@@ -1732,71 +1632,6 @@ pub struct SyncedClientIdsResponse {
     pub client_ids: Vec<Uuid>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct FilterRule {
-    pub field: String,
-    pub operator: String,
-    pub value: serde_json::Value,
-    /// Second value for 'between' operator
-    pub value2: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct FilterGroup {
-    pub logic: String,
-    pub rules: Vec<FilterRule>,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct FilterRequest {
-    pub questionnaire_id: Uuid,
-    pub groups: Vec<FilterGroup>,
-    pub logic: Option<String>,
-    /// Which data source to aggregate: "variable" (default) or "response"
-    pub source: Option<String>,
-    /// Variable name or question id to aggregate
-    pub key: Option<String>,
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct FilteredSessionRow {
-    pub id: Uuid,
-    pub participant_id: Option<String>,
-    pub status: String,
-    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub metadata: serde_json::Value,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct FilterResponse {
-    pub sessions: Vec<FilteredSessionRow>,
-    pub total: i64,
-    pub stats: Option<NumericStatsSummary>,
-}
-
-/// POST /api/sessions/filter
-///
-/// Accepts a structured filter query and returns matching sessions
-/// with optional aggregated statistics on a key field.
-/// Filter keys (metadata.X / variable.X) are interpolated into a SQL string
-/// literal. PostgreSQL `''` escape would also work, but a strict identifier
-/// allowlist is defense-in-depth: it rules out future regressions if anyone
-/// adds a field type that uses the key in a non-literal context.
-pub(crate) fn is_safe_filter_key(key: &str) -> bool {
-    if key.is_empty() || key.len() > 128 {
-        return false;
-    }
-    let mut chars = key.chars();
-    let first = chars.next().unwrap();
-    if !(first.is_ascii_alphabetic() || first == '_') {
-        return false;
-    }
-    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct TimeSeriesQuery {
     pub questionnaire_id: Uuid,
@@ -1813,10 +1648,7 @@ pub struct TimeSeriesBucket {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        compute_numeric_stats, decl_hash, is_safe_filter_key, json_value_to_f64,
-        parse_aggregate_source,
-    };
+    use super::{compute_numeric_stats, decl_hash, json_value_to_f64, parse_aggregate_source};
     use serde_json::json;
 
     #[test]
@@ -1845,27 +1677,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn safe_filter_keys_pass() {
-        assert!(is_safe_filter_key("score"));
-        assert!(is_safe_filter_key("user_id"));
-        assert!(is_safe_filter_key("_private"));
-        assert!(is_safe_filter_key("a1"));
-    }
-
-    #[test]
-    fn unsafe_filter_keys_rejected() {
-        assert!(!is_safe_filter_key(""));
-        assert!(!is_safe_filter_key("1leading_digit"));
-        assert!(!is_safe_filter_key("with space"));
-        assert!(!is_safe_filter_key("quote'inside"));
-        assert!(!is_safe_filter_key("semi;colon"));
-        assert!(!is_safe_filter_key("dash-name"));
-        assert!(!is_safe_filter_key("dot.name"));
-        assert!(!is_safe_filter_key("union/**/select"));
-        // 129 chars — over length cap
-        assert!(!is_safe_filter_key(&"a".repeat(129)));
-    }
 
     #[test]
     fn parses_numeric_json_values() {

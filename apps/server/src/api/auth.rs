@@ -328,33 +328,6 @@ pub async fn login(
     .await
 }
 
-/// POST /api/auth/refresh
-#[utoipa::path(
-    post,
-    path = "/api/auth/refresh",
-    responses(
-        (status = 200, description = "Current browser session", body = SessionView),
-        (status = 401, description = "Refresh token invalid", body = crate::openapi::ErrorEnvelope)
-    ),
-    tags = ["auth"]
-)]
-pub async fn refresh(
-    State(state): State<AppState>,
-    jar: CookieJar,
-) -> Result<(CookieJar, Json<SessionView>), ApiError> {
-    let token = jar
-        .get(session::SESSION_COOKIE)
-        .map(|c| c.value().to_string())
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| ApiError::Unauthorized("Missing session".into()))?;
-
-    let view =
-        session::session_view_for_token(&state.pool, &token, state.config.auth_session_idle_expiry)
-            .await?
-            .ok_or_else(|| ApiError::Unauthorized("Invalid session".into()))?;
-    Ok((jar, Json(view)))
-}
-
 /// POST /api/auth/logout
 #[utoipa::path(
     post,
@@ -389,44 +362,6 @@ pub async fn logout(
     Ok((jar, Json(serde_json::json!({ "message": "Logged out" }))))
 }
 
-/// GET /api/auth/me
-#[utoipa::path(
-    get,
-    path = "/api/auth/me",
-    security(
-        ("bearerAuth" = [])
-    ),
-    responses(
-        (status = 200, description = "Current authenticated user", body = UserInfo),
-        (status = 404, description = "User not found", body = crate::openapi::ErrorEnvelope)
-    ),
-    tags = ["auth"]
-)]
-pub async fn me(
-    State(state): State<AppState>,
-    user: AuthenticatedUser,
-) -> Result<Json<UserInfo>, ApiError> {
-    let row = sqlx::query_as::<_, UserRow>(
-        r#"
-        SELECT id, email, full_name, avatar_url, password_hash, email_verified,
-               created_at, updated_at
-        FROM users WHERE id = $1
-        "#,
-    )
-    .bind(user.user_id)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
-
-    Ok(Json(UserInfo {
-        id: row.id,
-        email: row.email,
-        full_name: row.full_name,
-        avatar_url: row.avatar_url,
-        roles: user.roles,
-    }))
-}
-
 /// GET /api/auth/session
 #[utoipa::path(
     get,
@@ -453,127 +388,6 @@ pub async fn session_view(
             .await?
             .unwrap_or_else(SessionView::anonymous);
     Ok(Json(view))
-}
-
-/// POST /api/auth/csrf/rotate
-#[utoipa::path(
-    post,
-    path = "/api/auth/csrf/rotate",
-    responses(
-        (status = 200, description = "Rotated CSRF token", body = serde_json::Value),
-        (status = 401, description = "Not authenticated", body = crate::openapi::ErrorEnvelope)
-    ),
-    tags = ["auth"]
-)]
-pub async fn rotate_csrf(
-    user: AuthenticatedUser,
-    State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let session_hash = user
-        .session_hash
-        .as_deref()
-        .ok_or_else(|| ApiError::Unauthorized("Missing session".into()))?;
-    let csrf_token = session::rotate_csrf_token(&state.pool, session_hash).await?;
-    Ok(Json(serde_json::json!({ "csrf_token": csrf_token })))
-}
-
-/// POST /api/auth/dev/session
-#[utoipa::path(
-    post,
-    path = "/api/auth/dev/session",
-    request_body = DevSessionRequest,
-    responses(
-        (status = 200, description = "Development session", body = SessionView),
-        (status = 403, description = "Dev session disabled", body = crate::openapi::ErrorEnvelope)
-    ),
-    tags = ["auth"]
-)]
-pub async fn dev_session(
-    State(state): State<AppState>,
-    jar: CookieJar,
-    client_ip: ClientIp,
-    headers: HeaderMap,
-    Json(body): Json<DevSessionRequest>,
-) -> Result<(CookieJar, Json<SessionView>), ApiError> {
-    require_local_auth(&state)?;
-    if !cfg!(debug_assertions) {
-        return Err(ApiError::Forbidden("Dev sessions are disabled".into()));
-    }
-
-    let email = body
-        .email
-        .unwrap_or_else(|| "dev@qdesigner.local".to_string())
-        .to_lowercase();
-    let full_name = body.full_name.unwrap_or_else(|| "Developer".into());
-    let user_id = sqlx::query_scalar::<_, Uuid>(
-        r#"
-        INSERT INTO users (email, full_name, email_verified)
-        VALUES ($1, $2, true)
-        ON CONFLICT (email) DO UPDATE
-          SET full_name = COALESCE(users.full_name, EXCLUDED.full_name),
-              email_verified = true,
-              updated_at = now()
-        RETURNING id
-        "#,
-    )
-    .bind(&email)
-    .bind(&full_name)
-    .fetch_one(&state.pool)
-    .await?;
-
-    let user_info = build_user_info(&state, user_id, email, Some(full_name), None).await?;
-    issue_browser_session(
-        &state,
-        jar,
-        user_info,
-        AuthProvider::Local.as_str(),
-        true,
-        client_ip,
-        &headers,
-    )
-    .await
-}
-
-/// POST /api/auth/verify-email
-#[utoipa::path(
-    post,
-    path = "/api/auth/verify-email",
-    request_body = VerifyEmailRequest,
-    responses(
-        (status = 200, description = "Email verified", body = crate::openapi::MessageResponse),
-        (status = 400, description = "Invalid or expired token", body = crate::openapi::ErrorEnvelope)
-    ),
-    tags = ["auth"]
-)]
-pub async fn verify_email(
-    State(state): State<AppState>,
-    Json(body): Json<VerifyEmailRequest>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    // Look up the verification token
-    let row = sqlx::query_as::<_, (Uuid,)>(
-        r#"
-        SELECT user_id FROM email_verifications
-        WHERE token = $1 AND expires_at > NOW() AND used_at IS NULL
-        "#,
-    )
-    .bind(&body.token)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or_else(|| ApiError::BadRequest("Invalid or expired verification token".into()))?;
-
-    // Mark email as verified
-    sqlx::query("UPDATE users SET email_verified = true, updated_at = NOW() WHERE id = $1")
-        .bind(row.0)
-        .execute(&state.pool)
-        .await?;
-
-    // Mark token as used
-    sqlx::query("UPDATE email_verifications SET used_at = NOW() WHERE token = $1")
-        .bind(&body.token)
-        .execute(&state.pool)
-        .await?;
-
-    Ok(Json(serde_json::json!({ "message": "Email verified" })))
 }
 
 /// POST /api/auth/verify-email/send  and  /verify-email/resend
@@ -818,17 +632,12 @@ pub async fn password_reset(
         .execute(&state.pool)
         .await?;
 
-        // Determine the frontend URL from CORS origins (first origin)
-        let app_url = state
-            .config
-            .cors_origins
-            .first()
-            .cloned()
-            .unwrap_or_else(|| "http://localhost:4173".to_string());
-
+        // Frontend origin for the reset link — unified through the shared
+        // `app_origin()` helper (first CORS origin, trailing slash trimmed,
+        // localhost fallback).
         let reset_link = format!(
             "{}/reset-password?token={}",
-            app_url.trim_end_matches('/'),
+            state.config.app_origin(),
             token
         );
 

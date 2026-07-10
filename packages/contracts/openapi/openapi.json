@@ -163,37 +163,6 @@
         }
       }
     },
-    "/api/auth/refresh": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "POST /api/auth/refresh",
-        "operationId": "refresh",
-        "responses": {
-          "200": {
-            "description": "Current browser session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionView"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Refresh token invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/auth/logout": {
       "post": {
         "tags": [
@@ -213,42 +182,6 @@
         }
       }
     },
-    "/api/auth/me": {
-      "get": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "GET /api/auth/me",
-        "operationId": "me",
-        "responses": {
-          "200": {
-            "description": "Current authenticated user",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserInfo"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "User not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
     "/api/auth/session": {
       "get": {
         "tags": [
@@ -263,76 +196,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SessionView"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/csrf/rotate": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "POST /api/auth/csrf/rotate",
-        "operationId": "rotate_csrf",
-        "responses": {
-          "200": {
-            "description": "Rotated CSRF token",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Not authenticated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/dev/session": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "POST /api/auth/dev/session",
-        "operationId": "dev_session",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DevSessionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Development session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionView"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Dev session disabled",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             }
@@ -388,47 +251,6 @@
           },
           "400": {
             "description": "Invalid callback",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/auth/verify-email": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "POST /api/auth/verify-email",
-        "operationId": "verify_email",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/VerifyEmailRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Email verified",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid or expired token",
             "content": {
               "application/json": {
                 "schema": {
@@ -6109,37 +5931,6 @@
         }
       }
     },
-    "/api/sessions/check-duplicate": {
-      "post": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "POST /api/sessions/check-duplicate — check if a fingerprint already completed this questionnaire.",
-        "operationId": "check_duplicate",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CheckDuplicateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Duplicate check result",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CheckDuplicateResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/sessions/aggregate": {
       "get": {
         "tags": [
@@ -6648,67 +6439,6 @@
             "bearerAuth": []
           }
         ]
-      },
-      "post": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "POST /api/sessions/:id/responses",
-        "operationId": "submit_response",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Session id",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SubmitResponsesPayload"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Responses persisted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CountResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "No responses provided or session inactive",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Session not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/sessions/{id}/events": {
@@ -6865,67 +6595,6 @@
             "bearerAuth": []
           }
         ]
-      },
-      "post": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "POST /api/sessions/:id/variables",
-        "operationId": "upsert_variable",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Session id",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionVariableRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Variable persisted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid variable payload",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Session not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/questionnaires/{id}/condition-counts": {
@@ -7365,61 +7034,6 @@
             }
           }
         }
-      }
-    },
-    "/api/sessions/filter": {
-      "post": {
-        "tags": [
-          "analytics"
-        ],
-        "operationId": "filter_sessions",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FilterRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Filtered sessions",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FilterResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid filter request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Access denied",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
       }
     },
     "/api/sessions/timeseries": {
@@ -8585,38 +8199,6 @@
           }
         }
       },
-      "CheckDuplicateRequest": {
-        "type": "object",
-        "required": [
-          "questionnaire_id",
-          "fingerprint"
-        ],
-        "properties": {
-          "questionnaire_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "fingerprint": {
-            "type": "string"
-          }
-        }
-      },
-      "CheckDuplicateResponse": {
-        "type": "object",
-        "required": [
-          "is_duplicate",
-          "previous_completions"
-        ],
-        "properties": {
-          "is_duplicate": {
-            "type": "boolean"
-          },
-          "previous_completions": {
-            "type": "integer",
-            "format": "int64"
-          }
-        }
-      },
       "CommentResponse": {
         "type": "object",
         "required": [
@@ -9450,23 +9032,6 @@
           }
         }
       },
-      "DevSessionRequest": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "full_name": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
       "DomainRecord": {
         "type": "object",
         "required": [
@@ -9795,164 +9360,6 @@
             ],
             "description": "Operator-facing failure reason, present only on a failed job."
           }
-        }
-      },
-      "FilterGroup": {
-        "type": "object",
-        "required": [
-          "logic",
-          "rules"
-        ],
-        "properties": {
-          "logic": {
-            "type": "string"
-          },
-          "rules": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FilterRule"
-            }
-          }
-        }
-      },
-      "FilterRequest": {
-        "type": "object",
-        "required": [
-          "questionnaire_id",
-          "groups"
-        ],
-        "properties": {
-          "questionnaire_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "groups": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FilterGroup"
-            }
-          },
-          "logic": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "source": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Which data source to aggregate: \"variable\" (default) or \"response\""
-          },
-          "key": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Variable name or question id to aggregate"
-          },
-          "limit": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
-          },
-          "offset": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64"
-          }
-        }
-      },
-      "FilterResponse": {
-        "type": "object",
-        "required": [
-          "sessions",
-          "total"
-        ],
-        "properties": {
-          "sessions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FilteredSessionRow"
-            }
-          },
-          "total": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "stats": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/NumericStatsSummary"
-              }
-            ]
-          }
-        }
-      },
-      "FilterRule": {
-        "type": "object",
-        "required": [
-          "field",
-          "operator",
-          "value"
-        ],
-        "properties": {
-          "field": {
-            "type": "string"
-          },
-          "operator": {
-            "type": "string"
-          },
-          "value": {},
-          "value2": {
-            "description": "Second value for 'between' operator"
-          }
-        }
-      },
-      "FilteredSessionRow": {
-        "type": "object",
-        "required": [
-          "id",
-          "status",
-          "metadata"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "participant_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "status": {
-            "type": "string"
-          },
-          "started_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "completed_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "metadata": {}
         }
       },
       "HealthStatus": {
@@ -12251,31 +11658,6 @@
           }
         }
       },
-      "SessionVariableRequest": {
-        "type": "object",
-        "required": [
-          "name",
-          "value"
-        ],
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "value": {},
-          "value_type": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "source": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
       "SessionView": {
         "type": "object",
         "required": [
@@ -12357,63 +11739,6 @@
             "type": "boolean"
           }
         }
-      },
-      "SubmitResponseRequest": {
-        "type": "object",
-        "required": [
-          "question_id",
-          "value"
-        ],
-        "properties": {
-          "question_id": {
-            "type": "string"
-          },
-          "value": {},
-          "reaction_time_us": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "description": "Microsecond-precision reaction time (BIGINT)."
-          },
-          "presented_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "answered_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "metadata": {}
-        }
-      },
-      "SubmitResponsesPayload": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/SubmitResponseRequest"
-          },
-          {
-            "type": "object",
-            "required": [
-              "responses"
-            ],
-            "properties": {
-              "responses": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/SubmitResponseRequest"
-                }
-              }
-            }
-          }
-        ]
       },
       "SuccessResponse": {
         "type": "object",
@@ -13228,17 +12553,6 @@
             "type": "string"
           },
           "code": {
-            "type": "string"
-          }
-        }
-      },
-      "VerifyEmailRequest": {
-        "type": "object",
-        "required": [
-          "token"
-        ],
-        "properties": {
-          "token": {
             "type": "string"
           }
         }

@@ -23,9 +23,13 @@
 //! NOTE (correction to the P3-T2 plan): `GET /api/sessions/{id}/responses`
 //! takes an `AuthenticatedUser`, so an anonymous caller cannot read its own
 //! rows over HTTP — the positive read is therefore performed by the
-//! questionnaire's authenticated owner. `submit_response`'s `insert_response`
-//! does not persist a `client_id` (that column is only written by the
-//! offline `/sync` path), so the response is asserted by `question_id`/value.
+//! questionnaire's authenticated owner.
+//!
+//! NOTE (R5-4): the anonymous write goes through `POST /api/sessions/{id}/sync`
+//! — the offline-first batch path — after the per-response `POST
+//! /api/sessions/{id}/responses` endpoint was removed as vestigial. `/sync`
+//! runs under the same `fillout_rls_context` dual-path GUC, so it exercises the
+//! same anonymous-admission contract the removed endpoint did.
 
 use axum::http::StatusCode;
 
@@ -69,25 +73,30 @@ async fn anonymous_fillout_lifecycle_and_isolation() {
         .and_then(|s| uuid::Uuid::parse_str(s).ok())
         .expect("session id in create response");
 
-    // ── Anonymous submit a response ───────────────────────────────────
+    // ── Anonymous submit a response via the offline-first /sync path ──
     let resp_body = serde_json::json!({
-        "question_id": "q1",
-        "value": { "choice": "a" },
+        "responses": [{
+            "client_id": uuid::Uuid::new_v4(),
+            "question_id": "q1",
+            "value": { "choice": "a" },
+        }],
+        "events": [],
+        "variables": [],
     });
     let (status, submitted) = json_request(
         &app,
         "POST",
-        &format!("/api/sessions/{id1}/responses"),
+        &format!("/api/sessions/{id1}/sync"),
         None,
         Some(&resp_body),
     )
     .await;
+    assert_eq!(status, StatusCode::OK, "anon sync response: {submitted:?}");
     assert_eq!(
-        status,
-        StatusCode::CREATED,
-        "anon submit response: {submitted:?}"
+        submitted["responses_synced"].as_i64(),
+        Some(1),
+        "one response stored"
     );
-    assert_eq!(submitted["count"].as_i64(), Some(1), "one response stored");
 
     // ── Positive read: the questionnaire owner (A) reads the row ──────
     let (status, rows) = json_request(

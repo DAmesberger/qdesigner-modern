@@ -113,16 +113,6 @@ export type ChangeMemberRoleRequest = {
     role: string;
 };
 
-export type CheckDuplicateRequest = {
-    questionnaire_id: string;
-    fingerprint: string;
-};
-
-export type CheckDuplicateResponse = {
-    is_duplicate: boolean;
-    previous_completions: number;
-};
-
 export type CommentResponse = {
     id: string;
     questionnaire_id: string;
@@ -416,11 +406,6 @@ export type DeletedResponse = {
     deleted: boolean;
 };
 
-export type DevSessionRequest = {
-    email?: string | null;
-    full_name?: string | null;
-};
-
 export type DomainRecord = {
     id: string;
     organization_id: string;
@@ -533,52 +518,6 @@ export type ExportJob = {
      * Operator-facing failure reason, present only on a failed job.
      */
     error?: string | null;
-};
-
-export type FilterGroup = {
-    logic: string;
-    rules: Array<FilterRule>;
-};
-
-export type FilterRequest = {
-    questionnaire_id: string;
-    groups: Array<FilterGroup>;
-    logic?: string | null;
-    /**
-     * Which data source to aggregate: "variable" (default) or "response"
-     */
-    source?: string | null;
-    /**
-     * Variable name or question id to aggregate
-     */
-    key?: string | null;
-    limit?: number | null;
-    offset?: number | null;
-};
-
-export type FilterResponse = {
-    sessions: Array<FilteredSessionRow>;
-    total: number;
-    stats?: null | NumericStatsSummary;
-};
-
-export type FilterRule = {
-    field: string;
-    operator: string;
-    value: unknown;
-    /**
-     * Second value for 'between' operator
-     */
-    value2?: unknown;
-};
-
-export type FilteredSessionRow = {
-    id: string;
-    participant_id?: string | null;
-    status: string;
-    started_at?: string | null;
-    completed_at?: string | null;
-    metadata: unknown;
 };
 
 export type HealthStatus = {
@@ -1287,13 +1226,6 @@ export type SessionVariableRecord = {
     updated_at?: string | null;
 };
 
-export type SessionVariableRequest = {
-    name: string;
-    value: unknown;
-    value_type?: string | null;
-    source?: string | null;
-};
-
 export type SessionView = {
     authenticated: boolean;
     provider?: string | null;
@@ -1317,22 +1249,6 @@ export type SetDataRegionRequest = {
  */
 export type SetLegalHoldRequest = {
     legal_hold: boolean;
-};
-
-export type SubmitResponseRequest = {
-    question_id: string;
-    value: unknown;
-    /**
-     * Microsecond-precision reaction time (BIGINT).
-     */
-    reaction_time_us?: number | null;
-    presented_at?: string | null;
-    answered_at?: string | null;
-    metadata?: unknown;
-};
-
-export type SubmitResponsesPayload = SubmitResponseRequest | {
-    responses: Array<SubmitResponseRequest>;
 };
 
 export type SuccessResponse = {
@@ -1597,10 +1513,6 @@ export type VerifyCodeRequest = {
     code: string;
 };
 
-export type VerifyEmailRequest = {
-    token: string;
-};
-
 export type HealthData = {
     body?: never;
     path?: never;
@@ -1700,31 +1612,6 @@ export type LoginResponses = {
 
 export type LoginResponse = LoginResponses[keyof LoginResponses];
 
-export type RefreshData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/auth/refresh';
-};
-
-export type RefreshErrors = {
-    /**
-     * Refresh token invalid
-     */
-    401: ErrorEnvelope;
-};
-
-export type RefreshError = RefreshErrors[keyof RefreshErrors];
-
-export type RefreshResponses = {
-    /**
-     * Current browser session
-     */
-    200: SessionView;
-};
-
-export type RefreshResponse = RefreshResponses[keyof RefreshResponses];
-
 export type LogoutData = {
     body?: never;
     path?: never;
@@ -1738,31 +1625,6 @@ export type LogoutResponses = {
      */
     200: unknown;
 };
-
-export type MeData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/auth/me';
-};
-
-export type MeErrors = {
-    /**
-     * User not found
-     */
-    404: ErrorEnvelope;
-};
-
-export type MeError = MeErrors[keyof MeErrors];
-
-export type MeResponses = {
-    /**
-     * Current authenticated user
-     */
-    200: UserInfo;
-};
-
-export type MeResponse = MeResponses[keyof MeResponses];
 
 export type SessionViewData = {
     body?: never;
@@ -1779,54 +1641,6 @@ export type SessionViewResponses = {
 };
 
 export type SessionViewResponse = SessionViewResponses[keyof SessionViewResponses];
-
-export type RotateCsrfData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/auth/csrf/rotate';
-};
-
-export type RotateCsrfErrors = {
-    /**
-     * Not authenticated
-     */
-    401: ErrorEnvelope;
-};
-
-export type RotateCsrfError = RotateCsrfErrors[keyof RotateCsrfErrors];
-
-export type RotateCsrfResponses = {
-    /**
-     * Rotated CSRF token
-     */
-    200: unknown;
-};
-
-export type DevSessionData = {
-    body: DevSessionRequest;
-    path?: never;
-    query?: never;
-    url: '/api/auth/dev/session';
-};
-
-export type DevSessionErrors = {
-    /**
-     * Dev session disabled
-     */
-    403: ErrorEnvelope;
-};
-
-export type DevSessionError = DevSessionErrors[keyof DevSessionErrors];
-
-export type DevSessionResponses = {
-    /**
-     * Development session
-     */
-    200: SessionView;
-};
-
-export type DevSessionResponse = DevSessionResponses[keyof DevSessionResponses];
 
 export type ZitadelStartData = {
     body?: never;
@@ -1864,31 +1678,6 @@ export type ZitadelCallbackErrors = {
 };
 
 export type ZitadelCallbackError = ZitadelCallbackErrors[keyof ZitadelCallbackErrors];
-
-export type VerifyEmailData = {
-    body: VerifyEmailRequest;
-    path?: never;
-    query?: never;
-    url: '/api/auth/verify-email';
-};
-
-export type VerifyEmailErrors = {
-    /**
-     * Invalid or expired token
-     */
-    400: ErrorEnvelope;
-};
-
-export type VerifyEmailError = VerifyEmailErrors[keyof VerifyEmailErrors];
-
-export type VerifyEmailResponses = {
-    /**
-     * Email verified
-     */
-    200: MessageResponse;
-};
-
-export type VerifyEmailResponse = VerifyEmailResponses[keyof VerifyEmailResponses];
 
 export type SendVerificationCodeData = {
     body: SendVerificationCodeRequest;
@@ -4850,22 +4639,6 @@ export type CreateSessionResponses = {
 
 export type CreateSessionResponse2 = CreateSessionResponses[keyof CreateSessionResponses];
 
-export type CheckDuplicateData = {
-    body: CheckDuplicateRequest;
-    path?: never;
-    query?: never;
-    url: '/api/sessions/check-duplicate';
-};
-
-export type CheckDuplicateResponses = {
-    /**
-     * Duplicate check result
-     */
-    200: CheckDuplicateResponse;
-};
-
-export type CheckDuplicateResponse2 = CheckDuplicateResponses[keyof CheckDuplicateResponses];
-
 export type AggregateSessionsData = {
     body?: never;
     path?: never;
@@ -5095,40 +4868,6 @@ export type GetResponsesResponses = {
 
 export type GetResponsesResponse = GetResponsesResponses[keyof GetResponsesResponses];
 
-export type SubmitResponseData = {
-    body: SubmitResponsesPayload;
-    path: {
-        /**
-         * Session id
-         */
-        id: string;
-    };
-    query?: never;
-    url: '/api/sessions/{id}/responses';
-};
-
-export type SubmitResponseErrors = {
-    /**
-     * No responses provided or session inactive
-     */
-    400: ErrorEnvelope;
-    /**
-     * Session not found
-     */
-    404: ErrorEnvelope;
-};
-
-export type SubmitResponseError = SubmitResponseErrors[keyof SubmitResponseErrors];
-
-export type SubmitResponseResponses = {
-    /**
-     * Responses persisted
-     */
-    201: CountResponse;
-};
-
-export type SubmitResponseResponse = SubmitResponseResponses[keyof SubmitResponseResponses];
-
 export type GetEventsData = {
     body?: never;
     path: {
@@ -5218,40 +4957,6 @@ export type GetVariablesResponses = {
 };
 
 export type GetVariablesResponse = GetVariablesResponses[keyof GetVariablesResponses];
-
-export type UpsertVariableData = {
-    body: SessionVariableRequest;
-    path: {
-        /**
-         * Session id
-         */
-        id: string;
-    };
-    query?: never;
-    url: '/api/sessions/{id}/variables';
-};
-
-export type UpsertVariableErrors = {
-    /**
-     * Invalid variable payload
-     */
-    400: ErrorEnvelope;
-    /**
-     * Session not found
-     */
-    404: ErrorEnvelope;
-};
-
-export type UpsertVariableError = UpsertVariableErrors[keyof UpsertVariableErrors];
-
-export type UpsertVariableResponses = {
-    /**
-     * Variable persisted
-     */
-    201: SuccessResponse;
-};
-
-export type UpsertVariableResponse = UpsertVariableResponses[keyof UpsertVariableResponses];
 
 export type ConditionCountsData = {
     body?: never;
@@ -5519,35 +5224,6 @@ export type SyncedClientIdsResponses = {
 };
 
 export type SyncedClientIdsResponse2 = SyncedClientIdsResponses[keyof SyncedClientIdsResponses];
-
-export type FilterSessionsData = {
-    body: FilterRequest;
-    path?: never;
-    query?: never;
-    url: '/api/sessions/filter';
-};
-
-export type FilterSessionsErrors = {
-    /**
-     * Invalid filter request
-     */
-    400: ErrorEnvelope;
-    /**
-     * Access denied
-     */
-    403: ErrorEnvelope;
-};
-
-export type FilterSessionsError = FilterSessionsErrors[keyof FilterSessionsErrors];
-
-export type FilterSessionsResponses = {
-    /**
-     * Filtered sessions
-     */
-    200: FilterResponse;
-};
-
-export type FilterSessionsResponse = FilterSessionsResponses[keyof FilterSessionsResponses];
 
 export type TimeseriesData = {
     body?: never;

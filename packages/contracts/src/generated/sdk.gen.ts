@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AddMemberData, AddMemberErrors, AddMemberResponses, AddProjectMemberData, AddProjectMemberErrors, AddProjectMemberResponses, AggregateSessionsData, AggregateSessionsErrors, AggregateSessionsResponses, ArmCountsData, ArmCountsErrors, ArmCountsResponses, AssignMemberRoleData, AssignMemberRoleErrors, AssignMemberRoleResponses, BumpVersionData, BumpVersionErrors, BumpVersionResponses, ChangeMemberRoleData, ChangeMemberRoleErrors, ChangeMemberRoleResponses, CheckAutoJoinData, CheckAutoJoinErrors, CheckAutoJoinResponses, CheckDuplicateData, CheckDuplicateResponses, CompareSessionsData, CompareSessionsErrors, CompareSessionsResponses, CompletePromptData, CompletePromptErrors, CompletePromptResponses, ConditionCountsData, ConditionCountsErrors, ConditionCountsResponses, ConfirmPasswordResetData, ConfirmPasswordResetErrors, ConfirmPasswordResetResponses, CreateApiKeyData, CreateApiKeyErrors, CreateApiKeyResponses, CreateCommentData, CreateCommentErrors, CreateCommentResponses, CreateDomainData, CreateDomainErrors, CreateDomainResponses, CreateInvitationData, CreateInvitationErrors, CreateInvitationResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateProviderData, CreateProviderErrors, CreateProviderResponses, CreateQuestionnaireData, CreateQuestionnaireErrors, CreateQuestionnaireResponses, CreateRoleData, CreateRoleErrors, CreateRoleResponses, CreateScimTokenData, CreateScimTokenErrors, CreateScimTokenResponses, CreateSeriesData, CreateSeriesErrors, CreateSeriesResponses, CreateSessionData, CreateSessionErrors, CreateSessionResponses, CreateTemplateData, CreateTemplateErrors, CreateTemplateResponses, CrossProjectAnalyticsData, CrossProjectAnalyticsErrors, CrossProjectAnalyticsResponses, DashboardSummaryData, DashboardSummaryErrors, DashboardSummaryResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteAccountData, DeleteAccountErrors, DeleteAccountResponses, DeleteCommentData, DeleteCommentErrors, DeleteCommentResponses, DeleteDomainData, DeleteDomainErrors, DeleteDomainResponses, DeleteMediaData, DeleteMediaErrors, DeleteMediaResponses, DeleteOrganizationData, DeleteOrganizationErrors, DeleteOrganizationResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, DeleteProviderData, DeleteProviderErrors, DeleteProviderResponses, DeleteQuestionnaireData, DeleteQuestionnaireErrors, DeleteQuestionnaireResponses, DeleteRoleData, DeleteRoleErrors, DeleteRoleResponses, DeleteTemplateData, DeleteTemplateErrors, DeleteTemplateResponses, DevSessionData, DevSessionErrors, DevSessionResponses, EnrollData, EnrollErrors, EnrollResponses, EraseOrgData, EraseOrgErrors, EraseOrgResponses, ExportResponsesData, ExportResponsesErrors, ExportResponsesResponses, FilterSessionsData, FilterSessionsErrors, FilterSessionsResponses, GetEventsData, GetEventsErrors, GetEventsResponses, GetExportData, GetExportErrors, GetExportResponses, GetInvitationData, GetInvitationErrors, GetInvitationResponses, GetMediaData, GetMediaErrors, GetMediaResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetOrgBrandingData, GetOrgBrandingErrors, GetOrgBrandingResponses, GetProfileData, GetProfileErrors, GetProfileResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetQuestionnaireByCodeData, GetQuestionnaireByCodeErrors, GetQuestionnaireByCodeResponses, GetQuestionnaireData, GetQuestionnaireErrors, GetQuestionnaireResponses, GetResponsesData, GetResponsesErrors, GetResponsesResponses, GetSeatsData, GetSeatsErrors, GetSeatsResponses, GetSessionData, GetSessionErrors, GetSessionResponses, GetTemplateData, GetTemplateErrors, GetTemplateResponses, GetVariablesData, GetVariablesErrors, GetVariablesResponses, HealthData, HealthResponses, ListApiKeysData, ListApiKeysErrors, ListApiKeysResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListCommentsData, ListCommentsErrors, ListCommentsResponses, ListDomainsData, ListDomainsErrors, ListDomainsResponses, ListEnrollmentsData, ListEnrollmentsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMediaData, ListMediaErrors, ListMediaResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsResponses, ListPendingInvitationsData, ListPendingInvitationsErrors, ListPendingInvitationsResponses, ListProjectMembersData, ListProjectMembersErrors, ListProjectMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListQuestionnairesData, ListQuestionnairesErrors, ListQuestionnairesResponses, ListRolesData, ListRolesErrors, ListRolesResponses, ListScimTokensData, ListScimTokensErrors, ListScimTokensResponses, ListSeriesData, ListSeriesResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListTemplatesData, ListTemplatesErrors, ListTemplatesResponses, ListVersionsData, ListVersionsErrors, ListVersionsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, MeData, MeErrors, MeResponses, PasswordResetData, PasswordResetErrors, PasswordResetResponses, PublicCohortStatsData, PublicCohortStatsErrors, PublicCohortStatsResponses, PublicServerVariablesData, PublicServerVariablesErrors, PublicServerVariablesResponses, PublishQuestionnaireData, PublishQuestionnaireErrors, PublishQuestionnaireResponses, QuotaCellsData, QuotaCellsErrors, QuotaCellsResponses, QuotaStatusData, QuotaStatusErrors, QuotaStatusResponses, ReadyData, ReadyErrors, ReadyResponses, RefreshData, RefreshErrors, RefreshResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemoveProjectMemberData, RemoveProjectMemberErrors, RemoveProjectMemberResponses, RequestExportData, RequestExportErrors, RequestExportResponses, ResendVerificationCodeData, ResendVerificationCodeResponses, ResolvePromptData, ResolvePromptErrors, ResolvePromptResponses, ResolveSsoData, ResolveSsoResponses, RevokeApiKeyData, RevokeApiKeyErrors, RevokeApiKeyResponses, RevokeInvitationData, RevokeInvitationErrors, RevokeInvitationResponses, RevokeScimTokenData, RevokeScimTokenErrors, RevokeScimTokenResponses, RotateCsrfData, RotateCsrfErrors, RotateCsrfResponses, SendVerificationCodeData, SendVerificationCodeResponses, SessionViewData, SessionViewResponses, SetDataRegionData, SetDataRegionErrors, SetDataRegionResponses, SetLegalHoldData, SetLegalHoldErrors, SetLegalHoldResponses, SsoCallbackData, SsoCallbackErrors, SsoStartData, SsoStartErrors, StreamMediaContentData, StreamMediaContentErrors, StreamMediaContentResponses, SubmitEventsData, SubmitEventsErrors, SubmitEventsResponses, SubmitResponseData, SubmitResponseErrors, SubmitResponseResponses, SyncedClientIdsData, SyncedClientIdsErrors, SyncedClientIdsResponses, SyncSessionData, SyncSessionErrors, SyncSessionResponses, TimeseriesData, TimeseriesErrors, TimeseriesResponses, TransferOrgOwnershipData, TransferOrgOwnershipErrors, TransferOrgOwnershipResponses, TransferProjectOwnershipData, TransferProjectOwnershipErrors, TransferProjectOwnershipResponses, UnsubscribePromptData, UnsubscribePromptErrors, UnsubscribePromptResponses, UpdateCommentData, UpdateCommentErrors, UpdateCommentResponses, UpdateDomainData, UpdateDomainErrors, UpdateDomainResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectMemberData, UpdateProjectMemberErrors, UpdateProjectMemberResponses, UpdateProjectResponses, UpdateProviderData, UpdateProviderErrors, UpdateProviderResponses, UpdateQuestionnaireData, UpdateQuestionnaireErrors, UpdateQuestionnaireResponses, UpdateRoleData, UpdateRoleErrors, UpdateRoleResponses, UpdateSeriesData, UpdateSeriesErrors, UpdateSeriesResponses, UpdateSessionData, UpdateSessionErrors, UpdateSessionResponses, UpdateTemplateData, UpdateTemplateErrors, UpdateTemplateResponses, UploadMediaData, UploadMediaErrors, UploadMediaResponses, UploadSessionMediaData, UploadSessionMediaErrors, UploadSessionMediaResponses, UpsertVariableData, UpsertVariableErrors, UpsertVariableResponses, VerifyCodeData, VerifyCodeResponses, VerifyDomainData, VerifyDomainErrors, VerifyDomainResponses, VerifyEmailData, VerifyEmailErrors, VerifyEmailResponses, ZitadelCallbackData, ZitadelCallbackErrors, ZitadelStartData, ZitadelStartErrors } from './types.gen';
+import type { AcceptInvitationData, AcceptInvitationErrors, AcceptInvitationResponses, AddMemberData, AddMemberErrors, AddMemberResponses, AddProjectMemberData, AddProjectMemberErrors, AddProjectMemberResponses, AggregateSessionsData, AggregateSessionsErrors, AggregateSessionsResponses, ArmCountsData, ArmCountsErrors, ArmCountsResponses, AssignMemberRoleData, AssignMemberRoleErrors, AssignMemberRoleResponses, BumpVersionData, BumpVersionErrors, BumpVersionResponses, ChangeMemberRoleData, ChangeMemberRoleErrors, ChangeMemberRoleResponses, CheckAutoJoinData, CheckAutoJoinErrors, CheckAutoJoinResponses, CompareSessionsData, CompareSessionsErrors, CompareSessionsResponses, CompletePromptData, CompletePromptErrors, CompletePromptResponses, ConditionCountsData, ConditionCountsErrors, ConditionCountsResponses, ConfirmPasswordResetData, ConfirmPasswordResetErrors, ConfirmPasswordResetResponses, CreateApiKeyData, CreateApiKeyErrors, CreateApiKeyResponses, CreateCommentData, CreateCommentErrors, CreateCommentResponses, CreateDomainData, CreateDomainErrors, CreateDomainResponses, CreateInvitationData, CreateInvitationErrors, CreateInvitationResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateProviderData, CreateProviderErrors, CreateProviderResponses, CreateQuestionnaireData, CreateQuestionnaireErrors, CreateQuestionnaireResponses, CreateRoleData, CreateRoleErrors, CreateRoleResponses, CreateScimTokenData, CreateScimTokenErrors, CreateScimTokenResponses, CreateSeriesData, CreateSeriesErrors, CreateSeriesResponses, CreateSessionData, CreateSessionErrors, CreateSessionResponses, CreateTemplateData, CreateTemplateErrors, CreateTemplateResponses, CrossProjectAnalyticsData, CrossProjectAnalyticsErrors, CrossProjectAnalyticsResponses, DashboardSummaryData, DashboardSummaryErrors, DashboardSummaryResponses, DeclineInvitationData, DeclineInvitationErrors, DeclineInvitationResponses, DeleteAccountData, DeleteAccountErrors, DeleteAccountResponses, DeleteCommentData, DeleteCommentErrors, DeleteCommentResponses, DeleteDomainData, DeleteDomainErrors, DeleteDomainResponses, DeleteMediaData, DeleteMediaErrors, DeleteMediaResponses, DeleteOrganizationData, DeleteOrganizationErrors, DeleteOrganizationResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, DeleteProviderData, DeleteProviderErrors, DeleteProviderResponses, DeleteQuestionnaireData, DeleteQuestionnaireErrors, DeleteQuestionnaireResponses, DeleteRoleData, DeleteRoleErrors, DeleteRoleResponses, DeleteTemplateData, DeleteTemplateErrors, DeleteTemplateResponses, EnrollData, EnrollErrors, EnrollResponses, EraseOrgData, EraseOrgErrors, EraseOrgResponses, ExportResponsesData, ExportResponsesErrors, ExportResponsesResponses, GetEventsData, GetEventsErrors, GetEventsResponses, GetExportData, GetExportErrors, GetExportResponses, GetInvitationData, GetInvitationErrors, GetInvitationResponses, GetMediaData, GetMediaErrors, GetMediaResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetOrgBrandingData, GetOrgBrandingErrors, GetOrgBrandingResponses, GetProfileData, GetProfileErrors, GetProfileResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetQuestionnaireByCodeData, GetQuestionnaireByCodeErrors, GetQuestionnaireByCodeResponses, GetQuestionnaireData, GetQuestionnaireErrors, GetQuestionnaireResponses, GetResponsesData, GetResponsesErrors, GetResponsesResponses, GetSeatsData, GetSeatsErrors, GetSeatsResponses, GetSessionData, GetSessionErrors, GetSessionResponses, GetTemplateData, GetTemplateErrors, GetTemplateResponses, GetVariablesData, GetVariablesErrors, GetVariablesResponses, HealthData, HealthResponses, ListApiKeysData, ListApiKeysErrors, ListApiKeysResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListCommentsData, ListCommentsErrors, ListCommentsResponses, ListDomainsData, ListDomainsErrors, ListDomainsResponses, ListEnrollmentsData, ListEnrollmentsResponses, ListInvitationsData, ListInvitationsErrors, ListInvitationsResponses, ListMediaData, ListMediaErrors, ListMediaResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsResponses, ListPendingInvitationsData, ListPendingInvitationsErrors, ListPendingInvitationsResponses, ListProjectMembersData, ListProjectMembersErrors, ListProjectMembersResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListQuestionnairesData, ListQuestionnairesErrors, ListQuestionnairesResponses, ListRolesData, ListRolesErrors, ListRolesResponses, ListScimTokensData, ListScimTokensErrors, ListScimTokensResponses, ListSeriesData, ListSeriesResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListTemplatesData, ListTemplatesErrors, ListTemplatesResponses, ListVersionsData, ListVersionsErrors, ListVersionsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PasswordResetData, PasswordResetErrors, PasswordResetResponses, PublicCohortStatsData, PublicCohortStatsErrors, PublicCohortStatsResponses, PublicServerVariablesData, PublicServerVariablesErrors, PublicServerVariablesResponses, PublishQuestionnaireData, PublishQuestionnaireErrors, PublishQuestionnaireResponses, QuotaCellsData, QuotaCellsErrors, QuotaCellsResponses, QuotaStatusData, QuotaStatusErrors, QuotaStatusResponses, ReadyData, ReadyErrors, ReadyResponses, RegisterData, RegisterErrors, RegisterResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemoveProjectMemberData, RemoveProjectMemberErrors, RemoveProjectMemberResponses, RequestExportData, RequestExportErrors, RequestExportResponses, ResendVerificationCodeData, ResendVerificationCodeResponses, ResolvePromptData, ResolvePromptErrors, ResolvePromptResponses, ResolveSsoData, ResolveSsoResponses, RevokeApiKeyData, RevokeApiKeyErrors, RevokeApiKeyResponses, RevokeInvitationData, RevokeInvitationErrors, RevokeInvitationResponses, RevokeScimTokenData, RevokeScimTokenErrors, RevokeScimTokenResponses, SendVerificationCodeData, SendVerificationCodeResponses, SessionViewData, SessionViewResponses, SetDataRegionData, SetDataRegionErrors, SetDataRegionResponses, SetLegalHoldData, SetLegalHoldErrors, SetLegalHoldResponses, SsoCallbackData, SsoCallbackErrors, SsoStartData, SsoStartErrors, StreamMediaContentData, StreamMediaContentErrors, StreamMediaContentResponses, SubmitEventsData, SubmitEventsErrors, SubmitEventsResponses, SyncedClientIdsData, SyncedClientIdsErrors, SyncedClientIdsResponses, SyncSessionData, SyncSessionErrors, SyncSessionResponses, TimeseriesData, TimeseriesErrors, TimeseriesResponses, TransferOrgOwnershipData, TransferOrgOwnershipErrors, TransferOrgOwnershipResponses, TransferProjectOwnershipData, TransferProjectOwnershipErrors, TransferProjectOwnershipResponses, UnsubscribePromptData, UnsubscribePromptErrors, UnsubscribePromptResponses, UpdateCommentData, UpdateCommentErrors, UpdateCommentResponses, UpdateDomainData, UpdateDomainErrors, UpdateDomainResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdateProfileData, UpdateProfileErrors, UpdateProfileResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectMemberData, UpdateProjectMemberErrors, UpdateProjectMemberResponses, UpdateProjectResponses, UpdateProviderData, UpdateProviderErrors, UpdateProviderResponses, UpdateQuestionnaireData, UpdateQuestionnaireErrors, UpdateQuestionnaireResponses, UpdateRoleData, UpdateRoleErrors, UpdateRoleResponses, UpdateSeriesData, UpdateSeriesErrors, UpdateSeriesResponses, UpdateSessionData, UpdateSessionErrors, UpdateSessionResponses, UpdateTemplateData, UpdateTemplateErrors, UpdateTemplateResponses, UploadMediaData, UploadMediaErrors, UploadMediaResponses, UploadSessionMediaData, UploadSessionMediaErrors, UploadSessionMediaResponses, VerifyCodeData, VerifyCodeResponses, VerifyDomainData, VerifyDomainErrors, VerifyDomainResponses, ZitadelCallbackData, ZitadelCallbackErrors, ZitadelStartData, ZitadelStartErrors } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -53,45 +53,14 @@ export const login = <ThrowOnError extends boolean = false>(options: Options<Log
 });
 
 /**
- * POST /api/auth/refresh
- */
-export const refresh = <ThrowOnError extends boolean = false>(options?: Options<RefreshData, ThrowOnError>) => (options?.client ?? client).post<RefreshResponses, RefreshErrors, ThrowOnError>({ url: '/api/auth/refresh', ...options });
-
-/**
  * POST /api/auth/logout
  */
 export const logout = <ThrowOnError extends boolean = false>(options?: Options<LogoutData, ThrowOnError>) => (options?.client ?? client).post<LogoutResponses, unknown, ThrowOnError>({ url: '/api/auth/logout', ...options });
 
 /**
- * GET /api/auth/me
- */
-export const me = <ThrowOnError extends boolean = false>(options?: Options<MeData, ThrowOnError>) => (options?.client ?? client).get<MeResponses, MeErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/auth/me',
-    ...options
-});
-
-/**
  * GET /api/auth/session
  */
 export const sessionView = <ThrowOnError extends boolean = false>(options?: Options<SessionViewData, ThrowOnError>) => (options?.client ?? client).get<SessionViewResponses, unknown, ThrowOnError>({ url: '/api/auth/session', ...options });
-
-/**
- * POST /api/auth/csrf/rotate
- */
-export const rotateCsrf = <ThrowOnError extends boolean = false>(options?: Options<RotateCsrfData, ThrowOnError>) => (options?.client ?? client).post<RotateCsrfResponses, RotateCsrfErrors, ThrowOnError>({ url: '/api/auth/csrf/rotate', ...options });
-
-/**
- * POST /api/auth/dev/session
- */
-export const devSession = <ThrowOnError extends boolean = false>(options: Options<DevSessionData, ThrowOnError>) => (options.client ?? client).post<DevSessionResponses, DevSessionErrors, ThrowOnError>({
-    url: '/api/auth/dev/session',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
 
 /**
  * GET /api/auth/zitadel/start?return_to=/dashboard
@@ -102,18 +71,6 @@ export const zitadelStart = <ThrowOnError extends boolean = false>(options?: Opt
  * GET /api/auth/zitadel/callback
  */
 export const zitadelCallback = <ThrowOnError extends boolean = false>(options?: Options<ZitadelCallbackData, ThrowOnError>) => (options?.client ?? client).get<unknown, ZitadelCallbackErrors, ThrowOnError>({ url: '/api/auth/zitadel/callback', ...options });
-
-/**
- * POST /api/auth/verify-email
- */
-export const verifyEmail = <ThrowOnError extends boolean = false>(options: Options<VerifyEmailData, ThrowOnError>) => (options.client ?? client).post<VerifyEmailResponses, VerifyEmailErrors, ThrowOnError>({
-    url: '/api/auth/verify-email',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
 
 /**
  * POST /api/auth/verify-email/send  and  /verify-email/resend
@@ -1095,18 +1052,6 @@ export const createSession = <ThrowOnError extends boolean = false>(options: Opt
 });
 
 /**
- * POST /api/sessions/check-duplicate — check if a fingerprint already completed this questionnaire.
- */
-export const checkDuplicate = <ThrowOnError extends boolean = false>(options: Options<CheckDuplicateData, ThrowOnError>) => (options.client ?? client).post<CheckDuplicateResponses, unknown, ThrowOnError>({
-    url: '/api/sessions/check-duplicate',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * GET /api/sessions/aggregate
  */
 export const aggregateSessions = <ThrowOnError extends boolean = false>(options: Options<AggregateSessionsData, ThrowOnError>) => (options.client ?? client).get<AggregateSessionsResponses, AggregateSessionsErrors, ThrowOnError>({
@@ -1173,18 +1118,6 @@ export const getResponses = <ThrowOnError extends boolean = false>(options: Opti
 });
 
 /**
- * POST /api/sessions/:id/responses
- */
-export const submitResponse = <ThrowOnError extends boolean = false>(options: Options<SubmitResponseData, ThrowOnError>) => (options.client ?? client).post<SubmitResponseResponses, SubmitResponseErrors, ThrowOnError>({
-    url: '/api/sessions/{id}/responses',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * GET /api/sessions/:id/events
  */
 export const getEvents = <ThrowOnError extends boolean = false>(options: Options<GetEventsData, ThrowOnError>) => (options.client ?? client).get<GetEventsResponses, GetEventsErrors, ThrowOnError>({
@@ -1212,18 +1145,6 @@ export const getVariables = <ThrowOnError extends boolean = false>(options: Opti
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/sessions/{id}/variables',
     ...options
-});
-
-/**
- * POST /api/sessions/:id/variables
- */
-export const upsertVariable = <ThrowOnError extends boolean = false>(options: Options<UpsertVariableData, ThrowOnError>) => (options.client ?? client).post<UpsertVariableResponses, UpsertVariableErrors, ThrowOnError>({
-    url: '/api/sessions/{id}/variables',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
 });
 
 /**
@@ -1335,16 +1256,6 @@ export const syncSession = <ThrowOnError extends boolean = false>(options: Optio
  * own durability; `ensure_session_participant_or_member` gates access.
  */
 export const syncedClientIds = <ThrowOnError extends boolean = false>(options: Options<SyncedClientIdsData, ThrowOnError>) => (options.client ?? client).get<SyncedClientIdsResponses, SyncedClientIdsErrors, ThrowOnError>({ url: '/api/sessions/{id}/synced-client-ids', ...options });
-
-export const filterSessions = <ThrowOnError extends boolean = false>(options: Options<FilterSessionsData, ThrowOnError>) => (options.client ?? client).post<FilterSessionsResponses, FilterSessionsErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/sessions/filter',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
 
 /**
  * GET /api/sessions/timeseries

@@ -256,58 +256,6 @@ pub async fn create_session(
     ))
 }
 
-/// POST /api/sessions/check-duplicate — check if a fingerprint already completed this questionnaire.
-#[utoipa::path(
-    post,
-    path = "/api/sessions/check-duplicate",
-    request_body = CheckDuplicateRequest,
-    responses(
-        (status = 200, description = "Duplicate check result", body = CheckDuplicateResponse)
-    ),
-    tags = ["sessions"]
-)]
-pub async fn check_duplicate(
-    tx: Tx,
-    Json(body): Json<CheckDuplicateRequest>,
-) -> Result<Json<CheckDuplicateResponse>, ApiError> {
-    let mut tx = tx.tx().await?;
-    // Only expose the completion count for a PUBLISHED questionnaire, matching
-    // create_session's anonymous gate. Otherwise the SECURITY DEFINER counter
-    // below (which bypasses RLS) would be a count-oracle over unpublished /
-    // other-tenant drafts for any anonymous caller who guesses an id.
-    let q_status: Option<String> = sqlx::query_scalar(
-        "SELECT status FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
-    )
-    .bind(body.questionnaire_id)
-    .fetch_optional(&mut **tx)
-    .await?;
-    if q_status.as_deref() != Some("published") {
-        return Ok(Json(CheckDuplicateResponse {
-            is_duplicate: false,
-            previous_completions: 0,
-        }));
-    }
-    // Slice 2.5: delegate to the SECURITY DEFINER counter (00026), which
-    // runs with the definer's BYPASSRLS rights and therefore sees prior
-    // COMPLETED sessions across all callers. This replaces the pre-00026
-    // plain SELECT under `qdesigner_app`, which always returned 0 for
-    // anonymous fillout — the 00021 dual-path SELECT policy admits no
-    // other session's row when the request carries no JWT and no matching
-    // `app.session_id` GUC. That no-op was tracked in the P6.3 deferred
-    // list / CLAUDE.md "Known TODOs".
-    let count: i64 =
-        sqlx::query_scalar("SELECT public.count_completed_fingerprint_sessions($1, $2)")
-            .bind(body.questionnaire_id)
-            .bind(&body.fingerprint)
-            .fetch_one(&mut **tx)
-            .await?;
-
-    Ok(Json(CheckDuplicateResponse {
-        is_duplicate: count > 0,
-        previous_completions: count,
-    }))
-}
-
 /// GET /api/sessions
 #[utoipa::path(
     get,

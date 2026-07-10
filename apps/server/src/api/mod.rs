@@ -39,15 +39,10 @@ pub fn router(state: AppState) -> Router {
     let auth_routes = Router::new()
         .route("/login", post(auth::login))
         .route("/register", post(auth::register))
-        .route("/refresh", post(auth::refresh))
         .route("/logout", post(auth::logout))
-        .route("/me", get(auth::me))
         .route("/session", get(auth::session_view))
-        .route("/csrf/rotate", post(auth::rotate_csrf))
-        .route("/dev/session", post(auth::dev_session))
         .route("/zitadel/start", get(zitadel_auth::zitadel_start))
         .route("/zitadel/callback", get(zitadel_auth::zitadel_callback))
-        .route("/verify-email", post(auth::verify_email))
         .route("/verify-email/send", post(auth::send_verification_code))
         .route("/verify-email/verify", post(auth::verify_code))
         .route("/verify-email/resend", post(auth::resend_verification_code))
@@ -305,20 +300,15 @@ pub fn router(state: AppState) -> Router {
             "/",
             get(sessions::list_sessions).post(sessions::create_session),
         )
-        .route("/check-duplicate", post(sessions::check_duplicate))
         .route("/aggregate", get(sessions::aggregate_sessions))
         .route("/compare", get(sessions::compare_sessions))
         .route("/dashboard", get(sessions::dashboard_summary))
         .route("/timeseries", get(sessions::timeseries))
-        .route("/filter", post(sessions::filter_sessions))
         .route(
             "/{id}",
             get(sessions::get_session).patch(sessions::update_session),
         )
-        .route(
-            "/{id}/responses",
-            get(sessions::get_responses).post(sessions::submit_response),
-        )
+        .route("/{id}/responses", get(sessions::get_responses))
         .route(
             "/{id}/events",
             get(sessions::get_events).post(sessions::submit_events),
@@ -331,10 +321,7 @@ pub fn router(state: AppState) -> Router {
             )),
         )
         .route("/{id}/synced-client-ids", get(sessions::synced_client_ids))
-        .route(
-            "/{id}/variables",
-            get(sessions::get_variables).post(sessions::upsert_variable),
-        )
+        .route("/{id}/variables", get(sessions::get_variables))
         .route(
             "/{id}/media",
             post(media::upload_session_media)

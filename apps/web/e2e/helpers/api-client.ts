@@ -81,8 +81,8 @@ export class TestApiClient {
     });
   }
 
-  async getUser() {
-    return this.get('/api/auth/me');
+  async getSession() {
+    return this.get('/api/auth/session');
   }
 
   async getOrganizations() {
