@@ -116,6 +116,24 @@ impl Config {
         let public_app_origin =
             std::env::var("PUBLIC_APP_ORIGIN").unwrap_or_else(|_| default_app_origin.clone());
 
+        // CORS origins double as the app-origin source for invite/SSO links.
+        // A production-like deployment MUST configure them; otherwise those
+        // absolute links would silently point at the localhost dev fallback.
+        let cors_origins_raw = std::env::var("CORS_ORIGINS")
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty());
+        if let Err(msg) = require_cors_in_production(is_production_like(), cors_origins_raw.as_deref())
+        {
+            panic!("{msg}");
+        }
+        let cors_origins: Vec<String> = cors_origins_raw
+            .unwrap_or_else(|| default_app_origin.clone())
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
         let jwt_access_expiry_secs: u64 = std::env::var("JWT_ACCESS_EXPIRY_SECS")
             .ok()
             .and_then(|v| v.parse().ok())
@@ -200,11 +218,7 @@ impl Config {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(1025),
             smtp_from: env_or("SMTP_FROM", "noreply@qdesigner.local"),
-            cors_origins: std::env::var("CORS_ORIGINS")
-                .unwrap_or(default_app_origin)
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect(),
+            cors_origins,
             public_app_origin,
             server_host: env_or("SERVER_HOST", "0.0.0.0"),
             server_port: std::env::var("SERVER_PORT")
@@ -246,6 +260,16 @@ impl Config {
             .as_deref()
             .unwrap_or(&self.jwt_secret)
     }
+
+    /// The app (SPA) origin used to build absolute links in outbound email
+    /// (org invitations) and SSO callback bounce-backs — the first configured
+    /// CORS origin with any trailing slash trimmed. In production-like
+    /// environments [`Config::from_env`] fails loud when `CORS_ORIGINS` is
+    /// unset, so this is always the operator-configured origin there, never the
+    /// localhost dev fallback.
+    pub fn app_origin(&self) -> &str {
+        resolve_app_origin(&self.cors_origins)
+    }
 }
 
 fn env_required(key: &str) -> String {
@@ -268,12 +292,12 @@ fn env_flag(key: &str, default: bool) -> bool {
         .unwrap_or(default)
 }
 
-fn guard_auth_provider(provider: AuthProvider) {
-    if provider != AuthProvider::Local {
-        return;
-    }
-
-    let production_like = ["APP_ENV", "RUST_ENV", "NODE_ENV", "ENVIRONMENT"]
+/// True when an env var signals a production-like deployment. Shared by the
+/// auth-provider guard and the CORS/app-origin guard so both fail loud under
+/// the same convention: `APP_ENV`/`RUST_ENV`/`NODE_ENV`/`ENVIRONMENT` set to
+/// `prod`/`production`/`staging`/`shared`.
+fn is_production_like() -> bool {
+    ["APP_ENV", "RUST_ENV", "NODE_ENV", "ENVIRONMENT"]
         .iter()
         .filter_map(|key| std::env::var(key).ok())
         .any(|v| {
@@ -281,9 +305,91 @@ fn guard_auth_provider(provider: AuthProvider) {
                 v.trim().to_ascii_lowercase().as_str(),
                 "prod" | "production" | "staging" | "shared"
             )
-        });
+        })
+}
 
-    if production_like {
+/// Enforce that a production-like deployment configures `CORS_ORIGINS` (the
+/// sole source of the app origin used for invite/SSO links). Pure so it can be
+/// unit tested without mutating process env; returns the fail-loud message on
+/// violation.
+fn require_cors_in_production(
+    production_like: bool,
+    cors_origins_raw: Option<&str>,
+) -> Result<(), String> {
+    let has_origin = cors_origins_raw
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false);
+    if production_like && !has_origin {
+        return Err(
+            "CORS_ORIGINS is required in production-like environments \
+             (APP_ENV/RUST_ENV/NODE_ENV/ENVIRONMENT set to prod/production/staging/shared). \
+             It is the sole source of the app origin used to build invitation and SSO \
+             callback links; without it those links would point at the http://localhost:4173 \
+             dev fallback."
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+/// Resolve the app (SPA) origin: the first configured CORS origin with any
+/// trailing slash trimmed. Pure sibling of [`Config::app_origin`].
+fn resolve_app_origin(cors_origins: &[String]) -> &str {
+    cors_origins
+        .first()
+        .map(|s| s.trim_end_matches('/'))
+        .unwrap_or("http://localhost:4173")
+}
+
+fn guard_auth_provider(provider: AuthProvider) {
+    if provider != AuthProvider::Local {
+        return;
+    }
+    if is_production_like() {
         panic!("AUTH_PROVIDER=local is not allowed in production-like environments");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn require_cors_in_production_rejects_missing_origin() {
+        assert!(require_cors_in_production(true, None).is_err());
+        assert!(require_cors_in_production(true, Some("")).is_err());
+        assert!(require_cors_in_production(true, Some("   ")).is_err());
+    }
+
+    #[test]
+    fn require_cors_in_production_accepts_configured_origin() {
+        assert!(require_cors_in_production(true, Some("https://app.example.com")).is_ok());
+    }
+
+    #[test]
+    fn require_cors_in_production_allows_dev_fallback() {
+        // Non-prod environments keep the localhost fallback (no origin required).
+        assert!(require_cors_in_production(false, None).is_ok());
+        assert!(require_cors_in_production(false, Some("")).is_ok());
+    }
+
+    #[test]
+    fn resolve_app_origin_trims_trailing_slash() {
+        let origins = vec!["https://app.example.com/".to_string()];
+        assert_eq!(resolve_app_origin(&origins), "https://app.example.com");
+    }
+
+    #[test]
+    fn resolve_app_origin_uses_first_origin() {
+        let origins = vec![
+            "https://app.example.com".to_string(),
+            "https://admin.example.com".to_string(),
+        ];
+        assert_eq!(resolve_app_origin(&origins), "https://app.example.com");
+    }
+
+    #[test]
+    fn resolve_app_origin_falls_back_when_empty() {
+        assert_eq!(resolve_app_origin(&[]), "http://localhost:4173");
     }
 }

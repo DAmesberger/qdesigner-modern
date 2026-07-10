@@ -409,6 +409,9 @@ pub async fn create_provider(
     Json(body): Json<CreateIdpRequest>,
 ) -> Result<(axum::http::StatusCode, Json<IdentityProviderRecord>), ApiError> {
     validate_protocol(&body.protocol)?;
+    if body.protocol == "saml" {
+        return Err(saml_creation_not_available());
+    }
     validate_role(&body.default_role)?;
     validate_group_role_map(&body.group_role_map)?;
 
@@ -795,15 +798,11 @@ fn callback_redirect_uri(headers: &HeaderMap) -> String {
 }
 
 /// The SPA origin the callback bounces the freshly-minted token back to.
+/// Delegates to [`crate::config::Config::app_origin`] so the origin resolution
+/// (and the production-like fail-loud on a missing origin) is unified with the
+/// invite-email link builder.
 fn app_origin(state: &AppState) -> String {
-    state
-        .config
-        .cors_origins
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "http://localhost:4173".into())
-        .trim_end_matches('/')
-        .to_string()
+    state.config.app_origin().to_string()
 }
 
 /// Stub response for `protocol = 'saml'` runtime flows. SAML config is stored
@@ -814,6 +813,18 @@ fn saml_not_available() -> ApiError {
         "SAML SSO is configured but this build does not include the SAML runtime. \
          Use an OIDC provider, or build with SAML support enabled."
             .into(),
+    )
+}
+
+/// Rejection for attempts to *configure* a new `protocol = 'saml'` IdP. Since
+/// the runtime `start`/`callback` can't complete a SAML login yet
+/// ([`saml_not_available`]), the admin CRUD blocks creating one so an org can't
+/// silently configure a provider nobody can sign in through (F-27). Pre-existing
+/// saml rows stay readable/manageable — `protocol` is immutable on update — so
+/// this only guards the create path.
+fn saml_creation_not_available() -> ApiError {
+    ApiError::BadRequest(
+        "SAML is not yet available in this build. Configure an OIDC provider instead.".into(),
     )
 }
 

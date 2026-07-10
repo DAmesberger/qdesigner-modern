@@ -25,8 +25,8 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use common::{
-    build_test_state, extract_cookie, fixture_pool, provision_tenant, register_user, send_full,
-    test_app,
+    build_test_state, extract_cookie, fixture_pool, json_request, provision_tenant, register_user,
+    send_full, test_app,
 };
 
 // A 2048-bit RSA test key. Private key signs the id_token; the modulus below
@@ -396,4 +396,73 @@ async fn oidc_default_role_when_no_group_matches() {
     .await
     .expect("membership provisioned");
     assert_eq!(role, "viewer", "no group match should use default_role");
+}
+
+/// F-27 interim: the admin CRUD refuses to CREATE a `protocol = 'saml'` IdP
+/// (the SAML runtime is not built), so an org can't configure a provider that
+/// silently can't complete login. An OIDC provider on the same org is still
+/// accepted, proving the rejection is specific to SAML rather than a blanket
+/// create failure.
+#[tokio::test]
+async fn create_saml_provider_is_rejected() {
+    let Some(state) = build_test_state().await else {
+        eprintln!("skipping: no database");
+        return;
+    };
+    let app = test_app(state);
+
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+
+    let saml_body = json!({
+        "protocol": "saml",
+        "display_name": "Legacy SAML",
+        "metadata_url": "https://idp.example.com/saml/metadata",
+        "default_role": "member",
+    });
+    let (status, resp) = json_request(
+        &app,
+        "POST",
+        &format!("/api/organizations/{}/sso", tenant.org_id),
+        Some(&owner.token),
+        Some(&saml_body),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "creating a saml IdP should be rejected: {resp:?}"
+    );
+
+    // Nothing was persisted for the rejected saml create.
+    let sup = fixture_pool().await.expect("fixture pool");
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM org_identity_providers WHERE organization_id = $1")
+            .bind(tenant.org_id)
+            .fetch_one(&sup)
+            .await
+            .expect("count providers");
+    assert_eq!(count, 0, "no saml provider should have been persisted");
+
+    // Control: an OIDC provider (no metadata_url → skips the reachability probe)
+    // is still accepted on the same org.
+    let oidc_body = json!({
+        "protocol": "oidc",
+        "display_name": "Acme OIDC",
+        "metadata_url": null,
+        "default_role": "member",
+    });
+    let (status, resp) = json_request(
+        &app,
+        "POST",
+        &format!("/api/organizations/{}/sso", tenant.org_id),
+        Some(&owner.token),
+        Some(&oidc_body),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "an oidc IdP should still be accepted: {resp:?}"
+    );
 }

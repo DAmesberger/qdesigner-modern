@@ -301,8 +301,11 @@
               class="w-full rounded-md border border-border bg-background px-3 py-2 text-foreground"
             >
               <option value="oidc">OpenID Connect (OIDC)</option>
-              <option value="saml">SAML (config only)</option>
+              <option value="saml" disabled>SAML — not yet available</option>
             </select>
+            <p class="text-sm text-muted-foreground mt-1">
+              SAML is not yet available in this build. Configure an OIDC provider for now.
+            </p>
           </FormGroup>
           <FormGroup label="Display name" id="idp-name">
             <Input id="idp-name" type="text" bind:value={form.display_name} placeholder="Acme SSO" />

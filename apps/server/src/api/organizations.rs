@@ -1611,17 +1611,7 @@ pub async fn create_invitation(
         .await?
         .unwrap_or_else(|| "your organization".to_string());
 
-    let app_url = state
-        .config
-        .cors_origins
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "http://localhost:4173".to_string());
-    let invite_link = format!(
-        "{}/invite/{}",
-        app_url.trim_end_matches('/'),
-        invitation.token
-    );
+    let invite_link = format!("{}/invite/{}", state.config.app_origin(), invitation.token);
 
     let mut email_body = format!(
         "Hello,\n\n\
