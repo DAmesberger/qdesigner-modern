@@ -534,6 +534,75 @@ describe('ReactionEngine', () => {
     engine.destroy();
   });
 
+  it('scores a ResponseSet correct option even when requireCorrect is false (F-51 C)', async () => {
+    // ADR 0024 / RT-1a: marking an option correct via `correctOptionIds` IS the
+    // opt-in to score — it must not depend on the legacy `requireCorrect` flag
+    // (which reverted through the stale study shadow). Pressing the key bound to
+    // the correct option must yield isCorrect=true even with requireCorrect unset.
+    const { engine } = createEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'trial-responseset-correct',
+      responseMode: 'keyboard',
+      validKeys: ['f', 'j'],
+      responseSet: {
+        options: [
+          { id: 'left', bindings: [{ source: 'keyboard', key: 'f', on: 'down' }] },
+          { id: 'right', bindings: [{ source: 'keyboard', key: 'j', on: 'down' }] },
+        ],
+      },
+      correctOptionIds: ['left'],
+      // requireCorrect intentionally omitted (falsy) — the pre-fix gate returned null here.
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle' },
+      responseTimeoutMs: 400,
+      targetFPS: 120,
+    });
+
+    setTimeout(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f' }));
+    }, 60);
+
+    const result = await resultPromise;
+
+    expect(result.response?.optionId).toBe('left');
+    expect(result.isCorrect).toBe(true);
+
+    engine.destroy();
+  });
+
+  it('scores a ResponseSet wrong option as incorrect regardless of requireCorrect (F-51 C)', async () => {
+    const { engine } = createEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'trial-responseset-incorrect',
+      responseMode: 'keyboard',
+      validKeys: ['f', 'j'],
+      responseSet: {
+        options: [
+          { id: 'left', bindings: [{ source: 'keyboard', key: 'f', on: 'down' }] },
+          { id: 'right', bindings: [{ source: 'keyboard', key: 'j', on: 'down' }] },
+        ],
+      },
+      correctOptionIds: ['left'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle' },
+      responseTimeoutMs: 400,
+      targetFPS: 120,
+    });
+
+    setTimeout(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'j' }));
+    }, 60);
+
+    const result = await resultPromise;
+
+    expect(result.response?.optionId).toBe('right');
+    expect(result.isCorrect).toBe(false);
+
+    engine.destroy();
+  });
+
   // ---- Frame logging ----
 
   it('records frame log entries during trial', async () => {

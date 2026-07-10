@@ -60,7 +60,21 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
     {};
 
   const source = pickNormalizationSource(root);
-  const validKeys = normalizeValidKeys(source.response?.validKeys);
+
+  // F-51(B): the designer edits the legacy top-level authoring fields
+  // (`config.response`, `config.stimulus`, `config.testTrials`, …), but for a
+  // standard/custom study `pickNormalizationSource` returns the canonical `study`
+  // whose `response`/`stimulus`/scalar copies are a STALE starter snapshot that
+  // never re-syncs once blocks exist — so those edits reverted on reload. The
+  // `task` object is shared by reference with `study.task`, so it stays fresh;
+  // only the scalars, `response` and `stimulus` diverge. Read those from the
+  // top-level config when it carries a legacy `task`, exactly as `responseSet` /
+  // `correctOptionIds` already prefer the top-level `config.response` below.
+  // `blocks` and `counterbalance` still come from `source`/`study`.
+  const scalarSource: ReactionLegacyQuestionConfig =
+    root.task && typeof root.task === 'object' ? (root as ReactionLegacyQuestionConfig) : source;
+
+  const validKeys = normalizeValidKeys(scalarSource.response?.validKeys);
   const normalizedBlocks = normalizeStudyBlocks(source.blocks, validKeys);
 
   // ResponseSet (ADR 0024): preserved verbatim (validated) only when the author
@@ -111,8 +125,9 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
       )
     : [];
 
-  const stimulusType = normalizeStimulusType(source.stimulus?.type);
-  const stimulusContent = ensureString(source.stimulus?.content) || (stimulusType === 'shape' ? 'circle' : '');
+  const stimulusType = normalizeStimulusType(scalarSource.stimulus?.type);
+  const stimulusContent =
+    ensureString(scalarSource.stimulus?.content) || (stimulusType === 'shape' ? 'circle' : '');
 
   const counterbalance = normalizeCounterbalance(
     source.counterbalance ??
@@ -128,7 +143,7 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
         n: asInt(nBack.n, DEFAULT_NBACK.n, 1, 6),
         sequenceLength: asInt(
           nBack.sequenceLength,
-          source.testTrials,
+          scalarSource.testTrials,
           3,
           1000,
           DEFAULT_NBACK.sequenceLength
@@ -325,30 +340,30 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
     stimulus: {
       type: stimulusType,
       content: stimulusContent,
-      mediaRef: source.stimulus?.mediaRef,
+      mediaRef: scalarSource.stimulus?.mediaRef,
       fixation: {
-        type: source.stimulus?.fixation?.type === 'dot' ? 'dot' : 'cross',
-        duration: asInt(source.stimulus?.fixation?.duration, 500, 0, 10000),
+        type: scalarSource.stimulus?.fixation?.type === 'dot' ? 'dot' : 'cross',
+        duration: asInt(scalarSource.stimulus?.fixation?.duration, 500, 0, 10000),
       },
     },
     response: {
       validKeys,
-      timeout: asInt(source.response?.timeout, 2000, 100, 30000),
-      requireCorrect: Boolean(source.response?.requireCorrect),
-      mode: normalizeResponseMode(source.response?.mode),
-      targetRegion: normalizeTargetRegion(source.response?.targetRegion),
-      gamepadButtonMap: normalizeGamepadButtonMap(source.response?.gamepadButtonMap),
-      captureKeyUp: Boolean(source.response?.captureKeyUp),
+      timeout: asInt(scalarSource.response?.timeout, 2000, 100, 30000),
+      requireCorrect: Boolean(scalarSource.response?.requireCorrect),
+      mode: normalizeResponseMode(scalarSource.response?.mode),
+      targetRegion: normalizeTargetRegion(scalarSource.response?.targetRegion),
+      gamepadButtonMap: normalizeGamepadButtonMap(scalarSource.response?.gamepadButtonMap),
+      captureKeyUp: Boolean(scalarSource.response?.captureKeyUp),
       ...(responseSet ? { responseSet } : {}),
       ...(correctOptionIds ? { correctOptionIds } : {}),
     },
-    correctKey: ensureString(source.correctKey),
-    feedback: source.feedback !== false,
-    feedbackSettings: normalizeFeedbackSettings(source.feedbackSettings),
-    practice: Boolean(source.practice),
-    practiceTrials: asInt(source.practiceTrials, 3, 0, 1000),
-    testTrials: asInt(source.testTrials, 10, 1, 1000),
-    targetFPS: asInt(source.targetFPS, 120, 30, 240),
+    correctKey: ensureString(scalarSource.correctKey),
+    feedback: scalarSource.feedback !== false,
+    feedbackSettings: normalizeFeedbackSettings(scalarSource.feedbackSettings),
+    practice: Boolean(scalarSource.practice),
+    practiceTrials: asInt(scalarSource.practiceTrials, 3, 0, 1000),
+    testTrials: asInt(scalarSource.testTrials, 10, 1, 1000),
+    targetFPS: asInt(scalarSource.targetFPS, 120, 30, 240),
   };
 }
 

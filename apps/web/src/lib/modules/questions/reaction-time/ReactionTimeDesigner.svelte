@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, tick } from 'svelte';
   import type { Question } from '$lib/shared';
   import type { MediaAsset } from '$lib/shared/types/media';
   import MediaManagerModal from '$lib/components/designer/MediaManagerModal.svelte';
@@ -34,9 +35,25 @@
     question: Question & { config: ReactionTimeConfig };
     organizationId?: string;
     userId?: string;
+    /**
+     * F-51(A): notify the designer store of a config edit. Unlike the other
+     * question designers (which build an `updates` object and call `onUpdate` per
+     * edit), the reaction editor binds the shared question `$state` proxy directly
+     * throughout its sub-editors. That keeps the UI live, but the store's
+     * update/commit pipeline never ran — so `isDirty` never flipped and autosave
+     * never fired for reaction edits (reload lost paradigm + all edits). The
+     * settled deep-watch effect below reflects each edit through this callback so
+     * the store marks the questionnaire dirty and schedules the save.
+     */
+    onUpdate?: (updates: { config: ReactionTimeConfig }) => void;
   }
 
-  let { question = $bindable(), organizationId = '', userId = '' }: Props = $props();
+  let {
+    question = $bindable(),
+    organizationId = '',
+    userId = '',
+    onUpdate,
+  }: Props = $props();
 
   // E-REACT-4: feedback-shape editor state, mirrored back into the question
   // config. Kept as a local $state proxy so the mode/duration/text inputs bind
@@ -382,6 +399,34 @@
       question.config.study = starter.study as ReactionStudyConfig;
     }
   }
+
+  // F-51(A): reflect every reaction-editor edit into the designer store so it
+  // marks the questionnaire dirty and schedules autosave. The mount-time hydrate
+  // + study-sync + feedback effects mutate the config before the author touches
+  // anything, so we arm the watcher only after mount has settled (onMount + a
+  // tick past the initial effect flush) and capture that settled serialization as
+  // the baseline. `{#key questionItem.id}` in the properties panel remounts this
+  // component per question, so one instance only ever observes one question's
+  // edits. The reflection is loop-safe: the store's commit deep-clones the config
+  // verbatim (no reaction re-normalization), so the value we send comes back
+  // identical and the next effect run is a no-op.
+  let syncBaseline: string | null = null;
+  let syncArmed = $state(false);
+  onMount(() => {
+    void tick().then(() => {
+      syncArmed = true;
+    });
+  });
+  $effect(() => {
+    const serialized = JSON.stringify(question.config);
+    if (!syncArmed) {
+      syncBaseline = serialized;
+      return;
+    }
+    if (serialized === syncBaseline) return;
+    syncBaseline = serialized;
+    onUpdate?.({ config: $state.snapshot(question.config) as ReactionTimeConfig });
+  });
 </script>
 
 <div class="p-6 flex flex-col gap-6">

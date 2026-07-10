@@ -292,7 +292,8 @@
   {:else}
     <p class="mb-3 text-xs text-muted-foreground">
       Each option's <strong>id</strong> is the stable key analysis and export use. Mark the option(s)
-      counted as correct; correctness is scored only when “Require correct response” is enabled above.
+      counted as correct — a marked option is scored for accuracy on its own (independent of the
+      legacy “Require correct response” toggle above).
     </p>
 
     <div class="flex flex-col gap-3">

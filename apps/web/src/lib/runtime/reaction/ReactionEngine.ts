@@ -1545,17 +1545,22 @@ export class ReactionEngine {
     config: ReactionTrialConfig,
     response: ReactionResponseCapture | null
   ): boolean | null {
-    if (!config.requireCorrect) {
-      return null;
-    }
-
     // ResponseSet correctness (ADR 0024): when the trial declares which option
-    // ids are correct, score by the winning option id. Compiled-legacy content
-    // leaves `correctOptionIds` undefined and flows through the legacy branches
-    // below (unchanged), so existing outcomes are preserved exactly.
+    // ids are correct, marking those options IS the opt-in to score — RT-1a's rule
+    // is `correct = correctOptionIds.includes(winner.optionId)`, with no dependency
+    // on the legacy `requireCorrect` flag (which gates only the legacy branches
+    // below). This check therefore runs BEFORE the `requireCorrect` gate: F-51(C)
+    // — an authored correct option was left unscored (isCorrect null) because the
+    // separate legacy checkbox was off (and reverted through the stale study
+    // shadow). Compiled-legacy content leaves `correctOptionIds` undefined and
+    // flows through the gate + legacy branches unchanged, preserving outcomes.
     if (config.correctOptionIds) {
       if (!response) return false;
       return response.optionId != null && config.correctOptionIds.includes(response.optionId);
+    }
+
+    if (!config.requireCorrect) {
+      return null;
     }
 
     // Spatial scoring (mouse/touch): a configured targetRegion scores the

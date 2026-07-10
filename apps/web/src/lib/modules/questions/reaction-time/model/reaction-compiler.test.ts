@@ -487,3 +487,76 @@ describe('ResponseSet threading (ADR 0024, RT-2b)', () => {
     }
   });
 });
+
+describe('F-51 (B/C): top-level authoring fields win over a stale study shadow', () => {
+  // Mirror the SAVED designer shape for a procedural paradigm: a compiled `study`
+  // (with blocks + a stale starter `response`) shadows the fresh top-level config
+  // the reaction editor actually writes. `pickNormalizationSource` returns that
+  // study, so before the fix the top-level edits (testTrials, response.*) reverted.
+  function designerShapeConfig() {
+    return {
+      task: { type: 'standard' },
+      testTrials: 25,
+      stimulus: { type: 'shape', content: 'circle' },
+      response: {
+        mode: 'keyboard',
+        validKeys: ['f', 'j'],
+        timeout: 2000,
+        requireCorrect: true,
+        responseSet: {
+          options: [
+            { id: 'left', label: 'Left', bindings: [{ source: 'keyboard', key: 'f', on: 'down' }] },
+            { id: 'right', label: 'Right', bindings: [{ source: 'keyboard', key: 'j', on: 'down' }] },
+          ],
+        },
+        correctOptionIds: ['left'],
+      },
+      // Stale compiled study: starter defaults (testTrials 10, requireCorrect false,
+      // no responseSet) that never re-synced once blocks existed.
+      study: {
+        task: { type: 'standard' },
+        stimulus: { type: 'shape', content: 'circle' },
+        response: { mode: 'keyboard', validKeys: ['f', 'j'], timeout: 2000, requireCorrect: false },
+        testTrials: 10,
+        blocks: [
+          {
+            id: 'test',
+            name: 'Test',
+            kind: 'test',
+            randomizeOrder: false,
+            repetitions: 1,
+            trials: [
+              {
+                id: 't1',
+                name: 'T1',
+                repeat: 3,
+                stimulus: { kind: 'shape', shape: 'circle', radiusPx: 80 },
+                validKeys: ['f', 'j'],
+                requireCorrect: false,
+              },
+            ],
+          },
+        ],
+      },
+    };
+  }
+
+  it('B: normalize reads testTrials + response.requireCorrect from the top-level config', () => {
+    const normalized = normalizeReactionQuestionConfig({ config: designerShapeConfig() });
+    // Was 10 (stale study) before the fix.
+    expect(normalized.testTrials).toBe(25);
+    // Was false (stale study.response) before the fix — this is what left C unscored.
+    expect(normalized.response.requireCorrect).toBe(true);
+    expect(normalized.response.correctOptionIds).toEqual(['left']);
+  });
+
+  it('C: the materialized study-block trials carry the authored responseSet + correctOptionIds', () => {
+    const normalized = normalizeReactionQuestionConfig({ config: designerShapeConfig() });
+    const plan = compileReactionPlan(normalized, seedContext);
+    expect(plan.length).toBeGreaterThan(0);
+    for (const planned of plan) {
+      expect(planned.trial.correctOptionIds).toEqual(['left']);
+      expect(planned.trial.responseSet?.options.map((o) => o.id)).toEqual(['left', 'right']);
+    }
+  });
+});
