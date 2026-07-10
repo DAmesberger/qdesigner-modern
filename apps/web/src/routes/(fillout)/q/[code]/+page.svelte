@@ -306,6 +306,9 @@
     } else if (!seriesGateActive) {
       controller.startSyncEngine();
       controller.initFromLoad();
+      // Explicit offline provisioning (F-21): reflect an already-cached study as
+      // "Ready for offline use" on the welcome screen without persisting a flag.
+      void controller.refreshOfflineReadiness();
     }
 
     return () => {
@@ -442,6 +445,24 @@
         {m.fillout_offline_quota_notice()}
       </div>
     {/if}
+    {#if controller.crossDeviceNotice}
+      <!-- Honest cross-device resume fallback (F-10): a ?sid= link from another device can't
+           restore an anonymous session here. Say so; don't block starting fresh. -->
+      <div class="cross-device-note" data-testid="fillout-cross-device-note" role="status">
+        <span>
+          This link was for a session started on another device. Anonymous sessions can't be
+          moved between devices — you'll start fresh here.
+        </span>
+        <button
+          type="button"
+          class="cross-device-dismiss"
+          data-testid="fillout-cross-device-dismiss"
+          onclick={() => controller.dismissCrossDeviceNotice()}
+        >
+          Dismiss
+        </button>
+      </div>
+    {/if}
     <WelcomeScreen
       questionnaire={definition}
       projectName={data.questionnaire.projectName}
@@ -455,6 +476,10 @@
       onLocaleChange={handleLocaleChange}
       showPhotosensitivityAdvisory={hasReactionQuestion}
       {prefersReducedMotion}
+      offlineState={controller.offlinePrep}
+      offlineDone={controller.offlinePrepDone}
+      offlineTotal={controller.offlinePrepTotal}
+      onPrepareOffline={() => controller.prepareOffline()}
     />
   {:else if controller.screen === 'consent'}
     <ConsentScreen
@@ -757,6 +782,38 @@
     font-size: 0.8125rem;
     line-height: 1.4;
     text-align: center;
+  }
+
+  /* Honest cross-device resume fallback (F-10): a dismissible notice above the welcome card. */
+  .cross-device-note {
+    position: fixed;
+    top: 3rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 96;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: min(560px, calc(100vw - 1.5rem));
+    padding: 0.625rem 1rem;
+    border-radius: 0.5rem;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .cross-device-dismiss {
+    flex-shrink: 0;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
   }
 
   .loading-container,

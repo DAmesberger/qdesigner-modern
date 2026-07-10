@@ -91,6 +91,20 @@ function makeMocks() {
   const content = {
     pruneDefinitions: vi.fn(async () => {}),
     enforceMediaQuota: vi.fn(async () => {}),
+    prepareOffline: vi.fn(async () => ({
+      total: 2,
+      cached: 2,
+      failed: 0,
+      ready: true,
+      quotaExceeded: false,
+    })),
+    checkOfflineReadiness: vi.fn(async () => ({
+      total: 2,
+      cached: 0,
+      failed: 0,
+      ready: false,
+      quotaExceeded: false,
+    })),
   };
 
   const services = {
@@ -402,6 +416,107 @@ describe('FilloutPageController', () => {
 
       controller.recordItemProgress({ pageIndex: 0 });
       expect(controller.progress).toEqual({ current: 1, total: null });
+    });
+  });
+
+  describe('honest cross-device resume fallback (F-10)', () => {
+    it('seeds the notice from the load flag and clears it on dismiss', () => {
+      const data = { ...makeData(), crossDeviceResumeUnavailable: true };
+      const controller = makeController(data, makeMocks());
+
+      expect(controller.crossDeviceNotice).toBe(true);
+      controller.dismissCrossDeviceNotice();
+      expect(controller.crossDeviceNotice).toBe(false);
+    });
+
+    it('does not show the notice for a normal (non cross-device) open', () => {
+      const controller = makeController(makeData(), makeMocks());
+      expect(controller.crossDeviceNotice).toBe(false);
+    });
+  });
+
+  describe('explicit offline provisioning (F-21)', () => {
+    it('prepareOffline delegates to the content cache and confirms ready', async () => {
+      const data = makeData();
+      const mocks = makeMocks();
+      const controller = makeController(data, mocks);
+
+      await controller.prepareOffline();
+
+      expect(mocks.content.prepareOffline).toHaveBeenCalledTimes(1);
+      const call = mocks.content.prepareOffline.mock.calls[0] as unknown as [
+        string,
+        { major: number; minor: number; patch: number },
+        Record<string, unknown>,
+      ];
+      expect(call[0]).toBe('q1');
+      expect(call[1]).toEqual({ major: 1, minor: 0, patch: 0 });
+      expect(call[2]).toBe(data.questionnaire.definition);
+      expect(controller.offlinePrep).toBe('ready');
+      expect(controller.offlinePrepDone).toBe(2);
+      expect(controller.offlinePrepTotal).toBe(2);
+    });
+
+    it('surfaces a partial result honestly', async () => {
+      const mocks = makeMocks();
+      mocks.content.prepareOffline.mockResolvedValueOnce({
+        total: 3,
+        cached: 2,
+        failed: 1,
+        ready: false,
+        quotaExceeded: false,
+      });
+      const controller = makeController(makeData(), mocks);
+
+      await controller.prepareOffline();
+
+      expect(controller.offlinePrep).toBe('partial');
+      expect(controller.offlinePrepDone).toBe(2);
+      expect(controller.offlinePrepTotal).toBe(3);
+    });
+
+    it('surfaces an over-quota result honestly', async () => {
+      const mocks = makeMocks();
+      mocks.content.prepareOffline.mockResolvedValueOnce({
+        total: 4,
+        cached: 4,
+        failed: 0,
+        ready: true,
+        quotaExceeded: true,
+      });
+      const controller = makeController(makeData(), mocks);
+
+      await controller.prepareOffline();
+
+      expect(controller.offlinePrep).toBe('quota-exceeded');
+    });
+
+    it('falls back to an error state when preparation throws', async () => {
+      const mocks = makeMocks();
+      mocks.content.prepareOffline.mockRejectedValueOnce(new Error('network down'));
+      const controller = makeController(makeData(), mocks);
+
+      await controller.prepareOffline();
+
+      expect(controller.offlinePrep).toBe('error');
+    });
+
+    it('refreshOfflineReadiness reflects an already-cached study as ready', async () => {
+      const mocks = makeMocks();
+      mocks.content.checkOfflineReadiness.mockResolvedValueOnce({
+        total: 2,
+        cached: 2,
+        failed: 0,
+        ready: true,
+        quotaExceeded: false,
+      });
+      const controller = makeController(makeData(), mocks);
+
+      await controller.refreshOfflineReadiness();
+
+      expect(controller.offlinePrep).toBe('ready');
+      expect(controller.offlinePrepDone).toBe(2);
+      expect(controller.offlinePrepTotal).toBe(2);
     });
   });
 });

@@ -12,9 +12,28 @@ import {
 	type Variable,
 } from '@qdesigner/questionnaire-core';
 import type { NumericStatsSummary, ServerVariablesResponse } from '$lib/api/generated/types.gen';
+import { mediaContentUrl } from '$lib/services/mediaService';
 
 /** Fetch-skip window when a definition's `settings.report.refreshMs` is unset (24h). */
 const DEFAULT_SERVER_VARS_REFRESH_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Result of {@link FilloutContentCache.prepareOffline} / {@link FilloutContentCache.checkOfflineReadiness}
+ * (explicit offline provisioning, F-21). Recomputed from Cache-API membership so it survives a
+ * reload without any new schema — a fully-cached definition reads back `ready` on next mount.
+ */
+export interface OfflineReadiness {
+	/** Total cacheable media assets a full run needs (direct url/src + mediaId references). */
+	total: number;
+	/** How many of them are present in the media Cache-API bucket. */
+	cached: number;
+	/** How many could not be fetched this pass (0 for a pure membership recompute). */
+	failed: number;
+	/** Every asset is cached — the study can run offline (given the definition snapshot). */
+	ready: boolean;
+	/** This definition's media exceeds the media-cache budget, so it can't all be retained. */
+	quotaExceeded: boolean;
+}
 
 /** Map the server's `NumericStatsSummary` onto the cached {@link ServerVariableStats}. */
 function mapServerStats(s: NumericStatsSummary): ServerVariableStats {
@@ -463,6 +482,147 @@ export class FilloutContentCache {
 		return a.syncedAt - b.syncedAt;
 	}
 
+	// ── Explicit offline provisioning (F-21) ─────────────────────────────
+	//
+	// The eager load path caches media as a side effect (`cacheMedia` over `extractMediaUrls`).
+	// A field participant who knows they'll lose signal needs an *explicit* affordance instead:
+	// prefetch everything a full run needs, confirm it, and survive a reload. These three
+	// methods back that "Prepare offline" control on the welcome screen.
+
+	/**
+	 * Enumerate the cacheable media URLs a full offline run needs from a runtime definition:
+	 * direct `url` / `src` fields ({@link extractMediaUrls}) PLUS every `mediaId` reference
+	 * resolved to its stable same-origin proxy URL ({@link mediaContentUrl}). The latter covers
+	 * reaction-experiment assets, which carry only a `mediaId` in the definition and are missed
+	 * by the eager `extractMediaUrls`-only cache. Deduplicated.
+	 */
+	static offlineMediaUrls(definition: Record<string, unknown>): string[] {
+		const direct = this.extractMediaUrls(definition);
+		const byId = this.extractMediaIds(definition).map((id) => mediaContentUrl(id));
+		return [...new Set([...direct, ...byId])];
+	}
+
+	/**
+	 * Recompute offline readiness from Cache-API membership alone — ZERO network. Used on
+	 * welcome mount so a reload reflects "Ready for offline use" without persisting a flag: a
+	 * definition whose every media asset is already in the cache reads back `ready`. A definition
+	 * with no media is ready as soon as its snapshot is cached (the load path did that).
+	 */
+	static async checkOfflineReadiness(definition: Record<string, unknown>): Promise<OfflineReadiness> {
+		const urls = this.offlineMediaUrls(definition);
+		const total = urls.length;
+		if (total === 0) {
+			return { total: 0, cached: 0, failed: 0, ready: true, quotaExceeded: false };
+		}
+
+		let cache: Cache | null = null;
+		try {
+			cache = await caches.open(this.MEDIA_CACHE_NAME);
+		} catch {
+			cache = null;
+		}
+		if (!cache) return { total, cached: 0, failed: 0, ready: false, quotaExceeded: false };
+
+		let cached = 0;
+		for (const url of urls) {
+			if (await cache.match(url)) cached++;
+		}
+		return { total, cached, failed: 0, ready: cached === total, quotaExceeded: false };
+	}
+
+	/**
+	 * Explicitly prefetch every media asset a full run needs into the media Cache-API bucket,
+	 * reporting per-asset progress (F-21). Idempotent: assets already cached are counted, not
+	 * re-fetched. Each fetched asset gets a version-tagged accounting row so quota bounding and
+	 * pin-protection see it (the same rows `enforceMediaQuota` reads).
+	 *
+	 * Never evicts to make room — if this definition's own media exceeds the cache budget it
+	 * reports `quotaExceeded` so the caller can say so honestly, rather than silently thrashing
+	 * the cache. Per-asset failures are counted (`failed`) so a partial result can offer a retry.
+	 */
+	static async prepareOffline(
+		questionnaireId: string,
+		version: { major: number; minor: number; patch: number },
+		definition: Record<string, unknown>,
+		options?: { onProgress?: (done: number, total: number) => void }
+	): Promise<OfflineReadiness> {
+		const urls = this.offlineMediaUrls(definition);
+		const total = urls.length;
+		const onProgress = options?.onProgress;
+		onProgress?.(0, total);
+		if (total === 0) {
+			return { total: 0, cached: 0, failed: 0, ready: true, quotaExceeded: false };
+		}
+
+		let cache: Cache | null = null;
+		try {
+			cache = await caches.open(this.MEDIA_CACHE_NAME);
+		} catch {
+			cache = null;
+		}
+		if (!cache) return { total, cached: 0, failed: total, ready: false, quotaExceeded: false };
+
+		const key = filloutDefinitionKey(questionnaireId, version.major, version.minor, version.patch);
+		let cached = 0;
+		let failed = 0;
+		let done = 0;
+		for (const url of urls) {
+			let inCache = false;
+			let size = 0;
+			try {
+				const existing = await cache.match(url);
+				if (existing) {
+					size = Number(existing.headers.get('content-length') ?? '0') || 0;
+					inCache = true;
+				} else {
+					const response = await fetch(url);
+					if (response.ok) {
+						// Read the length header before put() consumes the body.
+						size = Number(response.headers.get('content-length') ?? '0') || 0;
+						await cache.put(url, response);
+						inCache = true;
+					}
+				}
+			} catch {
+				inCache = false;
+			}
+
+			if (inCache) {
+				cached++;
+				const entry: FilloutMediaEntry = {
+					url,
+					questionnaireKey: key,
+					questionnaireId,
+					versionMajor: version.major,
+					versionMinor: version.minor,
+					versionPatch: version.patch,
+					size,
+					cachedAt: Date.now(),
+				};
+				await db.filloutMedia.put(entry).catch(() => {});
+			} else {
+				failed++;
+			}
+			done++;
+			onProgress?.(done, total);
+		}
+
+		// Quota honesty: sum this version's tracked media against the cache budget. When the
+		// definition alone overflows the budget, report it rather than evicting to fit — the
+		// caller surfaces "too large to store offline" instead of a false "Ready".
+		let quotaExceeded = false;
+		try {
+			const cap = await this.mediaCap();
+			const versionBytes = (await db.filloutMedia.where('questionnaireKey').equals(key).toArray())
+				.reduce((sum, e) => sum + (e.size || 0), 0);
+			quotaExceeded = versionBytes > cap;
+		} catch {
+			// estimate/read failure — leave quotaExceeded false; readiness still reflects membership.
+		}
+
+		return { total, cached, failed, ready: cached === total && failed === 0, quotaExceeded };
+	}
+
 	/**
 	 * Walk questionnaire definition and cache all media URLs via the Cache API, recording an
 	 * accounting row per URL so `enforceMediaQuota` can bound the cache.
@@ -560,5 +720,34 @@ export class FilloutContentCache {
 
 	private static isCacheableMediaUrl(value: string): boolean {
 		return value.startsWith('http') || value.startsWith('/api/media');
+	}
+
+	/**
+	 * Collect every `mediaId` reference in a definition (reaction-experiment `config.assets`
+	 * entries, stimulus media configs, …). The runtime resolves these to `mediaContentUrl(id)`
+	 * at play time, so explicit offline provisioning must prefetch that same proxy URL.
+	 */
+	private static extractMediaIds(obj: unknown, ids: string[] = []): string[] {
+		if (!obj || typeof obj !== 'object') return ids;
+
+		if (Array.isArray(obj)) {
+			for (const item of obj) {
+				this.extractMediaIds(item, ids);
+			}
+			return ids;
+		}
+
+		const record = obj as Record<string, unknown>;
+		if (typeof record.mediaId === 'string' && record.mediaId) {
+			ids.push(record.mediaId);
+		}
+
+		for (const value of Object.values(record)) {
+			if (value && typeof value === 'object') {
+				this.extractMediaIds(value, ids);
+			}
+		}
+
+		return ids;
 	}
 }

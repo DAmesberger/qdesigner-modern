@@ -41,6 +41,16 @@
      * cross-participant data comparability); the accommodation is informed consent.
      */
     prefersReducedMotion?: boolean;
+    /**
+     * Explicit offline provisioning (F-21). When `onPrepareOffline` is supplied, an
+     * unobtrusive secondary control lets a field participant prefetch the whole study for
+     * offline use. `offlineState` drives its label/status; `offlineDone` / `offlineTotal`
+     * feed the "N of M" progress. Omitting `onPrepareOffline` hides the affordance entirely.
+     */
+    offlineState?: 'idle' | 'preparing' | 'ready' | 'partial' | 'quota-exceeded' | 'error';
+    offlineDone?: number;
+    offlineTotal?: number;
+    onPrepareOffline?: () => void;
   }
 
   let {
@@ -57,6 +67,10 @@
     onStartOver,
     showPhotosensitivityAdvisory = false,
     prefersReducedMotion = false,
+    offlineState = 'idle',
+    offlineDone = 0,
+    offlineTotal = 0,
+    onPrepareOffline,
   }: Props = $props();
 
   // Offer the resume choice only when the caller both flagged a compatible snapshot AND
@@ -190,6 +204,52 @@
           </Button>
         {/if}
       </div>
+
+      {#if onPrepareOffline}
+        <!-- Explicit offline provisioning (F-21): unobtrusive secondary control. Lets a
+             field participant download the whole study up front and confirm it's ready. -->
+        <div class="offline-prep" data-testid="fillout-offline-prep">
+          {#if offlineState === 'ready'}
+            <p class="offline-prep-status offline-prep-ready" data-testid="fillout-offline-ready">
+              <svg class="offline-prep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M20 6 9 17l-5-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              Ready for offline use
+            </p>
+          {:else if offlineState === 'preparing'}
+            <p class="offline-prep-status" data-testid="fillout-offline-preparing" aria-live="polite">
+              Preparing for offline use…{#if offlineTotal > 0}
+                {' '}({offlineDone} of {offlineTotal}){/if}
+            </p>
+          {:else if offlineState === 'quota-exceeded'}
+            <p class="offline-prep-status offline-prep-warn" data-testid="fillout-offline-quota" role="status">
+              This study is too large to store on this device for offline use. You can still
+              take part while connected.
+            </p>
+          {:else}
+            {#if offlineState === 'partial'}
+              <p class="offline-prep-status offline-prep-warn" data-testid="fillout-offline-partial" role="status">
+                {offlineDone} of {offlineTotal} files saved. Retry to finish downloading for
+                offline use.
+              </p>
+            {:else if offlineState === 'error'}
+              <p class="offline-prep-status offline-prep-warn" data-testid="fillout-offline-error" role="status">
+                Couldn't prepare this study for offline use. Check your connection and retry.
+              </p>
+            {/if}
+            <button
+              type="button"
+              class="offline-prep-button"
+              data-testid="fillout-offline-prepare-button"
+              onclick={onPrepareOffline}
+            >
+              {offlineState === 'partial' || offlineState === 'error'
+                ? 'Retry offline download'
+                : 'Make available offline'}
+            </button>
+          {/if}
+        </div>
+      {/if}
 
       {#if questionnaire.settings?.requireAuthentication || questionnaire.settings?.requireConsent}
         <p class="privacy-notice">
@@ -331,6 +391,60 @@
 
   :global(.start-button) {
     min-width: 200px;
+  }
+
+  /* Explicit offline provisioning (F-21): a quiet, secondary affordance below the primary
+     start action — present for field use, never competing with it. */
+  .offline-prep {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .offline-prep-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: hsl(var(--muted-foreground));
+    max-width: 30rem;
+  }
+
+  .offline-prep-ready {
+    color: hsl(var(--foreground));
+    font-weight: 500;
+  }
+
+  .offline-prep-warn {
+    color: hsl(var(--foreground));
+  }
+
+  .offline-prep-icon {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+  }
+
+  .offline-prep-button {
+    padding: 0.375rem 0.875rem;
+    border-radius: 0.5rem;
+    border: 1px solid hsl(var(--border));
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .offline-prep-button:hover {
+    color: hsl(var(--foreground));
+    border-color: hsl(var(--foreground) / 0.4);
   }
 
   .privacy-notice {

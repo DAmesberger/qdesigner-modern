@@ -358,10 +358,20 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		}
 	}
 
+	// ── Honest cross-device resume fallback (F-10) ────────────────────────
+	// A `?sid=` link points at a session we could not resume on THIS device: no server
+	// `existingSession` (the resume-fetch endpoints are auth-gated, so an anonymous
+	// cross-device open gets nothing) and no local snapshot to rehydrate from. We fall
+	// back to a fresh same-device run, but flag it so the welcome screen can say so.
+	// Anonymous cross-device resume itself is a known deferred feature — not built here.
+	const crossDeviceResumeUnavailable =
+		!!sessionId && !existingSession && !resumeSnapshot && !resumeCompleted;
+
 	return {
 		questionnaire: shapeQuestionnaire(effective, projectName),
 		branding,
 		existingSession,
+		crossDeviceResumeUnavailable,
 		code,
 		participantId,
 		urlParams,

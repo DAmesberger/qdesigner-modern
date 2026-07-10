@@ -61,6 +61,13 @@ export interface FilloutPageData {
   resumeStateSessionId: string | null;
   resumeSessionId: string | null;
   /**
+   * Honest cross-device resume fallback (F-10). True when a `?sid=` resume link was opened
+   * but the session isn't resumable on THIS device — the server resume endpoints are
+   * auth-gated, so an anonymous cross-device open silently falls back to a fresh same-device
+   * run. Drives a dismissible welcome-screen notice; it never blocks starting.
+   */
+  crossDeviceResumeUnavailable?: boolean;
+  /**
    * Longitudinal / EMA series wave context (E-FLOW-2), resolved in `load`
    * from a `?token=` reminder link. `seriesToken` is the enrollment resume
    * token (bound onto the created session + used for the completion
@@ -207,6 +214,21 @@ export class FilloutPageController {
   // Resume state (E-OFF-1 / E-FLOW-3, FIX-F12).
   resumeNotice = $state<string | null>(null);
   pinnedFallbackDismissed = $state(false);
+  // Honest cross-device resume fallback (F-10). Seeded from load; a dismissible welcome
+  // notice explains that an anonymous session can't be moved between devices, then the
+  // participant starts fresh here.
+  crossDeviceNotice = $state(false);
+
+  // --- Explicit offline provisioning (F-21 / R2-6) ---------------------------
+  // Field participants who know they'll lose signal can prefetch everything a full run
+  // needs from the welcome screen. `offlinePrep` is the affordance's state machine;
+  // `offlinePrepDone/Total` drive the "N of M" progress readout. Readiness is recomputed
+  // from Cache-API membership (no new schema) so it survives a reload.
+  offlinePrep = $state<'idle' | 'preparing' | 'ready' | 'partial' | 'quota-exceeded' | 'error'>(
+    'idle'
+  );
+  offlinePrepDone = $state(0);
+  offlinePrepTotal = $state(0);
   // True save-and-continue snapshot: mutable so a fresh-session create (or "Start over")
   // can drop it — it must only ever be applied to the SAME session it was captured on.
   activeResumeState = $state<ResumeState | undefined>(undefined);
@@ -263,6 +285,7 @@ export class FilloutPageController {
     this.services = { ...defaultServiceBag(), ...services };
     this.isOffline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
     this.activeResumeState = data.resumeState ?? undefined;
+    this.crossDeviceNotice = data.crossDeviceResumeUnavailable ?? false;
   }
 
   // --- Derived / presentational reads ----------------------------------------
@@ -424,6 +447,94 @@ export class FilloutPageController {
       await this.syncEngine.syncNow();
     } finally {
       await this.refreshSyncStats();
+    }
+  }
+
+  // --- Explicit offline provisioning (F-21 / R2-6) ---------------------------
+
+  /** Dismiss the honest cross-device resume notice (F-10). */
+  dismissCrossDeviceNotice(): void {
+    this.crossDeviceNotice = false;
+  }
+
+  /**
+   * Recompute the welcome screen's offline-readiness badge from Cache-API membership
+   * (F-21). Zero network, no persisted flag: a reload after a full prefetch reads back
+   * `ready`. Only meaningful before a session starts, so it leaves an in-flight
+   * `preparing` state untouched.
+   */
+  async refreshOfflineReadiness(): Promise<void> {
+    if (this.offlinePrep === 'preparing') return;
+    try {
+      const readiness = await this.services.content.checkOfflineReadiness(
+        this.data.questionnaire.definition as unknown as Record<string, unknown>
+      );
+      this.offlinePrepTotal = readiness.total;
+      this.offlinePrepDone = readiness.cached;
+      this.offlinePrep = readiness.ready ? 'ready' : this.offlinePrep === 'idle' ? 'idle' : 'partial';
+    } catch {
+      // Non-critical: leave the affordance in its last state.
+    }
+  }
+
+  /**
+   * Explicit "Prepare offline" action (F-21). Ensures the app shell is provisioned (best
+   * effort), then prefetches every media asset a full run needs through the same-origin
+   * proxy into the media Cache-API bucket, reporting "N of M" progress. The definition
+   * snapshot is already cached by the load path. Confirms a `ready` state, or honestly
+   * reports a partial / over-quota / failed outcome the participant can act on.
+   */
+  async prepareOffline(): Promise<void> {
+    if (this.offlinePrep === 'preparing') return;
+    this.offlinePrep = 'preparing';
+    this.offlinePrepDone = 0;
+    this.offlinePrepTotal = 0;
+    try {
+      await this.ensureAppShellCached();
+      const q = this.data.questionnaire;
+      const readiness = await this.services.content.prepareOffline(
+        q.id,
+        {
+          major: q.versionMajor ?? 1,
+          minor: q.versionMinor ?? 0,
+          patch: q.versionPatch ?? 0,
+        },
+        q.definition as unknown as Record<string, unknown>,
+        {
+          onProgress: (done, total) => {
+            this.offlinePrepDone = done;
+            this.offlinePrepTotal = total;
+          },
+        }
+      );
+      this.offlinePrepTotal = readiness.total;
+      this.offlinePrepDone = readiness.cached;
+      this.offlinePrep = readiness.quotaExceeded
+        ? 'quota-exceeded'
+        : readiness.ready
+          ? 'ready'
+          : 'partial';
+    } catch {
+      this.offlinePrep = 'error';
+    }
+  }
+
+  /**
+   * Best-effort app-shell provisioning for offline (F-21). When a service worker is already
+   * controlling the page its install step has precached the shell, so this is a no-op. When
+   * none is registered we register one in production so `/offline.html` + the app shell are
+   * available offline; in dev the SW is intentionally kept absent (HMR), so we skip — media
+   * still caches via the Cache API without it.
+   */
+  private async ensureAppShellCached(): Promise<void> {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    if (navigator.serviceWorker.controller) return;
+    if (import.meta.env.DEV) return;
+    try {
+      await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      await navigator.serviceWorker.ready;
+    } catch {
+      // Non-critical: the media cache does not depend on the shell being present.
     }
   }
 
