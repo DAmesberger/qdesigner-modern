@@ -867,9 +867,14 @@
 								{#each visibleSessions as session (session.id)}
 									<tr class="hover:bg-accent">
 										<td
-											class="px-6 py-4 whitespace-nowrap text-sm font-mono text-foreground"
+											class="px-6 py-4 whitespace-nowrap text-sm font-mono"
 										>
-											{session.id.slice(0, 8)}...
+											<a
+												href={appPaths.projectAnalyticsSession(data.project.id, session.id)}
+												class="text-primary hover:underline"
+											>
+												{session.id.slice(0, 8)}...
+											</a>
 										</td>
 										<td
 											class="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground"

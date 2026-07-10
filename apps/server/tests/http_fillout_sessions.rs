@@ -15,7 +15,10 @@
 //!     `ensure_session_access` → `verify_questionnaire_access`);
 //!   - an anonymous GET is refused (401 — the read endpoints require auth);
 //!   - reading a DIFFERENT session's responses returns only that session's
-//!     rows, never session 1's (per-session scoping / 00021 dual-path).
+//!     rows, never session 1's (per-session scoping / 00021 dual-path);
+//!   - the owner reads the session's interaction events + variables while a
+//!     cross-tenant user is denied the events (R3-1's per-session browser is
+//!     the events endpoint's first UI consumer).
 //!
 //! NOTE (correction to the P3-T2 plan): `GET /api/sessions/{id}/responses`
 //! takes an `AuthenticatedUser`, so an anonymous caller cannot read its own
@@ -100,6 +103,47 @@ async fn anonymous_fillout_lifecycle_and_isolation() {
     assert_eq!(arr.len(), 1, "owner sees exactly the one response");
     assert_eq!(arr[0]["question_id"].as_str(), Some("q1"));
 
+    // ── Anonymous submit an interaction event ─────────────────────────
+    // The events endpoint (R3-1's per-session browser is its first UI
+    // consumer) shares `ensure_session_access`/`ensure_session_participant_
+    // or_member` and the 00021 dual-path RLS with responses; prove a
+    // researcher can read it and a cross-tenant user cannot.
+    let event_body = serde_json::json!([{ "event_type": "focus", "question_id": "q1", "timestamp_us": 1000 }]);
+    let (status, evt) = json_request(
+        &app,
+        "POST",
+        &format!("/api/sessions/{id1}/events"),
+        None,
+        Some(&event_body),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "anon submit event: {evt:?}");
+
+    // ── Researcher (owner A) reads events + variables ─────────────────
+    let (status, events) = json_request(
+        &app,
+        "GET",
+        &format!("/api/sessions/{id1}/events"),
+        Some(&user_a.token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "owner read events: {events:?}");
+    let evt_arr = events.as_array().expect("events array");
+    assert_eq!(evt_arr.len(), 1, "owner sees the one event");
+    assert_eq!(evt_arr[0]["event_type"].as_str(), Some("focus"));
+
+    let (status, vars) = json_request(
+        &app,
+        "GET",
+        &format!("/api/sessions/{id1}/variables"),
+        Some(&user_a.token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "owner read variables: {vars:?}");
+    assert!(vars.is_array(), "variables endpoint returns an array");
+
     // ── Cross-tenant denial: unrelated authenticated user B ───────────
     let user_b = register_user(&app).await;
     let _b = provision_tenant(&app, &user_b.token).await;
@@ -115,6 +159,21 @@ async fn anonymous_fillout_lifecycle_and_isolation() {
         status,
         StatusCode::FORBIDDEN,
         "cross-tenant user must not read another tenant's session responses: {json:?}"
+    );
+
+    // Same cross-tenant denial for the events endpoint.
+    let (status, json) = json_request(
+        &app,
+        "GET",
+        &format!("/api/sessions/{id1}/events"),
+        Some(&user_b.token),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "cross-tenant user must not read another tenant's session events: {json:?}"
     );
 
     // ── Anonymous read is gated (endpoint requires auth) ──────────────

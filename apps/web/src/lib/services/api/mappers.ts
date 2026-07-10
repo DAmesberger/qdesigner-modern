@@ -333,5 +333,9 @@ export function mapSession(raw: GeneratedSession): SessionData {
     startedAt: raw.started_at ?? new Date().toISOString(),
     completedAt: raw.completed_at ?? null,
     metadata: (raw.metadata as Record<string, unknown>) ?? {},
+    lastActivityAt: raw.last_activity_at ?? null,
+    questionnaireVersionMajor: raw.questionnaire_version_major ?? null,
+    questionnaireVersionMinor: raw.questionnaire_version_minor ?? null,
+    questionnaireVersionPatch: raw.questionnaire_version_patch ?? null,
   };
 }

@@ -32,6 +32,10 @@ export const appPaths = {
     `/q/${appPaths.questionnaireFilloutCode(questionnaireId)}`,
   projectAnalytics: (projectId: string): string =>
     `/projects/${encodeSegment(projectId)}/analytics`,
+  // Read-only per-session response browser (R3-1), deep-linkable from the
+  // analytics sessions table.
+  projectAnalyticsSession: (projectId: string, sessionId: string): string =>
+    `/projects/${encodeSegment(projectId)}/analytics/sessions/${encodeSegment(sessionId)}`,
   // Read-only analytics a questionnaire-share grantee can open (F-32). Unlike
   // the org-scoped analytics pages, this route only calls endpoints the
   // `verify_questionnaire_access` share gate admits.

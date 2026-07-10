@@ -100,6 +100,12 @@ export interface SessionData {
   startedAt: string;
   completedAt: string | null;
   metadata: Record<string, unknown>;
+  /** Last recorded activity (used for duration on abandoned sessions). */
+  lastActivityAt?: string | null;
+  /** The exact questionnaire version this session was pinned to, if recorded. */
+  questionnaireVersionMajor?: number | null;
+  questionnaireVersionMinor?: number | null;
+  questionnaireVersionPatch?: number | null;
 }
 
 export interface ResponseSubmission {
