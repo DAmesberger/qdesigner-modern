@@ -976,8 +976,7 @@ function buildSternbergPlan(config: NormalizedReactionConfig, seedRoot: string):
 function buildPvtPlan(config: NormalizedReactionConfig, seedRoot: string): PlannedReactionTrial[] {
   const pvt = config.task.pvt;
   const shared = {
-    minIsiMs: pvt.minIsiMs,
-    maxIsiMs: pvt.maxIsiMs,
+    isi: pvt.isi,
     responseKey: pvt.responseKey,
     responseTimeoutMs: pvt.responseTimeoutMs,
     targetFPS: config.targetFPS,

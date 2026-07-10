@@ -10,6 +10,7 @@ import type {
   SimonTaskConfig,
   SternbergTaskConfig,
   TemporalOrderTaskConfig,
+  TimingSpec,
   VisualSearchTaskConfig,
 } from './reaction-schema';
 
@@ -59,17 +60,17 @@ export interface ReactionTimeConfig {
       stimulusSet: string[];
       targetKey: string;
       nonTargetKey: string;
-      fixationMs: number;
-      responseTimeoutMs: number;
+      fixationMs: TimingSpec;
+      responseTimeoutMs: TimingSpec;
     };
     stroop: {
       trialCount: number;
       colors: string[];
       congruentRatio: number;
-      stimulusDuration: number;
-      isi: number;
-      fixationMs: number;
-      responseTimeoutMs: number;
+      stimulusDuration: TimingSpec;
+      isi: TimingSpec;
+      fixationMs: TimingSpec;
+      responseTimeoutMs: TimingSpec;
     };
     flanker: {
       trialCount: number;
@@ -78,10 +79,10 @@ export interface ReactionTimeConfig {
       includeNeutral: boolean;
       neutralRatio: number;
       flankerCount: number;
-      stimulusDuration: number;
-      isi: number;
-      fixationMs: number;
-      responseTimeoutMs: number;
+      stimulusDuration: TimingSpec;
+      isi: TimingSpec;
+      fixationMs: TimingSpec;
+      responseTimeoutMs: TimingSpec;
     };
     iat: {
       category1Name: string;
@@ -94,18 +95,18 @@ export interface ReactionTimeConfig {
       attribute2Items: string[];
       trialsPerBlock: number;
       practiceTrialsPerBlock: number;
-      fixationMs: number;
-      responseTimeoutMs: number;
+      fixationMs: TimingSpec;
+      responseTimeoutMs: TimingSpec;
     };
     dotProbe: {
       trialCount: number;
-      cueDuration: number;
-      isi: number;
+      cueDuration: TimingSpec;
+      isi: TimingSpec;
       congruentRatio: number;
       probeSymbol: string;
       stimulusPairs: Array<{ salient: string; neutral: string }>;
-      fixationMs: number;
-      responseTimeoutMs: number;
+      fixationMs: TimingSpec;
+      responseTimeoutMs: TimingSpec;
     };
     goNoGo: GoNoGoTaskConfig;
     sart: SartTaskConfig;

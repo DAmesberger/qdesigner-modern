@@ -60,6 +60,39 @@ describe('reaction-normalize', () => {
     expect(normalized.task.flanker.flankerCount).toBe(3);
     expect(normalized.task.flanker.stimulusSet).toEqual(['<', '>']);
   });
+
+  it('preserves a jittered TimingSpec through normalization (ADR 0025)', () => {
+    const normalized = normalizeReactionQuestionConfig({
+      config: {
+        task: {
+          type: 'go-nogo',
+          goNoGo: { trialCount: 40, fixationMs: { dist: 'uniform', min: 400, max: 600 } },
+        },
+      },
+    });
+    expect(normalized.task.goNoGo.fixationMs).toEqual({ dist: 'uniform', min: 400, max: 600 });
+  });
+
+  it('maps the legacy PVT minIsiMs/maxIsiMs pair into a uniform isi spec', () => {
+    const normalized = normalizeReactionQuestionConfig({
+      config: {
+        task: { type: 'pvt', pvt: { trialCount: 30, minIsiMs: 2000, maxIsiMs: 10000 } },
+      },
+    });
+    expect(normalized.task.pvt.isi).toEqual({ dist: 'uniform', min: 2000, max: 10000 });
+  });
+
+  it('keeps an explicit PVT isi spec over the legacy pair', () => {
+    const normalized = normalizeReactionQuestionConfig({
+      config: {
+        task: {
+          type: 'pvt',
+          pvt: { trialCount: 30, isi: { dist: 'uniform', min: 500, max: 800 }, minIsiMs: 2000, maxIsiMs: 10000 },
+        },
+      },
+    });
+    expect(normalized.task.pvt.isi).toEqual({ dist: 'uniform', min: 500, max: 800 });
+  });
 });
 
 describe('reaction-compiler', () => {

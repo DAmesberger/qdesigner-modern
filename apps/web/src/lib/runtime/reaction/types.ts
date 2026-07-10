@@ -104,6 +104,25 @@ export interface ResponseSet {
   options: ResponseOption[];
 }
 
+/**
+ * An authored phase duration (ADR 0025). Either a fixed value in ms, or a
+ * distribution the seeded generator samples per-trial when trials are
+ * materialized. The object form is shaped to admit future named distributions
+ * (exponential, …) by discriminating on `dist`; today only `'uniform'` exists.
+ *
+ * A fixed number never consumes an rng draw, so a study authored entirely with
+ * fixed timings produces a byte-identical trial sequence to the pre-TimingSpec
+ * generators; only a distribution spec draws. See `presets/timingSpec.ts`.
+ */
+export type TimingSpec = number | UniformTimingSpec;
+
+/** A per-trial duration drawn uniformly from `[min, max]` ms (inclusive). */
+export interface UniformTimingSpec {
+  dist: 'uniform';
+  min: number;
+  max: number;
+}
+
 export interface ReactionFixationConfig {
   enabled?: boolean;
   type?: 'cross' | 'dot';

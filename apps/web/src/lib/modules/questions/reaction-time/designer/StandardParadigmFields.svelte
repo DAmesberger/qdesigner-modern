@@ -5,6 +5,7 @@
     validateReactionTask,
     issueFor,
   } from '$lib/components/designer/validation/scientificRules';
+  import TimingSpecField from './TimingSpecField.svelte';
 
   // Per-task-type configuration UI for the standard-paradigm library expansion
   // (E-REACT-2): Go/No-Go, SART, Simon, Posner, visual search, Sternberg, PVT,
@@ -80,8 +81,7 @@
         <input id="gonogo-key" type="text" bind:value={task.goNoGo.responseKey} class="input" />
       </div>
       <div class="mb-4">
-        <label for="gonogo-timeout">Response Timeout (ms)</label>
-        <input id="gonogo-timeout" type="number" min="100" max="20000" step="10" bind:value={task.goNoGo.responseTimeoutMs} class="input" class:invalid={errorFields.has('goNoGo.responseTimeoutMs')} />
+        <TimingSpecField id="gonogo-timeout" label="Response Timeout (ms)" bind:value={task.goNoGo.responseTimeoutMs} min={100} max={20000} step={10} fixedDefault={1000} invalid={errorFields.has('goNoGo.responseTimeoutMs')} />
         {@render fieldMsg('goNoGo.responseTimeoutMs')}
       </div>
     </div>
@@ -111,8 +111,7 @@
         <input id="sart-key" type="text" bind:value={task.sart.responseKey} class="input" />
       </div>
       <div class="mb-4">
-        <label for="sart-duration">Digit Duration (ms)</label>
-        <input id="sart-duration" type="number" min="0" max="5000" step="10" bind:value={task.sart.stimulusDuration} class="input" class:invalid={errorFields.has('sart.stimulusDuration')} />
+        <TimingSpecField id="sart-duration" label="Digit Duration (ms)" bind:value={task.sart.stimulusDuration} min={0} max={5000} step={10} fixedDefault={250} invalid={errorFields.has('sart.stimulusDuration')} />
         {@render fieldMsg('sart.stimulusDuration')}
       </div>
     </div>
@@ -176,13 +175,11 @@
         {@render fieldMsg('posner.validRatio')}
       </div>
       <div class="mb-4">
-        <label for="posner-cue">Cue Duration (ms)</label>
-        <input id="posner-cue" type="number" min="0" max="5000" step="10" bind:value={task.posner.cueDurationMs} class="input" class:invalid={errorFields.has('posner.cueDurationMs')} />
+        <TimingSpecField id="posner-cue" label="Cue Duration (ms)" bind:value={task.posner.cueDurationMs} min={0} max={5000} step={10} fixedDefault={100} invalid={errorFields.has('posner.cueDurationMs')} />
         {@render fieldMsg('posner.cueDurationMs')}
       </div>
       <div class="mb-4">
-        <label for="posner-soa">Cue→Target SOA (ms)</label>
-        <input id="posner-soa" type="number" min="0" max="5000" step="10" bind:value={task.posner.soaMs} class="input" class:invalid={errorFields.has('posner.soaMs')} />
+        <TimingSpecField id="posner-soa" label="Cue→Target SOA (ms)" bind:value={task.posner.soaMs} min={0} max={5000} step={10} fixedDefault={200} invalid={errorFields.has('posner.soaMs')} />
         {@render fieldMsg('posner.soaMs')}
       </div>
       <div class="mb-4">
@@ -271,13 +268,11 @@
         {@render fieldMsg('sternberg.setSizes')}
       </div>
       <div class="mb-4">
-        <label for="sternberg-encoding">Per-Item Study (ms)</label>
-        <input id="sternberg-encoding" type="number" min="0" max="10000" step="10" bind:value={task.sternberg.encodingMs} class="input" class:invalid={errorFields.has('sternberg.encodingMs')} />
+        <TimingSpecField id="sternberg-encoding" label="Per-Item Study (ms)" bind:value={task.sternberg.encodingMs} min={0} max={10000} step={10} fixedDefault={400} invalid={errorFields.has('sternberg.encodingMs')} />
         {@render fieldMsg('sternberg.encodingMs')}
       </div>
       <div class="mb-4">
-        <label for="sternberg-retention">Retention (ms)</label>
-        <input id="sternberg-retention" type="number" min="0" max="20000" step="10" bind:value={task.sternberg.retentionMs} class="input" class:invalid={errorFields.has('sternberg.retentionMs')} />
+        <TimingSpecField id="sternberg-retention" label="Retention (ms)" bind:value={task.sternberg.retentionMs} min={0} max={20000} step={10} fixedDefault={1000} invalid={errorFields.has('sternberg.retentionMs')} />
         {@render fieldMsg('sternberg.retentionMs')}
       </div>
       <div class="mb-4">
@@ -310,14 +305,8 @@
         <input id="pvt-key" type="text" bind:value={task.pvt.responseKey} class="input" />
       </div>
       <div class="mb-4">
-        <label for="pvt-min">Min ISI (ms)</label>
-        <input id="pvt-min" type="number" min="0" max="60000" step="100" bind:value={task.pvt.minIsiMs} class="input" class:invalid={errorFields.has('pvt.minIsiMs')} />
-        {@render fieldMsg('pvt.minIsiMs')}
-      </div>
-      <div class="mb-4">
-        <label for="pvt-max">Max ISI (ms)</label>
-        <input id="pvt-max" type="number" min="0" max="60000" step="100" bind:value={task.pvt.maxIsiMs} class="input" class:invalid={errorFields.has('pvt.maxIsiMs')} />
-        {@render fieldMsg('pvt.maxIsiMs')}
+        <TimingSpecField id="pvt-isi" label="Foreperiod / ISI (ms)" bind:value={task.pvt.isi} min={0} max={60000} step={100} fixedDefault={2000} invalid={errorFields.has('pvt.isi')} />
+        {@render fieldMsg('pvt.isi')}
       </div>
     </div>
   </div>
@@ -379,8 +368,7 @@
         {@render fieldMsg('rsvp.streamLength')}
       </div>
       <div class="mb-4">
-        <label for="rsvp-item">Item Duration (ms)</label>
-        <input id="rsvp-item" type="number" min="10" max="2000" step="10" bind:value={task.rsvp.itemDurationMs} class="input" class:invalid={errorFields.has('rsvp.itemDurationMs')} />
+        <TimingSpecField id="rsvp-item" label="Item Duration (ms)" bind:value={task.rsvp.itemDurationMs} min={10} max={2000} step={10} fixedDefault={100} invalid={errorFields.has('rsvp.itemDurationMs')} />
         {@render fieldMsg('rsvp.itemDurationMs')}
       </div>
       <div class="mb-4">

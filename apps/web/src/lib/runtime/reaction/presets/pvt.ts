@@ -1,5 +1,6 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
 import { createSeededRng } from './random';
+import { sampleTiming } from './timingSpec';
 
 /**
  * PVT — Psychomotor Vigilance Task (E-REACT-2). After a random inter-stimulus
@@ -10,12 +11,19 @@ import { createSeededRng } from './random';
  */
 export interface PvtPresetConfig {
   trialCount: number;
-  /** Minimum random ISI before the target. SOTA default 2000 ms. */
+  /**
+   * Foreperiod before the target (ADR 0025). A TimingSpec — a fixed ms value or
+   * a `uniform` distribution — sampled per-trial. The PVT is defined by a random
+   * foreperiod, so this is normally a uniform spec (SOTA 2000–10000 ms). When
+   * omitted, the legacy `minIsiMs`/`maxIsiMs` pair is mapped to a uniform spec.
+   */
+  isi?: TimingSpec;
+  /** Legacy minimum random ISI (ms). Mapped to `isi` when `isi` is absent. */
   minIsiMs?: number;
-  /** Maximum random ISI before the target. SOTA default 10000 ms. */
+  /** Legacy maximum random ISI (ms). Mapped to `isi` when `isi` is absent. */
   maxIsiMs?: number;
   responseKey?: string;
-  responseTimeoutMs?: number;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -28,20 +36,32 @@ export interface PvtTrialConfig extends ReactionTrialConfig {
   condition: 'pvt';
 }
 
+/**
+ * Resolve the foreperiod TimingSpec, honouring the legacy `minIsiMs`/`maxIsiMs`
+ * pair (back-compat) when an explicit `isi` spec is not supplied.
+ */
+function resolveIsiSpec(config: PvtPresetConfig): TimingSpec {
+  if (config.isi !== undefined) return config.isi;
+  const min = Math.max(0, config.minIsiMs ?? 2000);
+  const max = Math.max(min, config.maxIsiMs ?? 10000);
+  return { dist: 'uniform', min, max };
+}
+
 export function createPvtTrials(config: PvtPresetConfig): PvtTrialConfig[] {
   if (config.trialCount < 1) {
     throw new Error('trialCount must be >= 1');
   }
 
-  const minIsi = Math.max(0, config.minIsiMs ?? 2000);
-  const maxIsi = Math.max(minIsi, config.maxIsiMs ?? 10000);
+  const isiSpec = resolveIsiSpec(config);
   const rng = config.rng || createSeededRng(config.seed || 'pvt-default');
   const responseKey = (config.responseKey ?? ' ').toLowerCase();
 
   const trials: PvtTrialConfig[] = [];
 
   for (let i = 0; i < config.trialCount; i++) {
-    const isiMs = Math.round(minIsi + rng() * (maxIsi - minIsi));
+    // Draw order (ADR 0025): foreperiod → response timeout.
+    const isiMs = sampleTiming(isiSpec, rng) ?? 0;
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 5000;
 
     const stimulus: ReactionStimulusConfig = {
       kind: 'shape',
@@ -63,7 +83,7 @@ export function createPvtTrials(config: PvtPresetConfig): PvtTrialConfig[] {
       fixation: { enabled: false, type: 'dot', durationMs: 0 },
       preStimulusDelayMs: isiMs,
       stimulus,
-      responseTimeoutMs: config.responseTimeoutMs ?? 5000,
+      responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
       interTrialIntervalMs: 500,
     });

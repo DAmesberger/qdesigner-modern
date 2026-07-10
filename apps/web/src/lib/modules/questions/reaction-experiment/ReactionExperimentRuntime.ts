@@ -13,7 +13,10 @@ import {
   compactPhaseTimeline,
   type CompactPhaseMark,
 } from '$lib/modules/questions/reaction-time/model/trialRow';
-import { buildRuntimeTrialEvent } from '$lib/modules/questions/reaction-time/model/trialEvent';
+import {
+  buildRuntimeTrialEvent,
+  materializedPhasesFromTrial,
+} from '$lib/modules/questions/reaction-time/model/trialEvent';
 import {
   compileReactionExperimentPlan,
   normalizeReactionExperimentConfig,
@@ -223,7 +226,10 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
       // RT-1b: persist each trial the instant it completes (fire-and-forget on the
       // fillout side). The `value.responses` block summary below stays unchanged.
       context.onTrialComplete?.(
-        buildRuntimeTrialEvent(context.question.id, response, planned.metadata.scheduledPhases)
+        buildRuntimeTrialEvent(context.question.id, response, [
+          ...materializedPhasesFromTrial(planned.trial),
+          ...(planned.metadata.scheduledPhases ?? []),
+        ])
       );
     }
 

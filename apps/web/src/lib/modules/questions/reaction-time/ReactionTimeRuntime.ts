@@ -13,7 +13,7 @@ import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
 import { computeDerivedReactionMetrics, aggregateReactionProvenance } from './model/reaction-scoring';
 import type { ReactionTaskType } from './model/reaction-schema';
 import { compactPhaseTimeline, type CompactPhaseMark } from './model/trialRow';
-import { buildRuntimeTrialEvent } from './model/trialEvent';
+import { buildRuntimeTrialEvent, materializedPhasesFromTrial } from './model/trialEvent';
 
 /**
  * Recursively rewrite every media reference in a freshly-normalized (mutable)
@@ -370,8 +370,14 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
     // RT-1b: persist this trial IMMEDIATELY (fire-and-forget on the fillout side).
     // The question-level block summary still carries the full `allResponses` array
     // unchanged (dual-write) — this is the first-class per-trial record.
+    // sampledTimings records the MATERIALIZED per-trial durations (ADR 0025) —
+    // the paradigm's sampled core phases plus any authored tail phases — so a
+    // jittered foreperiod/ISI is auditable trial data, not a runtime accident.
     context.onTrialComplete?.(
-      buildRuntimeTrialEvent(context.question.id, response, scheduledPhases)
+      buildRuntimeTrialEvent(context.question.id, response, [
+        ...materializedPhasesFromTrial(planned.trial),
+        ...scheduledPhases,
+      ])
     );
 
     return response;

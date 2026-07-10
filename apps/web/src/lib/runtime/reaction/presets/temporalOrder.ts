@@ -1,5 +1,6 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
 import { createSeededRng, shuffle } from './random';
+import { sampleTiming } from './timingSpec';
 
 /**
  * Temporal-order judgment task (E-REACT-2). Two lateralized flashes are
@@ -20,10 +21,11 @@ export interface TemporalOrderPresetConfig {
   firstKey?: string;
   /** Key for a "right came first" judgment. */
   secondKey?: string;
-  stimulusDuration?: number;
-  isi?: number;
-  fixationMs?: number;
-  responseTimeoutMs?: number;
+  /** Phase durations (ADR 0025): a fixed ms value or a per-trial `uniform` spec. */
+  stimulusDuration?: TimingSpec;
+  isi?: TimingSpec;
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -79,6 +81,12 @@ export function createTemporalOrderTrials(
     const expectedResponse = leadingSide === 'left' ? firstKey : secondKey;
     const condition = `soa:${soaMs}`;
 
+    // Draw order (ADR 0025): fixation → stimulus → response timeout → ITI.
+    const fixationMs = sampleTiming(config.fixationMs, rng) ?? 500;
+    const stimulusDurationMs = sampleTiming(config.stimulusDuration, rng);
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 3000;
+    const interTrialIntervalMs = sampleTiming(config.isi, rng) ?? 500;
+
     const stimulus: ReactionStimulusConfig = {
       kind: 'shape',
       shape: 'circle',
@@ -101,15 +109,15 @@ export function createTemporalOrderTrials(
       fixation: {
         enabled: true,
         type: 'cross',
-        durationMs: config.fixationMs ?? 500,
+        durationMs: fixationMs,
       },
       // Foreperiod to the leading flash; the lagging flash follows |SOA| later.
       preStimulusDelayMs: Math.abs(soaMs),
       stimulus,
-      stimulusDurationMs: config.stimulusDuration,
-      responseTimeoutMs: config.responseTimeoutMs ?? 3000,
+      stimulusDurationMs,
+      responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
-      interTrialIntervalMs: config.isi ?? 500,
+      interTrialIntervalMs,
     });
   }
 

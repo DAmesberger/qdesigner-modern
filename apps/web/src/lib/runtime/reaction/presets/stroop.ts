@@ -1,5 +1,6 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
 import type { RGBAColor } from '$lib/shared';
+import { sampleTiming } from './timingSpec';
 
 export interface StroopColor {
   name: string;
@@ -10,10 +11,11 @@ export interface StroopPresetConfig {
   trialCount: number;
   colors?: StroopColor[];
   congruentRatio?: number;
-  stimulusDuration?: number;
-  isi?: number;
-  fixationMs?: number;
-  responseTimeoutMs?: number;
+  /** Phase durations (ADR 0025): a fixed ms value or a per-trial `uniform` spec. */
+  stimulusDuration?: TimingSpec;
+  isi?: TimingSpec;
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -81,6 +83,12 @@ export function createStroopTrials(config: StroopPresetConfig): StroopTrialConfi
     // Correct response is the ink color (not the word)
     const correctKey = inkColor.name[0]!.toLowerCase();
 
+    // Draw order (ADR 0025): fixation → stimulus → response timeout → ITI.
+    const fixationMs = sampleTiming(config.fixationMs, rng) ?? 500;
+    const stimulusDurationMs = sampleTiming(config.stimulusDuration, rng);
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 2000;
+    const interTrialIntervalMs = sampleTiming(config.isi, rng) ?? 250;
+
     const stimulus: ReactionStimulusConfig = {
       kind: 'text',
       text: wordColor.name.toUpperCase(),
@@ -102,13 +110,13 @@ export function createStroopTrials(config: StroopPresetConfig): StroopTrialConfi
       fixation: {
         enabled: true,
         type: 'cross',
-        durationMs: config.fixationMs ?? 500,
+        durationMs: fixationMs,
       },
       stimulus,
-      stimulusDurationMs: config.stimulusDuration,
-      responseTimeoutMs: config.responseTimeoutMs ?? 2000,
+      stimulusDurationMs,
+      responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
-      interTrialIntervalMs: config.isi ?? 250,
+      interTrialIntervalMs,
     });
   }
 

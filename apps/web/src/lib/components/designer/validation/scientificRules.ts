@@ -13,6 +13,7 @@
  * parse — no designer-valid / runtime-invalid drift.
  */
 import { FormulaParser, ParseError, type ASTNode } from '@qdesigner/scripting-engine';
+import { isTimingSpec } from '$lib/runtime/reaction';
 
 export type Severity = 'error' | 'warning';
 
@@ -77,6 +78,43 @@ export function positiveRule(field: string, value: unknown, label: string): Vali
   return [];
 }
 
+/**
+ * Validate an authored phase duration (ADR 0025), fixed OR jittered. A fixed
+ * value defers to {@link durationRule} (or {@link positiveRule} when `positive`).
+ * A `uniform` distribution must have both bounds finite and ≥ 0 (or > 0 when
+ * `positive`) with min ≤ max; a zero-width range (min === max) warns, since it
+ * jitters nothing. Reported against the single field id so one TimingSpecField
+ * surfaces the message inline (R4-4 idiom).
+ */
+export function timingRule(
+  field: string,
+  value: unknown,
+  label: string,
+  opts?: { positive?: boolean }
+): ValidationIssue[] {
+  if (isTimingSpec(value)) {
+    const lo = finite(value.min);
+    const hi = finite(value.max);
+    if (lo === null || hi === null) {
+      return [{ field, severity: 'error', message: `${label}: jitter needs a numeric minimum and maximum.` }];
+    }
+    if (lo < 0 || hi < 0) {
+      return [{ field, severity: 'error', message: `${label} cannot be negative.` }];
+    }
+    if (opts?.positive && (lo <= 0 || hi <= 0)) {
+      return [{ field, severity: 'error', message: `${label} must be greater than 0.` }];
+    }
+    if (lo > hi) {
+      return [{ field, severity: 'error', message: `${label}: jitter minimum cannot exceed the maximum.` }];
+    }
+    if (lo === hi) {
+      return [{ field, severity: 'warning', message: `${label}: jitter min and max are equal — no variation.` }];
+    }
+    return [];
+  }
+  return opts?.positive ? positiveRule(field, value, label) : durationRule(field, value, label);
+}
+
 /** min ≤ max ordering across two ISI/interval fields. */
 export function orderedRule(
   minField: string,
@@ -134,7 +172,7 @@ export function validateReactionTask(task: any): ValidationIssue[] {
           'A go ratio of 0 or 1 leaves no contrast between go and no-go trials.'
         )
       );
-      out.push(...positiveRule('goNoGo.responseTimeoutMs', c.responseTimeoutMs, 'Response timeout'));
+      out.push(...timingRule('goNoGo.responseTimeoutMs', c.responseTimeoutMs, 'Response timeout', { positive: true }));
       break;
     }
     case 'sart': {
@@ -144,7 +182,7 @@ export function validateReactionTask(task: any): ValidationIssue[] {
       if (digit === null || !Number.isInteger(digit) || digit < 0 || digit > 9) {
         out.push({ field: 'sart.targetDigit', severity: 'error', message: 'Target digit must be a single digit 0–9.' });
       }
-      out.push(...durationRule('sart.stimulusDuration', c.stimulusDuration, 'Digit duration'));
+      out.push(...timingRule('sart.stimulusDuration', c.stimulusDuration, 'Digit duration'));
       break;
     }
     case 'simon': {
@@ -172,8 +210,8 @@ export function validateReactionTask(task: any): ValidationIssue[] {
           message: 'Cues are usually predominantly valid (≥ 0.5) so an expectancy can build.',
         });
       }
-      out.push(...durationRule('posner.cueDurationMs', c.cueDurationMs, 'Cue duration'));
-      out.push(...durationRule('posner.soaMs', c.soaMs, 'Cue→target SOA'));
+      out.push(...timingRule('posner.cueDurationMs', c.cueDurationMs, 'Cue duration'));
+      out.push(...timingRule('posner.soaMs', c.soaMs, 'Cue→target SOA'));
       break;
     }
     case 'visual-search': {
@@ -187,16 +225,22 @@ export function validateReactionTask(task: any): ValidationIssue[] {
       const c = task.sternberg ?? {};
       out.push(...countRule('sternberg.trialCount', c.trialCount, 'Trial count'));
       out.push(...positiveListRule('sternberg.setSizes', c.setSizes, 'Set sizes'));
-      out.push(...durationRule('sternberg.encodingMs', c.encodingMs, 'Per-item study'));
-      out.push(...durationRule('sternberg.retentionMs', c.retentionMs, 'Retention'));
+      out.push(...timingRule('sternberg.encodingMs', c.encodingMs, 'Per-item study'));
+      out.push(...timingRule('sternberg.retentionMs', c.retentionMs, 'Retention'));
       break;
     }
     case 'pvt': {
       const c = task.pvt ?? {};
       out.push(...countRule('pvt.trialCount', c.trialCount, 'Trial count'));
-      out.push(...durationRule('pvt.minIsiMs', c.minIsiMs, 'Min ISI'));
-      out.push(...durationRule('pvt.maxIsiMs', c.maxIsiMs, 'Max ISI'));
-      out.push(...orderedRule('pvt.minIsiMs', c.minIsiMs, c.maxIsiMs, 'ISI'));
+      // Legacy min/max ISI is mapped to the `isi` TimingSpec by the normalizer;
+      // validate whichever the config carries so pre-migration configs still flag.
+      if (c.isi !== undefined) {
+        out.push(...timingRule('pvt.isi', c.isi, 'Foreperiod (ISI)'));
+      } else {
+        out.push(...durationRule('pvt.minIsiMs', c.minIsiMs, 'Min ISI'));
+        out.push(...durationRule('pvt.maxIsiMs', c.maxIsiMs, 'Max ISI'));
+        out.push(...orderedRule('pvt.minIsiMs', c.minIsiMs, c.maxIsiMs, 'ISI'));
+      }
       break;
     }
     case 'temporal-order': {
@@ -212,11 +256,45 @@ export function validateReactionTask(task: any): ValidationIssue[] {
       const c = task.rsvp ?? {};
       out.push(...countRule('rsvp.trialCount', c.trialCount, 'Trial count'));
       out.push(...countRule('rsvp.streamLength', c.streamLength, 'Stream length'));
-      out.push(...positiveRule('rsvp.itemDurationMs', c.itemDurationMs, 'Item duration'));
+      out.push(...timingRule('rsvp.itemDurationMs', c.itemDurationMs, 'Item duration', { positive: true }));
       const targets = Array.isArray(c.targetSet) ? c.targetSet : [];
       if (targets.length === 0) {
         out.push({ field: 'rsvp.targetSet', severity: 'warning', message: 'No targets defined — there is nothing to detect.' });
       }
+      break;
+    }
+    case 'n-back': {
+      const c = task.nBack ?? {};
+      out.push(...timingRule('nBack.fixationMs', c.fixationMs, 'Fixation'));
+      out.push(...timingRule('nBack.responseTimeoutMs', c.responseTimeoutMs, 'Response timeout', { positive: true }));
+      break;
+    }
+    case 'stroop': {
+      const c = task.stroop ?? {};
+      out.push(...timingRule('stroop.fixationMs', c.fixationMs, 'Fixation'));
+      out.push(...timingRule('stroop.isi', c.isi, 'Inter-stimulus interval'));
+      out.push(...timingRule('stroop.responseTimeoutMs', c.responseTimeoutMs, 'Response timeout', { positive: true }));
+      break;
+    }
+    case 'flanker': {
+      const c = task.flanker ?? {};
+      out.push(...timingRule('flanker.fixationMs', c.fixationMs, 'Fixation'));
+      out.push(...timingRule('flanker.isi', c.isi, 'Inter-stimulus interval'));
+      out.push(...timingRule('flanker.responseTimeoutMs', c.responseTimeoutMs, 'Response timeout', { positive: true }));
+      break;
+    }
+    case 'iat': {
+      const c = task.iat ?? {};
+      out.push(...timingRule('iat.fixationMs', c.fixationMs, 'Fixation'));
+      out.push(...timingRule('iat.responseTimeoutMs', c.responseTimeoutMs, 'Response timeout', { positive: true }));
+      break;
+    }
+    case 'dot-probe': {
+      const c = task.dotProbe ?? {};
+      out.push(...timingRule('dotProbe.cueDuration', c.cueDuration, 'Cue duration'));
+      out.push(...timingRule('dotProbe.isi', c.isi, 'Inter-trial interval'));
+      out.push(...timingRule('dotProbe.fixationMs', c.fixationMs, 'Fixation'));
+      out.push(...timingRule('dotProbe.responseTimeoutMs', c.responseTimeoutMs, 'Response timeout', { positive: true }));
       break;
     }
     default:

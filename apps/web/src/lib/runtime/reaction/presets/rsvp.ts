@@ -1,5 +1,6 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
 import { createSeededRng } from './random';
+import { sampleTiming } from './timingSpec';
 
 /**
  * RSVP — Rapid Serial Visual Presentation (E-REACT-2). Items stream at a fixed
@@ -17,13 +18,13 @@ export interface RsvpPresetConfig {
   trialCount: number;
   /** Items per stream (drives the pre-target lead). SOTA default 12. */
   streamLength?: number;
-  /** Per-item exposure. SOTA default 100 ms (10 Hz). */
-  itemDurationMs?: number;
+  /** Per-item exposure (ADR 0025). SOTA default 100 ms (10 Hz). */
+  itemDurationMs?: TimingSpec;
   targetKey?: string;
   targetSet?: string[];
   distractorSet?: string[];
-  fixationMs?: number;
-  responseTimeoutMs?: number;
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -47,7 +48,6 @@ export function createRsvpTrials(config: RsvpPresetConfig): RsvpTrialConfig[] {
   }
 
   const streamLength = Math.max(1, Math.round(config.streamLength ?? 12));
-  const itemDurationMs = Math.max(1, Math.round(config.itemDurationMs ?? 100));
   const rng = config.rng || createSeededRng(config.seed || 'rsvp-default');
   const targetKey = (config.targetKey ?? ' ').toLowerCase();
   const targetSet =
@@ -65,6 +65,13 @@ export function createRsvpTrials(config: RsvpPresetConfig): RsvpTrialConfig[] {
     const targetPosition =
       minPosition + Math.floor(rng() * Math.max(1, streamLength - minPosition + 1));
     const target = targetSet[Math.floor(rng() * targetSet.length)]!;
+
+    // Draw order (ADR 0025): fixation → item exposure → response timeout. The
+    // sampled item duration drives BOTH the pre-target stream lead and the
+    // (frame-scheduled) target exposure for this trial.
+    const fixationMs = sampleTiming(config.fixationMs, rng) ?? 500;
+    const itemDurationMs = Math.max(1, Math.round(sampleTiming(config.itemDurationMs, rng) ?? 100));
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 2000;
 
     const stimulus: ReactionStimulusConfig = {
       kind: 'text',
@@ -87,14 +94,14 @@ export function createRsvpTrials(config: RsvpPresetConfig): RsvpTrialConfig[] {
       fixation: {
         enabled: true,
         type: 'cross',
-        durationMs: config.fixationMs ?? 500,
+        durationMs: fixationMs,
       },
       // Preceding distractor stream before the target frame.
       preStimulusDelayMs: (targetPosition - 1) * itemDurationMs,
       stimulus,
       // Brief, frame-scheduled target exposure — the RSVP timing use case.
       stimulusDurationMs: itemDurationMs,
-      responseTimeoutMs: config.responseTimeoutMs ?? 2000,
+      responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
       interTrialIntervalMs: 700,
       // Distractor pool retained for provenance / designer preview.

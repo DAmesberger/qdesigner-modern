@@ -1,5 +1,6 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
 import { createSeededRng, shuffle } from './random';
+import { sampleTiming } from './timingSpec';
 
 /**
  * Sternberg memory-search task (E-REACT-2). A memory set of a given size is
@@ -22,13 +23,13 @@ export interface SternbergPresetConfig {
   memoryItems?: string[];
   presentKey?: string;
   absentKey?: string;
-  /** Per-item study exposure. SOTA default 400 ms. */
-  encodingMs?: number;
-  /** Retention interval before the probe. SOTA default 1000 ms. */
-  retentionMs?: number;
-  isi?: number;
-  fixationMs?: number;
-  responseTimeoutMs?: number;
+  /** Per-item study exposure (ADR 0025). SOTA default 400 ms. */
+  encodingMs?: TimingSpec;
+  /** Retention interval before the probe (ADR 0025). SOTA default 1000 ms. */
+  retentionMs?: TimingSpec;
+  isi?: TimingSpec;
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -72,8 +73,6 @@ export function createSternbergTrials(config: SternbergPresetConfig): SternbergT
   const rng = config.rng || createSeededRng(config.seed || 'sternberg-default');
   const presentKey = (config.presentKey ?? 'j').toLowerCase();
   const absentKey = (config.absentKey ?? 'f').toLowerCase();
-  const encodingMs = Math.max(0, config.encodingMs ?? 400);
-  const retentionMs = Math.max(0, config.retentionMs ?? 1000);
 
   const inSetFlags: boolean[] = [];
   for (let i = 0; i < config.trialCount; i++) {
@@ -96,6 +95,13 @@ export function createSternbergTrials(config: SternbergPresetConfig): SternbergT
 
     const expectedResponse = inSet ? presentKey : absentKey;
     const condition = `${inSet ? 'in' : 'out'}-${setSize}`;
+
+    // Draw order (ADR 0025): fixation → study → retention → response timeout → ITI.
+    const fixationMs = sampleTiming(config.fixationMs, rng) ?? 500;
+    const encodingMs = Math.max(0, sampleTiming(config.encodingMs, rng) ?? 400);
+    const retentionMs = Math.max(0, sampleTiming(config.retentionMs, rng) ?? 1000);
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 3000;
+    const interTrialIntervalMs = sampleTiming(config.isi, rng) ?? 500;
 
     const stimulus: ReactionStimulusConfig = {
       kind: 'text',
@@ -120,14 +126,14 @@ export function createSternbergTrials(config: SternbergPresetConfig): SternbergT
       fixation: {
         enabled: true,
         type: 'cross',
-        durationMs: config.fixationMs ?? 500,
+        durationMs: fixationMs,
       },
       // Study (setSize · encodingMs) + retention interval before the probe onset.
       preStimulusDelayMs: setSize * encodingMs + retentionMs,
       stimulus,
-      responseTimeoutMs: config.responseTimeoutMs ?? 3000,
+      responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
-      interTrialIntervalMs: config.isi ?? 500,
+      interTrialIntervalMs,
     });
   }
 

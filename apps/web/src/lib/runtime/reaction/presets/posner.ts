@@ -1,5 +1,6 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
 import { createSeededRng, shuffle } from './random';
+import { sampleTiming } from './timingSpec';
 
 /**
  * Posner spatial-cueing task (E-REACT-2). A peripheral cue precedes a lateralized
@@ -17,14 +18,14 @@ export interface PosnerPresetConfig {
   /** Proportion of validly-cued trials. SOTA default 0.8. */
   validRatio?: number;
   /** Cue exposure in ms (documented; folded into the SOA). SOTA default 100. */
-  cueDurationMs?: number;
-  /** Cue-onset → target-onset asynchrony. SOTA default 200 ms. */
-  soaMs?: number;
+  cueDurationMs?: TimingSpec;
+  /** Cue-onset → target-onset asynchrony (ADR 0025). SOTA default 200 ms. */
+  soaMs?: TimingSpec;
   leftKey?: string;
   rightKey?: string;
-  fixationMs?: number;
-  responseTimeoutMs?: number;
-  isi?: number;
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
+  isi?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -53,7 +54,6 @@ export function createPosnerTrials(config: PosnerPresetConfig): PosnerTrialConfi
   const rng = config.rng || createSeededRng(config.seed || 'posner-default');
   const leftKey = (config.leftKey ?? 'f').toLowerCase();
   const rightKey = (config.rightKey ?? 'j').toLowerCase();
-  const soaMs = Math.max(0, config.soaMs ?? 200);
 
   const validities: PosnerValidity[] = [];
   for (let i = 0; i < config.trialCount; i++) {
@@ -69,6 +69,12 @@ export function createPosnerTrials(config: PosnerPresetConfig): PosnerTrialConfi
     const targetSide: 'left' | 'right' =
       validity === 'valid' ? cueSide : cueSide === 'left' ? 'right' : 'left';
     const expectedResponse = targetSide === 'left' ? leftKey : rightKey;
+
+    // Draw order (ADR 0025): fixation → cue→target SOA → response timeout → ITI.
+    const fixationMs = sampleTiming(config.fixationMs, rng) ?? 500;
+    const soaMs = Math.max(0, sampleTiming(config.soaMs, rng) ?? 200);
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 1500;
+    const interTrialIntervalMs = sampleTiming(config.isi, rng) ?? 500;
 
     const stimulus: ReactionStimulusConfig = {
       kind: 'shape',
@@ -93,14 +99,14 @@ export function createPosnerTrials(config: PosnerPresetConfig): PosnerTrialConfi
       fixation: {
         enabled: true,
         type: 'cross',
-        durationMs: config.fixationMs ?? 500,
+        durationMs: fixationMs,
       },
       // Cue → target SOA: the target onset (after this delay) is the RT reference.
       preStimulusDelayMs: soaMs,
       stimulus,
-      responseTimeoutMs: config.responseTimeoutMs ?? 1500,
+      responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
-      interTrialIntervalMs: config.isi ?? 500,
+      interTrialIntervalMs,
     });
   }
 

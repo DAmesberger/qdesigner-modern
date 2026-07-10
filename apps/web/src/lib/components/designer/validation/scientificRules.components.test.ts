@@ -49,7 +49,8 @@ describe('AdaptiveBlockEditor inline validation', () => {
 });
 
 describe('StandardParadigmFields inline validation', () => {
-  // Minimal PVT config — the component only reads `task.pvt` for this branch.
+  // Minimal PVT config — the component only reads `task.pvt` for this branch. The
+  // foreperiod is authored as a jittered TimingSpec via TimingSpecField (ADR 0025).
   const pvtQuestion = (min: number, max: number) =>
     ({
       id: 'q1',
@@ -58,20 +59,25 @@ describe('StandardParadigmFields inline validation', () => {
       config: {
         task: {
           type: 'pvt',
-          pvt: { trialCount: 20, minIsiMs: min, maxIsiMs: max, responseKey: ' ', responseTimeoutMs: 3000 },
+          pvt: {
+            trialCount: 20,
+            isi: { dist: 'uniform', min, max },
+            responseKey: ' ',
+            responseTimeoutMs: 3000,
+          },
         },
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- minimal fixture for one branch
     }) as any;
 
-  it('flags a min ISI above the max ISI', () => {
+  it('flags a jittered foreperiod whose min exceeds its max', () => {
     const { getByText } = render(StandardParadigmFields, { question: pvtQuestion(10000, 2000) });
-    expect(getByText(/ISI: minimum cannot exceed the maximum/)).toBeTruthy();
+    expect(getByText(/jitter minimum cannot exceed the maximum/)).toBeTruthy();
   });
 
-  it('shows no ISI error for an ordered window', () => {
+  it('shows no foreperiod error for an ordered window', () => {
     const { queryByText } = render(StandardParadigmFields, { question: pvtQuestion(2000, 10000) });
-    expect(queryByText(/minimum cannot exceed the maximum/)).toBeNull();
+    expect(queryByText(/cannot exceed the maximum/)).toBeNull();
   });
 });
 

@@ -1,6 +1,45 @@
 import type { RuntimeTrialEvent } from '$lib/runtime/core/question-runtime';
-import type { ScheduledPhase } from '$lib/runtime/reaction';
+import type { ReactionTrialConfig, ScheduledPhase } from '$lib/runtime/reaction';
 import type { CompactPhaseMark } from './trialRow';
+
+/**
+ * Derive the materialized core phases of a trial (ADR 0025) as ScheduledPhase
+ * records, so the per-trial durations a paradigm SAMPLED at generation — the PVT
+ * foreperiod, a jittered fixation/ISI, a Sternberg study+retention delay — reach
+ * `sampledTimings`. Paradigm presets don't populate `metadata.scheduledPhases`
+ * (those are extra tail phases for study-block templates), so without this the
+ * blob would be empty for them. Only phases with a concrete positive duration are
+ * emitted. The runtimes prepend these to any authored `scheduledPhases`.
+ */
+export function materializedPhasesFromTrial(trial: ReactionTrialConfig): ScheduledPhase[] {
+  const phases: ScheduledPhase[] = [];
+
+  if (trial.fixation?.enabled && (trial.fixation.durationMs ?? 0) > 0) {
+    phases.push({ name: 'fixation', durationMs: trial.fixation.durationMs ?? 0 });
+  }
+  if ((trial.preStimulusDelayMs ?? 0) > 0 || (trial.preStimulusDelayFrames ?? 0) > 0) {
+    phases.push({
+      name: 'foreperiod',
+      durationMs: trial.preStimulusDelayMs ?? 0,
+      durationFrames: trial.preStimulusDelayFrames,
+    });
+  }
+  if ((trial.stimulusDurationMs ?? 0) > 0 || (trial.stimulusDurationFrames ?? 0) > 0) {
+    phases.push({
+      name: 'stimulus',
+      durationMs: trial.stimulusDurationMs ?? 0,
+      durationFrames: trial.stimulusDurationFrames,
+    });
+  }
+  if ((trial.responseTimeoutMs ?? 0) > 0) {
+    phases.push({ name: 'response-window', durationMs: trial.responseTimeoutMs ?? 0 });
+  }
+  if ((trial.interTrialIntervalMs ?? 0) > 0) {
+    phases.push({ name: 'inter-trial', durationMs: trial.interTrialIntervalMs ?? 0 });
+  }
+
+  return phases;
+}
 
 /**
  * The slice of a runtime's per-trial `TrialResponse` that {@link buildRuntimeTrialEvent}

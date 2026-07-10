@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildRuntimeTrialEvent, type TrialEventSource } from './trialEvent';
+import {
+	buildRuntimeTrialEvent,
+	materializedPhasesFromTrial,
+	type TrialEventSource,
+} from './trialEvent';
+import type { ReactionTrialConfig } from '$lib/runtime/reaction';
 
 function source(overrides: Partial<TrialEventSource> = {}): TrialEventSource {
 	return {
@@ -79,6 +84,50 @@ describe('buildRuntimeTrialEvent', () => {
 			optionId: 'congruent',
 			source: 'keyboard',
 			correct: true,
+		});
+	});
+});
+
+describe('materializedPhasesFromTrial (ADR 0025 — sampled durations reach sampledTimings)', () => {
+	function trial(overrides: Partial<ReactionTrialConfig> = {}): ReactionTrialConfig {
+		return {
+			id: 't1',
+			stimulus: { kind: 'shape', shape: 'circle', radiusPx: 80 },
+			...overrides,
+		} as ReactionTrialConfig;
+	}
+
+	it('surfaces a sampled foreperiod (e.g. the PVT ISI) as a phase', () => {
+		const phases = materializedPhasesFromTrial(trial({ preStimulusDelayMs: 6234, responseTimeoutMs: 5000 }));
+		expect(phases).toContainEqual({ name: 'foreperiod', durationMs: 6234, durationFrames: undefined });
+		expect(phases).toContainEqual({ name: 'response-window', durationMs: 5000 });
+	});
+
+	it('emits the fixation / stimulus / inter-trial phases when present and positive', () => {
+		const phases = materializedPhasesFromTrial(
+			trial({
+				fixation: { enabled: true, durationMs: 500 },
+				stimulusDurationMs: 250,
+				interTrialIntervalMs: 700,
+			})
+		);
+		const names = phases.map((p) => p.name);
+		expect(names).toEqual(['fixation', 'stimulus', 'inter-trial']);
+	});
+
+	it('omits zero / disabled phases', () => {
+		const phases = materializedPhasesFromTrial(
+			trial({ fixation: { enabled: false, durationMs: 0 }, preStimulusDelayMs: 0, stimulusDurationMs: 0 })
+		);
+		expect(phases).toEqual([]);
+	});
+
+	it('flows into sampledTimings when passed through buildRuntimeTrialEvent', () => {
+		const event = buildRuntimeTrialEvent('q-1', source(), [
+			...materializedPhasesFromTrial(trial({ preStimulusDelayMs: 2000 })),
+		]);
+		expect(event.sampledTimings).toEqual({
+			phases: [{ name: 'foreperiod', durationMs: 2000, durationFrames: null }],
 		});
 	});
 });

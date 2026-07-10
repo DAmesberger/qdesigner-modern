@@ -1,4 +1,5 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
+import { sampleTiming } from './timingSpec';
 
 export interface FlankerPresetConfig {
   trialCount: number;
@@ -7,10 +8,11 @@ export interface FlankerPresetConfig {
   includeNeutral?: boolean;
   neutralRatio?: number;
   flankerCount?: number;
-  stimulusDuration?: number;
-  isi?: number;
-  fixationMs?: number;
-  responseTimeoutMs?: number;
+  /** Phase durations (ADR 0025): a fixed ms value or a per-trial `uniform` spec. */
+  stimulusDuration?: TimingSpec;
+  isi?: TimingSpec;
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -101,6 +103,12 @@ export function createFlankerTrials(config: FlankerPresetConfig): FlankerTrialCo
     const displayString = flankerString + target + flankerString;
     const correctKey = keyMap[target]!;
 
+    // Draw order (ADR 0025): fixation → stimulus → response timeout → ITI.
+    const fixationMs = sampleTiming(config.fixationMs, rng) ?? 500;
+    const stimulusDurationMs = sampleTiming(config.stimulusDuration, rng);
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 1500;
+    const interTrialIntervalMs = sampleTiming(config.isi, rng) ?? 250;
+
     const stimulus: ReactionStimulusConfig = {
       kind: 'text',
       text: displayString,
@@ -123,13 +131,13 @@ export function createFlankerTrials(config: FlankerPresetConfig): FlankerTrialCo
       fixation: {
         enabled: true,
         type: 'cross',
-        durationMs: config.fixationMs ?? 500,
+        durationMs: fixationMs,
       },
       stimulus,
-      stimulusDurationMs: config.stimulusDuration,
-      responseTimeoutMs: config.responseTimeoutMs ?? 1500,
+      stimulusDurationMs,
+      responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
-      interTrialIntervalMs: config.isi ?? 250,
+      interTrialIntervalMs,
     });
   }
 

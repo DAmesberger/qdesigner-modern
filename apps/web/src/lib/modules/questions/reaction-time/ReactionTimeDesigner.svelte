@@ -9,6 +9,13 @@
   import { mediaService } from '$lib/services/mediaService';
   import { createLegacyStarterPayload } from './model/starter-templates';
   import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
+  import { isTimingSpec, type TimingSpec } from '$lib/runtime/reaction';
+
+  // Compact one-line summary of an authored phase duration (ADR 0025): a fixed
+  // ms value, or a jittered "lo–hi" range.
+  function formatTiming(spec: TimingSpec): string {
+    return isTimingSpec(spec) ? `${spec.min}–${spec.max}` : `${spec}`;
+  }
   import type {
     ReactionFeedbackSettings,
     ReactionLegacyQuestionConfig,
@@ -1061,11 +1068,11 @@
             {:else if question.config.task.type === 'sternberg'}
               {question.config.task.sternberg.trialCount} Sternberg (sizes {question.config.task.sternberg.setSizes.join('/')})
             {:else if question.config.task.type === 'pvt'}
-              {question.config.task.pvt.trialCount} PVT ({question.config.task.pvt.minIsiMs}–{question.config.task.pvt.maxIsiMs}ms ISI)
+              {question.config.task.pvt.trialCount} PVT ({formatTiming(question.config.task.pvt.isi)}ms ISI)
             {:else if question.config.task.type === 'temporal-order'}
               {question.config.task.temporalOrder.trialCount} TOJ ({question.config.task.temporalOrder.soaSetMs.length} SOAs)
             {:else if question.config.task.type === 'rsvp'}
-              {question.config.task.rsvp.trialCount} RSVP ({question.config.task.rsvp.itemDurationMs}ms/item)
+              {question.config.task.rsvp.trialCount} RSVP ({formatTiming(question.config.task.rsvp.itemDurationMs)}ms/item)
             {:else if question.config.task.type === 'custom'}
               {(question.config.study?.blocks || []).reduce(
                 (blockTotal, block) =>

@@ -1,4 +1,5 @@
-import type { ReactionStimulusConfig, ReactionTrialConfig } from '../types';
+import type { ReactionStimulusConfig, ReactionTrialConfig, TimingSpec } from '../types';
+import { sampleTiming } from './timingSpec';
 
 export interface NBackPresetConfig {
   n: number;
@@ -8,8 +9,9 @@ export interface NBackPresetConfig {
   validKeys?: string[];
   targetKey?: string;
   nonTargetKey?: string;
-  fixationMs?: number;
-  responseTimeoutMs?: number;
+  /** Phase durations (ADR 0025): a fixed ms value or a per-trial `uniform` spec. */
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -64,6 +66,11 @@ export function createNBackTrials(config: NBackPresetConfig): NBackTrialConfig[]
   return sequence.map((stimulus, index) => {
     const isTarget = targetPositions.has(index);
 
+    // Draw order (ADR 0025): fixation → response timeout. Sampled after the
+    // sequence is built, so a fixed-timing study keeps its exact sequence.
+    const fixationMs = sampleTiming(config.fixationMs, rng) || 400;
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) || 1200;
+
     return {
       id: `nback-${index + 1}`,
       index,
@@ -76,10 +83,10 @@ export function createNBackTrials(config: NBackPresetConfig): NBackTrialConfig[]
       fixation: {
         enabled: true,
         type: 'cross',
-        durationMs: config.fixationMs || 400,
+        durationMs: fixationMs,
       },
       stimulus,
-      responseTimeoutMs: config.responseTimeoutMs || 1200,
+      responseTimeoutMs,
       targetFPS: config.targetFPS || 120,
       interTrialIntervalMs: 250,
     };

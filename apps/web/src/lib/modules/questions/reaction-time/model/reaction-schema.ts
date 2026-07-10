@@ -5,9 +5,10 @@ import type {
   ReactionTargetRegion,
   ReactionTrialConfig,
   ScheduledPhase,
+  TimingSpec,
 } from '$lib/runtime/reaction';
 
-export type { ReactionResponseMode, ReactionTargetRegion, CounterbalanceScheme };
+export type { ReactionResponseMode, ReactionTargetRegion, CounterbalanceScheme, TimingSpec };
 
 export type ReactionTaskType =
   | 'standard'
@@ -87,6 +88,9 @@ export interface ReactionStudyBlock {
   trials: ReactionStudyTrialTemplate[];
 }
 
+// Phase-duration fields below are `TimingSpec` (ADR 0025): a fixed ms value or a
+// per-trial `uniform` distribution the seeded generator samples at materialization.
+
 export interface NBackTaskConfig {
   n: number;
   sequenceLength: number;
@@ -94,18 +98,18 @@ export interface NBackTaskConfig {
   stimulusSet: Array<string | ReactionStimulusConfig>;
   targetKey: string;
   nonTargetKey: string;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface StroopTaskConfig {
   trialCount: number;
   colors: string[];
   congruentRatio: number;
-  stimulusDuration: number;
-  isi: number;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  stimulusDuration: TimingSpec;
+  isi: TimingSpec;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface FlankerTaskConfig {
@@ -115,10 +119,10 @@ export interface FlankerTaskConfig {
   includeNeutral: boolean;
   neutralRatio: number;
   flankerCount: number;
-  stimulusDuration: number;
-  isi: number;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  stimulusDuration: TimingSpec;
+  isi: TimingSpec;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface IATTaskConfig {
@@ -132,8 +136,8 @@ export interface IATTaskConfig {
   attribute2Items: string[];
   trialsPerBlock: number;
   practiceTrialsPerBlock: number;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface DotProbeStimulusPair {
@@ -143,13 +147,13 @@ export interface DotProbeStimulusPair {
 
 export interface DotProbeTaskConfig {
   trialCount: number;
-  cueDuration: number;
-  isi: number;
+  cueDuration: TimingSpec;
+  isi: TimingSpec;
   congruentRatio: number;
   probeSymbol: string;
   stimulusPairs: DotProbeStimulusPair[];
-  fixationMs: number;
-  responseTimeoutMs: number;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 // --- Standard-paradigm library expansion (E-REACT-2). ---
@@ -160,10 +164,10 @@ export interface GoNoGoTaskConfig {
   goStimulus: string;
   noGoStimulus: string;
   responseKey: string;
-  stimulusDuration: number;
-  isi: number;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  stimulusDuration: TimingSpec;
+  isi: TimingSpec;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface SartTaskConfig {
@@ -171,10 +175,10 @@ export interface SartTaskConfig {
   targetDigit: number;
   digits: number[];
   responseKey: string;
-  stimulusDuration: number;
-  isi: number;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  stimulusDuration: TimingSpec;
+  isi: TimingSpec;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface SimonTaskConfig {
@@ -184,22 +188,22 @@ export interface SimonTaskConfig {
   rightColor: string;
   leftKey: string;
   rightKey: string;
-  stimulusDuration: number;
-  isi: number;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  stimulusDuration: TimingSpec;
+  isi: TimingSpec;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface PosnerTaskConfig {
   trialCount: number;
   validRatio: number;
-  cueDurationMs: number;
-  soaMs: number;
+  cueDurationMs: TimingSpec;
+  soaMs: TimingSpec;
   leftKey: string;
   rightKey: string;
-  isi: number;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  isi: TimingSpec;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface VisualSearchTaskConfig {
@@ -211,10 +215,10 @@ export interface VisualSearchTaskConfig {
   distractorChars: string[];
   presentKey: string;
   absentKey: string;
-  stimulusDuration: number;
-  isi: number;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  stimulusDuration: TimingSpec;
+  isi: TimingSpec;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface SternbergTaskConfig {
@@ -224,19 +228,27 @@ export interface SternbergTaskConfig {
   memoryItems: string[];
   presentKey: string;
   absentKey: string;
-  encodingMs: number;
-  retentionMs: number;
-  isi: number;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  encodingMs: TimingSpec;
+  retentionMs: TimingSpec;
+  isi: TimingSpec;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface PvtTaskConfig {
   trialCount: number;
-  minIsiMs: number;
-  maxIsiMs: number;
+  /**
+   * Foreperiod before the target (ADR 0025). Normally a `uniform` spec — the PVT
+   * is defined by a random foreperiod. The legacy `minIsiMs`/`maxIsiMs` pair is
+   * retained (optional) for back-compat; the normalizer maps it into `isi`.
+   */
+  isi: TimingSpec;
+  /** @deprecated Legacy minimum ISI (ms); superseded by `isi`. */
+  minIsiMs?: number;
+  /** @deprecated Legacy maximum ISI (ms); superseded by `isi`. */
+  maxIsiMs?: number;
   responseKey: string;
-  responseTimeoutMs: number;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface TemporalOrderTaskConfig {
@@ -244,21 +256,21 @@ export interface TemporalOrderTaskConfig {
   soaSetMs: number[];
   firstKey: string;
   secondKey: string;
-  stimulusDuration: number;
-  isi: number;
-  fixationMs: number;
-  responseTimeoutMs: number;
+  stimulusDuration: TimingSpec;
+  isi: TimingSpec;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export interface RsvpTaskConfig {
   trialCount: number;
   streamLength: number;
-  itemDurationMs: number;
+  itemDurationMs: TimingSpec;
   targetKey: string;
   targetSet: string[];
   distractorSet: string[];
-  fixationMs: number;
-  responseTimeoutMs: number;
+  fixationMs: TimingSpec;
+  responseTimeoutMs: TimingSpec;
 }
 
 export type ReactionCustomTrial = Partial<ReactionTrialConfig> & {

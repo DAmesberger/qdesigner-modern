@@ -1,5 +1,6 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
 import { createSeededRng, shuffle } from './random';
+import { sampleTiming } from './timingSpec';
 
 /**
  * SART — Sustained Attention to Response Task (E-REACT-2). The inverse of a
@@ -16,12 +17,12 @@ export interface SartPresetConfig {
   digits?: number[];
   /** Single response key pressed on non-target digits. */
   responseKey?: string;
-  /** Per-digit exposure. SOTA default 250 ms. */
-  stimulusDuration?: number;
+  /** Per-digit exposure (ADR 0025). SOTA default 250 ms. */
+  stimulusDuration?: TimingSpec;
   /** Post-digit mask/blank interval. SOTA default 900 ms (→ 1150 ms SOA). */
-  isi?: number;
-  fixationMs?: number;
-  responseTimeoutMs?: number;
+  isi?: TimingSpec;
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -72,6 +73,12 @@ export function createSartTrials(config: SartPresetConfig): SartTrialConfig[] {
     const digit = isNoGo ? targetDigit : nonTargets[Math.floor(rng() * nonTargets.length)]!;
     const condition: SartCondition = isNoGo ? 'nogo' : 'go';
 
+    // Draw order (ADR 0025): fixation → stimulus → response timeout → ITI.
+    const fixationMs = sampleTiming(config.fixationMs, rng) ?? 300;
+    const stimulusDurationMs = sampleTiming(config.stimulusDuration, rng) ?? 250;
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 1150;
+    const interTrialIntervalMs = sampleTiming(config.isi, rng) ?? 900;
+
     const stimulus: ReactionStimulusConfig = {
       kind: 'text',
       text: String(digit),
@@ -93,13 +100,13 @@ export function createSartTrials(config: SartPresetConfig): SartTrialConfig[] {
       fixation: {
         enabled: true,
         type: 'cross',
-        durationMs: config.fixationMs ?? 300,
+        durationMs: fixationMs,
       },
       stimulus,
-      stimulusDurationMs: config.stimulusDuration ?? 250,
-      responseTimeoutMs: config.responseTimeoutMs ?? 1150,
+      stimulusDurationMs,
+      responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
-      interTrialIntervalMs: config.isi ?? 900,
+      interTrialIntervalMs,
     });
   }
 

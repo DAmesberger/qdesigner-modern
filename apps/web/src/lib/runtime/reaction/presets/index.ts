@@ -55,3 +55,5 @@ export { createRsvpTrials } from './rsvp';
 export type { RsvpPresetConfig, RsvpTrialConfig } from './rsvp';
 
 export { createSeededRng, shuffle } from './random';
+
+export { sampleTiming, representativeTiming, isTimingSpec } from './timingSpec';

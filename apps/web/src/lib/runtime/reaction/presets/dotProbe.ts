@@ -1,5 +1,6 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
 import { mean } from '$lib/shared/utils/statistics';
+import { sampleTiming } from './timingSpec';
 
 export interface DotProbeStimulusPair {
   /** The "threat" or "salient" stimulus text/label */
@@ -10,13 +11,14 @@ export interface DotProbeStimulusPair {
 
 export interface DotProbePresetConfig {
   trialCount: number;
-  cueDuration?: number;
-  isi?: number;
+  /** Cue exposure → foreperiod before the probe (ADR 0025). */
+  cueDuration?: TimingSpec;
+  isi?: TimingSpec;
   stimulusPairs: DotProbeStimulusPair[];
   probePositions?: ('left' | 'right')[];
   congruentRatio?: number;
-  fixationMs?: number;
-  responseTimeoutMs?: number;
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   probeSymbol?: string;
   seed?: string;
@@ -79,6 +81,12 @@ export function createDotProbeTrials(config: DotProbePresetConfig): DotProbeTria
 
     const correctKey = probePosition === 'left' ? LEFT_KEY : RIGHT_KEY;
 
+    // Draw order (ADR 0025): fixation → cue foreperiod → response timeout → ITI.
+    const fixationMs = sampleTiming(config.fixationMs, rng) ?? 500;
+    const preStimulusDelayMs = sampleTiming(config.cueDuration, rng) ?? 500;
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 2000;
+    const interTrialIntervalMs = sampleTiming(config.isi, rng) ?? 500;
+
     // The stimulus shown is the probe dot/symbol at the probe position
     // The cue phase (showing both stimuli) is handled via the cueDuration
     // For the trial config, we represent the probe as the stimulus
@@ -105,13 +113,13 @@ export function createDotProbeTrials(config: DotProbePresetConfig): DotProbeTria
       fixation: {
         enabled: true,
         type: 'cross',
-        durationMs: config.fixationMs ?? 500,
+        durationMs: fixationMs,
       },
-      preStimulusDelayMs: config.cueDuration ?? 500,
+      preStimulusDelayMs,
       stimulus,
-      responseTimeoutMs: config.responseTimeoutMs ?? 2000,
+      responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
-      interTrialIntervalMs: config.isi ?? 500,
+      interTrialIntervalMs,
     });
   }
 

@@ -12,6 +12,9 @@ export type {
   ScheduledPhase,
   TimingMethod,
   ReactionOffsetMethod,
+  // Authored phase durations (ADR 0025).
+  TimingSpec,
+  UniformTimingSpec,
   // ResponseSet model (ADR 0024).
   ResponseSet,
   ResponseOption,
@@ -82,6 +85,9 @@ export {
   createPvtTrials,
   createTemporalOrderTrials,
   createRsvpTrials,
+  sampleTiming,
+  representativeTiming,
+  isTimingSpec,
 } from './presets';
 
 export type {

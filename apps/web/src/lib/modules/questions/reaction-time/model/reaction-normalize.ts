@@ -4,7 +4,8 @@ import type {
   ReactionStudyBlock,
   ReactionStudyTrialTemplate,
 } from './reaction-schema';
-import type { CounterbalanceScheme, ScheduledPhase } from '$lib/runtime/reaction';
+import type { CounterbalanceScheme, ScheduledPhase, TimingSpec } from '$lib/runtime/reaction';
+import { isTimingSpec } from '$lib/runtime/reaction';
 import type {
   DotProbeTaskConfig,
   DotProbeStimulusPair,
@@ -119,10 +120,10 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
         targetKey: ensureString(nBack.targetKey) || validKeys[0] || DEFAULT_NBACK.targetKey,
         nonTargetKey:
           ensureString(nBack.nonTargetKey) || validKeys[1] || validKeys[0] || DEFAULT_NBACK.nonTargetKey,
-        fixationMs: asInt(nBack.fixationMs, DEFAULT_NBACK.fixationMs, 0, 10000),
-        responseTimeoutMs: asInt(
+        fixationMs: normalizeTimingSpec(nBack.fixationMs, DEFAULT_NBACK.fixationMs as number, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(
           nBack.responseTimeoutMs,
-          DEFAULT_NBACK.responseTimeoutMs,
+          DEFAULT_NBACK.responseTimeoutMs as number,
           100,
           20000
         ),
@@ -136,10 +137,10 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
                 .filter(Boolean)
             : ['red', 'blue', 'green', 'yellow'],
         congruentRatio: asNumber(stroop.congruentRatio, 0.5, 0, 1),
-        stimulusDuration: asInt(stroop.stimulusDuration, 0, 0, 20000),
-        isi: asInt(stroop.isi, 250, 0, 20000),
-        fixationMs: asInt(stroop.fixationMs, 500, 0, 10000),
-        responseTimeoutMs: asInt(stroop.responseTimeoutMs, 2000, 100, 20000),
+        stimulusDuration: normalizeTimingSpec(stroop.stimulusDuration, 0, 0, 20000),
+        isi: normalizeTimingSpec(stroop.isi, 250, 0, 20000),
+        fixationMs: normalizeTimingSpec(stroop.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(stroop.responseTimeoutMs, 2000, 100, 20000),
       },
       flanker: {
         trialCount: asInt(flanker.trialCount, 40, 1, 1000),
@@ -148,10 +149,10 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
         includeNeutral: Boolean(flanker.includeNeutral),
         neutralRatio: asNumber(flanker.neutralRatio, 0.2, 0, 1),
         flankerCount: asInt(flanker.flankerCount, 2, 1, 8),
-        stimulusDuration: asInt(flanker.stimulusDuration, 0, 0, 20000),
-        isi: asInt(flanker.isi, 250, 0, 20000),
-        fixationMs: asInt(flanker.fixationMs, 500, 0, 10000),
-        responseTimeoutMs: asInt(flanker.responseTimeoutMs, 1500, 100, 20000),
+        stimulusDuration: normalizeTimingSpec(flanker.stimulusDuration, 0, 0, 20000),
+        isi: normalizeTimingSpec(flanker.isi, 250, 0, 20000),
+        fixationMs: normalizeTimingSpec(flanker.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(flanker.responseTimeoutMs, 1500, 100, 20000),
       },
       iat: {
         category1Name: ensureString(iat.category1Name) || 'Flowers',
@@ -164,18 +165,18 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
         attribute2Items: normalizeStringArray(iat.attribute2Items, ['Ugly', 'Nasty', 'Evil', 'Hurt']),
         trialsPerBlock: asInt(iat.trialsPerBlock, 20, 1, 200),
         practiceTrialsPerBlock: asInt(iat.practiceTrialsPerBlock, 10, 1, 200),
-        fixationMs: asInt(iat.fixationMs, 400, 0, 10000),
-        responseTimeoutMs: asInt(iat.responseTimeoutMs, 3000, 100, 30000),
+        fixationMs: normalizeTimingSpec(iat.fixationMs, 400, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(iat.responseTimeoutMs, 3000, 100, 30000),
       },
       dotProbe: {
         trialCount: asInt(dotProbe.trialCount, 40, 1, 1000),
-        cueDuration: asInt(dotProbe.cueDuration, 500, 0, 20000),
-        isi: asInt(dotProbe.isi, 500, 0, 20000),
+        cueDuration: normalizeTimingSpec(dotProbe.cueDuration, 500, 0, 20000),
+        isi: normalizeTimingSpec(dotProbe.isi, 500, 0, 20000),
         congruentRatio: asNumber(dotProbe.congruentRatio, 0.5, 0, 1),
         probeSymbol: ensureString(dotProbe.probeSymbol) || '*',
         stimulusPairs: dotProbePairs.length > 0 ? dotProbePairs : [{ salient: 'THREAT', neutral: 'NEUTRAL' }],
-        fixationMs: asInt(dotProbe.fixationMs, 500, 0, 10000),
-        responseTimeoutMs: asInt(dotProbe.responseTimeoutMs, 2000, 100, 30000),
+        fixationMs: normalizeTimingSpec(dotProbe.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(dotProbe.responseTimeoutMs, 2000, 100, 30000),
       },
       goNoGo: {
         trialCount: asInt(goNoGo.trialCount, 60, 1, 1000),
@@ -183,20 +184,20 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
         goStimulus: ensureString(goNoGo.goStimulus) || 'GO',
         noGoStimulus: ensureString(goNoGo.noGoStimulus) || 'STOP',
         responseKey: ensureString(goNoGo.responseKey) || validKeys[0] || ' ',
-        stimulusDuration: asInt(goNoGo.stimulusDuration, 0, 0, 20000),
-        isi: asInt(goNoGo.isi, 500, 0, 20000),
-        fixationMs: asInt(goNoGo.fixationMs, 500, 0, 10000),
-        responseTimeoutMs: asInt(goNoGo.responseTimeoutMs, 1000, 100, 20000),
+        stimulusDuration: normalizeTimingSpec(goNoGo.stimulusDuration, 0, 0, 20000),
+        isi: normalizeTimingSpec(goNoGo.isi, 500, 0, 20000),
+        fixationMs: normalizeTimingSpec(goNoGo.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(goNoGo.responseTimeoutMs, 1000, 100, 20000),
       },
       sart: {
         trialCount: asInt(sart.trialCount, 90, 1, 2000),
         targetDigit: asInt(sart.targetDigit, 3, 0, 9),
         digits: normalizeNumberArray(sart.digits, [1, 2, 3, 4, 5, 6, 7, 8, 9], 0, 9),
         responseKey: ensureString(sart.responseKey) || validKeys[0] || ' ',
-        stimulusDuration: asInt(sart.stimulusDuration, 250, 0, 20000),
-        isi: asInt(sart.isi, 900, 0, 20000),
-        fixationMs: asInt(sart.fixationMs, 300, 0, 10000),
-        responseTimeoutMs: asInt(sart.responseTimeoutMs, 1150, 100, 20000),
+        stimulusDuration: normalizeTimingSpec(sart.stimulusDuration, 250, 0, 20000),
+        isi: normalizeTimingSpec(sart.isi, 900, 0, 20000),
+        fixationMs: normalizeTimingSpec(sart.fixationMs, 300, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(sart.responseTimeoutMs, 1150, 100, 20000),
       },
       simon: {
         trialCount: asInt(simon.trialCount, 60, 1, 1000),
@@ -205,21 +206,21 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
         rightColor: ensureString(simon.rightColor) || 'red',
         leftKey: ensureString(simon.leftKey) || validKeys[0] || 'f',
         rightKey: ensureString(simon.rightKey) || validKeys[1] || 'j',
-        stimulusDuration: asInt(simon.stimulusDuration, 0, 0, 20000),
-        isi: asInt(simon.isi, 500, 0, 20000),
-        fixationMs: asInt(simon.fixationMs, 500, 0, 10000),
-        responseTimeoutMs: asInt(simon.responseTimeoutMs, 1500, 100, 20000),
+        stimulusDuration: normalizeTimingSpec(simon.stimulusDuration, 0, 0, 20000),
+        isi: normalizeTimingSpec(simon.isi, 500, 0, 20000),
+        fixationMs: normalizeTimingSpec(simon.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(simon.responseTimeoutMs, 1500, 100, 20000),
       },
       posner: {
         trialCount: asInt(posner.trialCount, 60, 1, 1000),
         validRatio: asNumber(posner.validRatio, 0.8, 0, 1),
-        cueDurationMs: asInt(posner.cueDurationMs, 100, 0, 5000),
-        soaMs: asInt(posner.soaMs, 200, 0, 5000),
+        cueDurationMs: normalizeTimingSpec(posner.cueDurationMs, 100, 0, 5000),
+        soaMs: normalizeTimingSpec(posner.soaMs, 200, 0, 5000),
         leftKey: ensureString(posner.leftKey) || validKeys[0] || 'f',
         rightKey: ensureString(posner.rightKey) || validKeys[1] || 'j',
-        isi: asInt(posner.isi, 500, 0, 20000),
-        fixationMs: asInt(posner.fixationMs, 500, 0, 10000),
-        responseTimeoutMs: asInt(posner.responseTimeoutMs, 1500, 100, 20000),
+        isi: normalizeTimingSpec(posner.isi, 500, 0, 20000),
+        fixationMs: normalizeTimingSpec(posner.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(posner.responseTimeoutMs, 1500, 100, 20000),
       },
       visualSearch: {
         trialCount: asInt(visualSearch.trialCount, 60, 1, 1000),
@@ -230,10 +231,10 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
         distractorChars: normalizeStringArray(visualSearch.distractorChars, ['L', 'F', 'E']),
         presentKey: ensureString(visualSearch.presentKey) || validKeys[1] || 'j',
         absentKey: ensureString(visualSearch.absentKey) || validKeys[0] || 'f',
-        stimulusDuration: asInt(visualSearch.stimulusDuration, 0, 0, 20000),
-        isi: asInt(visualSearch.isi, 500, 0, 20000),
-        fixationMs: asInt(visualSearch.fixationMs, 500, 0, 10000),
-        responseTimeoutMs: asInt(visualSearch.responseTimeoutMs, 3000, 100, 30000),
+        stimulusDuration: normalizeTimingSpec(visualSearch.stimulusDuration, 0, 0, 20000),
+        isi: normalizeTimingSpec(visualSearch.isi, 500, 0, 20000),
+        fixationMs: normalizeTimingSpec(visualSearch.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(visualSearch.responseTimeoutMs, 3000, 100, 30000),
       },
       sternberg: {
         trialCount: asInt(sternberg.trialCount, 60, 1, 1000),
@@ -255,33 +256,32 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
         ]),
         presentKey: ensureString(sternberg.presentKey) || validKeys[1] || 'j',
         absentKey: ensureString(sternberg.absentKey) || validKeys[0] || 'f',
-        encodingMs: asInt(sternberg.encodingMs, 400, 0, 10000),
-        retentionMs: asInt(sternberg.retentionMs, 1000, 0, 20000),
-        isi: asInt(sternberg.isi, 500, 0, 20000),
-        fixationMs: asInt(sternberg.fixationMs, 500, 0, 10000),
-        responseTimeoutMs: asInt(sternberg.responseTimeoutMs, 3000, 100, 30000),
+        encodingMs: normalizeTimingSpec(sternberg.encodingMs, 400, 0, 10000),
+        retentionMs: normalizeTimingSpec(sternberg.retentionMs, 1000, 0, 20000),
+        isi: normalizeTimingSpec(sternberg.isi, 500, 0, 20000),
+        fixationMs: normalizeTimingSpec(sternberg.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(sternberg.responseTimeoutMs, 3000, 100, 30000),
       },
       pvt: {
         trialCount: asInt(pvt.trialCount, 40, 1, 1000),
-        minIsiMs: asInt(pvt.minIsiMs, 2000, 0, 60000),
-        maxIsiMs: asInt(pvt.maxIsiMs, 10000, 0, 60000),
+        isi: normalizePvtIsi(pvt),
         responseKey: ensureString(pvt.responseKey) || validKeys[0] || ' ',
-        responseTimeoutMs: asInt(pvt.responseTimeoutMs, 5000, 500, 60000),
+        responseTimeoutMs: normalizeTimingSpec(pvt.responseTimeoutMs, 5000, 500, 60000),
       },
       temporalOrder: {
         trialCount: asInt(temporalOrder.trialCount, 60, 1, 1000),
         soaSetMs: normalizeNumberArray(temporalOrder.soaSetMs, [17, 33, 67, 133, 267], 1, 2000),
         firstKey: ensureString(temporalOrder.firstKey) || validKeys[0] || 'f',
         secondKey: ensureString(temporalOrder.secondKey) || validKeys[1] || 'j',
-        stimulusDuration: asInt(temporalOrder.stimulusDuration, 0, 0, 20000),
-        isi: asInt(temporalOrder.isi, 500, 0, 20000),
-        fixationMs: asInt(temporalOrder.fixationMs, 500, 0, 10000),
-        responseTimeoutMs: asInt(temporalOrder.responseTimeoutMs, 3000, 100, 30000),
+        stimulusDuration: normalizeTimingSpec(temporalOrder.stimulusDuration, 0, 0, 20000),
+        isi: normalizeTimingSpec(temporalOrder.isi, 500, 0, 20000),
+        fixationMs: normalizeTimingSpec(temporalOrder.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(temporalOrder.responseTimeoutMs, 3000, 100, 30000),
       },
       rsvp: {
         trialCount: asInt(rsvp.trialCount, 40, 1, 1000),
         streamLength: asInt(rsvp.streamLength, 12, 1, 100),
-        itemDurationMs: asInt(rsvp.itemDurationMs, 100, 10, 2000),
+        itemDurationMs: normalizeTimingSpec(rsvp.itemDurationMs, 100, 10, 2000),
         targetKey: ensureString(rsvp.targetKey) || validKeys[0] || ' ',
         targetSet: normalizeStringArray(rsvp.targetSet, ['X', 'Z']),
         distractorSet: normalizeStringArray(rsvp.distractorSet, [
@@ -294,8 +294,8 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
           'G',
           'H',
         ]),
-        fixationMs: asInt(rsvp.fixationMs, 500, 0, 10000),
-        responseTimeoutMs: asInt(rsvp.responseTimeoutMs, 2000, 100, 30000),
+        fixationMs: normalizeTimingSpec(rsvp.fixationMs, 500, 0, 10000),
+        responseTimeoutMs: normalizeTimingSpec(rsvp.responseTimeoutMs, 2000, 100, 30000),
       },
       customTrials,
     },
@@ -748,4 +748,40 @@ function asInt(
 ): number {
   const bounded = asNumber(value, fallback, min, max, defaultValue);
   return Math.round(bounded);
+}
+
+/**
+ * Validate an authored phase duration (ADR 0025). A `uniform` distribution is
+ * preserved (each bound clamped to [min,max]); anything else coerces to a fixed
+ * ms integer exactly as `asInt` would. Bounds are NOT reordered — an inverted
+ * min/max survives so the designer's scientific-validity rule can flag it.
+ */
+function normalizeTimingSpec(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number
+): TimingSpec {
+  if (isTimingSpec(value)) {
+    return {
+      dist: 'uniform',
+      min: asInt(value.min, fallback, min, max, fallback),
+      max: asInt(value.max, fallback, min, max, fallback),
+    };
+  }
+  return asInt(value, fallback, min, max, fallback);
+}
+
+/**
+ * Resolve the PVT foreperiod (ADR 0025). Prefers an explicit `isi` TimingSpec;
+ * otherwise maps the legacy `minIsiMs`/`maxIsiMs` pair into a uniform spec
+ * (ordered, so the legacy semantics of min ≤ max are preserved).
+ */
+function normalizePvtIsi(pvt: Partial<PvtTaskConfig>): TimingSpec {
+  if (pvt.isi !== undefined) {
+    return normalizeTimingSpec(pvt.isi, 2000, 0, 60000);
+  }
+  const lo = asInt(pvt.minIsiMs, 2000, 0, 60000, 2000);
+  const hi = asInt(pvt.maxIsiMs, 10000, 0, 60000, 10000);
+  return { dist: 'uniform', min: Math.min(lo, hi), max: Math.max(lo, hi) };
 }

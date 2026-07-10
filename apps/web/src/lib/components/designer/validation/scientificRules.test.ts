@@ -5,6 +5,7 @@ import {
   durationRule,
   positiveRule,
   orderedRule,
+  timingRule,
   validateReactionTask,
   validateCatItem,
   validateAdaptiveBlock,
@@ -92,6 +93,69 @@ describe('generic numeric rules', () => {
       expect(orderedRule('f', undefined, 200, 'ISI')).toEqual([]);
     });
   });
+
+  describe('timingRule (TimingSpec, ADR 0025)', () => {
+    it('defers to durationRule for a fixed value', () => {
+      expect(timingRule('f', 250, 'D')).toEqual([]);
+      expect(errors(timingRule('f', -1, 'D'))).toHaveLength(1);
+      expect(warnings(timingRule('f', 0, 'D'))).toHaveLength(1);
+    });
+    it('defers to positiveRule for a fixed value when positive is set', () => {
+      expect(errors(timingRule('f', 0, 'D', { positive: true }))).toHaveLength(1);
+      expect(timingRule('f', 5, 'D', { positive: true })).toEqual([]);
+    });
+    it('accepts a well-ordered uniform spec', () => {
+      expect(timingRule('f', { dist: 'uniform', min: 100, max: 200 }, 'ISI')).toEqual([]);
+    });
+    it('errors when a uniform min exceeds its max', () => {
+      const issues = timingRule('f', { dist: 'uniform', min: 800, max: 200 }, 'ISI');
+      expect(errors(issues)).toHaveLength(1);
+      expect(issues[0]!.field).toBe('f');
+    });
+    it('errors on a negative bound', () => {
+      expect(errors(timingRule('f', { dist: 'uniform', min: -5, max: 200 }, 'ISI'))).toHaveLength(1);
+    });
+    it('errors on a non-positive bound when positive is set', () => {
+      expect(errors(timingRule('f', { dist: 'uniform', min: 0, max: 200 }, 'D', { positive: true }))).toHaveLength(1);
+    });
+    it('warns on a zero-width (min === max) jitter range', () => {
+      expect(warnings(timingRule('f', { dist: 'uniform', min: 300, max: 300 }, 'ISI'))).toHaveLength(1);
+    });
+  });
+});
+
+describe('validateReactionTask — TimingSpec fields (ADR 0025)', () => {
+  it('flags an inverted jitter range on the PVT foreperiod', () => {
+    const issues = validateReactionTask({
+      type: 'pvt',
+      pvt: { trialCount: 20, isi: { dist: 'uniform', min: 10000, max: 2000 } },
+    });
+    expect(issueFor(issues, 'pvt.isi')?.severity).toBe('error');
+  });
+
+  it('accepts a well-ordered PVT foreperiod jitter', () => {
+    const issues = validateReactionTask({
+      type: 'pvt',
+      pvt: { trialCount: 20, isi: { dist: 'uniform', min: 2000, max: 10000 } },
+    });
+    expect(issues).toEqual([]);
+  });
+
+  it('flags a jittered response timeout that dips to zero (positive field)', () => {
+    const issues = validateReactionTask({
+      type: 'go-nogo',
+      goNoGo: { trialCount: 40, goRatio: 0.75, responseTimeoutMs: { dist: 'uniform', min: 0, max: 1000 } },
+    });
+    expect(issueFor(issues, 'goNoGo.responseTimeoutMs')?.severity).toBe('error');
+  });
+
+  it('validates the TaskPresetFields paradigms too (stroop ISI jitter)', () => {
+    const bad = validateReactionTask({
+      type: 'stroop',
+      stroop: { fixationMs: 500, responseTimeoutMs: 2000, isi: { dist: 'uniform', min: 400, max: 100 } },
+    });
+    expect(issueFor(bad, 'stroop.isi')?.severity).toBe('error');
+  });
 });
 
 describe('validateReactionTask', () => {
@@ -159,8 +223,10 @@ describe('validateReactionTask', () => {
     expect(issueFor(issues, 'posner.validRatio')?.severity).toBe('warning');
   });
 
-  it('returns nothing for an unknown / non-standard task type', () => {
-    expect(validateReactionTask({ type: 'stroop' })).toEqual([]);
+  it('returns nothing for a task type without timed fields, or a nullish task', () => {
+    // `standard` and `custom` carry no paradigm-level timing to validate.
+    expect(validateReactionTask({ type: 'standard' })).toEqual([]);
+    expect(validateReactionTask({ type: 'custom' })).toEqual([]);
     expect(validateReactionTask(null)).toEqual([]);
   });
 });

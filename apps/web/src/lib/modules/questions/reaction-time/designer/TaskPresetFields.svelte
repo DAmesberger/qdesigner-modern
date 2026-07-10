@@ -3,6 +3,11 @@
   import type { ReactionTimeConfig } from '../model/designer-config';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import TimingSpecField from './TimingSpecField.svelte';
+  import {
+    validateReactionTask,
+    issueFor,
+  } from '$lib/components/designer/validation/scientificRules';
 
   // Per-task-type configuration UI extracted from ReactionTimeDesigner (P6-T5).
   // Receives the bindable question so the nested `bind:value` inputs mutate the
@@ -12,6 +17,13 @@
   }
 
   let { question = $bindable() }: Props = $props();
+
+  // Inline scientific-validity checks (R4-4), matching StandardParadigmFields so
+  // the TimingSpec jitter controls surface min/max errors as the researcher types.
+  const issues = $derived(validateReactionTask(question.config.task));
+  const errorFields = $derived(
+    new Set(issues.filter((i) => i.severity === 'error').map((i) => i.field))
+  );
 
   let newNBackStimulus = $state('');
   let newStroopColor = $state('');
@@ -95,6 +107,15 @@
   }
 </script>
 
+{#snippet fieldMsg(field: string)}
+  {@const issue = issueFor(issues, field)}
+  {#if issue}
+    <p class="field-msg {issue.severity}" role={issue.severity === 'error' ? 'alert' : undefined}>
+      {issue.message}
+    </p>
+  {/if}
+{/snippet}
+
     {#if question.config.task.type === 'n-back'}
       <div class="mt-4 pl-4">
         <h5 class="mb-2 text-sm font-medium text-muted-foreground">N-Back Configuration</h5>
@@ -153,28 +174,30 @@
             />
           </div>
           <div class="mb-4">
-            <label for="nback-fixation-ms">Fixation (ms)</label>
-            <input
+            <TimingSpecField
               id="nback-fixation-ms"
-              type="number"
-              min="0"
-              max="5000"
-              step="10"
+              label="Fixation (ms)"
               bind:value={question.config.task.nBack.fixationMs}
-              class="input"
+              min={0}
+              max={5000}
+              step={10}
+              fixedDefault={400}
+              invalid={errorFields.has('nBack.fixationMs')}
             />
+            {@render fieldMsg('nBack.fixationMs')}
           </div>
           <div class="mb-4">
-            <label for="nback-timeout-ms">Response Timeout (ms)</label>
-            <input
+            <TimingSpecField
               id="nback-timeout-ms"
-              type="number"
-              min="100"
-              max="10000"
-              step="10"
+              label="Response Timeout (ms)"
               bind:value={question.config.task.nBack.responseTimeoutMs}
-              class="input"
+              min={100}
+              max={10000}
+              step={10}
+              fixedDefault={1200}
+              invalid={errorFields.has('nBack.responseTimeoutMs')}
             />
+            {@render fieldMsg('nBack.responseTimeoutMs')}
           </div>
         </div>
 
@@ -236,40 +259,43 @@
             />
           </div>
           <div class="mb-4">
-            <label for="stroop-fixation-ms">Fixation (ms)</label>
-            <input
+            <TimingSpecField
               id="stroop-fixation-ms"
-              type="number"
-              min="0"
-              max="5000"
-              step="10"
+              label="Fixation (ms)"
               bind:value={question.config.task.stroop.fixationMs}
-              class="input"
+              min={0}
+              max={5000}
+              step={10}
+              fixedDefault={500}
+              invalid={errorFields.has('stroop.fixationMs')}
             />
+            {@render fieldMsg('stroop.fixationMs')}
           </div>
           <div class="mb-4">
-            <label for="stroop-timeout-ms">Response Timeout (ms)</label>
-            <input
+            <TimingSpecField
               id="stroop-timeout-ms"
-              type="number"
-              min="100"
-              max="10000"
-              step="10"
+              label="Response Timeout (ms)"
               bind:value={question.config.task.stroop.responseTimeoutMs}
-              class="input"
+              min={100}
+              max={10000}
+              step={10}
+              fixedDefault={2000}
+              invalid={errorFields.has('stroop.responseTimeoutMs')}
             />
+            {@render fieldMsg('stroop.responseTimeoutMs')}
           </div>
           <div class="mb-4">
-            <label for="stroop-isi">Inter-Stimulus Interval (ms)</label>
-            <input
+            <TimingSpecField
               id="stroop-isi"
-              type="number"
-              min="0"
-              max="5000"
-              step="10"
+              label="Inter-Stimulus Interval (ms)"
               bind:value={question.config.task.stroop.isi}
-              class="input"
+              min={0}
+              max={5000}
+              step={10}
+              fixedDefault={250}
+              invalid={errorFields.has('stroop.isi')}
             />
+            {@render fieldMsg('stroop.isi')}
           </div>
         </div>
 
@@ -341,40 +367,43 @@
             />
           </div>
           <div class="mb-4">
-            <label for="flanker-fixation-ms">Fixation (ms)</label>
-            <input
+            <TimingSpecField
               id="flanker-fixation-ms"
-              type="number"
-              min="0"
-              max="5000"
-              step="10"
+              label="Fixation (ms)"
               bind:value={question.config.task.flanker.fixationMs}
-              class="input"
+              min={0}
+              max={5000}
+              step={10}
+              fixedDefault={500}
+              invalid={errorFields.has('flanker.fixationMs')}
             />
+            {@render fieldMsg('flanker.fixationMs')}
           </div>
           <div class="mb-4">
-            <label for="flanker-timeout-ms">Response Timeout (ms)</label>
-            <input
+            <TimingSpecField
               id="flanker-timeout-ms"
-              type="number"
-              min="100"
-              max="10000"
-              step="10"
+              label="Response Timeout (ms)"
               bind:value={question.config.task.flanker.responseTimeoutMs}
-              class="input"
+              min={100}
+              max={10000}
+              step={10}
+              fixedDefault={1500}
+              invalid={errorFields.has('flanker.responseTimeoutMs')}
             />
+            {@render fieldMsg('flanker.responseTimeoutMs')}
           </div>
           <div class="mb-4">
-            <label for="flanker-isi">Inter-Stimulus Interval (ms)</label>
-            <input
+            <TimingSpecField
               id="flanker-isi"
-              type="number"
-              min="0"
-              max="5000"
-              step="10"
+              label="Inter-Stimulus Interval (ms)"
               bind:value={question.config.task.flanker.isi}
-              class="input"
+              min={0}
+              max={5000}
+              step={10}
+              fixedDefault={250}
+              invalid={errorFields.has('flanker.isi')}
             />
+            {@render fieldMsg('flanker.isi')}
           </div>
         </div>
 
@@ -525,28 +554,30 @@
             />
           </div>
           <div class="mb-4">
-            <label for="iat-fixation-ms">Fixation (ms)</label>
-            <input
+            <TimingSpecField
               id="iat-fixation-ms"
-              type="number"
-              min="0"
-              max="5000"
-              step="10"
+              label="Fixation (ms)"
               bind:value={question.config.task.iat.fixationMs}
-              class="input"
+              min={0}
+              max={5000}
+              step={10}
+              fixedDefault={400}
+              invalid={errorFields.has('iat.fixationMs')}
             />
+            {@render fieldMsg('iat.fixationMs')}
           </div>
           <div class="mb-4">
-            <label for="iat-timeout-ms">Response Timeout (ms)</label>
-            <input
+            <TimingSpecField
               id="iat-timeout-ms"
-              type="number"
-              min="100"
-              max="10000"
-              step="10"
+              label="Response Timeout (ms)"
               bind:value={question.config.task.iat.responseTimeoutMs}
-              class="input"
+              min={100}
+              max={10000}
+              step={10}
+              fixedDefault={3000}
+              invalid={errorFields.has('iat.responseTimeoutMs')}
             />
+            {@render fieldMsg('iat.responseTimeoutMs')}
           </div>
         </div>
 
@@ -664,16 +695,17 @@
             />
           </div>
           <div class="mb-4">
-            <label for="dotprobe-cue-duration">Cue Duration (ms)</label>
-            <input
+            <TimingSpecField
               id="dotprobe-cue-duration"
-              type="number"
-              min="50"
-              max="5000"
-              step="10"
+              label="Cue Duration (ms)"
               bind:value={question.config.task.dotProbe.cueDuration}
-              class="input"
+              min={50}
+              max={5000}
+              step={10}
+              fixedDefault={500}
+              invalid={errorFields.has('dotProbe.cueDuration')}
             />
+            {@render fieldMsg('dotProbe.cueDuration')}
           </div>
           <div class="mb-4">
             <label for="dotprobe-probe-symbol">Probe Symbol</label>
@@ -686,40 +718,43 @@
             />
           </div>
           <div class="mb-4">
-            <label for="dotprobe-fixation-ms">Fixation (ms)</label>
-            <input
+            <TimingSpecField
               id="dotprobe-fixation-ms"
-              type="number"
-              min="0"
-              max="5000"
-              step="10"
+              label="Fixation (ms)"
               bind:value={question.config.task.dotProbe.fixationMs}
-              class="input"
+              min={0}
+              max={5000}
+              step={10}
+              fixedDefault={500}
+              invalid={errorFields.has('dotProbe.fixationMs')}
             />
+            {@render fieldMsg('dotProbe.fixationMs')}
           </div>
           <div class="mb-4">
-            <label for="dotprobe-timeout-ms">Response Timeout (ms)</label>
-            <input
+            <TimingSpecField
               id="dotprobe-timeout-ms"
-              type="number"
-              min="100"
-              max="10000"
-              step="10"
+              label="Response Timeout (ms)"
               bind:value={question.config.task.dotProbe.responseTimeoutMs}
-              class="input"
+              min={100}
+              max={10000}
+              step={10}
+              fixedDefault={2000}
+              invalid={errorFields.has('dotProbe.responseTimeoutMs')}
             />
+            {@render fieldMsg('dotProbe.responseTimeoutMs')}
           </div>
           <div class="mb-4">
-            <label for="dotprobe-isi">Inter-Trial Interval (ms)</label>
-            <input
+            <TimingSpecField
               id="dotprobe-isi"
-              type="number"
-              min="0"
-              max="5000"
-              step="10"
+              label="Inter-Trial Interval (ms)"
               bind:value={question.config.task.dotProbe.isi}
-              class="input"
+              min={0}
+              max={5000}
+              step={10}
+              fixedDefault={500}
+              invalid={errorFields.has('dotProbe.isi')}
             />
+            {@render fieldMsg('dotProbe.isi')}
           </div>
         </div>
 
@@ -810,5 +845,19 @@
     font-weight: 700;
     color: hsl(var(--background));
     letter-spacing: 0.15em;
+  }
+
+  .field-msg {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    line-height: 1.1rem;
+  }
+
+  .field-msg.error {
+    color: hsl(var(--destructive));
+  }
+
+  .field-msg.warning {
+    color: hsl(var(--warning));
   }
 </style>

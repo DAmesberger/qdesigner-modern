@@ -1,5 +1,6 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
 import { createSeededRng, shuffle } from './random';
+import { sampleTiming } from './timingSpec';
 
 /**
  * Visual search task (E-REACT-2). A target ("T") is present among a variable
@@ -24,10 +25,11 @@ export interface VisualSearchPresetConfig {
   distractorChars?: string[];
   presentKey?: string;
   absentKey?: string;
-  stimulusDuration?: number;
-  isi?: number;
-  fixationMs?: number;
-  responseTimeoutMs?: number;
+  /** Phase durations (ADR 0025): a fixed ms value or a per-trial `uniform` spec. */
+  stimulusDuration?: TimingSpec;
+  isi?: TimingSpec;
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -94,6 +96,12 @@ export function createVisualSearchTrials(
     const expectedResponse = targetPresent ? presentKey : absentKey;
     const condition = `${targetPresent ? 'present' : 'absent'}-${setSize}`;
 
+    // Draw order (ADR 0025): fixation → stimulus → response timeout → ITI.
+    const fixationMs = sampleTiming(config.fixationMs, rng) ?? 500;
+    const stimulusDurationMs = sampleTiming(config.stimulusDuration, rng);
+    const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 3000;
+    const interTrialIntervalMs = sampleTiming(config.isi, rng) ?? 500;
+
     const stimulus: ReactionStimulusConfig = {
       kind: 'text',
       text: items.join(' '),
@@ -115,13 +123,13 @@ export function createVisualSearchTrials(
       fixation: {
         enabled: true,
         type: 'cross',
-        durationMs: config.fixationMs ?? 500,
+        durationMs: fixationMs,
       },
       stimulus,
-      stimulusDurationMs: config.stimulusDuration,
-      responseTimeoutMs: config.responseTimeoutMs ?? 3000,
+      stimulusDurationMs,
+      responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
-      interTrialIntervalMs: config.isi ?? 500,
+      interTrialIntervalMs,
     });
   }
 

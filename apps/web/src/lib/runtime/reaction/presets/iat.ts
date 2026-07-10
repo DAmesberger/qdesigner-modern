@@ -1,5 +1,6 @@
-import type { ReactionTrialConfig, ReactionStimulusConfig } from '../types';
+import type { ReactionTrialConfig, ReactionStimulusConfig, TimingSpec } from '../types';
 import { mean } from '$lib/shared/utils/statistics';
+import { sampleTiming } from './timingSpec';
 
 export interface IATCategory {
   name: string;
@@ -12,8 +13,9 @@ export interface IATPresetConfig {
   blocksSequence?: IATBlockType[];
   trialsPerBlock?: number;
   practiceTrialsPerBlock?: number;
-  fixationMs?: number;
-  responseTimeoutMs?: number;
+  /** Phase durations (ADR 0025): a fixed ms value or a per-trial `uniform` spec. */
+  fixationMs?: TimingSpec;
+  responseTimeoutMs?: TimingSpec;
   targetFPS?: number;
   seed?: string;
   rng?: () => number;
@@ -152,6 +154,10 @@ export function createIATBlocks(config: IATPresetConfig): IATBlockConfig[] {
 
       const correctKey = item.side === 'left' ? leftKey : rightKey;
 
+      // Draw order (ADR 0025): fixation → response timeout.
+      const fixationMs = sampleTiming(config.fixationMs, rng) ?? 400;
+      const responseTimeoutMs = sampleTiming(config.responseTimeoutMs, rng) ?? 3000;
+
       trials.push({
         id: `iat-b${blockIdx + 1}-t${t + 1}`,
         index: globalTrialIndex,
@@ -168,10 +174,10 @@ export function createIATBlocks(config: IATPresetConfig): IATBlockConfig[] {
         fixation: {
           enabled: true,
           type: 'cross',
-          durationMs: config.fixationMs ?? 400,
+          durationMs: fixationMs,
         },
         stimulus,
-        responseTimeoutMs: config.responseTimeoutMs ?? 3000,
+        responseTimeoutMs,
         targetFPS: config.targetFPS ?? 120,
         interTrialIntervalMs: 250,
       });
