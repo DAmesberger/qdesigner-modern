@@ -519,4 +519,53 @@ describe('FilloutPageController', () => {
       expect(controller.offlinePrepTotal).toBe(2);
     });
   });
+
+  describe('unmount-during-init dispose race (W-5)', () => {
+    it('tears down a runtime that finishes building after dispose()', async () => {
+      const data = makeData({ settings: { requireConsent: false } });
+      const mocks = makeMocks();
+      // makeRuntime stays pending until the test resolves it — modelling an unmount
+      // while the runtime (and its WebGL context) is still under construction.
+      let resolveRuntime!: (r: typeof mocks.runtime) => void;
+      mocks.services.makeRuntime = vi.fn(
+        () => new Promise<typeof mocks.runtime>((resolve) => (resolveRuntime = resolve))
+      ) as unknown as typeof mocks.services.makeRuntime;
+      const controller = makeController(data, mocks);
+      wireRuntimeInputs(controller, data.questionnaire.definition);
+      controller.session = { id: 'sess-1' };
+
+      const initPromise = controller.initializeRuntime();
+      // Let init reach the (pending) makeRuntime call before the page unmounts.
+      await new Promise((r) => setTimeout(r, 0));
+      expect(mocks.services.makeRuntime).toHaveBeenCalledTimes(1);
+      // Page unmounts before makeRuntime settles.
+      controller.dispose();
+      // Runtime construction now completes.
+      resolveRuntime(mocks.runtime);
+      await initPromise;
+
+      expect(mocks.runtime.dispose).toHaveBeenCalledTimes(1);
+      expect(mocks.runtime.start).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resumed-session WebGL preflight (W-11)', () => {
+    it('routes a resumed in-progress session to webgl-unsupported when WebGL is unavailable', async () => {
+      vi.mocked(definitionNeedsWebGL).mockReturnValue(true);
+      vi.mocked(probeWebGL2Support).mockReturnValue(false);
+      const data = makeData({ settings: { requireConsent: false } });
+      data.existingSession = {
+        id: 's1',
+        status: 'in_progress',
+      } as unknown as FilloutPageData['existingSession'];
+      const mocks = makeMocks();
+      const controller = makeController(data, mocks);
+      wireRuntimeInputs(controller, data.questionnaire.definition);
+
+      await controller.initFromLoad();
+
+      expect(controller.screen).toBe('webgl-unsupported');
+      expect(mocks.services.makeRuntime).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -335,10 +335,7 @@
   });
 </script>
 
-<svelte:window
-  on:keydown={(e) => controller.handleKeyDown(e)}
-  on:resize={() => controller.handleResize()}
-/>
+<svelte:window on:resize={() => controller.handleResize()} />
 
 <div class="fillout-page" bind:this={container} data-testid="fillout-root" style={brandStyle}>
   <!-- Persistent SR-only live region (F094): survives screen switches so every

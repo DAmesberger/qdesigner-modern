@@ -46,6 +46,13 @@ const VIDEO_FRAME_RING_MAX = 240;
  * presented raf frames, the raf clock takes over (rVFC is unavailable or slow).
  */
 const VIDEO_ONSET_RAF_FALLBACK_FRAMES = 2;
+/**
+ * Max time to wait for `AudioContext.resume()` before proceeding without primed
+ * audio (W-1). Without a user activation the resume promise can stay pending
+ * forever on some mobile/iOS audio states; racing it against this timeout keeps
+ * the un-timed await from deadlocking `prepare()` → `run()` (black canvas).
+ */
+const AUDIO_RESUME_TIMEOUT_MS = 500;
 
 interface ReactionEngineOptions {
   canvas: HTMLCanvasElement;
@@ -187,6 +194,20 @@ export class ReactionEngine {
   private falseStartCount = 0;
   private firstFalseStartTime: number | null = null;
 
+  // Visibility / focus-loss state (W-3, ADR 0027 record mode). A backgrounded or
+  // blurred tab during a trial makes timing unreliable (rAF halts, setTimeout is
+  // throttled ≥1s), so the trial is FLAGGED — never aborted — and continues.
+  private visibilityInvalidated = false;
+  private visibilityLossCount = 0;
+  private visibilityLossPhases: Array<{ phase: string; phaseElapsedMs: number }> = [];
+  /** Name + start time of the phase currently open, for stamping loss deltas. */
+  private activePhaseName: string | null = null;
+  private activePhaseStart = 0;
+
+  // Audio-priming state (W-1). Logged once per engine on the first resume timeout
+  // so a device that can never satisfy the autoplay policy does not spam the log.
+  private audioPrimeTimeoutLogged = false;
+
   // Video onset state.
   private awaitingVideoOnset = false;
   private videoOnsetFramesWaited = 0;
@@ -285,11 +306,38 @@ export class ReactionEngine {
       const ctx = this.getOrCreateAudioContext();
       if (!ctx) return;
       if (ctx.state === 'suspended') {
-        await ctx.resume();
+        // W-1: race resume() against a short timeout. An un-timed await here can
+        // stay pending forever without a user activation (some mobile/iOS audio
+        // states), which would deadlock the trial loop and leave a black canvas.
+        // Priming is best-effort — a timed-out resume is recovered from per-trial.
+        await this.resumeAudioWithTimeout(ctx);
       }
     } catch {
       // Priming is best-effort; a failure here is recovered from per-trial.
     }
+  }
+
+  /**
+   * Resume the AudioContext, but never block longer than {@link AUDIO_RESUME_TIMEOUT_MS}
+   * (W-1). Resolves when resume() settles OR the timeout fires — the caller then
+   * proceeds regardless. Logs the timeout once per engine.
+   */
+  private resumeAudioWithTimeout(ctx: AudioContext): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        if (!this.audioPrimeTimeoutLogged) {
+          this.audioPrimeTimeoutLogged = true;
+          console.warn(
+            '[ReactionEngine] AudioContext.resume() timed out; continuing without primed audio'
+          );
+        }
+        resolve();
+      }, AUDIO_RESUME_TIMEOUT_MS);
+    });
+    return Promise.race([Promise.resolve(ctx.resume()).catch(() => {}), timeout]).finally(() => {
+      if (timer !== undefined) clearTimeout(timer);
+    });
   }
 
   /**
@@ -409,6 +457,12 @@ export class ReactionEngine {
         typeof provider.getMeanFrameIntervalMs === 'function'
           ? provider.getMeanFrameIntervalMs()
           : this.displayLatencyMs;
+      // W-6: hand the measured refresh interval to the renderer so it counts
+      // genuinely-dropped presented frames against the real display cadence, not
+      // the 120fps target (which fakes ~1 drop per real frame on a 60Hz panel).
+      if (this.calibratedFrameIntervalMs > 0) {
+        this.renderer.setMeasuredRefreshInterval?.(this.calibratedFrameIntervalMs);
+      }
     }
 
     this.resetTrialState();
@@ -425,6 +479,7 @@ export class ReactionEngine {
     this.subscribeFrameLogging(frameLog);
     this.setupResponseCapture(config, signal);
     this.subscribeRenderErrors();
+    this.subscribeVisibilityLoss();
 
     if (this.ownsRenderer) {
       this.renderer.start();
@@ -497,6 +552,16 @@ export class ReactionEngine {
         degraded: this.onsetDegraded,
         offsetMethod: this.stimulusOffsetMethod,
         actualDurationFrames: this.stimulusActualDurationFrames,
+        // W-2 / W-6 / W-3: environment + degradation provenance so a degraded run
+        // (clamped timer, sub-native refresh, backgrounded tab) is identifiable
+        // post hoc without stopping the participant (ADR 0027 record mode).
+        crossOriginIsolated: this.readCrossOriginIsolated(),
+        timerResolutionMs: this.measureTimerResolutionMs(),
+        measuredRefreshRateHz: this.measuredRefreshRateHz(),
+        invalidated: this.visibilityInvalidated ? 'visibility' : null,
+        visibilityLossCount: this.visibilityLossCount,
+        visibilityLossPhases:
+          this.visibilityLossPhases.length > 0 ? [...this.visibilityLossPhases] : [],
         frameStats: {
           fps: stats.fps,
           droppedFrames: stats.droppedFrames,
@@ -566,6 +631,12 @@ export class ReactionEngine {
     this.anticipatory = false;
     this.falseStartCount = 0;
     this.firstFalseStartTime = null;
+
+    this.visibilityInvalidated = false;
+    this.visibilityLossCount = 0;
+    this.visibilityLossPhases = [];
+    this.activePhaseName = null;
+    this.activePhaseStart = 0;
 
     this.renderErrorDuringTrial = false;
     this.renderErrorReason = null;
@@ -826,6 +897,10 @@ export class ReactionEngine {
 
   private openPhase(name: string, timeline: ReactionPhaseMark[]): () => void {
     const startTime = this.now();
+    // Track the open phase so a visibility loss (W-3) can stamp which phase was
+    // active and how far into it focus was lost.
+    this.activePhaseName = name;
+    this.activePhaseStart = startTime;
     this.hooks?.onPhaseChange?.(name, startTime);
 
     return () => {
@@ -834,6 +909,7 @@ export class ReactionEngine {
         startTime,
         endTime: this.now(),
       });
+      if (this.activePhaseName === name) this.activePhaseName = null;
     };
   }
 
@@ -989,6 +1065,75 @@ export class ReactionEngine {
     this.resolveResponse(null);
   }
 
+  /**
+   * Watch for the tab being backgrounded / losing focus during a trial (W-3, ADR
+   * 0027 record mode). rAF halts and setTimeout is throttled (≥1s) in a
+   * background tab, so fixation/ITI can balloon and onset can stamp against a
+   * stale frame. We do NOT abort — we FLAG the trial (`invalidated: 'visibility'`
+   * in provenance) and continue; enforce-mode aborting is a later unit. Listeners
+   * are torn down with the rest of the per-trial listeners via `cleanupListeners`.
+   */
+  private subscribeVisibilityLoss(): void {
+    if (typeof document !== 'undefined') {
+      const onVisibility = () => {
+        if (document.visibilityState === 'hidden') this.recordVisibilityLoss();
+      };
+      document.addEventListener('visibilitychange', onVisibility);
+      this.cleanupListeners.push(() =>
+        document.removeEventListener('visibilitychange', onVisibility)
+      );
+    }
+    if (typeof window !== 'undefined') {
+      const onBlur = () => this.recordVisibilityLoss();
+      window.addEventListener('blur', onBlur);
+      this.cleanupListeners.push(() => window.removeEventListener('blur', onBlur));
+    }
+  }
+
+  /** Flag a visibility/focus loss and stamp the active-phase delta (W-3). */
+  private recordVisibilityLoss(): void {
+    this.visibilityInvalidated = true;
+    this.visibilityLossCount += 1;
+    this.visibilityLossPhases.push({
+      phase: this.activePhaseName ?? 'unknown',
+      phaseElapsedMs: this.activePhaseName ? this.now() - this.activePhaseStart : 0,
+    });
+  }
+
+  /** Whether the document is cross-origin isolated (W-2); false when unavailable. */
+  private readCrossOriginIsolated(): boolean {
+    return typeof globalThis !== 'undefined' && globalThis.crossOriginIsolated === true;
+  }
+
+  /**
+   * Estimate the effective `performance.now()` quantum in ms (W-2): the smallest
+   * positive delta observed across a tight sampling loop. ~0.005 when cross-origin
+   * isolated, clamped toward ~0.1 otherwise. Returns 0 when no positive delta is
+   * seen (the environment could not be probed).
+   */
+  private measureTimerResolutionMs(): number {
+    let min = Infinity;
+    let prev = this.now();
+    for (let i = 0; i < 100; i++) {
+      const t = this.now();
+      const delta = t - prev;
+      if (delta > 0 && delta < min) min = delta;
+      prev = t;
+    }
+    return Number.isFinite(min) ? min : 0;
+  }
+
+  /**
+   * The measured display refresh rate in Hz used for honest drop counting (W-6):
+   * the renderer's observed cadence when available, else the calibrated mean
+   * frame interval. Null when neither is known.
+   */
+  private measuredRefreshRateHz(): number | null {
+    const rendererInterval = this.renderer.getMeasuredRefreshIntervalMs?.() ?? 0;
+    const intervalMs = rendererInterval > 0 ? rendererInterval : this.calibratedFrameIntervalMs;
+    return intervalMs > 0 ? 1000 / intervalMs : null;
+  }
+
   private setupResponseCapture(config: ReactionTrialConfig, signal?: AbortSignal): void {
     this.responsePromise = new Promise<ReactionResponseCapture | null>((resolve) => {
       this.responseResolver = resolve;
@@ -1005,6 +1150,9 @@ export class ReactionEngine {
 
       const keydownHandler = (event: KeyboardEvent) => {
         if (!this.responseEnabled) return;
+        // W-14: ignore OS keyboard auto-repeat — a held key fires repeated keydowns
+        // that would otherwise inflate falseStartCount and register phantom responses.
+        if (event.repeat) return;
 
         const key = event.key.toLowerCase();
         if (allowedKeys.size > 0 && !allowedKeys.has(key)) return;
@@ -1805,13 +1953,12 @@ export class ReactionEngine {
     const ctx = this.getOrCreateAudioContext();
     if (!ctx) return false;
 
-    // Resume context if suspended (requires user gesture on first call).
+    // Resume context if suspended (requires user gesture on first call). Bounded
+    // by a timeout (W-1) so a never-settling resume can't stall the trial loop; if
+    // it is still suspended afterwards, fall back to the HTMLAudio path below.
     if (ctx.state === 'suspended') {
-      try {
-        await ctx.resume();
-      } catch {
-        return false;
-      }
+      await this.resumeAudioWithTimeout(ctx);
+      if (ctx.state === 'suspended') return false;
     }
 
     try {

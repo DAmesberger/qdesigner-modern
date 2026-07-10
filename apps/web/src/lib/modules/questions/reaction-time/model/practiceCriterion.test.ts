@@ -57,6 +57,23 @@ vi.mock('$lib/runtime/reaction', async (importOriginal) => {
         frameLog: [],
         phaseTimeline: [],
         stats: { fps: 120, droppedFrames: 0, jitter: 0 },
+        provenance: {
+          onsetMethod: 'raf',
+          responseMethod: 'event.timeStamp',
+          anticipatory: false,
+          falseStart: false,
+          falseStartCount: 0,
+          degraded: false,
+          offsetMethod: 'none',
+          actualDurationFrames: null,
+          crossOriginIsolated: true,
+          timerResolutionMs: 0.005,
+          measuredRefreshRateHz: 60,
+          invalidated: null,
+          visibilityLossCount: 0,
+          visibilityLossPhases: [],
+          frameStats: { fps: 120, droppedFrames: 0, jitter: 0 },
+        },
       };
     }
 

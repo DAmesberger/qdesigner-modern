@@ -41,6 +41,7 @@ function createWebGL2Mock(canvas: HTMLCanvasElement): WebGL2RenderingContext {
     bufferData: vi.fn(),
     drawArrays: vi.fn(),
     deleteBuffer: vi.fn(),
+    deleteVertexArray: vi.fn(),
     deleteProgram: vi.fn(),
     deleteTexture: vi.fn(),
     VERTEX_SHADER: 35633,
@@ -1109,6 +1110,120 @@ describe('ReactionEngine — timing correctness', () => {
     engine.destroy();
   });
 
+  // ---- W-2 / W-3 / W-14 environment + robustness provenance ----
+
+  it('stamps crossOriginIsolated and a timer-resolution estimate into provenance (W-2)', async () => {
+    const { engine, emitFrame } = createMockEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'env',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 40,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+
+    const result = await resultPromise;
+
+    expect(typeof result.provenance.crossOriginIsolated).toBe('boolean');
+    expect(typeof result.provenance.timerResolutionMs).toBe('number');
+    expect(result.provenance.timerResolutionMs).toBeGreaterThanOrEqual(0);
+
+    engine.destroy();
+  });
+
+  it('flags a visibility loss during a trial but records + completes it (W-3)', async () => {
+    const { engine, target, emitFrame } = createMockEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'vis',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 120,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+    // Backgrounding / focus loss mid-trial: record mode flags but never aborts.
+    window.dispatchEvent(new Event('blur'));
+    dispatchKey(target, 'f', 1050);
+
+    const result = await resultPromise;
+
+    expect(result.invalid).toBe(false);
+    expect(result.response?.reactionTimeMs).toBe(50);
+    expect(result.provenance.invalidated).toBe('visibility');
+    expect(result.provenance.visibilityLossCount).toBeGreaterThanOrEqual(1);
+    expect(result.provenance.visibilityLossPhases).toBeDefined();
+    expect(result.provenance.visibilityLossPhases!.length).toBeGreaterThanOrEqual(1);
+
+    engine.destroy();
+  });
+
+  it('leaves invalidated null for a clean trial with no focus loss (W-3)', async () => {
+    const { engine, target, emitFrame } = createMockEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'clean',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 120,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+    dispatchKey(target, 'f', 1040);
+
+    const result = await resultPromise;
+
+    expect(result.provenance.invalidated).toBeNull();
+    expect(result.provenance.visibilityLossCount).toBe(0);
+
+    engine.destroy();
+  });
+
+  it('ignores OS auto-repeat keydown events on the response path (W-14)', async () => {
+    const { engine, target, emitFrame } = createMockEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'repeat',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 120,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+
+    // A held key fires an auto-repeat keydown (event.repeat === true) — it must be
+    // ignored, so the genuine keypress at 1050 is the captured response, not 1020.
+    const repeat = new KeyboardEvent('keydown', { key: 'f' });
+    Object.defineProperty(repeat, 'repeat', { value: true });
+    Object.defineProperty(repeat, 'timeStamp', { value: 1020, configurable: true });
+    target.dispatchEvent(repeat);
+    dispatchKey(target, 'f', 1050);
+
+    const result = await resultPromise;
+
+    expect(result.response?.timestamp).toBe(1050);
+    expect(result.falseStartCount).toBe(0);
+
+    engine.destroy();
+  });
+
   // ---- 3.2 stimulus-duration concurrency ----
 
   it('runs the stimulus-duration timer concurrently with the response window (3.2)', async () => {
@@ -1232,6 +1347,32 @@ describe('ReactionEngine — timing correctness', () => {
       engine.destroy();
     } finally {
       restore();
+    }
+  });
+
+  it('primeAudio resolves without deadlocking when resume() never settles (W-1)', async () => {
+    // A resume() that never resolves models the no-user-activation / mobile audio
+    // state that used to hang prepare() → run() forever (black canvas). primeAudio
+    // must race it against the internal timeout and still resolve.
+    vi.useFakeTimers();
+    const resume = vi.fn(() => new Promise<void>(() => {})); // never settles
+    const restore = installMockAudioContext({ state: 'suspended', resume });
+    try {
+      const { engine } = createMockEngine();
+      const primed = engine.primeAudio();
+      let settled = false;
+      void primed.then(() => {
+        settled = true;
+      });
+      // Advance past the resume timeout; the race resolves via the timeout branch.
+      await vi.advanceTimersByTimeAsync(600);
+      await primed;
+      expect(settled).toBe(true);
+      expect(resume).toHaveBeenCalledTimes(1);
+      engine.destroy();
+    } finally {
+      restore();
+      vi.useRealTimers();
     }
   });
 

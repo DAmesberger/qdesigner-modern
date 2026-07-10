@@ -46,6 +46,7 @@ function createMockGl() {
     bufferData: vi.fn(),
     drawArrays: vi.fn(),
     deleteBuffer: vi.fn(),
+    deleteVertexArray: vi.fn(),
     deleteProgram: vi.fn(),
     deleteTexture: vi.fn(),
     deleteShader: vi.fn(),
@@ -447,5 +448,32 @@ describe('WebGLRenderer', () => {
     // Fresh allocation per frame is a retention contract: ReactionEngine pushes
     // each sample into its frameLog, so a pooled/reused object would corrupt it.
     expect(samples[0]).not.toBe(samples[1]);
+  });
+
+  it('counts drops against the MEASURED refresh, not the 120fps target (W-6)', () => {
+    // targetFPS 120 (the reaction default) on a 60Hz panel used to mark ~1 fake
+    // drop per real frame because expectedFrames divided by the 8.33ms target.
+    renderer = new WebGLRenderer({ canvas, targetFPS: 120, vsync: true });
+    renderer.setMeasuredRefreshInterval(1000 / 60); // ~16.67ms — a real 60Hz display
+
+    const rafCallbacks: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => {
+      rafCallbacks.push(cb);
+      return rafCallbacks.length;
+    });
+
+    renderer.start();
+    // Present frames at the true 60Hz cadence: no drops should be recorded.
+    let t = 0;
+    for (let i = 0; i < 5; i++) {
+      t += 1000 / 60;
+      rafCallbacks.shift()!(t);
+    }
+    expect(renderer.getStats().droppedFrames).toBe(0);
+
+    // A genuine missed vsync (a ~2x-refresh gap) is counted as exactly one drop.
+    t += (1000 / 60) * 2;
+    rafCallbacks.shift()!(t);
+    expect(renderer.getStats().droppedFrames).toBe(1);
   });
 });

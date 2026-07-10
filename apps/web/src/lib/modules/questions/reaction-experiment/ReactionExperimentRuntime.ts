@@ -67,6 +67,14 @@ interface TrialResponse {
     droppedFrames: number;
     jitter: number;
   };
+  /** Whether the document was cross-origin isolated during the trial (W-2). */
+  crossOriginIsolated: boolean;
+  /** Measured `performance.now()` quantum in ms during the trial (W-2). */
+  timerResolutionMs: number | null;
+  /** Measured display refresh rate in Hz used for drop counting (W-6). */
+  measuredRefreshRateHz: number | null;
+  /** True when the tab was backgrounded / lost focus during the trial (W-3). */
+  visibilityInvalidated: boolean;
   /** True when the trial was invalidated (e.g. stimulus render failed); not a genuine timeout. */
   invalid: boolean;
   invalidReason: string | null;
@@ -190,6 +198,11 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
           droppedFrames: result.stats.droppedFrames,
           jitter: result.stats.jitter,
         },
+        // Environment / degradation provenance (W-2 / W-3 / W-6, ADR 0027).
+        crossOriginIsolated: result.provenance.crossOriginIsolated,
+        timerResolutionMs: result.provenance.timerResolutionMs,
+        measuredRefreshRateHz: result.provenance.measuredRefreshRateHz ?? null,
+        visibilityInvalidated: result.provenance.invalidated === 'visibility',
         invalid: result.invalid ?? false,
         invalidReason: result.invalidReason ?? null,
       });

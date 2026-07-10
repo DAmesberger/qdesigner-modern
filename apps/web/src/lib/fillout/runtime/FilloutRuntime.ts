@@ -435,12 +435,6 @@ export class FilloutRuntime {
 		this.runtime.resize(width, height);
 	}
 
-	handleKeyPress(event: KeyboardEvent): void {
-		// The runtime doesn't have handleKeyPress, need to handle differently
-		// For now, just log
-		console.log('Key press:', event.key);
-	}
-
 	getSession(): QuestionnaireSession | null {
 		 
 		return (this.runtime as unknown as Record<string, unknown>).session as QuestionnaireSession | null;

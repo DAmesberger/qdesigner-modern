@@ -313,6 +313,37 @@ export interface ReactionTrialProvenance {
     droppedFrames: number;
     jitter: number;
   };
+  /**
+   * Whether the document was cross-origin isolated during the trial (W-2). When
+   * false, `performance.now()` is clamped (~100µs vs ~5µs) and the sub-ms claim
+   * silently degrades — the run stays recorded but is flagged here (ADR 0027).
+   */
+  crossOriginIsolated: boolean;
+  /**
+   * Measured effective `performance.now()` quantum in ms (W-2): the smallest
+   * positive inter-sample delta observed in a tight loop. ~0.005 when isolated,
+   * clamped toward ~0.1 otherwise. 0 when it could not be estimated.
+   */
+  timerResolutionMs: number;
+  /**
+   * Measured display refresh rate in Hz used to count genuinely-dropped frames
+   * (W-6), from calibration or the renderer's observed frame cadence — NOT the
+   * `targetFPS`. Null when no measurement was available.
+   */
+  measuredRefreshRateHz?: number | null;
+  /**
+   * Set to `'visibility'` when the tab was backgrounded / lost focus during the
+   * trial (W-3, ADR 0027 record mode). The trial still completes and records its
+   * RT; this flags that the timing may be unreliable. Absent for a clean trial.
+   */
+  invalidated?: 'visibility' | null;
+  /** Number of visibility/focus-loss events observed during the trial (W-3). */
+  visibilityLossCount?: number;
+  /**
+   * Per-event phase context for each visibility loss (W-3): which phase was
+   * active and how many ms into it focus was lost. Empty for a clean trial.
+   */
+  visibilityLossPhases?: Array<{ phase: string; phaseElapsedMs: number }>;
   /** Per-trial ring of video frames (video stimuli only). */
   videoFrames?: VideoFrameSample[];
 }

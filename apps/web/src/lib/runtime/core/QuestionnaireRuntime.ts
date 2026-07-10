@@ -18,7 +18,7 @@ import type {
   QuestionRuntimeResult,
 } from './question-runtime';
 import { VariableEngine } from '@qdesigner/scripting-engine';
-import { WebGLRenderer } from '$lib/renderer';
+import { WebGLRenderer, WebGLUnavailableError } from '$lib/renderer';
 import { ResourceManager } from '../resources/ResourceManager';
 import { MediaValidator } from '../validation/MediaValidator';
 import { ResponseCollector, type ResponseCaptureMetadata } from './ResponseCollector';
@@ -516,17 +516,24 @@ export class QuestionnaireRuntime {
         vsync: true,
       });
     } catch (err) {
-      // The constructor throws "WebGL 2.0 is required but not supported" ONLY when
-      // getContext('webgl2') returns null. Other messages (shader compile/link,
-      // buffer/uniform creation) are genuine GPU/driver failures — do not mask
-      // those as "no WebGL2", which would send a misleading participant message.
+      // Any renderer-construction failure leaves the participant unable to see the
+      // stimulus, so ALL of them are classified as WebGL-unavailable (W-11) — the
+      // fillout page routes the marker to the friendly `webgl-unsupported` gate
+      // screen instead of dumping a raw error. We keep two distinct messages so a
+      // "no WebGL2" device isn't told the same thing as a shader/driver failure.
       const message = err instanceof Error ? err.message : '';
       if (message.includes('WebGL 2.0 is required')) {
-        throw new Error(
-          'This study requires WebGL 2.0, which your browser or device does not support.'
+        throw new WebGLUnavailableError(
+          'This study requires WebGL 2.0, which your browser or device does not support.',
+          { cause: err }
         );
       }
-      throw err;
+      // Shader compile/link, buffer, or uniform creation failures: a genuine
+      // GPU/driver problem the participant can't act on. Still route to the gate.
+      throw new WebGLUnavailableError(
+        'This study could not initialize graphics on your device.',
+        { cause: err }
+      );
     }
 
     this.renderer = renderer;

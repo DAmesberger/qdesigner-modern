@@ -1,4 +1,5 @@
 import { moduleRegistry } from '$lib/modules/registry';
+import { isWebGLUnavailableMarker } from '$lib/renderer';
 import type { FilloutDefinition } from '$lib/fillout/types';
 
 /**
@@ -43,11 +44,14 @@ export function definitionNeedsWebGL(definition: FilloutDefinition): boolean {
 
 /**
  * Whether an error thrown during runtime/renderer construction is a WebGL-unavailability
- * failure. The WebGLRenderer throws `WebGL 2.0 is required but not supported`, but a
- * context can also be lost or blacklisted AFTER a passing probe; both should route to the
- * honest gate screen rather than dumping a raw error string on the generic error screen.
+ * failure (W-11). `QuestionnaireRuntime.ensureRenderer` now wraps EVERY renderer-construction
+ * failure — a null `webgl2` context, but also shader compile/link, buffer, and uniform
+ * failures — in a `WebGLUnavailableError` marker, so any of them routes to the friendly gate
+ * screen instead of the generic error screen. The `/webgl/i` message match is kept as a
+ * belt-and-braces fallback for a raw error that predates the marker.
  */
 export function isWebGLUnavailableError(err: unknown): boolean {
+  if (isWebGLUnavailableMarker(err)) return true;
   const message = err instanceof Error ? err.message : String(err ?? '');
   return /webgl/i.test(message);
 }

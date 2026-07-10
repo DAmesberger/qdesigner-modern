@@ -4,6 +4,7 @@ import {
   isWebGLUnavailableError,
   probeWebGL2Support,
 } from './webglPreflight';
+import { WebGLUnavailableError } from '$lib/renderer';
 import type { FilloutDefinition } from '$lib/fillout/types';
 
 // definitionNeedsWebGL reads the module registry; stub it so the predicate is exercised
@@ -77,6 +78,18 @@ describe('isWebGLUnavailableError', () => {
       true
     );
     expect(isWebGLUnavailableError(new Error('Failed to create WebGL program'))).toBe(true);
+  });
+
+  it('matches the WebGLUnavailableError marker regardless of message (W-11)', () => {
+    // ensureRenderer now wraps shader/link/buffer failures — whose raw messages
+    // don't contain "webgl" — in this marker so they still route to the gate screen.
+    expect(
+      isWebGLUnavailableError(
+        new WebGLUnavailableError('This study could not initialize graphics on your device.')
+      )
+    ).toBe(true);
+    // A structural marker (cross-realm instanceof safety) is honoured too.
+    expect(isWebGLUnavailableError({ webglUnavailable: true })).toBe(true);
   });
 
   it('does not match unrelated errors', () => {

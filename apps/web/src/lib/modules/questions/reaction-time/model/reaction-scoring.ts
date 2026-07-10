@@ -56,6 +56,14 @@ export interface ReactionProvenanceTrial {
   displayLatencyMs?: number | null;
   /** Audio output-latency folded into the onset (audio only). E-REACT-5. */
   outputLatencyMs?: number | null;
+  /** Whether the document was cross-origin isolated during the trial (W-2). */
+  crossOriginIsolated?: boolean;
+  /** Measured `performance.now()` quantum in ms during the trial (W-2). */
+  timerResolutionMs?: number | null;
+  /** Measured display refresh rate in Hz used for drop counting (W-6). */
+  measuredRefreshRateHz?: number | null;
+  /** True when the tab was backgrounded / lost focus during the trial (W-3). */
+  visibilityInvalidated?: boolean;
 }
 
 /** min / max / median across a set of latency samples, or null when empty. */
@@ -126,6 +134,16 @@ export function aggregateReactionProvenance(
       ? framedExposures.reduce((sum, v) => sum + v, 0) / framedExposures.length
       : null;
 
+  // Environment / degradation roll-up (W-2 / W-3 / W-6, ADR 0027 record mode) so a
+  // degraded run is identifiable from the persisted response-level provenance blob.
+  const isolatedFlags = testResponses.map((t) => t.crossOriginIsolated);
+  const crossOriginIsolated = isolatedFlags.some((v) => typeof v === 'boolean')
+    ? isolatedFlags.every((v) => v !== false)
+    : null;
+  const timerSamples = latencySamples(testResponses, (t) => t.timerResolutionMs);
+  const refreshSamples = latencySamples(testResponses, (t) => t.measuredRefreshRateHz);
+  const visibilityInvalidatedTrials = testResponses.filter((t) => t.visibilityInvalidated).length;
+
   return {
     onsetMethod: dominant(
       testResponses.map((t) => t.stimulusTimingMethod),
@@ -151,6 +169,16 @@ export function aggregateReactionProvenance(
       droppedFrames: avg((t) => t.frameStats.droppedFrames),
       jitter: avg((t) => t.frameStats.jitter),
     },
+    // Whether EVERY test trial ran cross-origin isolated (full timer precision);
+    // false if any trial was clamped, null when unknown (W-2, ADR 0027).
+    crossOriginIsolated,
+    // Coarsest observed timer quantum across the trials (worst case). W-2.
+    timerResolutionMs: timerSamples.length > 0 ? Math.max(...timerSamples) : null,
+    // Median measured refresh rate the drop counts were taken against (W-6).
+    measuredRefreshRateHz: latencyStats(refreshSamples)?.median ?? null,
+    // Count of trials flagged for a background/focus-loss event (W-3). >0 means
+    // some RTs in this response may be unreliable but were recorded, not dropped.
+    visibilityInvalidatedTrials,
   };
 }
 

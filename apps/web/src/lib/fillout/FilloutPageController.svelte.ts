@@ -260,6 +260,10 @@ export class FilloutPageController {
 
   // --- Non-reactive service handles ------------------------------------------
   private runtime: FilloutRuntime | null = null;
+  // W-5: set once dispose() runs (page unmount). initializeRuntime checks it after
+  // each await so a runtime built AFTER unmount is torn down instead of leaking its
+  // WebGL context + rAF loop (browsers cap ~16 live contexts).
+  private isDisposed = false;
   private syncEngine: FilloutUploadSync | null = null;
   private audioUnlockContext: AudioContext | null = null;
   private lastPresentedItemId: string | null = null;
@@ -569,11 +573,16 @@ export class FilloutPageController {
       this.session = data.existingSession;
       sessionStorage.setItem('qd_api_session_id', this.session.id);
       if (this.session.status === 'in_progress' || this.session.status === 'active') {
+        // W-11: resumed sessions bypassed the R2-4 WebGL preflight and dead-ended on
+        // a raw renderer error mid-study. Gate here too, so a device that can't run
+        // the reaction stimuli lands on the friendly webgl-unsupported screen.
+        if (!(await this.ensureWebGLSupported())) return;
         this.screen = 'runtime';
         await this.initializeRuntime();
       }
     } else if (data.resumeSnapshot && data.resumeSessionId) {
       // Offline / anonymous same-device resume (E-OFF-1): continue the SAME session id.
+      if (!(await this.ensureWebGLSupported())) return;
       this.session = {
         id: data.resumeSessionId,
         questionnaire_id: data.questionnaire.id,
@@ -992,7 +1001,7 @@ export class FilloutPageController {
         }
       );
 
-      this.runtime = await this.services.makeRuntime({
+      const built = await this.services.makeRuntime({
         canvas,
         questionnaire: inputs.definition,
         sessionId: this.session.id,
@@ -1034,12 +1043,27 @@ export class FilloutPageController {
         },
       });
 
+      // W-5: the page may have unmounted while makeRuntime was in flight. dispose()
+      // ran with this.runtime still null, so tear down the just-built runtime here
+      // rather than leaking its WebGL context + spinning rAF loop.
+      if (this.isDisposed) {
+        built.dispose();
+        return;
+      }
+      this.runtime = built;
+
       // E-FLOW-7: expose the interlocking quota cell + eligibility as flow variables.
       this.runtime.setFlowVariable('_quotaCell', this.quotaCellKey ?? '');
       this.runtime.setFlowVariable('_eligible', true);
 
       this.loadingMessage = m.fillout_loading_starting();
       await this.runtime.start();
+      // Unmounted during start(): dispose the runtime we just started (W-5).
+      if (this.isDisposed) {
+        this.runtime?.dispose();
+        this.runtime = null;
+        return;
+      }
       this.loading = false;
 
       // Resume toast (E-OFF-1): confirm we rehydrated at the right spot.
@@ -1216,10 +1240,6 @@ export class FilloutPageController {
     }
   }
 
-  handleKeyDown(event: KeyboardEvent): void {
-    this.runtime?.handleKeyPress(event);
-  }
-
   handleResize(): void {
     // Delegate to the runtime's single owned renderer (Slice 4.6). No-op until that
     // renderer is lazily created — form-only questionnaires never allocate one.
@@ -1299,6 +1319,9 @@ export class FilloutPageController {
 
   /** Tear down runtime, sync engine, and the audio unlock context (call on unmount). */
   dispose(): void {
+    // W-5: mark disposed so an initializeRuntime() still in flight tears down the
+    // runtime it builds after this point instead of leaking it.
+    this.isDisposed = true;
     if (this.statsTimer) {
       clearInterval(this.statsTimer);
       this.statsTimer = null;

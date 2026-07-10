@@ -29,6 +29,23 @@ interface MockTrialResult {
     droppedFrames: number;
     jitter: number;
   };
+  provenance: {
+    onsetMethod: string;
+    responseMethod: string;
+    anticipatory: boolean;
+    falseStart: boolean;
+    falseStartCount: number;
+    degraded: boolean;
+    offsetMethod: string;
+    actualDurationFrames: number | null;
+    crossOriginIsolated: boolean;
+    timerResolutionMs: number | null;
+    measuredRefreshRateHz: number | null;
+    invalidated: 'visibility' | null;
+    visibilityLossCount: number;
+    visibilityLossPhases: Array<{ phase: string; phaseElapsedMs: number }>;
+    frameStats: { fps: number; droppedFrames: number; jitter: number };
+  };
 }
 
 vi.mock('$lib/runtime/reaction', async (importOriginal) => {
@@ -77,6 +94,23 @@ vi.mock('$lib/runtime/reaction', async (importOriginal) => {
           fps: 120,
           droppedFrames: 0,
           jitter: 0,
+        },
+        provenance: {
+          onsetMethod: 'raf',
+          responseMethod: 'event.timeStamp',
+          anticipatory: false,
+          falseStart: false,
+          falseStartCount: 0,
+          degraded: false,
+          offsetMethod: 'none',
+          actualDurationFrames: null,
+          crossOriginIsolated: true,
+          timerResolutionMs: 0.005,
+          measuredRefreshRateHz: 60,
+          invalidated: null,
+          visibilityLossCount: 0,
+          visibilityLossPhases: [],
+          frameStats: { fps: 120, droppedFrames: 0, jitter: 0 },
         },
       };
     }

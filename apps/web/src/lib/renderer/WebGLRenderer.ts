@@ -77,6 +77,17 @@ export class WebGLRenderer {
   private recentFrameTimes: number[] = [];
   private readonly maxRecentFrameTimes = 240;
 
+  /**
+   * Measured display refresh interval (ms) used to count genuinely-dropped
+   * presented frames (W-6). Set from calibration via setMeasuredRefreshInterval;
+   * until then a self-estimate (median of observed frame times) is used. The
+   * `targetFPS` is deliberately NOT used as the divisor — a 120fps target on a
+   * 60Hz panel would otherwise mark ~1 fake drop per real frame.
+   */
+  private measuredRefreshIntervalMs = 0;
+  /** Self-measured refresh estimate (median frame time), recomputed ~once/sec. */
+  private estimatedRefreshIntervalMs = 0;
+
   private renderables: Map<string, Renderable> = new Map();
   private renderablesByLayer: Map<number, Set<string>> = new Map();
   /**
@@ -89,6 +100,8 @@ export class WebGLRenderer {
 
   private positionBuffer!: WebGLBuffer;
   private texCoordBuffer!: WebGLBuffer;
+  /** The vertex array object, retained so destroy() can release it (W-13). */
+  private vao: WebGLVertexArrayObject | null = null;
 
   /**
    * Grow-on-demand scratch buffers for drawGeometry (F106). Clip-space positions
@@ -205,7 +218,11 @@ export class WebGLRenderer {
     this.positionBuffer = positionBuffer;
     this.texCoordBuffer = texCoordBuffer;
 
+    // Retain the VAO so destroy() can delete it (W-13). On a context restore this
+    // re-runs and the previous handle already died with the lost context, so we
+    // simply overwrite it — no stale delete needed.
     const vao = gl.createVertexArray();
+    this.vao = vao;
     gl.bindVertexArray(vao);
 
     gl.enableVertexAttribArray(positionLocation);
@@ -363,9 +380,10 @@ export class WebGLRenderer {
 
       if (shouldPresent) {
         const presentedDelta = currentTime - this.lastPresentedTime;
-        const expectedFrames =
-          this.frameInterval > 0 ? Math.floor(presentedDelta / this.frameInterval) : 1;
-        droppedSinceLast = Math.max(0, expectedFrames - 1);
+        // W-6: count drops against the MEASURED refresh interval (calibration or
+        // self-estimate), never the targetFPS. Zero until a refresh is known, so
+        // we never fabricate drops before the cadence has been observed.
+        droppedSinceLast = this.countDroppedFrames(presentedDelta, this.refreshIntervalMs());
 
         if (droppedSinceLast > 0) {
           this.droppedFrames += droppedSinceLast;
@@ -432,7 +450,58 @@ export class WebGLRenderer {
       this.currentFPS = elapsed > 0 ? (this.frameCount * 1000) / elapsed : 0;
       this.frameCount = 0;
       this.lastFPSUpdate = currentTime;
+      // Refresh the self-measured refresh estimate once per FPS window (W-6); the
+      // median of observed frame times is robust to occasional dropped frames.
+      this.estimatedRefreshIntervalMs = this.medianFrameTime();
     }
+  }
+
+  /**
+   * The refresh interval used for drop counting (W-6): the calibrated measurement
+   * when set, else the self-measured median, else 0 (unknown → no drops counted).
+   */
+  private refreshIntervalMs(): number {
+    if (this.measuredRefreshIntervalMs > 0) return this.measuredRefreshIntervalMs;
+    return this.estimatedRefreshIntervalMs;
+  }
+
+  /**
+   * Count genuinely-dropped presented frames for a `presentedDelta` (ms) gap,
+   * measured against the real display `refreshMs` (W-6). Rounds to the nearest
+   * whole refresh so display jitter doesn't over- or under-count; returns 0 when
+   * the refresh is unknown or the gap is within one refresh.
+   */
+  private countDroppedFrames(presentedDelta: number, refreshMs: number): number {
+    if (refreshMs <= 0 || presentedDelta <= 0) return 0;
+    const expected = Math.round(presentedDelta / refreshMs);
+    return Math.max(0, expected - 1);
+  }
+
+  /** Median of the recent presented-frame intervals; 0 when none observed yet. */
+  private medianFrameTime(): number {
+    const n = this.recentFrameTimes.length;
+    if (n === 0) return 0;
+    const sorted = [...this.recentFrameTimes].sort((a, b) => a - b);
+    const mid = Math.floor(n / 2);
+    return n % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
+  }
+
+  /**
+   * Provide the measured display refresh interval (ms) from calibration (W-6). The
+   * reaction engine calls this after device qualification so drop counting uses the
+   * real cadence rather than the frame-rate target. A non-positive value is ignored.
+   */
+  public setMeasuredRefreshInterval(intervalMs: number): void {
+    this.measuredRefreshIntervalMs = intervalMs > 0 ? intervalMs : 0;
+  }
+
+  /**
+   * The refresh interval (ms) currently used for drop counting — the calibrated
+   * value when set, else the self-measured median. 0 when not yet known. Read by
+   * the reaction engine to stamp the measured refresh rate into trial provenance.
+   */
+  public getMeasuredRefreshIntervalMs(): number {
+    return this.refreshIntervalMs();
   }
 
   private recordFrameTime(frameTime: number): void {
@@ -977,6 +1046,10 @@ export class WebGLRenderer {
 
     gl.deleteBuffer(this.positionBuffer);
     gl.deleteBuffer(this.texCoordBuffer);
+    if (this.vao) {
+      gl.deleteVertexArray(this.vao);
+      this.vao = null;
+    }
     gl.deleteProgram(this.program);
 
     for (const texture of this.uploadedTextures) {
