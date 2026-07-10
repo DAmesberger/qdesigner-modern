@@ -31,6 +31,11 @@ beforeEach(async () => {
 	await db.filloutResponses.clear();
 	await db.filloutEvents.clear();
 	await db.filloutVariables.clear();
+	// Trials + ledger are participant-data tables the drain collects sessions from
+	// (RT-1b), so a prior file's leftover rows must be cleared too or they surface as
+	// phantom sessions in the shared fake-indexeddb singleton (cross-file isolation).
+	await db.filloutTrials.clear();
+	await db.filloutSyncLedger.clear();
 	apiMock.sessions.get.mockReset();
 	apiMock.sessions.create.mockReset();
 	apiMock.sessions.sync.mockReset();

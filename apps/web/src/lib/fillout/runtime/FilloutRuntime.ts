@@ -1,10 +1,12 @@
 import { ResponsePersistenceService } from '../services/ResponsePersistenceService';
 import { SessionManagementService } from '../services/SessionManagementService';
 import { OfflineResponsePersistence } from '../services/OfflineResponsePersistence';
+import { OfflineTrialPersistence } from '../services/OfflineTrialPersistence';
 import { OfflineSessionService } from '../services/OfflineSessionService';
 import { formatDexieError } from '$lib/services/db/errors';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
 import type { ResumeState } from '$lib/runtime/core/ResumeState';
+import type { RuntimeTrialEvent } from '$lib/runtime/core/question-runtime';
 import type {
 	ServerVariableSnapshot,
 	QuestionPresentedEvent,
@@ -127,6 +129,15 @@ export class FilloutRuntime {
 				void OfflineSessionService.updateResumeState(this.sessionId, state).catch((error) => {
 					// Log the REAL Dexie failure, not the opaque minified "DexieError2".
 					console.error(`Failed to persist resume state: ${formatDexieError(error)}`, error as Error);
+				});
+			},
+			// Per-trial persistence (RT-1b): write each completed reaction trial
+			// offline-first the instant it fires. Fire-and-forget so a slow/failed
+			// Dexie write never blocks the trial loop; the REAL error is logged
+			// (F-42 honesty), never swallowed silently.
+			onTrialComplete: (trial: RuntimeTrialEvent) => {
+				void OfflineTrialPersistence.persistTrialEvent(this.sessionId, trial).catch((error) => {
+					console.error(`Failed to persist trial: ${formatDexieError(error)}`, error as Error);
 				});
 			}
 		};

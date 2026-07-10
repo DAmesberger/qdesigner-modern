@@ -240,6 +240,9 @@ export const sessions = {
       responses_synced: number;
       events_synced: number;
       variables_synced: number;
+      // Per-trial rows freshly inserted this sync (RT-1b). Optional: an older
+      // server omits it and the client falls back to counting zero.
+      trials_synced?: number;
       // Ack-driven marking (E-OFF-4). Optional: an older server omits these and
       // the client falls back to marking every sent record synced.
       accepted_client_ids?: string[];

@@ -193,6 +193,56 @@ export interface FilloutVariable {
 }
 
 /**
+ * One materialized per-trial row (RT-1b), the fourth offline record kind. Written
+ * IMMEDIATELY as each reaction trial completes (a first-class analytic object, not
+ * a slice of the question-level response) and synced through the same batch
+ * `/sync` + `ON CONFLICT (client_id)` dedup path as responses/events. Keyed by the
+ * dedup `clientId` (uuid) so a re-shipped trial is idempotent server-side.
+ *
+ * At-rest encryption (E-OFF-2) mirrors {@link FilloutResponse}: the participant's
+ * ANSWER (`optionId`) is AES-GCM encrypted before write and decrypted before sync;
+ * the timing/measurement columns (`rtUs`, `sampledTimings`, `provenance`,
+ * `invalidated`) stay cleartext, exactly like `reactionTimeUs` / `timingProvenance`
+ * on a response row.
+ */
+export interface FilloutTrial {
+  /** Primary key: server dedup clientId (uuid). */
+  clientId: string;
+  sessionId: string;
+  questionId: string;
+  /** Monotonic trial number within the question (1-based). */
+  trialIndex: number;
+  /** Reaction paradigm / task type this trial belongs to. */
+  paradigm: string;
+  /**
+   * The winning ResponseOption id (ADR 0024) — the participant's answer. ENCRYPTED
+   * at rest (E-OFF-2), so the stored slot is an envelope; decrypted back to the raw
+   * `string | null` before sync. Typed `unknown` because the stored value is the
+   * envelope, not the plaintext.
+   */
+  optionId: unknown;
+  /** Winning source family (keyboard/pointer/…), else null. Cleartext measurement. */
+  source?: string | null;
+  /** Per-trial reaction time in microseconds (ms×1000 floored), else null. */
+  rtUs?: number | null;
+  /** Trial correctness, else null (unscored). */
+  correct?: boolean | null;
+  /** Materialized (sampled) phase-plan timings for this trial (ADR 0025). */
+  sampledTimings?: unknown;
+  /** Per-trial timing-provenance blob (which clocks, latencies, frame health). */
+  provenance?: unknown;
+  /** W-3 invalidation stamp (e.g. `'visibility'`), else null. */
+  invalidated?: string | null;
+  /** Content checksum (E-OFF-5); see {@link FilloutResponse.checksum}. */
+  checksum?: string;
+  /** Sync attempt counter (E-OFF-5). */
+  attempts?: number;
+  /** Last sync error seen for this row (E-OFF-5). */
+  lastError?: string;
+  synced: 0 | 1;
+}
+
+/**
  * Append-only sync-journey audit for every durable participant record (E-OFF-5).
  * One row per record `clientId`, tracking its passage from `pending` (enqueued
  * locally) → `acked` (server durably holds it) or → `deadletter` (K sync attempts
@@ -204,7 +254,7 @@ export interface FilloutSyncLedgerEntry {
   /** Primary key: the record's dedup `clientId`. */
   clientId: string;
   sessionId: string;
-  kind: 'response' | 'event' | 'variable';
+  kind: 'response' | 'event' | 'variable' | 'trial';
   state: 'pending' | 'acked' | 'deadletter';
   attempts: number;
   lastError?: string;
@@ -280,6 +330,7 @@ class QDesignerDatabase extends Dexie {
   filloutVariables!: Table<FilloutVariable>;
   filloutMedia!: Table<FilloutMediaEntry>;
   filloutServerVariables!: Table<FilloutServerVariable>;
+  filloutTrials!: Table<FilloutTrial, string>;
   filloutKeys!: Table<FilloutKeyRow, string>;
   filloutSyncLedger!: Table<FilloutSyncLedgerEntry, string>;
 
@@ -443,6 +494,30 @@ class QDesignerDatabase extends Dexie {
       filloutVariables: '[sessionId+name], sessionId, synced',
       filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt',
       filloutServerVariables: '[definitionKey+variableId], definitionKey, questionnaireId, syncedAt',
+      filloutKeys: 'sessionId',
+      filloutSyncLedger: 'clientId, sessionId, kind, state, updatedAt, [sessionId+state]'
+    });
+
+    // v8: per-trial persistence (RT-1b).
+    //  - filloutTrials is new: one row per completed reaction trial, PK `clientId`
+    //    (the server dedup uuid), with `sessionId`/`synced`/`[sessionId+synced]`
+    //    indexes so the sync drain, purge, and export use the same compound-index
+    //    pattern as filloutResponses. Purely additive — no .upgrade() body, so
+    //    Dexie creates the empty table on next open and older clients upgrade
+    //    transparently. All v7 stores are restated verbatim.
+    this.version(8).stores({
+      questionnaires: 'id, userId, syncStatus, lastModified, [id+userId]',
+      syncQueue: '++id, userId, status, timestamp, [userId+status]',
+      resources: 'id, url, lastAccessed, expiresAt',
+      drafts: 'id, userId, questionnaireId, timestamp, [userId+questionnaireId]',
+      filloutQuestionnaires: 'id, questionnaireId, accessCode, syncedAt',
+      filloutSessions: 'id, questionnaireId, status, createdAt, synced, [questionnaireId+status]',
+      filloutResponses: '++id, sessionId, clientId, questionId, synced, [sessionId+synced]',
+      filloutEvents: '++id, sessionId, clientId, synced, [sessionId+synced]',
+      filloutVariables: '[sessionId+name], sessionId, synced',
+      filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt',
+      filloutServerVariables: '[definitionKey+variableId], definitionKey, questionnaireId, syncedAt',
+      filloutTrials: 'clientId, sessionId, synced, [sessionId+synced]',
       filloutKeys: 'sessionId',
       filloutSyncLedger: 'clientId, sessionId, kind, state, updatedAt, [sessionId+state]'
     });
@@ -662,6 +737,7 @@ class QDesignerDatabase extends Dexie {
       this.filloutQuestionnaires as unknown as Table<{ size?: number }>,
       this.filloutMedia as unknown as Table<{ size?: number }>,
       this.filloutServerVariables as unknown as Table<{ size?: number }>,
+      this.filloutTrials as unknown as Table<{ size?: number }>,
       this.filloutSyncLedger as unknown as Table<{ size?: number }>,
     ];
     for (const table of filloutTables) {
@@ -720,6 +796,7 @@ class QDesignerDatabase extends Dexie {
         this.filloutResponses,
         this.filloutEvents,
         this.filloutVariables,
+        this.filloutTrials,
         this.filloutKeys,
       ],
       async () => {
@@ -736,6 +813,11 @@ class QDesignerDatabase extends Dexie {
           .equals(sessionId)
           .filter((v) => v.synced === 1)
           .delete();
+        // Per-trial rows follow the same synced-only crypto-erase (RT-1b).
+        await this.filloutTrials
+          .where('[sessionId+synced]')
+          .equals([sessionId, 1])
+          .delete();
 
         const sessionRow = await this.filloutSessions.get(sessionId);
         const sessionDeleted = !!sessionRow && sessionRow.synced === 1;
@@ -747,7 +829,8 @@ class QDesignerDatabase extends Dexie {
         const remaining =
           (await this.filloutResponses.where('sessionId').equals(sessionId).count()) +
           (await this.filloutEvents.where('sessionId').equals(sessionId).count()) +
-          (await this.filloutVariables.where('sessionId').equals(sessionId).count());
+          (await this.filloutVariables.where('sessionId').equals(sessionId).count()) +
+          (await this.filloutTrials.where('sessionId').equals(sessionId).count());
         if (sessionDeleted && remaining === 0) {
           await this.filloutKeys.delete(sessionId);
         }
@@ -771,16 +854,20 @@ class QDesignerDatabase extends Dexie {
    */
   async clearAllFilloutData(): Promise<void> {
     await this.transaction('rw',
-      this.filloutSessions,
-      this.filloutResponses,
-      this.filloutEvents,
-      this.filloutVariables,
+      [
+        this.filloutSessions,
+        this.filloutResponses,
+        this.filloutEvents,
+        this.filloutVariables,
+        this.filloutTrials,
+      ],
       async () => {
         await Promise.all([
           this.filloutSessions.clear(),
           this.filloutResponses.clear(),
           this.filloutEvents.clear(),
-          this.filloutVariables.clear()
+          this.filloutVariables.clear(),
+          this.filloutTrials.clear()
         ]);
       }
     );
@@ -806,6 +893,7 @@ class QDesignerDatabase extends Dexie {
         this.filloutResponses,
         this.filloutEvents,
         this.filloutVariables,
+        this.filloutTrials,
         this.filloutQuestionnaires,
         this.filloutMedia,
         this.filloutServerVariables,
@@ -818,6 +906,7 @@ class QDesignerDatabase extends Dexie {
           this.filloutResponses.clear(),
           this.filloutEvents.clear(),
           this.filloutVariables.clear(),
+          this.filloutTrials.clear(),
           this.filloutQuestionnaires.clear(),
           this.filloutMedia.clear(),
           this.filloutServerVariables.clear(),

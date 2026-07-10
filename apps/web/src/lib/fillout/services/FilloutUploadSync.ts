@@ -2,10 +2,11 @@ import { browser } from '$app/environment';
 import { api } from '$lib/services/api';
 import { OfflineSessionService } from './OfflineSessionService';
 import { OfflineResponsePersistence, type StoredFilloutResponse } from './OfflineResponsePersistence';
+import { OfflineTrialPersistence } from './OfflineTrialPersistence';
 import { SyncLedger } from './integrity/SyncLedger';
 import { FilloutContentCache } from './FilloutContentCache';
-import { db, filloutDefinitionKey, type FilloutSession, type FilloutResponse, type FilloutEvent, type FilloutVariable } from '$lib/services/db/indexeddb';
-import type { SyncPayload } from '$lib/api/generated/types.gen';
+import { db, filloutDefinitionKey, type FilloutSession, type FilloutResponse, type FilloutEvent, type FilloutVariable, type FilloutTrial } from '$lib/services/db/indexeddb';
+import type { SyncPayload, SyncTrialItem } from '$lib/api/generated/types.gen';
 
 /**
  * Structured sync outcome (E-OFF-4, surfaced to the page for E-OFF-6). Beyond the
@@ -18,6 +19,8 @@ export interface SyncResult {
 	responsesSynced: number;
 	eventsSynced: number;
 	variablesSynced: number;
+	/** Total per-trial rows (RT-1b) the server freshly inserted across all sessions. */
+	trialsSynced: number;
 	/** Total `POST /sync` HTTP calls issued across all sessions (large runs chunk). */
 	chunks: number;
 	/** Total client_ids (responses + events) the server durably acknowledged. */
@@ -114,6 +117,7 @@ export class FilloutUploadSync {
 			responsesSynced: 0,
 			eventsSynced: 0,
 			variablesSynced: 0,
+			trialsSynced: 0,
 			chunks: 0,
 			accepted: 0,
 			rejected: 0,
@@ -185,6 +189,7 @@ export class FilloutUploadSync {
 					result.responsesSynced += sessionResult.responsesSynced;
 					result.eventsSynced += sessionResult.eventsSynced;
 					result.variablesSynced += sessionResult.variablesSynced;
+					result.trialsSynced += sessionResult.trialsSynced;
 					result.chunks += sessionResult.chunks;
 					result.accepted += sessionResult.accepted;
 					result.rejected += sessionResult.rejected;
@@ -349,6 +354,23 @@ export class FilloutUploadSync {
 		};
 	}
 
+	private buildTrialItem(t: FilloutTrial): SyncTrialItem {
+		// `t.optionId` is already decrypted by getUnsyncedTrials; coerce to the wire
+		// shape (string | null). The server's `trials` columns are snake_case.
+		return {
+			client_id: t.clientId,
+			question_id: t.questionId,
+			trial_index: t.trialIndex,
+			option_id: (t.optionId as string | null) ?? null,
+			source: t.source ?? null,
+			rt_us: t.rtUs ?? null,
+			correct: t.correct ?? null,
+			sampled_timings: t.sampledTimings ?? null,
+			provenance: t.provenance ?? null,
+			invalidated: t.invalidated ?? null,
+		};
+	}
+
 	/**
 	 * Sync a single session's data to the backend, CHUNKED (E-OFF-4). Responses and
 	 * events are split into `SYNC_CHUNK_SIZE` batches and uploaded over as many
@@ -366,6 +388,7 @@ export class FilloutUploadSync {
 		responsesSynced: number;
 		eventsSynced: number;
 		variablesSynced: number;
+		trialsSynced: number;
 		chunks: number;
 		accepted: number;
 		rejected: number;
@@ -373,6 +396,7 @@ export class FilloutUploadSync {
 		const responses = await OfflineResponsePersistence.getUnsyncedResponses(session.id);
 		const events = await OfflineResponsePersistence.getUnsyncedEvents(session.id);
 		const variables = await OfflineResponsePersistence.getUnsyncedVariables(session.id);
+		const trials = await OfflineTrialPersistence.getUnsyncedTrials(session.id);
 
 		const sessionInit: SyncPayload['session'] = session.questionnaireId
 			? {
@@ -389,13 +413,15 @@ export class FilloutUploadSync {
 
 		const respChunks = chunkArray(responses, SYNC_CHUNK_SIZE);
 		const evtChunks = chunkArray(events, SYNC_CHUNK_SIZE);
+		const trialChunks = chunkArray(trials, SYNC_CHUNK_SIZE);
 		// At least one call: an empty-child session still needs to push its
 		// session-init and/or a completed-status update.
-		const numChunks = Math.max(respChunks.length, evtChunks.length, 1);
+		const numChunks = Math.max(respChunks.length, evtChunks.length, trialChunks.length, 1);
 
 		let responsesSynced = 0;
 		let eventsSynced = 0;
 		let variablesSynced = 0;
+		let trialsSynced = 0;
 
 		// Ack-driven marking state, accumulated across chunks.
 		const acceptedIds = new Set<string>();
@@ -409,12 +435,15 @@ export class FilloutUploadSync {
 		for (let i = 0; i < numChunks; i++) {
 			const respSlice = respChunks[i] ?? [];
 			const evtSlice = evtChunks[i] ?? [];
+			const trialSlice = trialChunks[i] ?? [];
 			const isFirst = i === 0;
 			const isLast = i === numChunks - 1;
 
 			const payload: SyncPayload = {
 				responses: respSlice.map((r) => this.buildResponseItem(r)),
 				events: evtSlice.map((e) => this.buildEventItem(e)),
+				// Per-trial rows (RT-1b) ride the same chunked batch as responses/events.
+				trials: trialSlice.map((t) => this.buildTrialItem(t)),
 				// Variables + session-init on the first chunk only; status on the last.
 				variables: isFirst
 					? variables.map((v) => ({ variable_name: v.name, variable_value: v.value }))
@@ -430,11 +459,13 @@ export class FilloutUploadSync {
 			responsesSynced += result.responses_synced ?? 0;
 			eventsSynced += result.events_synced ?? 0;
 			variablesSynced += result.variables_synced ?? 0;
+			trialsSynced += result.trials_synced ?? 0;
 
 			if (result.accepted_client_ids === undefined) {
 				// Legacy server: treat everything sent in this chunk as accepted.
 				for (const r of respSlice) acceptedIds.add(r.clientId);
 				for (const e of evtSlice) acceptedIds.add(e.clientId);
+				for (const t of trialSlice) acceptedIds.add(t.clientId);
 			} else {
 				for (const cid of result.accepted_client_ids) acceptedIds.add(cid);
 			}
@@ -461,8 +492,15 @@ export class FilloutUploadSync {
 			.map((e) => e.id)
 			.filter((id): id is number => id !== undefined);
 
+		// Trials are keyed by their clientId (PK), so mark by the acked clientId set.
+		const acceptedTrialClientIds = trials
+			.filter((t) => acceptedIds.has(t.clientId))
+			.map((t) => t.clientId);
+
 		if (responseIds.length > 0) await OfflineResponsePersistence.markResponsesSynced(responseIds);
 		if (eventIds.length > 0) await OfflineResponsePersistence.markEventsSynced(eventIds);
+		if (acceptedTrialClientIds.length > 0)
+			await OfflineTrialPersistence.markTrialsSynced(acceptedTrialClientIds);
 		if (variables.length > 0) {
 			if (variablesAckLegacy) {
 				await OfflineResponsePersistence.markVariablesSynced(session.id);
@@ -481,6 +519,9 @@ export class FilloutUploadSync {
 		const rejectedEventClientIds = events
 			.filter((e) => !acceptedIds.has(e.clientId))
 			.map((e) => e.clientId);
+		const rejectedTrialClientIds = trials
+			.filter((t) => !acceptedIds.has(t.clientId))
+			.map((t) => t.clientId);
 		const ackedVarClientIds = variablesAckLegacy
 			? variables.map((v) => v.clientId).filter((c): c is string => !!c)
 			: (acceptedVarNames ?? [])
@@ -488,7 +529,11 @@ export class FilloutUploadSync {
 					.filter((c): c is string => !!c);
 
 		await SyncLedger.markAcked([...acceptedIds, ...ackedVarClientIds]);
-		const rejectedClientIds = [...rejectedResponseClientIds, ...rejectedEventClientIds];
+		const rejectedClientIds = [
+			...rejectedResponseClientIds,
+			...rejectedEventClientIds,
+			...rejectedTrialClientIds,
+		];
 		if (rejectedClientIds.length > 0) {
 			await SyncLedger.markAttempt(rejectedClientIds, 'server did not acknowledge record');
 			await OfflineResponsePersistence.recordSyncFailure(
@@ -501,10 +546,17 @@ export class FilloutUploadSync {
 				rejectedEventClientIds,
 				'server did not acknowledge record'
 			);
+			await OfflineTrialPersistence.recordSyncFailure(
+				rejectedTrialClientIds,
+				'server did not acknowledge record'
+			);
 		}
 
 		const rejected =
-			responses.length - responseIds.length + (events.length - eventIds.length);
+			responses.length -
+			responseIds.length +
+			(events.length - eventIds.length) +
+			(trials.length - acceptedTrialClientIds.length);
 
 		// Only claim the session fully drained when nothing was left unacked. A
 		// partial drain leaves the session-synced flag at 0 so the next pass revisits
@@ -527,6 +579,7 @@ export class FilloutUploadSync {
 			responsesSynced,
 			eventsSynced,
 			variablesSynced,
+			trialsSynced,
 			chunks: numChunks,
 			accepted: acceptedIds.size,
 			rejected,
@@ -541,10 +594,11 @@ export class FilloutUploadSync {
 	 * dead-letters with a visible alert rather than retrying forever in silence.
 	 */
 	private async registerSessionFailure(sessionId: string, error: string): Promise<void> {
-		const [responses, events, variables] = await Promise.all([
+		const [responses, events, variables, trialClientIds] = await Promise.all([
 			db.filloutResponses.where('[sessionId+synced]').equals([sessionId, 0]).toArray(),
 			db.filloutEvents.where('[sessionId+synced]').equals([sessionId, 0]).toArray(),
 			db.filloutVariables.where('sessionId').equals(sessionId).filter((v) => v.synced === 0).toArray(),
+			OfflineTrialPersistence.getUnsyncedTrialClientIds(sessionId),
 		]);
 		const responseClientIds = responses.map((r) => r.clientId);
 		const eventClientIds = events.map((e) => e.clientId);
@@ -553,11 +607,12 @@ export class FilloutUploadSync {
 			.filter((c): c is string => !!c);
 
 		await SyncLedger.markAttempt(
-			[...responseClientIds, ...eventClientIds, ...variableClientIds],
+			[...responseClientIds, ...eventClientIds, ...variableClientIds, ...trialClientIds],
 			error
 		);
 		await OfflineResponsePersistence.recordSyncFailure('response', responseClientIds, error);
 		await OfflineResponsePersistence.recordSyncFailure('event', eventClientIds, error);
+		await OfflineTrialPersistence.recordSyncFailure(trialClientIds, error);
 	}
 
 	/**
@@ -573,12 +628,18 @@ export class FilloutUploadSync {
 	 * fresh unsynced rows pull the session back into the drain via the orphan path.
 	 */
 	private async escalateSessionIfFullyDead(session: FilloutSession): Promise<void> {
-		const [responses, events, variables] = await Promise.all([
+		const [responses, events, variables, trials] = await Promise.all([
 			OfflineResponsePersistence.getUnsyncedResponses(session.id),
 			OfflineResponsePersistence.getUnsyncedEvents(session.id),
 			OfflineResponsePersistence.getUnsyncedVariables(session.id),
+			OfflineTrialPersistence.getUnsyncedTrials(session.id),
 		]);
-		if (responses.length === 0 && events.length === 0 && variables.length === 0) {
+		if (
+			responses.length === 0 &&
+			events.length === 0 &&
+			variables.length === 0 &&
+			trials.length === 0
+		) {
 			await OfflineSessionService.markSynced(session.id);
 		}
 	}

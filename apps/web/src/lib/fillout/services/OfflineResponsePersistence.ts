@@ -1,7 +1,8 @@
-import { db, type FilloutResponse, type FilloutEvent, type FilloutVariable } from '$lib/services/db/indexeddb';
+import { db, type FilloutResponse, type FilloutEvent, type FilloutVariable, type FilloutTrial } from '$lib/services/db/indexeddb';
 import { FilloutCrypto } from './crypto/FilloutCrypto';
 import { computeChecksum, verifyChecksum } from './integrity/checksum';
 import { SyncLedger } from './integrity/SyncLedger';
+import { OfflineTrialPersistence } from './OfflineTrialPersistence';
 
 /**
  * Per-response timing provenance (contract C-PROVENANCE). Captured alongside
@@ -260,6 +261,7 @@ export class OfflineResponsePersistence {
 		responses: FilloutResponse[];
 		events: FilloutEvent[];
 		variables: FilloutVariable[];
+		trials: FilloutTrial[];
 		deadletters: Awaited<ReturnType<typeof SyncLedger.deadletters>>;
 	}> {
 		const [responses, events, variables] = await Promise.all([
@@ -274,6 +276,8 @@ export class OfflineResponsePersistence {
 			responses: decRes,
 			events,
 			variables: decVars,
+			// RT-1b: per-trial rows are recoverable through the same escape hatch.
+			trials: await OfflineTrialPersistence.exportUnsyncedTrials(),
 			deadletters: await SyncLedger.deadletters(),
 		};
 	}
@@ -352,6 +356,8 @@ export class OfflineResponsePersistence {
 		for (const r of responses) if (!dead.has(r.clientId)) ids.add(r.sessionId);
 		for (const e of events) if (!dead.has(e.clientId)) ids.add(e.sessionId);
 		for (const v of variables) if (!v.clientId || !dead.has(v.clientId)) ids.add(v.sessionId);
+		// RT-1b: a session whose only queued data is per-trial rows must still drain.
+		for (const id of await OfflineTrialPersistence.getSessionIdsWithUnsyncedTrials()) ids.add(id);
 		return [...ids];
 	}
 

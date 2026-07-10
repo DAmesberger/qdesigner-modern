@@ -13,6 +13,7 @@ import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
 import { computeDerivedReactionMetrics, aggregateReactionProvenance } from './model/reaction-scoring';
 import type { ReactionTaskType } from './model/reaction-schema';
 import { compactPhaseTimeline, type CompactPhaseMark } from './model/trialRow';
+import { buildRuntimeTrialEvent } from './model/trialEvent';
 
 /**
  * Recursively rewrite every media reference in a freshly-normalized (mutable)
@@ -316,7 +317,7 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
         ? trialResult.response.value
         : null;
 
-    return {
+    const response: TrialResponse = {
       trialId: planned.trial.id,
       trialNumber,
       isPractice: planned.metadata.isPractice,
@@ -365,6 +366,15 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       invalidReason: trialResult.invalidReason ?? null,
       counterbalanceCell,
     };
+
+    // RT-1b: persist this trial IMMEDIATELY (fire-and-forget on the fillout side).
+    // The question-level block summary still carries the full `allResponses` array
+    // unchanged (dual-write) — this is the first-class per-trial record.
+    context.onTrialComplete?.(
+      buildRuntimeTrialEvent(context.question.id, response, scheduledPhases)
+    );
+
+    return response;
   }
 
   public teardown(): void {

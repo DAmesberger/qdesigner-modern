@@ -33,6 +33,8 @@ beforeEach(async () => {
 	await db.filloutEvents.clear();
 	await db.filloutVariables.clear();
 	await db.filloutSyncLedger.clear();
+	// RT-1b: the drain also collects sessions from unsynced trial rows.
+	await db.filloutTrials.clear();
 	apiMock.sessions.get.mockReset();
 	apiMock.sessions.create.mockReset();
 	apiMock.sessions.sync.mockReset();

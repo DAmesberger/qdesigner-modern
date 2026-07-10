@@ -32,6 +32,10 @@ beforeEach(async () => {
 	await db.filloutResponses.clear();
 	await db.filloutEvents.clear();
 	await db.filloutVariables.clear();
+	// RT-1b: clear the trials + ledger tables the drain also collects from, so a
+	// prior file's rows can't leak into this suite via the shared fake-indexeddb.
+	await db.filloutTrials.clear();
+	await db.filloutSyncLedger.clear();
 	apiMock.sessions.get.mockReset();
 	apiMock.sessions.create.mockReset();
 	apiMock.sessions.sync.mockReset();

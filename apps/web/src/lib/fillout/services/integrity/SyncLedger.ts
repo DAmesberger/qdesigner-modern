@@ -253,6 +253,9 @@ export class SyncLedger {
 			await db.filloutResponses.where('clientId').equals(row.clientId).modify({ synced: 0 });
 		} else if (row.kind === 'event') {
 			await db.filloutEvents.where('clientId').equals(row.clientId).modify({ synced: 0 });
+		} else if (row.kind === 'trial') {
+			// Trials are keyed by clientId (their PK), so the equality match is direct.
+			await db.filloutTrials.where('clientId').equals(row.clientId).modify({ synced: 0 });
 		} else {
 			// Variables aren't indexed by clientId — scope by session then match.
 			await db.filloutVariables

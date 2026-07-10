@@ -13,6 +13,7 @@ import {
   compactPhaseTimeline,
   type CompactPhaseMark,
 } from '$lib/modules/questions/reaction-time/model/trialRow';
+import { buildRuntimeTrialEvent } from '$lib/modules/questions/reaction-time/model/trialEvent';
 import {
   compileReactionExperimentPlan,
   normalizeReactionExperimentConfig,
@@ -169,7 +170,7 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
       const key =
         result.response && typeof result.response.value === 'string' ? result.response.value : null;
 
-      responses.push({
+      const response: TrialResponse = {
         trialId: planned.trial.id,
         trialNumber: index + 1,
         isPractice: planned.metadata.isPractice,
@@ -215,7 +216,15 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
         visibilityInvalidated: result.provenance.invalidated === 'visibility',
         invalid: result.invalid ?? false,
         invalidReason: result.invalidReason ?? null,
-      });
+      };
+
+      responses.push(response);
+
+      // RT-1b: persist each trial the instant it completes (fire-and-forget on the
+      // fillout side). The `value.responses` block summary below stays unchanged.
+      context.onTrialComplete?.(
+        buildRuntimeTrialEvent(context.question.id, response, planned.metadata.scheduledPhases)
+      );
     }
 
     const testResponses = responses.filter((response) => !response.isPractice);

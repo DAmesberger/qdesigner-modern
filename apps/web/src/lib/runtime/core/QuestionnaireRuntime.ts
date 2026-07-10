@@ -16,6 +16,7 @@ import type {
   IQuestionRuntime,
   QuestionRuntimeContext,
   QuestionRuntimeResult,
+  RuntimeTrialEvent,
 } from './question-runtime';
 import { VariableEngine } from '@qdesigner/scripting-engine';
 import { WebGLRenderer, WebGLUnavailableError } from '$lib/renderer';
@@ -180,6 +181,12 @@ export interface RuntimeConfig {
    * answer boundary (E-FLOW-3, reusing P1-T1's write path).
    */
   onResumeStateCaptured?: (state: ResumeState) => void;
+  /**
+   * Fired by a v1 reaction runtime for each completed trial (RT-1b). Threaded into
+   * the {@link QuestionRuntimeContext} so the fillout layer can persist per-trial
+   * rows offline-first. Absent in the designer preview (no persistence side).
+   */
+  onTrialComplete?: (trial: RuntimeTrialEvent) => void;
 }
 
 export interface QuestionPresentedEvent {
@@ -1944,6 +1951,8 @@ export class QuestionnaireRuntime {
       // E-REACT-6: seed per-session counterbalancing + within-block shuffles.
       sessionId: this.session.id,
       participantNumber: this.config.participantNumber,
+      // RT-1b: forward the per-trial persistence hook to the reaction runtimes.
+      onTrialComplete: this.config.onTrialComplete,
     };
   }
 
