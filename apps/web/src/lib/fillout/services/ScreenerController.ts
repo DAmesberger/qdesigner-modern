@@ -12,6 +12,12 @@ export interface ScreenOutResult {
 	eligible: boolean;
 	/** The rule that screened the participant out (only when `eligible === false`). */
 	rule?: ScreenerRule;
+	/**
+	 * Id of the rule that screened the participant out. Set directly on the
+	 * flow-`terminate` screen-out path (whose rule is a {@link FlowControl}, not a
+	 * {@link ScreenerRule}); otherwise derived from `rule.id`.
+	 */
+	ruleId?: string;
 	/** Machine-readable reason, recorded to `session.metadata.screenOut.reason`. */
 	reason?: string;
 	/** Participant-facing message. */
@@ -102,12 +108,24 @@ export class ScreenerController {
 	/**
 	 * Build the structured `metadata.screenOut` blob recorded onto the session
 	 * when a participant is screened out, so ineligibility is queryable server-side.
+	 * The participant-facing message + redirect ride along so the completion view
+	 * can render the screen from persisted metadata (e.g. on a resumed session).
 	 */
-	static metadataFor(result: ScreenOutResult): Record<string, unknown> {
+	static metadataFor(result: ScreenOutResult): {
+		screenOut: {
+			reason: string;
+			ruleId: string | null;
+			message?: string;
+			redirectUrl?: string;
+			at: string;
+		};
+	} {
 		return {
 			screenOut: {
 				reason: result.reason ?? 'ineligible',
-				ruleId: result.rule?.id ?? null,
+				ruleId: result.ruleId ?? result.rule?.id ?? null,
+				...(result.message ? { message: result.message } : {}),
+				...(result.redirectUrl ? { redirectUrl: result.redirectUrl } : {}),
 				at: new Date().toISOString(),
 			},
 		};

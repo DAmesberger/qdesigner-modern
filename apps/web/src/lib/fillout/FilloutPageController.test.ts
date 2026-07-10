@@ -200,6 +200,62 @@ describe('FilloutPageController', () => {
     expect(controller.completedSession).toEqual(completed);
   });
 
+  it('routes an eligibility screen-out to the screened-out screen, not completion (F-20)', async () => {
+    const data = makeData();
+    const mocks = makeMocks();
+    const controller = makeController(data, mocks);
+    controller.startSyncEngine();
+    controller.session = { id: 'sess-so', questionnaire_id: 'q1', status: 'active' };
+
+    // The runtime stamps metadata.screenOut when a screen-out terminate/screener rule fires.
+    const completed = {
+      id: 'sess-so',
+      variables: [],
+      metadata: {
+        screenOut: {
+          reason: 'ineligible',
+          ruleId: 'f-screenout',
+          message: 'You do not qualify for this study.',
+          redirectUrl: 'https://panel.example.com/screenout',
+          at: new Date().toISOString(),
+        },
+      },
+    } as unknown as QuestionnaireSession;
+
+    await controller.handleComplete(completed);
+
+    expect(controller.screen).toBe('screened-out');
+    expect(controller.screenOut).toEqual({
+      eligible: false,
+      ruleId: 'f-screenout',
+      reason: 'ineligible',
+      message: 'You do not qualify for this study.',
+      redirectUrl: 'https://panel.example.com/screenout',
+    });
+    // Still a terminal session locally, but never a normal completion screen.
+    expect(mocks.offlineSession.completeSession).toHaveBeenCalledWith('sess-so');
+    expect(controller.completedSession).toEqual(completed);
+  });
+
+  it('routes a natural completion (no screenOut metadata) to the completion screen (F-20)', async () => {
+    const data = makeData();
+    const mocks = makeMocks();
+    const controller = makeController(data, mocks);
+    controller.startSyncEngine();
+    controller.session = { id: 'sess-done', questionnaire_id: 'q1', status: 'active' };
+
+    const completed = {
+      id: 'sess-done',
+      variables: [],
+      metadata: { qualityReport: {} },
+    } as unknown as QuestionnaireSession;
+
+    await controller.handleComplete(completed);
+
+    expect(controller.screen).toBe('complete');
+    expect(controller.screenOut).toBeNull();
+  });
+
   describe('participant progress (F-7)', () => {
     it('reports current page of total pages for a linear flow', () => {
       const data = makeData({ pages: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] });

@@ -37,6 +37,10 @@
     source: '',
     priority: undefined as number | undefined,
     iterations: undefined as number | undefined,
+    // Screen-out (F-20): filling any of these turns a `terminate` rule into an
+    // eligibility screen-out (distinct screened-out screen) instead of a plain end.
+    screenOutMessage: '',
+    screenOutRedirectUrl: '',
   });
 
   // Get available targets (pages and questions)
@@ -86,6 +90,12 @@
       source: newFlow.source || undefined,
       priority: newFlow.priority,
       iterations: newFlow.type === 'loop' ? newFlow.iterations : undefined,
+      ...(newFlow.type === 'terminate'
+        ? {
+            screenOutMessage: newFlow.screenOutMessage.trim() || undefined,
+            screenOutRedirectUrl: newFlow.screenOutRedirectUrl.trim() || undefined,
+          }
+        : {}),
     };
 
     designerStore.addFlowControl(flow);
@@ -143,6 +153,8 @@
       source: '',
       priority: undefined,
       iterations: undefined,
+      screenOutMessage: '',
+      screenOutRedirectUrl: '',
     };
   }
 
@@ -319,6 +331,8 @@
                     source: flow.source || '',
                     priority: flow.priority,
                     iterations: flow.iterations,
+                    screenOutMessage: flow.screenOutMessage || '',
+                    screenOutRedirectUrl: flow.screenOutRedirectUrl || '',
                   };
                   showAddFlow = true;
                 }}
@@ -472,6 +486,53 @@
               />
             </div>
           {/if}
+
+          <!-- Screen-out (for terminate, F-20) -->
+          {#if newFlow.type === 'terminate'}
+            <div class="rounded-md border border-border bg-muted/40 p-3 space-y-3">
+              <p class="text-xs text-muted-foreground">
+                Fill either field to turn this into an <strong>eligibility screen-out</strong>:
+                the participant sees a distinct "not eligible" screen (no completion code)
+                instead of the thank-you page. Leave both blank for a plain early end.
+              </p>
+              <div>
+                <label
+                  for="flow-screenout-message"
+                  class="text-sm font-medium text-foreground mb-2 block"
+                >
+                  Screen-out message
+                </label>
+                <textarea
+                  id="flow-screenout-message"
+                  bind:value={newFlow.screenOutMessage}
+                  rows="2"
+                  placeholder="e.g., Thank you for your interest, but you do not qualify for this study."
+                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary text-sm"
+                  data-testid="flow-screenout-message-input"
+                ></textarea>
+              </div>
+              <div>
+                <label
+                  for="flow-screenout-redirect"
+                  class="text-sm font-medium text-foreground mb-2 block"
+                >
+                  Redirect URL (optional)
+                </label>
+                <input
+                  id="flow-screenout-redirect"
+                  type="url"
+                  bind:value={newFlow.screenOutRedirectUrl}
+                  placeholder="https://panel.example.com/screenout"
+                  class="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-primary text-sm"
+                  data-testid="flow-screenout-redirect-input"
+                />
+                <p class="text-xs text-muted-foreground mt-1">
+                  Sends screened-out participants back to your panel (e.g. Prolific/SONA
+                  screen-out link).
+                </p>
+              </div>
+            </div>
+          {/if}
   </div>
 
   {#snippet footer()}
@@ -496,6 +557,14 @@
             source: newFlow.source || undefined,
             priority: newFlow.priority,
             iterations: newFlow.iterations,
+            screenOutMessage:
+              newFlow.type === 'terminate'
+                ? newFlow.screenOutMessage.trim() || undefined
+                : undefined,
+            screenOutRedirectUrl:
+              newFlow.type === 'terminate'
+                ? newFlow.screenOutRedirectUrl.trim() || undefined
+                : undefined,
           });
           editingFlow = null;
           showAddFlow = false;

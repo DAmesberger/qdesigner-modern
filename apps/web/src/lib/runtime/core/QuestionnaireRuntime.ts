@@ -31,6 +31,7 @@ import { iterationVarPrefix, DEFAULT_LOOP_VARIABLE_NAME } from './LoopExpansion'
 import { computeReactionTimeMs } from './reactionTiming';
 import { resolveFlowTargetPageIndex } from './flowTarget';
 import { orderFlowCandidates } from './FlowGraph';
+import { ScreenerController, type ScreenOutResult } from '$lib/fillout/services/ScreenerController';
 import { ScriptExecutor } from './ScriptExecutor';
 import { ConditionAssigner, getBlockOrder } from '../experimental';
 import { QualityReport } from '../quality/QualityReport';
@@ -204,6 +205,11 @@ export class QuestionnaireRuntime {
   private readonly blockRandomizer: BlockRandomizer;
   private readonly scriptExecutor: ScriptExecutor;
   private readonly qualityReport: QualityReport;
+  // Structured eligibility screener (E-FLOW-7 / F-20). Evaluates `settings.screeners`
+  // against live variables at each page boundary; an ineligible verdict screens the
+  // participant out into the distinct screened-out completion state. Also the home of
+  // the shared ScreenOutResult vocabulary that the flow-`terminate` screen-out reuses.
+  private readonly screener: ScreenerController;
 
   private currentPageIndex = 0;
   private currentItemIndex = 0;
@@ -299,6 +305,10 @@ export class QuestionnaireRuntime {
       config.questionnaire.settings.randomizationSeed || config.questionnaire.id
     );
     this.scriptExecutor = new ScriptExecutor();
+    this.screener = new ScreenerController(
+      config.questionnaire.settings?.screeners,
+      this.variableEngine
+    );
 
     // Unified timer subsystem (E-FLOW-5). Question-scope ticks are surfaced to the
     // overlay so participants see a live countdown; page/survey ticks are internal.
@@ -2493,14 +2503,34 @@ export class QuestionnaireRuntime {
   }
 
   private async handleFlowControl(): Promise<void> {
-    const matchingRule = this.findMatchingFlowRule();
-
     const fromPageId = this.currentPage?.id;
+
+    // Structured eligibility screener (E-FLOW-7 / F-20): evaluate the screener attached
+    // to the page we are leaving BEFORE any flow rule. A screen-out ends the session in
+    // the distinct screened-out state so an ineligible respondent never sees the
+    // thank-you screen.
+    if (fromPageId && this.screener.hasScreeners) {
+      const verdict = this.screener.evaluateAtPage(fromPageId);
+      if (!verdict.eligible) {
+        this.completeScreenedOut(verdict);
+        return;
+      }
+    }
+
+    const matchingRule = this.findMatchingFlowRule();
 
     if (matchingRule) {
       if (matchingRule.type === 'terminate') {
         this.recordFlowPath(fromPageId, matchingRule, 'terminate');
-        this.complete();
+        // A `terminate` rule carrying screen-out fields (F-20) is an eligibility
+        // screen-out, not a plain early completion — route it to the screened-out
+        // state. A bare terminate (no screen-out fields) still completes normally.
+        const screenOut = this.screenOutForTerminate(matchingRule);
+        if (screenOut) {
+          this.completeScreenedOut(screenOut);
+        } else {
+          this.complete();
+        }
         return;
       }
 
@@ -2697,7 +2727,39 @@ export class QuestionnaireRuntime {
     }
   }
 
-  private complete(status: 'completed' | 'timed_out' = 'completed'): void {
+  /**
+   * Build a screen-out result from a `terminate` flow rule (F-20) when the author
+   * configured any screen-out field, else `undefined` (a plain early-completion
+   * terminate). The reason falls back to a machine-readable default so a screen-out
+   * flagged by message/redirect alone is still recorded as one.
+   */
+  private screenOutForTerminate(rule: FlowControl): ScreenOutResult | undefined {
+    const reason = rule.screenOutReason?.trim();
+    const message = rule.screenOutMessage?.trim();
+    const redirectUrl = rule.screenOutRedirectUrl?.trim();
+    if (!reason && !message && !redirectUrl) return undefined;
+    return {
+      eligible: false,
+      ruleId: rule.id,
+      reason: reason || 'ineligible',
+      message: message || undefined,
+      redirectUrl: redirectUrl || undefined,
+    };
+  }
+
+  /**
+   * End the session as an eligibility SCREEN-OUT (F-20) rather than a normal
+   * completion: the structured outcome is stamped onto `session.metadata.screenOut`
+   * (via {@link complete}) so the fillout page routes to the screened-out screen.
+   */
+  private completeScreenedOut(result: ScreenOutResult): void {
+    this.complete('completed', result);
+  }
+
+  private complete(
+    status: 'completed' | 'timed_out' = 'completed',
+    screenOut?: ScreenOutResult
+  ): void {
     if (!this.isRunning) return;
 
     this.isRunning = false;
@@ -2717,6 +2779,12 @@ export class QuestionnaireRuntime {
       this.session.metadata = {};
     }
     this.session.metadata.qualityReport = this.qualityReport.generate() as unknown as Record<string, unknown>;
+
+    // Eligibility screen-out (F-20): the presence of this blob is what distinguishes a
+    // screened-out session from a natural completion downstream (fillout page + analytics).
+    if (screenOut) {
+      this.session.metadata.screenOut = ScreenerController.metadataFor(screenOut).screenOut;
+    }
 
     // Compute subscale / normative scores (E-FEEDBACK-1) BEFORE the snapshot so the
     // namespaced `score.<scaleId>` values are captured into session.variables and persisted.

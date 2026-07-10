@@ -78,6 +78,21 @@ export interface SessionMetadata {
   computedVariables?: Record<string, unknown>;
   aggregations?: Record<string, unknown>;
   qualityReport?: Record<string, unknown>;
+  /**
+   * Present only when the session ended via an eligibility screen-out (F-20) —
+   * either a `terminate` flow rule carrying screen-out fields or a structured
+   * {@link ScreenerRule}. Its presence is what distinguishes a screened-out
+   * session from a natural completion, so the runtime writes it and the fillout
+   * page routes to the screened-out screen (never the thank-you). Queryable
+   * server-side for ineligibility analytics.
+   */
+  screenOut?: {
+    reason: string;
+    ruleId: string | null;
+    message?: string;
+    redirectUrl?: string;
+    at: string;
+  };
 }
 
 export interface ResponseMetadata {

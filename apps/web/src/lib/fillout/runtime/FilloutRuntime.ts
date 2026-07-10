@@ -376,6 +376,9 @@ export class FilloutRuntime {
 			await OfflineSessionService.mergeMetadata(session.id, {
 				qualityReport: session.metadata?.qualityReport,
 				custom: session.metadata?.custom,
+				// Eligibility screen-out (F-20): persist so ineligibility is queryable
+				// server-side and survives a resume of the completed session.
+				screenOut: session.metadata?.screenOut,
 			});
 
 			// Persist completion

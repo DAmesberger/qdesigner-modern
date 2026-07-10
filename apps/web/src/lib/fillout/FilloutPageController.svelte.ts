@@ -22,6 +22,7 @@ import { SeriesEnrollmentService } from '$lib/fillout/services/SeriesEnrollmentS
 import { SyncLedger } from '$lib/fillout/services/integrity/SyncLedger';
 import { QuotaService } from '$lib/fillout/services/QuotaService';
 import { FraudDetectionService } from '$lib/fillout/services/FraudDetectionService';
+import type { ScreenOutResult } from '$lib/fillout/services/ScreenerController';
 import { api } from '$lib/services/api';
 import { db, filloutDefinitionKey, type FilloutServerVariable } from '$lib/services/db/indexeddb';
 import { collectServerVariables, declHash } from '@qdesigner/questionnaire-core';
@@ -137,8 +138,14 @@ const SERVER_VAR_DEFAULT_STALE_MS = 30 * 24 * 60 * 60 * 1000;
  */
 export class FilloutPageController {
   // --- Screen state machine ---------------------------------------------------
-  screen = $state<'welcome' | 'consent' | 'runtime' | 'complete' | 'over-quota'>('welcome');
+  screen = $state<
+    'welcome' | 'consent' | 'runtime' | 'complete' | 'over-quota' | 'screened-out'
+  >('welcome');
   overQuotaMessage = $state('');
+  // Structured eligibility screen-out outcome (F-20). Set when a `terminate` flow
+  // rule or a screener rule ends the session as ineligible; drives the dedicated
+  // screened-out screen (honest copy, no completion code) instead of the thank-you.
+  screenOut = $state<ScreenOutResult | null>(null);
   loading = $state(false);
   loadingMessage = $state('Loading questionnaire...');
   loadingProgress = $state(0);
@@ -412,7 +419,16 @@ export class FilloutPageController {
         this.session = data.existingSession;
         sessionStorage.setItem('qd_api_session_id', this.session.id);
       }
-      this.screen = 'complete';
+      // A resumed session that ended as a screen-out (F-20) must reopen on the
+      // screened-out screen, not the thank-you. The screen-out blob was persisted to
+      // the session metadata at completion time.
+      const resumedScreenOut = this.extractScreenOut(data.existingSession?.metadata);
+      if (resumedScreenOut) {
+        this.screenOut = resumedScreenOut;
+        this.screen = 'screened-out';
+      } else {
+        this.screen = 'complete';
+      }
       return;
     }
 
@@ -897,10 +913,49 @@ export class FilloutPageController {
    * completion screen, mark fraud-duplicate + offline session complete, trigger sync,
    * and opportunistically GC now that a session finished.
    */
+  /**
+   * Read a persisted `metadata.screenOut` blob (from a resumed completed session's
+   * loosely-typed metadata bag) back into a {@link ScreenOutResult}, or null when the
+   * session was a normal completion. F-20.
+   */
+  private extractScreenOut(metadata: unknown): ScreenOutResult | null {
+    const raw =
+      metadata && typeof metadata === 'object'
+        ? (metadata as { screenOut?: Record<string, unknown> }).screenOut
+        : undefined;
+    if (!raw || typeof raw !== 'object') return null;
+    const reason = typeof raw.reason === 'string' ? raw.reason : 'ineligible';
+    return {
+      eligible: false,
+      ruleId: typeof raw.ruleId === 'string' ? raw.ruleId : undefined,
+      reason,
+      message: typeof raw.message === 'string' ? raw.message : undefined,
+      redirectUrl: typeof raw.redirectUrl === 'string' ? raw.redirectUrl : undefined,
+    };
+  }
+
   async handleComplete(completed: QuestionnaireSession): Promise<void> {
     this.completedSession = completed;
-    this.screen = 'complete';
     this.savedLocally = true;
+
+    // Eligibility screen-out (F-20): the runtime stamps `metadata.screenOut` when the
+    // session ended via a screen-out `terminate` rule or a screener rule. Its presence
+    // routes to the dedicated screened-out screen — an ineligible respondent must never
+    // see the thank-you (with a completion code they might expect payment for).
+    const screenOutMeta = completed.metadata?.screenOut;
+    const screenedOut = Boolean(screenOutMeta);
+    if (screenOutMeta) {
+      this.screenOut = {
+        eligible: false,
+        ruleId: screenOutMeta.ruleId ?? undefined,
+        reason: screenOutMeta.reason,
+        message: screenOutMeta.message,
+        redirectUrl: screenOutMeta.redirectUrl,
+      };
+      this.screen = 'screened-out';
+    } else {
+      this.screen = 'complete';
+    }
 
     // Mark completed for fraud prevention duplicate detection
     this.services.fraud.markCompleted(this.data.questionnaire.id);
@@ -911,8 +966,9 @@ export class FilloutPageController {
     // E-FLOW-2: post completion back so the series advances the enrollment and
     // schedules the next wave. Best-effort — the wave's answers are already
     // persisted via the offline-first write path; a failed callback only delays
-    // the next reminder, so it never blocks the completion screen.
-    if (this.data.seriesToken) {
+    // the next reminder, so it never blocks the completion screen. A screen-out is
+    // NOT a wave completion, so it never advances the series.
+    if (this.data.seriesToken && !screenedOut) {
       void SeriesEnrollmentService.complete(
         this.data.seriesToken,
         this.session.id,

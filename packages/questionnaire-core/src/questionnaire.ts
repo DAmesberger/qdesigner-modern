@@ -310,6 +310,18 @@ export interface FlowControl {
    * order. Source-scoped rules always precede global (unset-source) rules.
    */
   priority?: number;
+  /**
+   * Screen-out configuration for a `terminate` rule (F-20). When ANY of these is
+   * set, the terminate is treated as an ELIGIBILITY screen-out — the participant
+   * is routed to the distinct screened-out completion state (honest "not eligible"
+   * copy, no completion code) carrying this reason/redirect — rather than a plain
+   * early completion (which still shows the normal thank-you). All three are
+   * ignored for non-`terminate` rule types. Field names mirror {@link ScreenerRule}
+   * so both screen-out vehicles produce the same structured outcome.
+   */
+  screenOutReason?: string;
+  screenOutMessage?: string;
+  screenOutRedirectUrl?: string;
 }
 
 export interface ExperimentalCondition {

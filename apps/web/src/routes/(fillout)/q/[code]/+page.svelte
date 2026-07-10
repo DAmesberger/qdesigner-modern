@@ -7,6 +7,7 @@
   import WelcomeScreen from '$lib/fillout/components/WelcomeScreen.svelte';
   import ConsentScreen from '$lib/fillout/components/ConsentScreen.svelte';
   import CompletionScreen from '$lib/fillout/components/CompletionScreen.svelte';
+  import ScreenedOutScreen from '$lib/fillout/components/ScreenedOutScreen.svelte';
   import SyncStatusPanel from '$lib/fillout/components/SyncStatusPanel.svelte';
   import ShareDeviceExit from '$lib/fillout/components/ShareDeviceExit.svelte';
   import { m } from '$lib/paraglide/messages';
@@ -583,6 +584,8 @@
         onAction={() => goto('/')}
       />
     </div>
+  {:else if controller.screen === 'screened-out' && controller.screenOut}
+    <ScreenedOutScreen result={controller.screenOut} onClose={() => goto('/')} />
   {:else if controller.screen === 'complete'}
     <CompletionScreen
       session={controller.completedSession}
