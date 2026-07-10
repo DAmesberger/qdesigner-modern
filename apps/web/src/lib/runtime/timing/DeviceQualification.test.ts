@@ -22,6 +22,33 @@ describe('DeviceQualification', () => {
     expect(typeof report.capabilities.crossOriginIsolated).toBe('boolean');
   });
 
+  it('discloses WebHID hardware-input availability (RT-4)', async () => {
+    const dq = new DeviceQualification();
+    const report = await dq.qualify();
+
+    expect(typeof report.capabilities.webHid).toBe('boolean');
+    expect(typeof report.capabilities.webHidDeviceGranted).toBe('boolean');
+  });
+
+  it('reports webHidDeviceGranted true when a device was already permitted (RT-4)', async () => {
+    const original = (navigator as { hid?: unknown }).hid;
+    Object.defineProperty(navigator, 'hid', {
+      value: { getDevices: async () => [{ productName: 'Box' }] },
+      configurable: true,
+    });
+    try {
+      const report = await new DeviceQualification().qualify();
+      expect(report.capabilities.webHid).toBe(true);
+      expect(report.capabilities.webHidDeviceGranted).toBe(true);
+    } finally {
+      if (original === undefined) {
+        delete (navigator as { hid?: unknown }).hid;
+      } else {
+        Object.defineProperty(navigator, 'hid', { value: original, configurable: true });
+      }
+    }
+  });
+
   it('calibration data is included in report', async () => {
     const dq = new DeviceQualification();
     const report = await dq.qualify();

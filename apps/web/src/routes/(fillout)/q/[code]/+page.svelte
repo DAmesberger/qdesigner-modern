@@ -21,6 +21,7 @@
     getLocaleLabel,
   } from '$lib/shared';
   import DeviceQualificationBanner from '$lib/runtime/timing/components/DeviceQualificationBanner.svelte';
+  import { definitionNeedsHid } from '$lib/runtime/reaction';
   import {
     FilloutPageController,
     type FilloutRuntimeInputs,
@@ -157,6 +158,10 @@
   const hasReactionQuestion = $derived(
     questionList.some((q) => REACTION_QUESTION_TYPES.has(q?.type))
   );
+  // RT-4 (ADR 0024): does any question bind a WebHID response? Drives the optional
+  // "connect response device" affordance on the welcome screen. Scans the raw
+  // (unlocalized) definition so translation can't hide a binding.
+  const needsResponseDevice = $derived(definitionNeedsHid(rawDefinition?.questions));
   // The reaction-experiment paradigm (IAT / Stroop / Flanker / …) is the one that
   // "declares it requires precision timing": its scientific validity hinges on
   // sub-frame onset accuracy, so a red grade there is a hard warning.
@@ -489,6 +494,7 @@
       offlineDone={controller.offlinePrepDone}
       offlineTotal={controller.offlinePrepTotal}
       onPrepareOffline={() => controller.prepareOffline()}
+      showResponseDeviceConnect={needsResponseDevice}
     />
   {:else if controller.screen === 'consent'}
     <ConsentScreen

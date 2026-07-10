@@ -326,8 +326,18 @@ export type TimingMethod =
  */
 export type ReactionOffsetMethod = 'raf' | 'timeout' | 'none';
 
+/**
+ * The device family stamped on a captured/anticipatory response (ADR 0024). The
+ * legacy `ReactionResponseMode` set plus `'hid'` — HID has no legacy authoring
+ * mode to project onto, so it is the one source that appears here verbatim
+ * rather than mapped (`pointer` still surfaces as the legacy `'mouse'`). The
+ * richer `responseSource: ResponseSourceKind` remains the canonical winning
+ * source family; this stays the coarse legacy device column for persistence.
+ */
+export type ReactionResponseDevice = ReactionResponseMode | 'hid';
+
 export interface ReactionResponseCapture {
-  source: ReactionResponseMode;
+  source: ReactionResponseDevice;
   value: string | { x: number; y: number };
   timestamp: number;
   /** Reported reaction time, clamped at 0 (`max(0, timestamp - onset)`). */
@@ -344,7 +354,7 @@ export interface ReactionResponseCapture {
    * The device family that produced the response. Usually equal to `source`;
    * threaded explicitly so the persistence layer can record it verbatim.
    */
-  responseDevice?: ReactionResponseMode;
+  responseDevice?: ReactionResponseDevice;
   /**
    * Keyboard hold/release paradigms (`captureKeyUp`): the high-resolution
    * timestamp of the key-UP that finalized the response.
@@ -397,7 +407,7 @@ export interface ReactionOnsetInfo {
 
 /** Info surfaced through the `onFalseStart` hook for anticipatory responses. */
 export interface ReactionFalseStartInfo {
-  source: ReactionResponseMode;
+  source: ReactionResponseDevice;
   value: string | { x: number; y: number };
   timestamp: number;
   /** ResponseSet (ADR 0024): option the anticipatory response resolved to, if any. */

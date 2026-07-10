@@ -77,6 +77,13 @@
     return (idCounts.get(id) ?? 0) > 1;
   }
 
+  // RT-4: surface the connect-at-start hint once when any option binds a HID
+  // button, so the author knows participants must pair the box on the welcome
+  // screen (and that it's Chromium-only, falling back to keyboard/touch).
+  const hasHidBinding = $derived(
+    (set?.options ?? []).some((option) => option.bindings.some((b) => b.source === 'hid'))
+  );
+
   // ---- mutation primitives ----
 
   // Write through the bindable `question` prop (the F-49 lesson: never a $derived
@@ -459,13 +466,26 @@
                     />
                   </label>
                 {:else if binding.source === 'hid'}
-                  <span class="text-xs text-muted-foreground italic">
-                    available with hardware support (soon)
-                  </span>
-                  <input
-                    type="number" class="input num" disabled aria-label="HID button index"
-                    value={binding.button}
-                  />
+                  <label class="flex items-center gap-1 text-xs">
+                    <span>button</span>
+                    <input
+                      type="number" min="0" max="255" step="1" class="input num"
+                      id={`responseset-option-${i}-binding-${j}-hid-button`}
+                      aria-label="HID button index"
+                      value={binding.button}
+                      oninput={(e) => patchBinding(i, j, { button: Number(e.currentTarget.value) })}
+                    />
+                  </label>
+                  <Select
+                    id={`responseset-option-${i}-binding-${j}-hid-edge`}
+                    class="text-xs"
+                    value={binding.on ?? 'down'}
+                    onchange={(e) =>
+                      patchBinding(i, j, { on: (e.currentTarget as HTMLSelectElement).value as 'down' | 'up' })}
+                  >
+                    <option value="down">on press</option>
+                    <option value="up">on release</option>
+                  </Select>
                 {/if}
 
                 <button
@@ -499,6 +519,15 @@
         </div>
       {/each}
     </div>
+
+    {#if hasHidBinding}
+      <p class="mt-3 text-xs text-muted-foreground" data-testid="responseset-hid-hint">
+        HID (button box) responses need Chrome or Edge; participants connect the device on the
+        study's welcome screen. Where the box has no button labels, discover a button's number by
+        pressing it and reading the captured binding. Keyboard, mouse or touch bindings on the same
+        option keep working as a fallback.
+      </p>
+    {/if}
 
     <div class="flex items-center gap-2 mt-3">
       <Button id="responseset-add-option" variant="secondary" size="sm" onclick={addOption}>

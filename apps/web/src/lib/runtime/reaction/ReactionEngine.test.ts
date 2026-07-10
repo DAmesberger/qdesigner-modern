@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ReactionEngine, STIMULUS_PREP_TIMEOUT_MS, type StimulusPrepResult } from './ReactionEngine';
 import { createPvtTrials } from './presets/pvt';
-import type { ReactionTrialConfig } from './types';
+import type { HidBinding, ReactionTrialConfig } from './types';
+import type { HidTransition, HidTransitionSource } from './input/HidSource';
 import type { WebGLRenderer } from '$lib/renderer';
 import type { FrameSample, FrameStats } from '$lib/shared';
 import type { ResourceManager } from '../resources/ResourceManager';
@@ -1014,6 +1015,7 @@ function createMockEngine(opts?: {
   clock?: () => number;
   hooks?: ConstructorParameters<typeof ReactionEngine>[0]['hooks'];
   gamepadSource?: ConstructorParameters<typeof ReactionEngine>[0]['gamepadSource'];
+  hidSource?: ConstructorParameters<typeof ReactionEngine>[0]['hidSource'];
   requestFrame?: ConstructorParameters<typeof ReactionEngine>[0]['requestFrame'];
   cancelFrame?: ConstructorParameters<typeof ReactionEngine>[0]['cancelFrame'];
 }) {
@@ -1030,6 +1032,7 @@ function createMockEngine(opts?: {
     clock: opts?.clock,
     hooks: opts?.hooks,
     gamepadSource: opts?.gamepadSource,
+    hidSource: opts?.hidSource,
     requestFrame: opts?.requestFrame,
     cancelFrame: opts?.cancelFrame,
   });
@@ -2945,5 +2948,278 @@ describe('ReactionEngine — no-stimulus invalidation (F-54)', () => {
     } finally {
       restore();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WebHID response source (RT-4, ADR 0024). A fake source lets a test drive
+// synthetic button transitions through the full arming → first-wins → capture
+// chain with no real hardware (CI has none).
+// ---------------------------------------------------------------------------
+
+function createFakeHidSource() {
+  let listener: ((t: HidTransition) => void) | null = null;
+  const source: HidTransitionSource = {
+    subscribe(cb) {
+      listener = cb;
+      return () => {
+        if (listener === cb) listener = null;
+      };
+    },
+  };
+  return {
+    source,
+    emit: (t: HidTransition) => listener?.(t),
+    isSubscribed: () => listener !== null,
+  };
+}
+
+describe('ReactionEngine — WebHID responses (RT-4)', () => {
+  const hidSet: ReactionTrialConfig['responseSet'] = {
+    options: [
+      { id: 'left', bindings: [{ source: 'hid', button: 1, on: 'down' }] },
+      { id: 'right', bindings: [{ source: 'hid', button: 2, on: 'down' }] },
+    ],
+  };
+
+  it('captures a HID button-down using the transition timestamp (same clock as keyboard)', async () => {
+    const fake = createFakeHidSource();
+    const { engine, emitFrame } = createMockEngine({ hidSource: fake.source });
+
+    const resultPromise = engine.runTrial({
+      id: 'hid-basic',
+      responseSet: hidSet,
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 300,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true }); // onset
+    await flush();
+    // The transition carries the inputreport's event.timeStamp — the engine must
+    // measure RT against THAT, never re-clock with performance.now at handler time.
+    fake.emit({ button: 2, edge: 'down', timestamp: 1150 });
+
+    const result = await resultPromise;
+
+    expect(result.timeout).toBe(false);
+    expect(result.response?.responseSource).toBe('hid');
+    expect(result.response?.source).toBe('hid');
+    expect(result.response?.responseDevice).toBe('hid');
+    expect(result.response?.optionId).toBe('right');
+    expect(result.response?.value).toBe('right');
+    expect(result.response?.timingMethod).toBe('event.timeStamp');
+    // Clock consistency: timestamp is the transition's, RT is measured against onset.
+    expect(result.response?.timestamp).toBe(1150);
+    expect(result.response?.reactionTimeMs).toBe(150);
+    expect((result.response?.binding as HidBinding).button).toBe(2);
+    expect((result.response?.binding as HidBinding).source).toBe('hid');
+
+    engine.destroy();
+  });
+
+  it('respects on: "up" bindings (RT anchored on the release edge)', async () => {
+    const fake = createFakeHidSource();
+    const { engine, emitFrame } = createMockEngine({ hidSource: fake.source });
+
+    const resultPromise = engine.runTrial({
+      id: 'hid-up',
+      responseSet: { options: [{ id: 'go', bindings: [{ source: 'hid', button: 4, on: 'up' }] }] },
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 300,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+    // A down on the same button must NOT resolve (only the up edge is bound).
+    fake.emit({ button: 4, edge: 'down', timestamp: 1100 });
+    fake.emit({ button: 4, edge: 'up', timestamp: 1180 });
+
+    const result = await resultPromise;
+
+    expect(result.response?.optionId).toBe('go');
+    expect(result.response?.timestamp).toBe(1180);
+    expect(result.response?.reactionTimeMs).toBe(180);
+    expect((result.response?.binding as HidBinding).on).toBe('up');
+
+    engine.destroy();
+  });
+
+  it('first event wins across HID and keyboard armed concurrently', async () => {
+    const fake = createFakeHidSource();
+    const { engine, target, emitFrame } = createMockEngine({ hidSource: fake.source });
+
+    const resultPromise = engine.runTrial({
+      id: 'hid-vs-keyboard',
+      responseSet: {
+        options: [
+          {
+            id: 'go',
+            bindings: [
+              { source: 'keyboard', key: 'f', on: 'down' },
+              { source: 'hid', button: 7, on: 'down' },
+            ],
+          },
+        ],
+      },
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 300,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+    // HID fires first; the later keyboard press is suppressed by the first-wins resolver.
+    fake.emit({ button: 7, edge: 'down', timestamp: 1120 });
+    dispatchKey(target, 'f', 1200);
+
+    const result = await resultPromise;
+
+    expect(result.response?.responseSource).toBe('hid');
+    expect(result.response?.timestamp).toBe(1120);
+    expect(result.response?.optionId).toBe('go');
+
+    engine.destroy();
+  });
+
+  it('keyboard wins when it fires before HID (symmetric first-wins)', async () => {
+    const fake = createFakeHidSource();
+    const { engine, target, emitFrame } = createMockEngine({ hidSource: fake.source });
+
+    const resultPromise = engine.runTrial({
+      id: 'keyboard-vs-hid',
+      responseSet: {
+        options: [
+          {
+            id: 'go',
+            bindings: [
+              { source: 'keyboard', key: 'f', on: 'down' },
+              { source: 'hid', button: 7, on: 'down' },
+            ],
+          },
+        ],
+      },
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 300,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+    dispatchKey(target, 'f', 1080);
+    fake.emit({ button: 7, edge: 'down', timestamp: 1200 });
+
+    const result = await resultPromise;
+
+    expect(result.response?.responseSource).toBe('keyboard');
+    expect(result.response?.timestamp).toBe(1080);
+
+    engine.destroy();
+  });
+
+  it('records a pre-onset HID press as an anticipatory false start, then accepts a later one', async () => {
+    const fake = createFakeHidSource();
+    const falseStarts: HidTransition['button'][] = [];
+    const { engine, emitFrame } = createMockEngine({
+      hidSource: fake.source,
+      hooks: {
+        onFalseStart: (info) => falseStarts.push((info.binding as HidBinding).button),
+      },
+    });
+
+    const resultPromise = engine.runTrial({
+      id: 'hid-false-start',
+      responseSet: hidSet,
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 300,
+    });
+
+    // The stimulus phase is open (responses enabled) but no frame has been
+    // presented yet, so onset is still null: this press is anticipatory.
+    await flush();
+    fake.emit({ button: 2, edge: 'down', timestamp: 500 });
+    // Now present the onset frame and fire the real, post-onset press.
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+    fake.emit({ button: 2, edge: 'down', timestamp: 1140 });
+
+    const result = await resultPromise;
+
+    expect(result.falseStartCount).toBeGreaterThanOrEqual(1);
+    expect(result.anticipatory).toBe(true);
+    expect(falseStarts).toContain(2);
+    // The post-onset press is the recorded response.
+    expect(result.response?.timestamp).toBe(1140);
+    expect(result.response?.responseSource).toBe('hid');
+
+    engine.destroy();
+  });
+
+  it('leaves HID bindings inert when no device is connected (keyboard still arms)', async () => {
+    // No hidSource injected — a HID study on a participant who never connected a box.
+    const { engine, target, emitFrame } = createMockEngine({});
+
+    const resultPromise = engine.runTrial({
+      id: 'hid-inert',
+      responseSet: {
+        options: [
+          {
+            id: 'go',
+            bindings: [
+              { source: 'hid', button: 3, on: 'down' },
+              { source: 'keyboard', key: 'f', on: 'down' },
+            ],
+          },
+        ],
+      },
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 200,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+    dispatchKey(target, 'f', 1090);
+
+    const result = await resultPromise;
+
+    // The keyboard binding on the same option carried the response.
+    expect(result.timeout).toBe(false);
+    expect(result.response?.responseSource).toBe('keyboard');
+    expect(result.response?.optionId).toBe('go');
+
+    engine.destroy();
+  });
+
+  it('scores a HID response correct via correctOptionIds', async () => {
+    const fake = createFakeHidSource();
+    const { engine, emitFrame } = createMockEngine({ hidSource: fake.source });
+
+    const resultPromise = engine.runTrial({
+      id: 'hid-correct',
+      responseSet: hidSet,
+      correctOptionIds: ['right'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 300,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true });
+    await flush();
+    fake.emit({ button: 2, edge: 'down', timestamp: 1100 });
+
+    const result = await resultPromise;
+    expect(result.response?.optionId).toBe('right');
+    expect(result.isCorrect).toBe(true);
+
+    engine.destroy();
   });
 });

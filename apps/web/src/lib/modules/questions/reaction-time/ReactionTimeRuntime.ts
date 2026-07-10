@@ -3,7 +3,7 @@ import type {
   QuestionRuntimeContext,
   QuestionRuntimeResult,
 } from '$lib/runtime/core/question-runtime';
-import { ReactionEngine, assignCounterbalance } from '$lib/runtime/reaction';
+import { ReactionEngine, assignCounterbalance, HidDeviceManager } from '$lib/runtime/reaction';
 import type { Binding } from '$lib/runtime/reaction';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import { mediaContentUrl } from '$lib/services/mediaService';
@@ -130,6 +130,10 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       // The engine runs qualify() once before the first trial and reads
       // getEstimatedDisplayLatencyMs() to compensate raf-based visual onset.
       gatekeeper: TimingGatekeeper.shared(),
+      // RT-4 (ADR 0024): arm against the session's connected HID response device
+      // if the participant granted one at study start. Null when none is
+      // connected, so hid bindings stay inert and keyboard/touch still work.
+      hidSource: HidDeviceManager.shared().getActiveSource() ?? undefined,
     });
 
     this.engine.seedFromResourceManager(context.resourceManager);

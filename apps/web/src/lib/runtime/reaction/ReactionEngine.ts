@@ -24,7 +24,7 @@ import type {
   ReactionEngineHooks,
   ReactionOffsetMethod,
   ReactionResponseCapture,
-  ReactionResponseMode,
+  ReactionResponseDevice,
   ReactionTrialConfig,
   ReactionTrialResult,
   ReactionTrialProvenance,
@@ -43,6 +43,7 @@ import { computeReactionTimeMs, computeSignedReactionTimeMs } from '../core/reac
 import { resolveFeedbackRenderable, resolveFeedbackVerdict } from './feedback/feedbackRenderable';
 import { FrameCountdown, framesForDurationMs } from './frameScheduler';
 import { GamepadPoller, type GamepadSource } from './input/GamepadPoller';
+import type { HidTransitionSource } from './input/HidSource';
 import { pointInRegion } from './input/spatialHit';
 import { compileLegacyResponse } from './responseSet';
 
@@ -152,6 +153,15 @@ interface ReactionEngineOptions {
    * virtual gamepad without hardware.
    */
   gamepadSource?: GamepadSource;
+  /**
+   * Injectable WebHID response source (RT-4, ADR 0024). When provided AND the
+   * trial's ResponseSet carries `hid` bindings, the engine arms against its
+   * transitions concurrently with the other sources (first event wins). Defaults
+   * to undefined — no device connected — so hid bindings are silently inert and
+   * keyboard/touch/pointer still arm. In the fillout runtime this is
+   * `HidDeviceManager.shared().getActiveSource()`; the test rig injects a fake.
+   */
+  hidSource?: HidTransitionSource;
   /** Injectable frame scheduler for the gamepad poller. Defaults to rAF. */
   requestFrame?: (callback: (time: number) => void) => number;
   /** Injectable frame canceller for the gamepad poller. Defaults to cAF. */
@@ -245,6 +255,7 @@ export class ReactionEngine {
   private eventTarget: Document | HTMLElement;
   private readonly now: () => number;
   private readonly gamepadSource?: GamepadSource;
+  private readonly hidSource?: HidTransitionSource;
   private readonly requestFrame?: (callback: (time: number) => void) => number;
   private readonly cancelFrame?: (handle: number) => void;
 
@@ -376,6 +387,7 @@ export class ReactionEngine {
     this.hooks = options.hooks;
     this.now = options.clock ?? (() => performance.now());
     this.gamepadSource = options.gamepadSource;
+    this.hidSource = options.hidSource;
     this.requestFrame = options.requestFrame;
     this.cancelFrame = options.cancelFrame;
 
@@ -1702,7 +1714,14 @@ export class ReactionEngine {
       this.armGamepad(gamepadBindings);
     }
 
-    // 'hid' bindings are ignored until the RT-4 WebHID adapter lands (ADR 0024).
+    // WebHID (RT-4, ADR 0024): arm only when a device is actually connected
+    // (`hidSource` injected). Without one the bindings stay inert — the other
+    // sources above still arm — so a HID study degrades to keyboard/touch on a
+    // participant who never connected a box (or on a non-Chromium browser).
+    const hidBindings = bound.filter((b) => b.binding.source === 'hid');
+    if (hidBindings.length > 0 && this.hidSource) {
+      this.armHid(hidBindings);
+    }
 
     if (signal) {
       const abortListener = () => this.resolveResponse(null);
@@ -1858,6 +1877,44 @@ export class ReactionEngine {
     this.cleanupListeners.push(() => poller.stop());
   }
 
+  /**
+   * Arm WebHID capture (RT-4, ADR 0024): subscribe to the connected device's
+   * button transitions and resolve each to the option its `(button, edge)`
+   * binding names. `on: 'down'` (the default) fires on press, `on: 'up'` on
+   * release; a transition matching no bound button is ignored. The transition
+   * carries the originating `inputreport` event's `event.timeStamp` — the same
+   * clock keyboard uses — so `handleResponse` measures RT identically and the
+   * first event across ALL armed sources wins (shared resolver).
+   */
+  private armHid(hidBindings: BoundBinding[]): void {
+    if (!this.hidSource) return;
+
+    const downByButton = new Map<number, BoundBinding>();
+    const upByButton = new Map<number, BoundBinding>();
+    for (const b of hidBindings) {
+      if (b.binding.source !== 'hid') continue;
+      const target = b.binding.on === 'up' ? upByButton : downByButton;
+      target.set(b.binding.button, b);
+    }
+
+    const unsubscribe = this.hidSource.subscribe((transition) => {
+      if (!this.responseEnabled) return;
+      const bound =
+        transition.edge === 'up'
+          ? upByButton.get(transition.button)
+          : downByButton.get(transition.button);
+      if (!bound) return;
+      // The captured `value` is the option id (parity with the gamepad source),
+      // so the persisted value column is the semantic response, not a bit index.
+      this.handleResponse('hid', bound.option.id, transition.timestamp, 'event.timeStamp', {
+        responseDevice: 'hid',
+        ...this.optionMeta(bound),
+      });
+    });
+
+    this.cleanupListeners.push(unsubscribe);
+  }
+
   /** Arm pointer (mouse) capture: a click resolves to the option it hits. */
   private armPointer(pointerBindings: BoundBinding[]): void {
     const handler = (event: MouseEvent) => {
@@ -1912,12 +1969,12 @@ export class ReactionEngine {
    * alongside the clamped `reactionTimeMs`.
    */
   private handleResponse(
-    source: ReactionResponseMode,
+    source: ReactionResponseDevice,
     value: string | { x: number; y: number },
     time: number,
     method: TimingMethod,
     extra?: {
-      responseDevice?: ReactionResponseMode;
+      responseDevice?: ReactionResponseDevice;
       releaseTimestamp?: number;
       holdDurationMs?: number;
       gamepadButtonIndex?: number;

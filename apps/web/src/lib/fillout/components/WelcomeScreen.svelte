@@ -2,6 +2,7 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Card from '$lib/components/ui/layout/Card.svelte';
   import LanguagePicker from './LanguagePicker.svelte';
+  import HidConnectAffordance from '$lib/runtime/reaction/input/components/HidConnectAffordance.svelte';
   import { m } from '$lib/paraglide/messages';
   import type { Questionnaire } from '$lib/shared/types/questionnaire';
 
@@ -52,6 +53,12 @@
     offlineDone?: number;
     offlineTotal?: number;
     onPrepareOffline?: () => void;
+    /**
+     * Show the optional WebHID "connect response device" affordance (RT-4, ADR 0024).
+     * True when the study binds a HID response (`definitionNeedsHid`). Always optional
+     * — participants without a box, or on a non-Chromium browser, use keyboard/touch.
+     */
+    showResponseDeviceConnect?: boolean;
   }
 
   let {
@@ -72,6 +79,7 @@
     offlineDone = 0,
     offlineTotal = 0,
     onPrepareOffline,
+    showResponseDeviceConnect = false,
   }: Props = $props();
 
   // Offer the resume choice only when the caller both flagged a compatible snapshot AND
@@ -161,6 +169,10 @@
             </p>
           {/if}
         </div>
+      {/if}
+
+      {#if showResponseDeviceConnect}
+        <HidConnectAffordance needsHid={showResponseDeviceConnect} />
       {/if}
 
       <div class="actions">

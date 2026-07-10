@@ -5,6 +5,7 @@ export type {
   ReactionTrialResult,
   ReactionResponseCapture,
   ReactionResponseMode,
+  ReactionResponseDevice,
   ReactionTargetRegion,
   ReactionStimulusConfig,
   ReactionFixationConfig,
@@ -64,6 +65,12 @@ export type {
   GamepadResponse,
   GamepadPollerOptions,
 } from './input/GamepadPoller';
+
+// WebHID response source (RT-4, ADR 0024).
+export { HidSource, HidReportParser } from './input/HidSource';
+export type { HidTransition, HidTransitionSource, HidDeviceLike } from './input/HidSource';
+export { HidDeviceManager } from './input/HidDeviceManager';
+export { containsHidBinding, definitionNeedsHid } from './input/hidBindingScan';
 
 // Preset re-exports
 export {

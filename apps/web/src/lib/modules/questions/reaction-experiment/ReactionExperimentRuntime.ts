@@ -3,7 +3,7 @@ import type {
   QuestionRuntimeContext,
   QuestionRuntimeResult,
 } from '$lib/runtime/core/question-runtime';
-import { ReactionEngine } from '$lib/runtime/reaction';
+import { ReactionEngine, HidDeviceManager } from '$lib/runtime/reaction';
 import type { Binding } from '$lib/runtime/reaction';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import { mediaContentUrl } from '$lib/services/mediaService';
@@ -112,6 +112,9 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
       // The engine runs qualify() once before the first trial and reads
       // getEstimatedDisplayLatencyMs() to compensate raf-based visual onset.
       gatekeeper: TimingGatekeeper.shared(),
+      // RT-4 (ADR 0024): arm against the session's connected HID response device
+      // if one was granted at study start; null leaves hid bindings inert.
+      hidSource: HidDeviceManager.shared().getActiveSource() ?? undefined,
     });
 
     this.engine.seedFromResourceManager(context.resourceManager);

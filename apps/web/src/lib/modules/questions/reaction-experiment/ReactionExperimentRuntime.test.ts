@@ -38,6 +38,9 @@ vi.mock('$lib/runtime/reaction', () => ({
     }
     destroy() {}
   },
+  // RT-4: the runtime resolves the session HID manager to arm hardware bindings;
+  // the mock has no device so getActiveSource() is null (bindings stay inert).
+  HidDeviceManager: { shared: () => ({ getActiveSource: () => null }) },
 }));
 
 import { ReactionExperimentRuntime } from './ReactionExperimentRuntime';
