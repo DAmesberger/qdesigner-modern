@@ -153,6 +153,13 @@ export class DocumentStore {
       normalized.settings.translations = deepClone(source.translations);
     }
 
+    // Informed-consent chrome (F-44) is a top-level participant-chrome block the
+    // fillout entry reads as `rawDefinition.consent`; carry it verbatim so it
+    // survives the load/normalize round-trip.
+    if (source?.consent) {
+      normalized.consent = deepClone(source.consent);
+    }
+
     normalized.variables = Array.isArray(source?.variables) ? deepClone(source.variables) : [];
     normalized.questions = Array.isArray(source?.questions) ? deepClone(source.questions) : [];
     normalized.flow = Array.isArray(source?.flow) ? deepClone(source.flow) : [];

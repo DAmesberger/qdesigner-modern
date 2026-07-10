@@ -41,6 +41,9 @@ export function questionnaireToYDoc(questionnaire: Questionnaire, doc?: Y.Doc): 
     meta.set('created', questionnaire.created.toISOString());
     meta.set('modified', questionnaire.modified.toISOString());
     meta.set('settings', questionnaire.settings);
+    // Informed-consent chrome (F-44) round-trips as a plain meta value, mirroring
+    // `settings` — the fillout entry reads it as top-level `rawDefinition.consent`.
+    if (questionnaire.consent) meta.set('consent', questionnaire.consent);
 
     // Pages (ordered)
     const pages = ydoc.getArray<Y.Map<unknown>>('pages');
@@ -110,6 +113,7 @@ export function yDocToQuestionnaire(doc: Y.Doc): Questionnaire {
       showProgressBar: true,
       saveProgress: true,
     },
+    consent: (meta.get('consent') as Questionnaire['consent']) ?? undefined,
     pages: pagesArr.toArray().map(yMapToPage),
     questions,
     variables: variablesArr.toArray().map(yMapToVariable),

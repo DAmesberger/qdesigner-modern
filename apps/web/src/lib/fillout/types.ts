@@ -27,6 +27,8 @@ export interface ConsentData {
 
 /** The consent chrome carried on a fillout definition (top-level, not on the core type). */
 export interface FilloutConsentConfig {
+  /** Consent screen heading; absent ⇒ the localized default chrome label. */
+  title?: string;
   content?: string;
   checkboxes?: ConsentCheckbox[];
   requireSignature?: boolean;

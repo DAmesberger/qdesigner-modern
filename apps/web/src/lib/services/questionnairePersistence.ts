@@ -38,6 +38,10 @@ export class QuestionnairePersistenceService {
         questions: questionnaire.questions,
         variables: questionnaire.variables,
         settings: questionnaire.settings,
+        // Top-level informed-consent chrome (F-44). The fillout entry reads it as
+        // `rawDefinition.consent` off this same JSONB, so it must ride the content
+        // blob alongside settings.requireConsent.
+        consent: questionnaire.consent,
         flow: questionnaire.flow,
         created: questionnaire.created,
         modified: new Date().toISOString()
@@ -102,6 +106,7 @@ export class QuestionnairePersistenceService {
         questions: (content as DynamicValue).questions || [],
         variables: (content as DynamicValue).variables || [],
         settings: (content as DynamicValue).settings || data.settings || {},
+        consent: (content as DynamicValue).consent || undefined,
         flow: (content as DynamicValue).flow || [],
         created: (content as DynamicValue).created || data.createdAt,
         modified: (content as DynamicValue).modified || data.updatedAt

@@ -2,7 +2,7 @@
   import { appPaths } from '$lib/routing/paths';
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
-  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator, LayoutDashboard, CalendarClock, Undo2, Redo2, Wrench, ChevronDown } from 'lucide-svelte';
+  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator, LayoutDashboard, CalendarClock, Undo2, Redo2, Wrench, ChevronDown, SlidersHorizontal } from 'lucide-svelte';
   import { fly } from 'svelte/transition';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import StudySeriesDesigner from '$lib/components/designer/StudySeriesDesigner.svelte';
@@ -13,6 +13,7 @@
   import ScaleScoringEditor from '$lib/components/designer/scoring/ScaleScoringEditor.svelte';
   import QuotaPanel from '$lib/components/designer/QuotaPanel.svelte';
   import ReportPagePanel from '$lib/components/designer/ReportPagePanel.svelte';
+  import StudySettingsPanel from '$lib/components/designer/StudySettingsPanel.svelte';
   import VersionManager from '$lib/components/designer/VersionManager.svelte';
   import type { PresenceUser } from '$lib/services/presence.svelte';
 
@@ -34,6 +35,7 @@
   let showScaleScoring = $state(false);
   let showQuotas = $state(false);
   let showReportPage = $state(false);
+  let showStudySettings = $state(false);
   let showTools = $state(false);
 
   const canUndo = $derived(designerStore.canUndo);
@@ -47,6 +49,7 @@
   // out of the always-visible header (R4-5). `show` flips the matching dialog.
   type ToolItem = { label: string; icon: typeof Wrench; run: () => void; when?: () => boolean };
   const toolItems: ToolItem[] = [
+    { label: 'Study settings', icon: SlidersHorizontal, run: () => (showStudySettings = true) },
     { label: 'Experimental design', icon: FlaskConical, run: () => (showExperimentalDesign = true) },
     {
       label: 'Study series',
@@ -376,6 +379,8 @@
 {/if}
 
 <DataQualityPanel bind:open={showDataQuality} />
+
+<StudySettingsPanel bind:open={showStudySettings} />
 
 <ScaleScoringEditor bind:open={showScaleScoring} />
 

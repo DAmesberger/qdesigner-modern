@@ -14,6 +14,39 @@ export * from './translation';
 // Core Questionnaire Types
 // ============================================================================
 
+/**
+ * A single informed-consent gate the participant must tick before proceeding
+ * (E-FLOW / F-44). Structurally mirrors the runtime's `ConsentCheckbox` prop
+ * so the authored value flows straight into the fillout consent screen.
+ */
+export interface ConsentCheckbox {
+  id: string;
+  label: string;
+  required: boolean;
+}
+
+/**
+ * Informed-consent chrome shown before a study starts when
+ * {@link QuestionnaireSettings.requireConsent} is set (F-44). The fillout entry
+ * reads this as a top-level `consent` block on the published definition
+ * (see the app's `FilloutConsentConfig`); the designer authors it here. The
+ * body is rendered as sanitized markdown/HTML by the consent screen.
+ */
+export interface ConsentContent {
+  /**
+   * Consent screen heading. Base-locale only (not yet a translatable chrome
+   * slot); absent ⇒ the consent screen falls back to its localized default
+   * "Informed Consent" label.
+   */
+  title?: string;
+  /** Consent body, rendered as sanitized markdown/HTML. */
+  content?: string;
+  /** Ordered acknowledgement checkboxes; `required` ones gate the Agree action. */
+  checkboxes?: ConsentCheckbox[];
+  /** Require a typed electronic signature before proceeding. */
+  requireSignature?: boolean;
+}
+
 export interface Questionnaire {
   id: string;
   organizationId?: string;
@@ -33,6 +66,15 @@ export interface Questionnaire {
   flow: FlowControl[];
   settings: QuestionnaireSettings;
   metadata?: Record<string, unknown>;
+  /**
+   * Informed-consent chrome shown before the study starts when
+   * {@link QuestionnaireSettings.requireConsent} is enabled (F-44). Top-level
+   * because the fillout entry reads it as a participant-chrome block on the
+   * published definition (`rawDefinition.consent`), distinct from the core
+   * runtime model. Absent ⇒ the consent screen falls back to its localized
+   * default title and empty body.
+   */
+  consent?: ConsentContent;
   /**
    * Optional per-locale participant-facing content translations (MOD-04,
    * ADR 0022). Additive and back-compatible — absent means single-language.

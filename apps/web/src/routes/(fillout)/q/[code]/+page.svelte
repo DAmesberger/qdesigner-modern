@@ -495,6 +495,7 @@
     />
   {:else if controller.screen === 'consent'}
     <ConsentScreen
+      title={rawDefinition.consent?.title || undefined}
       content={consentText}
       checkboxes={rawDefinition.consent?.checkboxes}
       requireSignature={rawDefinition.consent?.requireSignature}
