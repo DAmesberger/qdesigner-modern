@@ -151,6 +151,7 @@ export class FilloutPageController {
     | 'over-quota'
     | 'screened-out'
     | 'webgl-unsupported'
+    | 'media-error'
   >('welcome');
   overQuotaMessage = $state('');
   // Structured eligibility screen-out outcome (F-20). Set when a `terminate` flow
@@ -161,6 +162,15 @@ export class FilloutPageController {
   loadingMessage = $state('Loading questionnaire...');
   loadingProgress = $state(0);
   error = $state<string | null>(null);
+  // Recoverable media-preload failure (R2-5). When runtime start fails because one or
+  // more media resources could not be fetched, we route to a dedicated retry screen
+  // instead of the generic dead-end: the session already exists and no answer has been
+  // recorded yet (preload precedes the first item), so re-running the runtime build
+  // re-attempts only the preload without a duplicate session or lost progress.
+  // `mediaErrorCount` is the failed-resource count for the curated headline; the raw
+  // ResourceManager detail is kept in `mediaErrorDetails` for a collapsed secondary line.
+  mediaErrorCount = $state(0);
+  mediaErrorDetails = $state<string | null>(null);
 
   // --- Session state ----------------------------------------------------------
   // `session` spans three assignment shapes across create / resume / offline paths
@@ -814,6 +824,12 @@ export class FilloutPageController {
     try {
       this.loading = true;
 
+      // Retry-safe (R2-5): dispose any runtime left over from a prior failed attempt
+      // (e.g. a media-preload retry) before rebuilding, so the retry never leaks the
+      // half-constructed runtime/renderer. No-op on the first call — runtime is null.
+      this.runtime?.dispose();
+      this.runtime = null;
+
       // Modules must be registered before the runtime can resolve question types.
       // Awaiting the shared, idempotent promise here guarantees a populated registry
       // for both the resumed path and createSessionAndStart. Kept INSIDE the try so a
@@ -942,12 +958,36 @@ export class FilloutPageController {
         return;
       }
 
-      let errorMessage = err instanceof Error ? err.message : 'Failed to start questionnaire';
-      if (errorMessage.includes('Failed to preload')) {
-        errorMessage = `Unable to load required media files:\n${errorMessage}`;
+      const rawMessage = err instanceof Error ? err.message : 'Failed to start questionnaire';
+
+      // Media preload failure (R2-5): recoverable. Route to the dedicated retry screen
+      // rather than dumping the raw ResourceManager exception into the generic dead-end.
+      if (rawMessage.includes('Failed to preload')) {
+        const match = /Failed to preload (\d+) resource/.exec(rawMessage);
+        this.mediaErrorCount = match ? Number(match[1]) : 0;
+        this.mediaErrorDetails = rawMessage;
+        this.screen = 'media-error';
+        return;
       }
-      this.error = errorMessage;
+
+      this.error = rawMessage;
     }
+  }
+
+  /**
+   * Retry a failed media preload (R2-5). Re-runs the runtime build — which re-attempts
+   * the preload step — against the SAME session; the offline-first session model makes
+   * this safe (no new session is created, `this.session` is untouched, and any resume
+   * snapshot is re-applied), so a transient network blip is recoverable without losing
+   * progress. Clears the media-error state and returns to the runtime screen so the
+   * loading chrome shows during the re-attempt.
+   */
+  async retryMediaPreload(): Promise<void> {
+    this.mediaErrorCount = 0;
+    this.mediaErrorDetails = null;
+    this.error = null;
+    this.screen = 'runtime';
+    await this.initializeRuntime();
   }
 
   /**

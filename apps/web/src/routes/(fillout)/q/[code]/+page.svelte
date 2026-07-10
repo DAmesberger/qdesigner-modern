@@ -402,13 +402,25 @@
       {/if}
     </div>
   {:else if controller.error}
-    <div class="error-container" data-testid="fillout-error">
-      <EmptyState
-        title="Unable to load questionnaire"
-        description={controller.error}
-        buttonText="Go back"
-        onAction={() => goto('/')}
-      />
+    <!-- Generic startup-error fallback (R2-5): assertive so SR users hear it. A reload is
+         safe here — the fillout is offline-first and resume-capable, so re-running load()
+         re-attempts session creation / runtime init without losing any recorded answer. -->
+    <div class="error-container" data-testid="fillout-error" role="alert">
+      <EmptyState title="Unable to load questionnaire" description={controller.error} />
+      <p class="error-reassurance" data-testid="fillout-error-reassurance">
+        Any answers you've already given are saved on this device.
+      </p>
+      <div class="error-actions">
+        <button type="button" class="error-secondary" onclick={() => goto('/')}>Go back</button>
+        <button
+          type="button"
+          class="error-primary"
+          data-testid="fillout-error-reload"
+          onclick={() => location.reload()}
+        >
+          Reload
+        </button>
+      </div>
     </div>
   {:else if controller.loading && controller.screen !== 'runtime'}
     <div class="loading-container" data-testid="fillout-loading">
@@ -487,7 +499,7 @@
           onDismiss={timingBlocked ? undefined : () => (controller.bannerDismissed = true)}
         />
         {#if timingBlocked}
-          <p class="timing-block-note" data-testid="fillout-timing-block-note">
+          <p class="timing-block-note" data-testid="fillout-timing-block-note" role="status">
             This study measures reaction times to within a few milliseconds and
             your device did not pass the timing check. You may continue, but the
             recorded times may be less accurate than the study requires.
@@ -597,6 +609,41 @@
         buttonText="Go back"
         onAction={() => goto('/')}
       />
+    </div>
+  {:else if controller.screen === 'media-error'}
+    <!-- Recoverable media-preload failure (R2-5): a curated screen with the failed count
+         and a Retry that re-runs only the preload against the same session (offline-first,
+         no duplicate session). Assertive so SR users hear the interruption; the raw
+         ResourceManager exception is tucked into a collapsed <details>, not dumped inline. -->
+    <div class="error-container" data-testid="fillout-media-error" role="alert">
+      <EmptyState
+        title="Some media files couldn't load"
+        description={controller.mediaErrorCount > 0
+          ? `${controller.mediaErrorCount} media file${
+              controller.mediaErrorCount === 1 ? '' : 's'
+            } needed for this study couldn't be downloaded. This is usually a temporary network problem.`
+          : "Some media files needed for this study couldn't be downloaded. This is usually a temporary network problem."}
+      />
+      <p class="error-reassurance" data-testid="fillout-media-error-reassurance">
+        Retrying reloads the media without restarting your session.
+      </p>
+      <div class="error-actions">
+        <button type="button" class="error-secondary" onclick={() => goto('/')}>Go back</button>
+        <button
+          type="button"
+          class="error-primary"
+          data-testid="fillout-media-retry"
+          onclick={() => controller.retryMediaPreload()}
+        >
+          Retry
+        </button>
+      </div>
+      {#if controller.mediaErrorDetails}
+        <details class="error-details" data-testid="fillout-media-error-details">
+          <summary>Technical details</summary>
+          <pre>{controller.mediaErrorDetails}</pre>
+        </details>
+      {/if}
     </div>
   {:else if controller.screen === 'screened-out' && controller.screenOut}
     <ScreenedOutScreen result={controller.screenOut} onClose={() => goto('/')} />
@@ -728,6 +775,70 @@
   .loading-text {
     color: hsl(var(--muted-foreground));
     font-size: 0.875rem;
+  }
+
+  /* Recoverable-error affordances (R2-5): reassurance line + a Go-back / Retry|Reload
+     pair beneath the EmptyState, plus a collapsed technical-details disclosure. */
+  .error-reassurance {
+    max-width: 32rem;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+    line-height: 1.4;
+  }
+
+  .error-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+  }
+
+  .error-secondary,
+  .error-primary {
+    padding: 0.5rem 1.25rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  .error-secondary {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+  }
+
+  .error-primary {
+    border: none;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+
+  .error-secondary:hover,
+  .error-primary:hover {
+    opacity: 0.9;
+  }
+
+  .error-details {
+    max-width: min(560px, calc(100vw - 3rem));
+    text-align: left;
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .error-details summary {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .error-details pre {
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: hsl(var(--muted));
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
   }
 
   .loading-progress {

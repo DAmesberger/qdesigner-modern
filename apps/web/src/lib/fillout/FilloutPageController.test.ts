@@ -303,6 +303,60 @@ describe('FilloutPageController', () => {
     expect(controller.screenOut).toBeNull();
   });
 
+  describe('recoverable media-preload failure (R2-5)', () => {
+    it('routes a preload failure to the media-error screen with the failed count', async () => {
+      const data = makeData({ settings: { requireConsent: false } });
+      const mocks = makeMocks();
+      // runtime.start throws the ResourceManager preload error on the first attempt.
+      mocks.runtime.start.mockRejectedValueOnce(
+        new Error('Failed to preload 2 resources:\n- image "a" (x): boom\n- audio "b" (y): boom')
+      );
+
+      const controller = makeController(data, mocks);
+      wireRuntimeInputs(controller, data.questionnaire.definition);
+
+      await controller.createSessionAndStart();
+
+      // A recoverable screen — not the generic dead-end error.
+      expect(controller.screen).toBe('media-error');
+      expect(controller.error).toBeNull();
+      expect(controller.mediaErrorCount).toBe(2);
+      expect(controller.mediaErrorDetails).toContain('Failed to preload');
+      // The session was created exactly once and is preserved for the retry.
+      expect(mocks.offlineSession.createSession).toHaveBeenCalledTimes(1);
+      expect(controller.session?.id).toBe('offline-1');
+    });
+
+    it('retry re-runs the preload against the same session without a duplicate', async () => {
+      const data = makeData({ settings: { requireConsent: false } });
+      const mocks = makeMocks();
+      // Fail once, then succeed on the retry.
+      mocks.runtime.start.mockRejectedValueOnce(
+        new Error('Failed to preload 1 resource:\n- image "a" (x): boom')
+      );
+
+      const controller = makeController(data, mocks);
+      wireRuntimeInputs(controller, data.questionnaire.definition);
+
+      await controller.createSessionAndStart();
+      expect(controller.screen).toBe('media-error');
+
+      await controller.retryMediaPreload();
+
+      // Retry rebuilt the runtime and re-ran start — the preload re-attempt.
+      expect(controller.screen).toBe('runtime');
+      expect(controller.error).toBeNull();
+      expect(controller.mediaErrorDetails).toBeNull();
+      expect(mocks.services.makeRuntime).toHaveBeenCalledTimes(2);
+      expect(mocks.runtime.start).toHaveBeenCalledTimes(2);
+      // The stale runtime from the failed attempt is disposed before the rebuild.
+      expect(mocks.runtime.dispose).toHaveBeenCalledTimes(1);
+      // No second session was created — the same offline session is reused.
+      expect(mocks.offlineSession.createSession).toHaveBeenCalledTimes(1);
+      expect(controller.session?.id).toBe('offline-1');
+    });
+  });
+
   describe('participant progress (F-7)', () => {
     it('reports current page of total pages for a linear flow', () => {
       const data = makeData({ pages: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] });

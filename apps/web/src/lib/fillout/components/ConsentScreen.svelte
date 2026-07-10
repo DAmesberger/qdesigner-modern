@@ -145,7 +145,10 @@
       {/if}
 
       {#if showError}
-        <div class="error-message">Please complete all required fields before continuing.</div>
+        <!-- Assertive (R2-5): SR users must hear the validation failure on a blocked submit. -->
+        <div class="error-message" role="alert">
+          Please complete all required fields before continuing.
+        </div>
       {/if}
 
       <div class="actions">
@@ -155,11 +158,15 @@
           onclick={handleDecline}
           data-testid="fillout-consent-decline-button">Decline</Button
         >
+        <!-- Not disabled while incomplete (R2-5 a11y): an unexplained disabled control gives
+             SR users no reason why they can't proceed. Instead the click is allowed to reach
+             handleAccept, which surfaces the assertive validation message on a failed submit.
+             aria-disabled advertises the invalid state without swallowing the click. -->
         <Button
           variant="default"
           size="lg"
           onclick={handleAccept}
-          disabled={!canAccept}
+          aria-disabled={!canAccept}
           data-testid="fillout-consent-accept-button"
         >
           I Agree
