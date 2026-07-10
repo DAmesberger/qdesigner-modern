@@ -185,6 +185,83 @@ async fn export_bundle_covers_sessions_and_responses() {
         .await;
 }
 
+/// (a2) F-34: two *concurrent* export requests must not both create a job.
+/// The partial unique index `uq_data_exports_org_inflight` (00047) is the
+/// atomic arbiter behind the non-atomic in-flight SELECT gate: exactly one
+/// request 202s, the other maps the 23505 back to a 409.
+#[tokio::test]
+async fn concurrent_export_requests_yield_one_202_one_409() {
+    let Some(state) = build_media_test_state(EXPORT_BUCKET).await else {
+        return;
+    };
+    let Some(fixtures) = fixture_pool().await else {
+        return;
+    };
+    let app = test_app(state.clone());
+
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+
+    let uri = format!("/api/organizations/{}/export", tenant.org_id);
+    // Fire both requests concurrently against the same router.
+    let (a, b) = tokio::join!(
+        json_request(&app, "POST", &uri, Some(&owner.token), None),
+        json_request(&app, "POST", &uri, Some(&owner.token), None),
+    );
+
+    let mut statuses = [a.0, b.0];
+    statuses.sort_by_key(|s| s.as_u16());
+    assert_eq!(
+        statuses,
+        [StatusCode::ACCEPTED, StatusCode::CONFLICT],
+        "exactly one export accepted, one rejected as in-progress: {:?} / {:?}",
+        a,
+        b
+    );
+
+    // Exactly one row exists for the org.
+    let job_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM data_exports WHERE organization_id = $1")
+            .bind(tenant.org_id)
+            .fetch_one(&fixtures)
+            .await
+            .expect("count export rows");
+    assert_eq!(job_count, 1, "only one export job persisted");
+
+    // Let the winning background job settle, then clean up its artifact + rows.
+    for _ in 0..100 {
+        let terminal: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM data_exports \
+             WHERE organization_id = $1 AND status IN ('ready','failed'))",
+        )
+        .bind(tenant.org_id)
+        .fetch_one(&fixtures)
+        .await
+        .unwrap_or(false);
+        if terminal {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    if let Ok(Some(key)) = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT artifact_key FROM data_exports WHERE organization_id = $1",
+    )
+    .bind(tenant.org_id)
+    .fetch_one(&fixtures)
+    .await
+    {
+        let _ = state.storage.delete(&key).await;
+    }
+    let _ = sqlx::query("DELETE FROM data_exports WHERE organization_id = $1")
+        .bind(tenant.org_id)
+        .execute(&fixtures)
+        .await;
+    let _ = sqlx::query("DELETE FROM projects WHERE organization_id = $1")
+        .bind(tenant.org_id)
+        .execute(&fixtures)
+        .await;
+}
+
 /// (b)+(c) Legal hold blocks erasure; once released, erasure removes
 /// participant data but preserves audit_events.
 #[tokio::test]

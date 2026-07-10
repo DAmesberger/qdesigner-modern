@@ -423,6 +423,12 @@ pub async fn update_questionnaire(
     if body.content.is_some() {
         parts.push(format!("content = ${bind_idx}"));
         bind_idx += 1;
+        // F-37: a content write here is out-of-band relative to the collab CRDT
+        // (this is the non-collab / autosave writer; the YjsStore's own debounced
+        // persist writes `yjs_state` only, never `content`). Invalidate the cached
+        // CRDT binary so the next room creation re-seeds from the fresh content
+        // instead of masking this edit with a stale `yjs_state`.
+        parts.push("yjs_state = NULL".into());
     }
     if body.status.is_some() {
         parts.push(format!("status = ${bind_idx}"));

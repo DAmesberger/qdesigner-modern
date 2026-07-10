@@ -134,14 +134,13 @@ async fn authenticate(state: &AppState, token: &str) -> Result<ApiKeyContext, Ap
         .created_by
         .ok_or_else(|| ApiError::Unauthorized("API key principal no longer exists".into()))?;
 
-    // Rate-limit by key id, reusing the shared limiter (E-RBAC-7 step 8). The
+    // Rate-limit by key id on the dedicated machine-surface limiter (F-30):
+    // a separate, more generous bucket (main.rs: 300 req/60s, env-tunable) so
+    // high-throughput integrations aren't throttled by the auth-tuned cap. The
     // `apikey:` bucket prefix keeps it from colliding with the user-id / IP
-    // buckets. NOTE: the shared limiter is tuned for the auth surface
-    // (main.rs: 10 requests / 60s); a high-throughput integration that needs a
-    // larger machine budget should be given a dedicated, more generous
-    // `RateLimiter` instance in `AppState` rather than widening the auth cap.
+    // buckets.
     if !state
-        .rate_limiter
+        .api_key_rate_limiter
         .check(&format!("apikey:{}", row.id))
         .await
     {

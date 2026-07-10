@@ -449,13 +449,14 @@ async fn questionnaire_share_grants_only_that_questionnaires_analytics() {
     let tok_b = user_b.token.as_str();
 
     // Before sharing: B cannot read Q's analytics nor the parent project.
-    let filter_body = serde_json::json!({ "questionnaire_id": q, "groups": [], "logic": "AND" });
+    // `GET /api/sessions?questionnaire_id=…` flows through the same
+    // `verify_questionnaire_access` gate the analytics endpoints do.
     let (status, _j) = json_request(
         &app,
-        "POST",
-        "/api/sessions/filter",
+        "GET",
+        &format!("/api/sessions?questionnaire_id={q}"),
         Some(tok_b),
-        Some(&filter_body),
+        None,
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN, "no share ⇒ analytics denied");
@@ -476,10 +477,10 @@ async fn questionnaire_share_grants_only_that_questionnaires_analytics() {
     // B may now read Q's analytics (empty result, but admitted — 200).
     let (status, res) = json_request(
         &app,
-        "POST",
-        "/api/sessions/filter",
+        "GET",
+        &format!("/api/sessions?questionnaire_id={q}"),
         Some(tok_b),
-        Some(&filter_body),
+        None,
     )
     .await;
     assert_eq!(
@@ -534,4 +535,94 @@ async fn questionnaire_share_grants_only_that_questionnaires_analytics() {
     assert_eq!(arr.len(), 1);
     assert_eq!(arr[0]["resource_type"], "questionnaire");
     assert_eq!(arr[0]["resource_id"].as_str(), Some(q.to_string().as_str()));
+}
+
+/// F-31: the housekeeping purge deletes expired `resource_shares` rows (which
+/// otherwise accrete) while leaving live/never-expiring grants untouched. Runs
+/// the same single-pass body the hourly background task calls, on the app pool.
+#[tokio::test]
+async fn share_purge_removes_only_expired_grants() {
+    let Some(state) = build_test_state().await else {
+        eprintln!("skipping: no DB reachable");
+        return;
+    };
+    let app = test_app(state.clone());
+    let Some(fx) = fixture_pool().await else {
+        eprintln!("skipping: no fixture pool");
+        return;
+    };
+
+    let user_a = register_user(&app).await;
+    let a = provision_tenant(&app, &user_a.token).await;
+    let user_b = register_user(&app).await;
+    // Distinct grantee for the live grant — a unique index on
+    // (resource_type, resource_id, lower(grantee_email)) forbids two shares of
+    // the same project to the same email.
+    let user_c = register_user(&app).await;
+    let p = a.project_id;
+
+    // One already-expired grant + one live grant (no expiry) on the same project.
+    let expired_id: uuid::Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO resource_shares
+            (resource_type, resource_id, organization_id, grantee_user_id,
+             grantee_email, role, created_by, expires_at)
+        VALUES ('project', $1, $2, $3, $4, 'viewer', $5, now() - interval '1 hour')
+        RETURNING id
+        "#,
+    )
+    .bind(p)
+    .bind(a.org_id)
+    .bind(user_b.id)
+    .bind(&user_b.email)
+    .bind(user_a.id)
+    .fetch_one(&fx)
+    .await
+    .expect("seed expired share");
+
+    let live_id: uuid::Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO resource_shares
+            (resource_type, resource_id, organization_id, grantee_user_id,
+             grantee_email, role, created_by, expires_at)
+        VALUES ('project', $1, $2, $3, $4, 'viewer', $5, NULL)
+        RETURNING id
+        "#,
+    )
+    .bind(p)
+    .bind(a.org_id)
+    .bind(user_c.id)
+    .bind(&user_c.email)
+    .bind(user_a.id)
+    .fetch_one(&fx)
+    .await
+    .expect("seed live share");
+
+    // Run one purge pass (the body the hourly job calls).
+    let purged = qdesigner_server::housekeeping::run_share_purge(&state)
+        .await
+        .expect("purge runs");
+    assert!(purged >= 1, "purge removed at least the expired grant");
+
+    let expired_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM resource_shares WHERE id = $1)")
+            .bind(expired_id)
+            .fetch_one(&fx)
+            .await
+            .expect("probe expired");
+    assert!(!expired_exists, "expired grant purged");
+
+    let live_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM resource_shares WHERE id = $1)")
+            .bind(live_id)
+            .fetch_one(&fx)
+            .await
+            .expect("probe live");
+    assert!(live_exists, "live grant survives the purge");
+
+    // Cleanup.
+    let _ = sqlx::query("DELETE FROM resource_shares WHERE id = $1")
+        .bind(live_id)
+        .execute(&fx)
+        .await;
 }

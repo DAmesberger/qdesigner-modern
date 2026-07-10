@@ -236,9 +236,16 @@ pub async fn delete_account(
         )));
     }
 
-    // (3a) Soft-delete organizations where the caller is the sole member.
-    // Computed BEFORE the membership DELETE so the "no other member" check
-    // still sees the real membership set.
+    // (3a) Soft-delete organizations where the caller is the sole *active*
+    // member. Computed BEFORE the membership DELETE so the "no other member"
+    // check still sees the real membership set.
+    //
+    // The `status = 'active'` filter on the NOT EXISTS mirrors the owner-guard
+    // above: both treat a non-active member (invited/pending) as absent. Without
+    // it, an org with the departing owner + one non-active member would pass the
+    // guard (no active others) yet skip this soft-delete (a member row exists),
+    // leaving the org active with no owner/active member after the DELETE below
+    // (F-25).
     sqlx::query(
         r#"
         UPDATE organizations o
@@ -250,7 +257,9 @@ pub async fn delete_account(
           )
           AND NOT EXISTS (
               SELECT 1 FROM organization_members m2
-              WHERE m2.organization_id = o.id AND m2.user_id <> $1
+              WHERE m2.organization_id = o.id
+                AND m2.user_id <> $1
+                AND m2.status = 'active'
           )
         "#,
     )

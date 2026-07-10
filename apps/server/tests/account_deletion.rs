@@ -186,3 +186,66 @@ async fn solo_owner_deletes_and_is_anonymized() {
         .execute(&fixtures)
         .await;
 }
+
+/// (c) F-25: an org with the departing owner (active) + one *non-active*
+/// (invited/pending) member must be treated as sole-member. The owner-guard
+/// (filters `status='active'`) already lets the delete through with 200; the
+/// soft-delete's "no other member" check must *also* ignore the non-active
+/// member so the org is soft-deleted rather than left ownerless-but-active.
+#[tokio::test]
+async fn departing_owner_with_only_non_active_member_soft_deletes_org() {
+    let Some(state) = build_test_state().await else {
+        return;
+    };
+    let Some(fixtures) = fixture_pool().await else {
+        return;
+    };
+    let app = test_app(state);
+
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+
+    // A second user seeded as an *invited* (non-active) member of the org.
+    let invited = register_user(&app).await;
+    sqlx::query(
+        "INSERT INTO organization_members (organization_id, user_id, role, status) \
+         VALUES ($1, $2, 'member', 'invited')",
+    )
+    .bind(tenant.org_id)
+    .bind(invited.id)
+    .execute(&fixtures)
+    .await
+    .expect("seed invited (non-active) member");
+
+    // The owner-guard must pass (no *active* other member) → delete succeeds.
+    let body = serde_json::json!({ "password": "demo123456" });
+    let (status, json) = json_request(
+        &app,
+        "DELETE",
+        "/api/users/me",
+        Some(&owner.token),
+        Some(&body),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "expected 200, got {json:?}");
+
+    // The consistency fix: the org must be soft-deleted, not left active with a
+    // lingering non-active member and no owner.
+    let org_deleted_at: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT deleted_at FROM organizations WHERE id = $1")
+            .bind(tenant.org_id)
+            .fetch_one(&fixtures)
+            .await
+            .expect("load org row");
+    assert!(
+        org_deleted_at.is_some(),
+        "org with only a non-active co-member must be soft-deleted (F-25)"
+    );
+
+    // Cleanup: the invited member row survived the owner's membership DELETE
+    // (only the caller's memberships are removed); drop it so reruns stay clean.
+    let _ = sqlx::query("DELETE FROM organization_members WHERE organization_id = $1")
+        .bind(tenant.org_id)
+        .execute(&fixtures)
+        .await;
+}

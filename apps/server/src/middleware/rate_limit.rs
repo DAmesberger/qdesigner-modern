@@ -167,4 +167,28 @@ mod tests {
         let req = Request::new(axum::body::Body::empty());
         assert_eq!(rate_limit_key(&req), "unknown");
     }
+
+    /// F-30: the dedicated machine-surface limiter is a separate, more generous
+    /// bucket — a 300/60s cap admits a burst that the auth-tuned 10/60s cap
+    /// would have blocked long before.
+    #[tokio::test]
+    async fn generous_api_key_bucket_admits_beyond_auth_cap() {
+        let auth = RateLimiter::new(10, 60, None);
+        let api_key = RateLimiter::new(300, 60, None);
+        let key = "apikey:abc";
+        for i in 0..200 {
+            assert!(
+                api_key.check(key).await,
+                "generous api-key bucket must admit request {i}"
+            );
+        }
+        // The auth-tuned cap on its own bucket blocks after 10.
+        for _ in 0..10 {
+            assert!(auth.check("user:xyz").await);
+        }
+        assert!(
+            !auth.check("user:xyz").await,
+            "auth cap still blocks the 11th request"
+        );
+    }
 }

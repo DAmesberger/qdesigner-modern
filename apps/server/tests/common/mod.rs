@@ -321,6 +321,7 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         rate_limiter: RateLimiter::new(10_000, 60, None),
         verify_send_limiter: RateLimiter::new(10_000, 60, None),
         verify_attempt_limiter: RateLimiter::new(10_000, 60, None),
+        api_key_rate_limiter: RateLimiter::new(10_000, 60, None),
         config: Arc::new(config),
     })
 }

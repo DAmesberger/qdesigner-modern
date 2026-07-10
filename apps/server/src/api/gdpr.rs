@@ -220,6 +220,10 @@ pub async fn request_export(
     // id). No RETURNING: on this bare pool connection there is no `app.user_id`
     // GUC, so the data_exports_select policy would hide a RETURNING row. The
     // request tx commits the audit row independently on success.
+    // The in-flight SELECT above and this INSERT are not one atomic step, so two
+    // truly concurrent requests can both pass the gate. The partial unique index
+    // `uq_data_exports_org_inflight` (00047) is the real arbiter: the loser's
+    // INSERT raises a 23505, which we translate back to the same 409 (F-34).
     sqlx::query(
         r#"
         INSERT INTO data_exports (id, organization_id, requested_by, status, data_region)
@@ -231,7 +235,16 @@ pub async fn request_export(
     .bind(user.user_id)
     .bind(&region)
     .execute(&state.pool)
-    .await?;
+    .await
+    .map_err(|e| {
+        if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
+            ApiError::Conflict(
+                "An export is already in progress for this organization".into(),
+            )
+        } else {
+            ApiError::Database(e)
+        }
+    })?;
 
     let job = ExportJob {
         id: job_id,

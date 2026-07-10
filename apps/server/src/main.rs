@@ -133,6 +133,20 @@ async fn main() {
     // the in-memory fallback still enforces per-process when Redis is down.
     let verify_send_limiter = RateLimiter::new(3, 900, redis.clone());
     let verify_attempt_limiter = RateLimiter::new(5, 900, redis.clone());
+    // Dedicated, more generous bucket for the machine (API-key) surface (F-30):
+    // the auth-tuned 10/60s is too tight for high-throughput integrations.
+    // Env-tunable (API_KEY_RATE_LIMIT_MAX / API_KEY_RATE_LIMIT_WINDOW_SECS);
+    // defaults to 300 req / 60s. Kept out of Config (read here) to stay surgical.
+    let api_key_rate_max = std::env::var("API_KEY_RATE_LIMIT_MAX")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(300);
+    let api_key_rate_window = std::env::var("API_KEY_RATE_LIMIT_WINDOW_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(60);
+    let api_key_rate_limiter =
+        RateLimiter::new(api_key_rate_max, api_key_rate_window, redis.clone());
 
     // ── WebSocket ────────────────────────────────────────────────────
     let mut websocket_state = WebSocketState::new();
@@ -214,6 +228,7 @@ async fn main() {
         rate_limiter,
         verify_send_limiter,
         verify_attempt_limiter,
+        api_key_rate_limiter,
         config: Arc::new(config.clone()),
     };
 
@@ -224,6 +239,11 @@ async fn main() {
     // purger above). Uses SECURITY DEFINER functions so the non-BYPASSRLS
     // app pool can still see the cross-tenant due set.
     qdesigner_server::series::spawn_scheduler(state.clone());
+
+    // ── Expired-resource-share purger (F-31) ─────────────────────────
+    // Hourly cleanup of lapsed `resource_shares` rows (already inert on reads,
+    // but they accrete without this). Fire-and-forget, like the scheduler above.
+    qdesigner_server::housekeeping::spawn_share_purge(state.clone());
 
     // ── Router ───────────────────────────────────────────────────────
     let app = api::router(state.clone())
