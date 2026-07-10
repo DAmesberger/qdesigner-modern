@@ -587,6 +587,17 @@
         onAction={() => goto('/')}
       />
     </div>
+  {:else if controller.screen === 'webgl-unsupported'}
+    <!-- WebGL preflight gate (R2-4): a reaction/webgl study on a device without WebGL 2.0.
+         Honest turn-away BEFORE any session was created, not a mid-study dead-end. -->
+    <div class="loading-container" data-testid="fillout-webgl-unsupported">
+      <EmptyState
+        title="Graphics support required"
+        description="This study contains reaction-time tasks that need graphics support your browser or device doesn't provide. Please try again on a desktop browser such as Chrome or Firefox."
+        buttonText="Go back"
+        onAction={() => goto('/')}
+      />
+    </div>
   {:else if controller.screen === 'screened-out' && controller.screenOut}
     <ScreenedOutScreen result={controller.screenOut} onClose={() => goto('/')} />
   {:else if controller.screen === 'complete'}

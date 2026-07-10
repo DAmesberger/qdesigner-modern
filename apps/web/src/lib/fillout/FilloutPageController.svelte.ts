@@ -28,6 +28,11 @@ import { db, filloutDefinitionKey, type FilloutServerVariable } from '$lib/servi
 import { collectServerVariables, declHash } from '@qdesigner/questionnaire-core';
 import type { ServerVariableSnapshot } from '$lib/runtime/core/QuestionnaireRuntime';
 import { ensureModulesRegistered } from '$lib/modules/register-all';
+import {
+  definitionNeedsWebGL,
+  isWebGLUnavailableError,
+  probeWebGL2Support,
+} from '$lib/fillout/webglPreflight';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import type { GatekeeperResult } from '$lib/runtime/timing';
 import type { FilloutRuntime, FilloutRuntimeConfig } from '$lib/fillout/runtime/FilloutRuntime';
@@ -139,7 +144,13 @@ const SERVER_VAR_DEFAULT_STALE_MS = 30 * 24 * 60 * 60 * 1000;
 export class FilloutPageController {
   // --- Screen state machine ---------------------------------------------------
   screen = $state<
-    'welcome' | 'consent' | 'runtime' | 'complete' | 'over-quota' | 'screened-out'
+    | 'welcome'
+    | 'consent'
+    | 'runtime'
+    | 'complete'
+    | 'over-quota'
+    | 'screened-out'
+    | 'webgl-unsupported'
   >('welcome');
   overQuotaMessage = $state('');
   // Structured eligibility screen-out outcome (F-20). Set when a `terminate` flow
@@ -458,11 +469,34 @@ export class FilloutPageController {
     // "Start" is a user gesture — unlock audio here so the no-consent path also
     // satisfies the autoplay policy before any reaction trial (CONTRACT-AUDIO).
     this.ensureAudioUnlocked();
+
+    // WebGL preflight (R2-4): a study containing reaction / webgl stimuli needs a WebGL
+    // 2.0 context. Probe here — BEFORE the consent screen and BEFORE any session creation —
+    // so a device that can't render the stimuli is turned away honestly instead of
+    // dead-ending mid-study on a raw renderer error, and never leaves an orphan session.
+    if (!(await this.ensureWebGLSupported())) return;
+
     if (this.data.questionnaire.definition.settings?.requireConsent) {
       this.screen = 'consent';
     } else {
       await this.createSessionAndStart();
     }
+  }
+
+  /**
+   * Gate the start flow on WebGL 2.0 availability when the definition contains a v1 WebGL
+   * paradigm (R2-4). Returns `true` to proceed; `false` after switching to the dedicated
+   * `webgl-unsupported` screen. Zero behavioural change for a questionnaire with no WebGL
+   * items — the probe is never consulted, so form-only studies are untouched.
+   */
+  private async ensureWebGLSupported(): Promise<boolean> {
+    // The v1-contract predicate reads the module registry; ensure it is populated first.
+    await ensureModulesRegistered();
+    if (!definitionNeedsWebGL(this.data.questionnaire.definition)) return true;
+    if (probeWebGL2Support()) return true;
+    this.screen = 'webgl-unsupported';
+    this.loading = false;
+    return false;
   }
 
   /**
@@ -899,6 +933,14 @@ export class FilloutPageController {
     } catch (err) {
       console.error('Failed to initialize runtime:', err);
       this.loading = false;
+
+      // Belt-and-braces (R2-4): a WebGL context can still fail to construct after a passing
+      // probe (context loss, driver blacklisting). Route it to the same honest gate screen
+      // rather than dumping the raw "WebGL 2.0 is required" string on the generic error one.
+      if (isWebGLUnavailableError(err)) {
+        this.screen = 'webgl-unsupported';
+        return;
+      }
 
       let errorMessage = err instanceof Error ? err.message : 'Failed to start questionnaire';
       if (errorMessage.includes('Failed to preload')) {

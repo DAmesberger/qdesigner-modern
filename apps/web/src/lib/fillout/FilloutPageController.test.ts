@@ -15,6 +15,17 @@ vi.mock('$lib/modules/register-all', () => ({
 }));
 // goto is only reached on consent-decline (not exercised here); mock so the import resolves.
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+// WebGL preflight (R2-4). Default to "no WebGL needed" so the existing form-path tests are
+// untouched (the probe is never consulted); the preflight tests override per-case.
+vi.mock('$lib/fillout/webglPreflight', () => ({
+  definitionNeedsWebGL: vi.fn(() => false),
+  probeWebGL2Support: vi.fn(() => true),
+  isWebGLUnavailableError: vi.fn(() => false),
+}));
+import {
+  definitionNeedsWebGL,
+  probeWebGL2Support,
+} from '$lib/fillout/webglPreflight';
 
 /**
  * Build a minimal FilloutPageData. `definition` only needs the few fields the controller
@@ -121,6 +132,9 @@ beforeEach(() => {
   // (no api.sessions.create round-trip). Individual paths under test don't depend on the
   // network otherwise.
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+  // Reset the WebGL preflight doubles to their "form-only, supported" defaults.
+  vi.mocked(definitionNeedsWebGL).mockReturnValue(false);
+  vi.mocked(probeWebGL2Support).mockReturnValue(true);
 });
 
 describe('FilloutPageController', () => {
@@ -167,6 +181,39 @@ describe('FilloutPageController', () => {
     expect(controller.overQuotaMessage).toBe('Study full');
     expect(mocks.offlineSession.createSession).not.toHaveBeenCalled();
     expect(mocks.services.makeRuntime).not.toHaveBeenCalled();
+  });
+
+  it('blocks a reaction study on a failing WebGL probe and never creates a session (R2-4)', async () => {
+    const data = makeData({ settings: { requireConsent: false } });
+    const mocks = makeMocks();
+    // This definition needs WebGL, and the device can't provide it.
+    vi.mocked(definitionNeedsWebGL).mockReturnValue(true);
+    vi.mocked(probeWebGL2Support).mockReturnValue(false);
+
+    const controller = makeController(data, mocks);
+    wireRuntimeInputs(controller, data.questionnaire.definition);
+
+    await controller.handleStart();
+
+    expect(controller.screen).toBe('webgl-unsupported');
+    expect(probeWebGL2Support).toHaveBeenCalledTimes(1);
+    expect(mocks.offlineSession.createSession).not.toHaveBeenCalled();
+    expect(mocks.services.makeRuntime).not.toHaveBeenCalled();
+  });
+
+  it('does not consult the WebGL probe for a form-only definition (R2-4)', async () => {
+    const data = makeData({ settings: { requireConsent: false } });
+    const mocks = makeMocks();
+    // Default: definitionNeedsWebGL → false.
+    const controller = makeController(data, mocks);
+    wireRuntimeInputs(controller, data.questionnaire.definition);
+
+    await controller.handleStart();
+
+    // No block, probe never consulted, and the normal start flow ran.
+    expect(controller.screen).toBe('runtime');
+    expect(probeWebGL2Support).not.toHaveBeenCalled();
+    expect(mocks.offlineSession.createSession).toHaveBeenCalledTimes(1);
   });
 
   it('completes: marks the offline session complete, then syncs, then shows completion', async () => {
