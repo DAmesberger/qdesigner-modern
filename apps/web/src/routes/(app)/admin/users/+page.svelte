@@ -17,6 +17,12 @@
   let members = $state<OrganizationMember[]>([]);
   let customRoles = $state<OrgRole[]>([]);
   let loading = $state(true);
+
+  // The members endpoint returns the full org roster in one shot, so page the
+  // table client-side: render a growing slice via "Load more" (audit-log idiom).
+  const PAGE_SIZE = 25;
+  let visibleCount = $state(PAGE_SIZE);
+  const visibleMembers = $derived(members.slice(0, visibleCount));
   let error = $state<string | null>(null);
   let removingUserId = $state<string | null>(null);
   let updatingUserId = $state<string | null>(null);
@@ -68,6 +74,7 @@
 
     try {
       members = await api.organizations.members.list(currentOrg.id);
+      visibleCount = PAGE_SIZE;
     } catch (err) {
       console.error('Error loading members:', err);
       error = 'Failed to load members';
@@ -310,7 +317,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-border">
-            {#each members as member}
+            {#each visibleMembers as member}
               <tr>
                 <td class="py-3">
                   <div>
@@ -388,6 +395,17 @@
           </tbody>
         </table>
       </div>
+      {#if visibleCount < members.length}
+        <div class="mt-4 text-center">
+          <button
+            type="button"
+            class="inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            onclick={() => (visibleCount += PAGE_SIZE)}
+          >
+            Load more ({members.length - visibleCount} remaining)
+          </button>
+        </div>
+      {/if}
     </Card>
   {/if}
 </div>

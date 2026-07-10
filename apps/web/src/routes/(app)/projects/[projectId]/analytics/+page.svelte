@@ -44,6 +44,14 @@
 	let selectedQuestionnaireId = $state<string>('');
 	let sessions = $state<SessionData[]>([]);
 	let loading = $state(false);
+
+	// Client-side pagination for the sessions table. The full list stays loaded
+	// because the summary cards (completion rate, active/abandoned counts) are
+	// derived from every session; we only bound how many rows the table renders,
+	// growing the slice via "Load more" (the audit-log idiom).
+	const SESSIONS_PAGE_SIZE = 25;
+	let sessionsVisibleCount = $state(SESSIONS_PAGE_SIZE);
+	let visibleSessions = $derived(sessions.slice(0, sessionsVisibleCount));
 	let error = $state<string | null>(null);
 	let exportLoading = $state<string | null>(null);
 	let exportMenuOpen = $state(false);
@@ -183,6 +191,7 @@
 	async function loadSessions(questionnaireId: string) {
 		loading = true;
 		error = null;
+		sessionsVisibleCount = SESSIONS_PAGE_SIZE;
 
 		try {
 			sessions = await api.sessions.list({ questionnaireId });
@@ -855,7 +864,7 @@
 							<tbody
 								class="bg-card divide-y divide-border"
 							>
-								{#each sessions as session (session.id)}
+								{#each visibleSessions as session (session.id)}
 									<tr class="hover:bg-accent">
 										<td
 											class="px-6 py-4 whitespace-nowrap text-sm font-mono text-foreground"
@@ -891,6 +900,17 @@
 							</tbody>
 						</table>
 					</div>
+					{#if sessionsVisibleCount < sessions.length}
+						<div class="border-t border-border px-6 py-4 text-center">
+							<button
+								type="button"
+								class="inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+								onclick={() => (sessionsVisibleCount += SESSIONS_PAGE_SIZE)}
+							>
+								Load more ({sessions.length - sessionsVisibleCount} remaining)
+							</button>
+						</div>
+					{/if}
 				{/if}
 			</div>
 

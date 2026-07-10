@@ -33,6 +33,12 @@
   let sortColumn = $state<string>('name');
   let sortDirection = $state<'asc' | 'desc'>('asc');
 
+  // Client-side pagination (the list is loaded, filtered and sorted in the
+  // browser, so there is no server page to request — we render a growing
+  // slice via "Load more", the audit-log idiom).
+  const PAGE_SIZE = 25;
+  let visibleCount = $state(PAGE_SIZE);
+
   // Cross-project comparison
   let selectedIds = $state(new SvelteSet<string>());
   let compareSource = $state<'variable' | 'response'>('variable');
@@ -139,6 +145,15 @@
 
     return result;
   });
+
+  // Reset paging whenever the filter/sort inputs change, so "Load more" always
+  // starts from the top of the freshly filtered/sorted list.
+  $effect(() => {
+    void [filterProject, filterStatus, filterDateRange, sortColumn, sortDirection];
+    visibleCount = PAGE_SIZE;
+  });
+
+  let paged = $derived(filtered.slice(0, visibleCount));
 
   function toggleSort(col: string) {
     if (sortColumn === col) {
@@ -333,7 +348,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each filtered as q}
+            {#each paged as q}
               <tr
                 class="border-b border-border/50 hover:bg-background/30 cursor-pointer transition-colors"
                 onclick={() => window.location.href = `/analytics/${q.id}`}
@@ -382,6 +397,17 @@
           </tbody>
         </table>
       </div>
+      {#if visibleCount < filtered.length}
+        <div class="border-t border-border p-4 text-center">
+          <button
+            type="button"
+            class="inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            onclick={() => (visibleCount += PAGE_SIZE)}
+          >
+            Load more ({filtered.length - visibleCount} remaining)
+          </button>
+        </div>
+      {/if}
     </div>
   {/if}
 

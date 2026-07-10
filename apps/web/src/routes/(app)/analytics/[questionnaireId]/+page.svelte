@@ -111,40 +111,21 @@
   async function exportData(format: 'json' | 'csv') {
     exportLoading = true;
     try {
-      // Find the project for this questionnaire from summary
-      if (!summary) return;
-      const projects = await api.projects.list('');
-      let projectId = '';
-      for (const p of projects) {
-        if (p.id === summary.project_id) {
-          projectId = p.id;
-          break;
-        }
-      }
-      if (!projectId) {
-        // Try fetching all projects and finding via questionnaire list
-        for (const p of projects) {
-          try {
-            const qs = await api.questionnaires.list(p.id);
-            if (qs.some(q => q.id === data.questionnaireId)) {
-              projectId = p.id;
-              break;
-            }
-          } catch { /* continue */ }
-        }
-      }
-      if (projectId) {
-        const rows = await api.questionnaires.export(projectId, data.questionnaireId, format);
-        // Create and download blob
-        const content = format === 'json' ? JSON.stringify(rows, null, 2) : rowsToCsv(rows);
-        const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${summary?.name ?? 'export'}.${format}`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
+      // The owning project id comes straight off the summary — no need to
+      // list every project (and walk each one's questionnaires) to find it.
+      const projectId = summary?.project_id;
+      if (!projectId) return;
+
+      const rows = await api.questionnaires.export(projectId, data.questionnaireId, format);
+      // Create and download blob
+      const content = format === 'json' ? JSON.stringify(rows, null, 2) : rowsToCsv(rows);
+      const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${summary?.name ?? 'export'}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Export error:', err);
     } finally {
