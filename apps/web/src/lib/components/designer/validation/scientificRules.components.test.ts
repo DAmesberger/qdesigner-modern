@@ -4,6 +4,7 @@ import AdaptiveBlockEditor from '../AdaptiveBlockEditor.svelte';
 import StandardParadigmFields from '$lib/modules/questions/reaction-time/designer/StandardParadigmFields.svelte';
 import QuotaPanel from '../QuotaPanel.svelte';
 import { designerStore } from '$lib/stores/designer.svelte';
+import type { Question } from '$lib/shared';
 
 // Svelte transitions used by the Dialog need the Web Animations API jsdom lacks.
 beforeAll(() => {
@@ -17,7 +18,16 @@ beforeAll(() => {
 afterEach(() => cleanup());
 
 describe('AdaptiveBlockEditor inline validation', () => {
-  const question = { id: 'q1', type: 'text-input', name: '', display: { prompt: 'Item 1' } };
+  // Minimal fixture — AdaptiveBlockEditor only reads `display.prompt`/`name`/`id`
+  // off each question for its item labels, so a full response config is noise here.
+  const question = {
+    id: 'q1',
+    type: 'text-input',
+    name: '',
+    order: 0,
+    required: false,
+    display: { prompt: 'Item 1' },
+  } as unknown as Question;
 
   it('shows an error message for a non-positive discrimination (a)', () => {
     const { getByText } = render(AdaptiveBlockEditor, {
