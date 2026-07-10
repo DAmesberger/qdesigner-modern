@@ -90,8 +90,8 @@ opportunistically where their files are touched.
 | Phase | Status |
 |---|---|
 | RT-1 | ✅ CLOSED (b743be4 RT-1c, 5fd46e3 RT-1b-server, 7366e99 RT-1a, deeede2 RT-1b-client; exit live-QA all-pass: trials end-to-end in-browser with full provenance, W-1/W-3/W-10 verified, per-trial rows server-side) |
-| RT-2 | in progress — RT-2a merged a3bfe85 (jitter sampling live-verified; authoring persistence bug F-49 in fix); RT-2b (ResponseSet editor + Paradigm label) queued |
-| RT-3..RT-6 | todo |
+| RT-2 | ✅ CLOSED (RT-2a a3bfe85, RT-2b f840e5c; fixes F-48 5c86ef8, F-49 a136b8b, F-51 9afb859, F-52 structural 63a597e). Third QA pass 5/5: hydration + no-clobber, console hygiene clean, testTrials honored (4/4), semantic option_ids + correctness scored end-to-end (canvas-pixel onset detector, rt_us 393-404ms vs 400ms dispatch — timing chain incidentally validated), custom paradigm BlockEditor intact. Lesson encoded: single-source config (no procedural study snapshot), owned working copy + onUpdate contract. F-53 logged (global deadletter banner). |
+| RT-3..RT-6 | todo (RT-3 media contract next) |
 
 QA-surfaced bugs: F-48 (pre-existing designer autosave create/update race —
 fix in flight), F-49 (TimingSpec persistence — fix in flight). Live-QA
