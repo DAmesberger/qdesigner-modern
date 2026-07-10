@@ -485,6 +485,49 @@ pub async fn get_events(
     Ok(Json(events))
 }
 
+/// GET /api/sessions/:id/trials
+#[utoipa::path(
+    get,
+    path = "/api/sessions/{id}/trials",
+    params(
+        ("id" = Uuid, Path, description = "Session id")
+    ),
+    security(
+        ("bearerAuth" = [])
+    ),
+    responses(
+        (status = 200, description = "Session per-trial rows", body = [TrialRecord]),
+        (status = 404, description = "Session not found", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["sessions"]
+)]
+pub async fn get_trials(
+    user: AuthenticatedUser,
+    tx: Tx,
+    Path(session_id): Path<Uuid>,
+) -> Result<Json<Vec<TrialRecord>>, ApiError> {
+    let mut tx = tx.tx().await?;
+    ensure_session_access(&mut tx, user.user_id, session_id).await?;
+
+    // Runtime query (not the compile-checked macro) so the `trials` table added
+    // in 00048 needs no `.sqlx` cache entry — mirrors the sync handler's idiom.
+    let trials = sqlx::query_as::<_, TrialRecord>(
+        r#"
+        SELECT id, session_id, question_id, trial_index, option_id, source,
+               rt_us, correct, sampled_timings, provenance, invalidated,
+               client_id, created_at
+        FROM trials
+        WHERE session_id = $1
+        ORDER BY question_id ASC, trial_index ASC
+        "#,
+    )
+    .bind(session_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    Ok(Json(trials))
+}
+
 /// GET /api/sessions/:id/variables
 #[utoipa::path(
     get,

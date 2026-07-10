@@ -141,6 +141,21 @@ pub async fn sync_session(
     let mut responses_synced = 0i32;
     let mut events_synced = 0i32;
     let mut variables_synced = 0i32;
+    let mut trials_synced = 0i32;
+
+    // W-8 honesty: `responses.reaction_time_us` is a single scalar and is
+    // meaningless for a multi-trial reaction response ("which trial?"). Count
+    // the trials the client is syncing per question_id in THIS batch; a response
+    // whose question carries >1 trial gets its reaction_time_us NULLed server-
+    // side (the per-trial truth lives in trials.rt_us). Single-trial responses
+    // pass the client value through unchanged. Enforced here so the client can
+    // never assert a bogus per-response RT for a multi-trial paradigm.
+    let mut trial_count_by_question: HashMap<&str, usize> = HashMap::new();
+    for trial in &body.trials {
+        *trial_count_by_question
+            .entry(trial.question_id.as_str())
+            .or_insert(0) += 1;
+    }
     // Ack-driven marking (E-OFF-4): every client_id / variable name the server
     // durably holds after this sync, returned so the client flips ONLY these to
     // synced=1. A committed `ON CONFLICT (client_id) DO NOTHING` chunk guarantees
@@ -178,10 +193,21 @@ pub async fn sync_session(
              presented_at, answered_at, metadata, client_id, timing_provenance) ",
         );
         builder.push_values(chunk, |mut row, resp| {
+            // W-8: NULL the scalar RT for a multi-trial reaction response.
+            let reaction_time_us = if trial_count_by_question
+                .get(resp.question_id.as_str())
+                .copied()
+                .unwrap_or(0)
+                > 1
+            {
+                None
+            } else {
+                resp.reaction_time_us
+            };
             row.push_bind(session_id)
                 .push_bind(&resp.question_id)
                 .push_bind(&resp.value)
-                .push_bind(resp.reaction_time_us)
+                .push_bind(reaction_time_us)
                 .push_bind(&resp.presented_at)
                 .push_unseparated("::text::timestamptz")
                 .push_bind(&resp.answered_at)
@@ -220,6 +246,33 @@ pub async fn sync_session(
         events_synced += result.rows_affected() as i32;
         // Same ack contract as responses — the committed chunk is durably held.
         accepted_client_ids.extend(chunk.iter().map(|evt| evt.client_id));
+    }
+
+    // Sync trials with dedup — same chunked strategy as responses/events.
+    // 11 bind columns/row (500 × 11 = 5500 binds), well under Postgres' limit.
+    for chunk in body.trials.chunks(SYNC_BATCH_ROWS) {
+        let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+            "INSERT INTO trials (session_id, question_id, trial_index, option_id, \
+             source, rt_us, correct, sampled_timings, provenance, invalidated, client_id) ",
+        );
+        builder.push_values(chunk, |mut row, trial| {
+            row.push_bind(session_id)
+                .push_bind(&trial.question_id)
+                .push_bind(trial.trial_index)
+                .push_bind(&trial.option_id)
+                .push_bind(&trial.source)
+                .push_bind(trial.rt_us)
+                .push_bind(trial.correct)
+                .push_bind(&trial.sampled_timings)
+                .push_bind(&trial.provenance)
+                .push_bind(&trial.invalidated)
+                .push_bind(trial.client_id);
+        });
+        builder.push(" ON CONFLICT (client_id) DO NOTHING");
+        let result = builder.build().execute(&mut **tx).await?;
+        trials_synced += result.rows_affected() as i32;
+        // Same ack contract as responses — the committed chunk is durably held.
+        accepted_client_ids.extend(chunk.iter().map(|trial| trial.client_id));
     }
 
     // Sync variables (upsert)
@@ -262,7 +315,8 @@ pub async fn sync_session(
             .bind(status)
             .execute(&mut **tx)
             .await?;
-    } else if responses_synced > 0 || events_synced > 0 || variables_synced > 0 {
+    } else if responses_synced > 0 || events_synced > 0 || variables_synced > 0 || trials_synced > 0
+    {
         sqlx::query("UPDATE sessions SET last_activity_at = NOW() WHERE id = $1")
             .bind(session_id)
             .execute(&mut **tx)
@@ -307,6 +361,7 @@ pub async fn sync_session(
         responses_synced,
         events_synced,
         variables_synced,
+        trials_synced,
         accepted_client_ids,
         accepted_variable_names,
     }))
@@ -315,7 +370,7 @@ pub async fn sync_session(
 /// GET /api/sessions/{id}/synced-client-ids
 ///
 /// Lightweight reconcile probe (E-OFF-5): returns the `client_id`s the server
-/// durably holds for the session (responses + interaction events). The client
+/// durably holds for the session (responses + interaction events + trials). The client
 /// diffs its locally-`acked` ledger rows against this set and re-queues anything
 /// the server does not actually have — defending against a client-side
 /// over-marking that would otherwise strand data. Runs under the fillout GUC
@@ -348,6 +403,9 @@ pub async fn synced_client_ids(
         UNION
         SELECT client_id FROM interaction_events
         WHERE session_id = $1 AND client_id IS NOT NULL
+        UNION
+        SELECT client_id FROM trials
+        WHERE session_id = $1
         "#,
     )
     .bind(session_id)

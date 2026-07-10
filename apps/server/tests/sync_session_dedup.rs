@@ -168,6 +168,164 @@ async fn interaction_events_dedup_on_client_id() {
 }
 
 #[tokio::test]
+async fn trials_dedup_on_client_id() {
+    // RT-1b: trials sync uses the same `ON CONFLICT (client_id) DO NOTHING`
+    // idempotent dedup as responses/events. A retry with the same client_id
+    // must not create a second row nor overwrite the original.
+    let Some(pool) = fixture_pool().await else {
+        eprintln!("Skipping: DATABASE_URL not set");
+        return;
+    };
+
+    let session_id = make_session(&pool).await.expect("session");
+    let client_id = Uuid::new_v4();
+
+    let inserted = sqlx::query(
+        "INSERT INTO trials (session_id, client_id, question_id, trial_index, rt_us, correct) \
+         VALUES ($1, $2, 'q-1', 0, 12345, true) ON CONFLICT (client_id) DO NOTHING",
+    )
+    .bind(session_id)
+    .bind(client_id)
+    .execute(&pool)
+    .await
+    .expect("insert 1")
+    .rows_affected();
+    assert_eq!(inserted, 1, "first trial insert should write one row");
+
+    let retry = sqlx::query(
+        "INSERT INTO trials (session_id, client_id, question_id, trial_index, rt_us, correct) \
+         VALUES ($1, $2, 'q-1', 0, 99999, false) ON CONFLICT (client_id) DO NOTHING",
+    )
+    .bind(session_id)
+    .bind(client_id)
+    .execute(&pool)
+    .await
+    .expect("insert 2")
+    .rows_affected();
+    assert_eq!(retry, 0, "duplicate trial client_id should be skipped");
+
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM trials WHERE client_id = $1")
+        .bind(client_id)
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+    assert_eq!(count, 1);
+
+    let rt: i64 = sqlx::query_scalar("SELECT rt_us FROM trials WHERE client_id = $1")
+        .bind(client_id)
+        .fetch_one(&pool)
+        .await
+        .expect("rt");
+    assert_eq!(rt, 12345, "original trial value must survive retry");
+}
+
+#[tokio::test]
+async fn trials_backfill_is_idempotent() {
+    // RT-1b backfill: exploding a reaction response's `value.responses[]` into
+    // trials rows uses a DETERMINISTIC client_id (md5(response_id || ':' ||
+    // ordinal)), so re-running the exact backfill statement is a no-op. This
+    // mirrors the statement 00048 runs.
+    let Some(pool) = fixture_pool().await else {
+        eprintln!("Skipping: DATABASE_URL not set");
+        return;
+    };
+
+    let session_id = make_session(&pool).await.expect("session");
+
+    // A two-trial reaction response (the shape the client persists into
+    // `responses.value`), with a scalar reaction_time_us that W-8 must NULL.
+    let value = serde_json::json!({
+        "responses": [
+            { "trialNumber": 0, "key": "left",  "reactionTime": 321.5, "isCorrect": true,  "responseDevice": "keyboard" },
+            { "trialNumber": 1, "key": "right", "reactionTime": 410.0, "isCorrect": false, "responseDevice": "keyboard", "anticipatory": true }
+        ]
+    });
+    let resp_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO responses (session_id, question_id, value, reaction_time_us) \
+         VALUES ($1, 'rt-q', $2, 400000) RETURNING id",
+    )
+    .bind(session_id)
+    .bind(&value)
+    .fetch_one(&pool)
+    .await
+    .expect("insert reaction response");
+
+    // The backfill INSERT (subset scoped to this one response for the test).
+    let backfill = r#"
+        INSERT INTO public.trials
+            (session_id, question_id, trial_index, option_id, source, rt_us, correct,
+             sampled_timings, provenance, invalidated, client_id)
+        SELECT
+            r.session_id, r.question_id,
+            COALESCE((elem->>'trialNumber')::int, (ord - 1)::int),
+            elem->>'key', elem->>'responseDevice',
+            CASE WHEN jsonb_typeof(elem->'reactionTime') = 'number'
+                 THEN round((elem->>'reactionTime')::numeric * 1000)::bigint ELSE NULL END,
+            CASE WHEN jsonb_typeof(elem->'isCorrect') = 'boolean'
+                 THEN (elem->>'isCorrect')::boolean ELSE NULL END,
+            elem->'phaseTimeline',
+            jsonb_strip_nulls(jsonb_build_object('backfilled', true)),
+            CASE
+                WHEN jsonb_typeof(elem->'invalid') = 'boolean' AND (elem->>'invalid')::boolean
+                    THEN COALESCE(elem->>'invalidReason', 'invalid')
+                WHEN jsonb_typeof(elem->'anticipatory') = 'boolean' AND (elem->>'anticipatory')::boolean
+                    THEN 'anticipatory'
+                ELSE NULL END,
+            md5(r.id::text || ':' || ord::text)::uuid
+        FROM public.responses r
+        CROSS JOIN LATERAL jsonb_array_elements(
+            CASE WHEN jsonb_typeof(r.value->'responses') = 'array'
+                 THEN r.value->'responses' ELSE '[]'::jsonb END
+        ) WITH ORDINALITY AS t(elem, ord)
+        WHERE r.id = $1
+        ON CONFLICT (client_id) DO NOTHING
+    "#;
+
+    let first = sqlx::query(backfill)
+        .bind(resp_id)
+        .execute(&pool)
+        .await
+        .expect("backfill 1")
+        .rows_affected();
+    assert_eq!(first, 2, "two trials materialized from the two-element array");
+
+    let again = sqlx::query(backfill)
+        .bind(resp_id)
+        .execute(&pool)
+        .await
+        .expect("backfill 2")
+        .rows_affected();
+    assert_eq!(again, 0, "re-running the backfill is a deterministic no-op");
+
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM trials WHERE session_id = $1 AND question_id = 'rt-q'")
+            .bind(session_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count");
+    assert_eq!(count, 2, "still exactly two trials after two backfill passes");
+
+    // The second trial was flagged anticipatory; the first kept.
+    let invalidated: Option<String> = sqlx::query_scalar(
+        "SELECT invalidated FROM trials WHERE session_id = $1 AND trial_index = 1",
+    )
+    .bind(session_id)
+    .fetch_one(&pool)
+    .await
+    .expect("invalidated");
+    assert_eq!(invalidated.as_deref(), Some("anticipatory"));
+
+    // rt_us is microseconds (ms × 1000).
+    let rt0: Option<i64> =
+        sqlx::query_scalar("SELECT rt_us FROM trials WHERE session_id = $1 AND trial_index = 0")
+            .bind(session_id)
+            .fetch_one(&pool)
+            .await
+            .expect("rt0");
+    assert_eq!(rt0, Some(321_500), "321.5ms → 321500us");
+}
+
+#[tokio::test]
 async fn sync_metadata_merge_preserves_prior_keys_and_is_idempotent() {
     // Mirrors the metadata-merge sync_session runs for a PRE-EXISTING session
     // (online-created): the INSERT branch is skipped, so the final-snapshot

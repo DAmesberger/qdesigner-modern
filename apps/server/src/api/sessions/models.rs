@@ -93,6 +93,25 @@ pub struct ResponseRecord {
     pub client_id: Option<Uuid>,
 }
 
+/// A persisted per-trial row (RT-1b). Read back by
+/// `GET /api/sessions/{id}/trials` for the session browser's "Per Trial" tab.
+#[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
+pub struct TrialRecord {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub question_id: String,
+    pub trial_index: i32,
+    pub option_id: Option<String>,
+    pub source: Option<String>,
+    pub rt_us: Option<i64>,
+    pub correct: Option<bool>,
+    pub sampled_timings: Option<serde_json::Value>,
+    pub provenance: Option<serde_json::Value>,
+    pub invalidated: Option<String>,
+    pub client_id: Uuid,
+    pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct InteractionEventRecord {
     pub id: Uuid,
@@ -1550,6 +1569,11 @@ pub struct SyncPayload {
     pub responses: Vec<SyncResponseItem>,
     pub events: Vec<SyncEventItem>,
     pub variables: Vec<SyncVariableItem>,
+    /// Per-trial rows (RT-1b), the fourth offline record kind. Optional so
+    /// older clients that only sync responses/events/variables still
+    /// deserialize; defaults to empty.
+    #[serde(default)]
+    pub trials: Vec<SyncTrialItem>,
     pub status: Option<String>,
     /// Present when the session may not yet exist on the server (offline-created).
     #[serde(default)]
@@ -1590,6 +1614,32 @@ pub struct SyncEventItem {
     pub metadata: Option<serde_json::Value>,
 }
 
+/// One per-trial row in the sync payload (RT-1b). Fields mirror the `trials`
+/// table columns; snake_case with camelCase aliases like the other sync items.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SyncTrialItem {
+    #[serde(alias = "clientId")]
+    pub client_id: Uuid,
+    #[serde(alias = "questionId")]
+    pub question_id: String,
+    #[serde(alias = "trialIndex")]
+    pub trial_index: i32,
+    #[serde(default, alias = "optionId")]
+    pub option_id: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default, alias = "rtUs")]
+    pub rt_us: Option<i64>,
+    #[serde(default)]
+    pub correct: Option<bool>,
+    #[serde(default, alias = "sampledTimings")]
+    pub sampled_timings: Option<serde_json::Value>,
+    #[serde(default)]
+    pub provenance: Option<serde_json::Value>,
+    #[serde(default)]
+    pub invalidated: Option<String>,
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct SyncVariableItem {
     #[serde(alias = "variableName")]
@@ -1607,6 +1657,11 @@ pub struct SyncResult {
     pub responses_synced: i32,
     pub events_synced: i32,
     pub variables_synced: i32,
+    /// Count of `trials[]` rows freshly inserted this sync (RT-1b). Duplicates
+    /// skipped by `ON CONFLICT (client_id) DO NOTHING` are not counted, exactly
+    /// like `responses_synced`.
+    #[serde(default)]
+    pub trials_synced: i32,
     /// Ack-driven marking (E-OFF-4): the `client_id`s (responses AND events) the
     /// server DURABLY HOLDS after this sync — i.e. every id in a chunk whose
     /// `INSERT ... ON CONFLICT (client_id) DO NOTHING` statement committed, which

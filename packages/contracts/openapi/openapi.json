@@ -6546,6 +6546,57 @@
         }
       }
     },
+    "/api/sessions/{id}/trials": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "GET /api/sessions/:id/trials",
+        "operationId": "get_trials",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Session id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session per-trial rows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TrialRecord"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/sessions/{id}/variables": {
       "get": {
         "tags": [
@@ -6998,7 +7049,7 @@
           "sessions"
         ],
         "summary": "GET /api/sessions/{id}/synced-client-ids",
-        "description": "Lightweight reconcile probe (E-OFF-5): returns the `client_id`s the server\ndurably holds for the session (responses + interaction events). The client\ndiffs its locally-`acked` ledger rows against this set and re-queues anything\nthe server does not actually have — defending against a client-side\nover-marking that would otherwise strand data. Runs under the fillout GUC\n(`app.session_id` from the URL path), so an anonymous session can probe its\nown durability; `ensure_session_participant_or_member` gates access.",
+        "description": "Lightweight reconcile probe (E-OFF-5): returns the `client_id`s the server\ndurably holds for the session (responses + interaction events + trials). The client\ndiffs its locally-`acked` ledger rows against this set and re-queues anything\nthe server does not actually have — defending against a client-side\nover-marking that would otherwise strand data. Runs under the fillout GUC\n(`app.session_id` from the URL path), so an anonymous session can probe its\nown durability; `ensure_session_participant_or_member` gates access.",
         "operationId": "synced_client_ids",
         "parameters": [
           {
@@ -11805,6 +11856,13 @@
               "$ref": "#/components/schemas/SyncVariableItem"
             }
           },
+          "trials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncTrialItem"
+            },
+            "description": "Per-trial rows (RT-1b), the fourth offline record kind. Optional so\nolder clients that only sync responses/events/variables still\ndeserialize; defaults to empty."
+          },
           "status": {
             "type": [
               "string",
@@ -11885,6 +11943,11 @@
             "type": "integer",
             "format": "int32"
           },
+          "trials_synced": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Count of `trials[]` rows freshly inserted this sync (RT-1b). Duplicates\nskipped by `ON CONFLICT (client_id) DO NOTHING` are not counted, exactly\nlike `responses_synced`."
+          },
           "accepted_client_ids": {
             "type": "array",
             "items": {
@@ -11942,6 +12005,61 @@
           },
           "metadata": {},
           "browser_info": {}
+        }
+      },
+      "SyncTrialItem": {
+        "type": "object",
+        "description": "One per-trial row in the sync payload (RT-1b). Fields mirror the `trials`\ntable columns; snake_case with camelCase aliases like the other sync items.",
+        "required": [
+          "client_id",
+          "question_id",
+          "trial_index"
+        ],
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "question_id": {
+            "type": "string"
+          },
+          "trial_index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "option_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rt_us": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "correct": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "sampled_timings": {},
+          "provenance": {},
+          "invalidated": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       },
       "SyncVariableItem": {
@@ -12047,6 +12165,78 @@
             "type": "string",
             "format": "uuid",
             "description": "The user who becomes the new project owner. Must be an active member\nof the project's parent organization (auto-added to the project as\n`owner` if not already a project member)."
+          }
+        }
+      },
+      "TrialRecord": {
+        "type": "object",
+        "description": "A persisted per-trial row (RT-1b). Read back by\n`GET /api/sessions/{id}/trials` for the session browser's \"Per Trial\" tab.",
+        "required": [
+          "id",
+          "session_id",
+          "question_id",
+          "trial_index",
+          "client_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "question_id": {
+            "type": "string"
+          },
+          "trial_index": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "option_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rt_us": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "correct": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "sampled_timings": {},
+          "provenance": {},
+          "invalidated": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           }
         }
       },

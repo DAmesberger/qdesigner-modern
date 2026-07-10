@@ -1267,6 +1267,12 @@ export type SyncPayload = {
     responses: Array<SyncResponseItem>;
     events: Array<SyncEventItem>;
     variables: Array<SyncVariableItem>;
+    /**
+     * Per-trial rows (RT-1b), the fourth offline record kind. Optional so
+     * older clients that only sync responses/events/variables still
+     * deserialize; defaults to empty.
+     */
+    trials?: Array<SyncTrialItem>;
     status?: string | null;
     session?: null | SyncSessionInit;
 };
@@ -1291,6 +1297,12 @@ export type SyncResult = {
     responses_synced: number;
     events_synced: number;
     variables_synced: number;
+    /**
+     * Count of `trials[]` rows freshly inserted this sync (RT-1b). Duplicates
+     * skipped by `ON CONFLICT (client_id) DO NOTHING` are not counted, exactly
+     * like `responses_synced`.
+     */
+    trials_synced?: number;
     /**
      * Ack-driven marking (E-OFF-4): the `client_id`s (responses AND events) the
      * server DURABLY HOLDS after this sync — i.e. every id in a chunk whose
@@ -1322,6 +1334,23 @@ export type SyncSessionInit = {
     version_patch?: number | null;
     metadata?: unknown;
     browser_info?: unknown;
+};
+
+/**
+ * One per-trial row in the sync payload (RT-1b). Fields mirror the `trials`
+ * table columns; snake_case with camelCase aliases like the other sync items.
+ */
+export type SyncTrialItem = {
+    client_id: string;
+    question_id: string;
+    trial_index: number;
+    option_id?: string | null;
+    source?: string | null;
+    rt_us?: number | null;
+    correct?: boolean | null;
+    sampled_timings?: unknown;
+    provenance?: unknown;
+    invalidated?: string | null;
 };
 
 export type SyncVariableItem = {
@@ -1377,6 +1406,26 @@ export type TransferProjectOwnershipRequest = {
      * `owner` if not already a project member).
      */
     new_owner_user_id: string;
+};
+
+/**
+ * A persisted per-trial row (RT-1b). Read back by
+ * `GET /api/sessions/{id}/trials` for the session browser's "Per Trial" tab.
+ */
+export type TrialRecord = {
+    id: string;
+    session_id: string;
+    question_id: string;
+    trial_index: number;
+    option_id?: string | null;
+    source?: string | null;
+    rt_us?: number | null;
+    correct?: boolean | null;
+    sampled_timings?: unknown;
+    provenance?: unknown;
+    invalidated?: string | null;
+    client_id: string;
+    created_at?: string | null;
 };
 
 export type UnsubscribeResponse = {
@@ -4927,6 +4976,36 @@ export type SubmitEventsResponses = {
 };
 
 export type SubmitEventsResponse = SubmitEventsResponses[keyof SubmitEventsResponses];
+
+export type GetTrialsData = {
+    body?: never;
+    path: {
+        /**
+         * Session id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/sessions/{id}/trials';
+};
+
+export type GetTrialsErrors = {
+    /**
+     * Session not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetTrialsError = GetTrialsErrors[keyof GetTrialsErrors];
+
+export type GetTrialsResponses = {
+    /**
+     * Session per-trial rows
+     */
+    200: Array<TrialRecord>;
+};
+
+export type GetTrialsResponse = GetTrialsResponses[keyof GetTrialsResponses];
 
 export type GetVariablesData = {
     body?: never;

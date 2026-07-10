@@ -321,6 +321,7 @@ pub fn router(state: AppState) -> Router {
             )),
         )
         .route("/{id}/synced-client-ids", get(sessions::synced_client_ids))
+        .route("/{id}/trials", get(sessions::get_trials))
         .route("/{id}/variables", get(sessions::get_variables))
         .route(
             "/{id}/media",
