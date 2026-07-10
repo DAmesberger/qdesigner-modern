@@ -57,8 +57,8 @@ export const load: PageLoad = async ({ parent, depends }) => {
       completed_responses: q.completed_sessions,
       avg_completion_time: q.avg_completion_time_ms ?? undefined,
       response_rate_7d: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: q.created_at,
+      updated_at: q.updated_at,
     }));
 
     recentActivity = dashboard.recent_activity.map((a) => ({

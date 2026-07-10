@@ -23,8 +23,13 @@ export const appPaths = {
     const suffix = query.toString();
     return suffix ? `${path}?${suffix}` : path;
   },
-  projectQuestionnaireRun: (projectId: string, questionnaireId: string): string =>
-    `/projects/${encodeSegment(projectId)}/questionnaires/${encodeSegment(questionnaireId)}/run`,
+  // Public fillout code — first 8 hex chars of the questionnaire UUID, upper-cased.
+  // Mirrors the server's by-code lookup (see get_questionnaire_by_code) and the
+  // designer's DistributionPanel; there is no stored code column.
+  questionnaireFilloutCode: (questionnaireId: string): string =>
+    questionnaireId.replace(/-/g, '').substring(0, 8).toUpperCase(),
+  questionnaireFillout: (questionnaireId: string): string =>
+    `/q/${appPaths.questionnaireFilloutCode(questionnaireId)}`,
   projectAnalytics: (projectId: string): string =>
     `/projects/${encodeSegment(projectId)}/analytics`,
   projectMembers: (projectId: string): string =>

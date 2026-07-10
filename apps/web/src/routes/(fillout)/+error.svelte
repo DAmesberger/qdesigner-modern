@@ -2,29 +2,50 @@
   import { page } from '$app/state';
 
   let status = $derived(page.status);
+  // Not-yet-open studies are thrown as 403 with a machine-readable marker (see
+  // q/[code]/+page.ts). A plain 403 without it stays a genuine "forbidden".
+  let notYetOpen = $derived(status === 403 && page.error?.code === 'not_yet_open');
 
-  let title = $derived(
-    status === 404
-      ? 'Questionnaire Unavailable'
-      : status === 410
-        ? 'Questionnaire Closed'
-        : 'Something Went Wrong'
-  );
+  // The study's open date rides along on the error body when known; format it
+  // loosely so participants get a human-readable "opens on" line.
+  let openDate = $derived.by(() => {
+    const raw = page.error?.openDate;
+    if (!raw) return null;
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d.toLocaleString();
+  });
 
-  let description = $derived(
-    status === 404
-      ? 'This questionnaire is no longer available or the link may be incorrect. Please check the URL and try again.'
-      : status === 410
-        ? 'This questionnaire has been closed and is no longer accepting responses.'
-        : 'We encountered an issue loading your session. Please try refreshing the page.'
-  );
+  let title = $derived.by(() => {
+    if (status === 404) return 'Questionnaire Unavailable';
+    if (status === 410) return 'Questionnaire Closed';
+    if (notYetOpen) return 'Not Open Yet';
+    return 'Something Went Wrong';
+  });
+
+  let description = $derived.by(() => {
+    if (status === 404) {
+      return 'This questionnaire is no longer available or the link may be incorrect. Please check the URL and try again.';
+    }
+    if (status === 410) {
+      return 'This questionnaire is closed and is no longer accepting responses.';
+    }
+    if (notYetOpen) {
+      return openDate
+        ? `This questionnaire is not open yet. It opens on ${openDate}. Please come back then.`
+        : 'This questionnaire is not open yet. Please come back later.';
+    }
+    return 'We encountered an issue loading your session. Please try refreshing the page.';
+  });
 </script>
 
 <div class="flex min-h-screen items-center justify-center p-6">
   <div class="w-full max-w-sm text-center">
     <div class="mb-8">
       <svg class="mx-auto h-16 w-16 text-muted-foreground/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        {#if status === 404 || status === 410}
+        {#if notYetOpen}
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 7v5l3 2" />
+        {:else if status === 404 || status === 410}
           <path d="M9 12h6M12 9v6" />
           <circle cx="12" cy="12" r="10" />
         {:else}

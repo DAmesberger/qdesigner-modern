@@ -695,9 +695,9 @@ export const ssoStart = <ThrowOnError extends boolean = false>(options: Options<
  * GET /api/sso/callback?code=...&state=...
  *
  * Anonymous. Completes the authorization-code exchange, validates the
- * id_token, JIT-provisions the user + membership, mints an app JWT, and
- * bounces the browser back to the SPA with the access token in the URL
- * fragment (the refresh token rides an httpOnly cookie).
+ * id_token, JIT-provisions the user + membership, mints an opaque app session,
+ * and bounces the browser back to the SPA. Browser-visible tokens are not
+ * returned from this flow.
  */
 export const ssoCallback = <ThrowOnError extends boolean = false>(options?: Options<SsoCallbackData, ThrowOnError>) => (options?.client ?? client).get<unknown, SsoCallbackErrors, ThrowOnError>({ url: '/api/sso/callback', ...options });
 

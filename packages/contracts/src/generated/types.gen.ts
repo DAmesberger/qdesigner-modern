@@ -958,6 +958,8 @@ export type QuestionnaireSummary = {
     total_responses: number;
     completed_sessions: number;
     avg_completion_time_ms?: number | null;
+    created_at: string;
+    updated_at: string;
 };
 
 export type QuestionnaireVersion = {

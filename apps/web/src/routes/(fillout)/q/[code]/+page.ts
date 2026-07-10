@@ -100,18 +100,27 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		latest = cached as unknown as QuestionnaireByCode;
 	}
 
-	// Validate questionnaire is active (version-agnostic gate — checked against latest metadata)
+	// Validate questionnaire is active (version-agnostic gate — checked against latest metadata).
+	// A deactivated study is a permanently-closed one from the participant's view → 410 Gone,
+	// which +error.svelte renders as the "closed" screen (no refresh advice).
 	if (!latest.is_active) {
-		throw error(403, 'This questionnaire is no longer active');
+		throw error(410, 'This questionnaire is closed.');
 	}
 
-	// Check date restrictions
+	// Check date restrictions.
 	const now = new Date();
+	// Not open yet: still a distinct, recoverable state — the participant should come back
+	// later. Carry a marker + the open date so the error screen can say when it opens.
 	if (latest.start_date && new Date(latest.start_date) > now) {
-		throw error(403, 'This questionnaire is not yet available');
+		throw error(403, {
+			message: 'This questionnaire is not open yet.',
+			code: 'not_yet_open',
+			openDate: latest.start_date as string,
+		});
 	}
+	// Past its end date: closed, same as a deactivated study → 410.
 	if (latest.end_date && new Date(latest.end_date) < now) {
-		throw error(403, 'This questionnaire has ended');
+		throw error(410, 'This questionnaire is closed.');
 	}
 
 	// Extract all URL search params for distribution/variable mapping

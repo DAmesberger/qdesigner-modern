@@ -3489,7 +3489,7 @@
           "sso"
         ],
         "summary": "GET /api/sso/callback?code=...&state=...",
-        "description": "Anonymous. Completes the authorization-code exchange, validates the\nid_token, JIT-provisions the user + membership, mints an app JWT, and\nbounces the browser back to the SPA with the access token in the URL\nfragment (the refresh token rides an httpOnly cookie).",
+        "description": "Anonymous. Completes the authorization-code exchange, validates the\nid_token, JIT-provisions the user + membership, mints an opaque app session,\nand bounces the browser back to the SPA. Browser-visible tokens are not\nreturned from this flow.",
         "operationId": "sso_callback",
         "parameters": [
           {
@@ -11269,7 +11269,9 @@
           "project_id",
           "status",
           "total_responses",
-          "completed_sessions"
+          "completed_sessions",
+          "created_at",
+          "updated_at"
         ],
         "properties": {
           "id": {
@@ -11300,6 +11302,14 @@
               "null"
             ],
             "format": "double"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

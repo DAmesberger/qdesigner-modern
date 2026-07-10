@@ -314,6 +314,8 @@ pub struct QuestionnaireSummary {
     pub total_responses: i64,
     pub completed_sessions: i64,
     pub avg_completion_time_ms: Option<f64>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]

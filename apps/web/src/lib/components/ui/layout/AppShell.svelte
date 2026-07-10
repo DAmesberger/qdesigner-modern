@@ -5,7 +5,7 @@
   import ThemeToggle from '../ThemeToggle.svelte';
   import LanguageSwitcher from '$lib/i18n/LanguageSwitcher.svelte';
   import CommandPalette from '$lib/components/ui/CommandPalette.svelte';
-  import { LayoutDashboard, FolderKanban, Shield, X, Menu, ChevronDown } from 'lucide-svelte';
+  import { LayoutDashboard, FolderKanban, BarChart3, Shield, X, Menu, ChevronDown } from 'lucide-svelte';
 
   interface Props {
     user?: any;
@@ -20,6 +20,7 @@
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Projects', href: '/projects', icon: FolderKanban },
+    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Admin', href: '/admin', icon: Shield },
   ];
 

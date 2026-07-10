@@ -236,7 +236,9 @@ pub async fn dashboard_summary(
                 CASE WHEN s.completed_at IS NOT NULL AND s.started_at IS NOT NULL
                      THEN EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) * 1000.0
                 END
-            )::float8 AS avg_completion_time_ms
+            )::float8 AS avg_completion_time_ms,
+            q.created_at,
+            q.updated_at
         FROM questionnaire_definitions q
         JOIN projects p ON p.id = q.project_id
         LEFT JOIN sessions s ON s.questionnaire_id = q.id
@@ -244,7 +246,7 @@ pub async fn dashboard_summary(
         WHERE p.organization_id = $1
           AND p.deleted_at IS NULL
           AND q.deleted_at IS NULL
-        GROUP BY q.id, q.name, q.project_id, q.status
+        GROUP BY q.id, q.name, q.project_id, q.status, q.created_at, q.updated_at
         ORDER BY q.updated_at DESC
         "#,
     )

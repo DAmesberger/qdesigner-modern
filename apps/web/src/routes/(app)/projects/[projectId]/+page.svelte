@@ -251,20 +251,28 @@
                       </span>
                       <div class="flex items-center space-x-2">
                         {#if questionnaire.status === 'published'}
-                          <button
-                            onclick={() => {
-                              if (typeof window !== 'undefined') {
-                                window.location.href = appPaths.projectQuestionnaireRun(
-                                  data.project.id,
-                                  questionnaire.id
-                                );
-                              }
-                            }}
-                            class="text-muted-foreground hover:text-foreground"
-                            title="Run questionnaire"
-                          >
-                            <Play class="h-5 w-5" />
-                          </button>
+                          {@const filloutCode = questionnaire.id
+                            ? appPaths.questionnaireFilloutCode(questionnaire.id)
+                            : ''}
+                          {#if filloutCode}
+                            <a
+                              href={appPaths.questionnaireFillout(questionnaire.id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="text-muted-foreground hover:text-foreground"
+                              title="Preview fillout (opens in new tab)"
+                              data-testid={`questionnaire-run-${questionnaire.id}`}
+                            >
+                              <Play class="h-5 w-5" />
+                            </a>
+                          {:else}
+                            <span
+                              class="text-muted-foreground/40 cursor-not-allowed"
+                              title="No published fillout link available"
+                            >
+                              <Play class="h-5 w-5" />
+                            </span>
+                          {/if}
                         {/if}
                         <button
                           onclick={() => {

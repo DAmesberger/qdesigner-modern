@@ -17,6 +17,7 @@
     ShieldCheck,
     KeyRound,
     Terminal,
+    Building2,
   } from 'lucide-svelte';
 
   let loading = $state(true);
@@ -224,13 +225,17 @@
           <ClipboardList class="h-5 w-5 text-primary mr-3" />
           <span class="text-foreground">View All Questionnaires</span>
         </a>
-        <a href="/projects" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
+        <a href="/analytics" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
           <BarChart3 class="h-5 w-5 text-primary mr-3" />
           <span class="text-foreground">View Analytics</span>
         </a>
+        <a href="/admin/settings" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
+          <Building2 class="h-5 w-5 text-primary mr-3" />
+          <span class="text-foreground">Organization Settings</span>
+        </a>
         <a href="/settings" class="flex items-center p-3 rounded-lg transition-all duration-200 hover:bg-muted hover:translate-x-1">
           <Settings class="h-5 w-5 text-primary mr-3" />
-          <span class="text-foreground">System Settings</span>
+          <span class="text-foreground">My Settings</span>
         </a>
       </div>
     </div>
