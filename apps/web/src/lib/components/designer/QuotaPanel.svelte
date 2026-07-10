@@ -7,11 +7,29 @@
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
   import QuotaCellBuilder from '$lib/components/designer/QuotaCellBuilder.svelte';
+  import {
+    validateQuotaCondition,
+    hasErrors,
+    issueFor,
+  } from '$lib/components/designer/validation/scientificRules';
 
   let { open = $bindable(false) } = $props<{ open: boolean }>();
 
   let localGroups = $state<QuotaGroup[]>([]);
   let expandedGroups = $state<Set<string>>(new Set());
+
+  // Condition formulas are parsed with the SAME FormulaParser the runtime uses,
+  // so a designer-accepted quota condition is one the engine can parse. Unknown
+  // variable references (against the questionnaire's declared variables) warn but
+  // don't block; any syntax error blocks Save.
+  const knownVariables = $derived(
+    (designerStore.questionnaire.variables ?? []).map((v) => v.name)
+  );
+  const hasConditionError = $derived(
+    localGroups.some((g) =>
+      g.quotas.some((q) => hasErrors(validateQuotaCondition(q.condition, knownVariables)))
+    )
+  );
 
   $effect(() => {
     if (open) {
@@ -109,6 +127,7 @@
   }
 
   function save() {
+    if (hasConditionError) return;
     const groups = localGroups.filter(
       (g) => g.quotas.length > 0 || (g.cells?.length ?? 0) > 0
     );
@@ -197,6 +216,10 @@
                   </p>
                 {:else}
                   {#each group.quotas as quota, quotaIndex (quota.id)}
+                    {@const conditionIssue = issueFor(
+                      validateQuotaCondition(quota.condition, knownVariables),
+                      'condition'
+                    )}
                     <div class="border border-border rounded-md p-3 space-y-2 bg-background">
                       <div class="flex items-center gap-2">
                         <input
@@ -302,13 +325,30 @@
                               'condition',
                               e.currentTarget.value
                             )}
-                          class="w-full px-2 py-1 text-sm font-mono border border-border rounded bg-background text-foreground focus:ring-2 focus:ring-primary"
-                          placeholder='e.g., gender == "female" or age >= 18'
+                          class="w-full px-2 py-1 text-sm font-mono border rounded bg-background text-foreground focus:ring-2 focus:ring-primary {conditionIssue?.severity ===
+                          'error'
+                            ? 'border-destructive'
+                            : 'border-border'}"
+                          aria-invalid={conditionIssue?.severity === 'error' ? 'true' : undefined}
+                          placeholder='e.g., gender == "female" && age >= 18'
                         />
-                        <p class="text-[10px] text-muted-foreground mt-0.5">
-                          Use "true" for a catch-all quota, or variable comparisons like
-                          <code class="bg-accent px-1 rounded">age &gt;= 18</code>
-                        </p>
+                        {#if conditionIssue}
+                          <p
+                            class="text-[10px] mt-0.5 {conditionIssue.severity === 'error'
+                              ? 'text-destructive'
+                              : 'text-warning'}"
+                            role={conditionIssue.severity === 'error' ? 'alert' : undefined}
+                          >
+                            {conditionIssue.message}
+                          </p>
+                        {:else}
+                          <p class="text-[10px] text-muted-foreground mt-0.5">
+                            Use "true" for a catch-all quota, or comparisons like
+                            <code class="bg-accent px-1 rounded">age &gt;= 18</code>
+                            joined with <code class="bg-accent px-1 rounded">&amp;&amp;</code> /
+                            <code class="bg-accent px-1 rounded">||</code>.
+                          </p>
+                        {/if}
                       </div>
 
                       {#if quota.overQuotaAction === 'redirect'}
@@ -410,8 +450,10 @@
     </button>
     <button
       onclick={save}
-      class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+      disabled={hasConditionError}
+      class="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
       data-testid="quota-save"
+      title={hasConditionError ? 'Fix the invalid quota condition to save' : undefined}
     >
       Save
     </button>

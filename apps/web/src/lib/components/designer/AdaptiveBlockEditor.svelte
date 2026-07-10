@@ -8,6 +8,10 @@
    * edited); array fields are reassigned so Svelte reactivity fires on the parent state.
    */
   import type { AdaptiveBlockConfig, CATItem, AdaptiveItemScoring, Question } from '$lib/shared';
+  import {
+    validateAdaptiveBlock,
+    issueFor,
+  } from '$lib/components/designer/validation/scientificRules';
 
   let {
     config,
@@ -18,6 +22,22 @@
     questionIds: string[];
     allQuestions: Question[];
   } = $props();
+
+  // Inline IRT-parameter sanity checks (R4-4): a > 0 (typically 0.2–3),
+  // b in −4..4, c in [0,1) (≤ 0.35 by convention), plus stopping-rule bounds.
+  const issues = $derived(
+    validateAdaptiveBlock({
+      maxItems: config.maxItems,
+      seThreshold: config.seThreshold,
+      exposureControl: config.exposureControl,
+      exposureTopK: config.exposureTopK,
+      items: (config.items ?? []).map((it) => ({ id: it.id, a: it.a, b: it.b, c: it.c })),
+      questionIds,
+    })
+  );
+  const errorFields = $derived(
+    new Set(issues.filter((i) => i.severity === 'error').map((i) => i.field))
+  );
 
   function questionLabel(id: string): string {
     const q = allQuestions.find((question) => question.id === id);
@@ -56,6 +76,18 @@
   }
 </script>
 
+{#snippet fieldMsg(field: string)}
+  {@const issue = issueFor(issues, field)}
+  {#if issue}
+    <p
+      class="mt-1 text-xs {issue.severity === 'error' ? 'text-destructive' : 'text-warning'}"
+      role={issue.severity === 'error' ? 'alert' : undefined}
+    >
+      {issue.message}
+    </p>
+  {/if}
+{/snippet}
+
 <div class="border-t border-border pt-4 space-y-4">
   <div>
     <h4 class="text-sm font-medium text-foreground mb-1">Adaptive (CAT/IRT) settings</h4>
@@ -76,9 +108,10 @@
         min="1"
         value={config.maxItems ?? ''}
         oninput={(e) => (config.maxItems = numberOrUndefined(e.currentTarget.value))}
-        class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+        class="w-full px-3 py-2 border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary {errorFields.has('maxItems') ? 'border-destructive' : 'border-border'}"
         placeholder="30"
       />
+      {@render fieldMsg('maxItems')}
     </div>
     <div>
       <label for="adaptive-se" class="block text-sm text-muted-foreground mb-1">SE threshold</label>
@@ -89,9 +122,10 @@
         step="0.05"
         value={config.seThreshold ?? ''}
         oninput={(e) => (config.seThreshold = numberOrUndefined(e.currentTarget.value))}
-        class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+        class="w-full px-3 py-2 border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary {errorFields.has('seThreshold') ? 'border-destructive' : 'border-border'}"
         placeholder="0.3"
       />
+      {@render fieldMsg('seThreshold')}
     </div>
   </div>
 
@@ -117,9 +151,10 @@
           min="1"
           value={config.exposureTopK ?? ''}
           oninput={(e) => (config.exposureTopK = numberOrUndefined(e.currentTarget.value))}
-          class="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+          class="w-full px-3 py-2 border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary {errorFields.has('exposureTopK') ? 'border-destructive' : 'border-border'}"
           placeholder="3"
         />
+        {@render fieldMsg('exposureTopK')}
       </div>
     {/if}
   </div>
@@ -179,7 +214,7 @@
               step="0.1"
               value={item.a}
               oninput={(e) => patchItem(id, { a: numberOrUndefined(e.currentTarget.value) ?? 1 })}
-              class="px-1.5 py-1 border border-border rounded bg-background text-foreground text-xs"
+              class="px-1.5 py-1 border rounded bg-background text-foreground text-xs {errorFields.has(`item.${id}.a`) ? 'border-destructive' : 'border-border'}"
               aria-label={`Discrimination for ${id}`}
             />
             <input
@@ -187,7 +222,7 @@
               step="0.1"
               value={item.b}
               oninput={(e) => patchItem(id, { b: numberOrUndefined(e.currentTarget.value) ?? 0 })}
-              class="px-1.5 py-1 border border-border rounded bg-background text-foreground text-xs"
+              class="px-1.5 py-1 border rounded bg-background text-foreground text-xs {errorFields.has(`item.${id}.b`) ? 'border-destructive' : 'border-border'}"
               aria-label={`Difficulty for ${id}`}
             />
             <input
@@ -195,7 +230,7 @@
               step="0.05"
               value={item.c ?? 0}
               oninput={(e) => patchItem(id, { c: numberOrUndefined(e.currentTarget.value) ?? 0 })}
-              class="px-1.5 py-1 border border-border rounded bg-background text-foreground text-xs"
+              class="px-1.5 py-1 border rounded bg-background text-foreground text-xs {errorFields.has(`item.${id}.c`) ? 'border-destructive' : 'border-border'}"
               aria-label={`Guessing for ${id}`}
             />
             <input
@@ -213,6 +248,9 @@
               placeholder="—"
             />
           </div>
+          {@render fieldMsg(`item.${id}.a`)}
+          {@render fieldMsg(`item.${id}.b`)}
+          {@render fieldMsg(`item.${id}.c`)}
         {/each}
       </div>
       <p class="text-[11px] text-muted-foreground/70 mt-2">

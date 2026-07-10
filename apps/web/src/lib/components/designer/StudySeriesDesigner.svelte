@@ -3,6 +3,12 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
   import { Plus, Trash2, Copy, Users, Send } from 'lucide-svelte';
+  import {
+    validateSeriesDraft,
+    validateEmail,
+    hasErrors,
+    issueFor,
+  } from '$lib/components/designer/validation/scientificRules';
   import type {
     SeriesRecord,
     EnrollmentRecord,
@@ -50,6 +56,14 @@
     { label: 'Day 2', offsetDays: 2, minHours: 20, maxHours: 28 },
   ]);
   let creating = $state(false);
+
+  // Inline validity checks for the new-series draft (R4-4): wave intervals must
+  // be positive and ordered, fixed offsets must increase, the reminder body
+  // should carry a {{link}} placeholder. Errors block "Create series".
+  const draftIssues = $derived(
+    validateSeriesDraft({ name, scheduleKind, waves, reminderBody })
+  );
+  const draftHasErrors = $derived(hasErrors(draftIssues));
 
   // ── Per-series enrollment state ──
   let enrollments = $state<Record<string, EnrollmentRecord[]>>({});
@@ -101,7 +115,7 @@
   }
 
   async function createSeries() {
-    if (!name.trim() || waves.length === 0) return;
+    if (!name.trim() || waves.length === 0 || draftHasErrors) return;
     creating = true;
     error = null;
     try {
@@ -133,7 +147,7 @@
 
   async function enrollParticipant(seriesId: string) {
     const email = (enrollEmail[seriesId] || '').trim();
-    if (!email) return;
+    if (!email || hasErrors(validateEmail('email', email))) return;
     try {
       const res: EnrollResponse = await api.series.enroll(seriesId, {
         contact_channel: email,
@@ -162,6 +176,15 @@
   }
 </script>
 
+{#snippet draftMsg(field: string)}
+  {@const issue = issueFor(draftIssues, field)}
+  {#if issue}
+    <small class="field-msg {issue.severity}" role={issue.severity === 'error' ? 'alert' : undefined}>
+      {issue.message}
+    </small>
+  {/if}
+{/snippet}
+
 <section class="series-designer" data-testid="study-series-designer">
   <header>
     <h3><Users size={16} /> Longitudinal / EMA study series</h3>
@@ -180,6 +203,7 @@
     <label class="field">
       <span>Name</span>
       <input bind:value={name} placeholder="e.g. 7-day mood diary" />
+      {@render draftMsg('name')}
     </label>
 
     <label class="field">
@@ -223,7 +247,12 @@
             <Trash2 size={14} />
           </button>
         </div>
+        {@render draftMsg(`waves.${i}.label`)}
+        {@render draftMsg(`waves.${i}.offsetDays`)}
+        {@render draftMsg(`waves.${i}.minHours`)}
+        {@render draftMsg(`waves.${i}.maxHours`)}
       {/each}
+      {@render draftMsg('waves')}
     </div>
 
     <label class="field">
@@ -234,13 +263,17 @@
       <span>Reminder body</span>
       <textarea bind:value={reminderBody} rows="4"></textarea>
       <small class="hint">Use <code>{'{{link}}'}</code> and <code>{'{{unsubscribe}}'}</code>.</small>
+      {@render draftMsg('reminderBody')}
     </label>
     <label class="field short">
       <span>Timezone</span>
       <input bind:value={timezone} />
     </label>
 
-    <Button onclick={createSeries} disabled={creating || !name.trim() || waves.length === 0}>
+    <Button
+      onclick={createSeries}
+      disabled={creating || !name.trim() || waves.length === 0 || draftHasErrors}
+    >
       {creating ? 'Creating…' : 'Create series'}
     </Button>
   </div>
@@ -253,6 +286,7 @@
   {/if}
 
   {#each series as s (s.id)}
+    {@const emailIssue = issueFor(validateEmail('email', enrollEmail[s.id] ?? ''), 'email')}
     <div class="panel">
       <div class="series-head">
         <div>
@@ -269,6 +303,8 @@
         <input
           placeholder="participant email"
           value={enrollEmail[s.id] ?? ''}
+          class:invalid={emailIssue?.severity === 'error'}
+          aria-invalid={emailIssue?.severity === 'error' ? 'true' : undefined}
           oninput={(e) => (enrollEmail = { ...enrollEmail, [s.id]: e.currentTarget.value })}
         />
         <input
@@ -277,10 +313,17 @@
           value={enrollRef[s.id] ?? ''}
           oninput={(e) => (enrollRef = { ...enrollRef, [s.id]: e.currentTarget.value })}
         />
-        <Button size="sm" onclick={() => enrollParticipant(s.id)}>
+        <Button
+          size="sm"
+          onclick={() => enrollParticipant(s.id)}
+          disabled={!(enrollEmail[s.id] ?? '').trim() || emailIssue?.severity === 'error'}
+        >
           <Send size={14} /> Enroll
         </Button>
       </div>
+      {#if emailIssue}
+        <small class="field-msg {emailIssue.severity}" role="alert">{emailIssue.message}</small>
+      {/if}
 
       {#if lastResumeLink[s.id]}
         {@const link = lastResumeLink[s.id] ?? ''}
@@ -340,6 +383,19 @@
   .error {
     color: hsl(var(--destructive));
     font-size: 0.85rem;
+  }
+  .field-msg {
+    font-size: 0.72rem;
+    line-height: 1rem;
+  }
+  .field-msg.error {
+    color: hsl(var(--destructive));
+  }
+  .field-msg.warning {
+    color: hsl(var(--warning));
+  }
+  .enroll-row input.invalid {
+    border-color: hsl(var(--destructive));
   }
   .panel {
     border: 1px solid hsl(var(--border));

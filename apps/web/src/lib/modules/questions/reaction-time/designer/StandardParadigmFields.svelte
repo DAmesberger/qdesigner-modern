@@ -1,6 +1,10 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
   import type { ReactionTimeConfig } from '../model/designer-config';
+  import {
+    validateReactionTask,
+    issueFor,
+  } from '$lib/components/designer/validation/scientificRules';
 
   // Per-task-type configuration UI for the standard-paradigm library expansion
   // (E-REACT-2): Go/No-Go, SART, Simon, Posner, visual search, Sternberg, PVT,
@@ -13,6 +17,13 @@
   let { question = $bindable() }: Props = $props();
 
   const task = $derived(question.config.task);
+
+  // Inline scientific-validity checks (R4-4). Recomputed on every edit so the
+  // researcher sees bad timing/ratios/counts as they type, not at publish.
+  const issues = $derived(validateReactionTask(task));
+  const errorFields = $derived(
+    new Set(issues.filter((i) => i.severity === 'error').map((i) => i.field))
+  );
 
   function parseNumberList(value: string): number[] {
     return value
@@ -29,6 +40,15 @@
   }
 </script>
 
+{#snippet fieldMsg(field: string)}
+  {@const issue = issueFor(issues, field)}
+  {#if issue}
+    <p class="field-msg {issue.severity}" role={issue.severity === 'error' ? 'alert' : undefined}>
+      {issue.message}
+    </p>
+  {/if}
+{/snippet}
+
 {#if task.type === 'go-nogo'}
   <div class="mt-4 pl-4">
     <h5 class="mb-2 text-sm font-medium text-muted-foreground">Go / No-Go Configuration</h5>
@@ -39,11 +59,13 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="mb-4">
         <label for="gonogo-trials">Trial Count</label>
-        <input id="gonogo-trials" type="number" min="1" max="1000" bind:value={task.goNoGo.trialCount} class="input" />
+        <input id="gonogo-trials" type="number" min="1" max="1000" bind:value={task.goNoGo.trialCount} class="input" class:invalid={errorFields.has('goNoGo.trialCount')} />
+        {@render fieldMsg('goNoGo.trialCount')}
       </div>
       <div class="mb-4">
         <label for="gonogo-ratio">Go Ratio</label>
-        <input id="gonogo-ratio" type="number" min="0" max="1" step="0.05" bind:value={task.goNoGo.goRatio} class="input" />
+        <input id="gonogo-ratio" type="number" min="0" max="1" step="0.05" bind:value={task.goNoGo.goRatio} class="input" class:invalid={errorFields.has('goNoGo.goRatio')} />
+        {@render fieldMsg('goNoGo.goRatio')}
       </div>
       <div class="mb-4">
         <label for="gonogo-go">Go Label</label>
@@ -59,7 +81,8 @@
       </div>
       <div class="mb-4">
         <label for="gonogo-timeout">Response Timeout (ms)</label>
-        <input id="gonogo-timeout" type="number" min="100" max="20000" step="10" bind:value={task.goNoGo.responseTimeoutMs} class="input" />
+        <input id="gonogo-timeout" type="number" min="100" max="20000" step="10" bind:value={task.goNoGo.responseTimeoutMs} class="input" class:invalid={errorFields.has('goNoGo.responseTimeoutMs')} />
+        {@render fieldMsg('goNoGo.responseTimeoutMs')}
       </div>
     </div>
   </div>
@@ -75,11 +98,13 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="mb-4">
         <label for="sart-trials">Trial Count</label>
-        <input id="sart-trials" type="number" min="1" max="2000" bind:value={task.sart.trialCount} class="input" />
+        <input id="sart-trials" type="number" min="1" max="2000" bind:value={task.sart.trialCount} class="input" class:invalid={errorFields.has('sart.trialCount')} />
+        {@render fieldMsg('sart.trialCount')}
       </div>
       <div class="mb-4">
         <label for="sart-target">Target (No-Go) Digit</label>
-        <input id="sart-target" type="number" min="0" max="9" bind:value={task.sart.targetDigit} class="input" />
+        <input id="sart-target" type="number" min="0" max="9" bind:value={task.sart.targetDigit} class="input" class:invalid={errorFields.has('sart.targetDigit')} />
+        {@render fieldMsg('sart.targetDigit')}
       </div>
       <div class="mb-4">
         <label for="sart-key">Response Key</label>
@@ -87,7 +112,8 @@
       </div>
       <div class="mb-4">
         <label for="sart-duration">Digit Duration (ms)</label>
-        <input id="sart-duration" type="number" min="0" max="5000" step="10" bind:value={task.sart.stimulusDuration} class="input" />
+        <input id="sart-duration" type="number" min="0" max="5000" step="10" bind:value={task.sart.stimulusDuration} class="input" class:invalid={errorFields.has('sart.stimulusDuration')} />
+        {@render fieldMsg('sart.stimulusDuration')}
       </div>
     </div>
   </div>
@@ -103,11 +129,13 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="mb-4">
         <label for="simon-trials">Trial Count</label>
-        <input id="simon-trials" type="number" min="1" max="1000" bind:value={task.simon.trialCount} class="input" />
+        <input id="simon-trials" type="number" min="1" max="1000" bind:value={task.simon.trialCount} class="input" class:invalid={errorFields.has('simon.trialCount')} />
+        {@render fieldMsg('simon.trialCount')}
       </div>
       <div class="mb-4">
         <label for="simon-ratio">Congruent Ratio</label>
-        <input id="simon-ratio" type="number" min="0" max="1" step="0.05" bind:value={task.simon.congruentRatio} class="input" />
+        <input id="simon-ratio" type="number" min="0" max="1" step="0.05" bind:value={task.simon.congruentRatio} class="input" class:invalid={errorFields.has('simon.congruentRatio')} />
+        {@render fieldMsg('simon.congruentRatio')}
       </div>
       <div class="mb-4">
         <label for="simon-left-color">Left Colour</label>
@@ -139,19 +167,23 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="mb-4">
         <label for="posner-trials">Trial Count</label>
-        <input id="posner-trials" type="number" min="1" max="1000" bind:value={task.posner.trialCount} class="input" />
+        <input id="posner-trials" type="number" min="1" max="1000" bind:value={task.posner.trialCount} class="input" class:invalid={errorFields.has('posner.trialCount')} />
+        {@render fieldMsg('posner.trialCount')}
       </div>
       <div class="mb-4">
         <label for="posner-valid">Valid Ratio</label>
-        <input id="posner-valid" type="number" min="0" max="1" step="0.05" bind:value={task.posner.validRatio} class="input" />
+        <input id="posner-valid" type="number" min="0" max="1" step="0.05" bind:value={task.posner.validRatio} class="input" class:invalid={errorFields.has('posner.validRatio')} />
+        {@render fieldMsg('posner.validRatio')}
       </div>
       <div class="mb-4">
         <label for="posner-cue">Cue Duration (ms)</label>
-        <input id="posner-cue" type="number" min="0" max="5000" step="10" bind:value={task.posner.cueDurationMs} class="input" />
+        <input id="posner-cue" type="number" min="0" max="5000" step="10" bind:value={task.posner.cueDurationMs} class="input" class:invalid={errorFields.has('posner.cueDurationMs')} />
+        {@render fieldMsg('posner.cueDurationMs')}
       </div>
       <div class="mb-4">
         <label for="posner-soa">Cue→Target SOA (ms)</label>
-        <input id="posner-soa" type="number" min="0" max="5000" step="10" bind:value={task.posner.soaMs} class="input" />
+        <input id="posner-soa" type="number" min="0" max="5000" step="10" bind:value={task.posner.soaMs} class="input" class:invalid={errorFields.has('posner.soaMs')} />
+        {@render fieldMsg('posner.soaMs')}
       </div>
       <div class="mb-4">
         <label for="posner-left-key">Left Key</label>
@@ -175,7 +207,8 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="mb-4">
         <label for="search-trials">Trial Count</label>
-        <input id="search-trials" type="number" min="1" max="1000" bind:value={task.visualSearch.trialCount} class="input" />
+        <input id="search-trials" type="number" min="1" max="1000" bind:value={task.visualSearch.trialCount} class="input" class:invalid={errorFields.has('visualSearch.trialCount')} />
+        {@render fieldMsg('visualSearch.trialCount')}
       </div>
       <div class="mb-4">
         <label for="search-sizes">Set Sizes (comma-separated)</label>
@@ -185,11 +218,14 @@
           value={task.visualSearch.setSizes.join(', ')}
           onchange={(e) => (task.visualSearch.setSizes = parseNumberList(e.currentTarget.value))}
           class="input"
+          class:invalid={errorFields.has('visualSearch.setSizes')}
         />
+        {@render fieldMsg('visualSearch.setSizes')}
       </div>
       <div class="mb-4">
         <label for="search-present-ratio">Target-Present Ratio</label>
-        <input id="search-present-ratio" type="number" min="0" max="1" step="0.05" bind:value={task.visualSearch.targetPresentRatio} class="input" />
+        <input id="search-present-ratio" type="number" min="0" max="1" step="0.05" bind:value={task.visualSearch.targetPresentRatio} class="input" class:invalid={errorFields.has('visualSearch.targetPresentRatio')} />
+        {@render fieldMsg('visualSearch.targetPresentRatio')}
       </div>
       <div class="mb-4">
         <label for="search-present-key">Present Key</label>
@@ -219,7 +255,8 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="mb-4">
         <label for="sternberg-trials">Trial Count</label>
-        <input id="sternberg-trials" type="number" min="1" max="1000" bind:value={task.sternberg.trialCount} class="input" />
+        <input id="sternberg-trials" type="number" min="1" max="1000" bind:value={task.sternberg.trialCount} class="input" class:invalid={errorFields.has('sternberg.trialCount')} />
+        {@render fieldMsg('sternberg.trialCount')}
       </div>
       <div class="mb-4">
         <label for="sternberg-sizes">Set Sizes (comma-separated)</label>
@@ -229,15 +266,19 @@
           value={task.sternberg.setSizes.join(', ')}
           onchange={(e) => (task.sternberg.setSizes = parseNumberList(e.currentTarget.value))}
           class="input"
+          class:invalid={errorFields.has('sternberg.setSizes')}
         />
+        {@render fieldMsg('sternberg.setSizes')}
       </div>
       <div class="mb-4">
         <label for="sternberg-encoding">Per-Item Study (ms)</label>
-        <input id="sternberg-encoding" type="number" min="0" max="10000" step="10" bind:value={task.sternberg.encodingMs} class="input" />
+        <input id="sternberg-encoding" type="number" min="0" max="10000" step="10" bind:value={task.sternberg.encodingMs} class="input" class:invalid={errorFields.has('sternberg.encodingMs')} />
+        {@render fieldMsg('sternberg.encodingMs')}
       </div>
       <div class="mb-4">
         <label for="sternberg-retention">Retention (ms)</label>
-        <input id="sternberg-retention" type="number" min="0" max="20000" step="10" bind:value={task.sternberg.retentionMs} class="input" />
+        <input id="sternberg-retention" type="number" min="0" max="20000" step="10" bind:value={task.sternberg.retentionMs} class="input" class:invalid={errorFields.has('sternberg.retentionMs')} />
+        {@render fieldMsg('sternberg.retentionMs')}
       </div>
       <div class="mb-4">
         <label for="sternberg-present-key">In-Set Key</label>
@@ -261,7 +302,8 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="mb-4">
         <label for="pvt-trials">Trial Count</label>
-        <input id="pvt-trials" type="number" min="1" max="1000" bind:value={task.pvt.trialCount} class="input" />
+        <input id="pvt-trials" type="number" min="1" max="1000" bind:value={task.pvt.trialCount} class="input" class:invalid={errorFields.has('pvt.trialCount')} />
+        {@render fieldMsg('pvt.trialCount')}
       </div>
       <div class="mb-4">
         <label for="pvt-key">Response Key</label>
@@ -269,11 +311,13 @@
       </div>
       <div class="mb-4">
         <label for="pvt-min">Min ISI (ms)</label>
-        <input id="pvt-min" type="number" min="0" max="60000" step="100" bind:value={task.pvt.minIsiMs} class="input" />
+        <input id="pvt-min" type="number" min="0" max="60000" step="100" bind:value={task.pvt.minIsiMs} class="input" class:invalid={errorFields.has('pvt.minIsiMs')} />
+        {@render fieldMsg('pvt.minIsiMs')}
       </div>
       <div class="mb-4">
         <label for="pvt-max">Max ISI (ms)</label>
-        <input id="pvt-max" type="number" min="0" max="60000" step="100" bind:value={task.pvt.maxIsiMs} class="input" />
+        <input id="pvt-max" type="number" min="0" max="60000" step="100" bind:value={task.pvt.maxIsiMs} class="input" class:invalid={errorFields.has('pvt.maxIsiMs')} />
+        {@render fieldMsg('pvt.maxIsiMs')}
       </div>
     </div>
   </div>
@@ -289,7 +333,8 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="mb-4">
         <label for="toj-trials">Trial Count</label>
-        <input id="toj-trials" type="number" min="1" max="1000" bind:value={task.temporalOrder.trialCount} class="input" />
+        <input id="toj-trials" type="number" min="1" max="1000" bind:value={task.temporalOrder.trialCount} class="input" class:invalid={errorFields.has('temporalOrder.trialCount')} />
+        {@render fieldMsg('temporalOrder.trialCount')}
       </div>
       <div class="mb-4">
         <label for="toj-soas">SOAs (ms, comma-separated)</label>
@@ -299,7 +344,9 @@
           value={task.temporalOrder.soaSetMs.join(', ')}
           onchange={(e) => (task.temporalOrder.soaSetMs = parseNumberList(e.currentTarget.value))}
           class="input"
+          class:invalid={errorFields.has('temporalOrder.soaSetMs')}
         />
+        {@render fieldMsg('temporalOrder.soaSetMs')}
       </div>
       <div class="mb-4">
         <label for="toj-first-key">Left-First Key</label>
@@ -323,15 +370,18 @@
     <div class="grid grid-cols-2 gap-3">
       <div class="mb-4">
         <label for="rsvp-trials">Trial Count</label>
-        <input id="rsvp-trials" type="number" min="1" max="1000" bind:value={task.rsvp.trialCount} class="input" />
+        <input id="rsvp-trials" type="number" min="1" max="1000" bind:value={task.rsvp.trialCount} class="input" class:invalid={errorFields.has('rsvp.trialCount')} />
+        {@render fieldMsg('rsvp.trialCount')}
       </div>
       <div class="mb-4">
         <label for="rsvp-stream">Stream Length</label>
-        <input id="rsvp-stream" type="number" min="1" max="100" bind:value={task.rsvp.streamLength} class="input" />
+        <input id="rsvp-stream" type="number" min="1" max="100" bind:value={task.rsvp.streamLength} class="input" class:invalid={errorFields.has('rsvp.streamLength')} />
+        {@render fieldMsg('rsvp.streamLength')}
       </div>
       <div class="mb-4">
         <label for="rsvp-item">Item Duration (ms)</label>
-        <input id="rsvp-item" type="number" min="10" max="2000" step="10" bind:value={task.rsvp.itemDurationMs} class="input" />
+        <input id="rsvp-item" type="number" min="10" max="2000" step="10" bind:value={task.rsvp.itemDurationMs} class="input" class:invalid={errorFields.has('rsvp.itemDurationMs')} />
+        {@render fieldMsg('rsvp.itemDurationMs')}
       </div>
       <div class="mb-4">
         <label for="rsvp-key">Target Key</label>
@@ -345,7 +395,9 @@
           value={task.rsvp.targetSet.join(', ')}
           onchange={(e) => (task.rsvp.targetSet = parseStringList(e.currentTarget.value))}
           class="input"
+          class:invalid={errorFields.has('rsvp.targetSet')}
         />
+        {@render fieldMsg('rsvp.targetSet')}
       </div>
       <div class="mb-4">
         <label for="rsvp-distractors">Distractor Set (comma-separated)</label>
@@ -376,5 +428,27 @@
     outline: none;
     border-color: hsl(var(--primary));
     box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
+  }
+
+  .input.invalid {
+    border-color: hsl(var(--destructive));
+  }
+
+  .input.invalid:focus {
+    box-shadow: 0 0 0 3px hsl(var(--destructive) / 0.1);
+  }
+
+  .field-msg {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    line-height: 1.1rem;
+  }
+
+  .field-msg.error {
+    color: hsl(var(--destructive));
+  }
+
+  .field-msg.warning {
+    color: hsl(var(--warning));
   }
 </style>
