@@ -250,11 +250,13 @@
   }
 
   // Open a shared resource. Project shares deep-link to the project; a
-  // questionnaire-only share has no guest-openable route yet (the grantee lacks
-  // project access), so those rows are informational.
+  // questionnaire share opens the read-only guest analytics view (F-32), which
+  // only calls endpoints the grantee's share access admits.
   function openSharedResource(item: SharedResource) {
     if (item.resource_type === 'project') {
       void navigateTo(appPaths.project(item.resource_id));
+    } else {
+      void navigateTo(appPaths.sharedQuestionnaireAnalytics(item.resource_id));
     }
   }
 
@@ -479,7 +481,6 @@
             <button
               type="button"
               onclick={() => openSharedResource(item)}
-              disabled={item.resource_type !== 'project'}
               class="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/60 px-4 py-3 text-left transition-colors enabled:hover:border-primary/40 enabled:hover:bg-accent/40 disabled:cursor-default"
             >
               <div class="min-w-0">
@@ -504,9 +505,7 @@
                   · {sharedExpiryLabel(item.expires_at)}
                 </p>
               </div>
-              {#if item.resource_type === 'project'}
-                <ArrowRight class="h-4 w-4 shrink-0 text-muted-foreground" />
-              {/if}
+              <ArrowRight class="h-4 w-4 shrink-0 text-muted-foreground" />
             </button>
           </li>
         {/each}

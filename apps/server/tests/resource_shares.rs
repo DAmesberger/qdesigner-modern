@@ -488,6 +488,29 @@ async fn questionnaire_share_grants_only_that_questionnaires_analytics() {
         "questionnaire share grants analytics: {res:?}"
     );
 
+    // The guest analytics view (F-32) reads the timeseries + arm-counts for the
+    // shared questionnaire; both flow through the same `verify_questionnaire_access`
+    // gate and must admit the grantee so the guest page renders rather than 403s.
+    let (status, _ts) = json_request(
+        &app,
+        "GET",
+        &format!("/api/sessions/timeseries?questionnaire_id={q}&interval=day"),
+        Some(tok_b),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "share grants timeseries read");
+
+    let (status, _arms) = json_request(
+        &app,
+        "GET",
+        &format!("/api/questionnaires/{q}/arm-counts"),
+        Some(tok_b),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "share grants arm-counts read");
+
     // Scope: a questionnaire share does NOT grant read of the parent project.
     let (status, _j) = json_request(
         &app,
