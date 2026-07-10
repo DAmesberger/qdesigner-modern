@@ -89,5 +89,15 @@ opportunistically where their files are touched.
 
 | Phase | Status |
 |---|---|
-| RT-1 | in progress (2026-07-10) |
-| RT-2..RT-6 | todo |
+| RT-1 | ✅ CLOSED (b743be4 RT-1c, 5fd46e3 RT-1b-server, 7366e99 RT-1a, deeede2 RT-1b-client; exit live-QA all-pass: trials end-to-end in-browser with full provenance, W-1/W-3/W-10 verified, per-trial rows server-side) |
+| RT-2 | in progress — RT-2a merged a3bfe85 (jitter sampling live-verified; authoring persistence bug F-49 in fix); RT-2b (ResponseSet editor + Paradigm label) queued |
+| RT-3..RT-6 | todo |
+
+QA-surfaced bugs: F-48 (pre-existing designer autosave create/update race —
+fix in flight), F-49 (TimingSpec persistence — fix in flight). Live-QA
+tooling notes: agent-browser CLI keyboard commands are too slow for
+response windows (dispatch KeyboardEvents from a single in-page eval);
+the CDP daemon can wedge after activity bursts (kill -9 + respawn +
+re-login). Process rule learned: NEVER run live-QA while any agent edits
+apps/web — Vite HMR invalidates in-flight sessions and the module-registry
+graph makes everything downstream of everything.
