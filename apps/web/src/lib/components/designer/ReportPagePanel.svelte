@@ -4,11 +4,19 @@
   import type { ReportPageConfig, ReportWidget } from '$lib/shared';
   import { generateId } from '$lib/shared';
   import { NORM_TABLES } from '$lib/runtime/feedback/normTables';
-  import { Plus, Trash2 } from 'lucide-svelte';
+  import { Plus, Trash2, LayoutGrid, Eye } from 'lucide-svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import ReportGridEditor from './ReportGridEditor.svelte';
+  import ReportPageView from '$lib/fillout/components/ReportPageView.svelte';
+  import { buildSampleReportData } from './report-sample-data';
 
   let { open = $bindable(false) } = $props<{ open: boolean }>();
+
+  // Which widget the visual grid editor currently has selected — highlights the
+  // matching config card below so the two views stay in lockstep.
+  let selectedId = $state<string | null>(null);
+  let viewMode = $state<'layout' | 'preview'>('layout');
 
   const DEFAULT_CONFIG: ReportPageConfig = {
     enabled: false,
@@ -23,6 +31,8 @@
 
   $effect(() => {
     if (open) {
+      selectedId = null;
+      viewMode = 'layout';
       const existing = designerStore.questionnaire.settings?.report;
       config = existing
         ? {
@@ -80,6 +90,15 @@
       .map((v) => ({ value: v.name, label: v.name }))
   );
   const normOptions = NORM_TABLES.map((n) => ({ value: n.id, label: n.label }));
+
+  const typeLabels: Record<string, string> = Object.fromEntries(
+    widgetTypes.map((t) => [t.value, t.label])
+  );
+
+  // Live preview reuses the REAL participant renderer against sample values derived
+  // from the widgets' bindings, forced `enabled` so an unsaved draft still previews.
+  const previewData = $derived(buildSampleReportData(config));
+  const previewConfig = $derived({ ...config, enabled: true });
 
   function nextRow(): number {
     return config.widgets.reduce((max, w) => Math.max(max, w.position.y + w.position.h), 0);
@@ -229,8 +248,85 @@
 
     <!-- Widgets -->
     <div class="space-y-3">
-      {#each config.widgets as widget, i (widget.id)}
-        <div class="border border-border rounded-lg p-3 space-y-2 bg-background" data-testid={`report-widget-${i}`}>
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-medium text-foreground">Widgets ({config.widgets.length})</span>
+        {#if config.widgets.length > 0}
+          <div class="inline-flex rounded-md border border-border overflow-hidden text-xs" role="tablist" aria-label="Report editor view">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'layout'}
+              class="flex items-center gap-1 px-2.5 py-1 {viewMode === 'layout' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}"
+              onclick={() => (viewMode = 'layout')}
+              data-testid="report-view-layout"
+            >
+              <LayoutGrid class="w-3.5 h-3.5" /> Layout
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'preview'}
+              class="flex items-center gap-1 px-2.5 py-1 border-l border-border {viewMode === 'preview' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}"
+              onclick={() => (viewMode = 'preview')}
+              data-testid="report-view-preview"
+            >
+              <Eye class="w-3.5 h-3.5" /> Preview
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      {#if config.widgets.length === 0}
+        <!-- Empty state: friendly guidance + the add call-to-action. -->
+        <div
+          class="flex flex-col items-center gap-3 py-10 px-4 text-center border-2 border-dashed border-border rounded-lg"
+          data-testid="report-empty-state"
+        >
+          <div class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+            <LayoutGrid class="w-5 h-5" />
+          </div>
+          <div class="space-y-1">
+            <p class="text-sm font-medium text-foreground">No widgets yet</p>
+            <p class="text-xs text-muted-foreground max-w-xs">
+              Build the participant results page by adding widgets — score tiles, charts, or
+              interpretive text — then drag them into place on the grid.
+            </p>
+          </div>
+          <button
+            onclick={addWidget}
+            class="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+            data-testid="report-add-widget"
+          >
+            <Plus class="w-4 h-4" /> Add your first widget
+          </button>
+        </div>
+      {:else if viewMode === 'preview'}
+        <div class="border border-border rounded-lg bg-background overflow-hidden" data-testid="report-preview">
+          <ReportPageView
+            reportConfig={previewConfig}
+            variables={previewData.variables}
+            scoreConfigs={previewData.scoreConfigs}
+            session={previewData.session}
+            reportTitle={config.title}
+          />
+          <p class="text-[11px] text-muted-foreground text-center px-3 py-2 border-t border-border">
+            Preview uses representative sample values — participants see their own results.
+          </p>
+        </div>
+      {:else}
+        <ReportGridEditor
+          bind:widgets={config.widgets}
+          columns={config.layout.columns}
+          {typeLabels}
+          bind:selectedId
+        />
+
+        {#each config.widgets as widget, i (widget.id)}
+        <div
+          id={`report-card-${widget.id}`}
+          class="border rounded-lg p-3 space-y-2 bg-background {widget.id === selectedId ? 'border-primary ring-1 ring-primary' : 'border-border'}"
+          data-testid={`report-widget-${i}`}
+        >
           <div class="flex items-center gap-2">
             <Select
               value={widget.type}
@@ -439,15 +535,16 @@
             />
           {/if}
         </div>
-      {/each}
+        {/each}
 
-      <button
-        onclick={addWidget}
-        class="w-full flex items-center justify-center gap-1.5 py-2 text-sm text-primary hover:text-primary/80 border-2 border-dashed border-border rounded-lg hover:border-primary/50 transition-colors"
-        data-testid="report-add-widget"
-      >
-        <Plus class="w-4 h-4" /> Add Widget
-      </button>
+        <button
+          onclick={addWidget}
+          class="w-full flex items-center justify-center gap-1.5 py-2 text-sm text-primary hover:text-primary/80 border-2 border-dashed border-border rounded-lg hover:border-primary/50 transition-colors"
+          data-testid="report-add-widget"
+        >
+          <Plus class="w-4 h-4" /> Add Widget
+        </button>
+      {/if}
     </div>
   </div>
 
