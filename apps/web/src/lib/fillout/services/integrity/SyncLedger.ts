@@ -195,6 +195,18 @@ export class SyncLedger {
 	}
 
 	/**
+	 * The set of clientIds currently escalated to `deadletter`. The upload engine
+	 * uses this to STOP re-shipping a record that has already exhausted its retry
+	 * budget: a dead-letter row's underlying record keeps `synced=0` (it is never
+	 * discarded — it stays exportable), so without this filter the drain would
+	 * re-send it every backoff tick forever and never let the retry loop settle.
+	 */
+	static async deadletterClientIds(): Promise<Set<string>> {
+		const rows = await db.filloutSyncLedger.where('state').equals('deadletter').toArray();
+		return new Set(rows.map((r) => r.clientId));
+	}
+
+	/**
 	 * Reconcile locally-`acked` rows against what the server actually holds
 	 * (E-OFF-5 step 5). Fetches the server's durably-held clientIds for the
 	 * session and re-queues any ledger row we marked acked that the server does NOT

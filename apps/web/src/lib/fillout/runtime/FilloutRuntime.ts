@@ -2,6 +2,7 @@ import { ResponsePersistenceService } from '../services/ResponsePersistenceServi
 import { SessionManagementService } from '../services/SessionManagementService';
 import { OfflineResponsePersistence } from '../services/OfflineResponsePersistence';
 import { OfflineSessionService } from '../services/OfflineSessionService';
+import { formatDexieError } from '$lib/services/db/errors';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
 import type { ResumeState } from '$lib/runtime/core/ResumeState';
 import type {
@@ -124,7 +125,8 @@ export class FilloutRuntime {
 			// write must not interrupt the run (the E-OFF-1 answer cursor still covers resume).
 			onResumeStateCaptured: (state: ResumeState) => {
 				void OfflineSessionService.updateResumeState(this.sessionId, state).catch((error) => {
-					console.error('Failed to persist resume state:', error as Error);
+					// Log the REAL Dexie failure, not the opaque minified "DexieError2".
+					console.error(`Failed to persist resume state: ${formatDexieError(error)}`, error as Error);
 				});
 			}
 		};
@@ -331,7 +333,7 @@ export class FilloutRuntime {
 				}
 			);
 		} catch (error) {
-			console.error('Failed to persist resume cursor:', error as Error);
+			console.error(`Failed to persist resume cursor: ${formatDexieError(error)}`, error as Error);
 		}
 
 		// Notify UI

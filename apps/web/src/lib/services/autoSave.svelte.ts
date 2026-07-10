@@ -1,5 +1,6 @@
 import { designerStore } from '$lib/stores/designer.svelte';
-import { db } from './db/indexeddb';
+import { db, ensureDbOpen } from './db/indexeddb';
+import { describeDexieError, formatDexieError } from './db/errors';
 import { toast } from '$lib/stores/toast';
 import { isOnline } from './offline';
 import type { Questionnaire } from '$lib/shared';
@@ -102,8 +103,19 @@ class AutoSaveService {
     this.isAutoSaving = true;
 
     try {
-      // Save to IndexedDB as draft
-      await db.saveDraft(this.getDraftKey(questionnaire), questionnaire, userId, true);
+      // Save to IndexedDB as draft. A `DatabaseClosedError` here (another tab
+      // upgraded the shared-profile DB) is transient — reopen and retry once
+      // before treating it as a real failure.
+      try {
+        await db.saveDraft(this.getDraftKey(questionnaire), questionnaire, userId, true);
+      } catch (err) {
+        if (describeDexieError(err).isDatabaseClosed) {
+          await ensureDbOpen();
+          await db.saveDraft(this.getDraftKey(questionnaire), questionnaire, userId, true);
+        } else {
+          throw err;
+        }
+      }
 
       this.lastSavedContent = JSON.stringify(questionnaire);
 
@@ -125,8 +137,18 @@ class AutoSaveService {
         }
       }
     } catch (error) {
-      console.error('Auto-save failed:', error as Error);
-      toast.error('Auto-save failed', { duration: 3000 });
+      // Log the REAL Dexie failure (name/message/inner), not the opaque minified
+      // constructor name ("DexieError2") that `console.error(error)` alone prints.
+      const info = describeDexieError(error);
+      console.error(`Auto-save failed: ${formatDexieError(error)}`, error as Error);
+      toast.error(
+        info.isQuotaExceeded
+          ? 'Auto-save failed: this device is out of storage space. Free up space or export your work.'
+          : info.isDatabaseClosed
+            ? 'Auto-save failed: the local database was closed (another tab may have updated it). Reload if this persists.'
+            : 'Auto-save failed',
+        { duration: 4000 }
+      );
     } finally {
       this.isAutoSaving = false;
     }

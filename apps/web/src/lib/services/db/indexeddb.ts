@@ -841,6 +841,21 @@ class QDesignerDatabase extends Dexie {
 // Create and export database instance
 export const db = new QDesignerDatabase();
 
+/**
+ * Reopen the connection if it was closed under us. In a shared/kiosk profile
+ * (many tabs, past schema upgrades) another tab opening a NEWER schema version
+ * makes Dexie close THIS tab's connection so it doesn't block the upgrade — after
+ * which the in-flight read/write throws `DatabaseClosedError` (the opaque
+ * "DexieError2" seen in the console). Dexie 4 keeps auto-open on across that close
+ * so the NEXT operation reopens on its own; this helper lets a hot write path
+ * force the reopen and retry the very operation that was interrupted.
+ */
+export async function ensureDbOpen(): Promise<void> {
+  if (!db.isOpen()) {
+    await db.open();
+  }
+}
+
 // Open database on import
 db.open().catch(err => {
   console.error('Failed to open IndexedDB:', err);

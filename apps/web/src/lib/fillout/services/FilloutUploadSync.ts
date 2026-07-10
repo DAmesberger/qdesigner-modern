@@ -214,6 +214,13 @@ export class FilloutUploadSync {
 					// instead of retrying forever with no escalation. Best-effort.
 					try {
 						await this.registerSessionFailure(session.id, msg);
+						// Once nothing shippable remains (every record escalated to
+						// dead-letter/corrupt), stop re-materializing this session — the
+						// session-init call would otherwise 404/500 forever (e.g. its
+						// questionnaire was deleted server-side) and never let the retry loop
+						// settle. The escalated records survive on disk (synced=0) for the
+						// export escape hatch; only the futile retry is dropped.
+						await this.escalateSessionIfFullyDead(session);
 					} catch (ledgerErr) {
 						console.warn(`[FilloutUploadSync] failure-accounting skipped for ${session.id}:`, ledgerErr);
 					}
@@ -551,6 +558,29 @@ export class FilloutUploadSync {
 		);
 		await OfflineResponsePersistence.recordSyncFailure('response', responseClientIds, error);
 		await OfflineResponsePersistence.recordSyncFailure('event', eventClientIds, error);
+	}
+
+	/**
+	 * Drop a session out of the retry set once it can never make progress: every one
+	 * of its unsynced records is already escalated (dead-letter / checksum-corrupt),
+	 * so the only thing still failing is the session-init materialization itself
+	 * (e.g. the questionnaire was deleted server-side → permanent 404). The
+	 * getUnsynced* getters already exclude escalated records, so "all three empty"
+	 * means nothing recoverable is left to ship. We flip the local session-synced
+	 * flag purely to stop re-materializing it — the escalated records keep synced=0
+	 * and survive (the purge only runs on a clean drain), so nothing is discarded and
+	 * the export escape hatch still sees them. If real answers arrive later, their
+	 * fresh unsynced rows pull the session back into the drain via the orphan path.
+	 */
+	private async escalateSessionIfFullyDead(session: FilloutSession): Promise<void> {
+		const [responses, events, variables] = await Promise.all([
+			OfflineResponsePersistence.getUnsyncedResponses(session.id),
+			OfflineResponsePersistence.getUnsyncedEvents(session.id),
+			OfflineResponsePersistence.getUnsyncedVariables(session.id),
+		]);
+		if (responses.length === 0 && events.length === 0 && variables.length === 0) {
+			await OfflineSessionService.markSynced(session.id);
+		}
 	}
 
 	private scheduleRetry(): void {

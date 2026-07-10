@@ -77,7 +77,13 @@ screen, block dialog stress, publish gating) + commit(s).
 
 ---
 
-## R2 — Participant integrity (2 waves)
+## R2 — Participant integrity ✅ ALL UNITS MERGED (exit live-QA in progress)
+
+R2-1 `629730f` progress indicator (F-7 closed) · R2-2 `5838974` screener wired
+(fake-thank-you fixed; F-40 logged) · R2-3 `ca11d22` deadletter surfaced ·
+R2-4 `0ac60ff` WebGL preflight · R2-5 `272f9a1` recoverable errors + assertive
+a11y · R2-6 `fba0bfc` prepare-offline (F-21) + cross-device notice (F-10
+messaging).
 
 ### Wave R2-A (parallel: 3 agents)
 
@@ -100,7 +106,13 @@ toggle in devtools) + commit(s).
 
 ---
 
-## R3 — Researcher workflow (2 waves)
+## R3 — Researcher workflow ✅ ALL UNITS MERGED (exit live-QA in progress)
+
+R3-1 `b90c25d` per-session response browser (F-41 logged) · R3-2 `b53c64e`
+project lifecycle · R3-3 `7f13d9f` questionnaire lifecycle · R3-4 `eedd445`
+pagination + export N+1 · R3-5 `3adee23` advanced analytics wire-or-delete
+(−3,320 LOC; Advanced tab: segmentation + cohort comparison) · R3-6 `b5b67a3`
+guest analytics (F-32 closed).
 
 ### Wave R3-A
 

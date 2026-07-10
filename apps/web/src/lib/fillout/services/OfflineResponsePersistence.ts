@@ -338,16 +338,20 @@ export class OfflineResponsePersistence {
 	 * strand every online session's data.
 	 */
 	static async getSessionIdsWithUnsyncedData(): Promise<string[]> {
-		const [responses, events, variables] = await Promise.all([
+		const [responses, events, variables, dead] = await Promise.all([
 			db.filloutResponses.where('synced').equals(0).toArray(),
 			db.filloutEvents.where('synced').equals(0).toArray(),
 			db.filloutVariables.where('synced').equals(0).toArray(),
+			// Dead-lettered records still carry synced=0 (never discarded) but must not
+			// keep a session in the sync set — a session whose ONLY unsynced rows are all
+			// escalated has nothing left to ship, so draining it would only re-fail forever.
+			SyncLedger.deadletterClientIds(),
 		]);
 
 		const ids = new Set<string>();
-		for (const r of responses) ids.add(r.sessionId);
-		for (const e of events) ids.add(e.sessionId);
-		for (const v of variables) ids.add(v.sessionId);
+		for (const r of responses) if (!dead.has(r.clientId)) ids.add(r.sessionId);
+		for (const e of events) if (!dead.has(e.clientId)) ids.add(e.sessionId);
+		for (const v of variables) if (!v.clientId || !dead.has(v.clientId)) ids.add(v.sessionId);
 		return [...ids];
 	}
 
@@ -359,10 +363,13 @@ export class OfflineResponsePersistence {
 			.where('[sessionId+synced]')
 			.equals([sessionId, 0])
 			.toArray();
-		// E-OFF-5: verify each row's checksum; a corrupt row is escalated and
-		// dropped from the sync stream (never synced as if intact) but kept on disk.
+		// E-OFF-5: skip dead-lettered rows (already escalated; re-shipping them just
+		// re-fails forever) and verify each remaining row's checksum; a corrupt row is
+		// escalated and dropped from the sync stream (never synced) but kept on disk.
+		const dead = await SyncLedger.deadletterClientIds();
 		const intact: StoredFilloutResponse[] = [];
 		for (const r of rows) {
+			if (dead.has(r.clientId)) continue;
 			const ok = await this.verifyStored(
 				'response',
 				r.clientId,
@@ -383,8 +390,10 @@ export class OfflineResponsePersistence {
 			.where('[sessionId+synced]')
 			.equals([sessionId, 0])
 			.toArray();
+		const dead = await SyncLedger.deadletterClientIds();
 		const intact: FilloutEvent[] = [];
 		for (const e of rows) {
+			if (dead.has(e.clientId)) continue;
 			const ok = await this.verifyStored(
 				'event',
 				e.clientId,
@@ -406,8 +415,10 @@ export class OfflineResponsePersistence {
 			.equals(sessionId)
 			.filter((v) => v.synced === 0)
 			.toArray();
+		const dead = await SyncLedger.deadletterClientIds();
 		const intact: FilloutVariable[] = [];
 		for (const v of rows) {
+			if (v.clientId && dead.has(v.clientId)) continue;
 			const ok = await this.verifyStored(
 				'variable',
 				v.clientId ?? `${v.sessionId}/${v.name}`,
