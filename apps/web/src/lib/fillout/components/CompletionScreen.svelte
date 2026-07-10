@@ -29,6 +29,14 @@
     distributionSettings?: DistributionSettings;
     /** URL params captured at fillout start, used for redirect variable substitution */
     urlParams?: Record<string, string>;
+    /**
+     * Answers the sync pipeline permanently rejected (SyncLedger dead-letter, E-OFF-5).
+     * When non-zero the screen must NOT claim the responses were successfully recorded —
+     * it shows a destructive warning strip with the export escape hatch instead (R2-3).
+     */
+    syncFailedCount?: number;
+    /** Download a JSON snapshot of unsynced/failed answers (E-OFF-5 escape hatch). */
+    onExportFailed?: () => void;
     onClose?: () => void;
     onDownload?: () => void;
   }
@@ -44,6 +52,8 @@
     reportConfig,
     distributionSettings,
     urlParams = {},
+    syncFailedCount = 0,
+    onExportFailed,
     onClose,
     onDownload,
   }: Props = $props();
@@ -191,8 +201,38 @@
       <h1 class="text-3xl font-bold mb-4 text-foreground" data-testid="fillout-completion-title">Thank You!</h1>
 
       <p class="text-lg text-muted-foreground mb-8 leading-relaxed">
-        {customMessage || 'Your responses have been successfully recorded.'}
+        {customMessage ||
+          (syncFailedCount > 0
+            ? 'Your responses are saved on this device.'
+            : 'Your responses have been successfully recorded.')}
       </p>
+
+      <!-- Permanent-sync-failure strip (R2-3): when the pipeline dead-lettered rows, the
+           screen must not imply everything reached the server. Honest, destructive, and
+           carries the same export escape hatch as the connectivity panel. -->
+      {#if syncFailedCount > 0}
+        <div
+          class="completion-sync-warning"
+          role="alert"
+          data-testid="fillout-completion-sync-warning"
+        >
+          <p class="completion-sync-warning-text">
+            {syncFailedCount}
+            {syncFailedCount === 1 ? 'answer' : 'answers'} could not be submitted to the server. Download
+            a copy so your responses aren't lost.
+          </p>
+          {#if onExportFailed}
+            <button
+              type="button"
+              class="completion-sync-warning-btn"
+              data-testid="fillout-completion-sync-export"
+              onclick={onExportFailed}
+            >
+              Download my answers
+            </button>
+          {/if}
+        </div>
+      {/if}
 
       {#if showStatistics && session}
         <div class="flex gap-8 justify-center mb-8 p-6 bg-muted rounded-lg">
@@ -304,6 +344,42 @@
   :global(.completion-card) {
     width: 100%;
     max-width: 600px;
+  }
+
+  .completion-sync-warning {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.625rem;
+    margin-bottom: 2rem;
+    padding: 1rem 1.25rem;
+    border-radius: 0.5rem;
+    background: hsl(var(--destructive) / 0.1);
+    border: 1px solid hsl(var(--destructive) / 0.4);
+    text-align: center;
+  }
+
+  .completion-sync-warning-text {
+    color: hsl(var(--destructive));
+    font-size: 0.875rem;
+    line-height: 1.45;
+    font-weight: 500;
+  }
+
+  .completion-sync-warning-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid hsl(var(--destructive));
+    background: hsl(var(--destructive));
+    color: hsl(var(--destructive-foreground));
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  .completion-sync-warning-btn:hover {
+    opacity: 0.85;
   }
 
   @media (max-width: 640px) {

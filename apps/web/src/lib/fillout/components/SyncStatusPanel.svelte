@@ -16,12 +16,30 @@
     syncing: boolean;
     /** Records durably queued locally but not yet acknowledged by the server. */
     pending: number;
+    /**
+     * Records the sync pipeline PERMANENTLY rejected (SyncLedger dead-letter, E-OFF-5).
+     * Non-zero means silent data loss unless surfaced — it flips the panel into a
+     * destructive, non-dismissible error state (R2-3). Dead-letter is terminal by
+     * design (the ledger never re-queues it), so the only recovery is the export
+     * escape hatch — there is deliberately no "retry" here.
+     */
+    deadletter?: number;
     /** Epoch ms of the last fully-successful sync, or null if none this session. */
     lastSyncedAt: number | null;
     onSyncNow: () => void;
+    /** Download a JSON snapshot of unsynced/failed answers (E-OFF-5 escape hatch). */
+    onExport?: () => void;
   }
 
-  let { online, syncing, pending, lastSyncedAt, onSyncNow }: Props = $props();
+  let {
+    online,
+    syncing,
+    pending,
+    deadletter = 0,
+    lastSyncedAt,
+    onSyncNow,
+    onExport,
+  }: Props = $props();
 
   // "just now" for a sync within the last minute, else a wall-clock HH:MM. Not
   // auto-ticking — good enough to read "last synced just now" right after a drain.
@@ -35,30 +53,52 @@
     return m.fillout_sync_last_synced({ time });
   });
 
-  // Visible primary status line.
+  // Visible primary status line. A dead-letter (permanent-failure) count outranks every
+  // other state — silent data loss is the most important thing to say (R2-3).
   const statusText = $derived.by(() => {
+    if (deadletter > 0) return m.fillout_sync_failed({ count: deadletter });
     if (syncing) return m.fillout_sync_syncing();
     if (!online) return m.fillout_sync_offline();
     if (pending > 0) return m.fillout_sync_pending({ count: pending });
     return m.fillout_sync_all_saved();
   });
 
-  // Screen-reader announcement — "N answers pending" / "all saved" (F094/P7-T1).
+  // Screen-reader announcement — failure (assertive) / "N answers pending" / "all saved"
+  // (F094/P7-T1, R2-3).
   const announcement = $derived(
-    pending > 0
-      ? m.fillout_sync_announce_pending({ count: pending })
-      : m.fillout_sync_announce_all_saved()
+    deadletter > 0
+      ? m.fillout_sync_announce_failed({ count: deadletter })
+      : pending > 0
+        ? m.fillout_sync_announce_pending({ count: pending })
+        : m.fillout_sync_announce_all_saved()
   );
 
-  const state = $derived(!online ? 'offline' : syncing ? 'syncing' : pending > 0 ? 'pending' : 'saved');
+  const state = $derived(
+    deadletter > 0
+      ? 'error'
+      : !online
+        ? 'offline'
+        : syncing
+          ? 'syncing'
+          : pending > 0
+            ? 'pending'
+            : 'saved'
+  );
   const syncDisabled = $derived(!online || syncing);
 </script>
 
 <div class="sync-panel" data-testid="fillout-sync-panel" data-state={state}>
-  <!-- aria-live: SR users hear the pending/saved transitions as they happen. -->
-  <span class="sr-only" role="status" aria-live="polite" data-testid="fillout-sync-announce">
-    {announcement}
-  </span>
+  <!-- Failure must interrupt (role="alert" / assertive); the routine pending/saved
+       transitions stay polite so they don't nag (R2-3). -->
+  {#if state === 'error'}
+    <span class="sr-only" role="alert" aria-live="assertive" data-testid="fillout-sync-announce">
+      {announcement}
+    </span>
+  {:else}
+    <span class="sr-only" role="status" aria-live="polite" data-testid="fillout-sync-announce">
+      {announcement}
+    </span>
+  {/if}
 
   <span class="sync-dot" aria-hidden="true"></span>
 
@@ -69,32 +109,46 @@
     {/if}
   </span>
 
-  <button
-    type="button"
-    class="sync-now"
-    data-testid="fillout-sync-now"
-    disabled={syncDisabled}
-    title={!online ? m.fillout_sync_now_offline_tooltip() : undefined}
-    aria-label={m.fillout_sync_now()}
-    onclick={() => onSyncNow()}
-  >
-    <svg
-      class="sync-now-icon"
-      class:spinning={syncing}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      aria-hidden="true"
+  {#if state === 'error'}
+    <!-- Terminal failure: no re-queue exists, so the recovery is the export escape hatch. -->
+    {#if onExport}
+      <button
+        type="button"
+        class="sync-export"
+        data-testid="fillout-sync-export"
+        onclick={() => onExport?.()}
+      >
+        {m.fillout_sync_export_failed()}
+      </button>
+    {/if}
+  {:else}
+    <button
+      type="button"
+      class="sync-now"
+      data-testid="fillout-sync-now"
+      disabled={syncDisabled}
+      title={!online ? m.fillout_sync_now_offline_tooltip() : undefined}
+      aria-label={m.fillout_sync_now()}
+      onclick={() => onSyncNow()}
     >
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-      />
-    </svg>
-    <span>{m.fillout_sync_now()}</span>
-  </button>
+      <svg
+        class="sync-now-icon"
+        class:spinning={syncing}
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        aria-hidden="true"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+        />
+      </svg>
+      <span>{m.fillout_sync_now()}</span>
+    </button>
+  {/if}
 </div>
 
 <style>
@@ -137,6 +191,17 @@
     background: hsl(var(--muted-foreground));
   }
 
+  /* Permanent-failure (dead-letter) state: destructive, unmissable, non-dismissible. */
+  .sync-panel[data-state='error'] {
+    background: hsl(var(--destructive) / 0.12);
+    border-color: hsl(var(--destructive) / 0.5);
+    color: hsl(var(--destructive));
+    font-weight: 600;
+  }
+  .sync-panel[data-state='error'] .sync-dot {
+    background: hsl(var(--destructive));
+  }
+
   .sync-text {
     display: inline-flex;
     align-items: baseline;
@@ -175,6 +240,25 @@
   .sync-now:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+
+  .sync-export {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    border: 1px solid hsl(var(--destructive));
+    background: hsl(var(--destructive));
+    color: hsl(var(--destructive-foreground));
+    font-size: 0.6875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  .sync-export:hover {
+    opacity: 0.85;
   }
 
   .sync-now-icon {

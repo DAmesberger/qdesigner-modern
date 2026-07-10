@@ -186,6 +186,7 @@
       controller.screen === 'complete' ||
       controller.isOffline ||
       controller.pendingCount > 0 ||
+      controller.deadletterCount > 0 ||
       controller.isSyncing
   );
   // Reload-persistent prompt (step 7): the SyncLedger pending tally lives in IndexedDB,
@@ -348,8 +349,10 @@
         online={!controller.isOffline}
         syncing={controller.isSyncing}
         pending={controller.pendingCount}
+        deadletter={controller.deadletterCount}
         lastSyncedAt={controller.lastSyncedAt}
         onSyncNow={() => controller.manualSync()}
+        onExport={() => controller.exportUnsyncedData()}
       />
     </div>
   {/if}
@@ -595,6 +598,8 @@
       distributionSettings={rawDefinition.settings?.distribution}
       urlParams={data.urlParams}
       showStatistics={true}
+      syncFailedCount={controller.deadletterCount}
+      onExportFailed={() => controller.exportUnsyncedData()}
       onClose={() => goto('/')}
     />
 
