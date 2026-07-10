@@ -8,6 +8,7 @@
   import { buildPsychometrics } from '$lib/analytics/psychometrics';
   import StatisticsCard from '$lib/analytics/components/StatisticsCard.svelte';
   import DescriptiveStatsWidget from '$lib/analytics/components/DescriptiveStatsWidget.svelte';
+  import AdvancedAnalytics from '$lib/analytics/components/AdvancedAnalytics.svelte';
   import ReliabilityPanel from '$lib/components/analytics/ReliabilityPanel.svelte';
   import IRTPanel from '$lib/components/analytics/IRTPanel.svelte';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -17,6 +18,8 @@
   }
 
   let { data }: Props = $props();
+
+  let view = $state<'overview' | 'advanced'>('overview');
 
   let summary = $derived(data.summary);
   let timeseries = $state<TimeSeriesBucket[]>([]);
@@ -234,6 +237,22 @@
     </div>
   </div>
 
+  <!-- Tabs -->
+  <div class="flex items-center gap-1 border-b border-border">
+    {#each [{ id: 'overview', label: 'Overview' }, { id: 'advanced', label: 'Advanced' }] as tab}
+      <button
+        onclick={() => (view = tab.id as 'overview' | 'advanced')}
+        class="px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors
+          {view === tab.id
+            ? 'border-primary text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground'}"
+      >
+        {tab.label}
+      </button>
+    {/each}
+  </div>
+
+  {#if view === 'overview'}
   <!-- Summary Cards -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
     <div class="glass-card p-4">
@@ -581,4 +600,9 @@
       {/if}
     {/if}
   </div>
+  {/if}
+
+  {#if view === 'advanced'}
+    <AdvancedAnalytics rows={data.exportRows ?? []} />
+  {/if}
 </div>
