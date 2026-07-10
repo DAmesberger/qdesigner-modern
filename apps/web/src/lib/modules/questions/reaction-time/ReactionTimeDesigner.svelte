@@ -18,11 +18,7 @@
   function formatTiming(spec: TimingSpec): string {
     return isTimingSpec(spec) ? `${spec.min}–${spec.max}` : `${spec}`;
   }
-  import type {
-    ReactionFeedbackSettings,
-    ReactionLegacyQuestionConfig,
-    ReactionStudyConfig,
-  } from './model/reaction-schema';
+  import type { ReactionFeedbackSettings } from './model/reaction-schema';
   import type {
     ReactionTaskType,
     ResponseMode,
@@ -36,28 +32,47 @@
     organizationId?: string;
     userId?: string;
     /**
-     * F-51(A): notify the designer store of a config edit. Unlike the other
-     * question designers (which build an `updates` object and call `onUpdate` per
-     * edit), the reaction editor binds the shared question `$state` proxy directly
-     * throughout its sub-editors. That keeps the UI live, but the store's
-     * update/commit pipeline never ran — so `isDirty` never flipped and autosave
-     * never fired for reaction edits (reload lost paradigm + all edits). The
-     * settled deep-watch effect below reflects each edit through this callback so
-     * the store marks the questionnaire dirty and schedules the save.
+     * F-51(A) / F-52: notify the designer store of a config edit. The `question`
+     * prop is a one-way `$derived` value from the store; mutating it directly
+     * triggers `ownership_invalid_mutation`. This component instead OWNS a local
+     * `$state` working copy (seeded from the prop), binds every sub-editor into
+     * THAT, and reflects each settled edit through this callback so the store
+     * marks the questionnaire dirty and schedules the save.
      */
     onUpdate?: (updates: { config: ReactionTimeConfig }) => void;
   }
 
   let {
-    question = $bindable(),
+    question: incomingQuestion,
     organizationId = '',
     userId = '',
     onUpdate,
   }: Props = $props();
 
-  // E-REACT-4: feedback-shape editor state, mirrored back into the question
-  // config. Kept as a local $state proxy so the mode/duration/text inputs bind
-  // directly; the effect keeps question.config.feedbackSettings pointing at it.
+  // F-52 (ownership): this component OWNS its editing state. `incomingQuestion` is
+  // a one-way value from the designer store — mutating it directly would trip
+  // `ownership_invalid_mutation` throughout the sub-editor subtree. We seed a
+  // local `$state` working copy from it and bind every sub-editor into this
+  // (owned) object; settled changes flow back to the store via `onUpdate` only.
+  // `{#key questionItem.id}` in the properties panel remounts this component per
+  // question, so one instance only ever edits one question.
+  let question = $state<Question & { config: ReactionTimeConfig }>(
+    createWorkingQuestion(incomingQuestion)
+  );
+
+  function createWorkingQuestion(
+    src: Question & { config?: unknown }
+  ): Question & { config: ReactionTimeConfig } {
+    const snapshot = $state.snapshot(src) as Question;
+    return { ...snapshot, config: createDesignerConfig(src?.config) } as Question & {
+      config: ReactionTimeConfig;
+    };
+  }
+
+  // E-REACT-4: feedback-shape editor state, mirrored back into the (owned)
+  // question config. `question.config` is always fully-formed here
+  // (createDesignerConfig normalizes it), so reading `feedbackSettings` off it is
+  // guarded — fixes the `feedbackSettings of undefined` TypeError (F-52 E).
   let feedbackSettings = $state<ReactionFeedbackSettings>(
     question.config.feedbackSettings ?? { mode: 'accuracy', durationMs: 800 }
   );
@@ -92,7 +107,6 @@
   let showMediaPicker = $state(false);
   let showExternalMediaUrl = $state(false);
   let mediaThumbnailUrl = $state<string | null>(null);
-  let hydratedQuestionId = $state<string | null>(null);
 
   // Response-mode + gamepad press-to-bind state (E-REACT-1).
   let gamepadBindValue = $state('');
@@ -167,49 +181,38 @@
 
   function createDesignerConfig(source: unknown): ReactionTimeConfig {
     const sourceRecord = toRecord(source);
-    const study = normalizeReactionQuestionConfig({ config: sourceRecord });
+    const normalized = normalizeReactionQuestionConfig({ config: sourceRecord });
     const prompt =
       typeof sourceRecord.prompt === 'string' && sourceRecord.prompt.trim().length > 0
         ? sourceRecord.prompt
         : 'Reaction Time Task';
 
-    return {
-      study,
-      task: study.task as ReactionTimeConfig['task'],
-      stimulus: study.stimulus as ReactionTimeConfig['stimulus'],
-      response: study.response,
-      correctKey: study.correctKey,
-      feedback: study.feedback,
-      practice: study.practice,
-      practiceTrials: study.practiceTrials,
-      testTrials: study.testTrials,
-      targetFPS: study.targetFPS,
+    const config: ReactionTimeConfig = {
+      task: normalized.task as ReactionTimeConfig['task'],
+      stimulus: normalized.stimulus as ReactionTimeConfig['stimulus'],
+      response: normalized.response,
+      correctKey: normalized.correctKey,
+      feedback: normalized.feedback,
+      feedbackSettings: normalized.feedbackSettings,
+      practice: normalized.practice,
+      practiceTrials: normalized.practiceTrials,
+      testTrials: normalized.testTrials,
+      targetFPS: normalized.targetFPS,
       prompt,
     };
-  }
 
-  function hydrateQuestionConfig(force = false) {
-    if (!question || typeof question !== 'object') return;
-
-    const nextConfig = createDesignerConfig(question.config);
-    const currentSerialized = JSON.stringify(question.config ?? null);
-    const nextSerialized = JSON.stringify(nextConfig);
-
-    if (force || currentSerialized !== nextSerialized) {
-      question.config = nextConfig;
+    // F-52 (single source of truth): the visual `study` (block plan) is authored
+    // ONLY for the custom paradigm, where block editing IS the authoring. Every
+    // procedural paradigm has NO `study` — its trials materialize from the
+    // top-level config at compile/run time. This is also the migration path: a
+    // procedural config loaded with a stale compiled `study` drops it here, so the
+    // next save persists the single-source shape.
+    if (normalized.task.type === 'custom') {
+      config.study = normalized;
     }
 
-    hydratedQuestionId = question.id ?? null;
+    return config;
   }
-
-  hydrateQuestionConfig(true);
-
-  $effect(() => {
-    const nextQuestionId = question?.id ?? null;
-    if (nextQuestionId !== hydratedQuestionId) {
-      hydrateQuestionConfig(true);
-    }
-  });
 
   // Whether the current stimulus type uses media files
   let stimulusUsesMedia = $derived(
@@ -288,34 +291,12 @@
     }
   }
 
-  // Initialize config defaults
-  $effect(() => {
-    ensureStudyBlocks();
-  });
-
-  $effect(() => {
-    if ((question.config.study?.blocks || []).length > 0) {
-      return;
-    }
-
-    // Keep canonical study config in sync with the designer's legacy task fields.
-    const canonical = normalizeReactionQuestionConfig({ config: question.config });
-    const currentSerialized = JSON.stringify(question.config.study ?? null);
-    const nextSerialized = JSON.stringify(canonical);
-    if (currentSerialized !== nextSerialized) {
-      question.config.study = canonical;
-    }
-  });
-
-  // E-REACT-4: mirror the feedback toggle + shape into the canonical study even
-  // once the visual block editor owns it (the sync effect above early-returns
-  // when blocks exist, but the block runtime reads `study`).
-  $effect(() => {
-    const study = question.config.study;
-    if (!study) return;
-    study.feedback = question.config.feedback !== false;
-    study.feedbackSettings = feedbackSettings;
-  });
+  // F-52: no `ensureStudyBlocks` / study-sync / feedback-into-study effects. Those
+  // eagerly compiled and persisted a frozen `study` snapshot for procedural
+  // paradigms — the root of F-49/F-51/F-52. `study` now exists only for the custom
+  // paradigm and is produced by `createDesignerConfig` (on mount and on paradigm
+  // switch); procedural trials materialize from the top-level config at compile
+  // time, so there is nothing to keep in sync.
 
   $effect(() => {
     const currentTaskType = question.config.task?.type || 'standard';
@@ -382,34 +363,13 @@
     });
   }
 
-  function ensureStudyBlocks() {
-    if (question.config.study && Array.isArray(question.config.study.blocks) && question.config.study.blocks.length > 0) {
-      return;
-    }
-
-    const taskType = question.config.task?.type || 'standard';
-    const starter = createLegacyStarterPayload(
-      taskType,
-      question.config as unknown as Partial<ReactionLegacyQuestionConfig>
-    );
-    if (starter.task) {
-      question.config.task = starter.task as ReactionTimeConfig['task'];
-    }
-    if (starter.study) {
-      question.config.study = starter.study as ReactionStudyConfig;
-    }
-  }
-
   // F-51(A): reflect every reaction-editor edit into the designer store so it
-  // marks the questionnaire dirty and schedules autosave. The mount-time hydrate
-  // + study-sync + feedback effects mutate the config before the author touches
-  // anything, so we arm the watcher only after mount has settled (onMount + a
-  // tick past the initial effect flush) and capture that settled serialization as
-  // the baseline. `{#key questionItem.id}` in the properties panel remounts this
-  // component per question, so one instance only ever observes one question's
-  // edits. The reflection is loop-safe: the store's commit deep-clones the config
-  // verbatim (no reaction re-normalization), so the value we send comes back
-  // identical and the next effect run is a no-op.
+  // marks the questionnaire dirty and schedules autosave. The mount-time seed
+  // + feedback effect mutate the owned config before the author touches anything,
+  // so we arm the watcher only after mount has settled (onMount + a tick past the
+  // initial effect flush) and capture that settled serialization as the baseline.
+  // `{#key questionItem.id}` in the properties panel remounts this component per
+  // question, so one instance only ever observes one question's edits.
   let syncBaseline: string | null = null;
   let syncArmed = $state(false);
   onMount(() => {
@@ -425,7 +385,13 @@
     }
     if (serialized === syncBaseline) return;
     syncBaseline = serialized;
-    onUpdate?.({ config: $state.snapshot(question.config) as ReactionTimeConfig });
+    // F-52 (DataCloneError): send a plain, structured-cloneable clone — never a
+    // $state proxy or a nested closure. The store persists the whole questionnaire
+    // to IndexedDB via `structuredClone`, which throws `DataCloneError` on a
+    // reactive proxy or function; `JSON.parse(JSON.stringify(...))` (reusing the
+    // serialization we just computed) yields pure JSON data, which is exactly the
+    // shape the config is stored as anyway.
+    onUpdate?.({ config: JSON.parse(serialized) as ReactionTimeConfig });
   });
 </script>
 

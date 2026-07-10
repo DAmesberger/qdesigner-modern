@@ -51,12 +51,26 @@ async function reload(config: unknown): Promise<unknown> {
   return JSON.parse(JSON.stringify(reloaded.config));
 }
 
+// F-52: the designer OWNS its editing state and reflects settled edits through
+// `onUpdate` (it no longer mutates the passed-in question prop). Capture the saved
+// config from that callback rather than reading the prop back.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config payload
+function renderCapturing(question: any): () => any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config payload
+  let saved: any = null;
+  render(ReactionTimeDesigner, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config payload
+    props: { question, onUpdate: (u: { config: any }) => (saved = u.config) },
+  });
+  return () => saved;
+}
+
 describe('RT-2b: ResponseSet edits persist through save → reload', () => {
   afterEach(() => cleanup());
 
   it('option label + id edit and a correct-mark survive a round-trip', async () => {
     const question = seededQuestion(twoOptions());
-    render(ReactionTimeDesigner, { props: { question } });
+    const saved = renderCapturing(question);
     await tick();
     await tick();
 
@@ -69,8 +83,9 @@ describe('RT-2b: ResponseSet edits persist through save → reload', () => {
     await fireEvent.input(id, { target: { value: 'leftward' } });
     await fireEvent.change(correct1, { target: { checked: true } });
     await tick();
+    await tick();
 
-    const savedConfig = JSON.parse(JSON.stringify(question.config));
+    const savedConfig = JSON.parse(JSON.stringify(saved()));
     cleanup();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config
@@ -85,7 +100,7 @@ describe('RT-2b: ResponseSet edits persist through save → reload', () => {
 
   it('the Add response option control appends an option', async () => {
     const question = seededQuestion(twoOptions());
-    render(ReactionTimeDesigner, { props: { question } });
+    const saved = renderCapturing(question);
     await tick();
     await tick();
 
@@ -93,14 +108,15 @@ describe('RT-2b: ResponseSet edits persist through save → reload', () => {
     if (!add) throw new Error('add-option control did not render');
     await fireEvent.click(add);
     await tick();
+    await tick();
 
-    expect(question.config.response.responseSet.options).toHaveLength(3);
-    expect(question.config.response.responseSet.options[2]).toEqual({ id: '', label: '', bindings: [] });
+    expect(saved().response.responseSet.options).toHaveLength(3);
+    expect(saved().response.responseSet.options[2]).toEqual({ id: '', label: '', bindings: [] });
   });
 
   it('auto-suggests an option id (slugified) from the label', async () => {
     const question = seededQuestion([...twoOptions(), { id: '', label: '', bindings: [] }]);
-    render(ReactionTimeDesigner, { props: { question } });
+    const saved = renderCapturing(question);
     await tick();
     await tick();
 
@@ -108,8 +124,9 @@ describe('RT-2b: ResponseSet edits persist through save → reload', () => {
     if (!label2) throw new Error('third option did not render');
     await fireEvent.input(label2, { target: { value: 'Center Choice' } });
     await tick();
+    await tick();
 
-    const savedConfig = JSON.parse(JSON.stringify(question.config));
+    const savedConfig = JSON.parse(JSON.stringify(saved()));
     cleanup();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config
@@ -121,7 +138,7 @@ describe('RT-2b: ResponseSet edits persist through save → reload', () => {
 
   it('flags a duplicate option id after an edit', async () => {
     const question = seededQuestion(twoOptions());
-    render(ReactionTimeDesigner, { props: { question } });
+    const saved = renderCapturing(question);
     await tick();
     await tick();
 
@@ -129,8 +146,9 @@ describe('RT-2b: ResponseSet edits persist through save → reload', () => {
     if (!id1) throw new Error('option 1 id did not render');
     await fireEvent.input(id1, { target: { value: 'left' } });
     await tick();
+    await tick();
 
-    const savedConfig = JSON.parse(JSON.stringify(question.config));
+    const savedConfig = JSON.parse(JSON.stringify(saved()));
     expect(savedConfig.response.responseSet.options[1].id).toBe('left');
     cleanup();
 

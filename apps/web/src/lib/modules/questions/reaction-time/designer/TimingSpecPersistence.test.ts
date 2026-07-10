@@ -13,15 +13,18 @@ import ReactionTimeDesigner from '../ReactionTimeDesigner.svelte';
  * Rooting the binding at the bindable `question` (`question.config.task…`) — the
  * shape TaskPresetFields already used — fixes it.
  *
- * This drives the FULL ReactionTimeDesigner (the wrapper whose hydrate/study-sync
- * effects were essential to reproduce the bug), edits a jitter min input, then
- * snapshots → reloads a fresh designer, asserting the value survived.
+ * This drives the FULL ReactionTimeDesigner, edits a jitter min input, and
+ * asserts the edit reaches the SAVED config. F-52: the designer OWNS its editing
+ * state and reflects settled edits through `onUpdate` (it no longer mutates the
+ * passed-in question prop — that would trip ownership_invalid_mutation), so the
+ * saved config is captured from the `onUpdate` payload, then a fresh designer is
+ * reloaded from it and the jitter-min input asserted to hydrate to the edit.
  */
 async function editMinAndRoundTrip(
   taskConfig: unknown,
   inputId: string,
   newMin: string
-): Promise<{ afterEdit: unknown; afterReload: unknown }> {
+): Promise<{ afterEdit: Record<string, unknown>; afterReloadMin: string | null }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- minimal designer fixture
   const question: any = {
     id: 'q1',
@@ -30,7 +33,14 @@ async function editMinAndRoundTrip(
     config: { task: taskConfig },
   };
 
-  const { unmount } = render(ReactionTimeDesigner, { props: { question } });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config payload
+  let saved: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config payload
+  const onUpdate = (u: { config: any }) => {
+    saved = u.config;
+  };
+
+  const { unmount } = render(ReactionTimeDesigner, { props: { question, onUpdate } });
   await tick();
   await tick();
 
@@ -40,26 +50,27 @@ async function editMinAndRoundTrip(
   await tick();
   await tick();
 
-  const afterEdit = JSON.parse(JSON.stringify(question.config.task));
-
-  // Save (autosave / persistence serializes the whole questionnaire) then reload.
-  const saved = JSON.parse(JSON.stringify(question));
+  if (!saved) throw new Error('edit did not reflect through onUpdate');
+  const afterEdit = JSON.parse(JSON.stringify(saved.task)) as Record<string, unknown>;
   unmount();
 
+  // Reload a fresh designer from the SAVED (persisted) config and assert the jitter
+  // min input hydrates to the edited value — the exact re-QA reload scenario.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- minimal designer fixture
-  const reloaded: any = { id: 'q1', type: 'reaction-time', name: '', config: saved.config };
+  const reloaded: any = { id: 'q1', type: 'reaction-time', name: '', config: saved };
   render(ReactionTimeDesigner, { props: { question: reloaded } });
   await tick();
   await tick();
 
-  return { afterEdit, afterReload: JSON.parse(JSON.stringify(reloaded.config.task)) };
+  const reloadedMin = document.getElementById(inputId) as HTMLInputElement | null;
+  return { afterEdit, afterReloadMin: reloadedMin?.value ?? null };
 }
 
 describe('F-49: TimingSpec jitter edits persist through save → reload', () => {
   afterEach(() => cleanup());
 
   it('PVT foreperiod (StandardParadigmFields, was broken)', async () => {
-    const { afterReload } = await editMinAndRoundTrip(
+    const { afterEdit, afterReloadMin } = await editMinAndRoundTrip(
       {
         type: 'pvt',
         pvt: { trialCount: 20, isi: { dist: 'uniform', min: 2000, max: 10000 }, responseKey: ' ', responseTimeoutMs: 5000 },
@@ -68,11 +79,12 @@ describe('F-49: TimingSpec jitter edits persist through save → reload', () => 
       '3500'
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config
-    expect((afterReload as any).pvt.isi).toEqual({ dist: 'uniform', min: 3500, max: 10000 });
+    expect((afterEdit as any).pvt.isi).toEqual({ dist: 'uniform', min: 3500, max: 10000 });
+    expect(afterReloadMin).toBe('3500');
   });
 
   it('Sternberg per-item study (StandardParadigmFields)', async () => {
-    const { afterReload } = await editMinAndRoundTrip(
+    const { afterEdit, afterReloadMin } = await editMinAndRoundTrip(
       {
         type: 'sternberg',
         sternberg: {
@@ -93,11 +105,12 @@ describe('F-49: TimingSpec jitter edits persist through save → reload', () => 
       '350'
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config
-    expect((afterReload as any).sternberg.encodingMs).toEqual({ dist: 'uniform', min: 350, max: 500 });
+    expect((afterEdit as any).sternberg.encodingMs).toEqual({ dist: 'uniform', min: 350, max: 500 });
+    expect(afterReloadMin).toBe('350');
   });
 
   it('N-Back fixation (TaskPresetFields, question-rooted — the working shape)', async () => {
-    const { afterReload } = await editMinAndRoundTrip(
+    const { afterEdit, afterReloadMin } = await editMinAndRoundTrip(
       {
         type: 'n-back',
         nBack: {
@@ -115,6 +128,7 @@ describe('F-49: TimingSpec jitter edits persist through save → reload', () => 
       '350'
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config
-    expect((afterReload as any).nBack.fixationMs).toEqual({ dist: 'uniform', min: 350, max: 500 });
+    expect((afterEdit as any).nBack.fixationMs).toEqual({ dist: 'uniform', min: 350, max: 500 });
+    expect(afterReloadMin).toBe('350');
   });
 });

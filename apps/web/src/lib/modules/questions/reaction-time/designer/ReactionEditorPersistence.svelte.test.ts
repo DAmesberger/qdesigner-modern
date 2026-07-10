@@ -62,12 +62,18 @@ describe('F-51 A: reaction edits flow through onUpdate (mark dirty)', () => {
   });
 });
 
-describe('F-51 B: top-level Number of Test Trials survives reload', () => {
+describe('F-51/F-52 B: top-level Number of Test Trials survives reload', () => {
   afterEach(() => cleanup());
 
   it('an edited testTrials is not reverted to the paradigm default on reload', async () => {
     const question = reactiveQuestion();
-    render(ReactionTimeDesigner, { props: { question } });
+    // F-52: the designer owns its state and reflects edits through onUpdate; the
+    // saved config is the callback payload, not the (now un-mutated) prop.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config payload
+    let saved: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config payload
+    const onUpdate = (u: { config: any }) => (saved = u.config);
+    render(ReactionTimeDesigner, { props: { question, onUpdate } });
     await tick();
     await tick();
 
@@ -77,9 +83,13 @@ describe('F-51 B: top-level Number of Test Trials survives reload', () => {
     await tick();
     await tick();
 
-    // Serialize + reload a fresh designer from the saved config (the study shadow
-    // rides along); the reload must display 25, not the starter default (10).
-    const saved = JSON.parse(JSON.stringify(question.config));
+    // The saved config carries the edit; a fresh designer reloaded from it must
+    // display 25, not the paradigm default (10). This is the exact re-QA reload
+    // scenario — and the saved config now carries NO stale study for the
+    // (procedural) standard paradigm.
+    expect(saved).not.toBeNull();
+    expect(saved.testTrials).toBe(25);
+    expect(saved.study).toBeUndefined();
     cleanup();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- minimal designer fixture
@@ -90,6 +100,71 @@ describe('F-51 B: top-level Number of Test Trials survives reload', () => {
 
     const reloadedEl = document.getElementById('test-trials') as HTMLInputElement;
     expect(reloadedEl?.value).toBe('25');
-    expect(reloaded.config.testTrials).toBe(25);
+  });
+});
+
+describe('F-52 C: no ownership_invalid_mutation warnings', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('mounting and editing the reaction designer emits zero ownership warnings', async () => {
+    // The designer OWNS its editing state, so binding its sub-editors into that
+    // state (rather than mutating the passed-in `question` prop) must not trip
+    // Svelte's `ownership_invalid_mutation` dev warning (console.warn).
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const question = reactiveQuestion();
+    render(ReactionTimeDesigner, { props: { question } });
+    await tick();
+    await tick();
+
+    const el = document.getElementById('test-trials') as HTMLInputElement;
+    if (!el) throw new Error('test-trials input did not render');
+    await fireEvent.input(el, { target: { value: '30' } });
+    await tick();
+    await tick();
+
+    const messages = [...warn.mock.calls, ...error.mock.calls]
+      .flat()
+      .map((arg) => String(arg))
+      .join('\n');
+    expect(messages).not.toContain('ownership_invalid_mutation');
+  });
+});
+
+describe('F-52 D: onUpdate payload is structured-cloneable (no proxy / no DataCloneError)', () => {
+  afterEach(() => cleanup());
+
+  it('the reflected config survives structuredClone — never a $state proxy or closure', async () => {
+    const question = reactiveQuestion();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config payload
+    let saved: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config payload
+    const onUpdate = (u: { config: any }) => (saved = u.config);
+    render(ReactionTimeDesigner, { props: { question, onUpdate } });
+    await tick();
+    await tick();
+
+    // Toggling feedback plants the feedbackSettings $state into the config — the
+    // shape that previously leaked a proxy into the IndexedDB draft put.
+    const feedback = document.querySelector(
+      'input[type="checkbox"]'
+    ) as HTMLInputElement | null;
+    const el = document.getElementById('test-trials') as HTMLInputElement;
+    if (!el) throw new Error('test-trials input did not render');
+    await fireEvent.input(el, { target: { value: '12' } });
+    if (feedback) await fireEvent.change(feedback, { target: { checked: true } });
+    await tick();
+    await tick();
+
+    expect(saved).not.toBeNull();
+    // structuredClone is exactly what Dexie's `.put` runs on the persisted draft;
+    // a $state proxy or function would throw DataCloneError here.
+    expect(() => structuredClone(saved)).not.toThrow();
+    // And the payload is pure JSON data (round-trips identically).
+    expect(saved).toEqual(JSON.parse(JSON.stringify(saved)));
   });
 });

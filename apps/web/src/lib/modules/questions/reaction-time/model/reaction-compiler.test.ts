@@ -203,11 +203,14 @@ describe('reaction-compiler', () => {
     expect(plan.every((entry) => entry.metadata.taskType === 'standard')).toBe(true);
   });
 
-  it('prioritizes canonical study blocks when present', () => {
+  it('executes the authored study blocks for the custom paradigm', () => {
+    // F-52: authored block execution is the custom paradigm's path. The top-level
+    // task must be `custom` for the compiler to run the block list (a procedural
+    // top-level task now materializes from its own config and ignores any blocks).
     const plan = compileReactionPlan(
       normalizeReactionQuestionConfig({
         config: {
-          task: { type: 'stroop' },
+          task: { type: 'custom' },
           study: {
             schemaVersion: 1,
             task: { type: 'custom' },
@@ -314,22 +317,28 @@ describe('reaction-compiler counterbalancing (E-REACT-6)', () => {
   });
 
   it('reorders study blocks per the Latin-square row for the assigned cell', () => {
+    // F-52: block execution is the custom paradigm's authoring path, so the
+    // block-carrying fixtures declare `task.type: 'custom'` (procedural paradigms
+    // no longer execute an embedded block list).
     const config = normalizeReactionQuestionConfig({
       config: {
-        blocks: [
-          {
-            id: 'block-a',
-            name: 'A',
-            kind: 'test',
-            trials: [{ id: 'ta', stimulus: { kind: 'text', text: 'A' }, validKeys: ['f', 'j'] }],
-          },
-          {
-            id: 'block-b',
-            name: 'B',
-            kind: 'test',
-            trials: [{ id: 'tb', stimulus: { kind: 'text', text: 'B' }, validKeys: ['f', 'j'] }],
-          },
-        ],
+        task: { type: 'custom' },
+        study: {
+          blocks: [
+            {
+              id: 'block-a',
+              name: 'A',
+              kind: 'test',
+              trials: [{ id: 'ta', stimulus: { kind: 'text', text: 'A' }, validKeys: ['f', 'j'] }],
+            },
+            {
+              id: 'block-b',
+              name: 'B',
+              kind: 'test',
+              trials: [{ id: 'tb', stimulus: { kind: 'text', text: 'B' }, validKeys: ['f', 'j'] }],
+            },
+          ],
+        },
       },
     });
 
@@ -346,18 +355,21 @@ describe('reaction-compiler counterbalancing (E-REACT-6)', () => {
   it('selects only the assigned stimulus subset from tagged trial templates', () => {
     const config = normalizeReactionQuestionConfig({
       config: {
-        blocks: [
-          {
-            id: 'block-a',
-            name: 'A',
-            kind: 'test',
-            trials: [
-              { id: 'ta', condition: 'list-a', stimulus: { kind: 'text', text: 'A' } },
-              { id: 'tb', condition: 'list-b', stimulus: { kind: 'text', text: 'B' } },
-              { id: 'shared', stimulus: { kind: 'text', text: 'S' } },
-            ],
-          },
-        ],
+        task: { type: 'custom' },
+        study: {
+          blocks: [
+            {
+              id: 'block-a',
+              name: 'A',
+              kind: 'test',
+              trials: [
+                { id: 'ta', condition: 'list-a', stimulus: { kind: 'text', text: 'A' } },
+                { id: 'tb', condition: 'list-b', stimulus: { kind: 'text', text: 'B' } },
+                { id: 'shared', stimulus: { kind: 'text', text: 'S' } },
+              ],
+            },
+          ],
+        },
       },
     });
 
@@ -397,18 +409,21 @@ describe('reaction-compiler counterbalancing (E-REACT-6)', () => {
   it('varies within-block shuffle order by session id (per-participant randomization)', () => {
     const config = normalizeReactionQuestionConfig({
       config: {
-        blocks: [
-          {
-            id: 'block-a',
-            name: 'A',
-            kind: 'test',
-            randomizeOrder: true,
-            trials: Array.from({ length: 8 }, (_, i) => ({
-              id: `t${i}`,
-              stimulus: { kind: 'text', text: String(i) },
-            })),
-          },
-        ],
+        task: { type: 'custom' },
+        study: {
+          blocks: [
+            {
+              id: 'block-a',
+              name: 'A',
+              kind: 'test',
+              randomizeOrder: true,
+              trials: Array.from({ length: 8 }, (_, i) => ({
+                id: `t${i}`,
+                stimulus: { kind: 'text', text: String(i) },
+              })),
+            },
+          ],
+        },
       },
     });
 
@@ -488,11 +503,14 @@ describe('ResponseSet threading (ADR 0024, RT-2b)', () => {
   });
 });
 
-describe('F-51 (B/C): top-level authoring fields win over a stale study shadow', () => {
-  // Mirror the SAVED designer shape for a procedural paradigm: a compiled `study`
-  // (with blocks + a stale starter `response`) shadows the fresh top-level config
-  // the reaction editor actually writes. `pickNormalizationSource` returns that
-  // study, so before the fix the top-level edits (testTrials, response.*) reverted.
+describe('F-51/F-52 (B/C/F): top-level authoring fields win over a stale study shadow', () => {
+  // Mirror the SAVED designer shape for a procedural paradigm: a stale compiled
+  // `study` (with a 3-trial block + a stale starter `response`) rides along with
+  // the fresh top-level config the reaction editor writes. F-52 makes normalize
+  // IGNORE that study for procedural paradigms — scalars/response come from the
+  // top level and the trials materialize from the top-level config (testTrials:25),
+  // NOT from the stale 3-trial block. This is the exact re-QA scenario (fillout ran
+  // the frozen block count despite a smaller top-level testTrials).
   function designerShapeConfig() {
     return {
       task: { type: 'standard' },
@@ -550,7 +568,7 @@ describe('F-51 (B/C): top-level authoring fields win over a stale study shadow',
     expect(normalized.response.correctOptionIds).toEqual(['left']);
   });
 
-  it('C: the materialized study-block trials carry the authored responseSet + correctOptionIds', () => {
+  it('C: the materialized trials carry the authored responseSet + correctOptionIds', () => {
     const normalized = normalizeReactionQuestionConfig({ config: designerShapeConfig() });
     const plan = compileReactionPlan(normalized, seedContext);
     expect(plan.length).toBeGreaterThan(0);
@@ -558,5 +576,14 @@ describe('F-51 (B/C): top-level authoring fields win over a stale study shadow',
       expect(planned.trial.correctOptionIds).toEqual(['left']);
       expect(planned.trial.responseSet?.options.map((o) => o.id)).toEqual(['left', 'right']);
     }
+  });
+
+  it('F: the trial count comes from the top-level testTrials, not the stale study block', () => {
+    // The stale study block would compile to 3 trials (1 template × repeat 3); the
+    // top-level config authors testTrials:25. F-52 materializes from the top level.
+    const normalized = normalizeReactionQuestionConfig({ config: designerShapeConfig() });
+    expect(normalized.blocks).toHaveLength(0);
+    const plan = compileReactionPlan(normalized, seedContext);
+    expect(plan).toHaveLength(25);
   });
 });

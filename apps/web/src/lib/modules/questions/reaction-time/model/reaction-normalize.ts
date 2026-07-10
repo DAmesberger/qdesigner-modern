@@ -60,28 +60,44 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
     {};
 
   const source = pickNormalizationSource(root);
+  const taskType = normalizeTaskType(source.task?.type);
+  const isCustom = taskType === 'custom';
 
-  // F-51(B): the designer edits the legacy top-level authoring fields
-  // (`config.response`, `config.stimulus`, `config.testTrials`, …), but for a
-  // standard/custom study `pickNormalizationSource` returns the canonical `study`
-  // whose `response`/`stimulus`/scalar copies are a STALE starter snapshot that
-  // never re-syncs once blocks exist — so those edits reverted on reload. The
-  // `task` object is shared by reference with `study.task`, so it stays fresh;
-  // only the scalars, `response` and `stimulus` diverge. Read those from the
-  // top-level config when it carries a legacy `task`, exactly as `responseSet` /
-  // `correctOptionIds` already prefer the top-level `config.response` below.
-  // `blocks` and `counterbalance` still come from `source`/`study`.
-  const scalarSource: ReactionLegacyQuestionConfig =
-    root.task && typeof root.task === 'object' ? (root as ReactionLegacyQuestionConfig) : source;
+  // F-52 (single source of truth). The top-level config is the ONLY authored
+  // state for every procedural paradigm — its scalars, `response`, `stimulus`,
+  // and per-task fields. `study` (a compiled block snapshot) is authored ONLY for
+  // the `custom` paradigm, where block editing IS the authoring. For a procedural
+  // paradigm any embedded `study` is a stale eager-compile artifact: it is
+  // intentionally ignored here (scalars come from the top level, blocks normalize
+  // to empty so the compiler materializes fresh from the task config) and dropped
+  // on the next save. `pickNormalizationSource` already returns the top-level
+  // config for every designer-authored config; a legacy study-only config (no
+  // top-level task) reads its scalars from that study.
+  const scalarSource: ReactionLegacyQuestionConfig = source;
 
   const validKeys = normalizeValidKeys(scalarSource.response?.validKeys);
-  const normalizedBlocks = normalizeStudyBlocks(source.blocks, validKeys);
+
+  // Block sources are two distinct things:
+  //   • TOP-LEVEL `config.blocks` — an EXPLICIT authored block list (the
+  //     reaction-experiment / reaction-lab stack builds trials this way for every
+  //     template). Always honored, whatever the paradigm.
+  //   • `study.blocks` — the reaction-TIME designer's compiled snapshot. This is
+  //     authored (via the BlockEditor) ONLY for the custom paradigm; for a
+  //     procedural paradigm it is a stale eager-compile artifact and is ignored,
+  //     so the compiler materializes fresh from the top-level task config (the
+  //     F-52 bug where fillout ran the frozen 10-trial study despite testTrials:4).
+  const studyRecord = toRecord(root.study);
+  const explicitBlocks = Array.isArray(root.blocks) ? (root.blocks as unknown[]) : undefined;
+  const studyBlocks = Array.isArray(studyRecord?.blocks)
+    ? (studyRecord?.blocks as unknown[])
+    : undefined;
+  const blocksInput = explicitBlocks ?? (isCustom ? studyBlocks : undefined);
+  const normalizedBlocks = normalizeStudyBlocks(blocksInput, validKeys);
 
   // ResponseSet (ADR 0024): preserved verbatim (validated) only when the author
   // opened the Responses editor; absent ⇒ legacy fields compile at runtime. The
   // editor writes to the TOP-LEVEL `config.response`, so prefer that over the
-  // picked source (which is the canonical `study` for standard/custom, whose
-  // `response` is a stale starter snapshot that never re-syncs once it has blocks).
+  // picked source.
   const rootResponse = toRecord(root.response);
   const responseSet = normalizeResponseSet(
     rootResponse?.responseSet ?? source.response?.responseSet
@@ -90,8 +106,6 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
     rootResponse?.correctOptionIds ?? source.response?.correctOptionIds,
     responseSet
   );
-
-  const taskType = normalizeTaskType(source.task?.type);
   const nBack: Partial<NBackTaskConfig> = source.task?.nBack ?? {};
   const stroop: Partial<StroopTaskConfig> = source.task?.stroop ?? {};
   const flanker: Partial<FlankerTaskConfig> = source.task?.flanker ?? {};
@@ -129,10 +143,13 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
   const stimulusContent =
     ensureString(scalarSource.stimulus?.content) || (stimulusType === 'shape' ? 'circle' : '');
 
+  // Counterbalancing is a study-level concept surfaced only for the custom
+  // paradigm; procedural paradigms never author it, so a stale study's schemes are
+  // ignored for them (F-52).
   const counterbalance = normalizeCounterbalance(
-    source.counterbalance ??
-      root.counterbalance ??
-      toRecord(root.study)?.counterbalance
+    isCustom
+      ? source.counterbalance ?? root.counterbalance ?? studyRecord?.counterbalance
+      : source.counterbalance ?? root.counterbalance
   );
 
   return {
@@ -370,16 +387,13 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
 function pickNormalizationSource(root: Record<string, unknown>): ReactionLegacyQuestionConfig {
   const typedRoot = root as ReactionLegacyQuestionConfig;
 
-  if (typedRoot.study && typeof typedRoot.study === 'object') {
-    const study = typedRoot.study as ReactionLegacyQuestionConfig;
-    if (Array.isArray(study.blocks) && study.blocks.length > 0) {
-      return study;
-    }
-    if (!typedRoot.task || typeof typedRoot.task !== 'object') {
-      return study;
-    }
-  }
-
+  // F-52: the authored top-level config is authoritative whenever it carries a
+  // `task` object — every designer-authored config does (the designer edits
+  // `config.task`, `config.response`, `config.testTrials`, … directly). Only a
+  // legacy config whose data lives entirely under `study` (no top-level task)
+  // falls back to reading its task + scalars from that study. The previous
+  // "prefer study whenever study.blocks exists" rule was the root of the disease:
+  // a compiled block snapshot shadowed the fresh top-level authoring fields.
   if (typedRoot.task && typeof typedRoot.task === 'object') {
     return typedRoot;
   }
