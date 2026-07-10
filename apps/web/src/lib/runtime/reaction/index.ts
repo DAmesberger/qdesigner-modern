@@ -12,7 +12,21 @@ export type {
   ScheduledPhase,
   TimingMethod,
   ReactionOffsetMethod,
+  // ResponseSet model (ADR 0024).
+  ResponseSet,
+  ResponseOption,
+  Binding,
+  ResponseSourceKind,
+  KeyboardBinding,
+  PointerBinding,
+  TouchBinding,
+  GamepadBinding,
+  HidBinding,
 } from './types';
+
+// Legacy → ResponseSet compilation (ADR 0024).
+export { compileLegacyResponse } from './responseSet';
+export type { LegacyResponseInput } from './responseSet';
 
 export {
   resolveFeedbackVerdict,

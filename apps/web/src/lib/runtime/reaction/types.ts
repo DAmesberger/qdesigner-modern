@@ -14,6 +14,96 @@ export interface ReactionTargetRegion {
   radius: number;
 }
 
+/**
+ * A device family that can deliver participant responses (ADR 0024). Multiple
+ * sources may be armed concurrently for one trial; the first event wins. The
+ * union is deliberately OPEN for `'hid'` — RT-4 adds the WebHID adapter that
+ * consumes it; until then the engine arms the other sources and ignores `'hid'`
+ * bindings gracefully.
+ */
+export type ResponseSourceKind = 'keyboard' | 'pointer' | 'touch' | 'gamepad' | 'hid';
+
+/** A keyboard key attached to a ResponseOption, firing on press or release. */
+export interface KeyboardBinding {
+  source: 'keyboard';
+  /** The `KeyboardEvent.key` value (compared case-insensitively). */
+  key: string;
+  /** Which edge fires the response. Defaults to `'down'` (press). */
+  on?: 'down' | 'up';
+}
+
+/** A pointer (mouse) click attached to a ResponseOption, optionally region-scoped. */
+export interface PointerBinding {
+  source: 'pointer';
+  /**
+   * Optional spatial-hit region in normalized [0,1] canvas space. When several
+   * pointer options are armed, a click resolves to the option whose region
+   * contains it; a region-less binding is a catch-all. Absent = any click.
+   */
+  region?: ReactionTargetRegion;
+}
+
+/** A touch attached to a ResponseOption, optionally region-scoped (see PointerBinding). */
+export interface TouchBinding {
+  source: 'touch';
+  region?: ReactionTargetRegion;
+}
+
+/** A gamepad button (by `navigator.getGamepads()` index) attached to a ResponseOption. */
+export interface GamepadBinding {
+  source: 'gamepad';
+  button: number;
+}
+
+/**
+ * A WebHID button attached to a ResponseOption. RT-4 adds the adapter that reads
+ * `inputreport` events and resolves this binding; the engine currently ignores
+ * it. Kept in the union so content and the designer can author it ahead of the
+ * adapter.
+ */
+export interface HidBinding {
+  source: 'hid';
+  /** HID report button index the RT-4 adapter matches against. */
+  button: number;
+  on?: 'down' | 'up';
+}
+
+/**
+ * The attachment of one physical input to a ResponseOption (ADR 0024 / CONTEXT
+ * glossary). Discriminated on `source`; the engine's arming switch ignores any
+ * unknown source kind, so the union can grow (WebHID, WebSerial) without
+ * touching the resolver.
+ */
+export type Binding =
+  | KeyboardBinding
+  | PointerBinding
+  | TouchBinding
+  | GamepadBinding
+  | HidBinding;
+
+/**
+ * One semantic response alternative in a ResponseSet, identified by a stable
+ * `id` that analysis and export key on (e.g. `'left'`, `'go'`), independent of
+ * which physical input produced it. A single option may carry several bindings
+ * (e.g. the same option on a keyboard key AND a HID button).
+ */
+export interface ResponseOption {
+  id: string;
+  label?: string;
+  bindings: Binding[];
+}
+
+/**
+ * The named, ordered list of ResponseOptions a trial arms (ADR 0024). A trial
+ * accepts exactly one winning response from its set. Existing content compiles
+ * its legacy `{validKeys, correctResponse, …}` shape into a ResponseSet via
+ * `compileLegacyResponse` — see `responseSet.ts`.
+ */
+export interface ResponseSet {
+  id?: string;
+  options: ResponseOption[];
+}
+
 export interface ReactionFixationConfig {
   enabled?: boolean;
   type?: 'cross' | 'dot';
@@ -133,6 +223,21 @@ export interface ReactionTrialConfig {
   responseMode?: ReactionResponseMode;
   validKeys?: string[];
   correctResponse?: string;
+  /**
+   * Explicit ResponseSet (ADR 0024). When present it wins over the legacy
+   * `responseMode`/`validKeys`/`gamepadButtonMap`/`targetRegion` fields — the
+   * engine arms exactly the sources its bindings name. When absent the engine
+   * compiles the legacy fields into a ResponseSet (`compileLegacyResponse`), so
+   * existing content behaves identically.
+   */
+  responseSet?: ResponseSet;
+  /**
+   * Semantic option ids counted as correct (ADR 0024). Only consulted when
+   * `requireCorrect` is set AND this is present: correctness becomes
+   * `correctOptionIds.includes(winner.optionId)`. Compiled-legacy content leaves
+   * this undefined and keeps its `correctResponse`/`targetRegion` correctness.
+   */
+  correctOptionIds?: string[];
   requireCorrect?: boolean;
   fixation?: ReactionFixationConfig;
   preStimulusDelayMs?: number;
@@ -230,6 +335,20 @@ export interface ReactionResponseCapture {
   holdDurationMs?: number;
   /** Gamepad only: the `navigator.getGamepads()` button index that fired. */
   gamepadButtonIndex?: number;
+  /**
+   * ResponseSet (ADR 0024): the semantic id of the ResponseOption the winning
+   * binding resolved to. Absent when the response matched no option (e.g. a
+   * legacy keyboard trial with no `validKeys` accepting an arbitrary key).
+   */
+  optionId?: string;
+  /**
+   * ResponseSet (ADR 0024): the source family of the winning binding
+   * (`keyboard`/`pointer`/`touch`/`gamepad`/`hid`). Distinct from `source`,
+   * which stays the legacy `ReactionResponseMode` (`pointer` ⇒ `mouse`).
+   */
+  responseSource?: ResponseSourceKind;
+  /** ResponseSet (ADR 0024): the concrete winning binding (carries the key/button/edge). */
+  binding?: Binding;
 }
 
 /** One logged video frame, used to reconstruct the displayed frame at response time. */
@@ -262,6 +381,12 @@ export interface ReactionFalseStartInfo {
   source: ReactionResponseMode;
   value: string | { x: number; y: number };
   timestamp: number;
+  /** ResponseSet (ADR 0024): option the anticipatory response resolved to, if any. */
+  optionId?: string;
+  /** ResponseSet (ADR 0024): source family of the anticipatory binding. */
+  responseSource?: ResponseSourceKind;
+  /** ResponseSet (ADR 0024): the concrete binding the anticipatory response matched. */
+  binding?: Binding;
 }
 
 /**

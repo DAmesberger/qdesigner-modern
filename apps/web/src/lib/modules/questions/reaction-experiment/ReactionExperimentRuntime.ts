@@ -4,6 +4,7 @@ import type {
   QuestionRuntimeResult,
 } from '$lib/runtime/core/question-runtime';
 import { ReactionEngine } from '$lib/runtime/reaction';
+import type { Binding } from '$lib/runtime/reaction';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import { mediaContentUrl } from '$lib/services/mediaService';
 import { computeDerivedReactionMetrics, aggregateReactionProvenance } from '$lib/modules/questions/reaction-time/model/reaction-scoring';
@@ -28,6 +29,12 @@ interface TrialResponse {
   /** Stimulus kind (`shape` | `text` | `image` | `video` | `audio` | `custom`). */
   stimulusKind: string | null;
   key: string | null;
+  /** ResponseSet (ADR 0024): the winning ResponseOption id, else null. */
+  optionId: string | null;
+  /** ResponseSet (ADR 0024): the winning source family (keyboard/pointer/…), else null. */
+  responseSource: string | null;
+  /** ResponseSet (ADR 0024): the concrete winning binding (key/button/edge), else null. */
+  binding: Binding | null;
   reactionTime: number | null;
   /** Signed raw reaction time (`response - onset`); may be negative. E-REACT-5. */
   rawRtMs: number | null;
@@ -172,6 +179,9 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
         trialTemplateId: planned.metadata.trialTemplateId || null,
         stimulusKind: planned.trial.stimulus?.kind ?? null,
         key,
+        optionId: result.response?.optionId ?? null,
+        responseSource: result.response?.responseSource ?? null,
+        binding: result.response?.binding ?? null,
         reactionTime: result.response?.reactionTimeMs ?? null,
         rawRtMs: result.response?.rawRtMs ?? null,
         isCorrect: result.isCorrect,

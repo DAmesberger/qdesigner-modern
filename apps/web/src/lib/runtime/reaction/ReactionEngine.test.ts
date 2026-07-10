@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ReactionEngine } from './ReactionEngine';
+import type { ReactionTrialConfig } from './types';
 import type { WebGLRenderer } from '$lib/renderer';
 import type { FrameSample, FrameStats } from '$lib/shared';
 import type { ResourceManager } from '../resources/ResourceManager';
@@ -2100,6 +2101,292 @@ describe('ReactionEngine — frame-accurate offset (E-REACT-3)', () => {
     expect(result.offsetMethod).toBe('none');
     expect(result.actualDurationFrames).toBeNull();
 
+    engine.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ResponseSet model (RT-1a, ADR 0024).
+//
+// The engine works internally only with ResponseSets: an explicit set wins,
+// else the legacy fields compile into one. These pin compile-legacy
+// equivalence, concurrent multi-source arming (first-wins), the key-up edge,
+// optionId-based correctness, and the preserved W-14 auto-repeat guard.
+// ---------------------------------------------------------------------------
+
+/** Mock `getBoundingClientRect` so normalized pointer/touch coords are stable. */
+function mockRect(canvas: HTMLCanvasElement) {
+  vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+    left: 0,
+    top: 0,
+    right: 800,
+    bottom: 600,
+    width: 800,
+    height: 600,
+    x: 0,
+    y: 0,
+    toJSON: () => ({}),
+  });
+}
+
+function dispatchClick(canvas: HTMLCanvasElement, clientX: number, clientY: number, timeStamp: number) {
+  const event = new MouseEvent('click', { clientX, clientY, bubbles: true });
+  Object.defineProperty(event, 'timeStamp', { value: timeStamp, configurable: true });
+  canvas.dispatchEvent(event);
+}
+
+/** A keydown carrying `repeat: true` (OS auto-repeat), for the W-14 guard. */
+function dispatchRepeatKey(target: HTMLElement, key: string, timeStamp: number) {
+  const event = new KeyboardEvent('keydown', { key, repeat: true });
+  Object.defineProperty(event, 'timeStamp', { value: timeStamp, configurable: true });
+  target.dispatchEvent(event);
+}
+
+/**
+ * Start a trial, drive a single presented frame so the visual onset stamps at
+ * raf time 1000, then run `act` (which typically dispatches the response). The
+ * returned promise settles when the trial finishes.
+ */
+function runTrialToResult(
+  engine: ReactionEngine,
+  config: ReactionTrialConfig,
+  emitFrame: EmitFrame,
+  act: () => void
+) {
+  const resultPromise = engine.runTrial(config);
+  return (async () => {
+    await flush();
+    emitFrame({ now: 1000, presented: true, index: 0 });
+    await flush();
+    act();
+    return resultPromise;
+  })();
+}
+
+const baseTrial = (overrides: Partial<ReactionTrialConfig>): ReactionTrialConfig => ({
+  id: 'rs-trial',
+  fixation: { enabled: false },
+  stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+  responseTimeoutMs: 400,
+  ...overrides,
+});
+
+describe('ReactionEngine — ResponseSet model (RT-1a, ADR 0024)', () => {
+  // ---- Compile-legacy equivalence (table-driven over the win/correct outcomes). ----
+
+  it('compiles legacy keyboard validKeys/correctResponse to an equivalent set', async () => {
+    const cases: Array<{ key: string; expectCorrect: boolean }> = [
+      { key: 'f', expectCorrect: true },
+      { key: 'j', expectCorrect: false },
+    ];
+
+    for (const { key, expectCorrect } of cases) {
+      const { engine, target, emitFrame } = createMockEngine();
+      const result = await runTrialToResult(
+        engine,
+        baseTrial({
+          id: `legacy-${key}`,
+          responseMode: 'keyboard',
+          validKeys: ['f', 'j'],
+          correctResponse: 'f',
+          requireCorrect: true,
+        }),
+        emitFrame,
+        () => dispatchKey(target, key, 1150)
+      );
+
+      expect(result.response?.value).toBe(key);
+      expect(result.response?.optionId).toBe(key);
+      expect(result.response?.responseSource).toBe('keyboard');
+      expect(result.isCorrect).toBe(expectCorrect);
+      engine.destroy();
+    }
+  });
+
+  it('preserves the legacy "any key" behaviour when validKeys is empty (wildcard)', async () => {
+    const { engine, target, emitFrame } = createMockEngine();
+    const result = await runTrialToResult(
+      engine,
+      baseTrial({ id: 'wildcard', responseMode: 'keyboard' }),
+      emitFrame,
+      () => dispatchKey(target, 'q', 1150)
+    );
+
+    expect(result.response?.value).toBe('q');
+    expect(result.response?.optionId).toBe('q');
+    expect(result.response?.responseSource).toBe('keyboard');
+    engine.destroy();
+  });
+
+  // ---- Concurrent multi-source arming (first-wins, source recorded). ----
+
+  it('arms keyboard and pointer concurrently; a key press wins and records its source', async () => {
+    const { engine, target, canvas, emitFrame } = createMockEngine();
+    mockRect(canvas);
+
+    const result = await runTrialToResult(
+      engine,
+      baseTrial({
+        id: 'concurrent-key',
+        responseSet: {
+          options: [
+            { id: 'go', bindings: [{ source: 'keyboard', key: 'f' }, { source: 'pointer' }] },
+          ],
+        },
+      }),
+      emitFrame,
+      () => dispatchKey(target, 'f', 1150)
+    );
+
+    expect(result.response?.responseSource).toBe('keyboard');
+    expect(result.response?.source).toBe('keyboard');
+    expect(result.response?.optionId).toBe('go');
+    expect(result.response?.value).toBe('f');
+    engine.destroy();
+  });
+
+  it('arms keyboard and pointer concurrently; a click wins and records the pointer source', async () => {
+    const { engine, canvas, emitFrame } = createMockEngine();
+    mockRect(canvas);
+
+    const result = await runTrialToResult(
+      engine,
+      baseTrial({
+        id: 'concurrent-click',
+        responseSet: {
+          options: [
+            { id: 'go', bindings: [{ source: 'keyboard', key: 'f' }, { source: 'pointer' }] },
+          ],
+        },
+      }),
+      emitFrame,
+      () => dispatchClick(canvas, 400, 300, 1180)
+    );
+
+    expect(result.response?.responseSource).toBe('pointer');
+    // `source` stays the legacy ReactionResponseMode (pointer ⇒ mouse).
+    expect(result.response?.source).toBe('mouse');
+    expect(result.response?.optionId).toBe('go');
+    expect(result.response?.reactionTimeMs).toBe(180);
+    engine.destroy();
+  });
+
+  it('first event wins across concurrent sources; the later one is suppressed', async () => {
+    const { engine, target, canvas, emitFrame } = createMockEngine();
+    mockRect(canvas);
+
+    const result = await runTrialToResult(
+      engine,
+      baseTrial({
+        id: 'first-wins',
+        responseSet: {
+          options: [
+            { id: 'go', bindings: [{ source: 'keyboard', key: 'f' }, { source: 'pointer' }] },
+          ],
+        },
+      }),
+      emitFrame,
+      () => {
+        dispatchKey(target, 'f', 1150); // wins
+        dispatchClick(canvas, 400, 300, 1200); // suppressed (resolver already nulled)
+      }
+    );
+
+    expect(result.response?.responseSource).toBe('keyboard');
+    expect(result.response?.value).toBe('f');
+    expect(result.response?.timestamp).toBe(1150);
+    engine.destroy();
+  });
+
+  // ---- Key-up edge: an on:'up' binding resolves on release, not press. ----
+
+  it('resolves an on:"up" keyboard binding on release (RT anchored on the key-up)', async () => {
+    const { engine, target, emitFrame } = createMockEngine();
+
+    const resultPromise = engine.runTrial(
+      baseTrial({
+        id: 'keyup-binding',
+        responseSet: {
+          options: [{ id: 'release', bindings: [{ source: 'keyboard', key: 'f', on: 'up' }] }],
+        },
+      })
+    );
+
+    await flush();
+    emitFrame({ now: 1000, presented: true, index: 0 });
+    await flush();
+
+    // Press does NOT resolve the trial (only the release does).
+    dispatchKey(target, 'f', 1100);
+    dispatchKeyUp(target, 'f', 1250);
+
+    const result = await resultPromise;
+
+    expect(result.response?.value).toBe('f');
+    expect(result.response?.optionId).toBe('release');
+    expect(result.response?.responseSource).toBe('keyboard');
+    // RT anchored on the key-UP (1250), not the press (which would be 1100 → 100).
+    expect(result.response?.timestamp).toBe(1250);
+    expect(result.response?.reactionTimeMs).toBe(250);
+    engine.destroy();
+  });
+
+  // ---- Correctness via correctOptionIds. ----
+
+  it('scores correctness by the winning option id when correctOptionIds is set', async () => {
+    const cases: Array<{ key: string; optionId: string; expectCorrect: boolean }> = [
+      { key: 'j', optionId: 'right', expectCorrect: true },
+      { key: 'f', optionId: 'left', expectCorrect: false },
+    ];
+
+    for (const { key, optionId, expectCorrect } of cases) {
+      const { engine, target, emitFrame } = createMockEngine();
+      const result = await runTrialToResult(
+        engine,
+        baseTrial({
+          id: `option-correct-${key}`,
+          requireCorrect: true,
+          correctOptionIds: ['right'],
+          responseSet: {
+            options: [
+              { id: 'left', bindings: [{ source: 'keyboard', key: 'f' }] },
+              { id: 'right', bindings: [{ source: 'keyboard', key: 'j' }] },
+            ],
+          },
+        }),
+        emitFrame,
+        () => dispatchKey(target, key, 1150)
+      );
+
+      expect(result.response?.optionId).toBe(optionId);
+      expect(result.isCorrect).toBe(expectCorrect);
+      engine.destroy();
+    }
+  });
+
+  // ---- W-14 auto-repeat guard still holds under the ResponseSet path. ----
+
+  it('ignores OS auto-repeat keydowns (no phantom false start, no phantom response)', async () => {
+    const { engine, target, emitFrame } = createMockEngine();
+
+    const resultPromise = engine.runTrial(
+      baseTrial({ id: 'repeat-guard', responseMode: 'keyboard', validKeys: ['f'] })
+    );
+
+    await flush();
+    // Pre-onset auto-repeat keydown: must be ignored, NOT counted as a false start.
+    dispatchRepeatKey(target, 'f', 500);
+    emitFrame({ now: 1000, presented: true, index: 0 });
+    await flush();
+    // A genuine (non-repeat) press resolves the trial.
+    dispatchKey(target, 'f', 1150);
+
+    const result = await resultPromise;
+
+    expect(result.falseStartCount).toBe(0);
+    expect(result.anticipatory).toBe(false);
+    expect(result.response?.value).toBe('f');
+    expect(result.response?.timestamp).toBe(1150);
     engine.destroy();
   });
 });

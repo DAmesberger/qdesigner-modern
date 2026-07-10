@@ -19,6 +19,8 @@ import { WebGLRenderer } from '$lib/renderer';
 import type { Renderable } from '$lib/renderer';
 import type { ResourceManager } from '../resources/ResourceManager';
 import type {
+  Binding,
+  PointerBinding,
   ReactionEngineHooks,
   ReactionOffsetMethod,
   ReactionResponseCapture,
@@ -26,11 +28,15 @@ import type {
   ReactionTrialConfig,
   ReactionTrialResult,
   ReactionTrialProvenance,
+  ResponseOption,
+  ResponseSet,
+  ResponseSourceKind,
   ScheduledPhase,
   ReactionPhaseMark,
   ReactionRenderErrorInfo,
   ReactionStimulusConfig,
   TimingMethod,
+  TouchBinding,
   VideoFrameSample,
 } from './types';
 import { computeReactionTimeMs, computeSignedReactionTimeMs } from '../core/reactionTiming';
@@ -38,6 +44,51 @@ import { resolveFeedbackRenderable, resolveFeedbackVerdict } from './feedback/fe
 import { FrameCountdown, framesForDurationMs } from './frameScheduler';
 import { GamepadPoller, type GamepadSource } from './input/GamepadPoller';
 import { pointInRegion } from './input/spatialHit';
+import { compileLegacyResponse } from './responseSet';
+
+/** One binding paired with the ResponseOption it belongs to (arming/resolution). */
+interface BoundBinding {
+  option: ResponseOption;
+  binding: Binding;
+}
+
+/** The additive ResponseSet provenance a resolved (or anticipatory) response carries. */
+interface OptionMeta {
+  optionId?: string;
+  responseSource?: ResponseSourceKind;
+  binding?: Binding;
+}
+
+/** Flatten a ResponseSet into (option, binding) pairs for source arming. */
+function flattenBindings(set: ResponseSet): BoundBinding[] {
+  const out: BoundBinding[] = [];
+  for (const option of set.options) {
+    for (const binding of option.bindings) {
+      out.push({ option, binding });
+    }
+  }
+  return out;
+}
+
+/**
+ * Resolve a spatial (pointer/touch) point to the option it hits: first a binding
+ * whose region contains the point, else a region-less catch-all, else the first
+ * binding (so a click outside a legacy single region still resolves — scored
+ * incorrect downstream by the region test).
+ */
+function resolveSpatialOption(
+  bindings: BoundBinding[],
+  point: { x: number; y: number }
+): BoundBinding | null {
+  for (const b of bindings) {
+    const region = (b.binding as PointerBinding | TouchBinding).region;
+    if (region && pointInRegion(point, region)) return b;
+  }
+  for (const b of bindings) {
+    if (!(b.binding as PointerBinding | TouchBinding).region) return b;
+  }
+  return bindings[0] ?? null;
+}
 
 /** Max number of video frames retained in the per-trial reconstruction ring. */
 const VIDEO_FRAME_RING_MAX = 240;
@@ -1139,128 +1190,241 @@ export class ReactionEngine {
       this.responseResolver = resolve;
     });
 
-    const mode = config.responseMode || 'keyboard';
+    // Normalize to a ResponseSet (ADR 0024): an explicit set wins; otherwise the
+    // legacy fields compile into one. Every source the set's bindings name is
+    // armed CONCURRENTLY and the first matching event wins (the resolver, nulled
+    // on first resolve, suppresses the rest).
+    const explicitSet = config.responseSet;
+    const responseSet: ResponseSet = explicitSet ?? compileLegacyResponse(config);
+    const bound = flattenBindings(responseSet);
 
-    if (mode === 'keyboard') {
-      const allowedKeys = new Set((config.validKeys || []).map((key) => key.toLowerCase()));
-      const captureKeyUp = Boolean(config.captureKeyUp);
-      // Key-hold/release paradigm state: the key-DOWN time per key, held until
-      // the matching key-UP finalizes the response (RT still measured from down).
-      const pendingPress = new Map<string, { time: number; method: TimingMethod }>();
+    // Legacy wildcard: keyboard mode with no valid keys accepted ANY key. Kept as
+    // a narrow shim (only when NOT using an explicit ResponseSet) so "press any
+    // key" trials still work; the pressed key becomes its own option id.
+    const keyboardWildcard =
+      !explicitSet &&
+      (config.responseMode ?? 'keyboard') === 'keyboard' &&
+      !(config.validKeys && config.validKeys.length > 0);
 
-      const keydownHandler = (event: KeyboardEvent) => {
-        if (!this.responseEnabled) return;
-        // W-14: ignore OS keyboard auto-repeat — a held key fires repeated keydowns
-        // that would otherwise inflate falseStartCount and register phantom responses.
-        if (event.repeat) return;
-
-        const key = event.key.toLowerCase();
-        if (allowedKeys.size > 0 && !allowedKeys.has(key)) return;
-
-        const { time, method } = this.getEventTime(event);
-
-        if (!captureKeyUp) {
-          this.handleResponse('keyboard', key, time, method);
-          return;
-        }
-
-        // Hold/release: a pre-onset press is still an anticipatory false start
-        // (routed through handleResponse's discard path); a post-onset press is
-        // stashed and the response is finalized on the matching key-UP.
-        if (this.stimulusOnsetTime == null) {
-          this.handleResponse('keyboard', key, time, method);
-          return;
-        }
-        pendingPress.set(key, { time, method });
-      };
-
-      this.eventTarget.addEventListener('keydown', keydownHandler as EventListener);
-      this.cleanupListeners.push(() =>
-        this.eventTarget.removeEventListener('keydown', keydownHandler as EventListener)
-      );
-
-      if (captureKeyUp) {
-        const keyupHandler = (event: KeyboardEvent) => {
-          const key = event.key.toLowerCase();
-          const press = pendingPress.get(key);
-          if (!press) return;
-          pendingPress.delete(key);
-
-          const { time: releaseTime } = this.getEventTime(event);
-          const holdDurationMs = Math.max(0, releaseTime - press.time);
-          this.handleResponse('keyboard', key, press.time, press.method, {
-            responseDevice: 'keyboard',
-            releaseTimestamp: releaseTime,
-            holdDurationMs,
-          });
-        };
-
-        this.eventTarget.addEventListener('keyup', keyupHandler as EventListener);
-        this.cleanupListeners.push(() =>
-          this.eventTarget.removeEventListener('keyup', keyupHandler as EventListener)
-        );
-      }
+    const keyboardBindings = bound.filter((b) => b.binding.source === 'keyboard');
+    if (keyboardBindings.length > 0 || keyboardWildcard) {
+      this.armKeyboard(config, keyboardBindings, keyboardWildcard);
     }
 
-    if (mode === 'gamepad') {
-      const poller = new GamepadPoller({
-        buttonMap: config.gamepadButtonMap ?? {},
-        source: this.gamepadSource,
-        now: this.now,
-        requestFrame: this.requestFrame,
-        cancelFrame: this.cancelFrame,
-        onResponse: ({ buttonIndex, value, timestamp }) => {
-          if (!this.responseEnabled) return;
-          this.handleResponse('gamepad', value, timestamp, 'gamepad.timestamp', {
-            responseDevice: 'gamepad',
-            gamepadButtonIndex: buttonIndex,
-          });
-        },
-      });
-      poller.start();
-      this.cleanupListeners.push(() => poller.stop());
+    const pointerBindings = bound.filter((b) => b.binding.source === 'pointer');
+    if (pointerBindings.length > 0) {
+      this.armPointer(pointerBindings);
     }
 
-    if (mode === 'mouse') {
-      const handler = (event: MouseEvent) => {
-        if (!this.responseEnabled) return;
-
-        const rect = this.canvas.getBoundingClientRect();
-        const x = (event.clientX - rect.left) / rect.width;
-        const y = (event.clientY - rect.top) / rect.height;
-
-        const { time, method } = this.getEventTime(event);
-        this.handleResponse('mouse', { x, y }, time, method);
-      };
-
-      this.canvas.addEventListener('click', handler);
-      this.cleanupListeners.push(() => this.canvas.removeEventListener('click', handler));
+    const touchBindings = bound.filter((b) => b.binding.source === 'touch');
+    if (touchBindings.length > 0) {
+      this.armTouch(touchBindings);
     }
 
-    if (mode === 'touch') {
-      const handler = (event: TouchEvent) => {
-        if (!this.responseEnabled) return;
-
-        const touch = event.touches[0];
-        if (!touch) return;
-
-        const rect = this.canvas.getBoundingClientRect();
-        const x = (touch.clientX - rect.left) / rect.width;
-        const y = (touch.clientY - rect.top) / rect.height;
-
-        const { time, method } = this.getEventTime(event);
-        this.handleResponse('touch', { x, y }, time, method);
-      };
-
-      this.canvas.addEventListener('touchstart', handler);
-      this.cleanupListeners.push(() => this.canvas.removeEventListener('touchstart', handler));
+    const gamepadBindings = bound.filter((b) => b.binding.source === 'gamepad');
+    if (gamepadBindings.length > 0) {
+      this.armGamepad(gamepadBindings);
     }
+
+    // 'hid' bindings are ignored until the RT-4 WebHID adapter lands (ADR 0024).
 
     if (signal) {
       const abortListener = () => this.resolveResponse(null);
       signal.addEventListener('abort', abortListener, { once: true });
       this.cleanupListeners.push(() => signal.removeEventListener('abort', abortListener));
     }
+  }
+
+  /** The additive option/source/binding provenance for a bound binding (or none). */
+  private optionMeta(bound: BoundBinding | null | undefined): OptionMeta {
+    if (!bound) return {};
+    return {
+      optionId: bound.option.id,
+      responseSource: bound.binding.source,
+      binding: bound.binding,
+    };
+  }
+
+  /**
+   * Arm keyboard capture for the set's keyboard bindings (ADR 0024). `on: 'down'`
+   * bindings (the default) fire on press; `on: 'up'` bindings fire on release
+   * (RT anchored on the key-UP). Legacy `captureKeyUp` is orthogonal: it stashes
+   * a DOWN press and finalizes it on the matching key-UP with a hold duration,
+   * RT still measured from the DOWN. The W-14 auto-repeat guard is preserved.
+   */
+  private armKeyboard(
+    config: ReactionTrialConfig,
+    keyboardBindings: BoundBinding[],
+    wildcard: boolean
+  ): void {
+    const downBindings = new Map<string, BoundBinding>();
+    const upBindings = new Map<string, BoundBinding>();
+    for (const b of keyboardBindings) {
+      if (b.binding.source !== 'keyboard') continue;
+      const key = b.binding.key.toLowerCase();
+      if (b.binding.on === 'up') upBindings.set(key, b);
+      else downBindings.set(key, b);
+    }
+
+    const captureKeyUp = Boolean(config.captureKeyUp);
+    const pendingPress = new Map<string, { time: number; method: TimingMethod; meta: OptionMeta }>();
+    const pendingUp = new Map<string, OptionMeta>();
+
+    const keydownHandler = (event: KeyboardEvent) => {
+      if (!this.responseEnabled) return;
+      // W-14: ignore OS keyboard auto-repeat — a held key fires repeated keydowns
+      // that would otherwise inflate falseStartCount and register phantom responses.
+      if (event.repeat) return;
+
+      const key = event.key.toLowerCase();
+      const down = downBindings.get(key);
+      const wildcardHit = wildcard && !down && !upBindings.has(key);
+
+      if (down || wildcardHit) {
+        const { time, method } = this.getEventTime(event);
+        const meta: OptionMeta = down
+          ? this.optionMeta(down)
+          : { optionId: key, responseSource: 'keyboard' };
+
+        if (!captureKeyUp) {
+          this.handleResponse('keyboard', key, time, method, meta);
+          return;
+        }
+        // Hold/release: a pre-onset press is still an anticipatory false start
+        // (routed through handleResponse's discard path); a post-onset press is
+        // stashed and the response is finalized on the matching key-UP.
+        if (this.stimulusOnsetTime == null) {
+          this.handleResponse('keyboard', key, time, method, meta);
+          return;
+        }
+        pendingPress.set(key, { time, method, meta });
+        return;
+      }
+
+      const up = upBindings.get(key);
+      if (up) {
+        // Arm the release; the response resolves on the matching key-UP.
+        pendingUp.set(key, this.optionMeta(up));
+      }
+    };
+
+    this.eventTarget.addEventListener('keydown', keydownHandler as EventListener);
+    this.cleanupListeners.push(() =>
+      this.eventTarget.removeEventListener('keydown', keydownHandler as EventListener)
+    );
+
+    if (captureKeyUp || upBindings.size > 0) {
+      const keyupHandler = (event: KeyboardEvent) => {
+        const key = event.key.toLowerCase();
+
+        // captureKeyUp hold/release finalize (RT anchored on the DOWN).
+        const press = pendingPress.get(key);
+        if (press) {
+          pendingPress.delete(key);
+          const { time: releaseTime } = this.getEventTime(event);
+          const holdDurationMs = Math.max(0, releaseTime - press.time);
+          this.handleResponse('keyboard', key, press.time, press.method, {
+            responseDevice: 'keyboard',
+            releaseTimestamp: releaseTime,
+            holdDurationMs,
+            ...press.meta,
+          });
+          return;
+        }
+
+        // `on: 'up'` binding finalize (RT anchored on the key-UP).
+        const up = pendingUp.get(key);
+        if (up) {
+          pendingUp.delete(key);
+          const { time, method } = this.getEventTime(event);
+          this.handleResponse('keyboard', key, time, method, {
+            responseDevice: 'keyboard',
+            ...up,
+          });
+        }
+      };
+
+      this.eventTarget.addEventListener('keyup', keyupHandler as EventListener);
+      this.cleanupListeners.push(() =>
+        this.eventTarget.removeEventListener('keyup', keyupHandler as EventListener)
+      );
+    }
+  }
+
+  /** Arm gamepad capture: each gamepad binding maps a button index to its option. */
+  private armGamepad(gamepadBindings: BoundBinding[]): void {
+    const buttonMap: Record<number, string> = {};
+    const byButton = new Map<number, BoundBinding>();
+    for (const b of gamepadBindings) {
+      if (b.binding.source !== 'gamepad') continue;
+      // The poller emits the mapped value; keep it equal to the option id so the
+      // captured `value` matches the legacy gamepadButtonMap value.
+      buttonMap[b.binding.button] = b.option.id;
+      byButton.set(b.binding.button, b);
+    }
+
+    const poller = new GamepadPoller({
+      buttonMap,
+      source: this.gamepadSource,
+      now: this.now,
+      requestFrame: this.requestFrame,
+      cancelFrame: this.cancelFrame,
+      onResponse: ({ buttonIndex, value, timestamp }) => {
+        if (!this.responseEnabled) return;
+        this.handleResponse('gamepad', value, timestamp, 'gamepad.timestamp', {
+          responseDevice: 'gamepad',
+          gamepadButtonIndex: buttonIndex,
+          ...this.optionMeta(byButton.get(buttonIndex)),
+        });
+      },
+    });
+    poller.start();
+    this.cleanupListeners.push(() => poller.stop());
+  }
+
+  /** Arm pointer (mouse) capture: a click resolves to the option it hits. */
+  private armPointer(pointerBindings: BoundBinding[]): void {
+    const handler = (event: MouseEvent) => {
+      if (!this.responseEnabled) return;
+
+      const rect = this.canvas.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width;
+      const y = (event.clientY - rect.top) / rect.height;
+
+      const { time, method } = this.getEventTime(event);
+      const bound = resolveSpatialOption(pointerBindings, { x, y });
+      this.handleResponse('mouse', { x, y }, time, method, {
+        responseDevice: 'mouse',
+        ...this.optionMeta(bound),
+      });
+    };
+
+    this.canvas.addEventListener('click', handler);
+    this.cleanupListeners.push(() => this.canvas.removeEventListener('click', handler));
+  }
+
+  /** Arm touch capture: a touch resolves to the option it hits. */
+  private armTouch(touchBindings: BoundBinding[]): void {
+    const handler = (event: TouchEvent) => {
+      if (!this.responseEnabled) return;
+
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      const rect = this.canvas.getBoundingClientRect();
+      const x = (touch.clientX - rect.left) / rect.width;
+      const y = (touch.clientY - rect.top) / rect.height;
+
+      const { time, method } = this.getEventTime(event);
+      const bound = resolveSpatialOption(touchBindings, { x, y });
+      this.handleResponse('touch', { x, y }, time, method, {
+        responseDevice: 'touch',
+        ...this.optionMeta(bound),
+      });
+    };
+
+    this.canvas.addEventListener('touchstart', handler);
+    this.cleanupListeners.push(() => this.canvas.removeEventListener('touchstart', handler));
   }
 
   /**
@@ -1281,6 +1445,9 @@ export class ReactionEngine {
       releaseTimestamp?: number;
       holdDurationMs?: number;
       gamepadButtonIndex?: number;
+      optionId?: string;
+      responseSource?: ResponseSourceKind;
+      binding?: Binding;
     }
   ): void {
     if (this.stimulusOnsetTime == null) {
@@ -1289,7 +1456,16 @@ export class ReactionEngine {
       if (this.firstFalseStartTime == null) {
         this.firstFalseStartTime = time;
       }
-      this.hooks?.onFalseStart?.({ source, value, timestamp: time });
+      // Anticipatory responses resolve against the same ResponseSet (ADR 0024),
+      // so the recorded false start carries the option/source/binding it hit.
+      this.hooks?.onFalseStart?.({
+        source,
+        value,
+        timestamp: time,
+        optionId: extra?.optionId,
+        responseSource: extra?.responseSource,
+        binding: extra?.binding,
+      });
       return; // DISCARD — keep waiting for a valid post-onset response.
     }
 
@@ -1305,6 +1481,9 @@ export class ReactionEngine {
       releaseTimestamp: extra?.releaseTimestamp,
       holdDurationMs: extra?.holdDurationMs,
       gamepadButtonIndex: extra?.gamepadButtonIndex,
+      optionId: extra?.optionId,
+      responseSource: extra?.responseSource,
+      binding: extra?.binding,
     });
   }
 
@@ -1368,6 +1547,15 @@ export class ReactionEngine {
   ): boolean | null {
     if (!config.requireCorrect) {
       return null;
+    }
+
+    // ResponseSet correctness (ADR 0024): when the trial declares which option
+    // ids are correct, score by the winning option id. Compiled-legacy content
+    // leaves `correctOptionIds` undefined and flows through the legacy branches
+    // below (unchanged), so existing outcomes are preserved exactly.
+    if (config.correctOptionIds) {
+      if (!response) return false;
+      return response.optionId != null && config.correctOptionIds.includes(response.optionId);
     }
 
     // Spatial scoring (mouse/touch): a configured targetRegion scores the
