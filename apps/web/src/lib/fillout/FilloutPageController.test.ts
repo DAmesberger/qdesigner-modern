@@ -199,4 +199,52 @@ describe('FilloutPageController', () => {
     // `$state` deep-proxies the assigned object, so compare by value, not identity.
     expect(controller.completedSession).toEqual(completed);
   });
+
+  describe('participant progress (F-7)', () => {
+    it('reports current page of total pages for a linear flow', () => {
+      const data = makeData({ pages: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] });
+      const controller = makeController(data, makeMocks());
+
+      expect(controller.progress).toBeNull();
+
+      controller.recordItemProgress({ pageIndex: 0 });
+      expect(controller.progress).toEqual({ current: 1, total: 3 });
+
+      controller.recordItemProgress({ pageIndex: 1 });
+      expect(controller.progress).toEqual({ current: 2, total: 3 });
+    });
+
+    it('is monotonic: back-navigation / loop revisit never regresses the bar', () => {
+      const data = makeData({ pages: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] });
+      const controller = makeController(data, makeMocks());
+
+      controller.recordItemProgress({ pageIndex: 2 });
+      expect(controller.progress).toEqual({ current: 3, total: 3 });
+
+      // Revisiting an earlier page keeps the furthest-reached ordinal.
+      controller.recordItemProgress({ pageIndex: 0 });
+      expect(controller.progress).toEqual({ current: 3, total: 3 });
+    });
+
+    it('reports an indeterminate total for a flow with a loop rule', () => {
+      const data = makeData({
+        pages: [{ id: 'p1' }, { id: 'p2' }],
+        flow: [{ id: 'f1', type: 'loop' }],
+      });
+      const controller = makeController(data, makeMocks());
+
+      controller.recordItemProgress({ pageIndex: 0 });
+      expect(controller.progress).toEqual({ current: 1, total: null });
+    });
+
+    it('reports an indeterminate total for a definition with an adaptive block', () => {
+      const data = makeData({
+        pages: [{ id: 'p1', blocks: [{ id: 'b1', type: 'adaptive' }] }, { id: 'p2' }],
+      });
+      const controller = makeController(data, makeMocks());
+
+      controller.recordItemProgress({ pageIndex: 0 });
+      expect(controller.progress).toEqual({ current: 1, total: null });
+    });
+  });
 });

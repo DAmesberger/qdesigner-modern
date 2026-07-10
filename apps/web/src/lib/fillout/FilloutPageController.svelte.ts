@@ -6,6 +6,7 @@ import type {
   FormTimerState,
 } from '$lib/runtime/core/FormQuestionHost';
 import { buildQuestionAnnouncement } from '$lib/fillout/a11y/announce';
+import { computeProgressTotal, type FilloutProgress } from '$lib/fillout/progress';
 import type { ResumeState } from '$lib/runtime/core/ResumeState';
 import type {
   ConsentData,
@@ -195,6 +196,17 @@ export class FilloutPageController {
   // A11y (F094/F098): persistent live-region text.
   liveAnnouncement = $state('');
 
+  // --- Participant progress indicator (F-7 / R2-1) ---------------------------
+  // Page-based position for the fillout chrome's progress bar. Null until the first
+  // item is presented; then `{ current, total }` where `current` is the 1-based
+  // ordinal of the furthest page reached (monotonic — see recordItemProgress) and
+  // `total` is the page count, or null for an indeterminate flow (adaptive/CAT block
+  // or a dynamic-length / flow-loop design; see computeProgressTotal).
+  progress = $state<FilloutProgress | null>(null);
+  // Memoized page-based total (computeProgressTotal is a pure fn of the definition).
+  // `undefined` = not yet computed; a computed value is number | null.
+  private progressTotal: number | null | undefined = undefined;
+
   // --- Non-reactive service handles ------------------------------------------
   private runtime: FilloutRuntime | null = null;
   private syncEngine: FilloutUploadSync | null = null;
@@ -280,6 +292,28 @@ export class FilloutPageController {
     },
     getCurrentValue: () => this.currentValue,
   };
+
+  /**
+   * Update the participant progress readout from a newly presented item (F-7). Driven
+   * by the runtime's `onQuestionPresented` callback, so it advances for WebGL reaction
+   * stimuli too (the indicator lives in the page chrome, not the form card).
+   *
+   * Page-based and MONOTONIC: `current` is the furthest page ordinal reached, so
+   * back-navigation or a flow loop revisiting an earlier page never makes the bar
+   * regress. When the total is known, `current` is clamped to it so the bar can never
+   * read over 100%.
+   */
+  recordItemProgress(event: { pageIndex: number }): void {
+    if (this.progressTotal === undefined) {
+      this.progressTotal = computeProgressTotal(this.data.questionnaire.definition);
+    }
+    const total = this.progressTotal;
+    const reached = Math.max(this.progress?.current ?? 0, event.pageIndex + 1);
+    this.progress = {
+      current: total !== null ? Math.min(reached, total) : reached,
+      total,
+    };
+  }
 
   handleOverlayResponse(value: unknown) {
     this.currentValue = value;
@@ -822,6 +856,7 @@ export class FilloutPageController {
         // stimuli, which fire this before the category switch and never reach the overlay.
         onQuestionPresented: (event) => {
           this.liveAnnouncement = buildQuestionAnnouncement(event, inputs.questionList);
+          this.recordItemProgress(event);
         },
       });
 

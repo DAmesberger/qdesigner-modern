@@ -199,6 +199,32 @@
     hasQuotas && controller.isOffline && controller.screen === 'welcome'
   );
 
+  // --- Participant progress indicator (F-7 / R2-1) --------------------------
+  // Page-based progress shown in the runtime chrome (visible during reaction items too;
+  // it sits in the page chrome, not inside the form card). Honours the authored
+  // `settings.showProgressBar` (default true — only an explicit `false` hides it) and
+  // only appears once the runtime has presented an item. `WelcomeScreen` calls a page a
+  // "section", so the readout matches that terminology. When `total` is null the flow is
+  // indeterminate (adaptive/CAT or a dynamic-length loop): show just "Section N" with an
+  // indeterminate bar rather than a misleading fraction.
+  const showProgressBar = $derived(
+    controller.screen === 'runtime' &&
+      !!controller.progress &&
+      rawDefinition?.settings?.showProgressBar !== false
+  );
+  const progressPercent = $derived(
+    controller.progress && controller.progress.total
+      ? Math.min(100, Math.round((controller.progress.current / controller.progress.total) * 100))
+      : null
+  );
+  const progressLabel = $derived(
+    controller.progress
+      ? controller.progress.total !== null
+        ? `Section ${controller.progress.current} of ${controller.progress.total}`
+        : `Section ${controller.progress.current}`
+      : ''
+  );
+
   // Bridge the locale-dependent runtime inputs + the DOM canvas to the controller. Read
   // lazily (at runtime-construction time) so they reflect the participant's latest locale
   // pick and the freshly-bound canvas.
@@ -425,6 +451,31 @@
     />
   {:else if controller.screen === 'runtime'}
     <h1 class="sr-only">{definition?.name ?? 'Questionnaire'}</h1>
+
+    <!-- Participant progress (F-7): page-based, page chrome (visible during reaction
+         items too). The "N of M" position is already announced politely via the sr-only
+         live region above (buildQuestionAnnouncement), so the visible text is aria-hidden
+         and the bar carries an aria-label to avoid a duplicate announcement. -->
+    {#if showProgressBar && controller.progress}
+      <div class="fillout-progress" data-testid="fillout-progress">
+        <div
+          class="fillout-progress-track"
+          class:is-indeterminate={progressPercent === null}
+          role="progressbar"
+          aria-label={progressLabel}
+          aria-valuemin="0"
+          aria-valuemax={controller.progress.total ?? undefined}
+          aria-valuenow={progressPercent === null ? undefined : controller.progress.current}
+        >
+          <div
+            class="fillout-progress-fill"
+            style={progressPercent === null ? undefined : `width: ${progressPercent}%`}
+          ></div>
+        </div>
+        <span class="fillout-progress-text" aria-hidden="true">{progressLabel}</span>
+      </div>
+    {/if}
+
     {#if showTimingBanner && controller.qualification}
       <div class="timing-banner" data-testid="fillout-timing-banner">
         <DeviceQualificationBanner
@@ -682,6 +733,72 @@
     width: 100%;
     height: 100%;
     touch-action: none;
+  }
+
+  /* Participant progress (F-7): a slim rail pinned to the very bottom of the viewport
+     plus a small centered "Section N of M" chip just above it. Page chrome, so it stays
+     visible over both the form overlay and full-screen reaction stimuli. */
+  .fillout-progress {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 92;
+    pointer-events: none;
+  }
+
+  .fillout-progress-track {
+    height: 4px;
+    width: 100%;
+    background: hsl(var(--muted));
+    overflow: hidden;
+  }
+
+  .fillout-progress-fill {
+    height: 100%;
+    background: hsl(var(--primary));
+    transition: width 0.3s ease;
+  }
+
+  /* Indeterminate flow (adaptive/CAT or dynamic loop): no honest fraction, so run a
+     traveling sliver instead of a fixed fill. */
+  .fillout-progress-track.is-indeterminate .fillout-progress-fill {
+    width: 30%;
+    transition: none;
+    animation: fillout-progress-indeterminate 1.4s ease-in-out infinite;
+  }
+
+  @keyframes fillout-progress-indeterminate {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(333%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fillout-progress-track.is-indeterminate .fillout-progress-fill {
+      animation: none;
+      width: 100%;
+      opacity: 0.4;
+    }
+  }
+
+  .fillout-progress-text {
+    position: absolute;
+    bottom: 0.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+    color: hsl(var(--muted-foreground));
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
   }
 
   .timing-banner {
