@@ -77,7 +77,7 @@ screen, block dialog stress, publish gating) + commit(s).
 
 ---
 
-## R2 — Participant integrity ✅ ALL UNITS MERGED (exit live-QA in progress)
+## R2 — Participant integrity ✅ CLOSED (exit live-QA passed; F-42 aftercare fixed `b736dbd`)
 
 R2-1 `629730f` progress indicator (F-7 closed) · R2-2 `5838974` screener wired
 (fake-thank-you fixed; F-40 logged) · R2-3 `ca11d22` deadletter surfaced ·
@@ -106,7 +106,7 @@ toggle in devtools) + commit(s).
 
 ---
 
-## R3 — Researcher workflow ✅ ALL UNITS MERGED (exit live-QA in progress)
+## R3 — Researcher workflow ✅ CLOSED (exit live-QA passed 9/11 direct + 2 static/expected)
 
 R3-1 `b90c25d` per-session response browser (F-41 logged) · R3-2 `b53c64e`
 project lifecycle · R3-3 `7f13d9f` questionnaire lifecycle · R3-4 `eedd445`
@@ -134,7 +134,28 @@ guest analytics (F-32 closed).
 
 ---
 
-## R4 — i18n & consistency (2 waves, parallelizable with R3 where files disjoint)
+## R4 — i18n & consistency ✅ ALL UNITS MERGED, exit live-QA passed 2026-07-10
+
+R4-1 `0bb37d2` fillout chrome i18n (109 keys en/de/es, chrome follows content
+locale) · R4-2 `c940f28` admin sweep + F-43 count fix · R4-3 `d8271bf` visual
+report editor + real-renderer preview · R4-4 `9e35c5a`+`b11dc4a` scientific
+validation (surfaced F-45) · R4-5 `d84afd0` designer safety (F-39 closed) ·
+R4-6 `58fd6db` study settings + consent authoring (F-44 closed) + consent
+checkbox crash fix `f257179` · R4-7 `26899de` media dimensions (F-8 closed) ·
+F-42 sync retry-forever fix `b736dbd` · F-45 quota evaluation fix `9fece4e`.
+
+**Exit QA (9/9 pass):** i18n flip, consent flow, quota validation + real
+gating (2nd session correctly hit "Study Full" where the old stub allowed),
+report grid drag + preview, undo/redo/Tools/delete-confirm/translation bars,
+media dims + letterboxing, admin toasts + non-zero counts, no console errors.
+Found F-46 (dead empty-state upload CTA — fix in flight). Inconclusive: the
+QA agent could not locate the 9-paradigm ISI min/max fields (checked presets +
+trial fields, not the standard-paradigm selector) — **human spot-check
+recommended**; headless WebGL trials would not advance (M3's REACTION-SMOKE
+previously proved this path in-browser; likely automation env) — **human
+smoke recommended**. Demo-data note: the seeded "Reaction Time Study" now
+contains a plain MC question (drift predating this pass); rebuild it if it
+should demo RT. Deferred from R4: onboarding-wizard rework (optional).
 
 | Unit | Title | Detail |
 |---|---|---|
@@ -149,7 +170,15 @@ guest analytics (F-32 closed).
 
 ---
 
-## R5 — Production & enterprise closeout
+## R5 — Production & enterprise closeout ✅ MERGED (except on-demand items)
+
+R5-1/R5-2 `f64b156` prod fail-loud + SAML honesty (F-27 interim) · R5-3
+`0ea11b3` hardening ledger F-25/30/31/34/37 (migration 00047, housekeeping
+task) · R5-4 `e561c85` orphan-endpoint removal (−2,293 lines; resolves the
+CLAUDE.md check-duplicate TODO; accuracyTrend computed). **Still open by
+design:** R5-5 SSO-vs-real-IdP live-QA (F-28, needs a dev IdP in compose)
+and the full SAML ACS (F-27, on customer demand); qdesigner_app prod
+password (ADR 0014, deployment-time).
 
 | Unit | Title | Detail |
 |---|---|---|
