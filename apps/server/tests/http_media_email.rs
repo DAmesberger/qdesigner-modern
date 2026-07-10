@@ -35,6 +35,19 @@ fn png_bytes() -> Vec<u8> {
     b
 }
 
+/// A real PNG header carrying big-endian `width`×`height` in its IHDR chunk,
+/// so the server's `imagesize` sniff recovers exact dimensions (F-8). No
+/// pixel data is needed — the header is enough for both `infer` (type) and
+/// `imagesize` (dimensions).
+fn png_bytes_with_dims(width: u32, height: u32) -> Vec<u8> {
+    let mut b = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    b.extend_from_slice(&[0x00, 0x00, 0x00, 0x0D, b'I', b'H', b'D', b'R']);
+    b.extend_from_slice(&width.to_be_bytes());
+    b.extend_from_slice(&height.to_be_bytes());
+    b.extend_from_slice(&[0x08, 0x06, 0x00, 0x00, 0x00]); // depth, colour, compression, filter, interlace
+    b
+}
+
 /// Build a `multipart/form-data` body carrying `organization_id` + a `file`
 /// part, by hand (binary-safe). Returns `(content_type_header, body)`.
 fn multipart_upload(org_id: Uuid, filename: &str, ctype: &str, file: &[u8]) -> (String, Vec<u8>) {
@@ -159,6 +172,62 @@ async fn media_upload_then_stream_content_full_and_range() {
         png[0..4].to_vec(),
         "ranged body must be exactly the first 4 bytes"
     );
+}
+
+// ── media upload: image dimensions round-trip (F-8) ──────────────────
+
+#[tokio::test]
+async fn media_upload_returns_image_dimensions() {
+    let Some(state) = common::build_media_test_state(MEDIA_TEST_BUCKET).await else {
+        return;
+    };
+    let app = common::test_app(state);
+
+    let user = common::register_user(&app).await;
+    let tenant = common::provision_tenant(&app, &user.token).await;
+    let (session_cookie, csrf_token) = user
+        .token
+        .split_once('|')
+        .expect("register_user yields a session|csrf token");
+
+    // A 1920×1080 PNG header — the server should sniff and persist the dims.
+    let png = png_bytes_with_dims(1920, 1080);
+    let (ctype, body) = multipart_upload(tenant.org_id, "poster.png", "image/png", &png);
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/media")
+        .header("x-requested-with", "XMLHttpRequest")
+        .header("cookie", format!("qd_session={session_cookie}"))
+        .header("x-csrf-token", csrf_token)
+        .header("content-type", ctype)
+        .body(Body::from(body))
+        .expect("build multipart request");
+
+    let (status, _headers, json) = common::send_full(&app, req).await;
+    assert_eq!(status, StatusCode::CREATED, "upload should 201: {json:?}");
+    assert_eq!(
+        json["width"].as_i64(),
+        Some(1920),
+        "upload response should carry the sniffed width: {json:?}"
+    );
+    assert_eq!(
+        json["height"].as_i64(),
+        Some(1080),
+        "upload response should carry the sniffed height: {json:?}"
+    );
+
+    // And the dims survive a re-read through GET /api/media/{id}.
+    let media_id = json["id"].as_str().expect("media id in upload response");
+    let req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/media/{media_id}"))
+        .header("cookie", format!("qd_session={session_cookie}"))
+        .body(Body::empty())
+        .expect("build get-media request");
+    let (status, _headers, json) = common::send_full(&app, req).await;
+    assert_eq!(status, StatusCode::OK, "get-media should 200: {json:?}");
+    assert_eq!(json["width"].as_i64(), Some(1920), "persisted width: {json:?}");
+    assert_eq!(json["height"].as_i64(), Some(1080), "persisted height: {json:?}");
 }
 
 // ── email verification: send → verify → MailPit confirms ─────────────

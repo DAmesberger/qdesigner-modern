@@ -10374,6 +10374,22 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "width": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Intrinsic pixel width for image assets; NULL for non-images or\nheaders that could not be parsed (F-8)."
+          },
+          "height": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Intrinsic pixel height for image assets; NULL for non-images or\nheaders that could not be parsed (F-8)."
           }
         }
       },

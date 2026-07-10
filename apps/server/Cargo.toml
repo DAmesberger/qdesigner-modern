@@ -48,6 +48,10 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 yrs = "0.25.0"
 utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid", "preserve_order", "preserve_path_order"] }
 infer = "0.16"
+# Header-only image dimension sniff at upload time (F-8). Reads just the
+# format header (PNG/JPEG/GIF/WEBP/BMP/…) to recover pixel width/height —
+# never decodes the full image, so it is cheap on the upload path.
+imagesize = "0.13"
 # Zip writer for the org GDPR export bundle (E-RBAC-9). default-features off
 # drops the bzip2/zstd/lzma/aes codecs; only the deflate path is pulled in
 # (flate2/miniz_oxide), keeping the dependency lean.

@@ -263,15 +263,6 @@ export class MediaService {
   }
 
   /**
-   * Update media metadata
-   */
-  async updateMedia(mediaId: string, updates: Partial<MediaAsset>): Promise<MediaAsset> {
-    void mediaId;
-    void updates;
-    throw new Error('Media metadata updates are not supported by the current REST API');
-  }
-
-  /**
    * Extract metadata from file (client-side operation)
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- metadata shape varies by media type
@@ -343,13 +334,6 @@ export class MediaService {
     }
 
     return metadata;
-  }
-
-  /**
-   * Generate thumbnail for image/video (client-side placeholder)
-   */
-  async generateThumbnail(_file: File, _originalPath: string): Promise<string | undefined> {
-    return undefined;
   }
 
   /**

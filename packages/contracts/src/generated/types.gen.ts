@@ -687,6 +687,16 @@ export type MediaAsset = {
     storage_key: string;
     uploaded_by: string;
     created_at?: string | null;
+    /**
+     * Intrinsic pixel width for image assets; NULL for non-images or
+     * headers that could not be parsed (F-8).
+     */
+    width?: number | null;
+    /**
+     * Intrinsic pixel height for image assets; NULL for non-images or
+     * headers that could not be parsed (F-8).
+     */
+    height?: number | null;
 };
 
 export type MediaAssetWithUrl = MediaAsset & {

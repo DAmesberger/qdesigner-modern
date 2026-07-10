@@ -410,6 +410,12 @@
     return new Date(date).toLocaleDateString();
   }
 
+  // '1920 × 1080' when the server extracted image dimensions, else ''.
+  // Non-image assets and pre-F-8 uploads carry no dimensions.
+  function formatDimensions(asset: MediaAsset): string {
+    return asset.width && asset.height ? `${asset.width} × ${asset.height}` : '';
+  }
+
   $effect(() => {
     const queryKey = JSON.stringify({
       organizationId: effectiveOrganizationId(),
@@ -620,10 +626,12 @@
               : theme.semantic.borderDefault + ' hover:border-muted-foreground'}"
           >
             {#if isImageMedia(asset)}
+              <!-- object-contain letterboxes against the tile background so the
+                   author judges true aspect instead of a blind centre-crop. -->
               <img
                 src={(asset as any).thumbnailUrl || (asset as any).url || '/placeholder-image.svg'}
                 alt={asset.originalFilename}
-                class="w-full h-full object-cover"
+                class="w-full h-full object-contain {theme.semantic.bgSubtle}"
                 loading="lazy"
               />
             {:else}
@@ -638,7 +646,9 @@
             >
               <div class="absolute bottom-0 left-0 right-0 p-2 text-background">
                 <p class="text-xs truncate">{asset.originalFilename}</p>
-                <p class="text-xs opacity-75">{formatFileSize(asset.sizeBytes)}</p>
+                <p class="text-xs opacity-75">
+                  {formatFileSize(asset.sizeBytes)}{#if formatDimensions(asset)} • {formatDimensions(asset)}{/if}
+                </p>
               </div>
             </div>
 
@@ -689,7 +699,7 @@
                 {asset.originalFilename}
               </p>
               <p class="{theme.typography.caption} {theme.semantic.textSecondary}">
-                {formatFileSize(asset.sizeBytes)} • {asset.mimeType} • {formatDate(asset.createdAt)}
+                {formatFileSize(asset.sizeBytes)} • {asset.mimeType}{#if formatDimensions(asset)} • {formatDimensions(asset)}{/if} • {formatDate(asset.createdAt)}
               </p>
             </div>
 

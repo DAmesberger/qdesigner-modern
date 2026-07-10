@@ -28,6 +28,12 @@ pub struct MediaAsset {
     pub storage_key: String,
     pub uploaded_by: Uuid,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Intrinsic pixel width for image assets; NULL for non-images or
+    /// headers that could not be parsed (F-8).
+    pub width: Option<i32>,
+    /// Intrinsic pixel height for image assets; NULL for non-images or
+    /// headers that could not be parsed (F-8).
+    pub height: Option<i32>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -121,6 +127,24 @@ pub fn validate_upload(
     Ok((sniffed_mime.to_string(), kind.extension().to_string()))
 }
 
+/// Recover an image's intrinsic pixel dimensions from its header (F-8).
+///
+/// Only images carry dimensions, so callers gate on the canonical mime
+/// (`image/*`) before calling. `imagesize` reads the format header only —
+/// it never decodes pixel data — so this is cheap even for large uploads.
+/// Returns `None` for a non-image mime, a format it cannot parse (e.g.
+/// `image/svg+xml`, which has no pixel header), or dimensions that overflow
+/// `i32` — the column is nullable and the asset is still stored.
+fn extract_image_dimensions(mime: &str, bytes: &[u8]) -> Option<(i32, i32)> {
+    if !mime.starts_with("image/") {
+        return None;
+    }
+    let size = imagesize::blob_size(bytes).ok()?;
+    let width = i32::try_from(size.width).ok()?;
+    let height = i32::try_from(size.height).ok()?;
+    Some((width, height))
+}
+
 // ── Handlers ─────────────────────────────────────────────────────────
 
 /// GET /api/media
@@ -167,7 +191,7 @@ pub async fn list_media(
     let assets = sqlx::query_as::<_, MediaAsset>(
         r#"
         SELECT id, organization_id, filename, content_type, size_bytes,
-               storage_key, uploaded_by, created_at
+               storage_key, uploaded_by, created_at, width, height
         FROM media_assets
         WHERE organization_id = $1
         ORDER BY created_at DESC
@@ -268,6 +292,12 @@ pub async fn upload_media(
     }
 
     let size_bytes = bytes.len() as i64;
+    // Sniff intrinsic dimensions from the image header before the bytes are
+    // moved into the S3 upload (F-8). Non-images / unparseable headers → NULL.
+    let (width, height) = match extract_image_dimensions(&content_type, &bytes) {
+        Some((w, h)) => (Some(w), Some(h)),
+        None => (None, None),
+    };
     // Route the object under the org's data-residency region prefix (E-RBAC-9):
     // the storage-key namespace is the enforcement point for residency claims.
     let region = crate::api::access::org_data_region(&mut **tx, org_id).await?;
@@ -283,10 +313,10 @@ pub async fn upload_media(
     let asset = sqlx::query_as::<_, MediaAsset>(
         r#"
         INSERT INTO media_assets (organization_id, filename, content_type, size_bytes,
-                                  storage_key, uploaded_by)
-        VALUES ($1, $2, $3, $4, $5, $6)
+                                  storage_key, uploaded_by, width, height)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id, organization_id, filename, content_type, size_bytes,
-                  storage_key, uploaded_by, created_at
+                  storage_key, uploaded_by, created_at, width, height
         "#,
     )
     .bind(org_id)
@@ -295,6 +325,8 @@ pub async fn upload_media(
     .bind(size_bytes)
     .bind(&storage_key)
     .bind(user.user_id)
+    .bind(width)
+    .bind(height)
     .fetch_one(&mut **tx)
     .await?;
 
@@ -337,7 +369,7 @@ pub async fn get_media(
     let asset = sqlx::query_as::<_, MediaAsset>(
         r#"
         SELECT id, organization_id, filename, content_type, size_bytes,
-               storage_key, uploaded_by, created_at
+               storage_key, uploaded_by, created_at, width, height
         FROM media_assets WHERE id = $1
         "#,
     )
@@ -419,7 +451,7 @@ pub async fn stream_media_content(
         sqlx::query_as::<_, MediaAsset>(
             r#"
             SELECT id, organization_id, filename, content_type, size_bytes,
-                   storage_key, uploaded_by, created_at
+                   storage_key, uploaded_by, created_at, width, height
             FROM media_assets WHERE id = $1
             "#,
         )
@@ -513,7 +545,7 @@ pub async fn delete_media(
     let asset = sqlx::query_as::<_, MediaAsset>(
         r#"
         SELECT id, organization_id, filename, content_type, size_bytes,
-               storage_key, uploaded_by, created_at
+               storage_key, uploaded_by, created_at, width, height
         FROM media_assets WHERE id = $1
         "#,
     )
@@ -760,5 +792,34 @@ mod validate_upload_tests {
     fn rejects_empty() {
         let err = validate_upload(&[], "image/png").expect_err("empty must be rejected");
         assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
+    }
+
+    /// A PNG whose IHDR carries real `width`×`height` big-endian dimensions.
+    /// `imagesize` reads them from the header without needing pixel data.
+    fn png_with_dims(width: u32, height: u32) -> Vec<u8> {
+        let mut b = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        b.extend_from_slice(&[0x00, 0x00, 0x00, 0x0D, b'I', b'H', b'D', b'R']);
+        b.extend_from_slice(&width.to_be_bytes());
+        b.extend_from_slice(&height.to_be_bytes());
+        b.extend_from_slice(&[0x08, 0x06, 0x00, 0x00, 0x00]); // depth, colour, compression, filter, interlace
+        b
+    }
+
+    #[test]
+    fn extracts_png_dimensions() {
+        let dims = extract_image_dimensions("image/png", &png_with_dims(1920, 1080));
+        assert_eq!(dims, Some((1920, 1080)));
+    }
+
+    #[test]
+    fn returns_none_for_non_image_mime() {
+        // Even with parseable image bytes, an audio mime carries no dimensions.
+        assert_eq!(extract_image_dimensions("audio/mpeg", &png_with_dims(4, 2)), None);
+    }
+
+    #[test]
+    fn returns_none_for_unparseable_image_bytes() {
+        // image/* mime but no valid raster header (e.g. svg / garbage).
+        assert_eq!(extract_image_dimensions("image/png", b"not a real png"), None);
     }
 }
