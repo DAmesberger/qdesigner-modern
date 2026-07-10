@@ -1,5 +1,6 @@
 import { tick } from 'svelte';
 import { goto } from '$app/navigation';
+import { m } from '$lib/paraglide/messages';
 import type {
   FormQuestionHost,
   FormHostPresentation,
@@ -166,7 +167,7 @@ export class FilloutPageController {
   // screened-out screen (honest copy, no completion code) instead of the thank-you.
   screenOut = $state<ScreenOutResult | null>(null);
   loading = $state(false);
-  loadingMessage = $state('Loading questionnaire...');
+  loadingMessage = $state(m.fillout_loading_default());
   loadingProgress = $state(0);
   error = $state<string | null>(null);
   // Recoverable media-preload failure (R2-5). When runtime start fails because one or
@@ -660,8 +661,7 @@ export class FilloutPageController {
         // Cookie/behavior fraud (evaluated locally) can terminate before we create a session.
         if (!fraudResult.passed) {
           if (fpSettings.fraudAction === 'terminate') {
-            this.error =
-              fpSettings.fraudMessage || 'This survey is not available for your submission.';
+            this.error = fpSettings.fraudMessage || m.fillout_error_fraud_default();
             this.loading = false;
             return;
           } else if (fpSettings.fraudAction === 'redirect' && fpSettings.fraudRedirectUrl) {
@@ -700,8 +700,7 @@ export class FilloutPageController {
             window.location.href = quotaResult.redirectUrl;
             return;
           }
-          this.overQuotaMessage =
-            quotaResult.message || 'This study has reached its target number of participants.';
+          this.overQuotaMessage = quotaResult.message || m.fillout_over_quota_default();
           this.screen = 'over-quota';
           this.loading = false;
           return;
@@ -721,8 +720,7 @@ export class FilloutPageController {
             window.location.href = cellResult.redirectUrl;
             return;
           }
-          this.overQuotaMessage =
-            cellResult.message || 'This study has reached its target for your group.';
+          this.overQuotaMessage = cellResult.message || m.fillout_over_quota_group();
           this.screen = 'over-quota';
           this.loading = false;
           return;
@@ -787,8 +785,7 @@ export class FilloutPageController {
           // flag api.sessions.create() surfaces from the create response.
           if (fpSettings?.preventDuplicates && created.duplicate === true) {
             if (fpSettings.fraudAction === 'terminate') {
-              this.error =
-                fpSettings.fraudMessage || 'This survey is not available for your submission.';
+              this.error = fpSettings.fraudMessage || m.fillout_error_fraud_default();
               this.loading = false;
               return;
             } else if (fpSettings.fraudAction === 'redirect' && fpSettings.fraudRedirectUrl) {
@@ -852,7 +849,7 @@ export class FilloutPageController {
       await this.initializeRuntime();
     } catch (err) {
       console.error('Failed to create session:', err);
-      this.error = err instanceof Error ? err.message : 'Failed to start questionnaire';
+      this.error = err instanceof Error ? err.message : m.fillout_error_start_failed();
     } finally {
       this.loading = false;
     }
@@ -967,7 +964,7 @@ export class FilloutPageController {
 
       // No page-level WebGLRenderer (CONTRACT-LAZY, Slice 4.6): the runtime owns the
       // single renderer and creates it lazily — only if a WebGL item is reached.
-      this.loadingMessage = 'Loading questionnaire...';
+      this.loadingMessage = m.fillout_loading_default();
 
       // Fetch condition counts (online only)
       if (navigator.onLine) {
@@ -1026,7 +1023,7 @@ export class FilloutPageController {
         onSessionUpdate: (progress) => {
           if (this.loading) {
             this.loadingProgress = progress;
-            this.loadingMessage = `Loading media resources... ${Math.round(progress * 2)}%`;
+            this.loadingMessage = m.fillout_loading_media({ percent: Math.round(progress * 2) });
           }
         },
         // A11y (F094/F098): announce every presented item — including WebGL reaction
@@ -1041,7 +1038,7 @@ export class FilloutPageController {
       this.runtime.setFlowVariable('_quotaCell', this.quotaCellKey ?? '');
       this.runtime.setFlowVariable('_eligible', true);
 
-      this.loadingMessage = 'Starting questionnaire...';
+      this.loadingMessage = m.fillout_loading_starting();
       await this.runtime.start();
       this.loading = false;
 
@@ -1049,10 +1046,10 @@ export class FilloutPageController {
       if (this.data.resumeSnapshot) {
         const restored = this.data.resumeSnapshot.responses.length;
         const total = inputs.questionList.length || restored;
-        this.resumeNotice = `Resuming where you left off (question ${Math.min(
-          restored + 1,
-          total
-        )} of ${total})`;
+        this.resumeNotice = m.fillout_resume_notice({
+          current: Math.min(restored + 1, total),
+          total,
+        });
         setTimeout(() => {
           this.resumeNotice = null;
         }, 6000);
@@ -1069,7 +1066,7 @@ export class FilloutPageController {
         return;
       }
 
-      const rawMessage = err instanceof Error ? err.message : 'Failed to start questionnaire';
+      const rawMessage = err instanceof Error ? err.message : m.fillout_error_start_failed();
 
       // Media preload failure (R2-5): recoverable. Route to the dedicated retry screen
       // rather than dumping the raw ResourceManager exception into the generic dead-end.

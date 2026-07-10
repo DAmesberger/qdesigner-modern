@@ -2,6 +2,7 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Card from '$lib/components/ui/layout/Card.svelte';
   import LanguagePicker from './LanguagePicker.svelte';
+  import { m } from '$lib/paraglide/messages';
   import type { Questionnaire } from '$lib/shared/types/questionnaire';
 
   interface LocaleOption {
@@ -106,7 +107,7 @@
       {/if}
 
       <h1 class="welcome-title" data-testid="fillout-welcome-title">
-        {questionnaire.name || 'Welcome'}
+        {questionnaire.name || m.fillout_welcome_default_title()}
       </h1>
 
       {#if welcomeText}
@@ -120,7 +121,7 @@
               <circle cx="12" cy="12" r="10" stroke-width="2" />
               <path d="M12 6v6l4 2" stroke-width="2" stroke-linecap="round" />
             </svg>
-            <span>About {calculatedDuration} minutes</span>
+            <span>{m.fillout_welcome_minutes({ minutes: calculatedDuration })}</span>
           </div>
         {/if}
 
@@ -132,19 +133,16 @@
               <line x1="9" y1="11" x2="15" y2="11" stroke-width="2" stroke-linecap="round" />
               <line x1="9" y1="15" x2="13" y2="15" stroke-width="2" stroke-linecap="round" />
             </svg>
-            <span>{questionnaire.pages.length} sections</span>
+            <span>{m.fillout_welcome_sections({ count: questionnaire.pages.length })}</span>
           </div>
         {/if}
       </div>
 
       {#if questionnaire.settings?.requireConsent}
         <div class="instructions">
-          <h3>Before you begin:</h3>
+          <h3>{m.fillout_welcome_consent_heading()}</h3>
           <div class="instructions-content">
-            <p>
-              This questionnaire requires your consent to participate. Your responses will be used
-              for research purposes.
-            </p>
+            <p>{m.fillout_welcome_consent_body()}</p>
           </div>
         </div>
       {/if}
@@ -155,17 +153,11 @@
           role="note"
           data-testid="fillout-photosensitivity-advisory"
         >
-          <h3 class="text-foreground">Photosensitivity warning</h3>
-          <p>
-            This task presents rapidly flashing and alternating high-contrast visual stimuli.
-            If you have photosensitive epilepsy or are otherwise sensitive to flashing lights,
-            please do not proceed &mdash; stop now and consult the researcher before continuing.
-          </p>
+          <h3 class="text-foreground">{m.fillout_welcome_photosensitivity_title()}</h3>
+          <p>{m.fillout_welcome_photosensitivity_body()}</p>
           {#if prefersReducedMotion}
             <p data-testid="fillout-photosensitivity-reduced-motion">
-              Your system requests reduced motion. This study's stimuli are timing-critical and
-              cannot be slowed without invalidating the measurement, so the flashing cannot be
-              reduced. Please take this into account when deciding whether to proceed.
+              {m.fillout_welcome_photosensitivity_reduced_motion()}
             </p>
           {/if}
         </div>
@@ -181,7 +173,7 @@
               class="start-button"
               data-testid="fillout-continue-button"
             >
-              Continue where you left off
+              {m.fillout_welcome_resume_continue()}
             </Button>
             <Button
               variant="outline"
@@ -189,7 +181,7 @@
               onclick={onStartOver}
               data-testid="fillout-start-over-button"
             >
-              Start over
+              {m.fillout_welcome_resume_start_over()}
             </Button>
           </div>
         {:else}
@@ -200,7 +192,7 @@
             class="start-button"
             data-testid="fillout-start-button"
           >
-            Start Questionnaire
+            {m.fillout_welcome_start()}
           </Button>
         {/if}
       </div>
@@ -214,27 +206,25 @@
               <svg class="offline-prep-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path d="M20 6 9 17l-5-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-              Ready for offline use
+              {m.fillout_welcome_offline_ready()}
             </p>
           {:else if offlineState === 'preparing'}
             <p class="offline-prep-status" data-testid="fillout-offline-preparing" aria-live="polite">
-              Preparing for offline use…{#if offlineTotal > 0}
-                {' '}({offlineDone} of {offlineTotal}){/if}
+              {m.fillout_welcome_offline_preparing()}{#if offlineTotal > 0}
+                {' '}{m.fillout_welcome_offline_progress({ done: offlineDone, total: offlineTotal })}{/if}
             </p>
           {:else if offlineState === 'quota-exceeded'}
             <p class="offline-prep-status offline-prep-warn" data-testid="fillout-offline-quota" role="status">
-              This study is too large to store on this device for offline use. You can still
-              take part while connected.
+              {m.fillout_welcome_offline_quota_exceeded()}
             </p>
           {:else}
             {#if offlineState === 'partial'}
               <p class="offline-prep-status offline-prep-warn" data-testid="fillout-offline-partial" role="status">
-                {offlineDone} of {offlineTotal} files saved. Retry to finish downloading for
-                offline use.
+                {m.fillout_welcome_offline_partial({ done: offlineDone, total: offlineTotal })}
               </p>
             {:else if offlineState === 'error'}
               <p class="offline-prep-status offline-prep-warn" data-testid="fillout-offline-error" role="status">
-                Couldn't prepare this study for offline use. Check your connection and retry.
+                {m.fillout_welcome_offline_error()}
               </p>
             {/if}
             <button
@@ -244,8 +234,8 @@
               onclick={onPrepareOffline}
             >
               {offlineState === 'partial' || offlineState === 'error'
-                ? 'Retry offline download'
-                : 'Make available offline'}
+                ? m.fillout_welcome_offline_retry()
+                : m.fillout_welcome_offline_make_available()}
             </button>
           {/if}
         </div>
@@ -253,7 +243,7 @@
 
       {#if questionnaire.settings?.requireAuthentication || questionnaire.settings?.requireConsent}
         <p class="privacy-notice">
-          Your responses will be stored securely and used only for research purposes.
+          {m.fillout_welcome_privacy_notice()}
         </p>
       {/if}
     </div>

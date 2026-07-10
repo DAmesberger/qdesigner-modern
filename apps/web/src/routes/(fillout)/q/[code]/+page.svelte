@@ -26,6 +26,10 @@
     type FilloutRuntimeInputs,
   } from '$lib/fillout/FilloutPageController.svelte';
   import { SeriesEnrollmentService } from '$lib/fillout/services/SeriesEnrollmentService';
+  import {
+    setFilloutChromeLocale,
+    clearFilloutChromeLocale,
+  } from '$lib/fillout/filloutLocale.svelte';
 
   interface Props {
     data: PageData;
@@ -91,6 +95,12 @@
   );
   // Definition with question prompts / option labels / page titles localized.
   const definition = $derived(localizeQuestionnaire(rawDefinition, effectiveLocale));
+  // R4-1: the built-in chrome (buttons, consent, errors) follows the participant's
+  // chosen content locale, not the researcher-app cookie locale. Scoped to the
+  // fillout route and cleared on unmount (see onMount teardown).
+  $effect(() => {
+    setFilloutChromeLocale(effectiveLocale);
+  });
   const languageOptions = $derived(
     availableLocales.map((code) => ({ code, label: getLocaleLabel(rawDefinition, code) }))
   );
@@ -222,8 +232,11 @@
   const progressLabel = $derived(
     controller.progress
       ? controller.progress.total !== null
-        ? `Section ${controller.progress.current} of ${controller.progress.total}`
-        : `Section ${controller.progress.current}`
+        ? m.fillout_progress_section_of({
+            n: controller.progress.current,
+            m: controller.progress.total,
+          })
+        : m.fillout_progress_section({ n: controller.progress.current })
       : ''
   );
 
@@ -313,6 +326,7 @@
 
     return () => {
       controller.dispose();
+      clearFilloutChromeLocale();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       document.body.classList.remove('fillout');
@@ -372,12 +386,12 @@
          stops sending (its due scan filters status='active'). -->
     <div class="series-gate" data-testid="fillout-series-unsubscribe">
       <EmptyState
-        title="Unsubscribed"
+        title={m.fillout_series_unsubscribed_title()}
         description={seriesUnsubFailed
-          ? 'We could not process your request. The link may have expired.'
+          ? m.fillout_series_unsubscribe_failed()
           : seriesUnsubDone
-            ? 'You will no longer receive reminders for this study.'
-            : 'Processing your request…'}
+            ? m.fillout_series_unsubscribe_done()
+            : m.fillout_series_unsubscribe_processing()}
       />
     </div>
   {:else if seriesComeBackLater}
@@ -385,22 +399,23 @@
     <div class="series-gate" data-testid="fillout-series-comeback">
       {#if seriesPrompt?.status === 'completed'}
         <EmptyState
-          title="Study complete"
-          description="You have completed all waves of this study. Thank you for taking part."
+          title={m.fillout_series_complete_title()}
+          description={m.fillout_series_complete_desc()}
         />
       {:else if seriesPrompt?.status === 'withdrawn'}
         <EmptyState
-          title="You have unsubscribed"
-          description="You are no longer enrolled in this study."
+          title={m.fillout_series_withdrawn_title()}
+          description={m.fillout_series_withdrawn_desc()}
         />
       {:else}
         <EmptyState
-          title="Come back soon"
+          title={m.fillout_series_comeback_title()}
           description={seriesNextTime
-            ? `Your next questionnaire${
-                seriesPrompt?.wave_label ? ` (${seriesPrompt.wave_label})` : ''
-              } opens on ${formatSeriesTime(seriesNextTime)}. We'll email you a reminder.`
-            : 'Your next questionnaire is not open yet. We\'ll email you a reminder when it is.'}
+            ? m.fillout_series_comeback_dated({
+                waveLabel: seriesPrompt?.wave_label ? ` (${seriesPrompt.wave_label})` : '',
+                date: formatSeriesTime(seriesNextTime),
+              })
+            : m.fillout_series_comeback_undated()}
         />
       {/if}
     </div>
@@ -409,19 +424,19 @@
          safe here — the fillout is offline-first and resume-capable, so re-running load()
          re-attempts session creation / runtime init without losing any recorded answer. -->
     <div class="error-container" data-testid="fillout-error" role="alert">
-      <EmptyState title="Unable to load questionnaire" description={controller.error} />
+      <EmptyState title={m.fillout_error_load_title()} description={controller.error} />
       <p class="error-reassurance" data-testid="fillout-error-reassurance">
-        Any answers you've already given are saved on this device.
+        {m.fillout_error_saved_reassurance()}
       </p>
       <div class="error-actions">
-        <button type="button" class="error-secondary" onclick={() => goto('/')}>Go back</button>
+        <button type="button" class="error-secondary" onclick={() => goto('/')}>{m.fillout_action_go_back()}</button>
         <button
           type="button"
           class="error-primary"
           data-testid="fillout-error-reload"
           onclick={() => location.reload()}
         >
-          Reload
+          {m.fillout_action_reload()}
         </button>
       </div>
     </div>
@@ -449,17 +464,14 @@
       <!-- Honest cross-device resume fallback (F-10): a ?sid= link from another device can't
            restore an anonymous session here. Say so; don't block starting fresh. -->
       <div class="cross-device-note" data-testid="fillout-cross-device-note" role="status">
-        <span>
-          This link was for a session started on another device. Anonymous sessions can't be
-          moved between devices — you'll start fresh here.
-        </span>
+        <span>{m.fillout_cross_device_note()}</span>
         <button
           type="button"
           class="cross-device-dismiss"
           data-testid="fillout-cross-device-dismiss"
           onclick={() => controller.dismissCrossDeviceNotice()}
         >
-          Dismiss
+          {m.fillout_action_dismiss()}
         </button>
       </div>
     {/if}
@@ -491,7 +503,7 @@
       onPrimeAudio={() => controller.ensureAudioUnlocked()}
     />
   {:else if controller.screen === 'runtime'}
-    <h1 class="sr-only">{definition?.name ?? 'Questionnaire'}</h1>
+    <h1 class="sr-only">{definition?.name ?? m.fillout_runtime_default_title()}</h1>
 
     <!-- Participant progress (F-7): page-based, page chrome (visible during reaction
          items too). The "N of M" position is already announced politely via the sr-only
@@ -525,9 +537,7 @@
         />
         {#if timingBlocked}
           <p class="timing-block-note" data-testid="fillout-timing-block-note" role="status">
-            This study measures reaction times to within a few milliseconds and
-            your device did not pass the timing check. You may continue, but the
-            recorded times may be less accurate than the study requires.
+            {m.fillout_timing_block_note()}
           </p>
         {/if}
       </div>
@@ -541,17 +551,14 @@
 
     {#if data.pinnedFallback && !controller.pinnedFallbackDismissed}
       <div class="pinned-fallback-note" data-testid="fillout-pinned-fallback-note" role="status">
-        <span>
-          The exact version this session started on isn't stored on this device, so it's
-          continuing on the latest version. Your prior answers were restored.
-        </span>
+        <span>{m.fillout_pinned_fallback_note()}</span>
         <button
           type="button"
           class="pinned-fallback-dismiss"
           data-testid="fillout-pinned-fallback-dismiss"
           onclick={() => (controller.pinnedFallbackDismissed = true)}
         >
-          Dismiss
+          {m.fillout_action_dismiss()}
         </button>
       </div>
     {/if}
@@ -566,7 +573,7 @@
       width={window.innerWidth}
       height={window.innerHeight}
       role="img"
-      aria-label="Reaction task stimulus display"
+      aria-label={m.fillout_canvas_aria()}
       data-testid="fillout-runtime-canvas"
     ></canvas>
 
@@ -608,7 +615,7 @@
                 disabled={!controller.canAdvance}
                 onclick={() => controller.submitOverlayAnswer()}
               >
-                Continue
+                {m.fillout_form_continue()}
               </button>
             </div>
           </div>
@@ -618,9 +625,9 @@
   {:else if controller.screen === 'over-quota'}
     <div class="loading-container" data-testid="fillout-over-quota">
       <EmptyState
-        title="Study Full"
+        title={m.fillout_over_quota_title()}
         description={controller.overQuotaMessage}
-        buttonText="Go back"
+        buttonText={m.fillout_action_go_back()}
         onAction={() => goto('/')}
       />
     </div>
@@ -629,9 +636,9 @@
          Honest turn-away BEFORE any session was created, not a mid-study dead-end. -->
     <div class="loading-container" data-testid="fillout-webgl-unsupported">
       <EmptyState
-        title="Graphics support required"
-        description="This study contains reaction-time tasks that need graphics support your browser or device doesn't provide. Please try again on a desktop browser such as Chrome or Firefox."
-        buttonText="Go back"
+        title={m.fillout_webgl_title()}
+        description={m.fillout_webgl_desc()}
+        buttonText={m.fillout_action_go_back()}
         onAction={() => goto('/')}
       />
     </div>
@@ -642,30 +649,28 @@
          ResourceManager exception is tucked into a collapsed <details>, not dumped inline. -->
     <div class="error-container" data-testid="fillout-media-error" role="alert">
       <EmptyState
-        title="Some media files couldn't load"
+        title={m.fillout_media_error_title()}
         description={controller.mediaErrorCount > 0
-          ? `${controller.mediaErrorCount} media file${
-              controller.mediaErrorCount === 1 ? '' : 's'
-            } needed for this study couldn't be downloaded. This is usually a temporary network problem.`
-          : "Some media files needed for this study couldn't be downloaded. This is usually a temporary network problem."}
+          ? m.fillout_media_error_desc_count({ count: controller.mediaErrorCount })
+          : m.fillout_media_error_desc()}
       />
       <p class="error-reassurance" data-testid="fillout-media-error-reassurance">
-        Retrying reloads the media without restarting your session.
+        {m.fillout_media_error_reassurance()}
       </p>
       <div class="error-actions">
-        <button type="button" class="error-secondary" onclick={() => goto('/')}>Go back</button>
+        <button type="button" class="error-secondary" onclick={() => goto('/')}>{m.fillout_action_go_back()}</button>
         <button
           type="button"
           class="error-primary"
           data-testid="fillout-media-retry"
           onclick={() => controller.retryMediaPreload()}
         >
-          Retry
+          {m.fillout_action_retry()}
         </button>
       </div>
       {#if controller.mediaErrorDetails}
         <details class="error-details" data-testid="fillout-media-error-details">
-          <summary>Technical details</summary>
+          <summary>{m.fillout_media_error_details()}</summary>
           <pre>{controller.mediaErrorDetails}</pre>
         </details>
       {/if}

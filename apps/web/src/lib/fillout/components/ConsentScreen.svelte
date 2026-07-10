@@ -4,9 +4,11 @@
   import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
   import { sanitizeHtml } from '$lib/services/markdownProcessor';
   import { confirmDialog } from '$lib/stores/confirm.svelte';
+  import { m } from '$lib/paraglide/messages';
   import type { ConsentCheckbox, ConsentData } from '$lib/fillout/types';
 
   interface Props {
+    /** Screen heading. Defaults to the localized "Informed Consent" chrome label. */
     title?: string;
     content: string;
     requireSignature?: boolean;
@@ -22,7 +24,7 @@
   }
 
   let {
-    title = 'Informed Consent',
+    title,
     content,
     requireSignature = false,
     checkboxes = [],
@@ -30,6 +32,9 @@
     onDecline,
     onPrimeAudio,
   }: Props = $props();
+
+  // Author-supplied heading wins; otherwise the built-in localized chrome label.
+  const resolvedTitle = $derived(title ?? m.fillout_consent_default_title());
 
   let checkboxStates = $state<Record<string, boolean>>({});
   let signature = $state('');
@@ -83,11 +88,10 @@
   async function handleDecline() {
     if (
       await confirmDialog({
-        title: 'Decline participation?',
-        message:
-          'Are you sure you want to decline? You will not be able to participate in this study.',
-        confirmLabel: 'Decline',
-        cancelLabel: 'Go back',
+        title: m.fillout_consent_decline_dialog_title(),
+        message: m.fillout_consent_decline_dialog_message(),
+        confirmLabel: m.fillout_consent_decline(),
+        cancelLabel: m.fillout_action_go_back(),
         destructive: true,
       })
     ) {
@@ -99,7 +103,7 @@
 <div class="consent-screen" data-testid="fillout-consent-screen">
   <Card class="consent-card">
     <div class="consent-content">
-      <h1 class="consent-title" data-testid="fillout-consent-title">{title}</h1>
+      <h1 class="consent-title" data-testid="fillout-consent-title">{resolvedTitle}</h1>
 
       <div class="consent-text">
         {@html sanitizeHtml(content)}
@@ -127,19 +131,19 @@
       {#if requireSignature}
         <div class="signature-section">
           <label for="signature" class="signature-label">
-            Electronic Signature <span class="required">*</span>
+            {m.fillout_consent_signature_label()} <span class="required">*</span>
           </label>
           <input
             id="signature"
             type="text"
             bind:value={signature}
-            placeholder="Type your full name"
+            placeholder={m.fillout_consent_signature_placeholder()}
             class="signature-input"
             oninput={() => (showError = false)}
             data-testid="fillout-consent-signature"
           />
           <p class="signature-note">
-            By typing your name above, you are providing an electronic signature.
+            {m.fillout_consent_signature_note()}
           </p>
         </div>
       {/if}
@@ -147,7 +151,7 @@
       {#if showError}
         <!-- Assertive (R2-5): SR users must hear the validation failure on a blocked submit. -->
         <div class="error-message" role="alert">
-          Please complete all required fields before continuing.
+          {m.fillout_consent_validation_error()}
         </div>
       {/if}
 
@@ -156,7 +160,7 @@
           variant="outline"
           size="lg"
           onclick={handleDecline}
-          data-testid="fillout-consent-decline-button">Decline</Button
+          data-testid="fillout-consent-decline-button">{m.fillout_consent_decline()}</Button
         >
         <!-- Not disabled while incomplete (R2-5 a11y): an unexplained disabled control gives
              SR users no reason why they can't proceed. Instead the click is allowed to reach
@@ -169,13 +173,12 @@
           aria-disabled={!canAccept}
           data-testid="fillout-consent-accept-button"
         >
-          I Agree
+          {m.fillout_consent_agree()}
         </Button>
       </div>
 
       <p class="consent-footer">
-        If you have questions about this consent form or the study, please contact the research
-        team.
+        {m.fillout_consent_footer()}
       </p>
     </div>
   </Card>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import { m } from '$lib/paraglide/messages';
 
   let status = $derived(page.status);
   // Not-yet-open studies are thrown as 403 with a machine-readable marker (see
@@ -16,25 +17,25 @@
   });
 
   let title = $derived.by(() => {
-    if (status === 404) return 'Questionnaire Unavailable';
-    if (status === 410) return 'Questionnaire Closed';
-    if (notYetOpen) return 'Not Open Yet';
-    return 'Something Went Wrong';
+    if (status === 404) return m.fillout_error_unavailable_title();
+    if (status === 410) return m.fillout_error_closed_title();
+    if (notYetOpen) return m.fillout_error_not_open_title();
+    return m.fillout_error_generic_title();
   });
 
   let description = $derived.by(() => {
     if (status === 404) {
-      return 'This questionnaire is no longer available or the link may be incorrect. Please check the URL and try again.';
+      return m.fillout_error_unavailable_desc();
     }
     if (status === 410) {
-      return 'This questionnaire is closed and is no longer accepting responses.';
+      return m.fillout_error_closed_desc();
     }
     if (notYetOpen) {
       return openDate
-        ? `This questionnaire is not open yet. It opens on ${openDate}. Please come back then.`
-        : 'This questionnaire is not open yet. Please come back later.';
+        ? m.fillout_error_not_open_desc_dated({ date: openDate })
+        : m.fillout_error_not_open_desc();
     }
-    return 'We encountered an issue loading your session. Please try refreshing the page.';
+    return m.fillout_error_generic_desc();
   });
 </script>
 
@@ -65,7 +66,7 @@
     </p>
 
     <p class="text-xs text-muted-foreground/60">
-      If the problem persists, please contact the researcher who shared this link.
+      {m.fillout_error_contact()}
     </p>
   </div>
 </div>

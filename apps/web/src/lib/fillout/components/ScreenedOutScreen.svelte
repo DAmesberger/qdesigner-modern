@@ -1,6 +1,7 @@
 <script lang="ts">
   import Button from '$lib/components/ui/Button.svelte';
   import Card from '$lib/components/ui/layout/Card.svelte';
+  import { m } from '$lib/paraglide/messages';
   import type { ScreenOutResult } from '$lib/fillout/services/ScreenerController';
 
   interface Props {
@@ -60,12 +61,11 @@
         class="text-3xl font-bold mb-4 text-foreground"
         data-testid="fillout-screened-out-title"
       >
-        You're not eligible for this study
+        {m.fillout_screened_out_title()}
       </h1>
 
       <p class="text-lg text-muted-foreground mb-8 leading-relaxed">
-        {result.message ||
-          'Thank you for your interest. Based on your answers, you do not qualify to take part in this study. Your responses have not been recorded as a completion.'}
+        {result.message || m.fillout_screened_out_message()}
       </p>
 
       {#if redirectUrl}
@@ -74,22 +74,22 @@
           data-testid="fillout-screened-out-redirect"
         >
           <p class="text-sm text-foreground mb-2">
-            Redirecting in {redirectCountdown} seconds...
+            {m.fillout_redirect_generic({ seconds: redirectCountdown })}
           </p>
           <a href={redirectUrl} class="text-xs text-primary underline">
-            Click here if not redirected automatically
+            {m.fillout_redirect_fallback_link()}
           </a>
         </div>
       {/if}
 
       <div class="flex gap-4 justify-center mb-6">
         <Button variant="default" size="lg" onclick={handleClose}>
-          {onClose ? 'Close' : 'Return Home'}
+          {onClose ? m.fillout_action_close() : m.fillout_action_return_home()}
         </Button>
       </div>
 
       <p class="text-xs text-muted-foreground opacity-80">
-        If you have any questions about this study, please contact the research team.
+        {m.fillout_contact_footer()}
       </p>
     </div>
   </Card>

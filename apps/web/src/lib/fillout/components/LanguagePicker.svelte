@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Languages } from 'lucide-svelte';
+  import { m } from '$lib/paraglide/messages';
 
   interface LocaleOption {
     code: string;
@@ -18,7 +19,7 @@
 {#if options.length > 1}
   <div class="language-picker" data-testid="fillout-language-picker">
     <Languages class="picker-icon" aria-hidden="true" />
-    <div class="picker-options" role="group" aria-label="Select language">
+    <div class="picker-options" role="group" aria-label={m.fillout_language_picker_aria()}>
       {#each options as option (option.code)}
         <button
           type="button"

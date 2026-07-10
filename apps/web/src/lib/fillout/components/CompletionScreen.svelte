@@ -7,6 +7,7 @@
   import type { ScoreInterpreterConfig } from '$lib/runtime/feedback/ScoreInterpreter';
   import { generateReport, type ReportConfig } from '$lib/runtime/feedback/ReportGenerator';
   import ReportPageView from './ReportPageView.svelte';
+  import { m } from '$lib/paraglide/messages';
 
   interface Props {
     session?: QuestionnaireSession;
@@ -130,6 +131,23 @@
 
   const effectiveRedirectUrl = $derived(redirectUrl || panelRedirectUrl);
 
+  // Panel provider display name for the redirect line. Brand names stay untranslated;
+  // an unknown/unset provider falls back to the localized "completion page".
+  const panelProviderLabel = $derived.by(() => {
+    switch (distributionSettings?.panelIntegration?.provider) {
+      case 'prolific':
+        return 'Prolific';
+      case 'mturk':
+        return 'MTurk';
+      case 'sona':
+        return 'SONA';
+      case 'cloudresearch':
+        return 'CloudResearch';
+      default:
+        return m.fillout_redirect_default_target();
+    }
+  });
+
   // Auto-redirect countdown
   $effect(() => {
     const target = effectiveRedirectUrl;
@@ -198,13 +216,13 @@
         </svg>
       </div>
 
-      <h1 class="text-3xl font-bold mb-4 text-foreground" data-testid="fillout-completion-title">Thank You!</h1>
+      <h1 class="text-3xl font-bold mb-4 text-foreground" data-testid="fillout-completion-title">{m.fillout_completion_title()}</h1>
 
       <p class="text-lg text-muted-foreground mb-8 leading-relaxed">
         {customMessage ||
           (syncFailedCount > 0
-            ? 'Your responses are saved on this device.'
-            : 'Your responses have been successfully recorded.')}
+            ? m.fillout_completion_saved_local()
+            : m.fillout_completion_recorded())}
       </p>
 
       <!-- Permanent-sync-failure strip (R2-3): when the pipeline dead-lettered rows, the
@@ -217,9 +235,7 @@
           data-testid="fillout-completion-sync-warning"
         >
           <p class="completion-sync-warning-text">
-            {syncFailedCount}
-            {syncFailedCount === 1 ? 'answer' : 'answers'} could not be submitted to the server. Download
-            a copy so your responses aren't lost.
+            {m.fillout_completion_sync_warning({ count: syncFailedCount })}
           </p>
           {#if onExportFailed}
             <button
@@ -228,7 +244,7 @@
               data-testid="fillout-completion-sync-export"
               onclick={onExportFailed}
             >
-              Download my answers
+              {m.fillout_sync_export_failed()}
             </button>
           {/if}
         </div>
@@ -238,14 +254,14 @@
         <div class="flex gap-8 justify-center mb-8 p-6 bg-muted rounded-lg">
           {#if duration}
             <div class="flex flex-col gap-1">
-              <span class="text-sm text-muted-foreground">Time taken</span>
+              <span class="text-sm text-muted-foreground">{m.fillout_completion_time_taken()}</span>
               <span class="text-2xl font-semibold text-foreground">{duration}</span>
             </div>
           {/if}
 
           {#if session.responses?.length}
             <div class="flex flex-col gap-1">
-              <span class="text-sm text-muted-foreground">Questions answered</span>
+              <span class="text-sm text-muted-foreground">{m.fillout_completion_questions_answered()}</span>
               <span class="text-2xl font-semibold text-foreground">{session.responses.length}</span>
             </div>
           {/if}
@@ -254,14 +270,14 @@
 
       <!-- Completion code -->
       <div class="mb-8 p-6 bg-muted rounded-lg">
-        <p class="text-sm text-muted-foreground mb-2">Your completion code:</p>
+        <p class="text-sm text-muted-foreground mb-2">{m.fillout_completion_code_label()}</p>
         <div class="flex items-center justify-center gap-2 mb-2">
           <code class="text-2xl font-semibold tracking-widest text-primary font-mono">{completionCode}</code>
           <button
             class="w-8 h-8 p-1.5 bg-background border border-border rounded-md cursor-pointer transition-all duration-200 text-muted-foreground hover:bg-muted hover:text-foreground active:scale-95"
             onclick={() => navigator.clipboard.writeText(completionCode)}
-            title="Copy to clipboard"
-            aria-label="Copy to clipboard"
+            title={m.fillout_completion_code_copy()}
+            aria-label={m.fillout_completion_code_copy()}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" class="w-full h-full">
               <rect x="9" y="9" width="13" height="13" rx="2" stroke-width="2" />
@@ -269,7 +285,7 @@
             </svg>
           </button>
         </div>
-        <p class="text-xs text-muted-foreground opacity-80">Please save this code for your records.</p>
+        <p class="text-xs text-muted-foreground opacity-80">{m.fillout_completion_code_save()}</p>
       </div>
 
       <!-- Panel integration / redirect info -->
@@ -277,22 +293,17 @@
         <div class="mb-6 p-4 bg-muted rounded-lg text-center" data-testid="fillout-redirect-info">
           {#if distributionSettings?.panelIntegration}
             <p class="text-sm text-foreground mb-2">
-              Redirecting to {distributionSettings.panelIntegration.provider === 'prolific'
-                ? 'Prolific'
-                : distributionSettings.panelIntegration.provider === 'mturk'
-                  ? 'MTurk'
-                  : distributionSettings.panelIntegration.provider === 'sona'
-                    ? 'SONA'
-                    : distributionSettings.panelIntegration.provider === 'cloudresearch'
-                      ? 'CloudResearch'
-                      : 'completion page'} in {redirectCountdown} seconds...
+              {m.fillout_redirect_provider({
+                provider: panelProviderLabel,
+                seconds: redirectCountdown,
+              })}
             </p>
           {:else}
             <p class="text-sm text-foreground mb-2">
-              Redirecting in {redirectCountdown} seconds...
+              {m.fillout_redirect_generic({ seconds: redirectCountdown })}
             </p>
           {/if}
-          <a href={effectiveRedirectUrl} class="text-xs text-primary underline">Click here if not redirected automatically</a>
+          <a href={effectiveRedirectUrl} class="text-xs text-primary underline">{m.fillout_redirect_fallback_link()}</a>
         </div>
       {/if}
 
@@ -306,7 +317,7 @@
             <input type="hidden" name="assignmentId" value={urlParams['assignmentId'] ?? ''} />
             <input type="hidden" name="completionCode" value={completionCode} />
             <Button variant="default" size="lg" type="submit">
-              Submit HIT
+              {m.fillout_completion_submit_hit()}
             </Button>
           </form>
         </div>
@@ -314,7 +325,7 @@
 
       <div class="flex gap-4 justify-center mb-6">
         {#if showDownload && onDownload}
-          <Button variant="outline" size="lg" onclick={onDownload}>Download Responses</Button>
+          <Button variant="outline" size="lg" onclick={onDownload}>{m.fillout_completion_download_responses()}</Button>
         {/if}
 
         {#if showReportButton}
@@ -324,17 +335,17 @@
             onclick={handleDownloadReport}
             disabled={generatingReport}
           >
-            {generatingReport ? 'Generating...' : 'Download Report (PDF)'}
+            {generatingReport ? m.fillout_completion_generating() : m.fillout_completion_download_report()}
           </Button>
         {/if}
 
         <Button variant="default" size="lg" onclick={handleClose}>
-          {onClose ? 'Close' : 'Return Home'}
+          {onClose ? m.fillout_action_close() : m.fillout_action_return_home()}
         </Button>
       </div>
 
       <p class="text-xs text-muted-foreground opacity-80">
-        If you have any questions about this study, please contact the research team.
+        {m.fillout_contact_footer()}
       </p>
     </div>
   </Card>
