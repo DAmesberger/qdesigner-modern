@@ -7,9 +7,11 @@
   import Button from '$lib/components/ui/Button.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
   import FormGroup from '$lib/components/ui/forms/FormGroup.svelte';
+  import ProjectActionsMenu from '$lib/components/ProjectActionsMenu.svelte';
   import { appPaths } from '$lib/routing/paths';
   import { toast } from '$lib/stores/toast';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import type { Project } from '$lib/shared/types/api';
   import type { PageData } from './$types';
 
   interface Props {
@@ -24,9 +26,31 @@
   let creating = $state(false);
   let searchQuery = $state('');
   let sortBy = $state<'name' | 'date' | 'questionnaires'>('date');
+  let statusFilter = $state<'active' | 'archived' | 'all'>('active');
+
+  // Local, mutable view of the loaded projects so lifecycle actions
+  // (rename/archive/delete) reflect immediately without a full reload.
+  let projects = $state<Project[]>(data.projects);
+
+  // Org owners/admins may manage every project in the org (server-enforced);
+  // the per-card action menu is gated on this.
+  const canManage = $derived(data.orgRole === 'owner' || data.orgRole === 'admin');
+
+  function applyProjectUpdate(updated: Project) {
+    projects = projects.map((p) => (p.id === updated.id ? updated : p));
+  }
+
+  function removeProject(projectId: string) {
+    projects = projects.filter((p) => p.id !== projectId);
+  }
 
   let filteredProjects = $derived.by(() => {
-    let result = data.projects;
+    let result = projects;
+    if (statusFilter === 'active') {
+      result = result.filter((p) => p.status !== 'archived');
+    } else if (statusFilter === 'archived') {
+      result = result.filter((p) => p.status === 'archived');
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(
@@ -112,7 +136,7 @@
   </div>
 
   <main class="px-4 sm:px-6 lg:px-8 py-8">
-    {#if data.projects.length === 0}
+    {#if projects.length === 0}
       <div class="text-center py-12">
         <FolderOpen class="mx-auto h-12 w-12 text-muted-foreground" />
         <h3 class="mt-2 text-sm font-medium text-foreground">No projects</h3>
@@ -151,6 +175,11 @@
           <option value="name">Name (A-Z)</option>
           <option value="questionnaires">Most questionnaires</option>
         </Select>
+        <Select bind:value={statusFilter} placeholder="">
+          <option value="active">Active</option>
+          <option value="archived">Archived</option>
+          <option value="all">All</option>
+        </Select>
       </div>
 
       {#if filteredProjects.length === 0}
@@ -166,26 +195,51 @@
           {#each filteredProjects as project, i}
             <div
               in:fly={{ y: 20, duration: 300, delay: i * 50 }}
-              class="bg-card overflow-hidden shadow-sm border border-border rounded-lg transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg"
+              class="relative bg-card overflow-hidden shadow-sm border border-border rounded-lg transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lg"
             >
+              {#if canManage}
+                <div class="absolute top-4 right-4 z-10">
+                  <ProjectActionsMenu
+                    {project}
+                    {canManage}
+                    canDelete={canManage}
+                    onRenamed={applyProjectUpdate}
+                    onArchived={applyProjectUpdate}
+                    onDeleted={removeProject}
+                  />
+                </div>
+              {/if}
               <button
                 onclick={() => {
                   if (project.id) {
                     goto(appPaths.project(project.id));
                   }
                 }}
-                class="block w-full text-left p-6 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                class="block w-full text-left p-6 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary {canManage
+                  ? 'pr-12'
+                  : ''}"
               >
                 <div class="flex items-center justify-between">
                   <div class="flex-1 min-w-0">
-                    <h3 class="text-lg font-medium text-foreground truncate">
-                      {project.name}
-                    </h3>
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-medium text-foreground truncate">
+                        {project.name}
+                      </h3>
+                      {#if project.status === 'archived'}
+                        <span
+                          class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground"
+                        >
+                          Archived
+                        </span>
+                      {/if}
+                    </div>
                     <p class="mt-1 text-sm text-muted-foreground">
                       {project.code}
                     </p>
                   </div>
-                  <ChevronRight class="h-5 w-5 text-muted-foreground" />
+                  {#if !canManage}
+                    <ChevronRight class="h-5 w-5 text-muted-foreground" />
+                  {/if}
                 </div>
 
                 {#if project.description}

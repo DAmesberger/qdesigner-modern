@@ -12,8 +12,11 @@
     Users2,
   } from 'lucide-svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import ProjectActionsMenu from '$lib/components/ProjectActionsMenu.svelte';
   import { appPaths } from '$lib/routing/paths';
+  import { goto } from '$app/navigation';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import type { Project } from '$lib/shared/types/api';
   import type { PageData } from './$types';
 
   interface Props {
@@ -27,6 +30,33 @@
   let searchQuery = $state('');
   let statusFilter = $state<string>('all');
   let sortBy = $state<'name' | 'date' | 'responses'>('date');
+
+  // Local, mutable view so a rename/archive reflects in the header immediately.
+  let project = $state<Project>(data.project);
+
+  const currentProjectRole = $derived(
+    (data.members ?? []).find((m) => m.user_id === data.currentUserId)?.role ?? null
+  );
+  const currentOrgRole = $derived(
+    (data.orgMembers ?? []).find((m) => m.userId === data.currentUserId)?.role ?? null
+  );
+  // Rename/archive: project editor+ or org admin+ (mirrors PATCH /projects/:id).
+  const canManage = $derived(
+    ['editor', 'admin', 'owner'].includes(currentProjectRole ?? '') ||
+      ['admin', 'owner'].includes(currentOrgRole ?? '')
+  );
+  // Delete: project owner or org admin+ (mirrors DELETE /projects/:id).
+  const canDelete = $derived(
+    currentProjectRole === 'owner' || ['admin', 'owner'].includes(currentOrgRole ?? '')
+  );
+
+  function onProjectUpdated(updated: Project) {
+    project = updated;
+  }
+
+  async function onProjectDeleted() {
+    await goto(appPaths.projects());
+  }
 
   let filteredQuestionnaires = $derived.by(() => {
     let result = data.questionnaires;
@@ -110,7 +140,7 @@
                   clip-rule="evenodd"
                 />
               </svg>
-              <span class="ml-4 text-foreground font-medium">{data.project.name}</span>
+              <span class="ml-4 text-foreground font-medium">{project.name}</span>
             </li>
           </ol>
         </nav>
@@ -118,9 +148,18 @@
         <!-- Header -->
         <div class="md:flex md:items-center md:justify-between">
           <div class="flex-1 min-w-0">
-            <h1 class="text-2xl font-bold leading-7 text-foreground sm:text-3xl sm:truncate">
-              {data.project.name}
-            </h1>
+            <div class="flex items-center gap-3">
+              <h1 class="text-2xl font-bold leading-7 text-foreground sm:text-3xl sm:truncate">
+                {project.name}
+              </h1>
+              {#if project.status === 'archived'}
+                <span
+                  class="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground"
+                >
+                  Archived
+                </span>
+              {/if}
+            </div>
             <p class="mt-1 text-sm text-muted-foreground">
               Project Code: {data.project.code}
             </p>
@@ -155,6 +194,20 @@
               <Plus class="-ml-1 mr-2 h-5 w-5" />
               New Questionnaire
             </button>
+            {#if canManage || canDelete}
+              <div
+                class="inline-flex items-center border border-border rounded-md bg-card"
+              >
+                <ProjectActionsMenu
+                  {project}
+                  {canManage}
+                  {canDelete}
+                  onRenamed={onProjectUpdated}
+                  onArchived={onProjectUpdated}
+                  onDeleted={onProjectDeleted}
+                />
+              </div>
+            {/if}
           </div>
         </div>
       </div>
