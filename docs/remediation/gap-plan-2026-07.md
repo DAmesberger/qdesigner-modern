@@ -28,12 +28,14 @@ the ledger.
 
 ---
 
-## R0 — Land the in-flight auth migration ✅ (this session)
+## R0 — Land the in-flight auth migration ✅ MERGED (commit `5fdadd8`)
 
 | Unit | Scope | Status |
 |---|---|---|
-| R0-1 | Full gate on the working tree (Zitadel opaque-session work, migrations 00044/00045) | in-progress |
-| R0-2 | Commit auth work (+ docs/AUTH_PRIVACY_COMPLIANCE.md, env examples); separate commit for `.agents`/`.claude/skills` tooling | todo |
+| R0-1 | Full gate on the working tree (Zitadel opaque-session work, migrations 00044/00045) | **merged** — required 2 supervised fixes: delete_account self-deadlock (drop(tx) does not commit; revocation moved onto the request tx, helpers take PgExecutor) + test-harness machine-token routing (sk_/scim_ → Bearer, sessions → qd_session cookie) |
+| R0-2 | Commit auth work + plan doc + skills tooling | **merged** (`5fdadd8`, `e56dbb2`, `71d5b75`) |
+
+Cookie-session auth browser-verified during R1 exit QA (login → /dashboard, reload stays authenticated, qd_session httpOnly).
 
 Post-R0 follow-up (deferred to R5-4): delete vestigial JWT-era endpoints
 (`/auth/refresh`, `/auth/me`, `/auth/csrf/rotate`, token-variant
@@ -41,10 +43,17 @@ Post-R0 follow-up (deferred to R5-4): delete vestigial JWT-era endpoints
 
 ---
 
-## R1 — Wire what's built + fix the lies (2 waves)
+## R1 — Wire what's built + fix the lies ✅ MERGED (commits `66d1035` R1-A, `ef3e833` R1-B)
 
-Highest ROI: mostly links, guards, one render-loop fix. All frontend; disjoint
-files → parallelizable within each wave.
+**Exit live-QA 2026-07-10: all 8 checklist items PASS in-browser** (auth reload,
+nav reachability, real timestamps, Run button → /q/{code} new tab, F-35 dialog
+stress + adaptive persistence across reload, publish gate both paths, all 3
+delete confirms, bogus-code screen). **F-35 CLOSED.** Bonus fixes landed:
+DocumentStore normalization silently downgraded `adaptive` blocks to `standard`
+and dropped their config on every save (found by R1-5's test); fillout code is
+derived from the questionnaire UUID (first 8 hex) — no stored column (R1-2).
+Residual observation: a one-time "Auto-save failed" toast right after block
+creation, self-recovered, data intact (pre-existing, noted post-M5 too).
 
 ### Wave R1-A (parallel: 4 agents)
 
