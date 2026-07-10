@@ -3,6 +3,7 @@ use std::sync::Arc;
 use axum::{extract::Request, extract::State, middleware::Next, response::Response};
 use tokio::sync::Mutex;
 
+use crate::auth::session;
 use crate::error::ApiError;
 use crate::middleware::tx::SharedTx;
 use crate::state::AppState;
@@ -28,7 +29,7 @@ use crate::state::AppState;
 /// so the connection still returns to the pool — just via the drop path
 /// rather than the explicit rollback branch above.
 ///
-/// If the request carries no valid `Authorization: Bearer` header the
+/// If the request carries no valid `qd_session` cookie (or legacy bearer token)
 /// middleware does *not* open a transaction. Routes that require auth
 /// rely on the `AuthenticatedUser` extractor to issue the 401 themselves;
 /// routes that allow anonymous access keep working without a Tx.
@@ -37,7 +38,16 @@ pub async fn set_rls_context(
     mut request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    let Some((user_id, primary_role)) = extract_user_from_request(&state, &request) else {
+    let session_token = session::extract_session_cookie(request.headers());
+    let bearer_token = request
+        .headers()
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(str::to_string);
+    let Some((user_id, primary_role)) =
+        extract_user_from_tokens(&state, session_token, bearer_token).await?
+    else {
         return Ok(next.run(request).await);
     };
 
@@ -84,10 +94,30 @@ pub async fn set_rls_context(
 
 /// Decode the JWT from the Authorization header without consuming the request.
 /// Returns `(user_id, primary_role)` or `None` if the header is absent / invalid.
-fn extract_user_from_request(state: &AppState, request: &Request) -> Option<(uuid::Uuid, String)> {
-    let auth_header = request.headers().get("authorization")?.to_str().ok()?;
-    let token = auth_header.strip_prefix("Bearer ")?;
-    let claims = state.jwt_manager.verify_access_token(token).ok()?;
+async fn extract_user_from_tokens(
+    state: &AppState,
+    session_token: Option<String>,
+    bearer_token: Option<String>,
+) -> Result<Option<(uuid::Uuid, String)>, ApiError> {
+    if let Some(token) = session_token {
+        if let Some(user) = session::resolve_session_token(
+            &state.pool,
+            &token,
+            state.config.auth_session_idle_expiry,
+        )
+        .await?
+        {
+            let primary_role = user.roles.first().cloned().unwrap_or_default();
+            return Ok(Some((user.user_id, primary_role)));
+        }
+    }
+
+    let Some(token) = bearer_token else {
+        return Ok(None);
+    };
+    let Ok(claims) = state.jwt_manager.verify_access_token(&token) else {
+        return Ok(None);
+    };
     let primary_role = claims.roles.first().cloned().unwrap_or_default();
-    Some((claims.sub, primary_role))
+    Ok(Some((claims.sub, primary_role)))
 }

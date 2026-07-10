@@ -8,10 +8,9 @@
   let error = $state<string | null>(null);
 
   onMount(async () => {
-    // The OIDC callback set an httpOnly refresh cookie for the backend origin.
-    // Establishing the session is just a refresh from that cookie — the access
-    // token in the URL fragment (if present) is informational only and is
-    // stripped from the address bar below.
+    // The OIDC callback set an httpOnly qd_session cookie for the backend
+    // origin. Establishing the session is just a session lookup from that
+    // cookie.
     try {
       if (typeof history !== 'undefined' && window.location.hash) {
         history.replaceState(null, '', window.location.pathname + window.location.search);

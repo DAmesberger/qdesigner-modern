@@ -4,10 +4,8 @@
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
   import { autoSave } from '$lib/services/autoSave.svelte';
-  import { ws } from '$lib/services/ws';
   import { PresenceService, type PresenceUser } from '$lib/services/presence.svelte';
   import { CollaborativeDesigner } from '$lib/collaboration/CollaborativeDesigner';
-  import { auth } from '$lib/services/auth';
   import type { PageData } from './$types';
 
   import DesignerHeader from './components/DesignerHeader.svelte';
@@ -205,12 +203,10 @@
 
     // Wire up collaborative editing if online with a valid questionnaire
     const questionnaireId = designerStore.questionnaire?.id;
-    const token = auth.getAccessToken();
-    if (questionnaireId && token) {
+    if (questionnaireId) {
       collab = new CollaborativeDesigner();
       collab.init(designerStore.questionnaire, {
         questionnaireId,
-        token,
       });
 
       // The server is the sole seeder, so the Y.Doc starts EMPTY and only fills

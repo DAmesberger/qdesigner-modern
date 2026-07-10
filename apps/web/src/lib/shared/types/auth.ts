@@ -10,28 +10,24 @@ export interface User {
 }
 
 export interface Session {
-	accessToken: string;
-	/**
-	 * @deprecated The refresh token now lives in a server-set httpOnly cookie
-	 * and is never exposed to JS (F003). Kept optional for backward-compat with
-	 * any persisted shape; new sessions leave it undefined.
-	 */
-	refreshToken?: string;
 	expiresAt: number; // Unix timestamp
 	user: User;
+	provider: string;
+	mfaVerified: boolean;
+	roles: string[];
+	organizations: Array<{
+		id: string;
+		name: string;
+		slug: string;
+		role: string;
+	}>;
+	csrfToken: string;
 }
 
 export interface AuthResult {
 	session: Session | null;
 	user: User | null;
 	error: string | null;
-}
-
-export interface TokenPair {
-	access_token: string;
-	refresh_token: string;
-	expires_in: number;
-	token_type: string;
 }
 
 export interface LoginRequest {

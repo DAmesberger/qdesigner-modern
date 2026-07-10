@@ -1,29 +1,43 @@
 import { Page } from '@playwright/test';
+import { DEV_URLS } from '../helpers/dev-urls';
 
 /**
- * Set up mock authentication state for tests that need it inline.
+ * Set up mock cookie/session authentication for tests that need it inline.
  * For most tests, prefer using the storageState from auth.setup.ts instead.
  */
 export async function mockAuth(page: Page, email = 'test@example.com') {
-  await page.addInitScript((userEmail) => {
-    // Set auth token in the format the new backend expects
-    window.localStorage.setItem('auth_token', JSON.stringify({
-      access_token: 'mock-access-token',
-      refresh_token: 'mock-refresh-token',
-      expires_at: Date.now() + 3600000, // 1 hour from now
-    }));
-    window.localStorage.setItem('auth_user', JSON.stringify({
-      id: 'mock-user-id',
-      email: userEmail,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }));
-  }, email);
+  await page.context().addCookies([
+    {
+      name: 'qd_session',
+      value: 'mock-session',
+      url: DEV_URLS.backend,
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+  ]);
+  await page.route('**/api/auth/session', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        authenticated: true,
+        provider: 'local',
+        user: {
+          id: 'mock-user-id',
+          email,
+          full_name: 'Mock User',
+          roles: ['member'],
+        },
+        mfa_verified: true,
+        roles: ['member'],
+        organizations: [],
+        expires_at: new Date(Date.now() + 3600000).toISOString(),
+        csrf_token: 'mock-csrf-token',
+      }),
+    });
+  });
 }
 
 export async function clearAuth(page: Page) {
-  await page.evaluate(() => {
-    window.localStorage.removeItem('auth_token');
-    window.localStorage.removeItem('auth_user');
-  });
+  await page.context().clearCookies();
 }

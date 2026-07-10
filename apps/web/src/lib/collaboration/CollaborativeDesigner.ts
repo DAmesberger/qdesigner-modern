@@ -24,7 +24,6 @@ import type {
 
 export interface CollaborativeDesignerOptions {
   questionnaireId: string;
-  token: string;
   wsUrl?: string;
 }
 
@@ -82,7 +81,6 @@ export class CollaborativeDesigner {
     this.disconnect();
     this.provider = new YjsProvider(this.doc, {
       questionnaireId: options.questionnaireId,
-      token: options.token,
       wsUrl: options.wsUrl,
     });
     this.provider.connect();

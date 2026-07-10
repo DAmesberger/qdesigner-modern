@@ -13,20 +13,20 @@ class WebSocketClient {
 	private reconnectAttempts = 0;
 	private maxReconnectAttempts = 10;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-	private token: string | null = null;
+	private shouldReconnect = false;
 
 	get connected(): boolean {
 		return this.ws?.readyState === WebSocket.OPEN;
 	}
 
-	connect(token: string): void {
-		this.token = token;
+	connect(): void {
+		this.shouldReconnect = true;
 		this.reconnectAttempts = 0;
 		this.doConnect();
 	}
 
 	disconnect(): void {
-		this.token = null;
+		this.shouldReconnect = false;
 		this.reconnectAttempts = this.maxReconnectAttempts; // Prevent reconnect
 		if (this.reconnectTimer) {
 			clearTimeout(this.reconnectTimer);
@@ -71,7 +71,7 @@ class WebSocketClient {
 	}
 
 	private doConnect(): void {
-		if (!this.token) return;
+		if (!this.shouldReconnect) return;
 		if (typeof window === 'undefined') return; // SSR guard
 
 		// Close any existing socket before opening a new one to prevent leaks
@@ -83,9 +83,9 @@ class WebSocketClient {
 
 		const wsUrl =
 			import.meta.env.VITE_WS_URL || `ws://${window.location.host}/api/ws`;
-		// Auth rides the subprotocol handshake, not the URL, so the JWT never
-		// leaks into logs/history. Server echoes back the 'qde-auth' marker.
-		this.ws = new WebSocket(wsUrl, ['qde-auth', this.token]);
+		// Auth rides the httpOnly qd_session cookie. The subprotocol is just an
+		// application marker echoed by the server.
+		this.ws = new WebSocket(wsUrl, ['qde-auth']);
 
 		this.ws.onopen = () => {
 			this.reconnectAttempts = 0;

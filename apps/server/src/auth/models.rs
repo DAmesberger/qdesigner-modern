@@ -38,7 +38,10 @@ pub struct AuthenticatedUser {
     pub user_id: Uuid,
     pub email: String,
     pub roles: Vec<String>,
-    pub jti: Uuid,
+    pub provider: String,
+    pub mfa_verified: bool,
+    pub session_hash: Option<String>,
+    pub jti: Option<Uuid>,
 }
 
 // ── Request / Response DTOs ──────────────────────────────────────────
@@ -56,21 +59,55 @@ pub struct LoginRequest {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct AuthResponse {
-    pub access_token: String,
-    pub refresh_token: String,
-    pub token_type: String,
-    pub expires_in: i64,
-    pub user: UserInfo,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
 pub struct UserInfo {
     pub id: Uuid,
     pub email: String,
     pub full_name: Option<String>,
     pub avatar_url: Option<String>,
     pub roles: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SessionView {
+    pub authenticated: bool,
+    pub provider: Option<String>,
+    pub user: Option<UserInfo>,
+    pub mfa_verified: bool,
+    pub roles: Vec<String>,
+    pub organizations: Vec<SessionOrganization>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub csrf_token: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema, sqlx::FromRow)]
+pub struct SessionOrganization {
+    pub id: Uuid,
+    pub name: String,
+    pub slug: String,
+    pub role: String,
+}
+
+impl SessionView {
+    pub fn anonymous() -> Self {
+        Self {
+            authenticated: false,
+            provider: None,
+            user: None,
+            mfa_verified: false,
+            roles: Vec::new(),
+            organizations: Vec::new(),
+            expires_at: None,
+            csrf_token: None,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct DevSessionRequest {
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub full_name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
@@ -84,15 +121,6 @@ pub struct RegisterRequest {
     ))]
     pub password: String,
     pub full_name: Option<String>,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct RefreshRequest {
-    /// Optional during the cookie transition: the refresh token normally
-    /// arrives in the httpOnly `refresh_token` cookie, so the body may be
-    /// empty. Kept as a fallback for callers that still POST it explicitly.
-    #[serde(default)]
-    pub refresh_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

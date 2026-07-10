@@ -84,7 +84,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthResponse"
+                  "$ref": "#/components/schemas/SessionView"
                 }
               }
             }
@@ -135,7 +135,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthResponse"
+                  "$ref": "#/components/schemas/SessionView"
                 }
               }
             }
@@ -170,23 +170,13 @@
         ],
         "summary": "POST /api/auth/refresh",
         "operationId": "refresh",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RefreshRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
-            "description": "Tokens refreshed",
+            "description": "Current browser session",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthResponse"
+                  "$ref": "#/components/schemas/SessionView"
                 }
               }
             }
@@ -220,12 +210,7 @@
               }
             }
           }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
+        }
       }
     },
     "/api/auth/me": {
@@ -262,6 +247,156 @@
             "bearerAuth": []
           }
         ]
+      }
+    },
+    "/api/auth/session": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "GET /api/auth/session",
+        "operationId": "session_view",
+        "responses": {
+          "200": {
+            "description": "Current browser session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/csrf/rotate": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/csrf/rotate",
+        "operationId": "rotate_csrf",
+        "responses": {
+          "200": {
+            "description": "Rotated CSRF token",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/dev/session": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "POST /api/auth/dev/session",
+        "operationId": "dev_session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DevSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Development session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Dev session disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/zitadel/start": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "GET /api/auth/zitadel/start?return_to=/dashboard",
+        "operationId": "zitadel_start",
+        "parameters": [
+          {
+            "name": "return_to",
+            "in": "query",
+            "description": "Same-origin app path to return to",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Redirect to Zitadel"
+          },
+          "403": {
+            "description": "Zitadel auth disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/zitadel/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "GET /api/auth/zitadel/callback",
+        "operationId": "zitadel_callback",
+        "responses": {
+          "303": {
+            "description": "Redirect back to app with session cookie"
+          },
+          "400": {
+            "description": "Invalid callback",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/auth/verify-email": {
@@ -8392,34 +8527,6 @@
           }
         }
       },
-      "AuthResponse": {
-        "type": "object",
-        "required": [
-          "access_token",
-          "refresh_token",
-          "token_type",
-          "expires_in",
-          "user"
-        ],
-        "properties": {
-          "access_token": {
-            "type": "string"
-          },
-          "refresh_token": {
-            "type": "string"
-          },
-          "token_type": {
-            "type": "string"
-          },
-          "expires_in": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "user": {
-            "$ref": "#/components/schemas/UserInfo"
-          }
-        }
-      },
       "AutoJoinResponse": {
         "type": "object",
         "required": [
@@ -9340,6 +9447,23 @@
         "properties": {
           "deleted": {
             "type": "boolean"
+          }
+        }
+      },
+      "DevSessionRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "full_name": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -11364,18 +11488,6 @@
           }
         }
       },
-      "RefreshRequest": {
-        "type": "object",
-        "properties": {
-          "refresh_token": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Optional during the cookie transition: the refresh token normally\narrives in the httpOnly `refresh_token` cookie, so the body may be\nempty. Kept as a fallback for callers that still POST it explicitly."
-          }
-        }
-      },
       "RegisterRequest": {
         "type": "object",
         "required": [
@@ -12050,6 +12162,30 @@
           }
         ]
       },
+      "SessionOrganization": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "role"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
       "SessionVariableRecord": {
         "type": "object",
         "required": [
@@ -12099,6 +12235,64 @@
             ]
           },
           "source": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SessionView": {
+        "type": "object",
+        "required": [
+          "authenticated",
+          "mfa_verified",
+          "roles",
+          "organizations"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserInfo"
+              }
+            ]
+          },
+          "mfa_verified": {
+            "type": "boolean"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "organizations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionOrganization"
+            }
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "csrf_token": {
             "type": [
               "string",
               "null"
@@ -13020,6 +13214,11 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer"
+      },
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "qd_session"
       }
     }
   },

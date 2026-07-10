@@ -22,16 +22,14 @@
     }
   });
 
-  // Connect WebSocket when user is authenticated, and reconnect on token refresh
+  // Connect WebSocket when user is authenticated. Auth rides the qd_session
+  // cookie, so no token is passed through the URL or subprotocols.
   $effect(() => {
     if (!data.user) return;
 
-    const token = auth.getAccessToken();
-    if (token) {
-      ws.connect(token);
-    }
+    ws.connect();
 
-    // Listen for token refresh / logout to reconnect or disconnect.
+    // Listen for session refresh / logout to reconnect or disconnect.
     // onAuthStateChange fires immediately with SIGNED_IN for current session;
     // skip that since we already connected above.
     let initial = true;
@@ -41,10 +39,7 @@
         return;
       }
       if (event.event === 'TOKEN_REFRESHED') {
-        const newToken = auth.getAccessToken();
-        if (newToken) {
-          ws.connect(newToken);
-        }
+        ws.connect();
       } else if (event.event === 'SIGNED_OUT') {
         ws.disconnect();
       }

@@ -8,12 +8,16 @@ import { DEV_URLS } from './dev-urls';
 const BACKEND_URL = DEV_URLS.backend;
 
 export class TestApiClient {
-  private token: string | null = null;
+  private sessionCookie: string | null = null;
+  private csrfToken: string | null = null;
 
   async login(email: string, password: string): Promise<void> {
     const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
       body: JSON.stringify({ email, password }),
     });
 
@@ -22,12 +26,23 @@ export class TestApiClient {
     }
 
     const data = await res.json();
-    this.token = data.tokens.access_token;
+    const setCookie = res.headers.get('set-cookie') ?? '';
+    const match = setCookie.match(/(?:^|,\s*)qd_session=([^;]+)/);
+    if (!match?.[1] || !data.csrf_token) {
+      throw new Error(`Login did not return a qd_session cookie and csrf_token for ${email}`);
+    }
+    this.sessionCookie = match[1];
+    this.csrfToken = data.csrf_token;
   }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const headers: Record<string, string> = {};
-    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    const headers: Record<string, string> = {
+      'X-Requested-With': 'XMLHttpRequest',
+    };
+    if (this.sessionCookie) headers.Cookie = `qd_session=${this.sessionCookie}`;
+    if (this.csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase())) {
+      headers['X-CSRF-Token'] = this.csrfToken;
+    }
     if (body) headers['Content-Type'] = 'application/json';
 
     const res = await fetch(`${BACKEND_URL}${path}`, {

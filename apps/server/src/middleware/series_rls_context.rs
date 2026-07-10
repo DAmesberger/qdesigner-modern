@@ -23,6 +23,7 @@ use axum::{extract::Request, extract::State, middleware::Next, response::Respons
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use crate::auth::session;
 use crate::error::ApiError;
 use crate::middleware::tx::SharedTx;
 use crate::state::AppState;
@@ -32,7 +33,14 @@ pub async fn set_series_rls_context(
     mut request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    let user_id = extract_user_id_from_jwt(&state, &request);
+    let session_token = session::extract_session_cookie(request.headers());
+    let bearer_token = request
+        .headers()
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(str::to_string);
+    let user_id = extract_user_id_from_tokens(&state, session_token, bearer_token).await?;
     let enrollment_token = extract_enrollment_token_from_path(request.uri().path());
 
     let mut tx = state.pool.begin().await?;
@@ -72,11 +80,29 @@ pub async fn set_series_rls_context(
     Ok(response)
 }
 
-fn extract_user_id_from_jwt(state: &AppState, request: &Request) -> Option<Uuid> {
-    let auth_header = request.headers().get("authorization")?.to_str().ok()?;
-    let token = auth_header.strip_prefix("Bearer ")?;
-    let claims = state.jwt_manager.verify_access_token(token).ok()?;
-    Some(claims.sub)
+async fn extract_user_id_from_tokens(
+    state: &AppState,
+    session_token: Option<String>,
+    bearer_token: Option<String>,
+) -> Result<Option<Uuid>, ApiError> {
+    if let Some(token) = session_token {
+        return Ok(session::resolve_session_token(
+            &state.pool,
+            &token,
+            state.config.auth_session_idle_expiry,
+        )
+        .await?
+        .map(|user| user.user_id));
+    }
+
+    let Some(token) = bearer_token else {
+        return Ok(None);
+    };
+    Ok(state
+        .jwt_manager
+        .verify_access_token(&token)
+        .ok()
+        .map(|c| c.sub))
 }
 
 /// Pull the resume-token UUID out of the request path.

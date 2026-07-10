@@ -1,5 +1,28 @@
 use std::time::Duration;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthProvider {
+    Local,
+    Zitadel,
+}
+
+impl AuthProvider {
+    fn from_env_value(raw: &str) -> Self {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "local" => Self::Local,
+            "zitadel" => Self::Zitadel,
+            other => panic!("AUTH_PROVIDER must be 'local' or 'zitadel', got '{other}'"),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Zitadel => "zitadel",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct Config {
@@ -43,6 +66,25 @@ pub struct Config {
     pub server_host: String,
     pub server_port: u16,
 
+    // Auth provider. Shared/production deployments must use Zitadel; local
+    // email/password login is kept only for local development and tests.
+    pub auth_provider: AuthProvider,
+    pub auth_token_enc_key: String,
+    pub auth_session_idle_expiry: Duration,
+    pub auth_session_absolute_expiry: Duration,
+    pub auth_session_retention: Duration,
+    pub security_event_retention: Duration,
+    pub auth_ip_hash_key: String,
+
+    // Primary Zitadel/OIDC configuration.
+    pub zitadel_issuer: Option<String>,
+    pub zitadel_client_id: Option<String>,
+    pub zitadel_client_secret: Option<String>,
+    pub zitadel_redirect_uri: Option<String>,
+    pub zitadel_post_logout_redirect_uri: Option<String>,
+    pub zitadel_include_profile_scope: bool,
+    pub zitadel_allow_sms_email_mfa: bool,
+
     // Symmetric key used to encrypt per-org IdP `client_secret`s at rest
     // (E-RBAC-6). When unset it falls back to `jwt_secret` at the call site, so
     // dev/test never need a separate secret; production should set a dedicated
@@ -83,6 +125,62 @@ impl Config {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(604800); // 7 days
+        let auth_session_idle_secs: u64 = std::env::var("AUTH_SESSION_IDLE_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8 * 60 * 60);
+        let auth_session_absolute_secs: u64 = std::env::var("AUTH_SESSION_ABSOLUTE_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(7 * 24 * 60 * 60);
+        let auth_session_retention_secs: u64 = std::env::var("AUTH_SESSION_RETENTION_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30 * 24 * 60 * 60);
+        let security_event_retention_secs: u64 = std::env::var("SECURITY_EVENT_RETENTION_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(365 * 24 * 60 * 60);
+        let auth_provider = AuthProvider::from_env_value(
+            &std::env::var("AUTH_PROVIDER").unwrap_or_else(|_| "local".into()),
+        );
+        let auth_token_enc_key = std::env::var("AUTH_TOKEN_ENC_KEY")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| {
+                if auth_provider == AuthProvider::Zitadel {
+                    panic!("AUTH_TOKEN_ENC_KEY environment variable is required for Zitadel auth")
+                }
+                env_or("JWT_SECRET", "dev-only-auth-token-encryption-key")
+            });
+        let auth_ip_hash_key = std::env::var("AUTH_IP_HASH_KEY")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| auth_token_enc_key.clone());
+        guard_auth_provider(auth_provider);
+
+        let zitadel_issuer = std::env::var("ZITADEL_ISSUER")
+            .ok()
+            .map(|v| v.trim_end_matches('/').to_string())
+            .filter(|v| !v.is_empty());
+        let zitadel_client_id = std::env::var("ZITADEL_CLIENT_ID")
+            .ok()
+            .filter(|v| !v.trim().is_empty());
+        let zitadel_client_secret = std::env::var("ZITADEL_CLIENT_SECRET")
+            .ok()
+            .filter(|v| !v.trim().is_empty());
+        let zitadel_redirect_uri = std::env::var("ZITADEL_REDIRECT_URI")
+            .ok()
+            .filter(|v| !v.trim().is_empty());
+        if auth_provider == AuthProvider::Zitadel
+            && (zitadel_issuer.is_none()
+                || zitadel_client_id.is_none()
+                || zitadel_redirect_uri.is_none())
+        {
+            panic!(
+                "ZITADEL_ISSUER, ZITADEL_CLIENT_ID, and ZITADEL_REDIRECT_URI are required when AUTH_PROVIDER=zitadel"
+            );
+        }
 
         Self {
             database_url: env_required("DATABASE_URL"),
@@ -113,6 +211,22 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(4100),
+            auth_provider,
+            auth_token_enc_key,
+            auth_session_idle_expiry: Duration::from_secs(auth_session_idle_secs),
+            auth_session_absolute_expiry: Duration::from_secs(auth_session_absolute_secs),
+            auth_session_retention: Duration::from_secs(auth_session_retention_secs),
+            security_event_retention: Duration::from_secs(security_event_retention_secs),
+            auth_ip_hash_key,
+            zitadel_issuer,
+            zitadel_client_id,
+            zitadel_client_secret,
+            zitadel_redirect_uri,
+            zitadel_post_logout_redirect_uri: std::env::var("ZITADEL_POST_LOGOUT_REDIRECT_URI")
+                .ok()
+                .filter(|v| !v.trim().is_empty()),
+            zitadel_include_profile_scope: env_flag("ZITADEL_INCLUDE_PROFILE_SCOPE", false),
+            zitadel_allow_sms_email_mfa: env_flag("ZITADEL_ALLOW_SMS_EMAIL_MFA", false),
             sso_encryption_key: std::env::var("SSO_ENCRYPTION_KEY")
                 .ok()
                 .filter(|v| !v.trim().is_empty()),
@@ -140,4 +254,36 @@ fn env_required(key: &str) -> String {
 
 fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+fn env_flag(key: &str, default: bool) -> bool {
+    std::env::var(key)
+        .ok()
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(default)
+}
+
+fn guard_auth_provider(provider: AuthProvider) {
+    if provider != AuthProvider::Local {
+        return;
+    }
+
+    let production_like = ["APP_ENV", "RUST_ENV", "NODE_ENV", "ENVIRONMENT"]
+        .iter()
+        .filter_map(|key| std::env::var(key).ok())
+        .any(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "prod" | "production" | "staging" | "shared"
+            )
+        });
+
+    if production_like {
+        panic!("AUTH_PROVIDER=local is not allowed in production-like environments");
+    }
 }

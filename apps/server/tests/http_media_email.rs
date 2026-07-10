@@ -74,6 +74,13 @@ async fn media_upload_then_stream_content_full_and_range() {
     let user = common::register_user(&app).await;
     let tenant = common::provision_tenant(&app, &user.token).await;
 
+    // Human auth now rides the `qd_session` cookie (with the CSRF token on
+    // state-changing methods); `user.token` is the `session|csrf` combo.
+    let (session_cookie, csrf_token) = user
+        .token
+        .split_once('|')
+        .expect("register_user yields a session|csrf token");
+
     // ── authenticated multipart upload ──────────────────────────────
     let png = png_bytes();
     let (ctype, body) = multipart_upload(tenant.org_id, "stimulus.png", "image/png", &png);
@@ -81,7 +88,8 @@ async fn media_upload_then_stream_content_full_and_range() {
         .method("POST")
         .uri("/api/media")
         .header("x-requested-with", "XMLHttpRequest")
-        .header("authorization", format!("Bearer {}", user.token))
+        .header("cookie", format!("qd_session={session_cookie}"))
+        .header("x-csrf-token", csrf_token)
         .header("content-type", ctype)
         .body(Body::from(body))
         .expect("build multipart request");
@@ -97,7 +105,7 @@ async fn media_upload_then_stream_content_full_and_range() {
     let req = Request::builder()
         .method("GET")
         .uri(format!("/api/media/{media_id}/content"))
-        .header("authorization", format!("Bearer {}", user.token))
+        .header("cookie", format!("qd_session={session_cookie}"))
         .body(Body::empty())
         .expect("build content request");
     let (status, headers, bytes) = common::send_raw(&app, req).await;
@@ -127,7 +135,7 @@ async fn media_upload_then_stream_content_full_and_range() {
     let req = Request::builder()
         .method("GET")
         .uri(format!("/api/media/{media_id}/content"))
-        .header("authorization", format!("Bearer {}", user.token))
+        .header("cookie", format!("qd_session={session_cookie}"))
         .header(header::RANGE, "bytes=0-3")
         .body(Body::empty())
         .expect("build ranged content request");

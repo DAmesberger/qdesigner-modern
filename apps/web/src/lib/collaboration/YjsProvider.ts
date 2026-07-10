@@ -24,8 +24,6 @@ const MSG_AWARENESS = 1;
 export interface YjsProviderOptions {
   /** The questionnaire ID this doc belongs to. */
   questionnaireId: string;
-  /** JWT access token for WebSocket auth. */
-  token: string;
   /** WebSocket URL override (defaults to ws://<host>/api/ws). */
   wsUrl?: string;
 }
@@ -44,14 +42,12 @@ export class YjsProvider {
   private syncedListeners = new Set<() => void>();
 
   private readonly questionnaireId: string;
-  private readonly token: string;
   private readonly wsUrl: string;
 
   constructor(doc: Y.Doc, options: YjsProviderOptions) {
     this.doc = doc;
     this.awareness = new awarenessProtocol.Awareness(doc);
     this.questionnaireId = options.questionnaireId;
-    this.token = options.token;
     this.wsUrl =
       options.wsUrl ||
       (typeof window !== 'undefined'
@@ -134,9 +130,8 @@ export class YjsProvider {
     if (this.destroyed) return;
     if (typeof WebSocket === 'undefined') return; // SSR guard
 
-    // Auth rides the subprotocol handshake, not the URL, so the JWT never
-    // leaks into logs/history. Server echoes back the 'qde-auth' marker.
-    this.ws = new WebSocket(this.wsUrl, ['qde-auth', this.token]);
+    // Auth rides the httpOnly qd_session cookie. Server echoes the marker.
+    this.ws = new WebSocket(this.wsUrl, ['qde-auth']);
     this.ws.binaryType = 'arraybuffer';
 
     this.ws.onopen = () => {

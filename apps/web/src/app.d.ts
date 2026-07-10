@@ -6,7 +6,6 @@ declare global {
     interface Locals {
       getSession: () => Promise<{
         user: unknown;
-        access_token: string;
       } | null>;
       user?: unknown;
     }

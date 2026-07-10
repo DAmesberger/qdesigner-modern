@@ -32,6 +32,7 @@ pub mod shares;
 pub mod sso;
 pub mod templates;
 pub mod users;
+pub mod zitadel_auth;
 
 /// Assemble the full application router.
 pub fn router(state: AppState) -> Router {
@@ -41,6 +42,11 @@ pub fn router(state: AppState) -> Router {
         .route("/refresh", post(auth::refresh))
         .route("/logout", post(auth::logout))
         .route("/me", get(auth::me))
+        .route("/session", get(auth::session_view))
+        .route("/csrf/rotate", post(auth::rotate_csrf))
+        .route("/dev/session", post(auth::dev_session))
+        .route("/zitadel/start", get(zitadel_auth::zitadel_start))
+        .route("/zitadel/callback", get(zitadel_auth::zitadel_callback))
         .route("/verify-email", post(auth::verify_email))
         .route("/verify-email/send", post(auth::send_verification_code))
         .route("/verify-email/verify", post(auth::verify_code))

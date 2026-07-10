@@ -23,6 +23,7 @@ pub fn cors_layer(origins: &[String]) -> CorsLayer {
             CONTENT_TYPE,
             ACCEPT,
             HeaderName::from_static("x-requested-with"),
+            HeaderName::from_static("x-csrf-token"),
         ])
         .allow_credentials(true)
         .max_age(std::time::Duration::from_secs(3600))

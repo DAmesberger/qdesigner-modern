@@ -1,15 +1,17 @@
-use axum::{body::Bytes, extract::State, Json};
+use axum::{extract::State, http::HeaderMap, Json};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use lettre::message::header::ContentType;
 use lettre::transport::smtp::client::Tls;
 use lettre::{Message, SmtpTransport, Transport};
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::audit::ClientIp;
 use crate::auth::models::*;
 use crate::auth::password;
 use crate::auth::session;
+use crate::config::AuthProvider;
 use crate::error::ApiError;
 use crate::state::AppState;
 
@@ -19,19 +21,128 @@ const REFRESH_COOKIE: &str = "refresh_token";
 /// the browser only attaches the secret to `/api/auth/*` requests.
 const REFRESH_COOKIE_PATH: &str = "/api/auth";
 
-/// Build the `Set-Cookie` for the refresh token: `HttpOnly; Secure;
-/// SameSite=Strict; Path=/api/auth; Max-Age=<refresh exp>`. The token lives
-/// only in this cookie — it is never returned in the JSON body — so JS (and any
-/// XSS payload) can't read it. `secure` is gated by config so non-localhost
-/// plain-http dev can opt out.
-fn refresh_cookie(token: String, max_age_secs: i64, secure: bool) -> Cookie<'static> {
-    Cookie::build((REFRESH_COOKIE, token))
+fn session_cookie(token: String, max_age_secs: i64, secure: bool) -> Cookie<'static> {
+    Cookie::build((session::SESSION_COOKIE, token))
         .http_only(true)
         .secure(secure)
-        .same_site(SameSite::Strict)
-        .path(REFRESH_COOKIE_PATH)
+        .same_site(SameSite::Lax)
+        .path("/")
         .max_age(time::Duration::seconds(max_age_secs))
         .build()
+}
+
+fn clear_session_cookie() -> Cookie<'static> {
+    Cookie::build((session::SESSION_COOKIE, ""))
+        .path("/")
+        .build()
+}
+
+fn require_local_auth(state: &AppState) -> Result<(), ApiError> {
+    if state.config.auth_provider == AuthProvider::Local {
+        Ok(())
+    } else {
+        Err(ApiError::Forbidden(
+            "Local email/password auth is disabled".into(),
+        ))
+    }
+}
+
+async fn build_user_info(
+    state: &AppState,
+    user_id: Uuid,
+    email: String,
+    full_name: Option<String>,
+    avatar_url: Option<String>,
+) -> Result<UserInfo, ApiError> {
+    let roles = session::current_roles(&state.pool, user_id).await?;
+    Ok(UserInfo {
+        id: user_id,
+        email,
+        full_name,
+        avatar_url,
+        roles,
+    })
+}
+
+async fn issue_browser_session(
+    state: &AppState,
+    jar: CookieJar,
+    user: UserInfo,
+    provider: &str,
+    mfa_verified: bool,
+    client_ip: ClientIp,
+    headers: &HeaderMap,
+) -> Result<(CookieJar, Json<SessionView>), ApiError> {
+    let fp = session::fingerprint(
+        &state.config,
+        client_ip.0,
+        headers
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok()),
+    );
+    let new_session = session::create_auth_session(
+        &state.pool,
+        user,
+        session::SessionMetadata {
+            provider: provider.to_string(),
+            issuer: None,
+            subject: None,
+            encrypted_token_set: None,
+            mfa_verified,
+            idle_ttl: state.config.auth_session_idle_expiry,
+            absolute_ttl: state.config.auth_session_absolute_expiry,
+        },
+        fp,
+    )
+    .await?;
+    let jar = jar.add(session_cookie(
+        new_session.cookie_token,
+        state.config.auth_session_absolute_expiry.as_secs() as i64,
+        state.config.cookie_secure,
+    ));
+    Ok((jar, Json(new_session.view)))
+}
+
+async fn revoke_upstream_if_configured(state: &AppState, session_hash: &str) {
+    let Ok(Some(encrypted)) =
+        session::encrypted_token_set_for_session(&state.pool, session_hash).await
+    else {
+        return;
+    };
+    let Ok(plaintext) = crate::auth::crypto::decrypt(&state.config.auth_token_enc_key, &encrypted)
+    else {
+        return;
+    };
+    let Ok(token_set) = serde_json::from_str::<session::StoredTokenSet>(&plaintext) else {
+        return;
+    };
+    let Some(endpoint) = token_set.revocation_endpoint.as_deref() else {
+        return;
+    };
+    let Some(token) = token_set
+        .refresh_token
+        .as_deref()
+        .or(token_set.access_token.as_deref())
+    else {
+        return;
+    };
+
+    let mut form = vec![("token", token.to_string())];
+    if let Some(client_id) = state.config.zitadel_client_id.as_deref() {
+        form.push(("client_id", client_id.to_string()));
+    }
+    if let Some(secret) = state.config.zitadel_client_secret.as_deref() {
+        form.push(("client_secret", secret.to_string()));
+    }
+
+    if let Err(e) = reqwest::Client::new()
+        .post(endpoint)
+        .form(&form)
+        .send()
+        .await
+    {
+        tracing::warn!("upstream token revocation failed: {e}");
+    }
 }
 
 /// A removal cookie matching the refresh cookie's name + path so the browser
@@ -48,7 +159,7 @@ fn clear_refresh_cookie() -> Cookie<'static> {
     path = "/api/auth/register",
     request_body = RegisterRequest,
     responses(
-        (status = 200, description = "Registered and signed in", body = AuthResponse),
+        (status = 200, description = "Registered and signed in", body = SessionView),
         (status = 409, description = "Email already registered", body = crate::openapi::ErrorEnvelope),
         (status = 422, description = "Validation error", body = crate::openapi::ErrorEnvelope)
     ),
@@ -57,8 +168,11 @@ fn clear_refresh_cookie() -> Cookie<'static> {
 pub async fn register(
     State(state): State<AppState>,
     jar: CookieJar,
+    client_ip: ClientIp,
+    headers: HeaderMap,
     Json(body): Json<RegisterRequest>,
-) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
+) -> Result<(CookieJar, Json<SessionView>), ApiError> {
+    require_local_auth(&state)?;
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -106,46 +220,25 @@ pub async fn register(
         .execute(&state.pool)
         .await;
 
-    // Issue tokens
-    let roles = vec!["user".to_string()];
-    let (access_token, _claims) =
-        state
-            .jwt_manager
-            .create_access_token(user_id, &body.email, roles.clone())?;
-    let (refresh_token, refresh_claims) = state.jwt_manager.create_refresh_token(user_id)?;
-
-    session::store_refresh_token(
-        &state.pool,
-        user_id,
-        refresh_claims.jti,
-        DateTime::<Utc>::from_timestamp(refresh_claims.exp, 0).unwrap_or_else(Utc::now),
+    let user = UserInfo {
+        id: user_id,
+        email: body.email,
+        full_name: Some(full_name),
+        avatar_url: None,
+        roles: vec!["user".to_string()],
+    };
+    let (jar, response) = issue_browser_session(
+        &state,
+        jar,
+        user,
+        AuthProvider::Local.as_str(),
+        true,
+        client_ip,
+        &headers,
     )
     .await?;
 
-    let jar = jar.add(refresh_cookie(
-        refresh_token,
-        state.jwt_manager.refresh_expiry_secs(),
-        state.config.cookie_secure,
-    ));
-
-    Ok((
-        jar,
-        Json(AuthResponse {
-            access_token,
-            // The refresh token is delivered via the httpOnly cookie above and
-            // deliberately omitted from the JSON body so JS never sees it.
-            refresh_token: String::new(),
-            token_type: "Bearer".into(),
-            expires_in: state.jwt_manager.access_expiry_secs(),
-            user: UserInfo {
-                id: user_id,
-                email: body.email,
-                full_name: Some(full_name),
-                avatar_url: None,
-                roles,
-            },
-        }),
-    ))
+    Ok((jar, response))
 }
 
 /// POST /api/auth/login
@@ -154,7 +247,7 @@ pub async fn register(
     path = "/api/auth/login",
     request_body = LoginRequest,
     responses(
-        (status = 200, description = "Signed in", body = AuthResponse),
+        (status = 200, description = "Signed in", body = SessionView),
         (status = 401, description = "Invalid credentials", body = crate::openapi::ErrorEnvelope),
         (status = 422, description = "Validation error", body = crate::openapi::ErrorEnvelope)
     ),
@@ -163,8 +256,11 @@ pub async fn register(
 pub async fn login(
     State(state): State<AppState>,
     jar: CookieJar,
+    client_ip: ClientIp,
+    headers: HeaderMap,
     Json(body): Json<LoginRequest>,
-) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
+) -> Result<(CookieJar, Json<SessionView>), ApiError> {
+    require_local_auth(&state)?;
     body.validate()
         .map_err(|e| ApiError::Validation(e.to_string()))?;
 
@@ -212,75 +308,32 @@ pub async fn login(
         .execute(&state.pool)
         .await;
 
-    // Collect roles from org memberships
-    let roles: Vec<String> = sqlx::query_scalar(
-        r#"
-        SELECT DISTINCT role FROM organization_members
-        WHERE user_id = $1 AND status = 'active'
-        "#,
-    )
-    .bind(user.id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    let roles = if roles.is_empty() {
-        vec!["user".to_string()]
-    } else {
-        roles
-    };
-
     // Update last login
     sqlx::query("UPDATE users SET last_login_at = NOW(), login_count = COALESCE(login_count, 0) + 1 WHERE id = $1")
         .bind(user.id)
         .execute(&state.pool)
         .await?;
 
-    let (access_token, _claims) =
-        state
-            .jwt_manager
-            .create_access_token(user.id, &user.email, roles.clone())?;
-    let (refresh_token, refresh_claims) = state.jwt_manager.create_refresh_token(user.id)?;
-
-    session::store_refresh_token(
-        &state.pool,
-        user.id,
-        refresh_claims.jti,
-        DateTime::<Utc>::from_timestamp(refresh_claims.exp, 0).unwrap_or_else(Utc::now),
-    )
-    .await?;
-
-    let jar = jar.add(refresh_cookie(
-        refresh_token,
-        state.jwt_manager.refresh_expiry_secs(),
-        state.config.cookie_secure,
-    ));
-
-    Ok((
+    let user_info =
+        build_user_info(&state, user.id, user.email, user.full_name, user.avatar_url).await?;
+    issue_browser_session(
+        &state,
         jar,
-        Json(AuthResponse {
-            access_token,
-            // Delivered via the httpOnly cookie above; omitted from the body.
-            refresh_token: String::new(),
-            token_type: "Bearer".into(),
-            expires_in: state.jwt_manager.access_expiry_secs(),
-            user: UserInfo {
-                id: user.id,
-                email: user.email,
-                full_name: user.full_name,
-                avatar_url: user.avatar_url,
-                roles,
-            },
-        }),
-    ))
+        user_info,
+        AuthProvider::Local.as_str(),
+        true,
+        client_ip,
+        &headers,
+    )
+    .await
 }
 
 /// POST /api/auth/refresh
 #[utoipa::path(
     post,
     path = "/api/auth/refresh",
-    request_body = RefreshRequest,
     responses(
-        (status = 200, description = "Tokens refreshed", body = AuthResponse),
+        (status = 200, description = "Current browser session", body = SessionView),
         (status = 401, description = "Refresh token invalid", body = crate::openapi::ErrorEnvelope)
     ),
     tags = ["auth"]
@@ -288,111 +341,24 @@ pub async fn login(
 pub async fn refresh(
     State(state): State<AppState>,
     jar: CookieJar,
-    bytes: Bytes,
-) -> Result<(CookieJar, Json<AuthResponse>), ApiError> {
-    // Prefer the httpOnly refresh cookie. Fall back to a JSON body
-    // `{ "refresh_token": ... }` during the transition (older clients / explicit
-    // callers). The body is parsed leniently so an empty/absent body — the
-    // normal cookie-only case — is not an error.
-    let cookie_token = jar
-        .get(REFRESH_COOKIE)
+) -> Result<(CookieJar, Json<SessionView>), ApiError> {
+    let token = jar
+        .get(session::SESSION_COOKIE)
         .map(|c| c.value().to_string())
-        .filter(|v| !v.is_empty());
-    let body_token = if bytes.is_empty() {
-        None
-    } else {
-        serde_json::from_slice::<RefreshRequest>(&bytes)
-            .ok()
-            .and_then(|r| r.refresh_token)
-            .filter(|v| !v.is_empty())
-    };
-    let token = cookie_token
-        .or(body_token)
-        .ok_or_else(|| ApiError::Unauthorized("Missing refresh token".into()))?;
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| ApiError::Unauthorized("Missing session".into()))?;
 
-    let claims = state.jwt_manager.verify_refresh_token(&token)?;
-
-    // Check if the refresh token is still valid
-    if !session::is_refresh_token_valid(&state.pool, claims.jti).await? {
-        return Err(ApiError::Unauthorized("Refresh token revoked".into()));
-    }
-
-    // Revoke the old refresh token (rotation)
-    session::revoke_refresh_token(&state.pool, claims.jti).await?;
-
-    // Look up the user
-    let user = sqlx::query_as::<_, UserRow>(
-        r#"
-        SELECT id, email, full_name, avatar_url, password_hash, email_verified,
-               created_at, updated_at
-        FROM users WHERE id = $1 AND deleted_at IS NULL
-        "#,
-    )
-    .bind(claims.sub)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or_else(|| ApiError::Unauthorized("User not found".into()))?;
-
-    let roles: Vec<String> = sqlx::query_scalar(
-        "SELECT DISTINCT role FROM organization_members WHERE user_id = $1 AND status = 'active'",
-    )
-    .bind(user.id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    let roles = if roles.is_empty() {
-        vec!["user".to_string()]
-    } else {
-        roles
-    };
-
-    let (access_token, _new_claims) =
-        state
-            .jwt_manager
-            .create_access_token(user.id, &user.email, roles.clone())?;
-    let (refresh_token, new_refresh_claims) = state.jwt_manager.create_refresh_token(user.id)?;
-
-    session::store_refresh_token(
-        &state.pool,
-        user.id,
-        new_refresh_claims.jti,
-        DateTime::<Utc>::from_timestamp(new_refresh_claims.exp, 0).unwrap_or_else(Utc::now),
-    )
-    .await?;
-
-    // Rotate the cookie to the freshly-minted refresh token.
-    let jar = jar.add(refresh_cookie(
-        refresh_token,
-        state.jwt_manager.refresh_expiry_secs(),
-        state.config.cookie_secure,
-    ));
-
-    Ok((
-        jar,
-        Json(AuthResponse {
-            access_token,
-            // Delivered via the rotated httpOnly cookie above; omitted from body.
-            refresh_token: String::new(),
-            token_type: "Bearer".into(),
-            expires_in: state.jwt_manager.access_expiry_secs(),
-            user: UserInfo {
-                id: user.id,
-                email: user.email,
-                full_name: user.full_name,
-                avatar_url: user.avatar_url,
-                roles,
-            },
-        }),
-    ))
+    let view =
+        session::session_view_for_token(&state.pool, &token, state.config.auth_session_idle_expiry)
+            .await?
+            .ok_or_else(|| ApiError::Unauthorized("Invalid session".into()))?;
+    Ok((jar, Json(view)))
 }
 
 /// POST /api/auth/logout
 #[utoipa::path(
     post,
     path = "/api/auth/logout",
-    security(
-        ("bearerAuth" = [])
-    ),
     responses(
         (status = 200, description = "Signed out", body = serde_json::Value)
     ),
@@ -403,14 +369,22 @@ pub async fn logout(
     jar: CookieJar,
     user: AuthenticatedUser,
 ) -> Result<(CookieJar, Json<serde_json::Value>), ApiError> {
-    // Revoke the access token JTI
-    session::revoke_access_token(&state.pool, user.jti).await?;
+    if let Some(session_hash) = user.session_hash.as_deref() {
+        revoke_upstream_if_configured(&state, session_hash).await;
+        session::revoke_auth_session(&state.pool, session_hash).await?;
+    }
+
+    if let Some(jti) = user.jti {
+        session::revoke_access_token(&state.pool, jti).await?;
+    }
 
     // Revoke all refresh tokens for this user
     session::revoke_all_user_tokens(&state.pool, user.user_id).await?;
 
-    // Clear the httpOnly refresh cookie so the browser stops sending it.
-    let jar = jar.remove(clear_refresh_cookie());
+    // Clear auth cookies so the browser stops sending them.
+    let jar = jar
+        .remove(clear_refresh_cookie())
+        .remove(clear_session_cookie());
 
     Ok((jar, Json(serde_json::json!({ "message": "Logged out" }))))
 }
@@ -451,6 +425,113 @@ pub async fn me(
         avatar_url: row.avatar_url,
         roles: user.roles,
     }))
+}
+
+/// GET /api/auth/session
+#[utoipa::path(
+    get,
+    path = "/api/auth/session",
+    responses(
+        (status = 200, description = "Current browser session", body = SessionView)
+    ),
+    tags = ["auth"]
+)]
+pub async fn session_view(
+    State(state): State<AppState>,
+    jar: CookieJar,
+) -> Result<Json<SessionView>, ApiError> {
+    let Some(token) = jar
+        .get(session::SESSION_COOKIE)
+        .map(|c| c.value().to_string())
+        .filter(|v| !v.is_empty())
+    else {
+        return Ok(Json(SessionView::anonymous()));
+    };
+
+    let view =
+        session::session_view_for_token(&state.pool, &token, state.config.auth_session_idle_expiry)
+            .await?
+            .unwrap_or_else(SessionView::anonymous);
+    Ok(Json(view))
+}
+
+/// POST /api/auth/csrf/rotate
+#[utoipa::path(
+    post,
+    path = "/api/auth/csrf/rotate",
+    responses(
+        (status = 200, description = "Rotated CSRF token", body = serde_json::Value),
+        (status = 401, description = "Not authenticated", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["auth"]
+)]
+pub async fn rotate_csrf(
+    user: AuthenticatedUser,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let session_hash = user
+        .session_hash
+        .as_deref()
+        .ok_or_else(|| ApiError::Unauthorized("Missing session".into()))?;
+    let csrf_token = session::rotate_csrf_token(&state.pool, session_hash).await?;
+    Ok(Json(serde_json::json!({ "csrf_token": csrf_token })))
+}
+
+/// POST /api/auth/dev/session
+#[utoipa::path(
+    post,
+    path = "/api/auth/dev/session",
+    request_body = DevSessionRequest,
+    responses(
+        (status = 200, description = "Development session", body = SessionView),
+        (status = 403, description = "Dev session disabled", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["auth"]
+)]
+pub async fn dev_session(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    client_ip: ClientIp,
+    headers: HeaderMap,
+    Json(body): Json<DevSessionRequest>,
+) -> Result<(CookieJar, Json<SessionView>), ApiError> {
+    require_local_auth(&state)?;
+    if !cfg!(debug_assertions) {
+        return Err(ApiError::Forbidden("Dev sessions are disabled".into()));
+    }
+
+    let email = body
+        .email
+        .unwrap_or_else(|| "dev@qdesigner.local".to_string())
+        .to_lowercase();
+    let full_name = body.full_name.unwrap_or_else(|| "Developer".into());
+    let user_id = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        INSERT INTO users (email, full_name, email_verified)
+        VALUES ($1, $2, true)
+        ON CONFLICT (email) DO UPDATE
+          SET full_name = COALESCE(users.full_name, EXCLUDED.full_name),
+              email_verified = true,
+              updated_at = now()
+        RETURNING id
+        "#,
+    )
+    .bind(&email)
+    .bind(&full_name)
+    .fetch_one(&state.pool)
+    .await?;
+
+    let user_info = build_user_info(&state, user_id, email, Some(full_name), None).await?;
+    issue_browser_session(
+        &state,
+        jar,
+        user_info,
+        AuthProvider::Local.as_str(),
+        true,
+        client_ip,
+        &headers,
+    )
+    .await
 }
 
 /// POST /api/auth/verify-email

@@ -3,14 +3,14 @@
 //! First automatically-run handler-level test: drives `api::router` (wrapped
 //! with `csrf_middleware`, exactly as `main.rs` layers it) through
 //! `tower::ServiceExt::oneshot`. Covers the happy path
-//! register → me → login → refresh → logout plus two negative gates:
+//! register → me → login → session refresh → logout plus two negative gates:
 //!   - 401 on a wrong-password login, and
-//!   - 403 from `csrf_middleware` on a state-changing POST that carries
-//!     neither `X-Requested-With` nor an `Authorization` header.
+//!   - 403 from `csrf_middleware` on a state-changing POST that carries no
+//!     CSRF/XHR signal.
 //!
-//! The refresh token is delivered only via the httpOnly `refresh_token`
-//! cookie (ADR — P2-T9), so the refresh step round-trips the `Set-Cookie`
-//! from login back as a `Cookie` header — `oneshot` keeps no cookie jar.
+//! The browser receives only an opaque httpOnly `qd_session` cookie. The test
+//! round-trips that cookie plus the returned `csrf_token` manually because
+//! `oneshot` keeps no cookie jar.
 
 use axum::http::StatusCode;
 
@@ -27,7 +27,7 @@ async fn register_me_login_refresh_logout_happy_path() {
     };
     let app = test_app(state);
 
-    // register → access token + user id
+    // register → qd_session cookie + user id
     let user = register_user(&app).await;
 
     // GET /api/auth/me with the register token
@@ -42,8 +42,8 @@ async fn register_me_login_refresh_logout_happy_path() {
     );
     let email = user.email.clone();
 
-    // login with the same credentials — capture the fresh access token and
-    // the httpOnly refresh cookie.
+    // login with the same credentials — capture the fresh opaque session
+    // cookie and CSRF token.
     let login_body = serde_json::json!({ "email": email, "password": "demo123456" });
     let (status, headers, login) = send_full(
         &app,
@@ -51,28 +51,33 @@ async fn register_me_login_refresh_logout_happy_path() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "login should succeed: {login:?}");
-    let login_token = login["access_token"]
-        .as_str()
-        .expect("access_token in login response")
-        .to_string();
-    assert_eq!(
-        login["refresh_token"].as_str(),
-        Some(""),
-        "refresh token must NOT be returned in the JSON body (cookie-only)"
-    );
-    let refresh_cookie =
-        extract_cookie(&headers, "refresh_token").expect("login must set a refresh_token cookie");
+    assert_eq!(login["authenticated"].as_bool(), Some(true));
     assert!(
-        !refresh_cookie.is_empty(),
-        "refresh cookie must be non-empty"
+        login.get("access_token").is_none(),
+        "access token must not be returned in the JSON body"
     );
+    assert!(
+        login.get("refresh_token").is_none(),
+        "refresh token must not be returned in the JSON body"
+    );
+    let session_cookie = extract_cookie(&headers, "qd_session").expect("login must set qd_session");
+    assert!(
+        !session_cookie.is_empty(),
+        "session cookie must be non-empty"
+    );
+    let csrf = login["csrf_token"]
+        .as_str()
+        .expect("csrf_token in login response")
+        .to_string();
+    let login_credential = format!("{session_cookie}|{csrf}");
 
-    // refresh: send the cookie back as a Cookie header (oneshot keeps no jar).
+    // refresh/session view: send the session cookie and CSRF header back.
     let refresh_req = axum::http::Request::builder()
         .method("POST")
         .uri("/api/auth/refresh")
         .header("x-requested-with", "XMLHttpRequest")
-        .header("cookie", format!("refresh_token={refresh_cookie}"))
+        .header("x-csrf-token", csrf)
+        .header("cookie", format!("qd_session={session_cookie}"))
         .body(axum::body::Body::empty())
         .expect("build refresh request");
     let (status, _headers, refreshed) = send_full(&app, refresh_req).await;
@@ -81,20 +86,26 @@ async fn register_me_login_refresh_logout_happy_path() {
         StatusCode::OK,
         "refresh should succeed: {refreshed:?}"
     );
-    assert!(
-        refreshed["access_token"]
-            .as_str()
-            .is_some_and(|t| !t.is_empty()),
-        "refresh should mint a new access token"
-    );
+    assert_eq!(refreshed["authenticated"].as_bool(), Some(true));
+    let refreshed_csrf = refreshed["csrf_token"]
+        .as_str()
+        .expect("refresh rotates csrf token");
+    let refreshed_credential = format!("{session_cookie}|{refreshed_csrf}");
 
-    // logout with the login access token.
-    let (status, out) =
-        json_request(&app, "POST", "/api/auth/logout", Some(&login_token), None).await;
+    // logout with the cookie session.
+    let (status, out) = json_request(
+        &app,
+        "POST",
+        "/api/auth/logout",
+        Some(&refreshed_credential),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "logout should succeed: {out:?}");
 
-    // After logout the access token JTI is revoked → /me now 401.
-    let (status, _) = json_request(&app, "GET", "/api/auth/me", Some(&login_token), None).await;
+    // After logout the session is revoked → /me now 401.
+    let (status, _) =
+        json_request(&app, "GET", "/api/auth/me", Some(&login_credential), None).await;
     assert_eq!(
         status,
         StatusCode::UNAUTHORIZED,

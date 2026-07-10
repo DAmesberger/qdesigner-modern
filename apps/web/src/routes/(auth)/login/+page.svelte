@@ -62,6 +62,11 @@
   const signupHref = $derived(
     redirectParam ? `/signup?redirect=${encodeURIComponent(redirectParam)}` : '/signup'
   );
+  const useZitadel = (import.meta.env.VITE_AUTH_PROVIDER || 'local') === 'zitadel';
+
+  function startZitadel() {
+    auth.startZitadel(redirectParam ?? '/dashboard');
+  }
 
   interface DevQuickLoginPersona {
     id: string;
@@ -372,6 +377,26 @@
           </p>
         </div>
 
+        {#if useZitadel}
+          <div class="mt-8 space-y-5">
+            {#if error}
+              <Alert variant="error" id="login-error">
+                {error}
+              </Alert>
+            {/if}
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              class="h-12 w-full rounded-xl text-base font-semibold shadow-lg shadow-primary/20"
+              onclick={startZitadel}
+            >
+              <ShieldCheck class="mr-2 h-4 w-4" />
+              Sign in with Zitadel
+              <ArrowRight class="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        {:else}
         <form class="mt-8 space-y-5" onsubmit={handleSignIn}>
           <FormGroup label={m.auth_login_email()} id="email">
             <Input
@@ -548,6 +573,7 @@
             </div>
           </div>
         </form>
+        {/if}
 
         <div
           class="mt-6 flex items-center gap-2 text-xs leading-6 text-muted-foreground"

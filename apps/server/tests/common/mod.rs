@@ -49,7 +49,7 @@ use tower::ServiceExt;
 
 use qdesigner_server::api;
 use qdesigner_server::auth::jwt::JwtManager;
-use qdesigner_server::config::Config;
+use qdesigner_server::config::{AuthProvider, Config};
 use qdesigner_server::middleware::csrf::csrf_middleware;
 use qdesigner_server::middleware::rate_limit::RateLimiter;
 use qdesigner_server::rbac::manager::RbacManager;
@@ -292,6 +292,20 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         public_app_origin: "http://localhost:4173".into(),
         server_host: "127.0.0.1".into(),
         server_port: 4100,
+        auth_provider: AuthProvider::Local,
+        auth_token_enc_key: "test-auth-token-encryption-key".into(),
+        auth_session_idle_expiry: Duration::from_secs(8 * 60 * 60),
+        auth_session_absolute_expiry: Duration::from_secs(7 * 24 * 60 * 60),
+        auth_session_retention: Duration::from_secs(30 * 24 * 60 * 60),
+        security_event_retention: Duration::from_secs(365 * 24 * 60 * 60),
+        auth_ip_hash_key: "test-auth-ip-hash-key".into(),
+        zitadel_issuer: None,
+        zitadel_client_id: None,
+        zitadel_client_secret: None,
+        zitadel_redirect_uri: None,
+        zitadel_post_logout_redirect_uri: None,
+        zitadel_include_profile_scope: false,
+        zitadel_allow_sms_email_mfa: false,
         sso_encryption_key: None,
         cookie_secure: false,
     };
@@ -353,7 +367,7 @@ pub async fn build_media_test_state(bucket: &str) -> Option<AppState> {
 /// mirroring `main.rs`. The CORS/Trace layers are intentionally omitted —
 /// they are not under test here.
 pub fn test_app(state: AppState) -> Router {
-    api::router(state).layer(axum::middleware::from_fn(csrf_middleware))
+    api::router(state.clone()).layer(axum::middleware::from_fn_with_state(state, csrf_middleware))
 }
 
 /// Build a JSON request. Always sets `X-Requested-With: XMLHttpRequest`
@@ -370,7 +384,18 @@ pub fn json_req(
         .uri(uri)
         .header("x-requested-with", "XMLHttpRequest");
     if let Some(t) = token {
-        builder = builder.header("authorization", format!("Bearer {t}"));
+        if t.starts_with("sk_") || t.starts_with("scim_") {
+            // Machine credential (API key `sk_` on the `/api/v1/*` surface, or
+            // SCIM `scim_` on `/scim/v2/*`) — both authenticate off the Bearer
+            // header. Human sessions travel in the `qd_session` cookie below.
+            builder = builder.header("authorization", format!("Bearer {t}"));
+        } else if let Some((session_token, csrf_token)) = t.split_once('|') {
+            builder = builder
+                .header("cookie", format!("qd_session={session_token}"))
+                .header("x-csrf-token", csrf_token);
+        } else {
+            builder = builder.header("cookie", format!("qd_session={t}"));
+        }
     }
     let body = match body {
         Some(v) => {
@@ -478,12 +503,18 @@ pub async fn register_user(app: &Router) -> TestUser {
         "password": "demo123456",
         "full_name": "P3T2 User",
     });
-    let (status, json) = json_request(app, "POST", "/api/auth/register", None, Some(&body)).await;
+    let (status, headers, json) = send_full(
+        app,
+        json_req("POST", "/api/auth/register", None, Some(&body)),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "register should succeed: {json:?}");
-    let token = json["access_token"]
+    let session_cookie =
+        extract_cookie(&headers, "qd_session").expect("register must set qd_session");
+    let csrf = json["csrf_token"]
         .as_str()
-        .expect("access_token in register response")
-        .to_string();
+        .expect("csrf_token in register response");
+    let token = format!("{session_cookie}|{csrf}");
     let id = json["user"]["id"]
         .as_str()
         .and_then(|s| uuid::Uuid::parse_str(s).ok())

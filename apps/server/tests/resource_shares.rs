@@ -21,8 +21,8 @@ use axum::http::StatusCode;
 
 mod common;
 use common::{
-    app_pool, build_test_state, fixture_pool, json_request, provision_tenant, register_user,
-    test_app, TestUser,
+    app_pool, build_test_state, extract_cookie, fixture_pool, json_req, json_request,
+    provision_tenant, register_user, send_full, test_app, TestUser,
 };
 
 fn list_contains(list: &serde_json::Value, id: uuid::Uuid) -> bool {
@@ -72,14 +72,23 @@ async fn register_with_email(app: &axum::Router, email: &str) -> TestUser {
         "password": "demo123456",
         "full_name": "Guest",
     });
-    let (status, json) = json_request(app, "POST", "/api/auth/register", None, Some(&body)).await;
+    let (status, headers, json) = send_full(
+        app,
+        json_req("POST", "/api/auth/register", None, Some(&body)),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "register {email}: {json:?}");
+    let session_cookie =
+        extract_cookie(&headers, "qd_session").expect("register must set qd_session");
+    let csrf = json["csrf_token"]
+        .as_str()
+        .expect("csrf_token in register response");
     TestUser {
         id: json["user"]["id"]
             .as_str()
             .and_then(|s| uuid::Uuid::parse_str(s).ok())
             .expect("user id"),
-        token: json["access_token"].as_str().unwrap().to_string(),
+        token: format!("{session_cookie}|{csrf}"),
         email: email.to_string(),
     }
 }

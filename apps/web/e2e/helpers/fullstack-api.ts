@@ -1,4 +1,5 @@
-import type { APIRequestContext } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
+import { DEV_URLS } from './dev-urls';
 import {
   createAutoAdvanceQuestion,
   pageWithQuestions,
@@ -12,8 +13,8 @@ export interface ProvisionedWorkspace {
   password: string;
   userId: string;
   fullName: string;
-  accessToken: string;
-  refreshToken: string;
+  sessionCookie: string;
+  csrfToken: string;
   expiresAt: number;
   organizationId: string;
   projectId: string;
@@ -24,8 +25,8 @@ export interface ProvisionedQuestionnaire {
   password: string;
   userId: string;
   fullName: string;
-  accessToken: string;
-  refreshToken: string;
+  sessionCookie: string;
+  csrfToken: string;
   expiresAt: number;
   organizationId: string;
   projectId: string;
@@ -35,19 +36,39 @@ export interface ProvisionedQuestionnaire {
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
+interface SessionCredential {
+  sessionCookie: string;
+  csrfToken: string;
+}
+
+function isUnsafe(method: HttpMethod): boolean {
+  return method !== 'GET';
+}
+
+function extractCookieValue(setCookie: string | undefined, name: string): string {
+  const match = setCookie?.match(new RegExp(`(?:^|,\\s*)${name}=([^;]+)`));
+  if (!match?.[1]) {
+    throw new Error(`Missing ${name} cookie in auth response`);
+  }
+  return match[1];
+}
+
 async function requestJson(
   requestContext: APIRequestContext,
   method: HttpMethod,
   path: string,
   body?: unknown,
-  token?: string
+  session?: SessionCredential
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- third-party API response
 ): Promise<any> {
   const headers: Record<string, string> = {
     'X-Requested-With': 'XMLHttpRequest',
   };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  if (session) {
+    headers.Cookie = `qd_session=${session.sessionCookie}`;
+    if (isUnsafe(method)) {
+      headers['X-CSRF-Token'] = session.csrfToken;
+    }
   }
 
   const response = await requestContext.fetch(`/api${path}`, {
@@ -66,6 +87,18 @@ async function requestJson(
   }
 
   return response.json();
+}
+
+export async function installAuthSession(page: Page, session: SessionCredential): Promise<void> {
+  await page.context().addCookies([
+    {
+      name: 'qd_session',
+      value: session.sessionCookie,
+      url: DEV_URLS.backend,
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+  ]);
 }
 
 function buildAutoFilloutDefinition(name: string) {
@@ -119,21 +152,33 @@ export async function provisionWorkspace(
   const projectCode = options?.projectCode || `FS${Date.now().toString().slice(-8)}`;
   const fullName = 'Playwright Fullstack User';
 
-  const auth = await requestJson(
-    requestContext,
-    'POST',
-    '/auth/register',
-    {
+  const authResponse = await requestContext.fetch('/api/auth/register', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    data: {
       email,
       password: TEST_PASSWORD,
       full_name: fullName,
-    }
-  );
+    },
+  });
 
-  const token = auth.access_token as string;
-  const refreshToken = auth.refresh_token as string;
-  const expiresIn = Number(auth.expires_in || 3600);
+  if (!authResponse.ok()) {
+    throw new Error(`API POST /api/auth/register failed (${authResponse.status()}): ${await authResponse.text()}`);
+  }
+
+  const auth = await authResponse.json();
+  const session = {
+    sessionCookie: extractCookieValue(authResponse.headers()['set-cookie'], 'qd_session'),
+    csrfToken: String(auth.csrf_token || ''),
+  };
+  if (!session.csrfToken) {
+    throw new Error('Missing csrf_token in auth response');
+  }
   const userId = String(auth.user?.id || '');
+  const expiresAt = Math.floor(new Date(String(auth.expires_at)).getTime() / 1000);
 
   const organization = await requestJson(
     requestContext,
@@ -143,7 +188,7 @@ export async function provisionWorkspace(
       name: organizationName,
       slug: orgSlug,
     },
-    token
+    session
   );
 
   const project = await requestJson(
@@ -156,7 +201,7 @@ export async function provisionWorkspace(
       code: projectCode,
       is_public: true,
     },
-    token
+    session
   );
 
   return {
@@ -164,9 +209,9 @@ export async function provisionWorkspace(
     password: TEST_PASSWORD,
     userId,
     fullName,
-    accessToken: token,
-    refreshToken,
-    expiresAt: Math.floor(Date.now() / 1000) + expiresIn,
+    sessionCookie: session.sessionCookie,
+    csrfToken: session.csrfToken,
+    expiresAt,
     organizationId: organization.id,
     projectId: project.id,
   };
@@ -175,19 +220,19 @@ export async function provisionWorkspace(
 export async function listProjectQuestionnaires(
   requestContext: APIRequestContext,
   projectId: string,
-  accessToken: string
+  session: SessionCredential
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- third-party API response
 ): Promise<any[]> {
-  return requestJson(requestContext, 'GET', `/projects/${projectId}/questionnaires`, undefined, accessToken);
+  return requestJson(requestContext, 'GET', `/projects/${projectId}/questionnaires`, undefined, session);
 }
 
 export async function getSessionById(
   requestContext: APIRequestContext,
   sessionId: string,
-  accessToken: string
+  session: SessionCredential
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- third-party API response
 ): Promise<any> {
-  return requestJson(requestContext, 'GET', `/sessions/${sessionId}`, undefined, accessToken);
+  return requestJson(requestContext, 'GET', `/sessions/${sessionId}`, undefined, session);
 }
 
 export async function provisionPublishedQuestionnaire(
@@ -207,7 +252,7 @@ export async function provisionPublishedQuestionnaire(
       content: definition,
       settings: {},
     },
-    workspace.accessToken
+    workspace
   );
 
   await requestJson(
@@ -215,7 +260,7 @@ export async function provisionPublishedQuestionnaire(
     'POST',
     `/projects/${workspace.projectId}/questionnaires/${questionnaire.id}/publish`,
     undefined,
-    workspace.accessToken
+    workspace
   );
 
   return {
@@ -223,8 +268,8 @@ export async function provisionPublishedQuestionnaire(
     password: workspace.password,
     userId: workspace.userId,
     fullName: workspace.fullName,
-    accessToken: workspace.accessToken,
-    refreshToken: workspace.refreshToken,
+    sessionCookie: workspace.sessionCookie,
+    csrfToken: workspace.csrfToken,
     expiresAt: workspace.expiresAt,
     organizationId: workspace.organizationId,
     projectId: workspace.projectId,

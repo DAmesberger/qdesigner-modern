@@ -25,7 +25,8 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use common::{
-    build_test_state, fixture_pool, provision_tenant, register_user, send_full, test_app,
+    build_test_state, extract_cookie, fixture_pool, provision_tenant, register_user, send_full,
+    test_app,
 };
 
 // A 2048-bit RSA test key. Private key signs the id_token; the modulus below
@@ -231,16 +232,12 @@ async fn oidc_callback_provisions_user_and_maps_group_to_admin() {
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default();
     assert!(
-        cb_location.contains("/sso/complete#access_token="),
-        "callback should carry the access token in the fragment: {cb_location}"
+        cb_location.ends_with("/sso/complete"),
+        "callback should return to the SSO completion route without token fragments: {cb_location}"
     );
-    // The refresh token must ride an httpOnly cookie, not the redirect URL.
     assert!(
-        headers.get_all("set-cookie").iter().any(|c| c
-            .to_str()
-            .map(|s| s.starts_with("refresh_token="))
-            .unwrap_or(false)),
-        "callback should set the refresh_token cookie"
+        extract_cookie(&headers, "qd_session").is_some(),
+        "callback should set the qd_session cookie"
     );
 
     // ── DB side effects ── (RLS-bound tables read via the superuser pool)

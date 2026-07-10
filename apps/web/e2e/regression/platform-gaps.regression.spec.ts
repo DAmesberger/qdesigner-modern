@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { provisionWorkspace, type ProvisionedWorkspace } from '../helpers/fullstack-api';
+import { installAuthSession, provisionWorkspace } from '../helpers/fullstack-api';
 
 
 test.describe('@regression platform-gaps', () => {
@@ -119,21 +119,7 @@ test.describe('@regression platform-gaps', () => {
   }) => {
     const workspace = await provisionWorkspace(request);
 
-    // Inject auth state before navigating
-    await page.addInitScript(
-      (ws: ProvisionedWorkspace) => {
-        localStorage.setItem(
-          'qdesigner-auth',
-          JSON.stringify({
-            accessToken: ws.accessToken,
-            refreshToken: ws.refreshToken,
-            expiresAt: ws.expiresAt,
-            user: { id: ws.userId, email: ws.email, full_name: ws.fullName },
-          })
-        );
-      },
-      workspace
-    );
+    await installAuthSession(page, workspace);
 
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
@@ -163,20 +149,7 @@ test.describe('@regression platform-gaps', () => {
   }) => {
     const workspace = await provisionWorkspace(request);
 
-    await page.addInitScript(
-      (ws: ProvisionedWorkspace) => {
-        localStorage.setItem(
-          'qdesigner-auth',
-          JSON.stringify({
-            accessToken: ws.accessToken,
-            refreshToken: ws.refreshToken,
-            expiresAt: ws.expiresAt,
-            user: { id: ws.userId, email: ws.email, full_name: ws.fullName },
-          })
-        );
-      },
-      workspace
-    );
+    await installAuthSession(page, workspace);
 
     // Navigate to designer with a new questionnaire
     await page.goto(

@@ -3,6 +3,7 @@ import {
   buildFilloutPath,
   deriveQuestionnaireCode,
   getSessionById,
+  installAuthSession,
   listProjectQuestionnaires,
   provisionWorkspace,
 } from '../helpers/fullstack-api';
@@ -17,19 +18,7 @@ test.describe('@fullstack designer creation, publish, and participant fillout', 
     const workspace = await provisionWorkspace(request);
     const questionnaireName = `UI Fullstack ${Date.now()}`;
 
-    await page.addInitScript((session) => {
-      window.localStorage.setItem('qdesigner-auth', JSON.stringify(session));
-    }, {
-      accessToken: workspace.accessToken,
-      refreshToken: workspace.refreshToken,
-      expiresAt: workspace.expiresAt,
-      user: {
-        id: workspace.userId,
-        email: workspace.email,
-        full_name: workspace.fullName,
-        roles: ['owner'],
-      },
-    });
+    await installAuthSession(page, workspace);
 
     await page.goto(`/projects/${workspace.projectId}`);
     await expect(page.getByTestId('create-questionnaire-button')).toBeVisible();
@@ -87,7 +76,7 @@ test.describe('@fullstack designer creation, publish, and participant fillout', 
     const questionnaires = await listProjectQuestionnaires(
       request,
       workspace.projectId,
-      workspace.accessToken
+      workspace
     );
     const created = questionnaires.find((entry) => entry.name === questionnaireName);
 
@@ -142,7 +131,7 @@ test.describe('@fullstack designer creation, publish, and participant fillout', 
     await expect
       .poll(
         async () => {
-          const session = await getSessionById(request, sessionId, workspace.accessToken);
+          const session = await getSessionById(request, sessionId, workspace);
           return session.id === sessionId;
         },
         {
@@ -152,7 +141,7 @@ test.describe('@fullstack designer creation, publish, and participant fillout', 
       )
       .toBe(true);
 
-    const persistedSession = await getSessionById(request, sessionId, workspace.accessToken);
+    const persistedSession = await getSessionById(request, sessionId, workspace);
     expect(persistedSession.id).toBe(sessionId);
     expect(['active', 'completed']).toContain(persistedSession.status);
   });

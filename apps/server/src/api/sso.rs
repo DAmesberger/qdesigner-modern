@@ -20,8 +20,8 @@
 //!     callback the id_token is signature+claim validated against the IdP's
 //!     JWKS, then the user and their active `organization_members` row are
 //!     provisioned just-in-time at the group-mapped (or default) role, and an
-//!     app JWT is minted via the same [`session`](crate::auth::session) +
-//!     [`JwtManager`](crate::auth::jwt::JwtManager) path a password login uses.
+//!     opaque browser session is issued through the same
+//!     [`session`](crate::auth::session) path a password login uses.
 //!
 //! SAML is a first-class config protocol in the data model and admin CRUD, but
 //! the runtime `start`/`callback` for `protocol = 'saml'` is a documented
@@ -36,12 +36,13 @@ use axum::Json;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::time::Duration;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::audit::{self, resource, AuditAction, AuditEvent, ClientIp};
-use crate::auth::models::AuthenticatedUser;
+use crate::auth::models::{AuthenticatedUser, UserInfo};
 use crate::auth::session;
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
@@ -920,9 +921,9 @@ pub async fn sso_start(
 /// GET /api/sso/callback?code=...&state=...
 ///
 /// Anonymous. Completes the authorization-code exchange, validates the
-/// id_token, JIT-provisions the user + membership, mints an app JWT, and
-/// bounces the browser back to the SPA with the access token in the URL
-/// fragment (the refresh token rides an httpOnly cookie).
+/// id_token, JIT-provisions the user + membership, mints an opaque app session,
+/// and bounces the browser back to the SPA. Browser-visible tokens are not
+/// returned from this flow.
 #[utoipa::path(
     get,
     path = "/api/sso/callback",
@@ -939,6 +940,7 @@ pub async fn sso_start(
 pub async fn sso_callback(
     State(state): State<AppState>,
     client_ip: ClientIp,
+    headers: HeaderMap,
     jar: CookieJar,
     Query(q): Query<CallbackQuery>,
 ) -> Result<(CookieJar, Redirect), ApiError> {
@@ -1202,36 +1204,53 @@ pub async fn sso_callback(
     } else {
         roles
     };
+    let profile = sqlx::query("SELECT full_name, avatar_url FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    let full_name: Option<String> = profile.get("full_name");
+    let avatar_url: Option<String> = profile.get("avatar_url");
 
     tx.commit().await?;
 
-    // ── Mint the app session (same path as password login) ──
-    let (access_token, _claims) =
-        state
-            .jwt_manager
-            .create_access_token(user_id, &user_email, roles.clone())?;
-    let (refresh_token, refresh_claims) = state.jwt_manager.create_refresh_token(user_id)?;
-    session::store_refresh_token(
+    // ── Mint the opaque app session (same cookie model as password login) ──
+    let fp = session::fingerprint(
+        &state.config,
+        client_ip.0,
+        headers
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok()),
+    );
+    let new_session = session::create_auth_session(
         &state.pool,
-        user_id,
-        refresh_claims.jti,
-        DateTime::<Utc>::from_timestamp(refresh_claims.exp, 0).unwrap_or_else(Utc::now),
+        UserInfo {
+            id: user_id,
+            email: user_email,
+            full_name,
+            avatar_url,
+            roles,
+        },
+        session::SessionMetadata {
+            provider: "sso".to_string(),
+            issuer: Some(login_state.issuer),
+            subject: Some(external_subject),
+            encrypted_token_set: None,
+            mfa_verified: false,
+            idle_ttl: state.config.auth_session_idle_expiry,
+            absolute_ttl: state.config.auth_session_absolute_expiry,
+        },
+        fp,
     )
     .await?;
 
-    let jar = jar.add(refresh_cookie(
-        refresh_token,
-        state.jwt_manager.refresh_expiry_secs(),
+    let jar = jar.add(session_cookie(
+        new_session.cookie_token,
+        state.config.auth_session_absolute_expiry.as_secs() as i64,
         state.config.cookie_secure,
     ));
 
-    // Bounce back to the SPA with the access token in the fragment.
-    let dest = format!(
-        "{}/sso/complete#access_token={}&token_type=Bearer&expires_in={}",
-        app_origin(&state),
-        urlencode(&access_token),
-        state.jwt_manager.access_expiry_secs(),
-    );
+    // Bounce back to the SPA. The session is available only via qd_session.
+    let dest = format!("{}/sso/complete", app_origin(&state));
     Ok((jar, Redirect::to(&dest)))
 }
 
@@ -1353,14 +1372,12 @@ fn urlencode(s: &str) -> String {
     out
 }
 
-/// Refresh-token cookie identical in shape to the one `api::auth` issues so the
-/// SSO session refreshes through the same `/api/auth/refresh` path.
-fn refresh_cookie(token: String, max_age_secs: i64, secure: bool) -> Cookie<'static> {
-    Cookie::build(("refresh_token", token))
+fn session_cookie(token: String, max_age_secs: i64, secure: bool) -> Cookie<'static> {
+    Cookie::build((session::SESSION_COOKIE, token))
         .http_only(true)
         .secure(secure)
-        .same_site(SameSite::Strict)
-        .path("/api/auth")
+        .same_site(SameSite::Lax)
+        .path("/")
         .max_age(time::Duration::seconds(max_age_secs))
         .build()
 }

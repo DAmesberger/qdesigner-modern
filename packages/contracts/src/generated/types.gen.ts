@@ -97,14 +97,6 @@ export type AuditListResponse = {
     next_cursor?: string | null;
 };
 
-export type AuthResponse = {
-    access_token: string;
-    refresh_token: string;
-    token_type: string;
-    expires_in: number;
-    user: UserInfo;
-};
-
 export type AutoJoinResponse = {
     can_auto_join: boolean;
     organization_id?: string | null;
@@ -422,6 +414,11 @@ export type DeleteAccountRequest = {
 
 export type DeletedResponse = {
     deleted: boolean;
+};
+
+export type DevSessionRequest = {
+    email?: string | null;
+    full_name?: string | null;
 };
 
 export type DomainRecord = {
@@ -1027,15 +1024,6 @@ export type ReadyStatus = {
     checks: ReadyChecks;
 };
 
-export type RefreshRequest = {
-    /**
-     * Optional during the cookie transition: the refresh token normally
-     * arrives in the httpOnly `refresh_token` cookie, so the body may be
-     * empty. Kept as a fallback for callers that still POST it explicitly.
-     */
-    refresh_token?: string | null;
-};
-
 export type RegisterRequest = {
     email: string;
     password: string;
@@ -1266,6 +1254,13 @@ export type SessionMediaWithUrl = SessionMediaAsset & {
     url: string;
 };
 
+export type SessionOrganization = {
+    id: string;
+    name: string;
+    slug: string;
+    role: string;
+};
+
 export type SessionVariableRecord = {
     session_id: string;
     variable_name: string;
@@ -1279,6 +1274,17 @@ export type SessionVariableRequest = {
     value: unknown;
     value_type?: string | null;
     source?: string | null;
+};
+
+export type SessionView = {
+    authenticated: boolean;
+    provider?: string | null;
+    user?: null | UserInfo;
+    mfa_verified: boolean;
+    roles: Array<string>;
+    organizations: Array<SessionOrganization>;
+    expires_at?: string | null;
+    csrf_token?: string | null;
 };
 
 /**
@@ -1642,7 +1648,7 @@ export type RegisterResponses = {
     /**
      * Registered and signed in
      */
-    200: AuthResponse;
+    200: SessionView;
 };
 
 export type RegisterResponse = RegisterResponses[keyof RegisterResponses];
@@ -1671,13 +1677,13 @@ export type LoginResponses = {
     /**
      * Signed in
      */
-    200: AuthResponse;
+    200: SessionView;
 };
 
 export type LoginResponse = LoginResponses[keyof LoginResponses];
 
 export type RefreshData = {
-    body: RefreshRequest;
+    body?: never;
     path?: never;
     query?: never;
     url: '/api/auth/refresh';
@@ -1694,9 +1700,9 @@ export type RefreshError = RefreshErrors[keyof RefreshErrors];
 
 export type RefreshResponses = {
     /**
-     * Tokens refreshed
+     * Current browser session
      */
-    200: AuthResponse;
+    200: SessionView;
 };
 
 export type RefreshResponse = RefreshResponses[keyof RefreshResponses];
@@ -1739,6 +1745,107 @@ export type MeResponses = {
 };
 
 export type MeResponse = MeResponses[keyof MeResponses];
+
+export type SessionViewData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/session';
+};
+
+export type SessionViewResponses = {
+    /**
+     * Current browser session
+     */
+    200: SessionView;
+};
+
+export type SessionViewResponse = SessionViewResponses[keyof SessionViewResponses];
+
+export type RotateCsrfData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/csrf/rotate';
+};
+
+export type RotateCsrfErrors = {
+    /**
+     * Not authenticated
+     */
+    401: ErrorEnvelope;
+};
+
+export type RotateCsrfError = RotateCsrfErrors[keyof RotateCsrfErrors];
+
+export type RotateCsrfResponses = {
+    /**
+     * Rotated CSRF token
+     */
+    200: unknown;
+};
+
+export type DevSessionData = {
+    body: DevSessionRequest;
+    path?: never;
+    query?: never;
+    url: '/api/auth/dev/session';
+};
+
+export type DevSessionErrors = {
+    /**
+     * Dev session disabled
+     */
+    403: ErrorEnvelope;
+};
+
+export type DevSessionError = DevSessionErrors[keyof DevSessionErrors];
+
+export type DevSessionResponses = {
+    /**
+     * Development session
+     */
+    200: SessionView;
+};
+
+export type DevSessionResponse = DevSessionResponses[keyof DevSessionResponses];
+
+export type ZitadelStartData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Same-origin app path to return to
+         */
+        return_to?: string;
+    };
+    url: '/api/auth/zitadel/start';
+};
+
+export type ZitadelStartErrors = {
+    /**
+     * Zitadel auth disabled
+     */
+    403: ErrorEnvelope;
+};
+
+export type ZitadelStartError = ZitadelStartErrors[keyof ZitadelStartErrors];
+
+export type ZitadelCallbackData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/zitadel/callback';
+};
+
+export type ZitadelCallbackErrors = {
+    /**
+     * Invalid callback
+     */
+    400: ErrorEnvelope;
+};
+
+export type ZitadelCallbackError = ZitadelCallbackErrors[keyof ZitadelCallbackErrors];
 
 export type VerifyEmailData = {
     body: VerifyEmailRequest;

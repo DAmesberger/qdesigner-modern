@@ -35,6 +35,7 @@ rand = "0.8"
 sha2 = "0.10"
 hex = "0.4"
 futures-util = "0.3"
+base64 = "0.22"
 # Symmetric AEAD for encrypting per-org IdP `client_secret` at rest (E-RBAC-6).
 # The 32-byte key is derived (SHA-256) from the config `SSO_ENCRYPTION_KEY`
 # (falls back to `JWT_SECRET`); each ciphertext carries its own random nonce.

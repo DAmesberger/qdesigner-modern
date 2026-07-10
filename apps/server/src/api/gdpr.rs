@@ -485,6 +485,52 @@ async fn build_and_upload(
     )
     .await?;
 
+    let external_identities = fetch_json_array(
+        &mut tx,
+        r#"SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (
+            SELECT ei.provider, ei.issuer, ei.subject, ei.user_id,
+                   ei.email_at_link, ei.email_verified_at_link,
+                   ei.created_at, ei.last_seen_at
+            FROM external_identities ei
+            JOIN organization_members om ON om.user_id = ei.user_id
+            WHERE om.organization_id = $1
+            ORDER BY ei.created_at
+        ) t"#,
+        org_id,
+    )
+    .await?;
+
+    let auth_sessions = fetch_json_array(
+        &mut tx,
+        r#"SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (
+            SELECT s.user_id, s.provider, s.issuer, s.subject, s.mfa_verified,
+                   s.idle_expires_at, s.absolute_expires_at, s.revoked_at,
+                   s.user_agent_hash, s.ip_prefix, s.ip_hash,
+                   s.created_at, s.last_seen_at
+            FROM auth_sessions s
+            JOIN organization_members om ON om.user_id = s.user_id
+            WHERE om.organization_id = $1
+            ORDER BY s.created_at
+        ) t"#,
+        org_id,
+    )
+    .await?;
+
+    let security_events = fetch_json_array(
+        &mut tx,
+        r#"SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM (
+            SELECT se.event_type, se.outcome, se.user_id, se.provider,
+                   se.issuer, se.subject, se.ip_prefix, se.ip_hash,
+                   se.user_agent_hash, se.metadata, se.created_at
+            FROM security_events se
+            JOIN organization_members om ON om.user_id = se.user_id
+            WHERE om.organization_id = $1
+            ORDER BY se.created_at
+        ) t"#,
+        org_id,
+    )
+    .await?;
+
     // Read tx done; release the connection before the (potentially slow) upload.
     tx.commit().await?;
 
@@ -504,6 +550,9 @@ async fn build_and_upload(
             "session_variables": array_len(&session_variables),
             "interaction_events": array_len(&interaction_events),
             "media_assets": array_len(&media_assets),
+            "external_identities": array_len(&external_identities),
+            "auth_sessions": array_len(&auth_sessions),
+            "security_events": array_len(&security_events),
         }
     });
 
@@ -518,6 +567,9 @@ async fn build_and_upload(
         ("session_variables.json", session_variables),
         ("interaction_events.json", interaction_events),
         ("media_assets.json", media_assets),
+        ("external_identities.json", external_identities),
+        ("auth_sessions.json", auth_sessions),
+        ("security_events.json", security_events),
     ];
 
     let zip_bytes = build_export_zip(&files)?;

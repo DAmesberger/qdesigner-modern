@@ -163,6 +163,8 @@ async fn main() {
     {
         let pool = pool.clone();
         let access_ttl = config.jwt_access_expiry;
+        let session_retention = config.auth_session_retention;
+        let security_event_retention = config.security_event_retention;
         tokio::spawn(async move {
             // Sweep daily; the per-row lookup stays cheap because expired
             // rows are deleted long before they accumulate.
@@ -177,6 +179,24 @@ async fn main() {
                     }
                     Ok(_) => {}
                     Err(e) => tracing::warn!("revoked_tokens purge failed: {e}"),
+                }
+                match auth::session::purge_expired_auth_data(
+                    &pool,
+                    session_retention,
+                    security_event_retention,
+                )
+                .await
+                {
+                    Ok((states, sessions, events)) if states > 0 || sessions > 0 || events > 0 => {
+                        tracing::info!(
+                            login_states = states,
+                            sessions,
+                            security_events = events,
+                            "purged expired auth data"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!("auth data purge failed: {e}"),
                 }
             }
         });
@@ -206,8 +226,11 @@ async fn main() {
     qdesigner_server::series::spawn_scheduler(state.clone());
 
     // ── Router ───────────────────────────────────────────────────────
-    let app = api::router(state)
-        .layer(axum::middleware::from_fn(csrf_middleware))
+    let app = api::router(state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            csrf_middleware,
+        ))
         .layer(cors_layer(&config.cors_origins))
         .layer(TraceLayer::new_for_http());
 

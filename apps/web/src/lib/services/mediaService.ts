@@ -16,13 +16,10 @@ const MEDIA_UPLOAD_TIMEOUT_MS = 120000;
 // `/api` proxy / same origin serves the backend); mirrors `$lib/api/runtime` so proxied
 // media URLs share the app's origin.
 //
-// The backend is Bearer-only (NO cookie auth). The streaming proxy
-// (`GET /api/media/{id}/content`) authorizes via the `Authorization: Bearer` header OR
-// anonymously when the asset is referenced by a PUBLISHED questionnaire. A bare
-// `<img>`/`<video>` element cannot send a Bearer header, so the proxy path only loads in
-// such an element for PUBLISHED media (the fillout runtime). Authenticated DESIGNER
-// surfaces previewing DRAFT/unpublished media must instead use a PRESIGNED url — the
-// signature is the auth, so it loads in a bare element. Hence the split below:
+// The streaming proxy (`GET /api/media/{id}/content`) authorizes via the
+// qd_session cookie OR anonymously when the asset is referenced by a PUBLISHED
+// questionnaire. Authenticated DESIGNER surfaces previewing DRAFT/unpublished
+// media can still use PRESIGNED urls for durable bare-element loading. Hence the split below:
 // `getContentUrl` (proxy, fillout) vs `getSignedUrl` (presigned, designer).
 const MEDIA_API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -178,7 +175,7 @@ export class MediaService {
    * Resolve a media id to a PRESIGNED url via `GET /api/media/{id}` (authenticated).
    *
    * The presigned signature is itself the authorization, so the returned url loads in a
-   * bare `<img>`/`<video>` element with no `Authorization` header. This is the resolver
+   * bare `<img>`/`<video>` element without custom headers. This is the resolver
    * for authenticated DESIGNER surfaces, which may preview DRAFT/unpublished media that
    * the anonymous streaming proxy would 404. Fillout runtime code must use `getContentUrl`.
    */

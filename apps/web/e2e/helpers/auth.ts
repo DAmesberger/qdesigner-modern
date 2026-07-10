@@ -44,29 +44,49 @@ export async function getVerificationCode(page: Page): Promise<string | null> {
 }
 
 /**
- * Set up authenticated state for a user by setting JWT tokens in localStorage.
- * For most tests, prefer using the storageState from auth.setup.ts instead.
+ * Set up authenticated state for UI tests that mock backend auth. Real
+ * fullstack tests should provision a backend session and install qd_session.
  */
 export async function authenticateUser(page: Page, user: TestUser): Promise<void> {
-  await page.addInitScript((userData) => {
-    window.localStorage.setItem('auth_token', JSON.stringify({
-      access_token: 'mock-token-' + userData.id,
-      refresh_token: 'mock-refresh-' + userData.id,
-    }));
-    window.localStorage.setItem('auth_user', JSON.stringify({
-      id: userData.id,
-      email: userData.email,
-      full_name: userData.fullName,
-    }));
-
-    // Also set organization data if provided
-    if (userData.organizationId) {
-      window.localStorage.setItem('current_organization', JSON.stringify({
-        id: userData.organizationId,
-        role: userData.role || 'member',
-      }));
-    }
-  }, user);
+  await page.context().addCookies([
+    {
+      name: 'qd_session',
+      value: `mock-session-${user.id}`,
+      url: TEST_CONFIG.urls.backend,
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+  ]);
+  await page.route('**/api/auth/session', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        authenticated: true,
+        provider: 'local',
+        user: {
+          id: user.id,
+          email: user.email,
+          full_name: user.fullName,
+          roles: [user.role || 'member'],
+        },
+        mfa_verified: true,
+        roles: [user.role || 'member'],
+        organizations: user.organizationId
+          ? [
+              {
+                id: user.organizationId,
+                name: TEST_CONFIG.organization.name,
+                slug: TEST_CONFIG.organization.slug,
+                role: user.role || 'member',
+              },
+            ]
+          : [],
+        expires_at: new Date(Date.now() + 3600000).toISOString(),
+        csrf_token: 'mock-csrf-token',
+      }),
+    });
+  });
 }
 
 /**
@@ -125,7 +145,7 @@ export async function createOrganization(page: Page, name: string): Promise<void
  * Sign out the current user
  */
 export async function signOut(page: Page): Promise<void> {
-  // Clear local storage
+  await page.context().clearCookies();
   await page.evaluate(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();

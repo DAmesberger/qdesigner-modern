@@ -1,5 +1,4 @@
-// SSO landing is purely client-side: it reads the access token from the URL
-// fragment (never sent to the server) and/or mints a session from the httpOnly
-// refresh cookie the backend set during the OIDC callback.
+// SSO landing is purely client-side: the backend callback has already set the
+// httpOnly qd_session cookie, so the page only resolves /api/auth/session.
 export const ssr = false;
 export const prerender = false;

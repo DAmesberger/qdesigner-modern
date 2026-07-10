@@ -1,4 +1,3 @@
-use axum::extract::State;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -8,7 +7,6 @@ use validator::Validate;
 use crate::auth::models::AuthenticatedUser;
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
-use crate::state::AppState;
 
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 pub struct UserProfile {
@@ -184,7 +182,6 @@ const DELETED_PASSWORD_SENTINEL: &str = "!account-deleted-no-login";
     tags = ["users"]
 )]
 pub async fn delete_account(
-    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Json(body): Json<DeleteAccountRequest>,
@@ -288,13 +285,22 @@ pub async fn delete_account(
     .execute(&mut **tx)
     .await?;
 
-    // Release the tx guard; the middleware commits it on the success return.
-    drop(tx);
+    // (3d) Auth/session erasure: unlink external identities and remove token
+    // material from cookie sessions. Security events are intentionally retained
+    // as minimized/pseudonymized append-only records.
+    sqlx::query("DELETE FROM external_identities WHERE user_id = $1")
+        .bind(user.user_id)
+        .execute(&mut **tx)
+        .await?;
+    crate::auth::session::revoke_all_auth_sessions(&mut **tx, user.user_id).await?;
 
-    // (4) Revoke all refresh tokens on the pool (outside the RLS tx), matching
-    // the auth.rs password-change / reset pattern. Running this inside the
-    // request tx would scope it to the wrong connection.
-    crate::auth::session::revoke_all_user_tokens(&state.pool, user.user_id).await?;
+    // (3e) Revoke all refresh tokens for the user in the SAME request
+    // transaction. This MUST NOT be issued on a second pool connection: the
+    // request tx above already holds row locks on these tables and is not
+    // committed until the middleware takes it back after the handler returns,
+    // so a concurrent pool acquire updating the same rows self-deadlocks
+    // (idle-in-transaction holder vs. a blocked second connection).
+    crate::auth::session::revoke_all_user_tokens(&mut **tx, user.user_id).await?;
 
     Ok(Json(serde_json::json!({ "message": "Account deleted" })))
 }

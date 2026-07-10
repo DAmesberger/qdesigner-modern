@@ -2,7 +2,9 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 
 use crate::auth::models::AuthenticatedUser;
-use crate::auth::session::is_access_token_revoked;
+use crate::auth::session::{
+    extract_session_cookie, is_access_token_revoked, resolve_session_token,
+};
 use crate::error::ApiError;
 use crate::state::AppState;
 
@@ -15,12 +17,24 @@ impl FromRequestParts<AppState> for AuthenticatedUser {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        // Extract Bearer token
+        if let Some(session_token) = extract_session_cookie(&parts.headers) {
+            if let Some(user) = resolve_session_token(
+                &state.pool,
+                &session_token,
+                state.config.auth_session_idle_expiry,
+            )
+            .await?
+            {
+                return Ok(user);
+            }
+            return Err(ApiError::Unauthorized("Invalid session".into()));
+        }
+
         let auth_header = parts
             .headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| ApiError::Unauthorized("Missing Authorization header".into()))?;
+            .ok_or_else(|| ApiError::Unauthorized("Missing session".into()))?;
 
         let token = auth_header
             .strip_prefix("Bearer ")
@@ -38,7 +52,10 @@ impl FromRequestParts<AppState> for AuthenticatedUser {
             user_id: claims.sub,
             email: claims.email,
             roles: claims.roles,
-            jti: claims.jti,
+            provider: "legacy_bearer".into(),
+            mfa_verified: false,
+            session_hash: None,
+            jti: Some(claims.jti),
         })
     }
 }

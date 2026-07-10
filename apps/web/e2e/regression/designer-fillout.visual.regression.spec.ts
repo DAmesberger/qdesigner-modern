@@ -2,32 +2,13 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import {
   buildFilloutPath,
   deriveQuestionnaireCode,
+  installAuthSession,
   type ProvisionedWorkspace,
   provisionWorkspace,
 } from '../helpers/fullstack-api';
 
 interface VisualFilloutProvision {
-  accessToken: string;
   questionnaireCode: string;
-}
-
-async function seedAuthSession(page: Page, workspace: ProvisionedWorkspace): Promise<void> {
-  await page.addInitScript(
-    (session) => {
-      window.localStorage.setItem('qdesigner-auth', JSON.stringify(session));
-    },
-    {
-      accessToken: workspace.accessToken,
-      refreshToken: workspace.refreshToken,
-      expiresAt: workspace.expiresAt,
-      user: {
-        id: workspace.userId,
-        email: workspace.email,
-        full_name: workspace.fullName,
-        roles: ['owner'],
-      },
-    }
-  );
 }
 
 async function stabilizeForScreenshot(page: Page): Promise<void> {
@@ -99,18 +80,23 @@ async function provisionVisualFilloutQuestionnaire(
     flow: [],
   };
 
-  const createResponse = await request.fetch(`/api/projects/${workspace.projectId}/questionnaires`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${workspace.accessToken}`,
+  const createResponse = await request.fetch(
+    `/api/projects/${workspace.projectId}/questionnaires`,
+    {
+      method: 'POST',
+      headers: {
+        Cookie: `qd_session=${workspace.sessionCookie}`,
+        'X-CSRF-Token': workspace.csrfToken,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      data: {
+        name: 'Visual Fillout Runtime',
+        description: 'Provisioned for visual regression screenshots',
+        content: definition,
+        settings: {},
+      },
     },
-    data: {
-      name: 'Visual Fillout Runtime',
-      description: 'Provisioned for visual regression screenshots',
-      content: definition,
-      settings: {},
-    },
-  });
+  );
 
   if (!createResponse.ok()) {
     throw new Error(`Failed to create visual questionnaire: ${createResponse.status()} ${await createResponse.text()}`);
@@ -123,7 +109,9 @@ async function provisionVisualFilloutQuestionnaire(
     {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${workspace.accessToken}`,
+        Cookie: `qd_session=${workspace.sessionCookie}`,
+        'X-CSRF-Token': workspace.csrfToken,
+        'X-Requested-With': 'XMLHttpRequest',
       },
     }
   );
@@ -133,7 +121,6 @@ async function provisionVisualFilloutQuestionnaire(
   }
 
   return {
-    accessToken: workspace.accessToken,
     questionnaireCode: deriveQuestionnaireCode(created.id),
   };
 }
@@ -148,7 +135,7 @@ test.describe('@visual designer and fillout screenshots', () => {
       projectName: 'Visual Project',
     });
 
-    await seedAuthSession(page, workspace);
+    await installAuthSession(page, workspace);
     await page.goto(`/projects/${workspace.projectId}`);
     await stabilizeForScreenshot(page);
 

@@ -1,6 +1,6 @@
 use axum::Json;
 use serde::Serialize;
-use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, Http, HttpAuthScheme, SecurityScheme};
 use utoipa::openapi::{ComponentsBuilder, OpenApi as OpenApiDoc};
 use utoipa::{Modify, OpenApi, ToSchema};
 
@@ -66,6 +66,10 @@ impl Modify for SecurityAddon {
             "bearerAuth",
             SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
         );
+        components.add_security_scheme(
+            "sessionCookie",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::new("qd_session"))),
+        );
     }
 }
 
@@ -79,6 +83,11 @@ impl Modify for SecurityAddon {
         api::auth::refresh,
         api::auth::logout,
         api::auth::me,
+        api::auth::session_view,
+        api::auth::rotate_csrf,
+        api::auth::dev_session,
+        api::zitadel_auth::zitadel_start,
+        api::zitadel_auth::zitadel_callback,
         api::auth::verify_email,
         api::auth::send_verification_code,
         api::auth::resend_verification_code,
@@ -219,15 +228,16 @@ impl Modify for SecurityAddon {
             ReadyChecks,
             models::LoginRequest,
             models::RegisterRequest,
-            models::RefreshRequest,
             models::VerifyEmailRequest,
             models::PasswordResetRequest,
             models::SendVerificationCodeRequest,
             models::VerifyCodeRequest,
             models::VerificationResult,
             models::PasswordResetConfirm,
-            models::AuthResponse,
             models::UserInfo,
+            models::SessionView,
+            models::SessionOrganization,
+            models::DevSessionRequest,
             api::users::UserProfile,
             api::users::UpdateProfileRequest,
             api::users::DeleteAccountRequest,
