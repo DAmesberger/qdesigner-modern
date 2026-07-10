@@ -11,6 +11,7 @@
     type TranslationPath,
   } from '$lib/shared';
   import Button from '$lib/components/ui/Button.svelte';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { Languages, Plus, X } from 'lucide-svelte';
 
   // Content translation (MOD-04, ADR 0022) — participant-facing questionnaire
@@ -84,8 +85,43 @@
     newLocaleLabel = '';
   }
 
-  function removeLocale(code: LocaleCode) {
-    designerStore.removeTranslationLocale(code);
+  // Count the non-empty translated strings stored for a locale so the confirm
+  // copy is honest about how much content the author is about to discard.
+  function countTranslations(bundle: LocaleTranslation | undefined): number {
+    if (!bundle) return 0;
+    let count = 0;
+    for (const q of Object.values(bundle.questions ?? {})) {
+      if (q.prompt && q.prompt.trim()) count += 1;
+      for (const label of Object.values(q.options ?? {})) {
+        if (label && label.trim()) count += 1;
+      }
+    }
+    for (const p of Object.values(bundle.pages ?? {})) {
+      if (p.title && p.title.trim()) count += 1;
+    }
+    for (const value of Object.values(bundle.chrome ?? {})) {
+      if (value && value.trim()) count += 1;
+    }
+    return count;
+  }
+
+  async function removeLocale(code: LocaleCode) {
+    const name = getLocaleLabel(questionnaire, code);
+    const n = countTranslations(designerStore.contentTranslations[code]);
+    const message =
+      n === 0
+        ? `Remove ${name}? It has no translations yet. This cannot be undone.`
+        : `Remove ${name} and its ${n} translation${n === 1 ? '' : 's'}? This cannot be undone.`;
+    if (
+      await confirmDialog({
+        title: 'Remove language?',
+        message,
+        confirmLabel: 'Remove',
+        destructive: true,
+      })
+    ) {
+      designerStore.removeTranslationLocale(code);
+    }
   }
 
   // Base-text accessors (shown as reference / placeholder). These mirror the

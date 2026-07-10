@@ -1,7 +1,14 @@
-import { describe, it, expect, afterEach, beforeAll } from 'vitest';
-import { render, cleanup, fireEvent } from '@testing-library/svelte';
+import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
+import { render, cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import Harness from './designer-context-harness.svelte';
 import { DesignerStore, designerStore } from '$lib/stores/designer.svelte';
+
+// Flow deletion is gated behind the shared confirm dialog, whose host is only
+// mounted in the app layout. Auto-confirm it so this seam test exercises the
+// delete interaction itself.
+vi.mock('$lib/stores/confirm.svelte', () => ({
+  confirmDialog: vi.fn(() => Promise.resolve(true)),
+}));
 
 // jsdom lacks the Web Animations API used by some designer subcomponents.
 beforeAll(() => {
@@ -67,8 +74,9 @@ describe('designer context seam (F034)', () => {
 
     await fireEvent.click(deleteBtn!);
 
-    // The interaction removed the flow from the INJECTED store...
-    expect(injected.questionnaire.flow ?? []).toHaveLength(0);
+    // The interaction removed the flow from the INJECTED store (after the
+    // auto-confirmed dialog resolves)...
+    await waitFor(() => expect(injected.questionnaire.flow ?? []).toHaveLength(0));
     // ...and left the module singleton entirely untouched.
     expect(designerStore.questionnaire.flow?.length ?? 0).toBe(singletonFlowCountBefore);
   });

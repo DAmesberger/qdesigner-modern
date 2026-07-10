@@ -53,16 +53,29 @@
   });
 
   /**
-   * The adaptive config being edited, created on demand. It is a reference into the
-   * active block (create or edit path) so AdaptiveBlockEditor mutates it in place.
+   * Ensure the active draft (create or edit path) carries an adaptive config object so
+   * AdaptiveBlockEditor — which mutates its `config` prop in place — has a stable,
+   * reactive reference to write into. Call this ONLY from event handlers (dialog open,
+   * type selection), never from the template: creating the object during render is a
+   * `$state` mutation inside a template expression, which Svelte 5 rejects with
+   * `state_unsafe_mutation` and wedges the dialog (F-35).
    */
-  function ensureAdaptive(): AdaptiveBlockConfig {
+  function ensureAdaptiveConfig(): void {
     if (editingBlock) {
       if (!editingBlock.adaptive) editingBlock.adaptive = { items: [] };
-      return editingBlock.adaptive;
+    } else if (!newBlock.adaptive) {
+      newBlock.adaptive = { items: [] };
     }
-    if (!newBlock.adaptive) newBlock.adaptive = { items: [] };
-    return newBlock.adaptive;
+  }
+
+  /** Set the active draft's block type (event handler); seed adaptive config on demand. */
+  function chooseBlockType(type: Block['type']): void {
+    if (editingBlock) {
+      editingBlock.type = type;
+    } else {
+      newBlock.type = type;
+    }
+    if (type === 'adaptive') ensureAdaptiveConfig();
   }
 
   let experimentalConditions = $derived(
@@ -201,6 +214,8 @@
 
   function handleEditBlock(block: Block) {
     editingBlock = { ...block };
+    // Normalize the adaptive config up front (on open) so the template only reads it.
+    if (editingBlock.type === 'adaptive') ensureAdaptiveConfig();
   }
 
   function handleUpdateBlock() {
@@ -459,13 +474,7 @@
           <div role="group" aria-labelledby="block-type-label" class="grid grid-cols-2 gap-2">
             {#each blockTypes as blockType}
               <button
-                onclick={() => {
-                  if (editingBlock) {
-                    editingBlock.type = blockType.type;
-                  } else {
-                    newBlock.type = blockType.type;
-                  }
-                }}
+                onclick={() => chooseBlockType(blockType.type)}
                 class="p-3 border rounded-lg text-left transition-all
                        {(editingBlock ? editingBlock.type : newBlock.type) === blockType.type
                   ? 'border-primary bg-primary/10'
@@ -740,11 +749,14 @@
         {/if}
 
         {#if (editingBlock ? editingBlock.type : newBlock.type) === 'adaptive'}
-          <AdaptiveBlockEditor
-            config={ensureAdaptive()}
-            questionIds={editingBlock ? (editingBlock.questions ?? []) : []}
-            allQuestions={designerStore.questionnaire.questions}
-          />
+          {@const adaptiveConfig = editingBlock ? editingBlock.adaptive : newBlock.adaptive}
+          {#if adaptiveConfig}
+            <AdaptiveBlockEditor
+              config={adaptiveConfig}
+              questionIds={editingBlock ? (editingBlock.questions ?? []) : []}
+              allQuestions={designerStore.questionnaire.questions}
+            />
+          {/if}
         {/if}
   </div>
 

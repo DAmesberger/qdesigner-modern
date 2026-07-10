@@ -110,9 +110,11 @@
     if (open) {
       previousActiveElement = document.activeElement as HTMLElement;
 
-      // Delay focus to ensure dialog is rendered
+      // Delay focus to ensure dialog is rendered. Re-check `open` when the timer
+      // fires: on a rapid close/reopen the queued callback must not steal focus
+      // into a dialog that is no longer showing.
       setTimeout(() => {
-        if (dialogElement) {
+        if (open && dialogElement) {
           const focusableElements = dialogElement.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
           const firstFocusable = focusableElements[0];
 

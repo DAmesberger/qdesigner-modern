@@ -1,7 +1,14 @@
 import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
-import { render, cleanup, fireEvent } from '@testing-library/svelte';
+import { render, cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import BlockEditor from './BlockEditor.svelte';
 import { createStimulusForKind, type ReactionStudyBlock } from '$lib/modules/questions/reaction-time/model/reaction-schema';
+
+// Block removal is gated behind the shared confirm dialog, whose host is only
+// mounted in the app layout. Auto-confirm it so the structural round-trip is
+// what these tests exercise.
+vi.mock('$lib/stores/confirm.svelte', () => ({
+  confirmDialog: vi.fn(() => Promise.resolve(true)),
+}));
 
 // jsdom lacks the Web Animations API some child components reach for.
 beforeAll(() => {
@@ -60,10 +67,10 @@ describe('BlockEditor onUpdate round-trip', () => {
     expect(document.querySelectorAll('.block-card').length).toBe(2);
     expect(blockLengths.at(-1)).toBe(2);
 
-    // Remove the second block via its card remove button.
+    // Remove the second block via its card remove button (confirm is auto-accepted).
     const removeButtons = document.querySelectorAll('.block-card-top .remove-btn');
     await fireEvent.click(removeButtons[1] as HTMLButtonElement);
-    expect(document.querySelectorAll('.block-card').length).toBe(1);
+    await waitFor(() => expect(document.querySelectorAll('.block-card').length).toBe(1));
     expect(blockLengths.at(-1)).toBe(1);
   });
 

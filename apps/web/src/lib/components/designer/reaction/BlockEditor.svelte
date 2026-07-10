@@ -6,6 +6,7 @@
     type ReactionStudyTrialTemplate,
   } from '$lib/modules/questions/reaction-time/model/reaction-schema';
   import Select from '$lib/components/ui/forms/Select.svelte';
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
 
   interface Props {
     blocks: ReactionStudyBlock[];
@@ -50,8 +51,21 @@
     emit();
   }
 
-  function removeBlock(index: number) {
+  async function removeBlock(index: number) {
     ensureBlocks();
+    const block = blocks[index];
+    const name = block?.name || `Block ${index + 1}`;
+    const trialCount = block?.trials?.length ?? 0;
+    if (
+      !(await confirmDialog({
+        title: 'Delete block?',
+        message: `Delete ${name} and its ${trialCount} trial${trialCount === 1 ? '' : 's'}? This cannot be undone.`,
+        confirmLabel: 'Delete',
+        destructive: true,
+      }))
+    ) {
+      return;
+    }
     blocks = blocks.filter((_, i) => i !== index);
     emit();
   }

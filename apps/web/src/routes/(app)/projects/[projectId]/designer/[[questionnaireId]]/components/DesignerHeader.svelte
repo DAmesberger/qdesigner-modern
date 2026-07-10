@@ -41,13 +41,7 @@
   const questionnaireId = $derived(designerStore.questionnaire?.id ?? '');
   const validationState = $derived(designerStore.validate());
   const hasValidationErrors = $derived(validationState.validationErrors.length > 0);
-  const questionCount = $derived(designerStore.questionnaire.questions.length);
-  const canPublish = $derived(
-    !hasValidationErrors &&
-      questionCount > 0 &&
-      !designerStore.isSaving &&
-      !designerStore.isPublishing
-  );
+  const canPublish = $derived(designerStore.canPublish);
 
   const saveStatus = $derived.by<'saved' | 'unsaved' | 'saving' | 'error'>(() => {
     if (designerStore.isSaving) return 'saving';

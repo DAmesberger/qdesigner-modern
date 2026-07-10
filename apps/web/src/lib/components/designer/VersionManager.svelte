@@ -2,6 +2,7 @@
   import { fade, fly } from 'svelte/transition';
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import { toast } from '$lib/stores/toast';
   import { page } from '$app/state';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
@@ -76,12 +77,16 @@
       return;
     }
 
+    // Capture before the await: pendingBumpType is reactive state mutated by
+    // other handlers, so narrowing wouldn't survive the suspension point.
+    const bumpType = pendingBumpType;
+    const note = bumpNote.trim();
     isBumping = true;
     try {
       const result = await api.questionnaires.bumpVersion(
         questionnaire.projectId,
         questionnaireId,
-        pendingBumpType
+        bumpType
       ) as any;
 
       if (result) {
@@ -90,12 +95,26 @@
         const newPatch = result.version_patch;
         const newDisplay = `${newMajor}.${newMinor}.${newPatch}`;
 
+        // The bump-version API accepts only `bump_type`, so the author's
+        // changelog note rides the questionnaire content instead — appended to
+        // settings.versionHistory (newest first) so it round-trips on save.
+        const historyEntry = {
+          version: newDisplay,
+          bumpType,
+          note,
+          at: new Date().toISOString(),
+        };
+        const existingHistory = questionnaire.settings?.versionHistory ?? [];
+
         designerStore.updateQuestionnaire({
-          ...questionnaire,
           version: newDisplay,
           versionMajor: newMajor,
           versionMinor: newMinor,
           versionPatch: newPatch,
+          settings: {
+            ...questionnaire.settings,
+            versionHistory: [historyEntry, ...existingHistory],
+          },
         });
 
         toast.success(`Version bumped to v${newDisplay}`);
@@ -116,11 +135,32 @@
     try {
       const data = await api.questionnaires.listVersions(questionnaireId) as any[];
       const version = (data || []).find((v: any) => v.id === versionId);
-      if (version?.content) {
-        designerStore.importQuestionnaire(version.content);
-        toast.success(`Loaded version ${version.version_major}.${version.version_minor}.${version.version_patch}`);
-        showVersionMenu = false;
+      if (!version?.content) return;
+
+      const versionLabel = `${version.version_major}.${version.version_minor}.${version.version_patch}`;
+
+      // Loading a historical version overwrites the working document. Guard
+      // against silent data loss: confirm whenever there are unsaved changes or
+      // the picked version differs from what's currently open.
+      const isSameAsWorking =
+        version.version_major === (questionnaire.versionMajor ?? 1) &&
+        version.version_minor === (questionnaire.versionMinor ?? 0) &&
+        version.version_patch === (questionnaire.versionPatch ?? 0);
+      if (designerStore.isDirty || !isSameAsWorking) {
+        const confirmed = await confirmDialog({
+          title: 'Replace working copy?',
+          message: `Replace your current working copy with v${versionLabel}? ${
+            designerStore.isDirty ? 'Unsaved changes will be lost.' : 'Your current version will be replaced.'
+          }`,
+          confirmLabel: 'Replace',
+          destructive: true,
+        });
+        if (!confirmed) return;
       }
+
+      designerStore.importQuestionnaire(version.content);
+      toast.success(`Loaded version ${versionLabel}`);
+      showVersionMenu = false;
     } catch (error) {
       console.error('Failed to load version:', error as Error);
       toast.error('Failed to load version');
@@ -128,10 +168,20 @@
   }
 
   async function publishVersion() {
+    // Same gate as the header Publish button (R1-6): never publish an invalid
+    // or in-flight document through the version dropdown.
+    if (!designerStore.canPublish) return;
     if (!questionnaire.projectId) {
       toast.error('Missing project ID');
       return;
     }
+
+    const confirmed = await confirmDialog({
+      title: `Publish v${versionDisplay}?`,
+      message: `Publish v${versionDisplay} to make it the live version participants receive.`,
+      confirmLabel: 'Publish',
+    });
+    if (!confirmed) return;
 
     try {
       await api.questionnaires.publish(questionnaire.projectId, questionnaireId);
@@ -198,10 +248,15 @@
       <div class="px-4 py-3 border-b border-border">
         <button
           onclick={publishVersion}
-          class="w-full px-3 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 transition-colors"
+          disabled={!designerStore.canPublish}
+          title={designerStore.publishBlockReason ?? `Publish v${versionDisplay}`}
+          class="w-full px-3 py-2 text-sm font-medium text-primary-foreground bg-primary rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary"
         >
           Publish v{versionDisplay}
         </button>
+        {#if designerStore.publishBlockReason}
+          <p class="mt-2 text-xs text-muted-foreground">{designerStore.publishBlockReason}</p>
+        {/if}
       </div>
 
       <!-- Version History -->
@@ -268,6 +323,20 @@
       <p class="text-sm text-muted-foreground mb-4">
         {bumpDescriptions[pendingBumpType]}
       </p>
+
+      <div class="mb-4">
+        <label for="bump-note" class="block text-xs font-medium text-foreground mb-1.5">
+          What changed? <span class="text-muted-foreground font-normal">(optional)</span>
+        </label>
+        <textarea
+          id="bump-note"
+          bind:value={bumpNote}
+          rows="2"
+          placeholder="Summarize the changes in this version…"
+          disabled={isBumping}
+          class="w-full px-3 py-2 text-sm bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50 resize-none"
+        ></textarea>
+      </div>
 
       {#if pendingBumpType === 'major'}
         <div class="p-3 bg-warning/10 border border-warning/30 rounded-lg">

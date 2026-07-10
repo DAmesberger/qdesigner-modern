@@ -170,6 +170,33 @@ export class DesignerStore {
     return this.isLoading;
   }
 
+  /**
+   * Single source of truth for whether the questionnaire may be published
+   * (R1-6). Both publish entry points — the header's Publish button and the
+   * VersionManager dropdown — gate on this so an invalid or in-flight document
+   * can never be published through either path.
+   */
+  get canPublish(): boolean {
+    return this.publishBlockReason === null;
+  }
+
+  /**
+   * Human-readable reason the document cannot be published, or `null` when it
+   * can. Used as the disabled-button tooltip so the gate explains itself.
+   */
+  get publishBlockReason(): string | null {
+    if (this.isSaving) return 'Saving…';
+    if (this.isPublishing) return 'Publishing…';
+    if (this.questionnaire.questions.length === 0) {
+      return 'Add at least one question before publishing';
+    }
+    const errorCount = this.validate().validationErrors.length;
+    if (errorCount > 0) {
+      return `Resolve ${errorCount} validation ${errorCount === 1 ? 'error' : 'errors'} before publishing`;
+    }
+    return null;
+  }
+
   get currentPage() {
     if (!this.currentPageId) {
       return this.questionnaire.pages[0] || null;

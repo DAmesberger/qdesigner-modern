@@ -637,6 +637,8 @@ export class DocumentStore {
         randomization: rawBlock.randomization,
         loop: rawBlock.loop,
         conditions: rawBlock.conditions,
+        condition: rawBlock.condition,
+        adaptive: rawBlock.adaptive,
       }));
 
       return {
@@ -651,7 +653,13 @@ export class DocumentStore {
   }
 
   private normalizeBlockType(type: string): Block['type'] {
-    if (type === 'randomized' || type === 'conditional' || type === 'loop' || type === 'standard') {
+    if (
+      type === 'randomized' ||
+      type === 'conditional' ||
+      type === 'loop' ||
+      type === 'adaptive' ||
+      type === 'standard'
+    ) {
       return type;
     }
     return 'standard';

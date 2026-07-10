@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
+  import { confirmDialog } from '$lib/stores/confirm.svelte';
   import type { FlowControl } from '$lib/shared/types/questionnaire';
   import { nanoid } from 'nanoid';
   import FlowControlEditor from './flow/FlowControlEditor.svelte';
@@ -112,9 +113,22 @@
     }
   }
 
-  function handleDeleteFlow(flowId: string) {
-    const updatedFlows = flowControls.filter((f) => f.id !== flowId);
-    designerStore.updateQuestionnaire({ flow: updatedFlows });
+  async function handleDeleteFlow(flowId: string) {
+    const flow = flowControls.find((f) => f.id === flowId);
+    const message = flow
+      ? `Delete this ${flow.type} rule (condition: ${flow.condition?.trim() || 'none'})? This cannot be undone.`
+      : 'Delete this flow rule? This cannot be undone.';
+    if (
+      await confirmDialog({
+        title: 'Delete flow rule?',
+        message,
+        confirmLabel: 'Delete',
+        destructive: true,
+      })
+    ) {
+      const updatedFlows = flowControls.filter((f) => f.id !== flowId);
+      designerStore.updateQuestionnaire({ flow: updatedFlows });
+    }
   }
 
   function handleFlowUpdate(updatedFlows: FlowControl[]) {

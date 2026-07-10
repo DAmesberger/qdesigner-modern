@@ -649,6 +649,28 @@ export interface QuestionnaireSettings {
    * stored). `getTranslations()` reads this first, then the top-level field.
    */
   translations?: QuestionnaireTranslations;
+  /**
+   * Client-authored changelog captured at each version bump (R1-6). The
+   * bump-version API accepts only `bump_type`, so the "what changed" note the
+   * author writes in the bump modal is persisted here — riding the existing
+   * settings round-trip — rather than being dropped. Newest entry first.
+   */
+  versionHistory?: VersionHistoryEntry[];
+}
+
+/**
+ * A single author-written changelog entry recorded when a version is bumped
+ * (R1-6). Lives under {@link QuestionnaireSettings.versionHistory}.
+ */
+export interface VersionHistoryEntry {
+  /** Resulting semver, e.g. `2.0.0`. */
+  version: string;
+  /** Which component was bumped. */
+  bumpType: 'major' | 'minor' | 'patch';
+  /** Author's "what changed?" note; may be empty. */
+  note: string;
+  /** ISO-8601 timestamp of the bump. */
+  at: string;
 }
 
 export interface QuestionSettings {
