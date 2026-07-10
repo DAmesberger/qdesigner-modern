@@ -36,11 +36,17 @@
   // Author-supplied heading wins; otherwise the built-in localized chrome label.
   const resolvedTitle = $derived(title ?? m.fillout_consent_default_title());
 
-  let checkboxStates = $state<Record<string, boolean>>({});
+  // Seed synchronously (not only in the $effect below) so the very first render
+  // already has a boolean for every checkbox: `bind:checked` on the child Checkbox
+  // rejects `undefined` (it has a `$bindable(false)` fallback), which would throw
+  // props_invalid_value on the initial paint — the effect runs too late to prevent it.
+  let checkboxStates = $state<Record<string, boolean>>(
+    Object.fromEntries(checkboxes.map((cb) => [cb.id, false]))
+  );
   let signature = $state('');
   let showError = $state(false);
 
-  // Initialize checkbox states
+  // Backfill any checkboxes that arrive/change after mount (prop is reactive).
   $effect(() => {
     checkboxes.forEach((cb) => {
       if (!(cb.id in checkboxStates)) {
