@@ -249,6 +249,15 @@
     input.value = ''; // Reset input
   }
 
+  // The file input is only bound inside the {#if showUploadArea} block, so
+  // callers that live outside it (e.g. the empty-state CTA) must reveal the
+  // upload area and wait for the DOM before the input exists to click.
+  async function openUploadPicker() {
+    showUploadArea = true;
+    await tick();
+    fileInput?.click();
+  }
+
   async function uploadFiles(files: File[]) {
     if (!(await ensureContext())) {
       console.error('[MediaManager] Missing organizationId for upload');
@@ -606,7 +615,7 @@
           <p class="mt-2 max-w-md text-center text-sm text-destructive">{contextError}</p>
         {/if}
         <button
-          onclick={() => fileInput?.click()}
+          onclick={openUploadPicker}
           class="{theme.components.button.variants.default} {theme.components.button.sizes
             .sm} rounded-md mt-4"
         >
