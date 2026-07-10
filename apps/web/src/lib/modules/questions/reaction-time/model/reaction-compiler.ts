@@ -426,6 +426,10 @@ function trialFromTemplate(
     targetRegion: config.response.targetRegion,
     gamepadButtonMap: config.response.gamepadButtonMap,
     validKeys,
+    // Authored ResponseSet (ADR 0024) wins over the legacy fields at the engine;
+    // threaded from the study-level response so every templated trial arms it.
+    ...(config.response.responseSet ? { responseSet: config.response.responseSet } : {}),
+    ...(config.response.correctOptionIds ? { correctOptionIds: config.response.correctOptionIds } : {}),
     correctResponse: template.correctResponse || config.correctKey || undefined,
     requireCorrect: template.requireCorrect ?? config.response.requireCorrect,
     fixation: {
@@ -1110,6 +1114,13 @@ function normalizeCustomTrial(
     targetRegion: trial.targetRegion ?? config.response.targetRegion,
     gamepadButtonMap: trial.gamepadButtonMap ?? config.response.gamepadButtonMap,
     validKeys: trial.validKeys || config.response.validKeys,
+    // A per-trial responseSet wins; else the study-level authored set (ADR 0024).
+    ...(trial.responseSet ?? config.response.responseSet
+      ? { responseSet: trial.responseSet ?? config.response.responseSet }
+      : {}),
+    ...(trial.correctOptionIds ?? config.response.correctOptionIds
+      ? { correctOptionIds: trial.correctOptionIds ?? config.response.correctOptionIds }
+      : {}),
     correctResponse: trial.correctResponse || undefined,
     requireCorrect: trial.requireCorrect ?? config.response.requireCorrect,
     fixation: {
@@ -1341,6 +1352,8 @@ function toStandardTrialConfig(
     targetRegion: config.response.targetRegion,
     gamepadButtonMap: config.response.gamepadButtonMap,
     validKeys: config.response.validKeys,
+    ...(config.response.responseSet ? { responseSet: config.response.responseSet } : {}),
+    ...(config.response.correctOptionIds ? { correctOptionIds: config.response.correctOptionIds } : {}),
     correctResponse: config.correctKey || undefined,
     requireCorrect: config.response.requireCorrect,
     fixation: {

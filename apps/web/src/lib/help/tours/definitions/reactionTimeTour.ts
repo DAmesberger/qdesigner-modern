@@ -11,7 +11,7 @@ export const reactionTimeTour: TourDefinition = {
 			target: '.designer-panel #task-type',
 			title: 'Reaction Time Tasks',
 			description:
-				'Choose a task paradigm: **Standard** for simple RT, **N-Back** for working memory, **Stroop** for interference, **Flanker** for attention, **IAT** for implicit association, or **Dot-Probe** for attentional bias.',
+				'Choose a paradigm: **Standard** for simple RT, **N-Back** for working memory, **Stroop** for interference, **Flanker** for attention, **IAT** for implicit association, or **Dot-Probe** for attentional bias.',
 			placement: 'left',
 			waitForElement: true,
 		},
@@ -20,7 +20,7 @@ export const reactionTimeTour: TourDefinition = {
 			target: '.designer-panel .subsection',
 			title: 'Configure Stimuli',
 			description:
-				'Set up your stimuli for the selected task. Define text, shapes, or images that participants will respond to. Each task type has its own specific configuration for stimuli and response keys.',
+				'Set up your stimuli for the selected paradigm. Define text, shapes, or images that participants will respond to. Each paradigm has its own specific configuration for stimuli and response keys.',
 			placement: 'left',
 			waitForElement: true,
 		},

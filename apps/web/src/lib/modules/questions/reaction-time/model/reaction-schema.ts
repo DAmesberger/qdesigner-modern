@@ -4,11 +4,12 @@ import type {
   ReactionStimulusConfig,
   ReactionTargetRegion,
   ReactionTrialConfig,
+  ResponseSet,
   ScheduledPhase,
   TimingSpec,
 } from '$lib/runtime/reaction';
 
-export type { ReactionResponseMode, ReactionTargetRegion, CounterbalanceScheme, TimingSpec };
+export type { ReactionResponseMode, ReactionTargetRegion, CounterbalanceScheme, ResponseSet, TimingSpec };
 
 export type ReactionTaskType =
   | 'standard'
@@ -344,6 +345,13 @@ export interface ReactionStudyConfig {
     gamepadButtonMap?: Record<number, string>;
     /** Keyboard hold/release capture (records releaseTimestamp/holdDurationMs). */
     captureKeyUp?: boolean;
+    /**
+     * Authored ResponseSet (ADR 0024). Present only once the researcher opens the
+     * Responses editor; absent ⇒ the engine compiles the legacy fields at runtime.
+     */
+    responseSet?: ResponseSet;
+    /** Semantic option ids scored as correct (ADR 0024), consulted when `requireCorrect`. */
+    correctOptionIds?: string[];
   };
   correctKey: string;
   feedback: boolean;
@@ -392,6 +400,8 @@ export interface ReactionLegacyQuestionConfig {
     targetRegion?: ReactionTargetRegion;
     gamepadButtonMap?: Record<number, string>;
     captureKeyUp?: boolean;
+    responseSet?: ResponseSet;
+    correctOptionIds?: string[];
   };
   correctKey?: string;
   feedback?: boolean;

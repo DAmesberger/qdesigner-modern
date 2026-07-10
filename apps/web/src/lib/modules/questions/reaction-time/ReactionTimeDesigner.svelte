@@ -6,6 +6,7 @@
   import TaskPresetFields from './designer/TaskPresetFields.svelte';
   import StandardParadigmFields from './designer/StandardParadigmFields.svelte';
   import CounterbalancingFields from './designer/CounterbalancingFields.svelte';
+  import ResponseSetEditor from './designer/ResponseSetEditor.svelte';
   import { mediaService } from '$lib/services/mediaService';
   import { createLegacyStarterPayload } from './model/starter-templates';
   import { normalizeReactionQuestionConfig } from './model/reaction-normalize';
@@ -386,10 +387,10 @@
 <div class="p-6 flex flex-col gap-6">
   <!-- Task Selection -->
   <div class="section">
-    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Task Mode</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Paradigm</h4>
 
     <div class="mb-4">
-      <label for="task-type">Task Type</label>
+      <label for="task-type">Paradigm</label>
       <Select id="task-type" bind:value={question.config.task.type}>
         <option value="standard">Standard Reaction Time</option>
         <option value="n-back">N-Back</option>
@@ -409,7 +410,7 @@
         <option value="custom">Custom Trial Plan</option>
       </Select>
       <Button variant="secondary" size="sm" class="mt-2" onclick={applyTaskStarter}>
-        Reset Selected Task To Starter
+        Reset Selected Paradigm To Starter
       </Button>
     </div>
 
@@ -835,6 +836,8 @@
         </Select>
       </div>
     {/if}
+
+    <ResponseSetEditor bind:question />
   </div>
 
   <!-- Trial Configuration -->

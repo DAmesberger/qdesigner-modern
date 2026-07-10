@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ReactionEngine } from './ReactionEngine';
+import { createPvtTrials } from './presets/pvt';
 import type { ReactionTrialConfig } from './types';
 import type { WebGLRenderer } from '$lib/renderer';
 import type { FrameSample, FrameStats } from '$lib/shared';
@@ -339,6 +340,65 @@ describe('ReactionEngine', () => {
 
     const delayPhase = result.phaseTimeline.find((p) => p.name === 'pre-stimulus-delay');
     expect(delayPhase).toBeDefined();
+
+    engine.destroy();
+  });
+
+  // ---- W-4: PVT foreperiod presses are RECORDED, not vanished ----
+
+  it('records a PVT foreperiod press as an anticipatory false start (W-4)', async () => {
+    const [trial] = createPvtTrials({
+      trialCount: 1,
+      isi: 300, // fixed foreperiod
+      responseKey: ' ',
+      responseTimeoutMs: 200,
+      seed: 'w4',
+    });
+    expect(trial!.allowResponseDuringPreStimulus).toBe(true);
+
+    const { engine } = createEngine();
+    const resultPromise = engine.runTrial({ ...trial!, targetFPS: 120 });
+
+    // Press SPACE ~100 ms in — well inside the 300 ms foreperiod, before onset.
+    setTimeout(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+    }, 100);
+
+    const result = await resultPromise;
+
+    // Recorded (counted + provenance-flagged), not silently dropped, and it did
+    // NOT resolve the trial (no valid post-onset response ⇒ the window timed out).
+    expect(result.falseStartCount).toBeGreaterThanOrEqual(1);
+    expect(result.anticipatory).toBe(true);
+    expect(result.provenance.falseStart).toBe(true);
+    expect(result.response).toBeNull();
+    expect(result.timeout).toBe(true);
+
+    engine.destroy();
+  });
+
+  it('without the foreperiod flag the same pre-onset press vanishes (W-4 control)', async () => {
+    const { engine } = createEngine();
+
+    const resultPromise = engine.runTrial({
+      id: 'no-flag',
+      responseMode: 'keyboard',
+      validKeys: [' '],
+      fixation: { enabled: false },
+      preStimulusDelayMs: 300,
+      // allowResponseDuringPreStimulus omitted → foreperiod presses are not armed.
+      stimulus: { kind: 'shape', shape: 'circle' },
+      responseTimeoutMs: 200,
+      targetFPS: 120,
+    });
+
+    setTimeout(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+    }, 100);
+
+    const result = await resultPromise;
+    expect(result.falseStartCount).toBe(0);
+    expect(result.anticipatory).toBe(false);
 
     engine.destroy();
   });

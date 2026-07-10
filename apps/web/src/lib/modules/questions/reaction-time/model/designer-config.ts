@@ -1,4 +1,4 @@
-import type { ReactionTrialConfig } from '$lib/runtime/reaction';
+import type { ReactionTrialConfig, ResponseSet } from '$lib/runtime/reaction';
 import type {
   GoNoGoTaskConfig,
   PosnerTaskConfig,
@@ -136,6 +136,16 @@ export interface ReactionTimeConfig {
     targetRegion?: { x: number; y: number; radius: number };
     gamepadButtonMap?: Record<number, string>;
     captureKeyUp?: boolean;
+    /**
+     * Authored ResponseSet (ADR 0024). Present only once the researcher opens the
+     * Responses editor; when absent the engine compiles the legacy
+     * `validKeys`/`mode`/… fields at runtime, so untouched content is unchanged.
+     * The compiler threads this onto each trial for the author-defined paradigms
+     * (standard, custom); procedure-fixed paradigms derive responses themselves.
+     */
+    responseSet?: ResponseSet;
+    /** Semantic option ids scored as correct (ADR 0024), consulted when `requireCorrect`. */
+    correctOptionIds?: string[];
   };
   correctKey?: string;
   feedback?: boolean;

@@ -422,3 +422,68 @@ describe('reaction-compiler counterbalancing (E-REACT-6)', () => {
     expect(orderFor('session-1')).not.toBe(orderFor('session-2'));
   });
 });
+
+describe('ResponseSet threading (ADR 0024, RT-2b)', () => {
+  const authoredSet = {
+    options: [
+      { id: 'left', label: 'Left', bindings: [{ source: 'keyboard' as const, key: 'f', on: 'down' as const }] },
+      { id: 'right', label: 'Right', bindings: [{ source: 'keyboard' as const, key: 'j', on: 'down' as const }] },
+    ],
+  };
+
+  it('threads an authored ResponseSet + correctOptionIds onto every standard trial', () => {
+    const config = normalizeReactionQuestionConfig({
+      config: {
+        task: { type: 'standard' },
+        testTrials: 4,
+        response: { validKeys: ['f', 'j'], responseSet: authoredSet, correctOptionIds: ['left'] },
+      },
+    });
+
+    const plan = compileReactionPlan(config, seedContext);
+    expect(plan.length).toBeGreaterThan(0);
+    for (const planned of plan) {
+      expect(planned.trial.responseSet).toEqual(authoredSet);
+      expect(planned.trial.correctOptionIds).toEqual(['left']);
+    }
+  });
+
+  it('threads the study-level ResponseSet onto templated (study-block) trials', () => {
+    const config = normalizeReactionQuestionConfig({
+      config: {
+        task: { type: 'custom' },
+        response: { validKeys: ['f', 'j'], responseSet: authoredSet, correctOptionIds: ['right'] },
+        study: {
+          blocks: [
+            {
+              id: 'b1',
+              name: 'Block 1',
+              kind: 'test',
+              trials: [{ id: 't1', stimulus: { kind: 'text', text: 'GO' } }],
+            },
+          ],
+        },
+      },
+    });
+
+    const plan = compileReactionPlan(config, seedContext);
+    expect(plan.length).toBeGreaterThan(0);
+    for (const planned of plan) {
+      expect(planned.trial.responseSet).toEqual(authoredSet);
+      expect(planned.trial.correctOptionIds).toEqual(['right']);
+    }
+  });
+
+  it('leaves trials free of a ResponseSet when none is authored (legacy compile path)', () => {
+    const config = normalizeReactionQuestionConfig({
+      config: { task: { type: 'standard' }, testTrials: 2, response: { validKeys: ['f', 'j'] } },
+    });
+
+    const plan = compileReactionPlan(config, seedContext);
+    expect(plan.length).toBeGreaterThan(0);
+    for (const planned of plan) {
+      expect(planned.trial.responseSet).toBeUndefined();
+      expect(planned.trial.correctOptionIds).toBeUndefined();
+    }
+  });
+});

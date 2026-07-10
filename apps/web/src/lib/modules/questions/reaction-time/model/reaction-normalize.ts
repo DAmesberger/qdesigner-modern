@@ -4,7 +4,14 @@ import type {
   ReactionStudyBlock,
   ReactionStudyTrialTemplate,
 } from './reaction-schema';
-import type { CounterbalanceScheme, ScheduledPhase, TimingSpec } from '$lib/runtime/reaction';
+import type {
+  Binding,
+  CounterbalanceScheme,
+  ResponseOption,
+  ResponseSet,
+  ScheduledPhase,
+  TimingSpec,
+} from '$lib/runtime/reaction';
 import { isTimingSpec } from '$lib/runtime/reaction';
 import type {
   DotProbeTaskConfig,
@@ -55,6 +62,20 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
   const source = pickNormalizationSource(root);
   const validKeys = normalizeValidKeys(source.response?.validKeys);
   const normalizedBlocks = normalizeStudyBlocks(source.blocks, validKeys);
+
+  // ResponseSet (ADR 0024): preserved verbatim (validated) only when the author
+  // opened the Responses editor; absent ⇒ legacy fields compile at runtime. The
+  // editor writes to the TOP-LEVEL `config.response`, so prefer that over the
+  // picked source (which is the canonical `study` for standard/custom, whose
+  // `response` is a stale starter snapshot that never re-syncs once it has blocks).
+  const rootResponse = toRecord(root.response);
+  const responseSet = normalizeResponseSet(
+    rootResponse?.responseSet ?? source.response?.responseSet
+  );
+  const correctOptionIds = normalizeCorrectOptionIds(
+    rootResponse?.correctOptionIds ?? source.response?.correctOptionIds,
+    responseSet
+  );
 
   const taskType = normalizeTaskType(source.task?.type);
   const nBack: Partial<NBackTaskConfig> = source.task?.nBack ?? {};
@@ -318,6 +339,8 @@ export function normalizeReactionQuestionConfig(question: unknown): NormalizedRe
       targetRegion: normalizeTargetRegion(source.response?.targetRegion),
       gamepadButtonMap: normalizeGamepadButtonMap(source.response?.gamepadButtonMap),
       captureKeyUp: Boolean(source.response?.captureKeyUp),
+      ...(responseSet ? { responseSet } : {}),
+      ...(correctOptionIds ? { correctOptionIds } : {}),
     },
     correctKey: ensureString(source.correctKey),
     feedback: source.feedback !== false,
@@ -450,6 +473,100 @@ function normalizeGamepadButtonMap(value: unknown): Record<number, string> | und
   }
 
   return Object.keys(map).length > 0 ? map : undefined;
+}
+
+/**
+ * Validate an authored ResponseSet (ADR 0024). Keeps options with a non-empty id
+ * and their well-formed bindings (each binding validated by its `source`
+ * discriminant; unknown/garbage bindings dropped). Returns undefined only when
+ * the input is absent or not an object — an author who opened the editor but left
+ * it empty still round-trips as `{ options: [] }`, so the "opened" state survives.
+ */
+function normalizeResponseSet(value: unknown): ResponseSet | undefined {
+  const record = toRecord(value);
+  if (!record) return undefined;
+
+  const rawOptions = Array.isArray(record.options) ? record.options : [];
+  const options: ResponseOption[] = [];
+  for (const rawOption of rawOptions) {
+    const optionRecord = toRecord(rawOption);
+    if (!optionRecord) continue;
+    // A blank id is kept (not dropped): it's an in-progress option the editor
+    // flags as "id required" — silently deleting the author's half-typed row on
+    // the next hydrate would be worse than a flagged empty. Serializing preserves
+    // the exact `{ id: '', label: '', bindings: [] }` an "Add option" click made.
+    const id = ensureString(optionRecord.id).trim();
+    const bindings = normalizeBindings(optionRecord.bindings);
+    const label = ensureString(optionRecord.label);
+    options.push({ id, ...(label ? { label } : {}), bindings });
+  }
+
+  const setId = ensureString(record.id).trim();
+  return { ...(setId ? { id: setId } : {}), options };
+}
+
+function normalizeBindings(value: unknown): Binding[] {
+  if (!Array.isArray(value)) return [];
+  const bindings: Binding[] = [];
+  for (const raw of value) {
+    const binding = normalizeBinding(raw);
+    if (binding) bindings.push(binding);
+  }
+  return bindings;
+}
+
+function normalizeBinding(value: unknown): Binding | null {
+  const record = toRecord(value);
+  if (!record) return null;
+
+  const edge = record.on === 'up' ? 'up' : record.on === 'down' ? 'down' : undefined;
+
+  switch (record.source) {
+    case 'keyboard': {
+      const key = ensureString(record.key).toLowerCase();
+      if (!key) return null;
+      return { source: 'keyboard', key, ...(edge ? { on: edge } : {}) };
+    }
+    case 'pointer': {
+      const region = normalizeTargetRegion(record.region);
+      return { source: 'pointer', ...(region ? { region } : {}) };
+    }
+    case 'touch': {
+      const region = normalizeTargetRegion(record.region);
+      return { source: 'touch', ...(region ? { region } : {}) };
+    }
+    case 'gamepad': {
+      const button = Number(record.button);
+      if (!Number.isInteger(button) || button < 0) return null;
+      return { source: 'gamepad', button };
+    }
+    case 'hid': {
+      const button = Number(record.button);
+      if (!Number.isInteger(button) || button < 0) return null;
+      return { source: 'hid', button, ...(edge ? { on: edge } : {}) };
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Validate the correct-option ids (ADR 0024). Keeps non-empty string ids that
+ * name an option in the (validated) set, de-duplicated. Returns undefined when
+ * nothing valid remains so the study omits the field.
+ */
+function normalizeCorrectOptionIds(
+  value: unknown,
+  responseSet: ResponseSet | undefined
+): string[] | undefined {
+  if (!Array.isArray(value) || !responseSet) return undefined;
+  const known = new Set(responseSet.options.map((option) => option.id));
+  const ids: string[] = [];
+  for (const raw of value) {
+    const id = ensureString(raw).trim();
+    if (id && known.has(id) && !ids.includes(id)) ids.push(id);
+  }
+  return ids.length > 0 ? ids : undefined;
 }
 
 function normalizeFlankerStimulusSet(value: unknown): [string, string] {

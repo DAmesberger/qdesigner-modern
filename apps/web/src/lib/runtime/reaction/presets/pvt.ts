@@ -5,9 +5,14 @@ import { sampleTiming } from './timingSpec';
 /**
  * PVT — Psychomotor Vigilance Task (E-REACT-2). After a random inter-stimulus
  * interval (SOTA 2–10 s) a salient target appears and the participant responds
- * as fast as possible. The random foreperiod defeats anticipation; responses
- * during the wait are discarded as anticipatory false starts by the engine.
- * Scored for lapses (RT ≥ 500 ms or a miss) and mean 1/RT (response speed).
+ * as fast as possible. The random foreperiod defeats anticipation; a press during
+ * the wait is a *false start* — a primary PVT measure. W-4: the trial sets
+ * `allowResponseDuringPreStimulus` so those foreperiod presses are RECORDED
+ * (routed through the engine's anticipatory path: counted in `falseStartCount`,
+ * surfaced via `onFalseStart`, provenance flagged) rather than silently dropped
+ * before onset. They never resolve the trial — the participant still responds to
+ * the actual target. Scored for lapses (RT ≥ 500 ms or a miss), false starts,
+ * and mean 1/RT (response speed).
  */
 export interface PvtPresetConfig {
   trialCount: number;
@@ -82,6 +87,9 @@ export function createPvtTrials(config: PvtPresetConfig): PvtTrialConfig[] {
       // No fixation; the random foreperiod is the pre-stimulus wait.
       fixation: { enabled: false, type: 'dot', durationMs: 0 },
       preStimulusDelayMs: isiMs,
+      // W-4: arm responses during the foreperiod so a premature press is captured
+      // as an anticipatory false start (recorded + counted) instead of vanishing.
+      allowResponseDuringPreStimulus: true,
       stimulus,
       responseTimeoutMs,
       targetFPS: config.targetFPS ?? 120,
