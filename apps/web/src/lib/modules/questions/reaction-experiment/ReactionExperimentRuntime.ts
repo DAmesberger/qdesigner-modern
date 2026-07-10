@@ -158,13 +158,26 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
       }
     );
 
-    const stimuli = trialPlan.map((planned) => planned.trial.stimulus).filter(Boolean);
-    await engine.warmUpStimuli(stimuli);
-
     const responses: TrialResponse[] = [];
+
+    // Layer-2 decode gate (ADR 0026): fully load + decode a block's stimuli from
+    // cache before its first trial, behind a visible preparing state, fail-closed
+    // if any asset can't be prepared. Gated per block so no network I/O or decode
+    // ever happens inside a running block.
+    let gatedBlockId: string | null = null;
 
     for (let index = 0; index < trialPlan.length; index++) {
       const planned = trialPlan[index]!;
+
+      if (planned.metadata.blockId !== gatedBlockId) {
+        gatedBlockId = planned.metadata.blockId;
+        const blockStimuli = trialPlan
+          .filter((p) => p.metadata.blockId === gatedBlockId)
+          .map((p) => p.trial.stimulus)
+          .filter(Boolean);
+        await engine.gateBlockMedia(blockStimuli, context.abortSignal);
+      }
+
       engine.clearScheduledPhases();
       const scheduledPhases = planned.metadata.scheduledPhases || [];
       scheduledPhases.forEach((phase) => engine.schedulePhase(phase));

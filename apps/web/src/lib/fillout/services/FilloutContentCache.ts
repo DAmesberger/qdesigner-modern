@@ -369,6 +369,15 @@ export class FilloutContentCache {
 
 		const protectedKeys = await this.protectedVersionKeys();
 
+		// ADR 0026 eviction pinning: a reaction study must be offline-COMPLETE or it is
+		// unrunnable — a timed block can never run with partial stimuli. So media owned
+		// by any cached reaction-bearing definition is PINNED against eviction regardless
+		// of session state. If such a study's own media overflows the budget we keep it
+		// (leaving the cache over cap) and let the honest "unrunnable / quota-exceeded"
+		// state surface through prepareOffline/the Layer-2 gate, rather than silently
+		// evicting stimuli it will then fail to load.
+		for (const key of await this.reactionBearingVersionKeys()) protectedKeys.add(key);
+
 		// Group tracked media by owning version; group age = newest cachedAt in the group.
 		const groups = new Map<string, { size: number; newest: number }>();
 		for (const e of entries) {
@@ -464,6 +473,47 @@ export class FilloutContentCache {
 		}
 
 		return keys;
+	}
+
+	/** v1 WebGL/reaction module types whose media must be offline-complete (ADR 0026). */
+	private static readonly REACTION_QUESTION_TYPES = new Set([
+		'reaction-time',
+		'reaction-experiment',
+		'webgl',
+	]);
+
+	/**
+	 * Version keys (filloutDefinitionKey) whose cached definition contains a reaction /
+	 * WebGL question — their media is pinned against quota eviction (ADR 0026). Scans the
+	 * cached by-code payloads once; a definition with no such question contributes nothing.
+	 */
+	private static async reactionBearingVersionKeys(): Promise<Set<string>> {
+		const keys = new Set<string>();
+		for (const row of await db.filloutQuestionnaires.toArray()) {
+			if (this.definitionIsReactionBearing(row.data)) keys.add(row.id);
+		}
+		return keys;
+	}
+
+	/** True when a cached definition references a reaction/WebGL question anywhere in its tree. */
+	private static definitionIsReactionBearing(data: Record<string, unknown> | undefined): boolean {
+		if (!data) return false;
+		let found = false;
+		const walk = (value: unknown): void => {
+			if (found || !value || typeof value !== 'object') return;
+			if (Array.isArray(value)) {
+				for (const item of value) walk(item);
+				return;
+			}
+			const record = value as Record<string, unknown>;
+			if (typeof record.type === 'string' && this.REACTION_QUESTION_TYPES.has(record.type)) {
+				found = true;
+				return;
+			}
+			for (const child of Object.values(record)) walk(child);
+		};
+		walk(definitionContent(data));
+		return found;
 	}
 
 	private static pickLatest(rows: FilloutQuestionnaire[]): FilloutQuestionnaire | null {
@@ -626,6 +676,12 @@ export class FilloutContentCache {
 	/**
 	 * Walk questionnaire definition and cache all media URLs via the Cache API, recording an
 	 * accounting row per URL so `enforceMediaQuota` can bound the cache.
+	 *
+	 * ADR 0026 Layer 1 (bytes, per study, automatic): this runs as part of the reactive load
+	 * path, so opening a media-bearing study caches ALL its assets — including `mediaId`-only
+	 * reaction-experiment assets resolved through the same-origin proxy ({@link offlineMediaUrls}),
+	 * which the direct-`url`/`src`-only {@link extractMediaUrls} misses. Per-URL failures while
+	 * online are swallowed (non-blocking); what BLOCKS a run is the per-block decode gate (Layer 2).
 	 */
 	private static async cacheMedia(
 		definition: Record<string, unknown>,
@@ -635,7 +691,7 @@ export class FilloutContentCache {
 		versionMinor: number,
 		versionPatch: number
 	): Promise<void> {
-		const urls = this.extractMediaUrls(definition);
+		const urls = this.offlineMediaUrls(definition);
 		if (urls.length === 0) return;
 
 		let cache: Cache;

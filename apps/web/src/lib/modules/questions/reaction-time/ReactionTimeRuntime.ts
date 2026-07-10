@@ -187,9 +187,6 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       counterbalance,
     });
 
-    const blockStimuli = trialPlan.map((planned) => planned.trial.stimulus).filter(Boolean);
-    await engine.warmUpStimuli(blockStimuli);
-
     const allResponses: TrialResponse[] = [];
     // E-REACT-4: how many practice passes each criterion-gated block actually
     // took, surfaced in metadata for the researcher.
@@ -210,6 +207,14 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
     };
 
     for (const group of groupIntoBlockRuns(trialPlan)) {
+      // Layer-2 decode gate (ADR 0026): before this block's first trial, fully load
+      // + decode every stimulus it references from cache behind a visible preparing
+      // state; fail-closed (honest retry) if any asset can't be prepared. No network
+      // I/O or decode then happens inside the running block. Idempotent across a
+      // criterion-based practice block's re-runs (assets stay cached).
+      const groupStimuli = group.map((planned) => planned.trial.stimulus).filter(Boolean);
+      await engine.gateBlockMedia(groupStimuli, context.abortSignal);
+
       const criterion = group[0]?.metadata.practiceCriterion;
       const isPracticeGroup = group.every((planned) => planned.metadata.isPractice);
 

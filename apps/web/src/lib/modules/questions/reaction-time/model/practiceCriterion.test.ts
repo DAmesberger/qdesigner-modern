@@ -24,6 +24,7 @@ vi.mock('$lib/runtime/reaction', async (importOriginal) => {
     seedFromResourceManager(): void {}
     async primeAudio(): Promise<void> {}
     async warmUpStimuli(): Promise<void> {}
+    async gateBlockMedia(): Promise<void> {}
     clearScheduledPhases(): void {}
     schedulePhase(): void {}
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ReactionEngine } from './ReactionEngine';
+import { ReactionEngine, type StimulusPrepResult } from './ReactionEngine';
 import { createPvtTrials } from './presets/pvt';
 import type { ReactionTrialConfig } from './types';
 import type { WebGLRenderer } from '$lib/renderer';
@@ -2516,6 +2516,142 @@ describe('ReactionEngine — ResponseSet model (RT-1a, ADR 0024)', () => {
     expect(result.anticipatory).toBe(false);
     expect(result.response?.value).toBe('f');
     expect(result.response?.timestamp).toBe(1150);
+    engine.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADR 0026 — Layer-2 per-block decode gate + W-9 onset-arming order.
+// ---------------------------------------------------------------------------
+
+/** Seed the engine's image + audio caches (as a preload would) without real I/O. */
+function seedMedia(engine: ReactionEngine, opts: { images?: string[]; audios?: string[] }) {
+  const rm = {
+    getImageCache: () =>
+      new Map<string, HTMLImageElement>((opts.images ?? []).map((s) => [s, {} as HTMLImageElement])),
+    getVideoCache: () => new Map<string, HTMLVideoElement>(),
+    getAudioBufferCache: () =>
+      new Map<string, AudioBuffer>((opts.audios ?? []).map((s) => [s, {} as AudioBuffer])),
+  } as unknown as ResourceManager;
+  engine.seedFromResourceManager(rm);
+}
+
+describe('ReactionEngine — Layer-2 media gate (ADR 0026)', () => {
+  it('decodes every referenced asset from cache before the first trial, with N-of-M progress', async () => {
+    const { engine } = createMockEngine();
+    seedMedia(engine, { images: ['a.png', 'b.png'], audios: ['tone.mp3'] });
+
+    const progress: Array<[number, number]> = [];
+    const result = await engine.prepareBlockStimuli(
+      [
+        { kind: 'image', src: 'a.png', id: '1' },
+        { kind: 'image', src: 'b.png', id: '2' },
+        { kind: 'audio', src: 'tone.mp3', id: '3' },
+        // Shape/text need no media and are excluded from the asset count.
+        { kind: 'shape', shape: 'circle', id: '4' },
+      ],
+      (p) => progress.push([p.done, p.total])
+    );
+
+    expect(result).toMatchObject({ total: 3, prepared: 3 });
+    expect(result.failures).toEqual([]);
+    expect(progress[0]).toEqual([0, 3]);
+    expect(progress[progress.length - 1]).toEqual([3, 3]);
+
+    engine.destroy();
+  });
+
+  it('fails closed when a referenced asset cannot be prepared (no partial-stimulus block)', async () => {
+    const { engine } = createMockEngine();
+    seedMedia(engine, { images: ['ok.png'] });
+    // The missing image is not in cache; force its load to fail deterministically
+    // (jsdom never fires Image load events for a bogus src).
+    (engine as unknown as { loadImage: (src: string) => Promise<HTMLImageElement | null> }).loadImage =
+      async () => null;
+
+    const result = await engine.prepareBlockStimuli([
+      { kind: 'image', src: 'ok.png', id: '1' },
+      { kind: 'image', src: 'missing.png', id: '2' },
+    ]);
+
+    expect(result.total).toBe(2);
+    expect(result.prepared).toBe(1);
+    expect(result.failures).toEqual([{ src: 'missing.png', kind: 'image' }]);
+
+    engine.destroy();
+  });
+
+  it('gateBlockMedia refuses to start, then retries on a gesture until the block is ready', async () => {
+    const { engine, target } = createMockEngine();
+
+    let attempts = 0;
+    (
+      engine as unknown as { prepareBlockStimuli: () => Promise<StimulusPrepResult> }
+    ).prepareBlockStimuli = async () => {
+      attempts += 1;
+      return attempts === 1
+        ? { total: 1, prepared: 0, failures: [{ src: 'x.png', kind: 'image' as const }] }
+        : { total: 1, prepared: 1, failures: [] };
+    };
+
+    const gate = engine.gateBlockMedia([{ kind: 'image', src: 'x.png', id: '1' }]);
+    await flush();
+    // First attempt failed → the gate is holding on the honest retry screen. A retry
+    // gesture drives the second (successful) attempt and resolves the gate.
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await gate;
+
+    expect(attempts).toBe(2);
+    engine.destroy();
+  });
+
+  it('is a no-op for a block that references no media', async () => {
+    const { engine, added } = createMockEngine();
+    await engine.gateBlockMedia([{ kind: 'shape', shape: 'circle', id: '1' }]);
+    // No preparing overlay renderable was ever added.
+    expect(added).not.toContain('reaction-stimulus-gate');
+    engine.destroy();
+  });
+});
+
+describe('ReactionEngine — W-9 onset arming order', () => {
+  it('does not stamp onset on a frame presented before a slow renderable is added', async () => {
+    const { engine, emitFrame } = createMockEngine();
+
+    // Defer the image load so a presented frame can arrive while the stimulus is
+    // still loading — the pre-fix bug stamped onset against that empty frame.
+    let resolveImage: (image: HTMLImageElement | null) => void = () => {};
+    (
+      engine as unknown as { loadImage: () => Promise<HTMLImageElement | null> }
+    ).loadImage = () =>
+      new Promise<HTMLImageElement | null>((resolve) => {
+        resolveImage = resolve;
+      });
+
+    const resultPromise = engine.runTrial({
+      id: 'slow-image',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'image', src: 'slow.png', id: 'stim' },
+      responseTimeoutMs: 60,
+    });
+
+    await flush();
+    // Frame presented BEFORE the renderable exists — must NOT stamp onset (W-9).
+    emitFrame({ now: 1000, presented: true });
+
+    // The image now resolves: the renderable is queued and onset arms.
+    resolveImage({ width: 10, height: 10 } as HTMLImageElement);
+    await flush();
+    // The next presented frame is the true onset frame (stimulus is on screen).
+    emitFrame({ now: 1016, presented: true });
+
+    const result = await resultPromise;
+
+    expect(result.stimulusOnsetTime).toBe(1016);
+    expect(result.stimulusOnsetRawTime).toBe(1016);
+
     engine.destroy();
   });
 });

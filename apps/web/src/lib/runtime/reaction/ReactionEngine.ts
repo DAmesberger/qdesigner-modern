@@ -105,6 +105,24 @@ const VIDEO_ONSET_RAF_FALLBACK_FRAMES = 2;
  */
 const AUDIO_RESUME_TIMEOUT_MS = 500;
 
+/** Progress of the Layer-2 per-block decode gate (ADR 0026). */
+export interface StimulusPrepProgress {
+  /** Assets fully loaded + decoded so far. */
+  done: number;
+  /** Distinct media assets this block references. */
+  total: number;
+}
+
+/** Outcome of {@link ReactionEngine.prepareBlockStimuli} — the Layer-2 decode gate. */
+export interface StimulusPrepResult {
+  /** Distinct media assets this block references. */
+  total: number;
+  /** How many were fully loaded + decoded from cache. */
+  prepared: number;
+  /** Assets that could not be prepared (drives the fail-closed refusal). */
+  failures: Array<{ src: string; kind: 'image' | 'video' | 'audio' }>;
+}
+
 interface ReactionEngineOptions {
   canvas: HTMLCanvasElement;
   renderer?: WebGLRenderer;
@@ -317,6 +335,21 @@ export class ReactionEngine {
   private readonly audioBufferCache = new Map<string, AudioBuffer>();
   private audioContext: AudioContext | null = null;
 
+  // Object URLs minted for fully-fetched video blobs (ADR 0026 Layer 2 — video is
+  // fetched whole, never streamed). Tracked so they are revoked on destroy().
+  private readonly videoObjectUrls = new Set<string>();
+
+  // Whether the current video stimulus can drive onset via requestVideoFrameCallback.
+  // Decided in createStimulusRenderable, consumed by runStimulus when it arms onset
+  // AFTER the renderable is queued (W-9).
+  private videoStimulusHasRvfc = false;
+
+  // Layer-2 decode gate overlay (ADR 0026): a canvas + renderable that shows the
+  // visible "Preparing stimuli… N of M" / fail-closed state on the reaction canvas
+  // between blocks. Reused across gates; torn down on gate completion and destroy.
+  private gateOverlayCanvas: HTMLCanvasElement | null = null;
+  private gateOverlayRenderable: Renderable | null = null;
+
   constructor(options: ReactionEngineOptions) {
     this.canvas = options.canvas;
     this.eventTarget = options.eventTarget || document;
@@ -464,6 +497,320 @@ export class ReactionEngine {
     }
 
     await Promise.all(promises);
+  }
+
+  // ── Layer-2 per-block decode gate (ADR 0026) ─────────────────────────────
+
+  /**
+   * Fail-closed decode gate for a block's stimuli (ADR 0026 Layer 2). Before the
+   * block's first trial, fully load + decode every referenced media asset FROM
+   * CACHE — image→decoded texture-ready bitmap, audio→WebAudio buffer, video→
+   * fully-fetched blob with its first frame decoded — behind a visible
+   * "Preparing stimuli… N of M" state rendered on the reaction canvas. If any
+   * asset cannot be prepared the block REFUSES TO START: it shows an honest,
+   * retryable state and waits for a retry gesture, looping until every asset is
+   * ready or the trial is aborted. Guarantees no network I/O and no decode ever
+   * happens inside the running block — "timing cannot be altered by missing data".
+   *
+   * A no-op (returns immediately) when the block references no media.
+   */
+  public async gateBlockMedia(
+    stimuli: ReactionStimulusConfig[],
+    signal?: AbortSignal
+  ): Promise<void> {
+    if (!stimuli.some((s) => this.isMediaStimulus(s) && s.src)) return;
+
+    // The shared renderer is normally already running under the fillout runtime;
+    // start() is idempotent, so this only matters for a standalone engine.
+    this.renderer.start?.();
+
+    try {
+      for (;;) {
+        if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
+
+        const result = await this.prepareBlockStimuli(
+          stimuli,
+          ({ done, total }) => this.setGateOverlay([`Preparing stimuli… ${done} of ${total}`]),
+          signal
+        );
+        if (result.failures.length === 0) return;
+
+        // Fail-closed: never run a timed block with partial stimuli. Honest,
+        // retryable copy distinct from the generic media-error screen.
+        this.setGateOverlay([
+          "Some stimuli for this task couldn't be prepared.",
+          'Check your connection, then press any key to try again.',
+        ]);
+        await this.waitForGateRetry(signal);
+      }
+    } finally {
+      this.clearGateOverlay();
+    }
+  }
+
+  /**
+   * Load + decode every distinct media asset a block references, from cache, with
+   * N-of-M progress (ADR 0026 Layer 2). Never throws (except on abort); returns
+   * which assets failed so {@link gateBlockMedia} can fail closed. Idempotent —
+   * already-decoded assets are counted from the caches with no I/O.
+   */
+  public async prepareBlockStimuli(
+    stimuli: ReactionStimulusConfig[],
+    onProgress?: (progress: StimulusPrepProgress) => void,
+    signal?: AbortSignal
+  ): Promise<StimulusPrepResult> {
+    // Distinct media assets only (shape/text/custom need no bytes).
+    const media: Array<Extract<ReactionStimulusConfig, { kind: 'image' | 'video' | 'audio' }>> = [];
+    const seen = new Set<string>();
+    for (const stimulus of stimuli) {
+      if (!this.isMediaStimulus(stimulus) || !stimulus.src) continue;
+      const key = `${stimulus.kind}:${stimulus.src}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      media.push(stimulus);
+    }
+
+    const total = media.length;
+    let done = 0;
+    onProgress?.({ done, total });
+
+    const failures: StimulusPrepResult['failures'] = [];
+    for (const stimulus of media) {
+      if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
+
+      let ok = false;
+      if (stimulus.kind === 'image') {
+        ok = await this.decodeImageToCache(stimulus.src, signal);
+      } else if (stimulus.kind === 'video') {
+        ok = (await this.fetchVideoBlobToCache(stimulus.src, signal)) != null;
+      } else {
+        ok = await this.decodeAudioToCache(stimulus.src, signal);
+      }
+
+      if (!ok) failures.push({ src: stimulus.src, kind: stimulus.kind });
+      done += 1;
+      onProgress?.({ done, total });
+    }
+
+    return { total, prepared: total - failures.length, failures };
+  }
+
+  private isMediaStimulus(
+    stimulus: ReactionStimulusConfig | undefined
+  ): stimulus is Extract<ReactionStimulusConfig, { kind: 'image' | 'video' | 'audio' }> {
+    return (
+      !!stimulus &&
+      (stimulus.kind === 'image' || stimulus.kind === 'video' || stimulus.kind === 'audio')
+    );
+  }
+
+  /** Ensure an image is loaded AND fully decoded (texture-upload ready) in the cache. */
+  private async decodeImageToCache(src: string, signal?: AbortSignal): Promise<boolean> {
+    if (this.imageCache.has(src)) return true;
+    const image = await this.loadImage(src, signal);
+    if (!image) return false;
+    // Guarantee the decode completed before texture upload (createImageBitmap-grade
+    // readiness): decode() resolves once pixels are ready; on an already-complete
+    // image it resolves immediately. Failure here is non-fatal — onload already
+    // signalled a usable image — so the asset still counts as prepared.
+    try {
+      await image.decode?.();
+    } catch {
+      // Already usable via onload; the WebGL upload path re-validates per frame.
+    }
+    return true;
+  }
+
+  /** Decode audio to a WebAudio buffer (preferred) or warm the HTMLAudio fallback. */
+  private async decodeAudioToCache(src: string, signal?: AbortSignal): Promise<boolean> {
+    if (this.audioBufferCache.has(src)) return true;
+    const ctx = this.getOrCreateAudioContext();
+    if (ctx) {
+      // decodeAudioData works on a suspended context, so the buffer is ready at
+      // gate time and W-1's resume race can never add decode latency mid-trial.
+      const buffer = await this.decodeAudioBuffer(ctx, src, signal);
+      if (buffer) return true;
+    }
+    // No Web Audio (or decode failed) — the degraded HTMLAudio playback path can
+    // still present the stimulus, so a loadable element counts as prepared.
+    if (this.audioCache.has(src)) return true;
+    const audio = await this.loadAudio(src, signal);
+    if (audio) {
+      this.audioCache.set(src, audio);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Fully fetch a video into a blob and decode its first frame, caching the
+   * element under its ORIGINAL src (ADR 0026 Layer 2: video is fetched WHOLE, not
+   * streamed — no Range requests, no network mid-block). Playback and the rVFC
+   * texture path then run from the same-origin blob object URL. Returns the
+   * decoded element, or null on fetch/decode failure.
+   */
+  private async fetchVideoBlobToCache(
+    src: string,
+    signal?: AbortSignal
+  ): Promise<HTMLVideoElement | null> {
+    if (this.videoCache.has(src)) return this.videoCache.get(src)!;
+
+    let objectUrl: string | null = null;
+    try {
+      const response = await fetch(src, { signal });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      objectUrl = URL.createObjectURL(blob);
+      this.videoObjectUrls.add(objectUrl);
+
+      const video = document.createElement('video');
+      // A blob: URL is same-origin, so this is a no-op for taint, but keeping it
+      // anonymous is harmless defense-in-depth for the WebGL texture upload.
+      video.crossOrigin = 'anonymous';
+      video.playsInline = true;
+      video.muted = true;
+      video.preload = 'auto';
+
+      const url = objectUrl;
+      const decoded = await new Promise<boolean>((resolve) => {
+        const cleanup = () => {
+          video.removeEventListener('loadeddata', onLoaded);
+          video.removeEventListener('error', onError);
+          if (signal) signal.removeEventListener('abort', onAbort);
+        };
+        const onLoaded = () => {
+          cleanup();
+          resolve(true);
+        };
+        const onError = () => {
+          cleanup();
+          resolve(false);
+        };
+        const onAbort = () => {
+          cleanup();
+          resolve(false);
+        };
+        video.addEventListener('loadeddata', onLoaded);
+        video.addEventListener('error', onError);
+        if (signal) signal.addEventListener('abort', onAbort, { once: true });
+        video.src = url;
+        video.load();
+      });
+
+      if (!decoded) {
+        URL.revokeObjectURL(objectUrl);
+        this.videoObjectUrls.delete(objectUrl);
+        return null;
+      }
+
+      // Keyed by ORIGINAL src so createStimulusRenderable/loadVideo resolve the
+      // pre-fetched blob element instead of re-opening a streaming request.
+      this.videoCache.set(src, video);
+      return video;
+    } catch {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        this.videoObjectUrls.delete(objectUrl);
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Render the Layer-2 gate overlay on the reaction canvas (ADR 0026): centred
+   * multi-line text ("Preparing stimuli… N of M" or the fail-closed message). The
+   * canvas + renderable are reused across updates; only the pixels change.
+   */
+  private setGateOverlay(lines: string[]): void {
+    const canvas = (this.gateOverlayCanvas ??= document.createElement('canvas'));
+    const fontPx = 32;
+    const lineHeight = fontPx * 1.5;
+    const padding = 40;
+
+    const measure = canvas.getContext('2d');
+    if (measure) {
+      measure.font = `${fontPx}px Arial`;
+      const textWidth = Math.max(1, ...lines.map((line) => measure.measureText(line).width));
+      canvas.width = Math.ceil(textWidth + padding * 2);
+      canvas.height = Math.ceil(lineHeight * lines.length + padding * 2);
+
+      const draw = canvas.getContext('2d');
+      if (draw) {
+        draw.clearRect(0, 0, canvas.width, canvas.height);
+        draw.font = `${fontPx}px Arial`;
+        draw.textAlign = 'center';
+        draw.textBaseline = 'middle';
+        draw.fillStyle = 'rgba(255, 255, 255, 1)';
+        lines.forEach((line, i) => {
+          draw.fillText(line, canvas.width / 2, padding + lineHeight * (i + 0.5));
+        });
+      }
+    }
+
+    // Reused canvas: flag the freshly-drawn pixels so the renderer re-uploads them.
+    this.renderer.invalidateTexture?.(canvas);
+
+    if (!this.gateOverlayRenderable) {
+      this.gateOverlayRenderable = {
+        id: 'reaction-stimulus-gate',
+        layer: 70,
+        render: (_gl, context) => {
+          const { x, y, width, height } = this.resolveBounds(
+            undefined,
+            context.width,
+            context.height,
+            canvas.width,
+            canvas.height
+          );
+          this.renderer.executeCommand({
+            type: 'drawTexture',
+            params: { texture: canvas, x, y, width, height },
+          });
+        },
+      };
+      this.renderer.addRenderable(this.gateOverlayRenderable);
+    }
+  }
+
+  /** Remove the gate overlay renderable (the block is starting, or the gate ended). */
+  private clearGateOverlay(): void {
+    if (this.gateOverlayRenderable) {
+      this.renderer.removeRenderable(this.gateOverlayRenderable.id);
+      this.gateOverlayRenderable = null;
+    }
+  }
+
+  /**
+   * Resolve on the next retry gesture (keydown / pointerdown) during a fail-closed
+   * gate. Rejects with an AbortError if the trial is aborted while waiting.
+   */
+  private waitForGateRetry(signal?: AbortSignal): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const target = this.eventTarget;
+      const cleanup = () => {
+        target.removeEventListener('keydown', onGesture as EventListener);
+        target.removeEventListener('pointerdown', onGesture as EventListener);
+        if (target !== document) document.removeEventListener('keydown', onGesture as EventListener);
+        if (signal) signal.removeEventListener('abort', onAbort);
+      };
+      const onGesture = () => {
+        cleanup();
+        resolve();
+      };
+      const onAbort = () => {
+        cleanup();
+        reject(new DOMException('Operation aborted', 'AbortError'));
+      };
+
+      if (signal?.aborted) {
+        reject(new DOMException('Operation aborted', 'AbortError'));
+        return;
+      }
+      target.addEventListener('keydown', onGesture as EventListener);
+      target.addEventListener('pointerdown', onGesture as EventListener);
+      if (target !== document) document.addEventListener('keydown', onGesture as EventListener);
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
   public schedulePhase(phase: ScheduledPhase): void {
@@ -664,6 +1011,17 @@ export class ReactionEngine {
       this.audioContext = null;
     }
     this.audioBufferCache.clear();
+    this.clearGateOverlay();
+    // Revoke every video-blob object URL minted by the Layer-2 gate (ADR 0026).
+    for (const url of this.videoObjectUrls) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        // best-effort revoke
+      }
+    }
+    this.videoObjectUrls.clear();
+    this.gateOverlayCanvas = null;
     this.textCanvas = null;
   }
 
@@ -695,6 +1053,7 @@ export class ReactionEngine {
     this.cancelVideoFrameLogging();
     this.awaitingVideoOnset = false;
     this.videoOnsetFramesWaited = 0;
+    this.videoStimulusHasRvfc = false;
     this.videoFrameRing = [];
 
     // Frame-accurate offset state (E-REACT-3).
@@ -774,21 +1133,16 @@ export class ReactionEngine {
 
     const stimulus = config.stimulus;
 
-    // Arm onset detection appropriate to the stimulus kind:
-    // - visual (shape/text/image/custom): raf pending mark, next presented frame.
-    // - video: requestVideoFrameCallback owns onset (armed in createStimulusRenderable);
-    //          raf is only a fallback after ~2 frames.
-    // - audio: onset is stamped synchronously in createStimulusRenderable
-    //          (audioContext or degraded HTMLAudio).
-    if (stimulus.kind === 'video') {
-      this.awaitingVideoOnset = true;
-      this.videoOnsetFramesWaited = 0;
-      this.pendingStimulusOnsetMark = false;
-    } else if (stimulus.kind === 'audio') {
-      this.pendingStimulusOnsetMark = false;
-    } else {
-      this.pendingStimulusOnsetMark = true;
-    }
+    // W-9 structural fix: do NOT arm any onset detection before the stimulus
+    // renderable actually exists. If createStimulusRenderable stalls (a media cache
+    // miss), a presented frame could otherwise stamp onset 1-2 frames before the
+    // pixels reach the screen, inflating RT. Arming is deferred to AFTER the
+    // renderable is queued (below). Layer-2's per-block decode gate (ADR 0026)
+    // makes this await resolve from cache within a microtask, but the ordering is
+    // the guard regardless — a miss can never stamp early.
+    this.pendingStimulusOnsetMark = false;
+    this.awaitingVideoOnset = false;
+    this.videoOnsetFramesWaited = 0;
 
     const renderable = await this.createStimulusRenderable(stimulus, signal);
 
@@ -797,6 +1151,24 @@ export class ReactionEngine {
     if (renderable) {
       renderableId = renderable.id;
       this.renderer.addRenderable(renderable);
+
+      // Now arm onset detection appropriate to the stimulus kind (W-9: only once
+      // the renderable is on the render queue):
+      // - video with rVFC: requestVideoFrameCallback owns onset (its logger was
+      //   registered in createStimulusRenderable but only stamps once
+      //   awaitingVideoOnset is set here); raf takes over after ~2 frames.
+      // - video without rVFC: the raf detector owns onset directly.
+      // - other visual (shape/text/image/custom): raf detector, next presented frame.
+      if (stimulus.kind === 'video') {
+        if (this.videoStimulusHasRvfc) {
+          this.awaitingVideoOnset = true;
+          this.videoOnsetFramesWaited = 0;
+        } else {
+          this.pendingStimulusOnsetMark = true;
+        }
+      } else {
+        this.pendingStimulusOnsetMark = true;
+      }
     } else if (stimulus.kind !== 'audio') {
       // Non-audio stimulus produced no renderable (e.g. media failed to load) and
       // no clock-driven onset will arrive — stamp an immediate fallback onset so
@@ -1778,15 +2150,13 @@ export class ReactionEngine {
 
       // requestVideoFrameCallback owns the onset (3.3): it exposes the
       // compositor's expectedDisplayTime, which is the frame's true on-screen
-      // time — more accurate than a raf timestamp. We do NOT arm the raf mark
-      // for video; raf only takes over as a fallback (handled in the frame loop)
-      // when rVFC is unavailable or has not fired within ~2 frames.
-      if ('requestVideoFrameCallback' in video) {
+      // time — more accurate than a raf timestamp. We register the rVFC logger
+      // here but do NOT arm onset yet: runStimulus arms it AFTER the renderable is
+      // queued (W-9), so a slow load can't stamp onset before the pixels exist.
+      // The logger's callback only stamps once awaitingVideoOnset is set there.
+      this.videoStimulusHasRvfc = 'requestVideoFrameCallback' in video;
+      if (this.videoStimulusHasRvfc) {
         this.startVideoFrameLogging(video as HTMLVideoElement);
-      } else {
-        // No rVFC — hand the onset to the raf detector immediately.
-        this.awaitingVideoOnset = false;
-        this.pendingStimulusOnsetMark = true;
       }
 
       if (stimulus.autoplay !== false) {

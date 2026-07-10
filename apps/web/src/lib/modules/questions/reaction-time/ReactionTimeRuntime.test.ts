@@ -6,6 +6,7 @@ const mockEngineState = {
   runTrialCalls: 0,
   primeAudioCalls: 0,
   gatekeeperPassed: false,
+  gateBlockCalls: 0,
 };
 
 interface MockTrialResult {
@@ -63,6 +64,10 @@ vi.mock('$lib/runtime/reaction', async (importOriginal) => {
     }
 
     async warmUpStimuli(): Promise<void> {}
+
+    async gateBlockMedia(): Promise<void> {
+      mockEngineState.gateBlockCalls++;
+    }
 
     clearScheduledPhases(): void {
       mockEngineState.scheduled = [];
@@ -132,6 +137,7 @@ describe('ReactionTimeRuntime', () => {
     mockEngineState.runTrialCalls = 0;
     mockEngineState.primeAudioCalls = 0;
     mockEngineState.gatekeeperPassed = false;
+    mockEngineState.gateBlockCalls = 0;
   });
 
   it('executes canonical study.blocks with scheduled phases', async () => {
