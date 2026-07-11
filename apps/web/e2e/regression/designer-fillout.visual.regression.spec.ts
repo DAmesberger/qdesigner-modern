@@ -3,7 +3,6 @@ import {
   buildFilloutPath,
   deriveQuestionnaireCode,
   installAuthSession,
-  type ProvisionedWorkspace,
   provisionWorkspace,
 } from '../helpers/fullstack-api';
 

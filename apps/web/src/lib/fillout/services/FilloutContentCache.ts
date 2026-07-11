@@ -84,6 +84,39 @@ export class FilloutContentCache {
 	private static MEDIA_HARD_CAP_BYTES = 256 * 1024 * 1024;
 
 	/**
+	 * Per-asset fetch budget (ms). A media asset is larger than the server-variable
+	 * aggregate `cacheServerVariables` fetches, so it gets a more generous cap than that
+	 * 3s ceiling — but it is still bounded so ONE hung asset can never stall the load path
+	 * (ADR 0026 Layer 1: byte-caching is best-effort; the block-level decode gate is the
+	 * hard offline guarantee).
+	 */
+	private static MEDIA_FETCH_TIMEOUT_MS = 10_000;
+
+	/**
+	 * Byte-cache a single media asset, capping the network fetch with an abort timeout so a
+	 * hung asset can't stall the caller. Returns whether the asset ended up in the Cache API
+	 * and its recorded size. Throws on fetch/abort/cache error; callers apply their own
+	 * failure semantics — the eager load path logs and moves on, `prepareOffline` counts it
+	 * as failed.
+	 */
+	private static async fetchAndCacheAsset(
+		cache: Cache,
+		url: string,
+		timeoutMs: number
+	): Promise<{ inCache: boolean; size: number }> {
+		const existing = await cache.match(url);
+		if (existing) {
+			return { inCache: true, size: Number(existing.headers.get('content-length') ?? '0') || 0 };
+		}
+		const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+		if (!response.ok) return { inCache: false, size: 0 };
+		// Read the length header before put() consumes the body.
+		const size = Number(response.headers.get('content-length') ?? '0') || 0;
+		await cache.put(url, response);
+		return { inCache: true, size };
+	}
+
+	/**
 	 * Download and cache a questionnaire for offline use as a version-pinned row.
 	 */
 	static async syncForOffline(accessCode: string, questionnaireData: Record<string, unknown>): Promise<void> {
@@ -620,19 +653,9 @@ export class FilloutContentCache {
 			let inCache = false;
 			let size = 0;
 			try {
-				const existing = await cache.match(url);
-				if (existing) {
-					size = Number(existing.headers.get('content-length') ?? '0') || 0;
-					inCache = true;
-				} else {
-					const response = await fetch(url);
-					if (response.ok) {
-						// Read the length header before put() consumes the body.
-						size = Number(response.headers.get('content-length') ?? '0') || 0;
-						await cache.put(url, response);
-						inCache = true;
-					}
-				}
+				// Same per-asset timeout cap as the eager load path; here a failure is
+				// reported honestly (`failed++`), not swallowed.
+				({ inCache, size } = await this.fetchAndCacheAsset(cache, url, this.MEDIA_FETCH_TIMEOUT_MS));
 			} catch {
 				inCache = false;
 			}
@@ -705,17 +728,12 @@ export class FilloutContentCache {
 		await Promise.allSettled(
 			urls.map(async (url) => {
 				try {
-					const existing = await cache.match(url);
-					let size = 0;
-					if (existing) {
-						size = Number(existing.headers.get('content-length') ?? '0') || 0;
-					} else {
-						const response = await fetch(url);
-						if (!response.ok) return;
-						// Read the length header before put() consumes the body.
-						size = Number(response.headers.get('content-length') ?? '0') || 0;
-						await cache.put(url, response);
-					}
+					const { inCache, size } = await this.fetchAndCacheAsset(
+						cache,
+						url,
+						this.MEDIA_FETCH_TIMEOUT_MS
+					);
+					if (!inCache) return;
 
 					const entry: FilloutMediaEntry = {
 						url,
@@ -728,8 +746,11 @@ export class FilloutContentCache {
 						cachedAt: Date.now(),
 					};
 					await db.filloutMedia.put(entry);
-				} catch {
-					// Non-critical: media may not be available.
+				} catch (err) {
+					// Best-effort byte-cache (ADR 0026 Layer 1): a per-asset failure or fetch
+					// timeout must never fail the load path — log and move on. The block-level
+					// decode gate (Layer 2) is what actually blocks a run on missing stimuli.
+					console.warn(`[FilloutContentCache] media prefetch skipped: ${url}`, err);
 				}
 			})
 		);

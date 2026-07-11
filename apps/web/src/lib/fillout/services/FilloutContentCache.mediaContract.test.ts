@@ -51,6 +51,39 @@ function installFetch(sizeBytes = 50) {
 	return fn;
 }
 
+/**
+ * fetch double that NEVER resolves on its own — it only settles by rejecting when the
+ * caller's AbortSignal fires. Models a hung asset (F-58): without the abort cap the caller
+ * would hang forever; with it, the fetch rejects at the timeout budget.
+ */
+function installHangingFetch() {
+	const fn = vi.fn(
+		(_url: string, init?: { signal?: AbortSignal }) =>
+			new Promise<Response>((_resolve, reject) => {
+				const signal = init?.signal;
+				if (signal) {
+					signal.addEventListener('abort', () =>
+						reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+					);
+				}
+			})
+	);
+	vi.stubGlobal('fetch', fn);
+	return fn;
+}
+
+/** Run `body` with the per-asset fetch budget temporarily shortened for fast timeout tests. */
+async function withShortMediaTimeout(ms: number, body: () => Promise<void>): Promise<void> {
+	const holder = FilloutContentCache as unknown as { MEDIA_FETCH_TIMEOUT_MS: number };
+	const original = holder.MEDIA_FETCH_TIMEOUT_MS;
+	holder.MEDIA_FETCH_TIMEOUT_MS = ms;
+	try {
+		await body();
+	} finally {
+		holder.MEDIA_FETCH_TIMEOUT_MS = original;
+	}
+}
+
 beforeEach(async () => {
 	await db.filloutMedia.clear();
 	await db.filloutQuestionnaires.clear();
@@ -92,7 +125,11 @@ describe('ADR 0026 Layer 1 — reactive load caches mediaId reaction assets', ()
 
 		// The mediaId-only asset was fetched and cached — the pre-ADR path (direct
 		// url/src only) would have missed it entirely.
-		expect(fetchFn).toHaveBeenCalledWith(proxyUrl);
+		// Each fetch is capped with an abort timeout so a hung asset can't stall the load (F-58).
+		expect(fetchFn).toHaveBeenCalledWith(
+			proxyUrl,
+			expect.objectContaining({ signal: expect.any(AbortSignal) })
+		);
 		expect(store.has(proxyUrl)).toBe(true);
 
 		const rows = await db.filloutMedia
@@ -100,6 +137,48 @@ describe('ADR 0026 Layer 1 — reactive load caches mediaId reaction assets', ()
 			.equals(filloutDefinitionKey('qn-l1', 1, 0, 0))
 			.toArray();
 		expect(rows.map((r) => r.url)).toContain(proxyUrl);
+	});
+});
+
+describe('F-58 — a hung media asset never stalls the load path', () => {
+	it('completes the load (asset skipped + logged) within the per-asset budget', async () => {
+		installCache();
+		const fetchFn = installHangingFetch();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		const key = filloutDefinitionKey('qn-hang', 1, 0, 0);
+		const payload = {
+			id: 'qn-hang',
+			version_major: 1,
+			version_minor: 0,
+			version_patch: 0,
+			definition: {
+				pages: [
+					{
+						questions: [
+							{ id: 'q', type: 'reaction-experiment', config: { assets: [{ mediaId: 'hung' }] } },
+						],
+					},
+				],
+			},
+		};
+
+		await withShortMediaTimeout(20, async () => {
+			// Resolves at all — a fetch with no timeout would hang here forever.
+			await FilloutContentCache.cacheQuestionnaire(payload, 'HNG');
+		});
+
+		expect(fetchFn).toHaveBeenCalledWith(
+			mediaContentUrl('hung'),
+			expect.objectContaining({ signal: expect.any(AbortSignal) })
+		);
+		// The definition snapshot still landed — media failure did not fail the load.
+		expect(await db.filloutQuestionnaires.get(key)).toBeTruthy();
+		// The hung asset was skipped (no accounting row) and logged, not swallowed silently.
+		expect(await db.filloutMedia.where('questionnaireKey').equals(key).count()).toBe(0);
+		expect(warn).toHaveBeenCalled();
+
+		warn.mockRestore();
 	});
 });
 

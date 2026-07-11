@@ -61,6 +61,38 @@ function installFetch(sizeBytes = 100, ok = true) {
 	return fn;
 }
 
+/**
+ * fetch double that never resolves on its own — it settles only by rejecting when the
+ * caller's AbortSignal fires (models a hung asset, F-58).
+ */
+function installHangingFetch() {
+	const fn = vi.fn(
+		(_url: string, init?: { signal?: AbortSignal }) =>
+			new Promise<Response>((_resolve, reject) => {
+				const signal = init?.signal;
+				if (signal) {
+					signal.addEventListener('abort', () =>
+						reject(signal.reason ?? new DOMException('Aborted', 'AbortError'))
+					);
+				}
+			})
+	);
+	vi.stubGlobal('fetch', fn);
+	return fn;
+}
+
+/** Run `body` with the per-asset fetch budget temporarily shortened for fast timeout tests. */
+async function withShortMediaTimeout(ms: number, body: () => Promise<void>): Promise<void> {
+	const holder = FilloutContentCache as unknown as { MEDIA_FETCH_TIMEOUT_MS: number };
+	const original = holder.MEDIA_FETCH_TIMEOUT_MS;
+	holder.MEDIA_FETCH_TIMEOUT_MS = ms;
+	try {
+		await body();
+	} finally {
+		holder.MEDIA_FETCH_TIMEOUT_MS = original;
+	}
+}
+
 beforeEach(async () => {
 	await db.filloutMedia.clear();
 });
@@ -138,6 +170,24 @@ describe('FilloutContentCache.prepareOffline', () => {
 		const readiness = await FilloutContentCache.prepareOffline(QID, VERSION, definition());
 
 		expect(readiness).toMatchObject({ total: 3, cached: 2, failed: 1, ready: false });
+	});
+
+	it('caps a hung asset at the fetch budget and reports it as failed (F-58)', async () => {
+		installCache();
+		const fetchFn = installHangingFetch();
+
+		let readiness!: Awaited<ReturnType<typeof FilloutContentCache.prepareOffline>>;
+		await withShortMediaTimeout(20, async () => {
+			// Resolves at all — a fetch with no timeout would hang forever on the first asset.
+			readiness = await FilloutContentCache.prepareOffline(QID, VERSION, definition());
+		});
+
+		// Explicit provisioning reports honestly: every hung asset is counted failed, not swallowed.
+		expect(readiness).toMatchObject({ total: 3, cached: 0, failed: 3, ready: false });
+		expect(fetchFn).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.objectContaining({ signal: expect.any(AbortSignal) })
+		);
 	});
 
 	it('reports quotaExceeded when the definition media overflows the cache budget', async () => {
