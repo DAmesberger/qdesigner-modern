@@ -374,20 +374,41 @@ pub async fn logout(
 pub async fn session_view(
     State(state): State<AppState>,
     jar: CookieJar,
-) -> Result<Json<SessionView>, ApiError> {
+) -> Result<(CookieJar, Json<SessionView>), ApiError> {
     let Some(token) = jar
         .get(session::SESSION_COOKIE)
         .map(|c| c.value().to_string())
         .filter(|v| !v.is_empty())
     else {
-        return Ok(Json(SessionView::anonymous()));
+        // No qd_session cookie at all: a plain anonymous request. Do NOT emit a
+        // Set-Cookie — a cookie-less caller must not gain a pointless header.
+        return Ok((jar, Json(SessionView::anonymous())));
     };
 
-    let view =
-        session::session_view_for_token(&state.pool, &token, state.config.auth_session_idle_expiry)
-            .await?
-            .unwrap_or_else(SessionView::anonymous);
-    Ok(Json(view))
+    match session::session_view_for_token(
+        &state.pool,
+        &token,
+        state.config.auth_session_idle_expiry,
+    )
+    .await?
+    {
+        Some(view) => Ok((jar, Json(view))),
+        None => {
+            // A qd_session cookie was present but does not resolve to a live
+            // session (stale/invalid/expired). Clear it here so the browser
+            // stops sending a dead cookie. Otherwise csrf_middleware sees the
+            // cookie on the next login POST and demands a CSRF token the client
+            // can no longer obtain, and POST /api/auth/logout is unreachable for
+            // the same reason (plus its AuthenticatedUser extractor 401s) —
+            // locking the browser out until cookies are cleared by hand.
+            // GET bypasses csrf_middleware and the web client loads the session
+            // on init, so the dead cookie self-heals before any login POST. Use
+            // the same removal helper as logout so name/path match how the
+            // cookie is set at login and the browser actually drops it.
+            let jar = jar.remove(clear_session_cookie());
+            Ok((jar, Json(SessionView::anonymous())))
+        }
+    }
 }
 
 /// POST /api/auth/verify-email/send  and  /verify-email/resend

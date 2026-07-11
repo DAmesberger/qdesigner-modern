@@ -123,6 +123,73 @@ async fn register_session_login_logout_happy_path() {
 }
 
 #[tokio::test]
+async fn stale_session_cookie_is_cleared_on_session_view() {
+    // A browser holding a stale/invalid httpOnly qd_session cookie must be able
+    // to recover: GET /api/auth/session sees a cookie that does not resolve to a
+    // live session and returns a removal Set-Cookie so the browser stops sending
+    // the dead cookie (which would otherwise trip csrf_middleware on the next
+    // login POST and lock the user out). See issue #47 follow-up.
+    let Some(state) = build_test_state().await else {
+        eprintln!("skipping: no DB reachable");
+        return;
+    };
+    let app = test_app(state);
+
+    // A syntactically-plausible token that resolves to no session.
+    let stale = "stale-invalid-session-token-deadbeef";
+    let (status, headers, view) = send_full(
+        &app,
+        json_req("GET", "/api/auth/session", Some(stale), None),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "session view is always 200: {view:?}");
+    assert_eq!(
+        view["authenticated"].as_bool(),
+        Some(false),
+        "a stale cookie must read as anonymous"
+    );
+
+    let removal = headers
+        .get_all("set-cookie")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .find(|s| s.starts_with("qd_session="))
+        .expect("stale session view must emit a qd_session removal Set-Cookie");
+    // The removal clears the value and matches the login cookie's path so the
+    // browser actually drops it.
+    assert!(
+        removal.starts_with("qd_session=;"),
+        "removal cookie must clear the value: {removal}"
+    );
+    assert!(
+        removal.contains("Path=/"),
+        "removal cookie path must match the login cookie: {removal}"
+    );
+}
+
+#[tokio::test]
+async fn anonymous_session_view_emits_no_set_cookie() {
+    // A cookie-less anonymous request must NOT gain a pointless Set-Cookie
+    // header — only a *present but invalid* cookie is cleared.
+    let Some(state) = build_test_state().await else {
+        eprintln!("skipping: no DB reachable");
+        return;
+    };
+    let app = test_app(state);
+
+    let (status, headers, view) =
+        send_full(&app, json_req("GET", "/api/auth/session", None, None)).await;
+
+    assert_eq!(status, StatusCode::OK, "session view is always 200: {view:?}");
+    assert_eq!(view["authenticated"].as_bool(), Some(false));
+    assert!(
+        headers.get_all("set-cookie").iter().next().is_none(),
+        "anonymous request must not receive any Set-Cookie"
+    );
+}
+
+#[tokio::test]
 async fn login_wrong_password_is_401() {
     let Some(state) = build_test_state().await else {
         eprintln!("skipping: no DB reachable");
