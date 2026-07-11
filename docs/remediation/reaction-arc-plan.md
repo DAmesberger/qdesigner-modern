@@ -92,7 +92,15 @@ opportunistically where their files are touched.
 | RT-1 | ✅ CLOSED (b743be4 RT-1c, 5fd46e3 RT-1b-server, 7366e99 RT-1a, deeede2 RT-1b-client; exit live-QA all-pass: trials end-to-end in-browser with full provenance, W-1/W-3/W-10 verified, per-trial rows server-side) |
 | RT-2 | ✅ CLOSED (RT-2a a3bfe85, RT-2b f840e5c; fixes F-48 5c86ef8, F-49 a136b8b, F-51 9afb859, F-52 structural 63a597e). Third QA pass 5/5: hydration + no-clobber, console hygiene clean, testTrials honored (4/4), semantic option_ids + correctness scored end-to-end (canvas-pixel onset detector, rt_us 393-404ms vs 400ms dispatch — timing chain incidentally validated), custom paradigm BlockEditor intact. Lesson encoded: single-source config (no procedural study snapshot), owned working copy + onUpdate contract. F-53 logged (global deadletter banner). |
 | RT-3 | ✅ DATA CONTRACT CLOSED (5661cd1 + F-54/F-55 stall-proofing 952f3ce). Exit QA: image-stimulus golden path server-verified (trials + provenance); Layer-1 mediaId auto-cache implemented (dev-testable post-F-55); fail-closed verified for fast-error AND genuine-stall paths — a stall now yields ZERO trials and a never-completing session (the silent-blank-data hole is structurally closed, belt-and-braces invalidated:'no-stimulus' stamp). Residue: F-56 (gate overlay may not present while the gate holds — blank screen UX, fix in flight), F-57 (same-version republish stale media refs). |
-| RT-4..RT-6 | todo (RT-4 WebHID next, after F-56) |
+| RT-4 | ✅ CLOSED (`9a44b1f`) — WebHID ResponseSource: descriptor-free bit-diff parser (bitfield button boxes; limits documented), armHid through the first-wins resolver on event.timeStamp (clock-proven), gesture-gated connect affordance on Welcome (Chromium-only honesty), qualification disclosure, hid editor rows enabled, CI fake-device rig. F-56 overlay self-painting fixed en route (`1605c93`). |
+| RT-5 | ✅ CLOSED (`b51ddcc`) — migration 00049 fillout_trial_stats (session-distinct n, invalidated excluded), per-declaration minN everywhere (legacy backfilled 5, new default 1), designer trial-source + Disclosure block, offline participant-vs-cohort box plot (cohort pre-synced, self from local trials, zero network at render), FeedbackChart precomputed quartiles + marker (closes F-16 note). |
+| RT-6 | ✅ CLOSED (`06286ce`) — test-mode rt-phase hook (stimulus at ONSET), e2e/reaction lane 5/5 against the live stack (golden path w/ server assertions, W-1 regression, preload fail-closed w/ documented gate-layer division, mapping, offline round-trip), CI-wired last in the e2e job. F-58 load-path fetch cap fixed en route (`5df2dba`). |
+
+**ARC COMPLETE (2026-07-11).** All six phases merged and QA'd. Open residue:
+F-53 (deadletter banner scoping), F-57 (same-version republish stale refs),
+F-50 (create 409 mapping), report-palette entry for reaction-cohort-box,
+cacheServerVariables signal cap; deferred by design: photodiode fast-follow,
+trigger output, descriptor-aware HID parsing.
 
 QA-surfaced bugs: F-48 (pre-existing designer autosave create/update race —
 fix in flight), F-49 (TimingSpec persistence — fix in flight). Live-QA
