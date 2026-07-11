@@ -71,3 +71,44 @@ touch, gamepad, or a WebHID device. Multiple sources may be armed
 concurrently for one trial; the first event wins and provenance records
 which source fired.
 _Avoid_: input mode, response mode
+
+### Validity
+
+Three distinct kinds of validity exist; never say "validation" bare.
+
+**Timing validity**:
+Whether the measurement conditions of a trial were intact (isolation,
+visibility, timer resolution). Governed by the study's ValidityPolicy;
+degradation records provenance, never an answer's rejection.
+_Avoid_: validity (unqualified)
+
+**Response validity**:
+Whether a participant's answer satisfies its question's constraints.
+Participant-correctable, so it blocks advance at capture; owned by the
+question's module.
+_Avoid_: answer validation, form validation
+
+**Config validity**:
+Whether an authored question configuration is well-formed enough to run
+(coherent ranges, sufficient options). A researcher-facing, design-time
+concern owned by the question's module; reported as ValidationIssues.
+_Avoid_: question validation
+
+**ValidationIssue**:
+One design-time finding that an authored configuration is incomplete or
+incoherent. Addressed to the researcher; participants never see one.
+_Avoid_: warning, error (unqualified)
+
+### Authorization
+
+**Scope**:
+The one resource an authorization decision is made against — an
+organization, project, or questionnaire. Every application-layer check
+names exactly one Scope.
+_Avoid_: resource, target
+
+**Permission**:
+A named capability from the platform's closed list (read, write, publish,
+manage-members, …), resolved from a member's system role and any custom
+role. Checked against a Scope; never checked without one.
+_Avoid_: right, privilege, action

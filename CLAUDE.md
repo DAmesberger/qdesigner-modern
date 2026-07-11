@@ -206,6 +206,8 @@ All architectural and scoping decisions through Phase 8 live in `docs/decisions/
 - `0027-validity-policy-record-by-default.md` — timing-validity problems record by default; per-study ValidityPolicy `enforce` is opt-in.
 - `0028-trial-aggregates-explicit-minn.md` — trial aggregates carry an explicit minN disclosure floor.
 - `0029-form-enforcement-and-offline-binaries.md` — form validation blocks at capture (modules own validity; script `onValidate` blocks on verdict, fails open on crash); binary answers go IndexedDB-first with deferred upload, pending provenance, pin-until-ack; storage modes deleted.
+- `0030-single-authorize-entry-point.md` — one `authz::authorize(executor, user, Scope, Permission)` replaces the access::/RbacManager pair at all ~70 authenticated sites (reads included); halves go private post-sweep; behavior-preserving sweep + divergence ledger; matrix test gate. Executes 0008's anticipated consolidation; 0013's RLS posture untouched.
+- `0031-sso-two-products-shared-oidc-client.md` — zitadel_auth (platform auth) and sso (org federation) are deliberate products; the duplicated OIDC mechanism extracts into one `OidcClient` returning verified claims; protocol-scoped seam (future SAML ACS bypasses it); nonce standardized hashed-at-rest; rejection-matrix wiremock gate.
 - `PHASE_6_PLAN.md` — Phase 6 implementation plan (with mid-phase amendments).
 - `PHASE_8_FILLOUT_FIX_PLAN.md` — Phase 8 fillout renderer & reaction-framework remediation plan (Phases 1–5).
 - `SUPERVISOR_PROTOCOL.md` — message format for the team-lead / supervisor / user loop
