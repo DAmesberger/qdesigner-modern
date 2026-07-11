@@ -118,6 +118,43 @@ impl S3StorageService {
         Ok(url.uri().to_string())
     }
 
+    /// Generate a presigned GET URL that forces a download rather than an
+    /// inline render.
+    ///
+    /// Pins `response-content-disposition: attachment` (with a sanitized
+    /// filename) into the presign so S3/MinIO echoes it as a response header.
+    /// Session-media answers can now be documents (PDF/office/zip/text, issue
+    /// #48); none of them may render inline from our origin, so every
+    /// session-media URL is served as an attachment regardless of type.
+    pub async fn presigned_download_url(
+        &self,
+        key: &str,
+        expires_in: Duration,
+        download_filename: &str,
+    ) -> Result<String, ApiError> {
+        let presign_config = PresigningConfig::builder()
+            .expires_in(expires_in)
+            .build()
+            .map_err(|e| ApiError::Internal(format!("Presign config error: {e}")))?;
+
+        let disposition = format!(
+            "attachment; filename=\"{}\"",
+            sanitize_download_filename(download_filename)
+        );
+
+        let url = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .response_content_disposition(disposition)
+            .presigned(presign_config)
+            .await
+            .map_err(|e| ApiError::Internal(format!("Presigning failed: {e}")))?;
+
+        Ok(url.uri().to_string())
+    }
+
     /// Stream an object's bytes from S3, optionally a single byte range.
     ///
     /// `range` is passed straight through as an HTTP `Range` header value
@@ -234,6 +271,35 @@ impl S3StorageService {
     pub fn export_key(region: &str, org_id: Uuid, job_id: Uuid) -> String {
         let region = sanitize_region(region);
         format!("{region}/exports/{org_id}/{job_id}.zip")
+    }
+}
+
+/// Reduce an untrusted upload filename to a safe ASCII token for a
+/// `Content-Disposition: attachment; filename="…"` header.
+///
+/// Keeps only the final path component, then restricts to characters that
+/// cannot break out of the quoted filename token or inject a header
+/// (alphanumerics plus a small safe punctuation set); everything else
+/// becomes `_`. Falls back to `download` when nothing safe remains. The
+/// result contains no `"`, `\`, `/`, or control bytes, so it is safe to
+/// embed directly in the header value.
+fn sanitize_download_filename(filename: &str) -> String {
+    let base = filename.rsplit(['/', '\\']).next().unwrap_or(filename);
+    let safe: String = base
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ' ' | '(' | ')' | '+') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let safe = safe.trim().trim_matches('.').trim().to_string();
+    if safe.is_empty() {
+        "download".to_string()
+    } else {
+        safe
     }
 }
 

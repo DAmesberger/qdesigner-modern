@@ -65,13 +65,37 @@ pub struct MediaUploadRequest {
 /// buffer, and this check catches anything that slips through.
 pub const MAX_UPLOAD_BYTES: usize = 25 * 1024 * 1024; // 25 MiB
 
+/// Bounded set of non-media document mimes accepted in addition to the
+/// image/audio/video matcher classes (issue #48, ADR 0029 binary answers).
+///
+/// Gated by *exact sniffed mime* — never by matcher class — so the set stays
+/// auditable and can't widen to sibling formats. `infer` reports PDF and zip
+/// as `MatcherType::Archive` and the OOXML office formats as
+/// `MatcherType::Doc`; matching on the concrete mime keeps other archive
+/// members (rar/7z/gzip/tar) and legacy OLE office containers out. Executable
+/// and script matcher classes (`App`, shell/text scripts) are never listed.
+const ALLOWED_DOC_MIMES: &[&str] = &[
+    "application/pdf",
+    "application/zip",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // docx
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",       // xlsx
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
+];
+
 /// Validate an uploaded blob before it reaches S3.
 ///
 /// Enforces (in order): a hard size cap; a magic-byte sniff via `infer`;
-/// membership of the sniffed type in the image/audio/video allowlist; and
-/// consistency between the sniffed type and the client-declared
-/// `content_type`. Returns the canonical `(mime, extension)` derived from
-/// the sniffed bytes — never from the untrusted filename or declared header.
+/// membership of the sniffed type in the allowlist (image/audio/video by
+/// matcher class, plus the bounded [`ALLOWED_DOC_MIMES`] set by exact mime);
+/// and consistency between the sniffed type and the client-declared
+/// `content_type`. Plain text has no magic bytes (`infer::get` returns
+/// `None`), so it takes an explicit carve-out: a sniff-miss whose declared
+/// type is `text/plain` or `text/csv` and whose bytes are valid UTF-8 is
+/// accepted, with the declared type as its canonical mime.
+///
+/// Returns the canonical `(mime, extension)` derived from the sniffed bytes
+/// (or, for the text carve-out, the declared text type) — never from the
+/// untrusted filename.
 ///
 /// This is the ONLY content gate on the anonymous `upload_session_media`
 /// path (no JWT), so it must be self-contained.
@@ -90,31 +114,56 @@ pub fn validate_upload(
         )));
     }
 
-    let kind =
-        infer::get(bytes).ok_or_else(|| ApiError::BadRequest("Unrecognized file type".into()))?;
-
-    let sniffed_mime = kind.mime_type();
-    let matcher = kind.matcher_type();
-    let is_allowed = matches!(
-        matcher,
-        infer::MatcherType::Image | infer::MatcherType::Audio | infer::MatcherType::Video
-    );
-    if !is_allowed {
-        return Err(ApiError::BadRequest(format!(
-            "File type not allowed: {sniffed_mime}"
-        )));
-    }
-
-    // The declared header must agree with the sniffed content. Compare on the
-    // essence (ignore parameters like "; charset=") and accept the common
-    // `application/octet-stream` default as "unspecified" only when it is the
-    // literal generic value — a mismatched concrete type is rejected.
+    // Compare declared type on its essence (ignore parameters like
+    // "; charset="), lowercased.
     let declared_essence = declared_content_type
         .split(';')
         .next()
         .unwrap_or("")
         .trim()
         .to_ascii_lowercase();
+
+    let kind = match infer::get(bytes) {
+        Some(kind) => kind,
+        None => {
+            // No magic signature. The only sniff-miss we accept is a declared
+            // text answer whose bytes are genuinely UTF-8 text; the declared
+            // type becomes canonical because there is nothing to sniff.
+            return match declared_essence.as_str() {
+                "text/plain" | "text/csv" => {
+                    if std::str::from_utf8(bytes).is_err() {
+                        return Err(ApiError::BadRequest(
+                            "Declared text upload is not valid UTF-8".into(),
+                        ));
+                    }
+                    let ext = if declared_essence == "text/csv" {
+                        "csv"
+                    } else {
+                        "txt"
+                    };
+                    Ok((declared_essence, ext.to_string()))
+                }
+                _ => Err(ApiError::BadRequest("Unrecognized file type".into())),
+            };
+        }
+    };
+
+    let sniffed_mime = kind.mime_type();
+    let matcher = kind.matcher_type();
+    let is_media = matches!(
+        matcher,
+        infer::MatcherType::Image | infer::MatcherType::Audio | infer::MatcherType::Video
+    );
+    let is_allowed = is_media || ALLOWED_DOC_MIMES.contains(&sniffed_mime);
+    if !is_allowed {
+        return Err(ApiError::BadRequest(format!(
+            "File type not allowed: {sniffed_mime}"
+        )));
+    }
+
+    // The declared header must agree with the sniffed content. Accept the
+    // common `application/octet-stream` default as "unspecified" only when it
+    // is the literal generic value — a mismatched concrete type is rejected.
     let declared_ok = declared_essence == sniffed_mime
         || declared_essence == "application/octet-stream"
         || declared_essence.is_empty();
@@ -714,9 +763,13 @@ pub async fn upload_session_media(
     .fetch_one(&mut **tx)
     .await?;
 
+    // Session-media answers can be documents (issue #48); serve every one as
+    // a download so nothing renders inline from our origin. The disposition
+    // filename is derived from the (untrusted) display name but sanitized by
+    // the storage layer.
     let url = state
         .storage
-        .presigned_url(&s3_key, Duration::from_secs(3600))
+        .presigned_download_url(&s3_key, Duration::from_secs(3600), &filename)
         .await?;
 
     Ok((
@@ -742,6 +795,31 @@ mod validate_upload_tests {
     fn mp3_bytes() -> Vec<u8> {
         let mut b = vec![b'I', b'D', b'3', 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         b.extend_from_slice(&[0u8; 32]);
+        b
+    }
+
+    // Minimal PDF header — infer's archive matcher keys on `%PDF-`.
+    fn pdf_bytes() -> Vec<u8> {
+        b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec()
+    }
+
+    // A bare zip local-file header (`PK\x03\x04`) whose entry name at offset
+    // 0x1E is NOT one of the OOXML subdirs, so `infer` falls through the
+    // office matchers to `application/zip`.
+    fn zip_bytes() -> Vec<u8> {
+        let mut b = vec![0x50, 0x4B, 0x03, 0x04];
+        b.extend_from_slice(&[0u8; 26]); // rest of the 30-byte local file header
+        b.extend_from_slice(b"payload.bin");
+        b
+    }
+
+    // A minimal OOXML (docx) container: the zip local-file header followed by
+    // a `word/` entry name at offset 0x1E, which is exactly what infer's
+    // `msooxml` matcher checks for.
+    fn docx_bytes() -> Vec<u8> {
+        let mut b = vec![0x50, 0x4B, 0x03, 0x04];
+        b.extend_from_slice(&[0u8; 26]); // rest of the 30-byte local file header
+        b.extend_from_slice(b"word/document.xml");
         b
     }
 
@@ -785,11 +863,93 @@ mod validate_upload_tests {
     }
 
     #[test]
-    fn rejects_disallowed_type() {
-        // A PDF sniffs as application/pdf — not in the image/audio/video
-        // allowlist.
-        let pdf = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
-        let err = validate_upload(pdf, "application/pdf").expect_err("pdf must be rejected");
+    fn accepts_pdf() {
+        let (mime, ext) = validate_upload(&pdf_bytes(), "application/pdf").expect("pdf should pass");
+        assert_eq!(mime, "application/pdf");
+        assert_eq!(ext, "pdf");
+    }
+
+    #[test]
+    fn accepts_pdf_with_generic_octet_stream_declared() {
+        let (mime, _ext) = validate_upload(&pdf_bytes(), "application/octet-stream")
+            .expect("pdf should pass with generic declared type");
+        assert_eq!(mime, "application/pdf");
+    }
+
+    #[test]
+    fn accepts_zip() {
+        let (mime, ext) = validate_upload(&zip_bytes(), "application/zip").expect("zip should pass");
+        assert_eq!(mime, "application/zip");
+        assert_eq!(ext, "zip");
+    }
+
+    #[test]
+    fn accepts_docx() {
+        // The docx container sniffs as the OOXML wordprocessing mime, ahead of
+        // the generic zip matcher.
+        let (mime, _ext) = validate_upload(
+            &docx_bytes(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        .expect("docx should pass");
+        assert_eq!(
+            mime,
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
+    }
+
+    #[test]
+    fn accepts_plain_text_via_carve_out() {
+        // No magic bytes: infer returns None; declared text/plain + valid UTF-8
+        // is accepted with the declared type as canonical.
+        let (mime, ext) = validate_upload(b"a free-text answer, plainly UTF-8", "text/plain")
+            .expect("utf-8 text should pass");
+        assert_eq!(mime, "text/plain");
+        assert_eq!(ext, "txt");
+    }
+
+    #[test]
+    fn accepts_csv_via_carve_out() {
+        let (mime, ext) =
+            validate_upload(b"col_a,col_b\n1,2\n3,4\n", "text/csv").expect("csv should pass");
+        assert_eq!(mime, "text/csv");
+        assert_eq!(ext, "csv");
+    }
+
+    #[test]
+    fn rejects_text_carve_out_with_invalid_utf8() {
+        // Declared text but the bytes are not valid UTF-8 (lone 0xFF).
+        let err = validate_upload(&[b'h', b'i', 0xFF, 0xFE, 0x00], "text/plain")
+            .expect_err("invalid utf-8 text must be rejected");
+        assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_elf_executable() {
+        // ELF magic → MatcherType::App, never allowlisted.
+        let mut elf = vec![0x7F, b'E', b'L', b'F', 0x02, 0x01, 0x01, 0x00];
+        elf.extend_from_slice(&[0u8; 32]);
+        let err = validate_upload(&elf, "application/octet-stream")
+            .expect_err("ELF must be rejected");
+        assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_pe_executable() {
+        // DOS/PE (MZ) header → MatcherType::App, never allowlisted.
+        let mut exe = vec![b'M', b'Z', 0x90, 0x00, 0x03, 0x00, 0x00, 0x00];
+        exe.extend_from_slice(&[0u8; 64]);
+        let err = validate_upload(&exe, "application/octet-stream")
+            .expect_err("PE executable must be rejected");
+        assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_untyped_binary_without_carve_out() {
+        // Sniff-miss with a non-text declared type is not the carve-out and
+        // stays rejected.
+        let err = validate_upload(b"\x00\x01\x02 arbitrary binary blob \x00", "application/octet-stream")
+            .expect_err("unrecognized binary must be rejected");
         assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
     }
 
