@@ -40,6 +40,11 @@
   let showSuggestions = $state(false);
   let selectedSuggestionIndex = $state(-1);
   let validationMessage = $state('');
+  // Last validity we surfaced, tracked OUTSIDE reactive state so the validation effect stays
+  // idempotent: it re-emits only when the verdict changes. Without this the effect writes
+  // `validationMessage` every run, which (once a defined `onValidation` is wired in, ADR 0029)
+  // feeds a render→effect cascade that trips Svelte's update-depth guard.
+  let lastEmittedMessage: string | undefined = undefined;
 
   // Filter suggestions based on current input
   const filteredSuggestions = $derived(
@@ -48,9 +53,13 @@
       .slice(0, 5) || []
   );
 
-  // Validation
+  // Validation (idempotent: emits only when the verdict changes — see lastEmittedMessage).
   $effect(() => {
-    validateInput(value);
+    const msg = computeValidationMessage(value);
+    if (msg === lastEmittedMessage) return;
+    lastEmittedMessage = msg;
+    validationMessage = msg;
+    onValidation?.({ valid: !msg, errors: msg ? [msg] : [] });
   });
 
   // Set answer type
@@ -61,44 +70,47 @@
     }
   });
 
-  function validateInput(val: string) {
-    validationMessage = '';
+  /** Pure: the validation message for a value, or '' when it satisfies every rule. */
+  function computeValidationMessage(val: string): string {
+    // minLength / pattern constrain the SHAPE of a non-empty answer; an empty value's
+    // presence is governed centrally by `required` (ADR 0029). So an optional field left
+    // blank passes here (and a required-but-blank one is held by the central gate, not by
+    // a spurious "minimum N characters" error). maxLength is safe on empty either way.
+    const hasValue = val.length > 0;
 
-    if (question.config.minLength && val.length < question.config.minLength) {
-      validationMessage = `Minimum ${question.config.minLength} characters required`;
-    } else if (question.config.maxLength && val.length > question.config.maxLength) {
-      validationMessage = `Maximum ${question.config.maxLength} characters allowed`;
-    } else if (question.config.pattern) {
+    if (hasValue && question.config.minLength && val.length < question.config.minLength) {
+      return `Minimum ${question.config.minLength} characters required`;
+    }
+    if (question.config.maxLength && val.length > question.config.maxLength) {
+      return `Maximum ${question.config.maxLength} characters allowed`;
+    }
+    if (hasValue && question.config.pattern) {
       const regex = new RegExp(question.config.pattern);
       if (!regex.test(val)) {
-        validationMessage = 'Invalid format';
+        return 'Invalid format';
       }
     }
 
-    // Type-specific validation
+    // Type-specific validation (only meaningful on a non-empty value).
     if (question.config.inputType === 'email' && val) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(val)) {
-        validationMessage = 'Please enter a valid email address';
+        return 'Please enter a valid email address';
       }
     } else if (question.config.inputType === 'url' && val) {
       try {
         new URL(val);
       } catch {
-        validationMessage = 'Please enter a valid URL';
+        return 'Please enter a valid URL';
       }
     } else if (question.config.inputType === 'tel' && val) {
       const telRegex = /^[\d\s\-+()]+$/;
       if (!telRegex.test(val)) {
-        validationMessage = 'Please enter a valid phone number';
+        return 'Please enter a valid phone number';
       }
     }
 
-    // Notify validation status
-    onValidation?.({
-      valid: !validationMessage,
-      errors: validationMessage ? [validationMessage] : [],
-    });
+    return '';
   }
 
   function handleInput(event: Event) {

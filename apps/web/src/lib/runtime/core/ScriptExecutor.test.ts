@@ -176,7 +176,7 @@ describe('ScriptExecutor', () => {
     expect(result).toEqual({ valid: false, error: 'Value is invalid' });
   });
 
-  it('executeOnValidate returns valid:true on hook error (does not block)', () => {
+  it('executeOnValidate fails open on hook error (does not block, flags failedOpen for provenance)', () => {
     const executor = new ScriptExecutor();
     const mockEngine = createMockVariableEngine();
 
@@ -185,7 +185,9 @@ describe('ScriptExecutor', () => {
     );
     const result = executor.executeOnValidate(question, 'test', mockEngine as any, {});
 
-    expect(result).toEqual({ valid: true });
+    // Fails open (ADR 0029): allowed through, but flagged so the runtime can stamp provenance.
+    expect(result.valid).toBe(true);
+    expect(result.failedOpen).toBe(true);
   });
 
   // ── executeOnNavigate ──

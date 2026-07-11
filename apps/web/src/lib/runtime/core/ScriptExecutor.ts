@@ -103,6 +103,13 @@ export interface TimerConfig {
 export interface ValidationResult {
   valid: boolean;
   error?: string;
+  /**
+   * True when `valid` is `true` only because the hook MISBEHAVED (threw / timed out)
+   * and the runtime chose to fail open (ADR 0029), not because the script returned a
+   * passing verdict. Lets callers distinguish "the script said OK" from "the script
+   * broke, so we let it through" and stamp provenance accordingly.
+   */
+  failedOpen?: boolean;
 }
 
 /**
@@ -429,8 +436,10 @@ export class ScriptExecutor {
         `[ScriptExecutor] onValidate error (${question.name || question.id}):`,
         error instanceof Error ? error.message : error
       );
-      // On error, allow navigation (don't block the user)
-      return { valid: true };
+      // A script that throws/hangs is an ops hiccup, not a validation verdict (ADR
+      // 0029): fail open (allow advance) but flag it so the caller can stamp
+      // provenance rather than silently treat the answer as validated.
+      return { valid: true, failedOpen: true, error: error instanceof Error ? error.message : String(error) };
     }
   }
 

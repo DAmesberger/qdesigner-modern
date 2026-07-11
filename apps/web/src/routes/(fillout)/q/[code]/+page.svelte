@@ -647,10 +647,16 @@
                 variables={controller.activePresentation.variables}
                 bind:value={controller.currentValue}
                 onResponse={(v) => controller.handleOverlayResponse(v)}
-                onValidation={controller.activePresentation.onValidation}
+                onValidation={(r) => controller.handleOverlayValidation(r)}
                 onInteraction={controller.activePresentation.onInteraction}
               />
             {/key}
+
+            {#if controller.scriptValidationError}
+              <div class="form-script-error" role="alert" data-testid="fillout-form-script-error">
+                {controller.scriptValidationError}
+              </div>
+            {/if}
 
             <div class="form-actions">
               <button
@@ -1210,6 +1216,15 @@
 
   .form-timer {
     margin-bottom: 1.25rem;
+  }
+
+  .form-script-error {
+    margin-top: 1rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.5rem;
+    background: hsl(var(--destructive) / 0.1);
+    color: hsl(var(--destructive));
+    font-size: 0.875rem;
   }
 
   .form-actions {

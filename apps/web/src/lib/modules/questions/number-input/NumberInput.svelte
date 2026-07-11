@@ -34,6 +34,11 @@
   let inputElement = $state<HTMLInputElement>();
   let validationMessage = $state('');
   let rawInputValue = $state('');
+  // Last validity we surfaced, tracked OUTSIDE reactive state so the validation effect can
+  // stay idempotent: it re-emits only when the verdict actually changes. Without this the
+  // effect writes `validationMessage` on every run, which (once a defined `onValidation` is
+  // wired in, ADR 0029) feeds a render→effect cascade that trips Svelte's update-depth guard.
+  let lastEmittedMessage: string | undefined = undefined;
 
   // Sync rawInputValue when value changes externally
   $effect(() => {
@@ -51,14 +56,13 @@
     }
   });
 
-  // Validation
+  // Validation (idempotent: emits only when the verdict changes — see lastEmittedMessage).
   $effect(() => {
-    if (value !== null && value !== undefined) {
-      validateInput(value);
-    } else {
-      validationMessage = '';
-      onValidation?.({ valid: true, errors: [] });
-    }
+    const msg = value !== null && value !== undefined ? computeValidationMessage(value) : '';
+    if (msg === lastEmittedMessage) return;
+    lastEmittedMessage = msg;
+    validationMessage = msg;
+    onValidation?.({ valid: !msg, errors: msg ? [msg] : [] });
   });
 
   function formatDisplayValue(val: number): string {
@@ -87,21 +91,18 @@
     return val;
   }
 
-  function validateInput(val: number) {
-    validationMessage = '';
-
+  /** Pure: the validation message for a value, or '' when it is in range. */
+  function computeValidationMessage(val: number): string {
     if (isNaN(val)) {
-      validationMessage = 'Please enter a valid number';
-    } else if (question.config.min !== undefined && question.config.min !== null && val < question.config.min) {
-      validationMessage = `Value must be at least ${question.config.min}`;
-    } else if (question.config.max !== undefined && question.config.max !== null && val > question.config.max) {
-      validationMessage = `Value must be at most ${question.config.max}`;
+      return 'Please enter a valid number';
     }
-
-    onValidation?.({
-      valid: !validationMessage,
-      errors: validationMessage ? [validationMessage] : [],
-    });
+    if (question.config.min !== undefined && question.config.min !== null && val < question.config.min) {
+      return `Value must be at least ${question.config.min}`;
+    }
+    if (question.config.max !== undefined && question.config.max !== null && val > question.config.max) {
+      return `Value must be at most ${question.config.max}`;
+    }
+    return '';
   }
 
   function handleInput(event: Event) {
@@ -128,16 +129,12 @@
   }
 
   function handleBlur() {
+    // ADR 0029: no silent clamp-on-blur. An out-of-range value stays exactly as the
+    // participant typed it — the validation effect flags it and the fillout host blocks Continue
+    // until they fix it. We only normalize the DISPLAY string (e.g. decimal places); the
+    // persisted `value` is never rewritten here. Spinner arrows still clamp (stepValue).
     if (value !== null && value !== undefined) {
-      const clamped = clampValue(value);
-      const rounded = roundToStep(clamped);
-      if (rounded !== value) {
-        value = rounded;
-        rawInputValue = formatDisplayValue(rounded);
-        onResponse?.(rounded);
-      } else {
-        rawInputValue = formatDisplayValue(value);
-      }
+      rawInputValue = formatDisplayValue(value);
     }
   }
 

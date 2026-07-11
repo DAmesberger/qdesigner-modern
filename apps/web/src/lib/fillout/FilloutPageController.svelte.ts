@@ -263,6 +263,15 @@ export class FilloutPageController {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- captured value spans every module answer shape
   currentValue = $state<any>(undefined);
   hasAnswered = $state(false);
+  // Constraint validity reported by the mounted module (ADR 0029 — modules own validity).
+  // Defaults valid so a module that never reports validity still advances (unenforced
+  // constraint, never a stuck participant). Constraint violations gate Continue exactly
+  // like required-presence, unconditionally — no policy knob.
+  moduleValidity = $state<{ valid: boolean; errors: string[] }>({ valid: true, errors: [] });
+  // A runtime-level script `onValidate` block message (ADR 0029, point 3). Distinct from
+  // moduleValidity: set only when the script returns an explicit invalid verdict at submit
+  // time; cleared on the participant's next edit or a passing/forced submit.
+  scriptValidationError = $state<string | null>(null);
   timerState = $state<FormTimerState | null>(null);
   // A11y (F094/F098): persistent live-region text.
   liveAnnouncement = $state('');
@@ -336,12 +345,15 @@ export class FilloutPageController {
   }
 
   get canAdvance(): boolean {
-    return (
-      !this.activePresentation ||
-      !this.activePresentation.interactive ||
-      !this.activePresentation.required ||
-      this.hasAnswered
-    );
+    const p = this.activePresentation;
+    // Non-interactive items (instruction / display / analytics) always advance.
+    if (!p || !p.interactive) return true;
+    // Constraint validity gates unconditionally (ADR 0029): an invalid answer blocks
+    // Continue even for an OPTIONAL question — the participant clears the field to skip.
+    if (!this.moduleValidity.valid) return false;
+    // Required-presence gating stays central and unchanged.
+    if (p.required && !this.hasAnswered) return false;
+    return true;
   }
 
   // --- FormQuestionHost bridge (runtime → overlay state) ---------------------
@@ -350,6 +362,10 @@ export class FilloutPageController {
       this.currentValue = presentation.initialValue;
       this.hasAnswered =
         presentation.initialValue !== undefined && presentation.initialValue !== null;
+      // Fresh item: assume valid until the module reports otherwise, and drop any
+      // stale script-verdict block from the previous item (ADR 0029).
+      this.moduleValidity = { valid: true, errors: [] };
+      this.scriptValidationError = null;
       this.activePresentation = presentation;
       // Fire the view's focus hook only when the item actually changed — re-presents
       // (e.g. validation re-render) must not steal focus from a module's inner input.
@@ -361,12 +377,17 @@ export class FilloutPageController {
       this.activePresentation = null;
       this.currentValue = undefined;
       this.hasAnswered = false;
+      this.moduleValidity = { valid: true, errors: [] };
+      this.scriptValidationError = null;
       this.timerState = null;
     },
     updateTimer: (state) => {
       this.timerState = state;
     },
     getCurrentValue: () => this.currentValue,
+    showValidationError: (message) => {
+      this.scriptValidationError = message;
+    },
   };
 
   /**
@@ -395,12 +416,29 @@ export class FilloutPageController {
     this.currentValue = value;
     this.hasAnswered =
       value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0);
+    // The participant edited the answer — retire any script-verdict block so they can
+    // resubmit (the module's own constraint message re-renders on its own channel).
+    this.scriptValidationError = null;
+  }
+
+  /**
+   * Validity report from the mounted module (ADR 0029). Modules emit `{ valid, errors }`
+   * alongside each response; this feeds `canAdvance` so constraint violations gate
+   * Continue. Forwarded to the runtime's presentation channel so a forced (timeout)
+   * submit records the module's last-known validity honestly.
+   */
+  handleOverlayValidation(result: { valid: boolean; errors: string[] }) {
+    this.moduleValidity = { valid: result.valid, errors: result.errors ?? [] };
+    this.activePresentation?.onValidation?.(result);
   }
 
   submitOverlayAnswer() {
     const presentation = this.activePresentation;
     if (!presentation) return;
-    if (presentation.interactive && presentation.required && !this.hasAnswered) return;
+    // Blocking validation (ADR 0029): the same gate that disables the Continue button
+    // re-checked here, so a programmatic / keyboard submit can't bypass it. Constraint
+    // violations and missing required answers both hold the participant here.
+    if (!this.canAdvance) return;
     presentation.onSubmit(this.currentValue);
   }
 

@@ -70,4 +70,13 @@ export interface FormQuestionHost {
    * answer. Optional — absent ⇒ an auto-submit timeout commits `null`.
    */
   getCurrentValue?(): unknown;
+  /**
+   * Surface a runtime-level validation block on the currently-mounted item (ADR 0029),
+   * or `null` to clear it. Used when the script `onValidate` hook returns an explicit
+   * invalid verdict: the runtime keeps the item presented and hands the host a message
+   * to show near the Continue action. Module-declared constraint messages render inside
+   * the module itself; this channel is only for the script verdict. Optional — a host
+   * that does not render script-verdict messages simply omits it.
+   */
+  showValidationError?(message: string | null): void;
 }

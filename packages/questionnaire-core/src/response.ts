@@ -102,6 +102,16 @@ export interface ResponseMetadata {
   corrections?: number; // Number of times answer was changed
   mouseMovements?: MouseTrackingData;
   eyeTracking?: EyeTrackingData;
+  /**
+   * Provenance stamp for the script `onValidate` hook (ADR 0029). Present only when
+   * the hook misbehaved (threw / timed out): the runtime FAILS OPEN — the answer is
+   * recorded and the participant advances — and records here that the validation
+   * verdict is untrustworthy, so analytics can flag it rather than assume "valid".
+   */
+  validation?: {
+    onValidate: 'failed-open';
+    error?: string;
+  };
 }
 
 export interface MouseTrackingData {

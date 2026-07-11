@@ -608,3 +608,107 @@ describe('FilloutPageController', () => {
     });
   });
 });
+
+/**
+ * Blocking form validation (ADR 0029, issue #33). The overlay Continue gate
+ * (`canAdvance`) must hold the participant on constraint violations exactly like
+ * required-presence — unconditionally, no policy knob — while a module that never
+ * reports validity still advances (unenforced constraint, never a stuck participant).
+ */
+describe('FilloutPageController — blocking form validation gate (ADR 0029)', () => {
+  function makePresentation(
+    overrides: Partial<import('$lib/runtime/core/FormQuestionHost').FormHostPresentation> = {}
+  ): import('$lib/runtime/core/FormQuestionHost').FormHostPresentation {
+    return {
+      item: { id: 'q1', type: 'text-input' } as unknown as import('$lib/shared').Question,
+      type: 'text-input',
+      category: 'question',
+      config: {} as never,
+      variables: {},
+      interactive: true,
+      required: true,
+      onSubmit: vi.fn(),
+      onValidation: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  it('blocks Continue when the module reports invalid and unblocks when it reports valid', () => {
+    const controller = makeController(makeData(), makeMocks());
+    controller.formHost.present(makePresentation());
+    // Answer present but the module says the constraint is violated.
+    controller.handleOverlayResponse('ab');
+    controller.handleOverlayValidation({ valid: false, errors: ['Minimum 5 characters required'] });
+    expect(controller.canAdvance).toBe(false);
+
+    // The participant fixes it; the module now reports valid.
+    controller.handleOverlayResponse('abcdef');
+    controller.handleOverlayValidation({ valid: true, errors: [] });
+    expect(controller.canAdvance).toBe(true);
+  });
+
+  it('advances a module that never reports validity (default-valid)', () => {
+    const controller = makeController(makeData(), makeMocks());
+    controller.formHost.present(makePresentation());
+    controller.handleOverlayResponse('anything');
+    // No handleOverlayValidation call at all — the worst case of a rule-less module.
+    expect(controller.canAdvance).toBe(true);
+  });
+
+  it('resets validity to valid on each new presentation', () => {
+    const controller = makeController(makeData(), makeMocks());
+    controller.formHost.present(makePresentation());
+    controller.handleOverlayResponse('ab');
+    controller.handleOverlayValidation({ valid: false, errors: ['bad'] });
+    expect(controller.canAdvance).toBe(false);
+
+    // Next item is presented — stale invalidity must not leak into it.
+    controller.formHost.present(makePresentation({ item: { id: 'q2', type: 'scale' } as never }));
+    expect(controller.moduleValidity.valid).toBe(true);
+    expect(controller.canAdvance).toBe(false); // required + not-yet-answered, but not because of validity
+    controller.handleOverlayResponse(3);
+    expect(controller.canAdvance).toBe(true);
+  });
+
+  it('blocks an invalid answer even when the question is optional', () => {
+    const controller = makeController(makeData(), makeMocks());
+    controller.formHost.present(makePresentation({ required: false }));
+    controller.handleOverlayResponse('not-an-email');
+    controller.handleOverlayValidation({ valid: false, errors: ['Please enter a valid email address'] });
+    expect(controller.canAdvance).toBe(false);
+  });
+
+  it('submitOverlayAnswer refuses to submit while a constraint is violated', () => {
+    const controller = makeController(makeData(), makeMocks());
+    const presentation = makePresentation();
+    controller.formHost.present(presentation);
+    controller.handleOverlayResponse('ab');
+    controller.handleOverlayValidation({ valid: false, errors: ['bad'] });
+
+    controller.submitOverlayAnswer();
+    expect(presentation.onSubmit).not.toHaveBeenCalled();
+
+    controller.handleOverlayValidation({ valid: true, errors: [] });
+    controller.submitOverlayAnswer();
+    expect(presentation.onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards module validity to the runtime presentation channel', () => {
+    const controller = makeController(makeData(), makeMocks());
+    const presentation = makePresentation();
+    controller.formHost.present(presentation);
+    controller.handleOverlayValidation({ valid: false, errors: ['bad'] });
+    expect(presentation.onValidation).toHaveBeenCalledWith({ valid: false, errors: ['bad'] });
+  });
+
+  it('surfaces a script-verdict block via showValidationError and clears it on the next edit', () => {
+    const controller = makeController(makeData(), makeMocks());
+    controller.formHost.present(makePresentation());
+    controller.formHost.showValidationError?.('Answer must be greater than the previous one');
+    expect(controller.scriptValidationError).toBe('Answer must be greater than the previous one');
+
+    // Editing the answer retires the stale script block.
+    controller.handleOverlayResponse('42');
+    expect(controller.scriptValidationError).toBeNull();
+  });
+});

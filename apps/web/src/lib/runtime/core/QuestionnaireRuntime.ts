@@ -243,6 +243,11 @@ export class QuestionnaireRuntime {
   // Set to a question id just before an auto-submit timeout requests its committed
   // value, so handleCollectedResponse can stamp the resulting Response as timedOut.
   private pendingTimeoutQuestionId: string | null = null;
+  // Latest validity the active form module reported through the presentation's
+  // onValidation channel (ADR 0029 — modules own validity). Reset to valid on every
+  // present; the fillout host gates Continue on it, and it is folded into the recorded
+  // Response's `valid` flag so a forced (timeout) submit of an invalid value is honest.
+  private activeFormValidation: { valid: boolean; errors: string[] } = { valid: true, errors: [] };
 
   private readonly questionRuntimeCache = new Map<string, IQuestionRuntime>();
   private readonly loopIterations = new Map<string, number>();
@@ -1769,6 +1774,11 @@ export class QuestionnaireRuntime {
     const item = question as PresentedQuestion;
     const cfInitialValue = item._carryForwardInitialValue;
 
+    // Fresh item: assume valid until the module reports otherwise. A module that never
+    // reports validity therefore leaves this valid — the worst failure of a buggy module
+    // is an unenforced constraint, never a stuck participant (ADR 0029).
+    this.activeFormValidation = { valid: true, errors: [] };
+
     this.config.formHost.present({
       item,
       type: item.type,
@@ -1778,6 +1788,15 @@ export class QuestionnaireRuntime {
       interactive: true,
       required: Boolean(item.required),
       initialValue: cfInitialValue,
+      // Modules own validity (ADR 0029): record the latest module verdict so a forced
+      // (timeout) submit records honestly. The fillout host also observes this channel
+      // directly to gate its Continue button — constraint violations block at capture.
+      onValidation: (result) => {
+        this.activeFormValidation = {
+          valid: result.valid,
+          errors: result.errors ?? [],
+        };
+      },
       onSubmit: (value, responseMetadata) => {
         void this.handleCollectedResponse(
           question,
@@ -2035,27 +2054,44 @@ export class QuestionnaireRuntime {
     value: DynamicValue,
     responseMetadata?: ResponseCaptureMetadata
   ): Promise<void> {
-    // Execute onValidate hook before accepting the response
+    // Script onValidate hook (ADR 0029). An EXPLICIT invalid verdict blocks the advance
+    // (the problem is participant-correctable): keep the item presented, surface the
+    // message, record nothing. A THROW/timeout instead FAILS OPEN — executeOnValidate
+    // returns valid with `failedOpen` set — so the answer records with provenance and the
+    // participant advances. A forced (timeout) submit is never blocked: the timer already
+    // decided the item is over.
     const validationResult = this.scriptExecutor.executeOnValidate(
       question,
       value,
       this.variableEngine,
       this.getResponseMap()
     );
-    if (!validationResult.valid) {
-      // Validation failed -- log warning but don't block (response collector already stopped)
-      console.warn(
-        `[ScriptExecutor] Validation blocked response for ${question.name || question.id}: ${validationResult.error}`
-      );
-    }
-
-    const timestamp = responseMetadata?.timestamp ?? performance.now();
-    const reactionTime = responseMetadata?.responseTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
 
     // Deadline auto-submit (E-FLOW-5): this commit was forced by the question timer, so
     // stamp the Response timedOut and mark it invalid regardless of validation state.
     const timedOut = this.pendingTimeoutQuestionId === question.id;
+
+    if (!validationResult.valid && !timedOut) {
+      // Explicit invalid verdict (a script throw fails open and never reaches here):
+      // block the advance and hand the message to the host to show. Nothing is recorded,
+      // the collector keeps running, and the participant can correct and resubmit.
+      this.config.formHost?.showValidationError?.(
+        validationResult.error || 'This answer is not valid.'
+      );
+      return;
+    }
+    // Passed (or forced through by a timeout): clear any prior script-validation block.
+    this.config.formHost?.showValidationError?.(null);
     this.pendingTimeoutQuestionId = null;
+
+    const timestamp = responseMetadata?.timestamp ?? performance.now();
+    const reactionTime = responseMetadata?.responseTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
+
+    // Provenance for a failed-open script validation (ADR 0029): the verdict is
+    // untrustworthy, so record that fact rather than let analytics assume "valid".
+    const validationProvenance = validationResult.failedOpen
+      ? { onValidate: 'failed-open' as const, error: validationResult.error }
+      : undefined;
 
     const response: Response = {
       id: nanoid(),
@@ -2065,10 +2101,19 @@ export class QuestionnaireRuntime {
       value,
       reactionTime,
       stimulusOnsetTime: onsetTime,
-      valid: validationResult.valid && !timedOut,
+      // Honest validity: the script verdict, the timeout flag, AND the module's own
+      // last-reported validity (the gate prevents an invalid module value from reaching
+      // a deliberate submit; a forced timeout submit can still carry one).
+      valid: validationResult.valid && !timedOut && this.activeFormValidation.valid,
       timedOut: timedOut || undefined,
       ...this.iterationFields(),
-      metadata: responseMetadata ? { firstInteraction: responseMetadata.responseTimeMs } : undefined,
+      metadata:
+        responseMetadata || validationProvenance
+          ? {
+              ...(responseMetadata ? { firstInteraction: responseMetadata.responseTimeMs } : {}),
+              ...(validationProvenance ? { validation: validationProvenance } : {}),
+            }
+          : undefined,
     };
 
     this.session.responses.push(response);
