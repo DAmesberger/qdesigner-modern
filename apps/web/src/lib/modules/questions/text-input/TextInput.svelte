@@ -245,6 +245,19 @@
         {/each}
       </div>
     {/if}
+
+    <!-- The module's own minLength/pattern/type verdict. BaseQuestion's
+         validationResult only covers required/selection, so without this the
+         Continue block (ADR 0029, #33) had no visible explanation. -->
+    {#if validationMessage}
+      <div
+        class="mt-2 text-sm text-destructive"
+        role="alert"
+        data-testid="text-input-validation-message"
+      >
+        {validationMessage}
+      </div>
+    {/if}
   </div>
 </BaseQuestion>
 

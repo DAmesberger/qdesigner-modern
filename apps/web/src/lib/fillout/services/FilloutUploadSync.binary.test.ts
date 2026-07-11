@@ -126,4 +126,45 @@ describe('FilloutUploadSync binary answers (issue #34)', () => {
 
 		engine.stop();
 	});
+
+	it('backs off a failing upload: an immediate re-sync does not re-hit it, an elapsed one does', async () => {
+		const session = await OfflineSessionService.createSession('q-1', 1, 0, 0);
+		const file = new File([new Uint8Array(512)], 'a.png', { type: 'image/png' });
+		const ref = await OfflineBinaryPersistence.capture(session.id, 'q-file', file, 'a.png');
+		await OfflineResponsePersistence.saveResponse(session.id, {
+			questionId: 'q-file',
+			value: ref,
+		});
+
+		apiMock.sessions.get.mockResolvedValue({ id: session.id });
+		apiMock.sessions.uploadMedia.mockRejectedValue(new Error('network down'));
+		apiMock.sessions.sync.mockImplementation(async (_id: string, payload: any) => ({
+			responses_synced: payload.responses.length,
+			events_synced: 0,
+			variables_synced: 0,
+			accepted_client_ids: payload.responses.map((r: { client_id: string }) => r.client_id),
+		}));
+
+		const engine = new FilloutUploadSync();
+
+		// First pass fails → one upload attempt, backoff window opens.
+		await engine.syncNow();
+		expect(apiMock.sessions.uploadMedia).toHaveBeenCalledTimes(1);
+
+		// A second sync fired immediately (e.g. an `online` flap or manual sync) must
+		// NOT re-hit the still-backing-off upload — this is the hot-loop guard.
+		await engine.syncNow();
+		expect(apiMock.sessions.uploadMedia).toHaveBeenCalledTimes(1);
+
+		// The blob is still pinned and pending the whole time.
+		const stillPending = await db.filloutBinaries.get(ref.clientId);
+		expect(stillPending?.status).toBe('pending');
+
+		// Age the last attempt past the (1 attempt → 1s) backoff window; now it's due.
+		await db.filloutBinaries.update(ref.clientId, { lastAttemptAt: Date.now() - 5000 });
+		await engine.syncNow();
+		expect(apiMock.sessions.uploadMedia).toHaveBeenCalledTimes(2);
+
+		engine.stop();
+	});
 });

@@ -612,11 +612,16 @@ export class FilloutUploadSync {
 	 *  - The pinned blob is deleted ONLY once its response is patched — so a blob
 	 *    captured but not yet committed to a response (participant hasn't advanced)
 	 *    survives, and the patch lands on a later pass.
-	 *  - A failed upload records the failure and keeps the blob pinned for retry.
-	 * Returns the number of binaries STILL pending after this pass.
+	 *  - A failed upload records the failure and keeps the blob pinned for retry, and is
+	 *    then SKIPPED until its per-binary backoff window elapses (issue #34 QA) — a
+	 *    permanently-failing upload must not be re-hit on every sync trigger.
+	 * Returns the number of binaries STILL pending after this pass (due or backing off).
 	 */
 	private async uploadSessionBinaries(sessionId: string): Promise<number> {
-		const pending = await OfflineBinaryPersistence.getPending(sessionId);
+		// Only the binaries whose backoff window has elapsed. Not-yet-due rows stay
+		// pinned + pending (counted below), so the session stays in the retry set but
+		// its dead upload is not hammered.
+		const pending = await OfflineBinaryPersistence.getRetryablePending(sessionId);
 		for (const bin of pending) {
 			try {
 				let mediaUrl = bin.mediaUrl;

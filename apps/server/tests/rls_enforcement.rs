@@ -372,6 +372,71 @@ async fn anon_session_insert_cannot_forge_user_id() {
 }
 
 #[tokio::test]
+async fn session_media_upload_reads_completed_session_status_under_session_guc() {
+    // Fix A (QA of #34): `upload_session_media` validates the session with
+    // `SELECT status FROM sessions WHERE id = $1`. Binary answers upload deferred,
+    // so this runs under `set_fillout_rls_context` bound by app.session_id and must
+    // (a) admit the row through the dual-path SELECT policy and (b) see a `completed`
+    // session — the handler now accepts `active` OR `completed`. Running the same
+    // query on the raw pool (no session GUC) is what produced the 404 "Session not
+    // found" the participant retried against; the second half proves that denial.
+    let Some(pool) = fixture_pool().await else {
+        eprintln!("skipping: DATABASE_URL_MIGRATIONS not set / db unreachable");
+        return;
+    };
+    let f = build_fixture(&pool).await;
+    let qid: Uuid = sqlx::query_scalar(
+        "SELECT id FROM questionnaire_definitions WHERE project_id = $1 LIMIT 1",
+    )
+    .bind(f.project_a)
+    .fetch_one(&pool)
+    .await
+    .expect("fixture questionnaire id");
+
+    // A COMPLETED anonymous session — the deferred-upload case.
+    let completed_session: Uuid = sqlx::query_scalar(
+        "INSERT INTO sessions (questionnaire_id, status) VALUES ($1, 'completed') RETURNING id",
+    )
+    .bind(qid)
+    .fetch_one(&pool)
+    .await
+    .expect("completed anon session");
+
+    // Bound to the session id (what the middleware sets from the URL path): the
+    // handler's status query admits the row and reads `completed`.
+    let mut tx = pool.begin().await.expect("begin");
+    pin_as_app_role(&mut tx, None, Some(completed_session)).await;
+    let status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM sessions WHERE id = $1")
+            .bind(completed_session)
+            .fetch_optional(&mut *tx)
+            .await
+            .expect("status query");
+    tx.rollback().await.ok();
+    assert_eq!(
+        status.as_deref(),
+        Some("completed"),
+        "a completed session must be readable (and thus uploadable) under its own session GUC"
+    );
+
+    // Bound to a DIFFERENT session id (or, equivalently, the no-GUC raw pool the old
+    // handler used): the dual-path SELECT policy denies the row → the exact 404.
+    let mut tx2 = pool.begin().await.expect("begin");
+    pin_as_app_role(&mut tx2, None, Some(Uuid::new_v4())).await;
+    let denied: Option<String> =
+        sqlx::query_scalar("SELECT status FROM sessions WHERE id = $1")
+            .bind(completed_session)
+            .fetch_optional(&mut *tx2)
+            .await
+            .expect("status query");
+    tx2.rollback().await.ok();
+    assert_eq!(
+        denied, None,
+        "without the matching session GUC the status query returns nothing — the pre-fix 404"
+    );
+}
+
+#[tokio::test]
 async fn anon_fillout_can_select_its_own_responses() {
     let Some(pool) = fixture_pool().await else {
         eprintln!("skipping");

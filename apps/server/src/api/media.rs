@@ -627,19 +627,32 @@ pub struct SessionMediaUploadRequest {
 )]
 pub async fn upload_session_media(
     State(state): State<AppState>,
+    tx: Tx,
     Path(session_id): Path<Uuid>,
     mut multipart: Multipart,
 ) -> Result<(axum::http::StatusCode, Json<SessionMediaWithUrl>), ApiError> {
-    // Validate session exists and is active
+    // This route runs under `set_fillout_rls_context`, which opens the
+    // per-request tx and sets `app.session_id` from the URL path. The
+    // session lookup MUST go through that tx — the raw pool has no GUCs, so
+    // the fillout-RLS-dual policies on `sessions` deny the row and the
+    // upload 404s ("Session not found") for the anonymous participant.
+    let mut tx = tx.tx().await?;
+
+    // Validate the session exists and is in an uploadable state. ADR 0029
+    // binary answers upload deferred and routinely arrive AFTER the session
+    // completes (pending → uploaded patching), so `completed` is accepted
+    // alongside `active`; other statuses (e.g. abandoned) are rejected.
     let session_status =
         sqlx::query_scalar::<_, String>("SELECT status FROM sessions WHERE id = $1")
             .bind(session_id)
-            .fetch_optional(&state.pool)
+            .fetch_optional(&mut **tx)
             .await?
             .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
 
-    if session_status != "active" {
-        return Err(ApiError::BadRequest("Session is not active".into()));
+    if session_status != "active" && session_status != "completed" {
+        return Err(ApiError::BadRequest(format!(
+            "Session is not accepting uploads (status: {session_status})"
+        )));
     }
 
     // Extract the file from multipart
@@ -698,7 +711,7 @@ pub async fn upload_session_media(
     .bind(&s3_key)
     .bind(&canonical_mime)
     .bind(size_bytes)
-    .fetch_one(&state.pool)
+    .fetch_one(&mut **tx)
     .await?;
 
     let url = state

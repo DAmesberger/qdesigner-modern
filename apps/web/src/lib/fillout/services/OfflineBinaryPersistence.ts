@@ -26,6 +26,33 @@ export interface BinaryAnswerReference {
   mediaUrl?: string;
 }
 
+/**
+ * Per-binary upload retry backoff (issue #34 QA). A permanently-failing upload must
+ * NOT be re-attempted on every sync trigger — the fillout engine fires `syncNow` on
+ * session completion, on every `online` event (network flap), and on manual sync, so
+ * without a per-row gate a dead upload hot-loops (51 attempts in ~2 min was observed).
+ * Mirrors the response-sync path's schedule: 1s base, ×2 per attempt, capped at 60s.
+ */
+const BINARY_RETRY_BASE_MS = 1000;
+const BINARY_RETRY_MAX_MS = 60000;
+
+/** Backoff window (ms) to wait after the Nth failed attempt before retrying. */
+export function binaryRetryDelayMs(attempts: number): number {
+  if (attempts <= 0) return 0;
+  return Math.min(BINARY_RETRY_BASE_MS * 2 ** (attempts - 1), BINARY_RETRY_MAX_MS);
+}
+
+/**
+ * True when a pending binary is due for another upload attempt: either it has never
+ * been tried (attempts 0 / no timestamp) or its backoff window has elapsed. A row
+ * that is NOT due stays pinned and pending — it is simply skipped this pass.
+ */
+export function isBinaryDueForRetry(row: FilloutBinary, now: number = Date.now()): boolean {
+  const attempts = row.attempts ?? 0;
+  if (attempts <= 0 || row.lastAttemptAt === undefined) return true;
+  return now - row.lastAttemptAt >= binaryRetryDelayMs(attempts);
+}
+
 /** Why a capture write failed loudly (surfaced to the participant via onValidation). */
 export type BinaryCaptureFailure = 'oversize' | 'quota';
 
@@ -166,6 +193,19 @@ export class OfflineBinaryPersistence {
     return rows.sort((a, b) => a.createdAt - b.createdAt);
   }
 
+  /**
+   * Pending binaries whose retry-backoff window has elapsed (issue #34 QA), oldest
+   * first. Not-yet-due rows stay pinned and pending — they are just skipped this pass
+   * so a permanently-failing upload can't be hammered on every sync trigger.
+   */
+  static async getRetryablePending(
+    sessionId: string,
+    now: number = Date.now()
+  ): Promise<FilloutBinary[]> {
+    const rows = await this.getPending(sessionId);
+    return rows.filter((r) => isBinaryDueForRetry(r, now));
+  }
+
   /** Count of pending binaries for a session (drives the researcher-facing surface). */
   static async countPending(sessionId: string): Promise<number> {
     return db.filloutBinaries.where('[sessionId+status]').equals([sessionId, 'pending']).count();
@@ -182,11 +222,16 @@ export class OfflineBinaryPersistence {
     await db.filloutBinaries.delete(clientId);
   }
 
-  /** Record a failed upload attempt (kept pending for retry — the blob stays pinned). */
+  /**
+   * Record a failed upload attempt (kept pending for retry — the blob stays pinned).
+   * Stamps `lastAttemptAt` so {@link isBinaryDueForRetry} can back the next attempt off
+   * (1s→60s) instead of letting the sync loop retry it hot (issue #34 QA).
+   */
   static async recordFailure(clientId: string, error: string): Promise<void> {
     await db.filloutBinaries.where('clientId').equals(clientId).modify((r) => {
       r.attempts = (r.attempts ?? 0) + 1;
       r.lastError = error;
+      r.lastAttemptAt = Date.now();
     });
   }
 }

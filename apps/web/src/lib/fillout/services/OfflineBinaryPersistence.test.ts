@@ -5,8 +5,11 @@ import {
 	BinaryCaptureError,
 	DEFAULT_BINARY_MAX_BYTES,
 	isBinaryAnswerReference,
+	binaryRetryDelayMs,
+	isBinaryDueForRetry,
 	type BinaryAnswerReference,
 } from './OfflineBinaryPersistence';
+import type { FilloutBinary } from '$lib/services/db/indexeddb';
 import { OfflineResponsePersistence } from './OfflineResponsePersistence';
 
 // crypto.randomUUID is mocked to `test-uuid-...` in apps/web/tests/setup.
@@ -128,5 +131,66 @@ describe('OfflineResponsePersistence.patchBinaryResponse', () => {
 	it('returns false when no response references the binary', async () => {
 		const patched = await OfflineResponsePersistence.patchBinaryResponse('s-1', 'nope', '/u');
 		expect(patched).toBe(false);
+	});
+});
+
+describe('binary upload retry backoff (issue #34 QA)', () => {
+	function row(overrides: Partial<FilloutBinary>): FilloutBinary {
+		return {
+			clientId: 'bin-1',
+			sessionId: 's-1',
+			questionId: 'q-file',
+			name: 'a.png',
+			size: 1,
+			mimeType: 'image/png',
+			data: new ArrayBuffer(1),
+			status: 'pending',
+			createdAt: 0,
+			...overrides,
+		};
+	}
+
+	it('grows the backoff window exponentially and caps it at 60s', () => {
+		expect(binaryRetryDelayMs(0)).toBe(0); // never tried → due immediately
+		expect(binaryRetryDelayMs(1)).toBe(1000);
+		expect(binaryRetryDelayMs(2)).toBe(2000);
+		expect(binaryRetryDelayMs(3)).toBe(4000);
+		expect(binaryRetryDelayMs(7)).toBe(60000); // 64s clamped to the 60s ceiling
+		expect(binaryRetryDelayMs(20)).toBe(60000);
+	});
+
+	it('treats a never-attempted binary as due', () => {
+		expect(isBinaryDueForRetry(row({ attempts: 0 }), 10_000)).toBe(true);
+		expect(isBinaryDueForRetry(row({ attempts: 1, lastAttemptAt: undefined }), 10_000)).toBe(true);
+	});
+
+	it('holds a recently-failed binary until its window elapses, then releases it', () => {
+		const failed = row({ attempts: 1, lastAttemptAt: 10_000 }); // 1s window
+		expect(isBinaryDueForRetry(failed, 10_500)).toBe(false); // 0.5s later — still backing off
+		expect(isBinaryDueForRetry(failed, 11_000)).toBe(true); // exactly 1s later — due
+	});
+
+	it('recordFailure increments attempts and stamps lastAttemptAt', async () => {
+		await db.filloutBinaries.add(row({ clientId: 'bin-fail', attempts: 0 }));
+		const before = Date.now();
+		await OfflineBinaryPersistence.recordFailure('bin-fail', 'network down');
+		const stored = await db.filloutBinaries.get('bin-fail');
+		expect(stored?.attempts).toBe(1);
+		expect(stored?.lastError).toBe('network down');
+		expect(stored?.lastAttemptAt).toBeGreaterThanOrEqual(before);
+	});
+
+	it('getRetryablePending excludes a still-backing-off binary but keeps a due one', async () => {
+		const now = 100_000;
+		await db.filloutBinaries.add(
+			row({ clientId: 'due', createdAt: 1, attempts: 1, lastAttemptAt: now - 5000 })
+		);
+		await db.filloutBinaries.add(
+			row({ clientId: 'backing-off', createdAt: 2, attempts: 3, lastAttemptAt: now - 100 })
+		);
+		const retryable = await OfflineBinaryPersistence.getRetryablePending('s-1', now);
+		expect(retryable.map((r) => r.clientId)).toEqual(['due']);
+		// Both are still counted as pending — nothing is dropped.
+		expect(await OfflineBinaryPersistence.countPending('s-1')).toBe(2);
 	});
 });

@@ -251,6 +251,19 @@
       {/if}
     </div>
   {/if}
+
+  <!-- The module's own min/max/NaN verdict. BaseQuestion's validationResult
+       only covers required/selection, so without this the Continue block
+       (ADR 0029, #33) had no visible explanation. -->
+  {#if validationMessage}
+    <div
+      class="mt-2 text-sm text-destructive"
+      role="alert"
+      data-testid="number-input-validation-message"
+    >
+      {validationMessage}
+    </div>
+  {/if}
 </BaseQuestion>
 
 <style>

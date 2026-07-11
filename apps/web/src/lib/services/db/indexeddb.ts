@@ -322,10 +322,16 @@ export interface FilloutBinary {
   status: 'pending' | 'uploaded';
   /** Server media URL, set once the upload endpoint acks (before the row is deleted). */
   mediaUrl?: string;
-  /** Upload attempt counter (diagnostics). */
+  /** Upload attempt counter (drives the retry backoff — see OfflineBinaryPersistence). */
   attempts?: number;
   /** Last upload error seen. */
   lastError?: string;
+  /**
+   * Epoch ms of the last failed upload attempt. Paired with `attempts` to compute
+   * the per-binary backoff window so a permanently-failing upload backs off (1s→60s)
+   * instead of hot-looping every time a sync is triggered (issue #34 QA).
+   */
+  lastAttemptAt?: number;
   createdAt: number;
 }
 
