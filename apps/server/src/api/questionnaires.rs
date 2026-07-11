@@ -285,7 +285,11 @@ pub async fn create_questionnaire(
     .bind(&settings)
     .bind(user.user_id)
     .fetch_one(&mut **tx)
-    .await?;
+    .await
+    // A duplicate (project_id, name, version) trips the unique index; that is a
+    // benign conflict (retryable client-side), not a server fault. Map its 23505
+    // to a 409 rather than letting `?` route it through Database → 500.
+    .map_err(ApiError::from_db_error)?;
 
     sync_questionnaire_variable_definitions(&mut tx, &q).await?;
 
