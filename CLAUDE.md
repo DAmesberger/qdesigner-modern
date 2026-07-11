@@ -199,6 +199,13 @@ All architectural and scoping decisions through Phase 8 live in `docs/decisions/
 - `0021-analytics-psychometrics.md` — Phase 8 mounts the analytics psychometrics suite.
 - `0022-questionnaire-translation.md` — Phase 8 per-questionnaire content translation.
 - `0023-fillout-hybrid-rendering.md` — Phase 8 finalizes the hybrid fillout contract: one WebGL path (`ReactionEngine`+`WebGLRenderer`, v1 stimuli only), everything else on the DOM overlay; deletes the hollow `QuestionPresenter`/`runtime/renderers`/`runtime/stimuli` stacks; D1 same-origin media proxy + D2 offline-first single write path + per-session version pinning.
+- `0024-response-model-and-hardware.md` — reaction arc: semantic response model + hardware (WebHID) response devices.
+- `0024-sqlx-offline-macros.md` — sqlx offline mode for query macros. (Duplicate number with the above — both kept.)
+- `0025-generation-time-materialization.md` — trials fully materialize at generation time (seeded TimingSpec sampling); the engine never samples at runtime.
+- `0026-media-fail-closed-offline.md` — reaction media is offline-complete at load and fail-closed at run; pending assets pin against eviction.
+- `0027-validity-policy-record-by-default.md` — timing-validity problems record by default; per-study ValidityPolicy `enforce` is opt-in.
+- `0028-trial-aggregates-explicit-minn.md` — trial aggregates carry an explicit minN disclosure floor.
+- `0029-form-enforcement-and-offline-binaries.md` — form validation blocks at capture (modules own validity; script `onValidate` blocks on verdict, fails open on crash); binary answers go IndexedDB-first with deferred upload, pending provenance, pin-until-ack; storage modes deleted.
 - `PHASE_6_PLAN.md` — Phase 6 implementation plan (with mid-phase amendments).
 - `PHASE_8_FILLOUT_FIX_PLAN.md` — Phase 8 fillout renderer & reaction-framework remediation plan (Phases 1–5).
 - `SUPERVISOR_PROTOCOL.md` — message format for the team-lead / supervisor / user loop
@@ -239,3 +246,17 @@ window.testMode.disable();
 - For UI/frontend changes start `pnpm dev` and test the golden path in a browser — `pnpm check` and `pnpm test` verify types/contracts, not feature correctness.
 - Questionnaire objects must carry semver fields (`versionMajor/Minor/Patch`).
 - When the audit/spec docs in `specs/` conflict with the code, the code wins. Several rounds of cleanup confirmed that the original audit's claims (about RbacManager being unused, RLS portability, renderer fragmentation, marketing-surface viability, even some test counts) were diagnostic-only and didn't survive contact with the actual codebase.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues (DAmesberger/qdesigner-modern) via the `gh` CLI; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage labels use their default names (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `CONTEXT.md`; ADRs live in `docs/decisions/` (not `docs/adr/`). See `docs/agents/domain.md`.
