@@ -553,7 +553,41 @@ QDesigner can provide real-time statistical feedback to participants after they 
 
 ### 12.11.2 Configuration
 
-Feedback is configured using the variable system (see Chapter 7). Computed variables can reference response data, apply formulas, and display results in a feedback block at the end of the questionnaire.
+Feedback is configured using the variable system (see Chapter 7). In the Variable Manager, each variable declares a computation mode via the **Computation** selector:
+
+- **Static (default value)** — a fixed value.
+- **Formula (computed locally)** — evaluated on the participant's device from other variables and responses.
+- **Server-computed (aggregate across participants)** — a **Server Variable**: the value is an aggregate the server computes over collected data, pre-synced to the device so feedback resolves offline. The panel notes: "Computed on the server from every completed session. Participants see the value as of their last online load; offline it falls back to the default value below."
+
+A Server Variable therefore requires a **Default Value** — the offline / insufficient-data fallback shown when the device has never synced.
+
+### 12.11.3 Trial-Level Server Variables
+
+A Server Variable's **Aggregate over** source can be a **Session variable / score**, a **Question response**, or **Reaction trials (RT)**. The trial source aggregates over the `trials` table — for example, the median `rt_us` where the trial was correct and not invalidated — enabling participant-vs-cohort feedback that resolves entirely offline (see Chapter 10 for trials and Chapter 11 for invalidation).
+
+When **Reaction trials (RT)** is the source, the editor exposes:
+
+| Control | Options |
+|---|---|
+| **Trial metric** | Reaction time (µs) or Accuracy (0–1) |
+| **Include invalidated trials** | Off by default (excludes trials the ValidityPolicy invalidated) |
+| **Materialization** | Single statistic → Number, or Full statistics → Object (a `{ n, mean, sd, median, p25, p75, … }` bundle to bind in cohort widgets) |
+
+Every trial-level (and every) Server Variable carries an explicit disclosure floor, replacing the old hidden platform floor (ADR 0028):
+
+- **Minimum n (disclosure floor)** — a whole number ≥ 1. "Stats are withheld until this many participants contribute. n is always shown." New declarations default to `1`; declarations that predate the change were migrated to `5` so nothing changed silently.
+- **Below the floor** — the authored behavior when the cohort has fewer than `minN` contributing participants: **Hide the widget**, or **Show "still forming" placeholder**.
+
+The rendered feedback always discloses the current cohort `n` to the participant, whether it is above the floor (shown in the chart caption) or below it (shown in the placeholder). The design principle is transparency over an invisible floor: the disclosure risk is the author's call per aggregate, not a platform guess.
+
+### 12.11.4 The Participant-vs-Cohort Box Plot
+
+Trial-level Server Variables drive an offline participant-vs-cohort box plot in the statistical-feedback module (`ReactionCohortBox`). It renders with **zero network at display time**:
+
+- The **cohort whiskers** (min, Q1/p25, median, Q3/p75, max) come straight from the pre-synced aggregate bundle — the participant never holds the cohort's raw trials, only its already-computed quartiles.
+- The **participant's own statistic** (their median or mean reaction time, or their accuracy proportion) is computed on the device from their local trials for the same reaction question, and overlaid as a distinct "you are here" marker (a dashed vertical line and dot) alongside the cohort's median line.
+
+Reaction times aggregate server-side in microseconds and convert to milliseconds for a human-readable axis; accuracy stays a 0–1 proportion. The caption always states the cohort size and, when available, the "as of" aggregation date — for example, "cohort n=142, as of 7/10/2026 · you: 431 ms". When the cohort is below its disclosure floor and the author chose the placeholder behavior, the widget shows "cohort still forming — n=X of minN" instead of the chart.
 
 ---
 
@@ -685,11 +719,74 @@ Each response row contains:
 
 ---
 
-## 12.13 Summary
+## 12.13 Session Detail: The Per-Participant Response Browser
+
+From the questionnaire's Analytics view, clicking a session ID in the **Sessions** table opens that participant's session detail page (`/projects/{id}/analytics/sessions/{sessionId}`) — a full read-out of everything one participant did, keyed to the questionnaire content they actually saw.
+
+### 12.13.1 Header and Provenance
+
+The header shows the session status badge plus a metadata grid: **Started**, **Completed**, **Duration**, **Participant** (or "Anonymous"), **Pinned version**, and, for between-subjects designs, the **Assigned arm** (its condition and index).
+
+The **Pinned version** is the exact `major.minor.patch` the session was filled out against. Answers are resolved against that pinned definition snapshot, so question text matches what the participant saw. If the exact snapshot cannot be loaded, a warning appears — "Prompts resolved against version X, not the exact pinned snapshot … Question wording may differ from what the participant saw." Two additional badges surface data-quality context: **Screened out** (an eligibility rule fired — see Chapter 13) and **Flagged** (a duplicate-participation or fraud flag was stamped on the session). A screened-out session also shows its **Screen-out** reason/message.
+
+### 12.13.2 Answers
+
+The **Answers** section is a table of the participant's responses, each keyed to its question text (the resolved prompt), with columns:
+
+| Column | Description |
+|---|---|
+| **Question** | The prompt as pinned, plus the question ID, type, and an "unresolved" marker if the pinned prompt could not be resolved |
+| **Answer** | The display value, plus the sync `client_id` prefix |
+| **RT (ms)** | Reaction time, converted from the stored microseconds |
+| **Answered** | Timestamp the answer was submitted |
+
+### 12.13.3 Reaction-Time Trials
+
+When the session contains reaction-timing data, a **Reaction-time trials** table appears — one row per Trial, with a compact column set (trial number, condition, stimulus kind, reaction time in ms, correctness). Trials excluded from analysis are visually de-emphasized. The full per-trial column set is available from the analytics Per-Trial export (see Chapter 10). A collapsible **Timing provenance (raw)** disclosure exposes the raw per-trial timing blob (onset method, display/output latency, and the other provenance each trial persists).
+
+### 12.13.4 Variables and Events
+
+The **Variables** section lists every session variable recorded for the participant as name/value pairs (scores, indices, running totals). The **Events** section is a chronological interaction-events timeline sourced from `GET /api/sessions/{id}/events`: each entry shows the event type, the question in focus, a wall-clock time, the microsecond timestamp, and a collapsible **payload** for any event metadata.
+
+---
+
+## 12.14 Advanced Analytics: Segmentation and Cohort Comparison
+
+The questionnaire analytics view carries two tabs, **Overview** and **Advanced**. The **Advanced** tab (the `AdvancedAnalytics` component) explores the loaded response set entirely client-side — no additional server round-trips.
+
+### 12.14.1 Segment
+
+The **Segment** section pairs a **FilterBuilder** with a distribution view. The filter builder composes rules into groups: each rule is a **field**, an **operator** (`=`, `!=`, `>`, `<`, `>=`, `<=`, Between, In), and a value; rules combine with AND/OR within a group, and groups combine with a top-level AND/OR. Controls read "+ Add rule", "Remove group", and "+ Add filter group". Below the filter, a live count reports "N of M participants match", and a **Field** selector charts the chosen numeric field's distribution (a histogram plus a descriptive-statistics widget) over the matching participants.
+
+### 12.14.2 Cohort Comparison
+
+The **Cohort comparison** section splits participants into two cohorts by a field's value and compares a numeric measure between them, "with Cohen's d and an independent-samples t-test." The controls are **Group by**, **Measure**, **Cohort A**, and **Cohort B**. The result reports:
+
+- **d** — Cohen's d, labeled Negligible / Small / Medium / Large (|d| thresholds 0.2 / 0.5 / 0.8).
+- **p** — the t-test p-value with a significance marker (`*` < .05, `**` < .01, `***` < .001, `ns` otherwise) and a Significant / Not significant label.
+
+A grouped bar chart compares the two cohorts on mean, median, and standard deviation, and side-by-side panels show each cohort's descriptive statistics and its `n`.
+
+---
+
+## 12.15 Shared (Guest) Analytics
+
+Researchers can share a questionnaire's analytics with an external collaborator or reviewer without granting full project access. From the Analytics view, the **Share** button (see the ShareDialog) issues a read-only grant; the recipient sees the study under "Shared with me" and opens it at a dedicated guest route (`/shared/questionnaires/{id}/analytics`).
+
+The guest view is deliberately read-only: it shows the summary cards (total sessions, completed, completion rate, average completion), the response timeline, the completion funnel, and — for between-subjects designs — the arm balance, along with the role badge and who shared it. It honors the share grant at all times: if the grant is revoked or expires while the page is open, a live refetch fails closed and the page becomes a friendly dead end — "This share is no longer available … Ask the owner to share it with you again" — rather than exposing data.
+
+---
+
+## 12.16 Summary
 
 | Feature                   | Implementation                          | Key Details                    |
 |--------------------------|----------------------------------------|-------------------------------|
 | Dashboard                 | Real-time WebSocket/SSE monitoring      | 10+ configurable metrics       |
+| Session detail            | Per-participant response browser        | Answers, per-Trial table, timing provenance, variables, events timeline; pinned version |
+| Advanced analytics        | FilterBuilder + CohortComparison        | Segmentation, Cohen's d, independent-samples t-test |
+| Trial-level Server Variable | Aggregate over trials, explicit `minN`  | Below-floor hide/placeholder, mandatory n disclosure |
+| Participant-vs-cohort box  | `ReactionCohortBox` + `FeedbackChart`   | Offline: cohort whiskers pre-synced, own dot local |
+| Shared analytics          | Read-only guest route                   | Honors share grants; fails closed on revoke |
 | Descriptive stats         | `calculateDescriptiveStats()`           | Mean, median, mode, SD, quartiles, skewness, kurtosis |
 | Pearson correlation        | `calculateCorrelation('pearson')`       | With Fisher z CI               |
 | Spearman correlation       | `calculateCorrelation('spearman')`      | Rank-based                     |

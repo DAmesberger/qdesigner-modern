@@ -26,7 +26,7 @@ A single organization can contain many projects. Each project can contain many q
 ### From the Projects Page
 
 1. Navigate to the Projects page from the dashboard (click "New Questionnaire" on the dashboard, or use the main navigation).
-2. The Projects page displays all projects you have access to across your organizations, shown as cards in a responsive grid.
+2. The Projects page displays all projects you have access to across your organizations, shown as cards in a responsive grid. A status filter lets you switch between **Active** (the default, which hides archived projects), **Archived**, and **All**.
 3. Click the "New Project" button in the top right corner.
 
 ### The Create Project Dialog
@@ -73,12 +73,16 @@ At the top, a breadcrumb trail shows: **Projects > [Project Name]**. Clicking "P
 ### Project Header
 
 The header displays:
-- The project name as a large heading
+- The project name as a large heading, with an **Archived** badge beside it when the project has been archived
 - The project code below the name
 - The project description (if set)
 - Two action buttons:
   - **Analytics**: Links to the project analytics page
   - **New Questionnaire**: Opens the questionnaire creation dialog
+- A **More options** (kebab) menu, available to users who can manage the project. It exposes the project lifecycle actions:
+  - **Rename**: Opens a dialog to change the project name
+  - **Archive** / **Restore**: Toggles the project between active and archived status. Archived projects are hidden from the default projects list but retain all data
+  - **Delete**: Permanently removes the project and its questionnaires and responses. To guard against accidents, deletion requires typing the exact project name to confirm
 
 ### Questionnaire List
 

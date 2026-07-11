@@ -33,6 +33,10 @@ When published, the server sets the `published_at` timestamp and changes the sta
 
 A published questionnaire is accessible to anyone with the short code. The `create_session` endpoint allows anonymous access when the questionnaire status is `published`, so participants do not need an account. If the questionnaire is still in draft, only authenticated users with project access can create sessions.
 
+### Running a Published Questionnaire
+
+On the project detail page, each published questionnaire carries a **Run** control — a play icon with the tooltip "Preview fillout (opens in new tab)". Clicking it opens the participant fillout URL (`/q/{code}`) in a new browser tab so the researcher can walk the live participant experience exactly as a respondent would. The control appears only for questionnaires whose status is `published`; a draft has no run link.
+
 ---
 
 ## 13.2 Shareable Links and Short Codes
@@ -89,9 +93,30 @@ Researchers can customize the width, height, and styling before copying the snip
 
 When a participant opens a questionnaire URL, the runtime environment loads.
 
+### The Welcome Screen
+
+The first thing a participant sees is the welcome screen: the project name, the questionnaire title, a welcome message (the localized welcome text, falling back to the description), and an info row with the estimated duration ("About N minutes") and section count. The primary action is **Start Questionnaire**. If a compatible save-and-continue snapshot exists for the session, the single Start button is replaced by a **Continue where you left off** / **Start over** choice.
+
+Three optional affordances appear here when relevant:
+
+- A **language picker** (see *Localized Chrome* below), shown only when the study has more than one content locale.
+- A photosensitivity advisory, when the study contains a reaction paradigm (which alternates high-contrast stimuli).
+- A **Prepare offline** control (covered in Section 13.7), for field participants who want to download the whole study before going offline.
+
 ### Consent Collection
 
-If the questionnaire includes a consent page (typically the first page), the participant must agree to the study terms before proceeding. When the participant provides consent, the runtime persists the consent decision to the session metadata with an ISO 8601 timestamp:
+If the questionnaire requires consent (`settings.requireConsent`), the welcome screen shows a "Before you begin:" note and, on Start, the participant is taken to the consent screen before any questions.
+
+As the participant sees it, the consent screen presents:
+
+- A **title** — the author's heading, or the localized default "Informed Consent".
+- A **body** — the author's consent text, rendered from sanitized HTML (headings, paragraphs, lists).
+- Optional **checkboxes** — each with its own label; required checkboxes are marked with an asterisk and must all be ticked to proceed.
+- An optional **Electronic Signature** field — labeled "Electronic Signature" with the placeholder "Type your full name" and the note "By typing your name above, you are providing an electronic signature."
+
+The actions are **I Agree** and **Decline**. Agreeing is blocked (with an assertive validation message) until every required checkbox is ticked and, if required, the signature is filled. Declining opens a confirmation dialog ("Decline participation? … You will not be able to participate in this study.") before it takes effect. (See Chapter 5 for authoring the consent page.)
+
+When the participant agrees, the runtime persists the consent decision to the session metadata with an ISO 8601 timestamp:
 
 ```json
 {
@@ -153,6 +178,22 @@ Sessions move through the following states:
 | `expired` | Session exceeded its maximum allowed duration. |
 
 To update a session's status, the runtime sends `PATCH /api/sessions/{sessionId}` with the new status. When set to `completed`, the server automatically records the `completed_at` timestamp.
+
+### Progress Indicator
+
+During the runtime, the page chrome shows a progress indicator so the participant can see how far they are — a text readout and a bar. Because the welcome screen calls each page a "section", the readout matches that wording: **Section N of M** with a filled bar. When the flow length is indeterminate (an adaptive/CAT flow or a dynamic-length loop), it degrades to **Section N** with an indeterminate bar rather than a misleading fraction. The indicator honors the authored toggle `settings.showProgressBar`: it is shown by default and only an explicit `false` hides it (see Chapter 5 for the report/progress authoring settings). It is visible during reaction items too, since it lives in the page chrome rather than inside a form card.
+
+### Screened-Out Screen
+
+Eligibility (screener) rules can end a session early because the participant does not qualify — a distinct outcome from natural completion. When a rule fires, the participant sees the screened-out screen, not the completion screen: a neutral (non-success) icon, the title "You're not eligible for this study", and either the author-configured message or the default — "Thank you for your interest. Based on your answers, you do not qualify to take part in this study. Your responses have not been recorded as a completion." **No completion code is shown.** If the author configured a redirect URL, a five-second countdown returns the participant to the provider, with a fallback link. Analytics marks such a session with a **Screened out** badge and its screen-out reason (see Chapter 12).
+
+### Cross-Device Sessions
+
+Anonymous sessions cannot be moved between devices. If a participant opens a resume link carrying a `?sid=` for a session that was started on another device — so there is no server-side session to resume (the resume endpoints are authentication-gated) and no local snapshot on this device — the runtime falls back to a fresh run and says so on the welcome screen: "This link was for a session started on another device. Anonymous sessions can't be moved between devices — you'll start fresh here."
+
+### Localized Chrome
+
+The participant-facing chrome (welcome, consent, progress, sync, and screen-out strings) is localized through compile-time messages and follows the participant's language choice. QDesigner ships English, German, and Spanish (en/de/es); the welcome-screen language picker appears when the study offers more than one content locale, and switching it re-renders both the chrome and the localized content.
 
 ---
 
@@ -268,6 +309,8 @@ Before going offline, questionnaires can be pre-synced for offline availability:
 
 The fillout route (`/q/{code}`) automatically caches questionnaires to IndexedDB on first online access, so returning participants can continue offline without explicit pre-sync.
 
+For field studies where the participant will deliberately go offline, the welcome screen can also offer an explicit **Prepare offline** affordance — a secondary "Make available offline" control that prefetches the whole study up front and confirms when it is done. While preparing, it reads "Preparing for offline use… (N of M)"; on success it reads "Ready for offline use". If it only partially completes it offers "Retry offline download" ("N of M files saved"), and if the study is too large to store it says so ("This study is too large to store on this device for offline use. You can still take part while connected."). Media-bearing reaction studies must reach the Offline-complete state before any timed block starts; reaching it is automatic at load, so this control is a convenience, not a gate.
+
 ### Client-Side Session Creation
 
 When offline, sessions are created entirely client-side:
@@ -297,18 +340,25 @@ The `FilloutSyncEngine` manages synchronization:
 5. **Completion**: On success, marks all uploaded records as `synced = true` in IndexedDB.
 6. **Retry**: On failure, uses exponential backoff (starting at 1 second, maximum 60 seconds) before retrying.
 
-### Offline UI Indicators
+### Sync Status Panel
 
-The fillout page displays connectivity and sync status to participants:
+Rather than an auto-hiding badge, the fillout page shows a persistent, always-visible sync status panel so the participant has an honest readout of whether their answers have reached the server. It reports one primary status line:
 
-| Status | Indicator | Description |
-|---|---|---|
-| **Offline** | Amber badge with cloud-off icon | Device has no internet connection. Responses are saved locally. |
-| **Syncing** | Blue badge with spinning icon | Sync in progress -- uploading saved responses to the server. |
-| **Synced** | Green badge with checkmark | All responses successfully uploaded to the server. |
-| **Sync Error** | Red badge with alert icon | Sync failed. Will retry automatically. |
+| State | Text |
+|---|---|
+| **Saved** | "All saved" (with "last synced just now" / "last synced HH:MM") |
+| **Syncing** | "Saving your answers…" |
+| **Offline** | "Offline — your answers are saved on this device" |
+| **Pending** | "N answers pending" |
+| **Failed** | "N answers could not be submitted" |
 
-After each response is saved locally, a brief "Saved locally" confirmation appears, reassuring participants that their data is preserved regardless of connectivity.
+A **Sync now** control triggers an immediate upload attempt (disabled while offline or already syncing, with the tooltip "You're offline — we'll sync automatically when you reconnect"). The pending and saved states are announced politely to assistive technology; the failure state is announced assertively.
+
+### Sync Failure and the Dead-Letter Escape Hatch
+
+Records the sync pipeline permanently rejects go to a dead-letter set. This is terminal by design — the ledger never re-queues it — so there is no "retry"; unaddressed, it would be silent data loss. The panel therefore flips into a non-dismissible destructive state reading "N answers could not be submitted", and the only recovery it offers is an export escape hatch: a **Download my answers** button that saves a JSON snapshot of the unsynced/failed records. The dead-letter surface is scoped per study.
+
+On a shared or kiosk research device, the **Save & exit (clear this device)** control (`ShareDeviceExit`) gives the participant a safe hand-off: it forces a final sync and then wipes every local fillout store so no residual data lingers. If unsynced answers survive the final sync, it does not silently discard them — it warns ("N answers on this device haven't been saved to the server yet"), offers "Download my answers first", and requires an explicit "Clear anyway" before wiping. On success it confirms "This device has been cleared. It is safe to hand back."
 
 ### Data Flow Summary
 

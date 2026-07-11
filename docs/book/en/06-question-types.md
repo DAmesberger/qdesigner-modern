@@ -487,43 +487,43 @@ The same module as Single Choice, but allows multiple selections.
 **Category**: Question
 **Answer type**: REACTION_TIME (object)
 
-**Purpose**: Measure response speed with microsecond precision using configurable stimuli, fixation periods, and response mappings.
+**Purpose**: Run a timed reaction task with frame-accurate stimulus onset and high-resolution response timestamps, recording per-trial reaction time and accuracy.
 
-**Configuration**:
+#### Paradigms
 
-| Property | Type | Default | Description |
-|---|---|---|---|
-| `task.type` | string | `'standard'` | Task type (standard, n-back, custom). |
-| `prompt` | string | `'Reaction Time Task'` | Task instruction. |
-| `stimulus.type` | string | `'shape'` | Stimulus type. |
-| `stimulus.content` | string | `'circle'` | Stimulus content. |
-| `stimulus.fixation.type` | string | `'cross'` | Fixation type. |
-| `stimulus.fixation.duration` | number | `500` | Fixation duration (ms). |
-| `feedback` | boolean | `true` | Show accuracy feedback. |
-| `practice` | boolean | `false` | Include practice trials. |
-| `practiceTrials` | number | `3` | Number of practice trials. |
-| `testTrials` | number | `10` | Number of test trials. |
-| `targetFPS` | number | `120` | Target frame rate. |
-| `response.validKeys` | string[] | `['f', 'j']` | Valid response keys. |
-| `response.timeout` | number | `2000` | Response timeout (ms). |
-| `response.requireCorrect` | boolean | `false` | Require correct response. |
+A reaction question is built around a **Paradigm** -- a scientific procedure template that fixes a task's trial structure and defines what counts as a correct response. You pick one from the **Paradigm** dropdown in the designer; the properties panel then shows only the fields that paradigm needs. QDesigner ships 16 paradigms:
 
-**N-back task configuration** (when `task.type = 'n-back'`):
-
-| Property | Type | Default |
+| Paradigm (label in the designer) | Identifier | What it measures |
 |---|---|---|
-| `task.nBack.n` | number | `2` |
-| `task.nBack.sequenceLength` | number | `20` |
-| `task.nBack.targetRate` | number | `0.3` |
-| `task.nBack.stimulusSet` | string[] | `['A','B','C','D']` |
-| `task.nBack.targetKey` | string | `'j'` |
-| `task.nBack.nonTargetKey` | string | `'f'` |
-| `task.nBack.fixationMs` | number | `400` |
-| `task.nBack.responseTimeoutMs` | number | `1200` |
+| Standard Reaction Time | `standard` | Simple / choice RT to a single stimulus |
+| N-Back | `n-back` | Working-memory updating |
+| Stroop | `stroop` | Colour-word interference |
+| Flanker (Eriksen) | `flanker` | Response conflict from flanking distractors |
+| Implicit Association Test (IAT) | `iat` | Implicit association strength (D-score) |
+| Dot-Probe | `dot-probe` | Attentional bias toward paired cues |
+| Go / No-Go | `go-nogo` | Response inhibition (commission / omission errors) |
+| SART | `sart` | Sustained attention (withhold on the rare target) |
+| Simon | `simon` | Spatial stimulus-response compatibility |
+| Posner Cueing | `posner` | Spatial attention orienting (valid vs. invalid cue) |
+| Visual Search | `visual-search` | Search efficiency (RT x set-size slope) |
+| Sternberg Memory Search | `sternberg` | Memory-scanning rate |
+| PVT (Psychomotor Vigilance) | `pvt` | Vigilance and lapses under fatigue |
+| Temporal-Order Judgment | `temporal-order` | Temporal resolution (JND across SOAs) |
+| RSVP | `rsvp` | Rapid serial visual target detection |
+| Custom Trial Plan | `custom` | Fully author-defined blocks and trials |
 
-**Capabilities**: Scripting, Conditionals, Analytics, Timing, Variables. Uses a dedicated `ReactionTimeRuntime` for microsecond-precision timing via `performance.now()`.
+Choosing a paradigm and pressing **Reset Selected Paradigm To Starter** loads a runnable starter configuration you can then edit. The procedural paradigms materialize their trials from paradigm parameters (trial count, ratios, timing); **Custom Trial Plan** is the only paradigm you build trial-by-trial in the visual block editor.
 
-**Answer data format**:
+> Earlier versions of QDesigner called these "task types". They are now authored as Paradigms. (The underlying `task.type` identifiers in the table above are unchanged.)
+
+#### Presets
+
+A **Preset** is a saved, named *parameterization* of a paradigm -- never a new procedure. In the reaction editor you can apply reusable **Timing Presets** (a named set of phase durations) and key/response presets, so a house-standard timing profile or response mapping can be dropped onto trials without re-typing it. Applying a preset only fills in parameter values; it never changes which paradigm is running.
+
+#### Response data
+
+Each trial records a reaction time, the response given, whether it was correct, and a timing-provenance record. A representative per-trial record:
+
 ```json
 {
   "reactionTime": 342,
@@ -537,7 +537,11 @@ The same module as Single Choice, but allows multiple selections.
 **Aggregations**: mean_rt, median_rt, min_rt, max_rt, accuracy, outliers.
 **Transformations**: remove_outliers, log_transform, z_score.
 
-**Use cases**: Simple reaction time tasks, go/no-go paradigms, n-back working memory tasks, Stroop tasks, implicit association tests, psychophysical experiments.
+**Capabilities**: Scripting, Conditionals, Analytics, Timing, Variables.
+
+**Timing precision**: Onset is frame-accurate with measured display-latency correction, and responses carry high-resolution `event.timeStamp` values -- yielding sub-millisecond *relative* precision on difference scores, not absolute microsecond accuracy. Full timer resolution requires cross-origin isolation (COOP/COEP). See **Chapter 10: Reaction Time Measurement** for the timing model, the per-paradigm configuration fields, stimulus kinds, counterbalancing, and scoring.
+
+**Use cases**: The 16 paradigms above cover simple/choice reaction time, response-inhibition and sustained-attention tasks, conflict paradigms (Stroop, Flanker, Simon), attention-orienting and bias probes (Posner, dot-probe), memory-search and working-memory tasks (Sternberg, n-back), psychophysics (temporal-order, RSVP, visual search), the IAT, and fully custom trial plans.
 
 ---
 
@@ -649,7 +653,7 @@ The same module as Single Choice, but allows multiple selections.
 **Category**: Question
 **Answer type**: REACTION_TIME (object)
 
-**Purpose**: GPU-rendered visual stimuli at 120+ FPS with microsecond timing precision using WebGL 2.0.
+**Purpose**: GPU-rendered visual stimuli at 120+ FPS using WebGL 2.0, with frame-accurate onset and sub-millisecond *relative* timing precision (see Chapter 10).
 
 **Configuration**:
 
@@ -720,6 +724,6 @@ The same module as Single Choice, but allows multiple selections.
 
 ### Performance Considerations
 
-- Reaction Time and WebGL questions use `performance.now()` for microsecond precision. Ensure the target device supports High Resolution Time.
+- Reaction Time and WebGL questions rely on frame-accurate onset and high-resolution response timestamps (`event.timeStamp`) for sub-millisecond *relative* precision. Full timer resolution requires cross-origin isolation (COOP/COEP); see Chapter 10.
 - The WebGL renderer targets 120 FPS by default. Set `rendering.targetFPS` to match the display refresh rate.
 - For large matrix questions (many rows/columns), consider mobile layout settings to ensure usability on small screens.

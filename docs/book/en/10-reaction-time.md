@@ -1,570 +1,326 @@
 # Chapter 10: Reaction Time Measurement
 
-Reaction time (RT) measurement is at the heart of cognitive and behavioral research. QDesigner Modern provides a purpose-built reaction time engine backed by a WebGL 2.0 renderer, delivering microsecond timing precision and 120+ FPS rendering. This chapter covers the architecture, stimulus types, timing model, supported paradigms, trial configuration, and best practices for timing-critical research.
+Reaction time (RT) measurement is the capability that sets QDesigner Modern apart from ordinary survey tools. A purpose-built reaction engine, driven by a WebGL 2.0 renderer, delivers **frame-accurate stimulus onset** and **sub-millisecond *relative* precision** on difference scores. This chapter is written for the researcher who authors and runs timed tasks. It covers how you choose a paradigm, how per-trial timings are generated, how you map responses to inputs (including external hardware), how stimulus media is guaranteed to be present before a timed block runs, what a trial records, and — honestly — what the timing numbers do and do not mean.
+
+Two claims frame everything that follows, and both are deliberate:
+
+- **Relative RT is scientifically defensible.** Within-participant difference scores — congruency effects, Simon/Posner costs, IAT *D*, set-size slopes — are measured on a single clock (`event.timeStamp` against a frame-counted onset), with fully seeded, reproducible randomization. The residual per-trial timing constant cancels in a difference.
+- **Absolute RT is defensible only to about one frame.** The display-latency correction is a *modelled* one-frame estimate, not a photodiode measurement. Microsecond *storage* does not imply microsecond *absolute* accuracy. Treat absolute RT as frame-accurate; treat differences as sub-millisecond.
 
 ---
 
-## 10.1 Architecture Overview
+## 10.1 Core Concepts
 
-The reaction time system consists of two core components:
+The reaction system uses a small, precise vocabulary. These terms are used consistently throughout this manual (see also the Glossary appendix).
 
-1. **WebGLRenderer** (`src/lib/renderer/WebGLRenderer.ts`) -- A hardware-accelerated rendering engine that draws stimuli, tracks frame timing, and reports dropped frames.
-2. **ReactionEngine** (`src/lib/runtime/reaction/ReactionEngine.ts`) -- An orchestrator that runs trial sequences, captures responses, computes reaction times, and records per-frame timing data.
+| Term | Meaning |
+|---|---|
+| **Paradigm** | A scientific procedure template for a reaction task (PVT, Simon, Stroop, …) that defines the trial structure and what counts as a correct response. |
+| **Preset** | A saved, named parameterization of a Paradigm. A Preset never defines new procedure — only parameter values. |
+| **Trial** | One fully materialized stimulus→response cycle. Every value a Trial uses — timings, stimulus, correct options — is a concrete number fixed at generation time. |
+| **TimingSpec** | An authored phase duration that is either a fixed value or a distribution (uniform min/max today), sampled per-trial by the seeded generator. |
+| **ResponseSet** | The named, ordered list of ResponseOptions a Trial arms; a Trial accepts exactly one winning response. |
+| **ResponseOption** | One semantic response alternative, identified by a stable id (`left`, `target-present`, …) that analysis and export key on — independent of which physical input produced it. |
+| **Binding** | The attachment of one physical input (a keyboard key, a HID button, a touch region) to a ResponseOption, including whether it fires on press or release. |
+| **ResponseSource** | A device family that can deliver responses — keyboard, pointer, touch, gamepad, or a WebHID device. Several may be armed at once; the first event wins. |
+| **ValidityPolicy** | A per-study posture toward degraded timing conditions. The default, `record`, stamps provenance and continues (see Chapter 11). |
+| **Offline-complete** | The state in which every asset a study can present exists in local storage. Reaction studies with media must reach this before any timed block starts. |
 
-### 10.1.1 WebGL 2.0 Renderer
+### 10.1.1 The two rendering paths
 
-The renderer creates a WebGL 2.0 context with performance-optimized settings:
+The fillout runtime has exactly one drawing path for timed stimuli and one for everything else (ADR 0023). Stimuli for reaction paradigms are drawn by the **WebGL renderer** (`renderer/WebGLRenderer`) driven by the **ReactionEngine** (`runtime/reaction/ReactionEngine`) — frame-exact onset is the reason this path exists. Ordinary form questions, instructions, and feedback render as DOM overlays. As an author you never choose between them; adding a reaction question puts that question on the WebGL path automatically.
 
-| Setting             | Default Value      | Purpose                               |
-|--------------------|--------------------|---------------------------------------|
-| `antialias`        | `false`            | Avoid per-sample smoothing overhead   |
-| `depth`            | `false`            | No 3D depth buffer needed             |
-| `stencil`          | `false`            | No stencil operations needed          |
-| `alpha`            | `true`             | Support transparent overlays          |
-| `desynchronized`   | `true`             | Bypass compositor for lower latency   |
-| `powerPreference`  | `high-performance` | Request dedicated GPU                 |
-| `preserveDrawingBuffer` | `false`       | Allow buffer swap optimization        |
+### 10.1.2 Generation-time materialization
 
-The `desynchronized` flag is particularly important: it tells the browser to bypass the compositor pipeline, reducing display latency by one frame or more on supported systems.
+A defining architectural decision (ADR 0025) is that **the engine never samples anything at runtime**. Every randomizable quantity — jittered phase durations, stimulus sequences, counterbalancing — is drawn by a seeded generator when the Trials are *materialized*, before the block runs. The engine receives only concrete per-trial numbers and executes them.
 
-**Rendering pipeline:**
+The consequence for you as a researcher is reproducibility and auditability:
 
-1. `requestAnimationFrame` callback fires.
-2. Renderer checks if enough time has passed since the last presented frame (based on target FPS and vsync settings).
-3. If presenting: clear the canvas, iterate through renderables sorted by layer, call each renderable's `render()` function.
-4. Frame callbacks are invoked with `FrameSample` data (timestamp, delta, presented flag, dropped-frame count).
-
-### 10.1.2 Frame Statistics
-
-The renderer continuously tracks performance metrics:
-
-| Metric          | Type     | Description                                    |
-|----------------|----------|------------------------------------------------|
-| `fps`          | `number` | Current frames per second (updated every 1s)   |
-| `frameTime`    | `number` | Average frame time in ms (rolling 240 samples) |
-| `droppedFrames`| `number` | Total frames missed since start                |
-| `targetFPS`    | `number` | Configured target frame rate                   |
-| `totalFrames`  | `number` | Total frames presented since start             |
-| `jitter`       | `number` | Standard deviation of frame times (ms)         |
-| `gpuTime`      | `number` | GPU execution time (if `EXT_disjoint_timer_query_webgl2` available) |
-
-### 10.1.3 Renderable System
-
-Stimuli are displayed through a layer-based renderable system. Each renderable has:
-
-- **id**: Unique string identifier
-- **layer**: Numeric z-order (lower layers render first)
-- **render()**: Function called each frame with the WebGL context and a `RenderContext`
-
-The `RenderContext` provides:
-
-```typescript
-interface RenderContext {
-  time: number;          // Current timestamp (performance.now())
-  deltaTime: number;     // Time since last frame (ms)
-  stimulusTime: number;  // Time since stimulus onset (ms)
-  width: number;         // Canvas width in pixels
-  height: number;        // Canvas height in pixels
-  pixelRatio: number;    // Device pixel ratio
-}
-```
+- **`seed + sessionId` ⇒ an identical Trial sequence.** Re-running a session with the same seed reconstructs exactly the same timings and stimuli.
+- **Every sampled value is data, not a runtime accident.** The materialized durations are persisted per-trial (`sampledTimings`), so an analyst can see the exact foreperiod a given Trial used.
+- **A study authored entirely with fixed timings draws nothing from the RNG** — it produces a byte-identical sequence to the pre-TimingSpec engine. Only a distribution consumes a draw.
 
 ---
 
-## 10.2 Timing Precision
+## 10.2 Choosing a Paradigm
 
-### 10.2.1 performance.now()
+In the questionnaire designer, add a **Reaction Time** question and open its properties. The first control is the **Paradigm** selector. Sixteen built-in paradigms ship; fifteen are procedure-fixed scientific templates and one (**Custom Trial Plan**) is a fully author-defined block builder.
 
-All timestamps in QDesigner's reaction time system use `performance.now()`, which provides sub-millisecond precision (typically 5-microsecond resolution in modern browsers). This is critical because:
+| Designer label | Notes |
+|---|---|
+| Standard Reaction Time | Simple/choice RT; freely mappable responses. |
+| N-Back | Match / non-match against *n* trials back. |
+| Stroop | Colour–word interference. |
+| Flanker (Eriksen) | Congruent / incongruent flankers. |
+| Implicit Association Test (IAT) | Seven-block IAT with *D*-score support. |
+| Dot-Probe | Attentional-bias probe. |
+| Go / No-Go | Respond vs. withhold. |
+| SART | Sustained-attention, withhold on the target digit. |
+| Simon | Spatial stimulus–response compatibility. |
+| Posner Cueing | Valid / invalid spatial cueing. |
+| Visual Search | Set-size slope; target present / absent. |
+| Sternberg Memory Search | In-set / out-of-set memory scanning. |
+| PVT (Psychomotor Vigilance) | Random-foreperiod vigilance; records false starts. |
+| Temporal-Order Judgment | Which of two stimuli came first. |
+| RSVP | Rapid serial visual presentation with a target. |
+| Custom Trial Plan | Author blocks and trials yourself in the visual editor. |
 
-- `Date.now()` only provides millisecond precision.
-- `performance.now()` is monotonic (never goes backward).
-- It is relative to the page's `timeOrigin`, avoiding clock drift.
+**Presets vs. Paradigms.** Choosing a paradigm and adjusting its fields (trial count, congruent ratio, timings, keys) *is* creating a Preset — a named parameterization. A Preset never changes the underlying procedure; it only sets values.
 
-### 10.2.2 Stimulus Onset Detection
-
-Stimulus onset time is not recorded when the stimulus is *requested* but when the first frame containing the stimulus is *actually presented*. The engine uses a two-step process:
-
-1. When the stimulus phase begins, a `pendingStimulusOnsetMark` flag is set.
-2. On the next frame callback where `sample.presented === true`, the onset time is recorded from `sample.now`.
-
-This ensures that the onset timestamp reflects the actual display time, not the time the stimulus was queued.
-
-### 10.2.3 Reaction Time Computation
-
-Reaction time is computed as:
-
-$$RT = t_{\text{response}} - t_{\text{stimulus onset}}$$
-
-where both timestamps come from `performance.now()`. The result is stored in milliseconds with sub-millisecond precision.
-
-### 10.2.4 Microsecond Storage
-
-When reaction time data is persisted to the database, QDesigner stores timing values as `BIGINT` representing microseconds:
-
-$$\text{reaction\_time\_us} = \lfloor RT \times 1000 \rfloor$$
-
-This avoids floating-point precision loss during storage and retrieval, and provides a consistent integer representation suitable for statistical analysis.
+Below the selector, **Reset Selected Paradigm To Starter** re-seeds the current paradigm's fields with sensible defaults. Each procedure-fixed paradigm materializes its Trials from the top-level config at compile time; only the **Custom Trial Plan** paradigm stores an authored block plan (its **Visual Trial Blocks** editor, §10.6).
 
 ---
 
-## 10.3 Stimulus Types
+## 10.3 Timing: TimingSpec and Jitter
 
-The `ReactionEngine` supports six stimulus types, each rendered through the WebGL pipeline.
+Every phase duration in a reaction task is a **TimingSpec** — either a single fixed value in milliseconds, or a **uniform distribution** sampled per Trial. This is how you introduce the jitter that defeats anticipation (a random foreperiod, a variable ISI, a jittered inter-trial interval).
 
-### 10.3.1 Shape Stimuli
+### 10.3.1 The jitter toggle
 
-Geometric shapes rendered as WebGL primitives:
+In the designer, each timing field is a compact control with a **Jitter** checkbox:
 
-| Shape       | Parameters                       | Notes                      |
-|------------|----------------------------------|----------------------------|
-| `circle`    | `radiusPx`, `color`, `position`  | Rendered as triangle fan   |
-| `square`    | `widthPx`, `color`, `position`   | Width = height             |
-| `rectangle` | `widthPx`, `heightPx`, `color`   | Independent dimensions     |
-| `triangle`  | `widthPx`, `color`, `position`   | Equilateral, apex at top   |
+- **Jitter off** — a single fixed-ms number input. Identical to a plain duration; consumes no random draw.
+- **Jitter on** — a **min** input, the word **to**, a **max** input, and a **ms** unit. The seeded generator draws one value uniformly in `[min, max]` (inclusive, rounded to whole ms) for each Trial.
 
-Shapes are positioned using normalized coordinates (0-1 maps to viewport) or pixel coordinates if values exceed 1:
+Fields authored this way include the PVT/vigilance **Foreperiod / ISI (ms)**, the Sternberg **Per-Item Study (ms)** and **Retention (ms)**, Posner **Cue Duration (ms)** and **Cue→Target SOA (ms)**, SART **Digit Duration (ms)**, RSVP **Item Duration (ms)**, and per-paradigm **Response Timeout (ms)**, among others. The same control shape covers them all.
 
-```typescript
-position: { x: 0.5, y: 0.5 }  // Center of screen
-position: { x: 400, y: 300 }   // Pixel coordinates
-```
+### 10.3.2 Validation (min ≤ max)
 
-Colors are specified as RGBA arrays with values in [0, 1]:
+Timing fields are validated inline as you type (they turn red on an error), so bad timings surface at authoring time rather than at publish:
 
-```typescript
-color: [1, 0, 0, 1]  // Opaque red
-color: [0, 0.5, 1, 0.8]  // Semi-transparent blue
-```
+- A jitter range with a minimum above its maximum is an **error**: *"…: jitter minimum cannot exceed the maximum."*
+- A zero-width range (min equals max) is a **warning**: *"…: jitter min and max are equal — no variation."* — it jitters nothing.
+- A range needing both bounds numeric reports *"…: jitter needs a numeric minimum and maximum."*
 
-### 10.3.2 Text Stimuli
+### 10.3.3 Reproducible sampling order
 
-Text is rendered to an off-screen canvas and then displayed as a WebGL texture:
-
-| Parameter    | Type     | Default  | Description              |
-|-------------|----------|----------|--------------------------|
-| `text`       | `string` | Required | The text content          |
-| `fontPx`     | `number` | 64       | Font size in pixels       |
-| `fontFamily` | `string` | "Arial"  | CSS font family           |
-| `color`      | `RGBAColor` | White | Text color                |
-| `position`   | `{x,y}`  | Center   | Position on screen        |
-
-This approach ensures crisp text at any size while maintaining WebGL rendering performance.
-
-### 10.3.3 Image Stimuli
-
-Images are loaded asynchronously and cached for subsequent trials:
-
-| Parameter  | Type     | Description                         |
-|-----------|----------|-------------------------------------|
-| `src`      | `string` | URL or path to the image            |
-| `widthPx`  | `number` | Display width (defaults to natural) |
-| `heightPx` | `number` | Display height (defaults to natural)|
-| `position` | `{x,y}`  | Center position                     |
-
-The image cache (`imageCache`) prevents redundant network requests when the same image appears across multiple trials.
-
-### 10.3.4 Video Stimuli
-
-Video elements are used as WebGL texture sources, updated each frame:
-
-| Parameter  | Type      | Default | Description              |
-|-----------|-----------|---------|--------------------------|
-| `src`      | `string`  | Required | URL to the video file   |
-| `autoplay` | `boolean` | `true`  | Start playing on display |
-| `muted`    | `boolean` | `true`  | Mute audio by default    |
-| `loop`     | `boolean` | `false` | Loop playback            |
-| `widthPx`  | `number`  | Video native | Display width       |
-| `heightPx` | `number`  | Video native | Display height      |
-
-Video textures are re-uploaded to the GPU every frame via `texImage2D`, enabling real-time video display within the WebGL context.
-
-### 10.3.5 Audio Stimuli
-
-Audio stimuli do not produce visual output. The stimulus onset is marked at the moment `audio.play()` is called:
-
-| Parameter  | Type      | Default | Description              |
-|-----------|-----------|---------|--------------------------|
-| `src`      | `string`  | Required | URL to the audio file   |
-| `volume`   | `number`  | 1.0     | Volume (0.0 - 1.0)       |
-| `autoplay` | `boolean` | `true`  | Start playing on display |
-
-Audio stimuli are commonly used in auditory RT paradigms where participants respond to tones, speech, or other sounds.
-
-### 10.3.6 Custom Shader Stimuli
-
-For advanced stimulus requirements (e.g., Gabor patches, random dot kinematograms, procedural animations), QDesigner supports custom GLSL shaders:
-
-| Parameter   | Type                    | Description                    |
-|------------|-------------------------|--------------------------------|
-| `shader`    | `string`                | GLSL fragment shader source    |
-| `vertices`  | `number[]`              | Vertex positions               |
-| `uniforms`  | `Record<string, ...>`   | Uniform values                 |
-
-The engine automatically passes `time` (seconds since stimulus onset) and `resolution` (viewport dimensions) as uniforms.
+When a Trial jitters several fields, the generator samples them in a fixed, documented per-field order (each paradigm states its order — the PVT, for example, draws *foreperiod → response timeout*). This keeps the seeded stream reproducible: the same seed and session id reconstruct the same per-field draws in the same order. The TimingSpec object is deliberately shaped to admit future named distributions (exponential, etc.) without changing the engine — only the generation layer.
 
 ---
 
-## 10.4 Media Library Integration
+## 10.4 Responses: ResponseSets and Bindings
 
-Stimulus media (images, videos, audio) can be uploaded to QDesigner's MinIO-based media library and referenced by URL in trial configurations. Benefits include:
+A Trial arms a **ResponseSet**: an ordered list of **ResponseOptions**, each identified by a stable semantic **id** (`left`, `go`, `target-present`) that your analysis and export key on. Each option carries one or more **Bindings** that attach a physical input to it. Multiple **ResponseSources** can be armed at once — keyboard, pointer, touch, gamepad, WebHID — and the **first event wins**; provenance records which source and binding fired.
 
-- **Preloading:** Media is loaded and cached before the trial begins.
-- **CDN-ready:** MinIO URLs can be fronted by a CDN for fast global delivery.
-- **Versioning:** Media assets are stored with content-addressable hashes.
+This model replaces the older `validKeys` / `correctResponse` scheme. Existing content that still uses the legacy fields is compiled losslessly into a ResponseSet at run time, so nothing breaks — but new authoring should think in options and bindings.
 
-In the designer, drag media from the **Media Library** panel directly onto a reaction time block to create stimulus references.
+### 10.4.1 Which paradigms are freely mappable
 
----
+Only two paradigms expose the full **Responses** editor: **Standard Reaction Time** and **Custom Trial Plan**. These are author-defined — you decide the options and their inputs.
 
-## 10.5 Paradigms
+Every other paradigm is **procedure-fixed**: its response structure is part of the scientific procedure, so its keys are configured in that paradigm's own fields, and the preset builds the ResponseSet for you. In the Responses panel these paradigms show a read-only note pointing at where their responses live — for example:
 
-The `ReactionEngine` is flexible enough to implement all common RT paradigms through configuration alone.
+- **Go / No-Go** — the single Response Key (withhold on no-go)
+- **Flanker (Eriksen)** — the two Valid Response Keys (left / right)
+- **IAT** — the fixed E / I category keys across its seven blocks
+- **Simon**, **Posner** — the Left / Right keys
+- **Visual Search** — the Present / Absent keys
+- **Sternberg** — the In-set / Out-of-set keys
 
-### 10.5.1 Simple Reaction Time
+### 10.4.2 Authoring a response set (standard / custom)
 
-The participant presses a single key as quickly as possible when a stimulus appears.
+For a freely mappable paradigm, the **Responses** panel starts from your **Valid Response Keys** / device settings. Click **Customize response set** to expand it into editable options. For each option you set:
 
-**Configuration:**
+- **Label** (human-readable) and **Option id** (the stable analysis key; auto-suggested from the label, must be unique — a duplicate or empty id is flagged).
+- **Correct response** — a checkbox marking the option(s) scored as correct. A marked option is scored on its own, independent of the legacy *Require correct response* toggle.
+- **Bindings** — click **Add binding** and choose a source: **Keyboard**, **Mouse**, **Touch**, **Gamepad**, or **HID device**.
 
-```typescript
-{
-  id: "simple-rt-trial-1",
-  responseMode: "keyboard",
-  validKeys: ["space"],
-  fixation: { enabled: true, type: "cross", durationMs: 500 },
-  preStimulusDelayMs: 800,       // Random jitter recommended
-  stimulus: { kind: "shape", shape: "circle", color: [1, 0, 0, 1] },
-  responseTimeoutMs: 1500,
-  interTrialIntervalMs: 1000,
-  targetFPS: 120
-}
-```
+Binding details by source:
 
-### 10.5.2 Choice Reaction Time
+- **Keyboard** — press-to-capture the key, plus an edge selector: **on press** (down) or **on release** (up). Key-up capture supports hold/release paradigms.
+- **Mouse / Touch** — either *any click/tap*, or *limit to region* with normalized centre `x`, `y` and `radius` (0–1 canvas space, viewport-independent).
+- **Gamepad** — a button index (0–31).
+- **HID device** — a button number (0–255) and a press/release edge (see §10.5).
 
-The participant presses different keys depending on which stimulus appears.
-
-**Configuration:**
-
-```typescript
-{
-  id: "choice-rt-trial-1",
-  responseMode: "keyboard",
-  validKeys: ["f", "j"],
-  correctResponse: "f",           // "f" for left stimulus
-  requireCorrect: true,
-  fixation: { enabled: true, type: "cross", durationMs: 500 },
-  preStimulusDelayMs: 600,
-  stimulus: { kind: "shape", shape: "circle", color: [0, 0, 1, 1] },
-  responseTimeoutMs: 2000,
-  interTrialIntervalMs: 800
-}
-```
-
-### 10.5.3 Go/No-Go
-
-The participant responds to "go" stimuli but withholds responses to "no-go" stimuli.
-
-**Configuration (Go trial):**
-
-```typescript
-{
-  id: "go-trial-1",
-  responseMode: "keyboard",
-  validKeys: ["space"],
-  correctResponse: "space",
-  requireCorrect: true,
-  stimulus: { kind: "shape", shape: "circle", color: [0, 1, 0, 1] },  // Green = go
-  responseTimeoutMs: 1500
-}
-```
-
-**Configuration (No-Go trial):**
-
-```typescript
-{
-  id: "nogo-trial-1",
-  responseMode: "keyboard",
-  validKeys: ["space"],
-  requireCorrect: true,
-  // No correctResponse set -> correct response is no response (timeout)
-  stimulus: { kind: "shape", shape: "circle", color: [1, 0, 0, 1] },  // Red = no-go
-  responseTimeoutMs: 1500
-}
-```
-
-For no-go trials, correctness is evaluated as: `response === null` indicates a correct inhibition.
-
-### 10.5.4 N-Back
-
-N-back tasks require participants to compare the current stimulus with the stimulus presented *n* trials earlier. QDesigner supports this by:
-
-1. Configuring a sequence of text or image stimuli.
-2. Setting `correctResponse` dynamically based on whether the current stimulus matches the one *n* steps back.
-3. Using the `validKeys` to define "match" and "non-match" keys.
-
-### 10.5.5 Custom Paradigms with Scheduled Phases
-
-The `ReactionEngine` supports arbitrary trial structures through **scheduled phases**:
-
-```typescript
-engine.schedulePhase({
-  name: "mask",
-  durationMs: 200,
-  allowResponse: false,
-  marksStimulusOnset: false
-});
-
-engine.schedulePhase({
-  name: "probe",
-  durationMs: 0,  // Duration until response
-  allowResponse: true,
-  marksStimulusOnset: true
-});
-```
-
-This enables paradigms like:
-- **Masked priming:** fixation -> prime -> mask -> target
-- **Attentional blink:** RSVP stream with target detection
-- **Visual search:** display array with response window
+A single option may carry several bindings at once — e.g. the same `go` option on both a keyboard key **and** a HID button — so a hardware participant and a keyboard participant answer the same semantic option, and analysis sees one id regardless of which fired.
 
 ---
 
-## 10.6 Trial Configuration
+## 10.5 External Response Hardware (WebHID)
 
-Each trial is configured through a `ReactionTrialConfig` object:
+For labs that use physical **button boxes**, an external **ResponseSource** is available through the browser's **WebHID** API (ADR 0024). HID `inputreport` events carry a high-resolution timestamp on the same clock as keyboard events, so the RT arithmetic is unchanged — hardware responses are timed exactly like keyboard responses.
 
-| Field                          | Type                  | Default    | Description                              |
-|-------------------------------|-----------------------|------------|------------------------------------------|
-| `id`                           | `string`              | Required   | Unique trial identifier                  |
-| `responseMode`                 | `'keyboard' \| 'mouse' \| 'touch'` | `'keyboard'` | Input method         |
-| `validKeys`                    | `string[]`            | `[]` (any) | Allowed keyboard keys                    |
-| `correctResponse`             | `string`              | -          | Expected correct response                |
-| `requireCorrect`              | `boolean`             | `false`    | Evaluate correctness                     |
-| `fixation`                     | `ReactionFixationConfig` | disabled | Fixation cross/dot settings             |
-| `preStimulusDelayMs`          | `number`              | 0          | Delay after fixation, before stimulus    |
-| `stimulus`                     | `ReactionStimulusConfig` | Required | Stimulus definition                     |
-| `stimulusDurationMs`          | `number`              | -          | How long stimulus stays after response   |
-| `responseTimeoutMs`           | `number`              | 2000       | Maximum response window                  |
-| `interTrialIntervalMs`        | `number`              | 0          | Blank screen between trials              |
-| `targetFPS`                    | `number`              | 120        | Renderer target frame rate               |
-| `vsync`                        | `boolean`             | `true`     | Synchronize with display refresh         |
-| `backgroundColor`             | `RGBAColor`           | Black      | Canvas background color                  |
-| `allowResponseDuringPreStimulus` | `boolean`           | `false`    | Accept early responses                   |
+### 10.5.1 Chromium-only, and honest about it
 
-### 10.6.1 Fixation Configuration
+WebHID exists only in Chromium-based browsers (Chrome, Edge). Participants on Safari or Firefox get keyboard/touch/pointer only. The platform discloses this rather than hiding it:
 
-| Field      | Type               | Default   | Description              |
-|-----------|--------------------|-----------|--------------------------|
-| `enabled`  | `boolean`          | `false`   | Show fixation            |
-| `type`     | `'cross' \| 'dot'` | `'cross'` | Fixation type            |
-| `durationMs` | `number`        | 0         | Display duration         |
-| `color`    | `RGBAColor`        | White     | Fixation color           |
-| `sizePx`   | `number`           | 20        | Size in pixels           |
+- In the ResponseSet editor, when any option binds a HID button, a hint appears: *"HID (button box) responses need Chrome or Edge; participants connect the device on the study's welcome screen. … Keyboard, mouse or touch bindings on the same option keep working as a fallback."* Always give HID options a keyboard/touch fallback binding for cross-browser participants.
+- Device qualification records whether WebHID is available at all and whether a device was already granted, so an analyst knows a participant *could* have used a box.
 
-The fixation cross is rendered as two perpendicular rectangles (2px wide). The dot is rendered as a filled circle with radius `sizePx / 4`.
+### 10.5.2 Connecting a device (participant side)
 
-### 10.6.2 Response Mapping
+When a study binds a HID response, the participant's **welcome screen** shows an optional **Connect response device** button (with the hint *"Optional — connect a hardware button box now, or just use the keyboard/touch."*). This is gesture-gated (browsers require a user gesture for the permission prompt). A device granted on a previous visit reconnects silently. On a non-Chromium browser the control is replaced by an explanation of the keyboard/tap fallback rather than a dead button. Connecting is never mandatory.
 
-**Keyboard:** The `validKeys` array specifies which keys are accepted. Key values use `event.key.toLowerCase()`. If the array is empty, any key is accepted.
+### 10.5.3 Button numbers are discovered empirically
 
-**Mouse:** Click position is normalized to [0, 1] relative to the canvas:
+The HID adapter is **descriptor-free**: it does not read a device's HID descriptor. Instead it detects which report bit changed between the "all released" state and a press (a bit-diff), and that bit index is the button's number. Practically, this means you **discover a button's number by pressing it** and reading the captured binding — there are no manufacturer labels to rely on. This works for the bitfield button boxes common in psychology labs; more exotic report layouts may not map cleanly.
 
-```typescript
-response.value = {
-  x: (clientX - canvasLeft) / canvasWidth,
-  y: (clientY - canvasTop) / canvasHeight
-}
-```
+### 10.5.4 Gamepad is convenience, not precision
 
-**Touch:** The first touch point is normalized identically to mouse clicks.
+A **gamepad** ResponseSource also exists and is convenient for authoring (the designer's *Press to Bind* affordance lets you bind a button by pressing it). Be clear about its timing, though: the Gamepad API is **polled**, not event-driven. The poller samples once per animation frame and detects the rising edge, so responses are **quantized to the frame loop (~8–16 ms)**. Retain gamepad for convenience where that resolution is acceptable; do **not** treat it as a precision RT source. For hardware-grade timing use keyboard or a WebHID button box.
+
+> **Deferred by design.** TTL/trigger *output* for EEG/eye-tracker sync, and photodiode/loopback timing-validation hardware, are deliberately out of v1 (ADR 0024). The browser cannot yet bound when an output voltage flips; a photodiode fast-follow would upgrade the display-latency model from *modelled* to *measured*.
 
 ---
 
-## 10.7 Trial Sequence
+## 10.6 The Custom Trial Plan (visual block editor)
 
-A trial proceeds through the following phases:
+The **Custom Trial Plan** paradigm turns on the **Visual Trial Blocks** editor — fully programmable reaction tasks with no JSON. You author **blocks** (each with an id, name, a **Kind** of Practice / Test / Custom, **Block Repetitions**, and **Randomize Trial Order**) and, inside each block, **trials** (stimulus, valid keys, correct response, fixation, response timeout, inter-trial interval, and per-trial repeat).
 
-```
-1. Fixation (optional)
-   |
-2. Pre-Stimulus Delay (optional)
-   |
-3. Stimulus Display + Response Window
-   |  -> Response captured (or timeout)
-   |
-4. Post-Stimulus Duration (optional)
-   |
-5. Scheduled Phases (optional, arbitrary)
-   |
-6. Inter-Trial Interval (optional)
-```
+A block can be gated on an accuracy criterion: **Gate on accuracy criterion (practice)** re-runs a practice block until the participant reaches a **Min accuracy (%)** or a **Max attempts** budget is spent. This is how you implement criterion-based practice.
 
-### 10.7.1 Phase Timeline
-
-Every phase is recorded with precise start and end times in the `phaseTimeline` array:
-
-```typescript
-interface ReactionPhaseMark {
-  name: string;       // "fixation", "pre-stimulus-delay", "stimulus", etc.
-  startTime: number;  // performance.now() at phase start
-  endTime: number;    // performance.now() at phase end
-}
-```
-
-### 10.7.2 ISI and SOA Control
-
-**Inter-Stimulus Interval (ISI):** The blank interval between the offset of one stimulus and the onset of the next. Controlled by `interTrialIntervalMs`.
-
-**Stimulus Onset Asynchrony (SOA):** The time between the onset of one stimulus and the onset of the next:
-
-$$SOA = \text{stimulusDuration} + ISI$$
-
-For precise SOA control, set `stimulusDurationMs` and `interTrialIntervalMs` explicitly:
-
-```typescript
-// 200ms stimulus, 300ms ISI -> 500ms SOA
-{ stimulusDurationMs: 200, interTrialIntervalMs: 300 }
-```
+Because Trials materialize at generation time, the custom plan you author is turned into concrete per-trial values the same way a built-in paradigm is — jitter, counterbalancing, and randomization all resolve into fixed numbers before the block runs.
 
 ---
 
-## 10.8 Practice Trials
+## 10.7 Stimuli
 
-Practice trials use the same `ReactionTrialConfig` structure but are marked separately in the data. To implement practice:
+A reaction stimulus is one of five authorable kinds, chosen with the **Stimulus Type** control: **Text**, **Shape**, **Image**, **Video**, or **Audio**.
 
-1. Create a set of practice trial configs.
-2. Run them through `engine.runTrial()` before the main trials.
-3. Provide feedback using the `hooks.onResponse` callback.
-4. Discard practice data in analysis (they are tagged with practice-prefixed IDs).
+| Kind | What you set | Timing notes |
+|---|---|---|
+| **Text** | The text to display; font size/family; colour; position. | Rendered to a texture; onset is the first presented frame. |
+| **Shape** | Circle / square (and rectangle / triangle in trial plans); colour; size; position. | Single GPU draw; no asset loading. Lowest-latency choice. |
+| **Image** | A media-library asset (preferred) or a remote URL. | Decoded to a texture at the block gate (§10.8). |
+| **Video** | A media asset/URL; autoplay/muted/loop. | Fully fetched before the block; onset corrected via the frame-callback clock. |
+| **Audio** | A media asset/URL; volume. | No visual output; onset marked at play, corrected for output/DAC latency. |
 
----
+Fixation is configured separately (**Fixation Type** cross/dot, **Fixation Duration**).
 
-## 10.9 Trial Result Data
+> **A note on "custom shader" stimuli.** Earlier documentation described a first-class GLSL custom-shader stimulus type. That path was **rejected** and is not a functional stimulus kind: a trial whose stimulus is a raw shader is invalidated by design (audit finding W-17). Author procedural visual effects as shapes/images/video instead. The stimulus dropdown offers exactly the five kinds above.
 
-Each trial produces a `ReactionTrialResult` with comprehensive timing data:
-
-```typescript
-interface ReactionTrialResult {
-  trialId: string;                    // Trial identifier
-  startedAt: number;                  // Trial start (performance.now())
-  stimulusOnsetTime: number | null;   // Actual display time
-  response: ReactionResponseCapture | null;
-  isCorrect: boolean | null;          // null if requireCorrect is false
-  timeout: boolean;                   // Whether response timed out
-  frameLog: FrameSample[];            // Per-frame timing data
-  phaseTimeline: ReactionPhaseMark[]; // Phase timestamps
-  stats: FrameStats;                  // Renderer statistics
-}
-```
-
-### 10.9.1 Response Capture
-
-```typescript
-interface ReactionResponseCapture {
-  source: 'keyboard' | 'mouse' | 'touch';
-  value: string | { x: number; y: number };
-  timestamp: number;         // performance.now() of the response event
-  reactionTimeMs: number;    // timestamp - stimulusOnsetTime
-}
-```
-
-### 10.9.2 Frame Log
-
-The frame log records every animation frame during the trial:
-
-```typescript
-interface FrameSample {
-  index: number;          // Frame counter
-  now: number;            // performance.now() timestamp
-  delta: number;          // Time since previous frame (ms)
-  presented: boolean;     // Whether a frame was actually painted
-  droppedSinceLast: number; // Frames missed since last presentation
-}
-```
-
-This data enables post-hoc analysis of display timing quality (see Section 10.11).
+Visual stimulus onset is recorded not when the stimulus is *requested* but when the **first frame containing it is actually presented** (the engine arms an onset detector and stamps the corrected onset on the next presented frame). Frame-accurate offsets are available for brief-exposure / masking / RSVP durations by counting presented frames rather than using a timer.
 
 ---
 
-## 10.10 Hooks
+## 10.8 Media: Offline-Complete and Fail-Closed
 
-The `ReactionEngine` provides lifecycle hooks for real-time monitoring:
+Media-bearing reaction studies get a two-layer guarantee (ADR 0026) so that **no participant ever runs a timed block with missing stimuli**, and no network I/O or decoding ever happens on the timing-critical path.
 
-| Hook            | Signature                                    | Use Case                        |
-|----------------|----------------------------------------------|---------------------------------|
-| `onFrame`       | `(sample: FrameSample, stats: FrameStats) => void` | Real-time FPS display    |
-| `onPhaseChange` | `(phase: string, startedAt: number) => void` | Phase progress indicator        |
-| `onResponse`    | `(response: ReactionResponseCapture) => void` | Immediate feedback             |
+### 10.8.1 Layer 1 — bytes cached at load (automatic)
+
+Simply *loading* the questionnaire caches **all** of its assets locally, including `mediaId`-referenced reaction stimuli (fetched through the same-origin media proxy). Any participant who has opened the study is already **Offline-complete**. An explicit **make-available-offline** affordance also exists on the welcome screen for pre-provisioning in the field (an optional secondary control that reports "N of M" progress and a ready/partial/error state) — but reaching offline-complete is automatic at load, never a participant choice.
+
+### 10.8.2 Layer 2 — decode gate per block (visible)
+
+Immediately before a block's first Trial, every asset that block references is loaded from local cache and **fully decoded** — image→texture-ready bitmap, audio→WebAudio buffer, video→fully-fetched blob with its first frame decoded. This runs behind a visible **"Preparing stimuli… N of M"** state on the reaction canvas. Once the gate clears, the block runs with zero asset work on the critical path.
+
+### 10.8.3 Fail-closed
+
+If either layer cannot complete — a missing asset, a decode failure, or a storage-quota problem — the block **refuses to start** and shows an honest, retryable screen:
+
+> Some stimuli for this task couldn't be prepared.
+> Check your connection, then press any key to try again.
+
+The gate loops until every asset is ready (or the trial is aborted). It never runs a timed block with partial stimuli — *"timing cannot be altered by missing data."* As a belt-and-braces backstop, if a visual stimulus never reaches the renderer the Trial is stamped `invalidated: 'no-stimulus'` rather than silently timed against a blank screen. A consequence, accepted by design: a study whose media exceeds a device's storage quota is unrunnable on that device — reaction assets are *pinned* against cache eviction rather than silently dropped.
 
 ---
 
-## 10.11 Best Practices for Timing-Critical Research
+## 10.9 What a Trial Records
 
-### 10.11.1 Display Considerations
+Reaction data is **per-trial**, not per-block. Each completed Trial is written locally (encrypted at rest) and synced as its own record; the server stores it in a `trials` table joined to the version-pinned session, with reaction time in **microseconds** (`rt_us`, floored `ms × 1000`). Per-trial storage is the source of truth — a crash partway through a block does not lose completed trials, and export keys on the per-trial rows rather than any block average.
 
-1. **Use fullscreen mode** to eliminate browser chrome and compositor interference.
-2. **Request high refresh rate:** Set `targetFPS: 120` or higher. On 60Hz displays, this degrades gracefully.
-3. **Enable vsync** (`vsync: true`) to synchronize with the display refresh cycle.
-4. **Use `desynchronized: true`** (the default) to bypass the compositor.
-5. **Minimize other browser activity** during testing.
+### 10.9.1 The tidy per-trial row
 
-### 10.11.2 Timing Validation
+Every Trial flattens to one row in the canonical long-format ("tidy") export, with a stable column order. The columns include:
 
-1. **Check `frameLog`** for dropped frames. If `droppedSinceLast > 0` on the stimulus onset frame, the onset time may be inaccurate.
-2. **Check `stats.jitter`**: For timing-critical research, jitter should be below 2ms.
-3. **Examine `phaseTimeline`** to verify that phase durations match configuration.
-4. **Use `stimulusOnsetTime`** (not `startedAt`) for RT computation -- the engine does this automatically.
+| Column | Meaning |
+|---|---|
+| `trial_number`, `trial_id`, `block_id`, `condition` | Trial identity and design cell. |
+| `is_practice`, `counterbalance_cell` | Practice flag; assigned counterbalance cell. |
+| `stimulus_kind` | shape / text / image / video / audio. |
+| `response_key`, `expected_response`, `is_target` | The response and what was expected. |
+| `reaction_time_ms` | Reported RT, clamped at 0. |
+| `raw_rt_ms` | *Signed* raw RT (`response − onset`); may be negative for a same-frame/pre-onset event. |
+| `is_correct`, `timeout` | Accuracy verdict; whether the window elapsed. |
+| `anticipatory`, `false_start_count` | Pre-onset (false-start) flag and count. |
+| `onset_method`, `response_method` | Which clock stamped onset / response (see below). |
+| `response_device` | keyboard / mouse / touch / gamepad / hid. |
+| `display_latency_ms`, `output_latency_ms` | Modelled visual display latency; audio output latency folded into onset. |
+| `offset_method`, `actual_duration_frames` | How the stimulus offset was scheduled; measured frame exposure. |
+| `hold_duration_ms` | Key hold time (down→up), for hold/release paradigms. |
+| `stimulus_onset_time`, `stimulus_offset_time` | High-res on/off timestamps. |
+| `fps`, `dropped_frames`, `jitter` | Frame health during the Trial. |
+| `invalid`, `invalid_reason` | Whether the Trial was invalidated, and why. |
+| `exclude_from_analysis`, `exclude_reason` | Analysis-ready exclusion flag (see Chapter 11). |
 
-### 10.11.3 Stimulus Preparation and Automatic Preloading
+### 10.9.2 Sampled timings vs. measured provenance
 
-QDesigner provides automatic media preloading through the **ResourceManager** to guarantee frame-exact timing with no network jitter on first stimulus presentation.
+Two distinct blobs travel with each Trial and should not be confused:
 
-**How automatic preloading works:**
+- **`sampledTimings`** — the *materialized* phase plan (ADR 0025): the concrete durations the seeded generator drew for this Trial (fixation, foreperiod, stimulus, response window, inter-trial). This is what *drove* the run and is fully reproducible from the seed.
+- **`provenance`** — the *measured* timing environment: the onset/response methods, modelled `displayLatencyMs` / folded `outputLatencyMs`, signed `rawRtMs`, false-start flags, frame stats (fps, dropped frames, jitter), `crossOriginIsolated`, the measured `timerResolutionMs`, the `measuredRefreshRateHz`, and any `invalidated` stamp. This is what *actually happened* on the device.
 
-1. **ResourceManager integration**: The `ResourceManager` scans all trial configurations for media URLs (images, videos, audio) and begins downloading them in parallel before the questionnaire starts.
-2. **seedFromResourceManager()**: The `ReactionEngine` calls `seedFromResourceManager()` during initialization, wiring the ResourceManager's cached assets into the engine's internal media cache. This means all media is already decoded and GPU-ready before the first trial begins.
-3. **warmUpStimuli() per block**: Before each reaction time block starts, the engine calls `warmUpStimuli()`, which pre-caches all stimuli for the upcoming block. This includes uploading textures to the GPU, decoding audio buffers, and pre-rendering text canvases.
-4. **Automatic preload() invocation**: The runtime automatically invokes `preload()` before the questionnaire starts, ensuring that all media assets referenced in the questionnaire definition are fetched and cached. Researchers do not need to manually trigger preloading.
+### 10.9.3 Timing methods
 
-This four-stage pipeline ensures that when a stimulus is presented, no network requests, image decoding, or texture uploads occur on the critical path. The result is frame-exact stimulus onset timing with zero jitter from asset loading.
+The clock that stamped each onset/response is recorded as one of: `event.timeStamp` (keyboard/pointer/HID input), `rvfc` (video via `requestVideoFrameCallback`), `audioContext` (audio onset via the audio clock), `raf` (visual onset via the animation-frame counter), `gamepad.timestamp`, or `performance.now` (fallback). Recording the method lets an analyst audit exactly how each timestamp was obtained.
 
-**Additional best practices:**
+### 10.9.4 PVT anticipation is recorded, not dropped
 
-1. **Use shape stimuli** when possible -- they render in a single GPU draw call with zero loading latency.
-2. **Pre-render text** if the same text appears across trials (the text canvas is generated fresh each time).
-3. **Verify preload completion**: The ResourceManager emits progress events that the runtime uses to display a loading indicator. Trials do not begin until all assets report ready.
+In the **PVT**, a press during the random foreperiod (before the target) is a *false start* — a primary PVT measure. The preset arms responses during the foreperiod so that a premature press is **captured** as an anticipatory response (counted in `false_start_count`, flagged `anticipatory`, surfaced through the false-start hook) rather than silently discarded (audit finding W-4). The press never resolves the Trial — the participant still responds to the actual target — but the anticipation is now in the data, so lapse and anticipation metrics are complete.
 
-### 10.11.4 Environmental Recommendations
+---
 
-1. **Hardware:** Dedicated GPU, 120Hz+ display, wired keyboard.
-2. **Browser:** Chromium-based browsers provide the most consistent timing.
-3. **OS:** Disable display scaling, power management, and notifications.
-4. **Network:** Preload all media assets before the session.
+## 10.10 Timing Precision — What the Numbers Mean
 
-### 10.11.5 Data Quality Checks
+This section is deliberately conservative. Report timing the way the platform actually measures it.
 
-1. **Exclude trials with `response.reactionTimeMs < 100`** (anticipatory responses).
-2. **Exclude trials with `timeout === true`** or analyze separately.
-3. **Report frame drop rates** from `stats.droppedFrames / stats.totalFrames`.
-4. **Report median RT** rather than mean, as RT distributions are typically right-skewed.
+### 10.10.1 The clock and cross-origin isolation
+
+All timestamps use `performance.now()` — monotonic, relative to the page's time origin. Its resolution, however, depends on **cross-origin isolation** (COOP/COEP). When the page **is** cross-origin isolated, the effective quantum is ~5 µs; when it is **not**, browsers clamp it toward ~100 µs. The engine measures the effective quantum per Trial and records it (`timerResolutionMs`), along with the `crossOriginIsolated` flag. Full timer resolution therefore requires the study to be served with the isolation headers; without them the sub-ms claim silently degrades — which is exactly why the flag is stamped on every Trial (see Chapter 11).
+
+### 10.10.2 Onset correction is modelled, not measured
+
+Visual onset is the first *presented* frame plus a **display-latency correction** — but that correction is a uniform one-frame model (the mean frame interval), not a photodiode or GPU-fence measurement. Audio onset folds in the output/DAC latency the audio system reports. Both corrections are honest estimates of the same order every trial, so they **cancel in a difference score** — which is why relative RT survives while absolute RT does not claim more than frame accuracy.
+
+### 10.10.3 Storage precision ≠ absolute accuracy
+
+RT is stored as an integer number of **microseconds** (`rt_us`) to avoid floating-point loss and give statistics packages a clean integer column. Integer-microsecond *storage* is not a claim of microsecond *absolute* accuracy. The defensible reading is: **frame-accurate absolute onset; sub-millisecond relative precision on difference scores.**
+
+### 10.10.4 Frame health
+
+Each Trial records `fps`, a real jitter measure (standard deviation of frame times), and a **measured**-refresh-rate-based dropped-frame count (the engine counts drops against the measured refresh rate, not a nominal target FPS, so drop counts on a 60 Hz display are honest). Use jitter and drop counts to screen trials whose display timing was poor.
+
+---
+
+## 10.11 Best Practices for Timing-Critical Studies
+
+### 10.11.1 Display and environment
+
+1. Serve the study **cross-origin isolated** (COOP/COEP) so the timer is not clamped — verify `crossOriginIsolated` in the recorded provenance.
+2. Prefer a **high-refresh display** and set the paradigm's target FPS to match the device.
+3. Use **fullscreen**, disable OS notifications and power management, and prefer a **wired** keyboard or a WebHID box.
+4. Chromium-based browsers give the most consistent timing (and are required for WebHID).
+
+### 10.11.2 Design
+
+1. Use **shape** or **text** stimuli where the science allows — they carry zero asset-loading latency.
+2. **Jitter** foreperiods/ISIs (uniform min/max) to defeat anticipation; keep the ranges scientifically justified.
+3. Give every **HID** option a keyboard/touch fallback binding so non-Chromium participants can still respond.
+4. Set a **seed** and record the `sessionId` so a session's Trials can be reconstructed exactly.
+
+### 10.11.3 Analysis hygiene
+
+1. Exclude **anticipatory** and **invalid** Trials — the export already flags them in `exclude_from_analysis` (see §10.9 and Chapter 11).
+2. Screen on **frame health** (`dropped_frames`, `jitter`) and on the **`invalidated`** provenance stamp.
+3. Report **relative** effects (difference scores), and describe absolute RT as frame-accurate, not microsecond-accurate.
+4. Prefer the **median** RT — RT distributions are right-skewed.
 
 ---
 
 ## 10.12 Summary
 
-| Feature                     | Implementation                        | Key Value               |
-|----------------------------|---------------------------------------|------------------------|
-| Renderer                    | WebGL 2.0 with `desynchronized` flag  | Sub-frame latency       |
-| Frame rate                  | Configurable target, vsync support    | 120+ FPS                |
-| Timing API                  | `performance.now()`                   | ~5 microsecond resolution|
-| Stimulus onset              | Frame-accurate detection              | First-presented-frame    |
-| RT computation              | `response.timestamp - stimulusOnset`  | Sub-ms precision         |
-| Storage precision           | BIGINT microseconds                   | Lossless integer storage |
-| Stimulus types              | Shape, text, image, video, audio, custom shader | 6 types      |
-| Response modes              | Keyboard, mouse, touch                | 3 modes                 |
-| Paradigms                   | Simple RT, Choice RT, Go/No-Go, N-back, custom | Unlimited     |
-| Per-trial data              | Frame log, phase timeline, stats      | Complete audit trail     |
-| Media caching               | In-memory image/video/audio cache     | Zero re-load latency    |
-| Automatic preloading        | ResourceManager + seedFromResourceManager() + warmUpStimuli() | Frame-exact first stimulus |
+| Feature | How it works | What to rely on |
+|---|---|---|
+| Paradigms | 16 built-in (15 procedure-fixed + Custom Trial Plan) | Presets = saved parameterizations |
+| Timings | TimingSpec: fixed or uniform(min,max), **sampled at generation** | Reproducible from `seed + sessionId` |
+| Responses | ResponseSet of semantic option ids, multi-source Bindings, first-wins | Analysis keys on the stable `optionId` |
+| Free mapping | **Standard** and **Custom Trial Plan** only | Others are procedure-fixed |
+| Hardware | WebHID button boxes (Chromium-only, descriptor-free bit-diff) | Same clock as keyboard; give a fallback |
+| Gamepad | Polled once per frame (~8–16 ms) | Convenience, **not** precision |
+| Media | Layer 1 auto-cache at load + Layer 2 decode gate, **fail-closed** | No timed block ever runs with missing stimuli |
+| Per-trial data | Tidy row + `sampledTimings` + measured `provenance`, `rt_us` | Per-trial is the source of truth |
+| Timing precision | Frame-accurate onset (modelled correction), sub-ms relative | COOP/COEP required for full timer resolution |
+| Validity | Degraded timing stamped (`invalidated`, isolation, timer res.) | Recorded by default — see Chapter 11 |
+
+For how invalidated and excluded Trials flow into aggregate statistics, see **Chapter 11 (Data Quality)** for the validity model and **Chapter 12 (Analytics and Statistics)** for their effect on reported aggregates.

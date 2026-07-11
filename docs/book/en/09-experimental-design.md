@@ -330,7 +330,82 @@ The between-subjects factor (Training Type) uses condition assignment. The withi
 
 ---
 
-## 9.7 Design Validation
+## 9.7 Participation Quotas
+
+Condition assignment decides *which* group a participant joins; **quotas** decide *how many* participants a condition or demographic cell may accept before it closes. Open them from the **Quotas** command in the designer (the target icon), which opens the **Quota Management** dialog: "Set participation caps per condition or demographic. When a quota is full, respondents matching that condition are routed according to the over-quota action."
+
+### 9.7.1 What You Author
+
+1. Click **Add Quota Group**. Each group has a name and a **logic**: **Independent** or **Cross-quota**.
+2. Inside a group, click **Add Quota**. Each quota has:
+   - **Target (n)** -- the maximum number of completed responses this quota accepts.
+   - **Condition (formula)** -- who this quota counts. Use `true` for a catch-all quota, or comparisons such as `age >= 18` joined with `&&` / `||` (placeholder example: `gender == "female" && age >= 18`).
+   - **Over-quota action** -- **Terminate**, **Redirect**, **Skip to end**, or **Continue (flag only)**.
+   - An **Over-quota message** (for Terminate / Skip to end) or a **Redirect URL** (for Redirect).
+   - An **Enabled** toggle.
+
+Quota conditions are parsed with the same formula engine that runs them, so a condition the dialog accepts is one the runtime can evaluate. A syntax error is flagged inline and blocks **Save**; a reference to a variable the questionnaire has not declared warns but does not block.
+
+### 9.7.2 How Gating Actually Behaves
+
+Quota conditions are **evaluated**, not pattern-matched. Compound conditions with `&&` / `||`, parentheses, and function calls all resolve against the participant's live in-survey variables. (In earlier builds a condition was read by a regex that understood only a single `variable op value` comparison and silently *allowed* every compound condition through, so a multi-term quota never actually gated -- that is fixed.)
+
+The gating rules:
+
+- **Empty / blank condition** -- a catch-all that always matches.
+- **A truthy result** -- the condition matches this respondent.
+- **A parse or evaluation error** -- treated as **non-matching**: the quota simply does not apply to that respondent (and the error is logged). A broken targeting formula can never corrupt a quota by counting or blocking the wrong people.
+- A quota gates a respondent **only when its condition matches *and* the quota is full** (its live completed count has reached the Target).
+
+### 9.7.3 What the Participant Sees
+
+Quota checking runs at entry, before a session is created. When a full quota's condition matches:
+
+- **Terminate** / **Skip to end** -- the participant sees the **Study Full** screen showing the over-quota message (default: "This study has reached its target number of participants."). No completion code is shown.
+- **Redirect** -- the participant is sent to the configured URL.
+- **Continue (flag only)** -- the participant is admitted, but the session is flagged as over-quota for later filtering.
+
+For example, a quota with **Target** = 1 that already has one completed response will correctly route a matching second participant to **Study Full**.
+
+### 9.7.4 Interlocking (Cross-Quota) Cells
+
+A **Cross-quota** group defines interlocking cells -- combinations of demographic values (e.g., age band x gender). As the dialog notes, "Interlocking cells fill independently; a participant is blocked only when their own cell (their combination of values) is full." A participant whose values fall outside the grid is not gated by the cross-quota. The default message for a full cell is "This study has reached its target for your group."
+
+Because cells resolve from live in-survey answers, the cell check can be re-run after the demographic questions that determine the participant's cell, not only at entry.
+
+### 9.7.5 Offline Enforcement
+
+The last successful quota snapshot is cached locally so an offline start can still enforce quotas. If neither a live check nor a cached snapshot is available, the participant is allowed to proceed and the session is flagged **unchecked** so unverified completions can be filtered afterward.
+
+---
+
+## 9.8 Eligibility Screeners
+
+Quotas are a **capacity** decision -- a group is full. **Screeners** are an **eligibility** decision -- the participant falls outside the target population. The two route to different screens and are recorded distinctly.
+
+### 9.8.1 Authoring a Screen-Out
+
+An eligibility screen-out is authored as a flow-control **Terminate** rule (see Chapter 8: Flow Control and Logic). Filling the rule's **Screen-out message** (and optionally its **Redirect URL**) turns a plain early end into an eligibility screen-out. The designer states this directly: "Fill either field to turn this into an eligibility screen-out: the participant sees a distinct 'not eligible' screen (no completion code) instead of the thank-you page. Leave both blank for a plain early end."
+
+Structured screener rules evaluate an `eligibleWhen` formula at a page boundary; the first rule that evaluates falsy screens the participant out with that rule's reason, message, and redirect.
+
+### 9.8.2 What the Screened-Out Participant Sees
+
+A screened-out participant is routed to a dedicated screen -- **not** the thank-you / completion screen, and with **no completion code**:
+
+- **Title:** "You're not eligible for this study"
+- **Message:** the author's screen-out message, or the default "Thank you for your interest. Based on your answers, you do not qualify to take part in this study. Your responses have not been recorded as a completion."
+- An optional auto-redirect (with a visible countdown) when a Redirect URL is set.
+
+The screen-out outcome is stamped onto the session metadata, so a resumed ineligible session still shows the screened-out screen rather than a completion. This corrects the older assumption that ineligible participants land on the thank-you page: they never see it, and no completion code is issued.
+
+### 9.8.3 Fail-Open on Broken Formulas
+
+A screener whose `eligibleWhen` formula throws (a bad formula or a missing variable) is treated as **eligible** and logged for the designer -- a broken rule never wrongly rejects a real participant. This is deliberately the opposite of a broken *quota* condition (which fails non-matching): a screener errs toward admitting, a quota errs toward not gating.
+
+---
+
+## 9.9 Design Validation
 
 QDesigner includes built-in validation for experimental designs:
 
@@ -339,10 +414,11 @@ QDesigner includes built-in validation for experimental designs:
 - **Weight validation:** Zero or negative weights trigger warnings.
 - **Visibility coverage:** The designer warns if any condition has no visible blocks (empty experience).
 - **Sample size guidance:** For balanced Latin square designs, the designer recommends sample sizes that are multiples of the number of orderings.
+- **Quota condition validation:** Quota targeting formulas are parsed with the runtime formula engine. A syntax error is flagged inline and blocks **Save** of the Quota Management dialog; references to undeclared variables warn but do not block.
 
 ---
 
-## 9.8 Summary
+## 9.10 Summary
 
 | Feature                    | Implementation                          | Key Parameter          |
 |---------------------------|----------------------------------------|----------------------|
@@ -356,3 +432,6 @@ QDesigner includes built-in validation for experimental designs:
 | Block randomization        | Seeded shuffle with preserve options    | First/Last/Both/None   |
 | Condition visibility       | Block-level condition filter            | Condition names        |
 | Reproducible randomization | Mulberry32 PRNG with base seed + participant ID | `seed` field     |
+| Participation quotas       | Formula-gated caps per condition / cell  | `condition`, `overQuotaAction` |
+| Interlocking (cross) quotas| Independent per-cell occupancy           | Cell value tuple        |
+| Eligibility screeners      | Terminate rule with screen-out fields    | `screenOutMessage`, `screenOutRedirectUrl` |

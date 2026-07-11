@@ -28,6 +28,9 @@ The password hashing algorithm used by QDesigner Modern. Argon2id is a memory-ha
 **Bearer Token**
 An authentication credential sent in the `Authorization` HTTP header. QDesigner Modern issues JWT bearer tokens upon login, which must be included in all authenticated API requests.
 
+**Binding**
+The attachment of a single physical input -- a keyboard key, a HID button, or a touch region -- to a ResponseOption, including whether it registers on key press or on release. A binding is what connects a participant's physical action to the semantic response that analysis records. (Preferred over "shortcut" or "mapping.") See also ResponseOption, ResponseSource.
+
 **Block**
 A logical grouping of questions within a page. Blocks enable randomization of question order within a page and allow applying shared settings to multiple questions.
 
@@ -200,6 +203,9 @@ The process of converting various session state representations into a consisten
 
 ### O
 
+**Offline-complete**
+The state in which every asset a study could ever present is already held in local storage. Media-bearing reaction studies must reach this state before any timed block may begin, which guarantees that stimulus onset is never delayed by a network fetch. Becoming offline-complete happens automatically during loading -- it is never a choice the participant makes.
+
 **Operational Transformation (OT)**
 An algorithm that enables real-time collaborative editing by transforming concurrent operations to maintain consistency across all connected clients. QDesigner Modern supports insert, delete, update, move, and reorder operations.
 
@@ -216,6 +222,9 @@ The highest-level role in an organization or project. Owners have full administr
 **Page**
 A structural unit in a questionnaire that groups related questions together. Pages are displayed one at a time during participant fillout, with navigation between pages.
 
+**Paradigm**
+A scientific procedure template for a reaction task -- for example the Psychomotor Vigilance Task (PVT), the Simon task, or the Sustained Attention to Response Task (SART). A Paradigm defines the trial structure and the rule for what counts as a correct response. (Preferred over "task type" or "reaction type.") See also Preset, Trial.
+
 **Participant**
 A person who fills out a questionnaire. Participants may be anonymous or identified, depending on the questionnaire's access settings.
 
@@ -224,6 +233,9 @@ A statistical measure indicating the value below which a given percentage of obs
 
 **Piping**
 The technique of inserting variable values or previous responses into question text using double curly brace syntax: `{{variableName}}`.
+
+**Preset**
+A saved, named parameterization of a Paradigm -- for example an arrow-flanker configuration of the flanker paradigm. A Preset only supplies parameter values; it never defines new procedure. (In the reaction context, preferred over "template.") See also Paradigm.
 
 **Presigned URL**
 A time-limited URL that grants temporary access to a private file in S3 storage. QDesigner Modern generates presigned URLs valid for one hour when serving media files.
@@ -272,6 +284,15 @@ A long-lived token used to obtain new access tokens without requiring re-authent
 **Response**
 A participant's answer to a single question within a session. Responses include the answer value, timing data, and metadata such as the number of changes made.
 
+**ResponseOption**
+One semantic response alternative within a ResponseSet, identified by a stable id such as `left` or `target-present`. Analysis and export key on this id, independent of which physical input actually produced the response. (Preferred over "answer" or "key.") See also ResponseSet, Binding.
+
+**ResponseSet**
+The named, ordered list of ResponseOptions that a Trial arms. A trial accepts exactly one winning response from its set. (Preferred over "keybindings" or "key map.") See also ResponseOption, Binding.
+
+**ResponseSource**
+A device family that can deliver a participant's responses -- keyboard, pointer, touch, gamepad, or a WebHID device. Several sources may be armed at once for a single trial; the first event wins, and the recorded provenance notes which source fired. (Preferred over "input mode" or "response mode.")
+
 **Role**
 A named set of permissions assigned to organization or project members. Organization roles: owner, admin, editor, viewer. Project roles: owner, admin, editor.
 
@@ -281,6 +302,9 @@ Svelte 5's reactivity system using `$state`, `$derived`, and `$effect` for fine-
 ---
 
 ### S
+
+**Server Variable**
+A variable declared on the questionnaire whose value is an aggregate the server computes over collected data (question values or trials) and pre-syncs to the device, so that feedback can resolve even while the participant is offline. Its declaration carries an explicit `minN` disclosure floor together with an authored behavior for when the sample falls below that floor. (Preferred over "cohort stat" or "dataset stat.")
 
 **Session**
 A single instance of a participant filling out a questionnaire. Sessions track progress, store responses, and record interaction events. Each session has a unique ID and lifecycle status.
@@ -322,8 +346,14 @@ A question type that allows participants to enter free-form text responses. Supp
 **Timezone**
 A user preference setting that determines how dates and times are displayed. Stored in the user profile.
 
+**TimingSpec**
+An authored phase duration, expressed either as a fixed value or as a distribution (currently uniform min/max). The seeded generator samples each TimingSpec once per trial when trials are materialized, so timing is fixed before the participant ever sees the stimulus. (Preferred over "jitter setting" or "delay config.") See also Trial.
+
 **Token Rotation**
 The security practice of issuing a new refresh token each time the current one is used. Prevents token reuse and limits the impact of token theft.
+
+**Trial**
+One fully materialized stimulus-to-response cycle. Every value in a trial -- its timings, stimulus, and correct options -- is a concrete number fixed at generation time; the engine never samples anything at runtime. See also Paradigm, TimingSpec, ResponseSet.
 
 ---
 
@@ -338,6 +368,9 @@ A 128-bit identifier used as the primary key for most database records. Ensures 
 ---
 
 ### V
+
+**ValidityPolicy**
+A per-study posture toward degraded timing conditions. Under `record` (the default) the runtime stamps timing provenance and warns the researcher but never stops the participant; under `enforce` it would refuse or abort timing-critical blocks when conditions are degraded. In the current release only `record` behaviour ships — the runtime always records and continues; `enforce` is a designed escalation path (ADR 0027) with no author-facing toggle yet. See Chapter 11.
 
 **Variable**
 A named value within a questionnaire that can be computed from formulas, derived from responses, or set by scripts. Variables power flow control, scoring, piping, and data analysis.

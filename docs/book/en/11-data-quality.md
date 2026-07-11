@@ -1,18 +1,19 @@
 # Chapter 11: Data Quality
 
-High-quality data is the foundation of credible research. QDesigner Modern provides three integrated data quality systems -- attention checks, speeder detection, and flatline detection -- that flag low-effort or bot-generated responses in real time. This chapter covers configuration, detection algorithms, quality reports, and best practices for research data integrity.
+High-quality data is the foundation of credible research. QDesigner Modern provides three integrated data quality systems for questionnaire responses -- attention checks, speeder detection, and flatline detection -- that flag low-effort or bot-generated responses in real time. For reaction studies it adds a fourth, timing-specific dimension: **timing validity**, which records (rather than hides) the moments when a device's measurement conditions degrade. This chapter covers configuration, detection algorithms, the timing-validity model, quality reports, and best practices for research data integrity.
 
 ---
 
 ## 11.1 Overview of Data Quality Mechanisms
 
-| Mechanism          | Detects                               | Implementation                     |
-|-------------------|--------------------------------------|-----------------------------------|
-| Attention Checks   | Inattentive or random responding      | `AttentionCheckValidator`          |
-| Speeder Detection  | Rushing through pages/questionnaire   | `SpeederDetector`                  |
-| Flatline Detection | Repetitive response patterns          | `FlatlineDetector`                 |
+| Mechanism          | Detects                               | Applies to        | Implementation                     |
+|-------------------|--------------------------------------|-------------------|-----------------------------------|
+| Attention Checks   | Inattentive or random responding      | Questionnaires    | `AttentionCheckValidator`          |
+| Speeder Detection  | Rushing through pages/questionnaire   | Questionnaires    | `SpeederDetector`                  |
+| Flatline Detection | Repetitive response patterns          | Questionnaires    | `FlatlineDetector`                 |
+| Timing Validity    | Degraded reaction-timing conditions   | Reaction studies  | Per-trial provenance (ADR 0027)    |
 
-All three systems operate independently and produce quality flags that can be combined for comprehensive data screening.
+The first three systems operate independently on questionnaire answers and produce quality flags that can be combined for comprehensive data screening. **Timing validity** is different in kind: it does not judge the participant's *effort* but the *measurement conditions* under which each reaction Trial was recorded, and by default it **records and continues** rather than stopping anyone (see Section 11.9).
 
 ---
 
@@ -366,6 +367,8 @@ All export formats (CSV, Excel, SPSS, R, etc.) include quality flag columns:
 | `flatline_patterns`       | string  | Comma-separated patterns  |
 | `overall_quality`         | string  | "pass" / "warning" / "fail" |
 
+For **reaction studies**, timing validity is carried at the *Trial* level rather than the participant level, so it appears in the per-trial ("tidy") export rather than these participant columns. Each Trial row includes `invalid`, `invalid_reason`, `exclude_from_analysis`, and `exclude_reason`, plus the timing-provenance fields (`cross_origin_isolated`, timer resolution, measured refresh rate, dropped frames, jitter). See Chapter 10, Section 10.9, for the full per-trial column set, and Section 11.9 for what the validity stamps mean.
+
 ---
 
 ## 11.8 Best Practices for Research Data Quality
@@ -406,12 +409,55 @@ In research publications, report:
 
 ---
 
-## 11.9 Summary
+## 11.9 Timing Validity for Reaction Studies
+
+Attention checks, speeder detection, and flatline detection judge whether a *participant* engaged with the content. Reaction studies need something different: a record of whether the *device* was in a state where its timing measurements can be trusted. A backgrounded tab, a page that is not cross-origin isolated, a throttled timer, or a lost graphics context all degrade timing — and, crucially, they are **measurable, stampable, and excludable after the fact**. So the platform's posture toward them is to record, not to stop.
+
+### 11.9.1 The ValidityPolicy: record by default
+
+A study's **ValidityPolicy** governs the response to degraded timing (ADR 0027). Two postures are defined:
+
+- **`record`** (the default, and the active platform-wide behavior) -- when timing degrades mid-study, the affected Trial carries explicit provenance, analytics surfaces it loudly, and **the participant is never stopped**.
+- **`enforce`** -- the designed opt-in escalation for maximally timing-critical studies: reaction blocks refuse to run without cross-origin isolation, and a visibility loss aborts the in-flight Trial (flagged and re-queued at block end within a bounded retry cap).
+
+This is the deliberate mirror of the media contract in Chapter 10: **missing data fails closed; degraded timing records and continues.** Media absence changes what the participant actually experienced and cannot be fixed afterward, so a block with missing stimuli refuses to start. Timing degradation, by contrast, is measurable and excludable afterward, and hard-stopping by default would brick studies over routine operational hiccups and punish participants for a deployment mistake.
+
+> **What ships today.** The platform records by default and stamps every Trial's timing provenance as described below; the `record` posture is applied uniformly. There is no per-study "enforce" toggle in the designer's Study Settings or Data Quality panels at present -- device qualification instead soft-warns the participant (a yellow/red grade) when isolation is missing or jitter is high, and the recorded provenance lets you exclude affected Trials in analysis. Treat `enforce` as the documented escalation path (ADR 0027) rather than a shipped setting.
+
+### 11.9.2 What record mode stamps
+
+Under `record`, each reaction Trial carries measured provenance (persisted alongside the trial data — see Chapter 10, Section 10.9). The timing-validity fields are:
+
+| Provenance field | Meaning |
+|---|---|
+| `crossOriginIsolated` | Whether the page was cross-origin isolated during the Trial. When `false`, `performance.now()` is clamped (toward ~100 µs vs. ~5 µs) and the sub-millisecond claim silently degrades -- so the flag is recorded on every Trial. |
+| `timerResolutionMs` | The measured effective `performance.now()` quantum -- the smallest positive inter-sample delta seen in a tight loop (~0.005 ms isolated; clamped toward ~0.1 ms otherwise). |
+| `measuredRefreshRateHz` | The display refresh rate measured from the renderer's observed cadence, used for honest dropped-frame counting -- not a nominal target FPS. |
+| `invalidated` | Set when the Trial's timing cannot be trusted; absent for a clean Trial. |
+| `visibilityLossCount`, `visibilityLossPhases` | How many times, and in which phase, the tab lost focus during the Trial. |
+
+### 11.9.3 What `invalidated` values mean
+
+The `invalidated` stamp takes one of two reasons, each with a distinct analytic meaning:
+
+- **`visibility`** -- the tab was backgrounded or lost focus during the Trial. Background tabs throttle timers and halt animation frames, so a phase can balloon, a stimulus can be "shown" unseen, and onset can stamp against a stale frame. The Trial still completes and records its RT, but that RT may be unreliable.
+- **`no-stimulus`** -- a visual stimulus never reached the renderer, so onset was never armed against real pixels. Any RT here would be measured against a blank screen; the Trial is marked invalid rather than timed (this is the belt-and-braces backstop behind the fail-closed media gate of Section 10.8).
+
+For analysis, an `invalidated` Trial (and any anticipatory false start) is flagged in the tidy export's `exclude_from_analysis` column with a machine-readable `exclude_reason`, so downstream reanalysis can drop it **defensibly rather than silently**. The analytics dashboard surfaces the count of visibility-invalidated Trials loudly rather than folding it into the aggregates. See **Chapter 12 (Analytics and Statistics)** for how excluded Trials are kept out of reported means, medians, and effect sizes.
+
+### 11.9.4 Serving for full timer resolution
+
+Because `crossOriginIsolated` gates the timer quantum, a timing-critical study should be served with the cross-origin isolation headers (COOP/COEP). Verify it by checking that `crossOriginIsolated` is `true` in the recorded provenance for real sessions. Without isolation, timing is still recorded and usable for relative comparisons, but the effective resolution is clamped and every Trial is flagged accordingly.
+
+---
+
+## 11.10 Summary
 
 | Mechanism          | What It Detects           | Key Config             | Default            |
 |-------------------|--------------------------|------------------------|--------------------|
 | Attention Check    | Inattentive responses     | `correctAnswer`, `type`| threshold = 1      |
 | Speeder Detection  | Rushing through survey    | `minPageTimeMs`        | 2,000 ms           |
 | Flatline Detection | Repetitive patterns       | `threshold`            | 0.80               |
-| Quality Report     | Combined assessment       | All three mechanisms   | Per-participant     |
+| Timing Validity    | Degraded reaction timing  | ValidityPolicy         | `record` (stamp & continue) |
+| Quality Report     | Combined assessment       | All mechanisms         | Per-participant     |
 | Export Flags       | Analysis-ready columns    | Included in all formats| Automatic           |
