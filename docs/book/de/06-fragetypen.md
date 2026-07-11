@@ -297,29 +297,60 @@ Dasselbe Modul wie Einfachauswahl, erlaubt aber mehrere Selektionen.
 
 **Typkennung**: `reaction-time`
 **Antworttyp**: REACTION_TIME (object)
-**Zweck**: Reaktionsgeschwindigkeit mit Mikrosekunden-Praezision messen unter Verwendung konfigurierbarer Stimuli, Fixationsperioden und Antwortzuordnungen.
+**Zweck**: Eine zeitkritische Reaktionsaufgabe mit frame-genauem Stimulus-Onset (Stimulusbeginn) und hochaufloesenden Antwort-Zeitstempeln ausfuehren, die pro Trial Reaktionszeit und Genauigkeit aufzeichnet.
 
-**Konfiguration**:
+#### Paradigms
 
-| Eigenschaft | Typ | Standard | Beschreibung |
-|---|---|---|---|
-| `task.type` | string | `'standard'` | Aufgabentyp (standard, n-back, custom). |
-| `stimulus.fixation.duration` | number | `500` | Fixationsdauer (ms). |
-| `feedback` | boolean | `true` | Genauigkeits-Feedback anzeigen. |
-| `practice` | boolean | `false` | Uebungsdurchgaenge einschliessen. |
-| `practiceTrials` | number | `3` | Anzahl der Uebungsdurchgaenge. |
-| `testTrials` | number | `10` | Anzahl der Testdurchgaenge. |
-| `targetFPS` | number | `120` | Ziel-Bildrate. |
-| `response.validKeys` | string[] | `['f', 'j']` | Gueltige Antworttasten. |
-| `response.timeout` | number | `2000` | Antwort-Timeout (ms). |
+Eine Reaktionsfrage ist um ein **Paradigm** herum aufgebaut -- eine wissenschaftliche Verfahrensvorlage, die die Trial-Struktur einer Aufgabe festlegt und definiert, was als korrekte Antwort zaehlt. Sie waehlen eines aus dem **Paradigm**-Dropdown im Designer aus; das Eigenschaften-Panel zeigt dann nur die Felder an, die das jeweilige Paradigm benoetigt. QDesigner liefert 16 Paradigms mit:
 
-**N-Back-Aufgabe** (wenn `task.type = 'n-back'`): `n` (Standard: 2), `sequenceLength` (20), `targetRate` (0.3), `stimulusSet` (['A','B','C','D']).
+| Paradigm (Bezeichnung im Designer) | Identifier | Was gemessen wird |
+|---|---|---|
+| Standard Reaction Time | `standard` | Einfache / Auswahl-RT auf einen einzelnen Stimulus |
+| N-Back | `n-back` | Arbeitsgedaechtnis-Aktualisierung |
+| Stroop | `stroop` | Farb-Wort-Interferenz |
+| Flanker (Eriksen) | `flanker` | Antwortkonflikt durch flankierende Distraktoren |
+| Implicit Association Test (IAT) | `iat` | Staerke impliziter Assoziationen (D-Score) |
+| Dot-Probe | `dot-probe` | Aufmerksamkeitsbias hin zu gepaarten Cues |
+| Go / No-Go | `go-nogo` | Antwortinhibition (Commission-/Omission-Fehler) |
+| SART | `sart` | Anhaltende Aufmerksamkeit (Zurueckhalten beim seltenen Target) |
+| Simon | `simon` | Raeumliche Reiz-Reaktions-Kompatibilitaet |
+| Posner Cueing | `posner` | Raeumliche Aufmerksamkeitsausrichtung (valider vs. invalider Cue) |
+| Visual Search | `visual-search` | Sucheffizienz (RT x Set-Size-Steigung) |
+| Sternberg Memory Search | `sternberg` | Gedaechtnis-Scanrate |
+| PVT (Psychomotor Vigilance) | `pvt` | Vigilanz und Aussetzer bei Ermuedung |
+| Temporal-Order Judgment | `temporal-order` | Zeitliche Aufloesung (JND ueber SOAs) |
+| RSVP | `rsvp` | Schnelle serielle visuelle Zielerkennung |
+| Custom Trial Plan | `custom` | Vollstaendig autordefinierte Bloecke und Trials |
 
-**Antwortformat**: `{ "reactionTime": 342, "correct": true, "stimulus": "circle", "response": "j", "timestamp": ... }`
+Wenn Sie ein Paradigm auswaehlen und die Schaltflaeche "Reset Selected Paradigm To Starter" druecken, wird eine lauffaehige Starter-Konfiguration geladen, die Sie anschliessend bearbeiten koennen. Die prozeduralen Paradigms materialisieren ihre Trials aus Paradigm-Parametern (Trial-Anzahl, Verhaeltnisse, Timing); **Custom Trial Plan** ist das einzige Paradigm, das Sie Trial fuer Trial im visuellen Blockeditor aufbauen.
+
+> Fruehere Versionen von QDesigner nannten diese "task types" (Aufgabentypen). Sie werden jetzt als Paradigms angelegt. (Die zugrunde liegenden `task.type`-Identifier in der Tabelle oben sind unveraendert.)
+
+#### Presets
+
+Ein **Preset** ist eine gespeicherte, benannte *Parametrisierung* eines Paradigms -- niemals ein neues Verfahren. Im Reaktionseditor koennen Sie wiederverwendbare **Timing Presets** (ein benannter Satz von Phasendauern) sowie Tasten-/Antwort-Presets anwenden, sodass ein hausinternes Standard-Timing-Profil oder eine Antwortzuordnung auf Trials uebernommen werden kann, ohne es erneut eintippen zu muessen. Das Anwenden eines Presets fuellt nur Parameterwerte aus; es aendert niemals, welches Paradigm laeuft.
+
+#### Response data
+
+Jeder Trial erfasst eine Reaktionszeit, die gegebene Antwort, ob sie korrekt war, und einen Timing-Provenienz-Datensatz. Ein repraesentativer Datensatz pro Trial:
+
+```json
+{
+  "reactionTime": 342,
+  "correct": true,
+  "stimulus": "circle",
+  "response": "j",
+  "timestamp": 1710461234567
+}
+```
 
 **Aggregationen**: mean_rt, median_rt, min_rt, max_rt, accuracy, outliers.
 
-**Anwendungsfaelle**: Einfache Reaktionszeitaufgaben, Go/No-Go-Paradigmen, N-Back-Arbeitsgedaechtnisaufgaben, Stroop-Tests, implizite Assoziationstests, psychophysische Experimente.
+**Capabilities**: Scripting, Conditionals, Analytics, Timing, Variables.
+
+**Timing-Praezision**: Der Stimulus-Onset (Stimulusbeginn) ist frame-genau mit gemessener Display-Latenz-Korrektur, und Antworten tragen hochaufloesende `event.timeStamp`-Werte -- was eine relative Sub-Millisekunden-Praezision bei Differenzwerten ergibt, keine absolute Mikrosekunden-Genauigkeit. Die volle Timer-Aufloesung erfordert Cross-Origin-Isolation (COOP/COEP). Siehe **Kapitel 10: Reaktionszeitmessung** fuer das Timing-Modell, die paradigmenspezifischen Konfigurationsfelder, Stimulusarten, Counterbalancing und Scoring.
+
+**Anwendungsfaelle**: Die 16 Paradigms oben decken einfache/Auswahl-Reaktionszeit, Aufgaben zur Antwortinhibition und anhaltenden Aufmerksamkeit, Konfliktparadigmen (Stroop, Flanker, Simon), Aufmerksamkeitsausrichtungs- und Bias-Proben (Posner, Dot-Probe), Gedaechtnissuch- und Arbeitsgedaechtnisaufgaben (Sternberg, N-Back), Psychophysik (Temporal-Order, RSVP, Visual Search), den IAT sowie vollstaendig benutzerdefinierte Trial-Plaene ab.
 
 ---
 
@@ -372,7 +403,7 @@ Dasselbe Modul wie Einfachauswahl, erlaubt aber mehrere Selektionen.
 
 **Typkennung**: `webgl`
 **Antworttyp**: REACTION_TIME (object)
-**Zweck**: GPU-gerenderte visuelle Stimuli mit 120+ FPS und Mikrosekunden-Timing-Praezision unter Verwendung von WebGL 2.0.
+**Zweck**: GPU-gerenderte visuelle Stimuli mit 120+ FPS unter Verwendung von WebGL 2.0, mit frame-genauem Onset und relativer Sub-Millisekunden-Timing-Praezision (siehe Kapitel 10).
 
 **Konfiguration**:
 

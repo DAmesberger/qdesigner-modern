@@ -26,7 +26,7 @@ Eine einzelne Organisation kann viele Projekte enthalten. Jedes Projekt kann vie
 ### Von der Projektseite
 
 1. Navigieren Sie zur Projektseite vom Dashboard aus (klicken Sie auf "New Questionnaire" auf dem Dashboard oder nutzen Sie die Hauptnavigation).
-2. Die Projektseite zeigt alle Projekte an, auf die Sie Zugriff haben, dargestellt als Karten in einem responsiven Raster.
+2. Die Projektseite zeigt alle Projekte an, auf die Sie Zugriff haben, dargestellt als Karten in einem responsiven Raster. Ein Statusfilter erlaubt den Wechsel zwischen **Active** (der Standardansicht, die archivierte Projekte ausblendet), **Archived** und **All**.
 3. Klicken Sie auf die Schaltflaeche "New Project" oben rechts.
 
 ### Der Projekterstellungsdialog
@@ -73,12 +73,16 @@ Oben zeigt eine Breadcrumb-Leiste: **Projects > [Projektname]**. Ein Klick auf "
 ### Projektkopfzeile
 
 Die Kopfzeile zeigt:
-- Den Projektnamen als grosse Ueberschrift
+- Den Projektnamen als grosse Ueberschrift, mit einem **Archived**-Abzeichen daneben, wenn das Projekt archiviert wurde
 - Den Projektcode unterhalb des Namens
 - Die Projektbeschreibung (sofern vorhanden)
 - Zwei Aktionsschaltflaechen:
   - **Analytics**: Fuehrt zur Projektanalytikseite
   - **New Questionnaire**: Oeffnet den Fragebogenerstellungsdialog
+- Ein Menue **Weitere Optionen** (Kebab-Menue), verfuegbar fuer Personen, die das Projekt verwalten koennen. Es stellt die Aktionen des Projektlebenszyklus bereit:
+  - **Umbenennen**: Oeffnet einen Dialog zum Aendern des Projektnamens
+  - **Archivieren** / **Wiederherstellen**: Schaltet das Projekt zwischen aktivem und archiviertem Status um. Archivierte Projekte werden aus der Standard-Projektliste ausgeblendet, behalten aber alle Daten
+  - **Loeschen**: Entfernt das Projekt sowie seine Frageboegen und Antworten dauerhaft. Zum Schutz vor Versehen erfordert das Loeschen die Eingabe des exakten Projektnamens zur Bestaetigung
 
 ### Fragebogenliste
 

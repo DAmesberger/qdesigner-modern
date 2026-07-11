@@ -34,6 +34,9 @@ Eine Authentifizierungsberechtigung, die im HTTP-Header `Authorization` gesendet
 **Befehlspalette** (*Command Palette*)
 Eine durchsuchbare Oberflache (geoffnet mit `Strg+K` / `Cmd+K`), die schnellen Zugriff auf alle Designer-Befehle bietet, einschliesslich Fragen hinzufugen, Ansichten wechseln und Aktionen ausfuhren.
 
+**Binding** (*Binding*)
+Die Zuordnung einer einzelnen physischen Eingabe -- einer Tastaturtaste, einer HID-Taste oder einer Beruhrungsregion -- zu einer ResponseOption, einschliesslich der Frage, ob sie beim Tastendruck oder beim Loslassen registriert wird. Ein Binding verbindet die physische Aktion eines Teilnehmers mit der semantischen Antwort, die die Analyse aufzeichnet. (Bevorzugt gegenuber "Shortcut" oder "Mapping".) Siehe auch ResponseOption, ResponseSource.
+
 **Block** (*Block*)
 Eine logische Gruppierung von Fragen innerhalb einer Seite. Blocke ermoglichen die Randomisierung der Fragenreihenfolge innerhalb einer Seite und erlauben die Anwendung gemeinsamer Einstellungen auf mehrere Fragen.
 
@@ -168,6 +171,9 @@ Ein Fragetyp, der eine Reihe vordefinierter Optionen prasentiert, aus denen Teil
 
 ### O
 
+**Offline-complete** (*Offline-complete*)
+Der Zustand, in dem jedes Asset, das eine Studie jemals prasentieren konnte, bereits im lokalen Speicher vorliegt. Medienbasierte Reaktionsstudien mussen diesen Zustand erreichen, bevor ein zeitkritischer Block beginnen darf, wodurch sichergestellt ist, dass der Stimulus-Onset niemals durch einen Netzwerkabruf verzogert wird. Der Offline-complete-Zustand wird wahrend des Ladens automatisch erreicht -- er ist niemals eine Entscheidung des Teilnehmers.
+
 **Operationale Transformation (OT)** (*Operational Transformation*)
 Ein Algorithmus, der kollaboratives Echtzeit-Bearbeiten ermoglicht, indem gleichzeitige Operationen transformiert werden, um Konsistenz uber alle verbundenen Clients hinweg aufrechtzuerhalten. QDesigner Modern unterstutzt Einfuge-, Losch-, Aktualisierungs-, Verschiebe- und Umordnungsoperationen.
 
@@ -178,11 +184,17 @@ Die oberste Entitat in der Mehrmandanten-Hierarchie. Organisationen enthalten Pr
 
 ### P
 
+**Paradigm** (*Paradigm*)
+Eine wissenschaftliche Prozedurvorlage fur eine Reaktionsaufgabe -- zum Beispiel die Psychomotor Vigilance Task (PVT), die Simon-Aufgabe oder die Sustained Attention to Response Task (SART). Ein Paradigm definiert die Trial-Struktur und die Regel dafur, was als korrekte Antwort gilt. (Bevorzugt gegenuber "Aufgabentyp" oder "Reaktionstyp".) Siehe auch Preset, Trial.
+
 **Perzentil** (*Percentile*)
 Ein statistisches Mass, das den Wert angibt, unterhalb dessen ein bestimmter Prozentsatz der Beobachtungen liegt. Die Aggregations-API berechnet p10, p25, p50 (Median), p75, p90, p95 und p99.
 
 **Piping** (*Piping*)
 Die Technik des Einfugens von Variablenwerten oder fruheren Antworten in Fragetexte mithilfe der doppelten geschweiften Klammern-Syntax: `{{variablenName}}`.
+
+**Preset** (*Preset*)
+Eine gespeicherte, benannte Parametrisierung eines Paradigms -- zum Beispiel eine Pfeil-Flanker-Konfiguration des Flanker-Paradigms. Ein Preset liefert nur Parameterwerte; es definiert niemals eine neue Prozedur. (Im Reaktionskontext bevorzugt gegenuber "Vorlage".) Siehe auch Paradigm.
 
 **Projekt** (*Project*)
 Ein Behalter innerhalb einer Organisation, der verwandte Fragebogen zusammenfasst. Projekte haben eigene Mitgliederlisten und Berechtigungseinstellungen.
@@ -216,6 +228,15 @@ Die gemessene Dauer zwischen Stimulusprasentation und Teilnehmerantwort, gespeic
 **Refresh-Token** (*Refresh Token*)
 Ein langlebiges Token, das zum Erhalten neuer Zugriffstoken ohne erneute Authentifizierung verwendet wird. Refresh-Token werden bei jeder Verwendung aus Sicherheitsgrunden rotiert.
 
+**ResponseOption** (*ResponseOption*)
+Eine semantische Antwortalternative innerhalb eines ResponseSets, identifiziert durch eine stabile ID wie `left` oder `target-present`. Analyse und Export schlusseln auf diese ID, unabhangig davon, welche physische Eingabe die Antwort tatsachlich erzeugt hat. (Bevorzugt gegenuber "Antwort" oder "Taste".) Siehe auch ResponseSet, Binding.
+
+**ResponseSet** (*ResponseSet*)
+Die benannte, geordnete Liste von ResponseOptions, die ein Trial scharfschaltet. Ein Trial akzeptiert genau eine gewinnende Antwort aus seinem Set. (Bevorzugt gegenuber "Tastenbelegung" oder "Key-Map".) Siehe auch ResponseOption, Binding.
+
+**ResponseSource** (*ResponseSource*)
+Eine Geratefamilie, die die Antworten eines Teilnehmers liefern kann -- Tastatur, Zeiger, Beruhrung, Gamepad oder ein WebHID-Gerat. Fur ein einzelnes Trial konnen mehrere Sources gleichzeitig scharfgeschaltet sein; das erste Ereignis gewinnt, und die aufgezeichnete Provenienz vermerkt, welche Source ausgelost hat. (Bevorzugt gegenuber "Eingabemodus" oder "Antwortmodus".)
+
 **Rolle** (*Role*)
 Ein benannter Satz von Berechtigungen, der Organisations- oder Projektmitgliedern zugewiesen wird. Organisationsrollen: Eigentumer, Administrator, Bearbeiter, Betrachter. Projektrollen: Eigentumer, Administrator, Bearbeiter.
 
@@ -234,6 +255,9 @@ Ein statistisches Mass fur die Asymmetrie einer Wahrscheinlichkeitsverteilung. V
 
 **Seite** (*Page*)
 Eine strukturelle Einheit in einem Fragebogen, die verwandte Fragen zusammenfasst. Seiten werden wahrend der Teilnehmerausfullung einzeln angezeigt, mit Navigation zwischen den Seiten.
+
+**Server-Variable** (*Server Variable*)
+Eine am Fragebogen deklarierte Variable, deren Wert eine Aggregation ist, die der Server uber gesammelte Daten (Fragewerte oder Trials) berechnet und vorab auf das Gerat synchronisiert, sodass sich Feedback auch dann auflosen kann, wenn der Teilnehmer offline ist. Ihre Deklaration tragt eine explizite `minN`-Offenlegungsschwelle zusammen mit einem festgelegten Verhalten fur den Fall, dass die Stichprobe unter diese Schwelle fallt. (Bevorzugt gegenuber "Kohortenkennzahl" oder "Datensatzkennzahl".)
 
 **Sitzung** (*Session*)
 Eine einzelne Instanz eines Teilnehmers, der einen Fragebogen ausfullt. Sitzungen verfolgen den Fortschritt, speichern Antworten und zeichnen Interaktionsereignisse auf. Jede Sitzung hat eine eindeutige ID und einen Lebenszyklusstatus.
@@ -269,8 +293,14 @@ Eine Person, die einen Fragebogen ausfullt. Teilnehmer konnen anonym oder identi
 **Texteingabe** (*Text Input*)
 Ein Fragetyp, der Teilnehmern erlaubt, Freitextantworten einzugeben. Unterstutzt einzeilige und mehrzeilige Varianten.
 
+**TimingSpec** (*TimingSpec*)
+Eine festgelegte Phasendauer, ausgedruckt entweder als fester Wert oder als Verteilung (derzeit uniform min/max). Der geseedete Generator zieht jede TimingSpec einmal pro Trial, wenn die Trials materialisiert werden, sodass das Timing feststeht, bevor der Teilnehmer den Stimulus je sieht. (Bevorzugt gegenuber "Jitter-Einstellung" oder "Verzogerungskonfiguration".) Siehe auch Trial.
+
 **Token-Rotation** (*Token Rotation*)
 Die Sicherheitspraxis, bei jeder Verwendung des aktuellen Refresh-Tokens ein neues auszustellen. Verhindert Token-Wiederverwendung und begrenzt die Auswirkungen eines Token-Diebstahls.
+
+**Trial** (*Trial*)
+Ein vollstandig materialisierter Zyklus von Stimulus zu Antwort. Jeder Wert in einem Trial -- seine Timings, der Stimulus und die korrekten Optionen -- ist eine konkrete Zahl, die zur Generierungszeit festgelegt wird; die Engine zieht zur Laufzeit niemals etwas. Siehe auch Paradigm, TimingSpec, ResponseSet.
 
 ---
 
@@ -282,6 +312,9 @@ Ein 128-Bit-Bezeichner, der als Primarschlussel fur die meisten Datenbankdatensa
 ---
 
 ### V
+
+**ValidityPolicy** (*ValidityPolicy*)
+Eine studienweite Haltung gegenuber verschlechterten Timing-Bedingungen. Unter `record` (der Standard) stempelt die Laufzeit die Timing-Provenienz und warnt die Forschenden, stoppt den Teilnehmer aber niemals; unter `enforce` wurde sie zeitkritische Blocke verweigern oder abbrechen, wenn die Bedingungen verschlechtert sind. In der aktuellen Version wird nur das `record`-Verhalten ausgeliefert -- die Laufzeit zeichnet stets auf und fahrt fort; `enforce` ist ein entworfener Eskalationspfad (ADR 0027) ohne bislang autorenseitigen Schalter. Siehe Kapitel 11.
 
 **Variable** (*Variable*)
 Ein benannter Wert innerhalb eines Fragebogens, der aus Formeln berechnet, aus Antworten abgeleitet oder durch Skripte gesetzt werden kann. Variablen betreiben Ablaufsteuerung, Bewertung, Piping und Datenanalyse.

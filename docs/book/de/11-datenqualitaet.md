@@ -1,18 +1,19 @@
 # Kapitel 11: Datenqualitaet
 
-Hochwertige Daten sind das Fundament glaubwuerdiger Forschung. QDesigner Modern bietet drei integrierte Datenqualitaetssysteme -- Aufmerksamkeitspruefungen, Speeder-Erkennung und Flatline-Erkennung -- die Antworten mit geringem Aufwand oder Bot-generierte Antworten in Echtzeit markieren. Dieses Kapitel behandelt Konfiguration, Erkennungsalgorithmen, Qualitaetsberichte und Best Practices fuer die Integritaet von Forschungsdaten.
+Hochwertige Daten sind das Fundament glaubwuerdiger Forschung. QDesigner Modern bietet drei integrierte Datenqualitaetssysteme fuer Fragebogen-Antworten -- Aufmerksamkeitspruefungen, Speeder-Erkennung und Flatline-Erkennung -- die Antworten mit geringem Aufwand oder Bot-generierte Antworten in Echtzeit markieren. Fuer Reaktionsstudien kommt eine vierte, timing-spezifische Dimension hinzu: die **Timing-Validitaet**, die die Momente, in denen sich die Messbedingungen eines Geraets verschlechtern, aufzeichnet (statt sie zu verbergen). Dieses Kapitel behandelt Konfiguration, Erkennungsalgorithmen, das Timing-Validitaets-Modell, Qualitaetsberichte und Best Practices fuer die Integritaet von Forschungsdaten.
 
 ---
 
 ## 11.1 Ueberblick ueber Datenqualitaetsmechanismen
 
-| Mechanismus           | Erkennt                                | Implementierung                   |
-|----------------------|----------------------------------------|-----------------------------------|
-| Aufmerksamkeitspruefungen | Unaufmerksames oder zufaelliges Antworten | `AttentionCheckValidator`     |
-| Speeder-Erkennung     | Durcheilen von Seiten/Fragebogen       | `SpeederDetector`                 |
-| Flatline-Erkennung    | Repetitive Antwortmuster               | `FlatlineDetector`                |
+| Mechanismus           | Erkennt                                | Gilt fuer         | Implementierung                   |
+|----------------------|----------------------------------------|-------------------|-----------------------------------|
+| Aufmerksamkeitspruefungen | Unaufmerksames oder zufaelliges Antworten | Fragebogen    | `AttentionCheckValidator`     |
+| Speeder-Erkennung     | Durcheilen von Seiten/Fragebogen       | Fragebogen        | `SpeederDetector`                 |
+| Flatline-Erkennung    | Repetitive Antwortmuster               | Fragebogen        | `FlatlineDetector`                |
+| Timing-Validitaet     | Verschlechterte Reaktionstiming-Bedingungen | Reaktionsstudien | Provenienz pro Trial (ADR 0027) |
 
-Alle drei Systeme arbeiten unabhaengig voneinander und erzeugen Qualitaetsflags, die fuer ein umfassendes Datenscreening kombiniert werden koennen.
+Die ersten drei Systeme arbeiten unabhaengig voneinander auf Fragebogen-Antworten und erzeugen Qualitaetsflags, die fuer ein umfassendes Datenscreening kombiniert werden koennen. Die **Timing-Validitaet** ist grundlegend anderer Art: Sie beurteilt nicht den *Aufwand* des Teilnehmers, sondern die *Messbedingungen*, unter denen jeder Reaktions-Trial aufgezeichnet wurde, und standardmaessig **zeichnet sie auf und faehrt fort**, anstatt jemanden zu stoppen (siehe Abschnitt 11.9).
 
 ---
 
@@ -366,6 +367,8 @@ Alle Exportformate (CSV, Excel, SPSS, R usw.) enthalten Qualitaetsflag-Spalten:
 | `flatline_patterns`         | string  | Kommagetrennte Muster      |
 | `overall_quality`           | string  | "pass" / "warning" / "fail"|
 
+Bei **Reaktionsstudien** wird die Timing-Validitaet auf *Trial*-Ebene gefuehrt, nicht auf Teilnehmerebene, sodass sie im Export pro Trial ("tidy") erscheint und nicht in diesen Teilnehmerspalten. Jede Trial-Zeile enthaelt `invalid`, `invalid_reason`, `exclude_from_analysis` und `exclude_reason` sowie die Timing-Provenienz-Felder (`cross_origin_isolated`, Timer-Aufloesung, gemessene Bildwiederholrate, verworfene Frames, Jitter). Siehe Kapitel 10, Abschnitt 10.9, fuer den vollstaendigen Spaltensatz pro Trial und Abschnitt 11.9 fuer die Bedeutung der Validitaets-Stempel.
+
 ---
 
 ## 11.8 Best Practices fuer Forschungsdatenqualitaet
@@ -406,12 +409,55 @@ In Forschungspublikationen berichten Sie:
 
 ---
 
-## 11.9 Zusammenfassung
+## 11.9 Timing-Validitaet fuer Reaktionsstudien
+
+Aufmerksamkeitspruefungen, Speeder-Erkennung und Flatline-Erkennung beurteilen, ob ein *Teilnehmer* sich mit dem Inhalt auseinandergesetzt hat. Reaktionsstudien benoetigen etwas anderes: eine Aufzeichnung darueber, ob sich das *Geraet* in einem Zustand befand, in dem seinen Timing-Messungen vertraut werden kann. Ein in den Hintergrund gerueckter Tab, eine nicht cross-origin-isolierte Seite, ein gedrosselter Timer oder ein verlorener Grafikkontext verschlechtern allesamt das Timing -- und, entscheidend, sie sind **messbar, stempelbar und nachtraeglich ausschliessbar**. Die Haltung der Plattform ihnen gegenueber ist daher, aufzuzeichnen, nicht zu stoppen.
+
+### 11.9.1 Die ValidityPolicy: standardmaessig aufzeichnen
+
+Die **ValidityPolicy** einer Studie steuert die Reaktion auf verschlechtertes Timing (ADR 0027). Zwei Haltungen sind definiert:
+
+- **`record`** (der Standard und das aktive plattformweite Verhalten) -- wenn sich das Timing mitten in der Studie verschlechtert, traegt der betroffene Trial explizite Provenienz, die Analytics stellt dies deutlich heraus, und **der Teilnehmer wird nie gestoppt**.
+- **`enforce`** -- die entworfene, per Opt-in aktivierbare Eskalation fuer maximal timing-kritische Studien: Reaktionsbloecke verweigern ohne Cross-Origin-Isolation die Ausfuehrung, und ein Sichtbarkeitsverlust bricht den laufenden Trial ab (markiert und am Blockende erneut eingereiht innerhalb eines begrenzten Wiederholungslimits).
+
+Dies ist das bewusste Spiegelbild des Medienvertrags aus Kapitel 10: **Fehlende Daten schlagen fail-closed fehl; verschlechtertes Timing zeichnet auf und faehrt fort.** Das Fehlen von Medien veraendert, was der Teilnehmer tatsaechlich erlebt hat, und laesst sich nachtraeglich nicht korrigieren, sodass ein Block mit fehlenden Stimuli den Start verweigert. Timing-Verschlechterung hingegen ist messbar und nachtraeglich ausschliessbar, und ein standardmaessiger Hard-Stop wuerde Studien wegen routinemaessiger betrieblicher Stoerungen unbrauchbar machen und Teilnehmer fuer einen Deployment-Fehler bestrafen.
+
+> **Was heute ausgeliefert wird.** Die Plattform zeichnet standardmaessig auf und stempelt die Timing-Provenienz jedes Trials wie unten beschrieben; die `record`-Haltung wird einheitlich angewendet. Derzeit gibt es keinen studienbezogenen "enforce"-Schalter in den Panels **Fragebogen-Einstellungen** oder **Datenqualitaet** des Designers -- stattdessen warnt die Geraetequalifizierung den Teilnehmer sanft (eine gelbe/rote Bewertung), wenn die Isolation fehlt oder der Jitter hoch ist, und die aufgezeichnete Provenienz erlaubt es Ihnen, betroffene Trials in der Analyse auszuschliessen. Betrachten Sie `enforce` als den dokumentierten Eskalationspfad (ADR 0027), nicht als eine ausgelieferte Einstellung.
+
+### 11.9.2 Was der record-Modus stempelt
+
+Unter `record` traegt jeder Reaktions-Trial gemessene Provenienz (persistiert zusammen mit den Trial-Daten -- siehe Kapitel 10, Abschnitt 10.9). Die Timing-Validitaets-Felder sind:
+
+| Provenienz-Feld | Bedeutung |
+|---|---|
+| `crossOriginIsolated` | Ob die Seite waehrend des Trials cross-origin-isoliert war. Bei `false` wird `performance.now()` begrenzt (in Richtung ~100 µs statt ~5 µs) und die Sub-Millisekunden-Aussage verschlechtert sich unbemerkt -- daher wird das Flag bei jedem Trial aufgezeichnet. |
+| `timerResolutionMs` | Das gemessene effektive `performance.now()`-Quantum -- das kleinste positive Delta zwischen zwei Messwerten in einer engen Schleife (~0,005 ms bei Isolation; sonst begrenzt in Richtung ~0,1 ms). |
+| `measuredRefreshRateHz` | Die aus der beobachteten Kadenz des Renderers gemessene Bildwiederholrate des Displays, verwendet fuer ehrliches Zaehlen verworfener Frames -- keine nominelle Ziel-FPS. |
+| `invalidated` | Gesetzt, wenn dem Timing des Trials nicht vertraut werden kann; bei einem sauberen Trial nicht vorhanden. |
+| `visibilityLossCount`, `visibilityLossPhases` | Wie oft und in welcher Phase der Tab waehrend des Trials den Fokus verloren hat. |
+
+### 11.9.3 Was die `invalidated`-Werte bedeuten
+
+Der `invalidated`-Stempel nimmt einen von zwei Gruenden an, jeder mit einer eigenen analytischen Bedeutung:
+
+- **`visibility`** -- der Tab wurde in den Hintergrund gerueckt oder verlor waehrend des Trials den Fokus. Hintergrund-Tabs drosseln Timer und stoppen Animation Frames, sodass sich eine Phase aufblaehen kann, ein Stimulus ungesehen "angezeigt" werden kann und der Onset gegen ein veraltetes Frame gestempelt werden kann. Der Trial wird dennoch abgeschlossen und zeichnet seine RT auf, aber diese RT kann unzuverlaessig sein.
+- **`no-stimulus`** -- ein visueller Stimulus erreichte den Renderer nie, sodass der Onset nie gegen echte Pixel scharfgeschaltet wurde. Jede RT hier wuerde gegen einen leeren Bildschirm gemessen; der Trial wird als ungueltig markiert statt getimt (dies ist die doppelt abgesicherte Rueckfallebene hinter dem fail-closed Mediengate aus Abschnitt 10.8).
+
+Fuer die Analyse wird ein `invalidated`-Trial (und jeder antizipatorische Fehlstart) in der Spalte `exclude_from_analysis` des tidy-Exports mit einem maschinenlesbaren `exclude_reason` markiert, sodass eine nachgelagerte Reanalyse ihn **nachvollziehbar statt stillschweigend** verwerfen kann. Das Analytics-Dashboard stellt die Anzahl der wegen Sichtbarkeit ungueltig gewordenen Trials deutlich heraus, anstatt sie in die Aggregate einzurechnen. Siehe **Kapitel 12 (Analytics und Statistik)** dazu, wie ausgeschlossene Trials aus berichteten Mittelwerten, Medianen und Effektstaerken herausgehalten werden.
+
+### 11.9.4 Ausliefern fuer volle Timer-Aufloesung
+
+Da `crossOriginIsolated` das Timer-Quantum steuert, sollte eine timing-kritische Studie mit den Cross-Origin-Isolation-Headern (COOP/COEP) ausgeliefert werden. Verifizieren Sie dies, indem Sie pruefen, dass `crossOriginIsolated` in der aufgezeichneten Provenienz realer Sitzungen `true` ist. Ohne Isolation wird das Timing weiterhin aufgezeichnet und ist fuer relative Vergleiche nutzbar, aber die effektive Aufloesung wird begrenzt und jeder Trial wird entsprechend markiert.
+
+---
+
+## 11.10 Zusammenfassung
 
 | Mechanismus           | Was erkannt wird          | Schluesselkonfiguration    | Standard           |
 |----------------------|--------------------------|---------------------------|--------------------|
 | Aufmerksamkeitspruefung | Unaufmerksame Antworten | `correctAnswer`, `type`   | Schwellenwert = 1  |
 | Speeder-Erkennung     | Durcheilen der Umfrage   | `minPageTimeMs`           | 2.000 ms           |
 | Flatline-Erkennung    | Repetitive Muster        | `threshold`               | 0,80               |
-| Qualitaetsbericht     | Kombinierte Bewertung    | Alle drei Mechanismen     | Pro Teilnehmer     |
+| Timing-Validitaet     | Verschlechtertes Reaktionstiming | ValidityPolicy    | `record` (stempeln & fortfahren) |
+| Qualitaetsbericht     | Kombinierte Bewertung    | Alle Mechanismen          | Pro Teilnehmer     |
 | Export-Flags          | Analysebereite Spalten   | In allen Formaten enthalten | Automatisch      |

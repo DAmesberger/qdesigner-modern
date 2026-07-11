@@ -553,7 +553,41 @@ QDesigner kann Teilnehmern nach Abschluss des Fragebogens statistisches Echtzeit
 
 ### 12.11.2 Konfiguration
 
-Feedback wird ueber das Variablensystem konfiguriert (siehe Kapitel 7). Berechnete Variablen koennen auf Antwortdaten verweisen, Formeln anwenden und Ergebnisse in einem Feedback-Block am Ende des Fragebogens anzeigen.
+Feedback wird ueber das Variablensystem konfiguriert (siehe Kapitel 7). Im Variable Manager legt jede Variable ueber den Auswahlschalter "Computation" (Berechnungsmodus) einen Berechnungsmodus fest:
+
+- **"Static (default value)"** (statisch, Standardwert) — ein fester Wert.
+- **"Formula (computed locally)"** (Formel, lokal berechnet) — wird auf dem Geraet des Teilnehmers aus anderen Variablen und Antworten ausgewertet.
+- **"Server-computed (aggregate across participants)"** (serverseitig berechnet, Aggregat ueber Teilnehmer) — eine **Server Variable**: Der Wert ist ein Aggregat, das der Server ueber die erhobenen Daten berechnet und vorab auf das Geraet synchronisiert, sodass sich das Feedback offline aufloesen laesst. Das Panel weist darauf hin: "Computed on the server from every completed session. Participants see the value as of their last online load; offline it falls back to the default value below."
+
+Eine Server Variable erfordert daher einen **"Default Value"** (Standardwert) — den Offline-/Fallback-Wert bei unzureichenden Daten, der angezeigt wird, wenn das Geraet noch nie synchronisiert hat.
+
+### 12.11.3 Server Variables auf Trial-Ebene
+
+Die Quelle einer Server Variable — der Auswahlschalter "Aggregate over" (aggregieren ueber) — kann eine "Session variable / score" (Sitzungsvariable/Score), eine "Question response" (Fragenantwort) oder "Reaction trials (RT)" (Reaktions-Trials) sein. Die Trial-Quelle aggregiert ueber die Tabelle `trials` — zum Beispiel den Median von `rt_us`, sofern der Trial korrekt und nicht invalidiert war — und ermoeglicht so ein Teilnehmer-vs-Kohorte-Feedback, das sich vollstaendig offline aufloest (siehe Kapitel 10 zu Trials und Kapitel 11 zur Invalidierung).
+
+Wenn "Reaction trials (RT)" die Quelle ist, blendet der Editor folgende Steuerelemente ein:
+
+| Steuerelement | Optionen |
+|---|---|
+| **"Trial metric"** (Trial-Metrik) | Reaction time (µs) oder Accuracy (0–1) |
+| **"Include invalidated trials"** (invalidierte Trials einschliessen) | Standardmaessig aus (schliesst von der ValidityPolicy invalidierte Trials aus) |
+| **"Materialization"** (Materialisierung) | Single statistic → Number oder Full statistics → Object (ein Bundle `{ n, mean, sd, median, p25, p75, … }` zum Binden in Kohorten-Widgets) |
+
+Jede Server Variable auf Trial-Ebene (und jede andere) traegt eine explizite Offenlegungsschwelle und ersetzt damit die alte verborgene Plattformschwelle (ADR 0028):
+
+- **"Minimum n (disclosure floor)"** (Mindest-n, Offenlegungsschwelle) — eine ganze Zahl ≥ 1. "Stats are withheld until this many participants contribute. n is always shown." Neue Deklarationen verwenden standardmaessig `1`; Deklarationen aus der Zeit vor der Aenderung wurden auf `5` migriert, damit sich nichts unbemerkt aendert.
+- **"Below the floor"** (unterhalb der Schwelle) — das vom Autor festgelegte Verhalten, wenn weniger als `minN` Teilnehmer zur Kohorte beitragen: **"Hide the widget"** (das Widget ausblenden) oder **"Show 'still forming' placeholder"** (Platzhalter "wird noch gebildet" anzeigen).
+
+Das gerenderte Feedback legt dem Teilnehmer stets das aktuelle Kohorten-`n` offen — ob oberhalb der Schwelle (in der Diagrammbeschriftung) oder unterhalb (im Platzhalter). Das Gestaltungsprinzip ist Transparenz statt einer unsichtbaren Schwelle: Das Offenlegungsrisiko liegt pro Aggregat in der Hand des Autors, nicht in einer Vermutung der Plattform.
+
+### 12.11.4 Das Teilnehmer-vs-Kohorte-Boxplot
+
+Server Variables auf Trial-Ebene speisen im Modul fuer statistisches Feedback (`ReactionCohortBox`) ein Offline-Teilnehmer-vs-Kohorte-Boxplot. Es rendert **ohne jeglichen Netzwerkzugriff zum Anzeigezeitpunkt**:
+
+- Die **Kohorten-Whisker** (Minimum, Q1/p25, Median, Q3/p75, Maximum) stammen direkt aus dem vorab synchronisierten Aggregat-Bundle — der Teilnehmer haelt nie die rohen Trials der Kohorte, sondern nur deren bereits berechnete Quartile.
+- Die **eigene Statistik des Teilnehmers** (sein Median oder mittlere Reaktionszeit bzw. sein Anteil korrekter Antworten) wird auf dem Geraet aus seinen lokalen Trials fuer dieselbe Reaktionsfrage berechnet und als eigener "you are here"-Marker (eine gestrichelte vertikale Linie samt Punkt) neben der Medianlinie der Kohorte eingeblendet.
+
+Reaktionszeiten werden serverseitig in Mikrosekunden aggregiert und fuer eine lesbare Achse in Millisekunden umgerechnet; die Accuracy bleibt ein Anteil zwischen 0 und 1. Die Beschriftung nennt stets die Kohortengroesse und, sofern verfuegbar, das "as of"-Aggregationsdatum — zum Beispiel "cohort n=142, as of 7/10/2026 · you: 431 ms". Liegt die Kohorte unterhalb ihrer Offenlegungsschwelle und hat der Autor das Platzhalterverhalten gewaehlt, zeigt das Widget statt des Diagramms "cohort still forming — n=X of minN".
 
 ---
 
@@ -685,11 +719,74 @@ Jede Antwortzeile enthaelt:
 
 ---
 
-## 12.13 Zusammenfassung
+## 12.13 Session Detail: Der Antwortbrowser pro Teilnehmer
+
+Aus der Analytics-Ansicht des Fragebogens oeffnet ein Klick auf eine Sitzungs-ID in der Tabelle "Sessions" (Sitzungen) die Session-Detail-Seite dieses Teilnehmers (`/projects/{id}/analytics/sessions/{sessionId}`) — eine vollstaendige Aufstellung all dessen, was ein Teilnehmer getan hat, verknuepft mit den Fragebogeninhalten, die er tatsaechlich gesehen hat.
+
+### 12.13.1 Kopfbereich und Provenienz
+
+Der Kopfbereich zeigt das Statusabzeichen der Sitzung sowie ein Metadatenraster: "Started" (gestartet), "Completed" (abgeschlossen), "Duration" (Dauer), "Participant" (Teilnehmer, oder "Anonymous") und "Pinned version" (gepinnte Version) sowie, bei Between-Subjects-Designs, den zugewiesenen Arm ("Assigned arm" — dessen Bedingung und Index).
+
+Die "Pinned version" ist genau die `major.minor.patch`, gegen die die Sitzung ausgefuellt wurde. Antworten werden gegen diesen gepinnten Definitions-Snapshot aufgeloest, sodass der Fragetext dem entspricht, was der Teilnehmer gesehen hat. Laesst sich der exakte Snapshot nicht laden, erscheint eine Warnung — "Prompts resolved against version X, not the exact pinned snapshot … Question wording may differ from what the participant saw." Zwei weitere Abzeichen liefern Kontext zur Datenqualitaet: "Screened out" (eine Teilnahmeregel hat gegriffen — siehe Kapitel 13) und "Flagged" (der Sitzung wurde ein Flag fuer Mehrfachteilnahme oder Betrug aufgepraegt). Eine aussortierte Sitzung zeigt zusaetzlich ihren "Screen-out"-Grund bzw. ihre -Meldung.
+
+### 12.13.2 Antworten
+
+Der Abschnitt "Answers" (Antworten) ist eine Tabelle der Antworten des Teilnehmers, jede verknuepft mit ihrem Fragetext (dem aufgeloesten Prompt), mit den Spalten:
+
+| Spalte | Beschreibung |
+|---|---|
+| **"Question"** (Frage) | Der Prompt wie gepinnt, dazu die Fragen-ID, der Typ und ein "unresolved"-Marker, falls sich der gepinnte Prompt nicht aufloesen liess |
+| **"Answer"** (Antwort) | Der Anzeigewert samt Praefix der Sync-`client_id` |
+| **"RT (ms)"** | Reaktionszeit, umgerechnet aus den gespeicherten Mikrosekunden |
+| **"Answered"** (beantwortet) | Zeitstempel der Antwortabgabe |
+
+### 12.13.3 Reaktionszeit-Trials
+
+Enthaelt die Sitzung Reaktionstiming-Daten, erscheint eine Tabelle "Reaction-time trials" (Reaktionszeit-Trials) — eine Zeile pro Trial, mit einem kompakten Spaltensatz (Trial-Nummer, Bedingung, Stimulusart, Reaktionszeit in ms, Korrektheit). Von der Analyse ausgeschlossene Trials werden visuell zurueckgenommen. Der vollstaendige Spaltensatz pro Trial ist ueber den Per-Trial-Export der Analytics verfuegbar (siehe Kapitel 10). Eine aufklappbare Offenlegung "Timing provenance (raw)" (Timing-Provenienz, roh) legt den rohen Timing-Blob pro Trial offen (Onset-Methode, Display-/Output-Latenz und die uebrige Provenienz, die jeder Trial persistiert).
+
+### 12.13.4 Variablen und Ereignisse
+
+Der Abschnitt "Variables" (Variablen) listet jede fuer den Teilnehmer erfasste Sitzungsvariable als Name-Wert-Paar auf (Scores, Indizes, laufende Summen). Der Abschnitt "Events" (Ereignisse) ist eine chronologische Timeline der Interaktionsereignisse, gespeist aus `GET /api/sessions/{id}/events`: Jeder Eintrag zeigt den Ereignistyp, die fokussierte Frage, eine Echtzeituhrzeit, den Mikrosekunden-Zeitstempel und einen aufklappbaren "payload" fuer etwaige Ereignismetadaten.
+
+---
+
+## 12.14 Advanced Analytics: Segmentierung und Kohortenvergleich
+
+Die Analytics-Ansicht des Fragebogens fuehrt zwei Reiter, "Overview" (Uebersicht) und "Advanced" (erweitert). Der Reiter "Advanced" (die Komponente `AdvancedAnalytics`) exploriert die geladene Antwortmenge vollstaendig clientseitig — ohne zusaetzliche Server-Roundtrips.
+
+### 12.14.1 Segment
+
+Der Abschnitt "Segment" kombiniert einen "FilterBuilder" mit einer Verteilungsansicht. Der Filterbuilder setzt Regeln zu Gruppen zusammen: Jede Regel besteht aus einem Feld ("field"), einem Operator ("operator" — `=`, `!=`, `>`, `<`, `>=`, `<=`, Between, In) und einem Wert; Regeln werden innerhalb einer Gruppe mit AND/OR verknuepft, Gruppen wiederum ueber ein AND/OR auf oberster Ebene. Die Bedienelemente lauten "+ Add rule", "Remove group" und "+ Add filter group". Unter dem Filter meldet eine Live-Zaehlung "N of M participants match", und ein Feldauswahlschalter ("Field") stellt die Verteilung des gewaehlten numerischen Feldes (ein Histogramm samt Widget fuer deskriptive Statistik) ueber die passenden Teilnehmer dar.
+
+### 12.14.2 Kohortenvergleich
+
+Der Abschnitt "Cohort comparison" (Kohortenvergleich) teilt die Teilnehmer anhand des Werts eines Feldes in zwei Kohorten und vergleicht ein numerisches Mass zwischen ihnen — "mit Cohens d und einem t-Test fuer unabhaengige Stichproben". Die Bedienelemente sind "Group by", "Measure", "Cohort A" und "Cohort B". Das Ergebnis berichtet:
+
+- **d** — Cohens d, beschriftet mit Negligible / Small / Medium / Large (|d|-Schwellen 0,2 / 0,5 / 0,8).
+- **p** — der p-Wert des t-Tests mit Signifikanzmarker (`*` < .05, `**` < .01, `***` < .001, sonst `ns`) und einer Beschriftung Significant / Not significant.
+
+Ein gruppiertes Balkendiagramm vergleicht die beiden Kohorten hinsichtlich Mittelwert, Median und Standardabweichung, und nebeneinander angeordnete Panels zeigen die deskriptive Statistik jeder Kohorte samt ihrem `n`.
+
+---
+
+## 12.15 Geteilte (Gast-)Analytics
+
+Forschende koennen die Analytics eines Fragebogens mit einem externen Mitarbeitenden oder Gutachter teilen, ohne vollen Projektzugriff zu gewaehren. Aus der Analytics-Ansicht vergibt die Schaltflaeche "Share" (siehe ShareDialog) eine schreibgeschuetzte Freigabe; der Empfaenger sieht die Studie unter "Shared with me" (mit mir geteilt) und oeffnet sie ueber eine eigene Gast-Route (`/shared/questionnaires/{id}/analytics`).
+
+Die Gastansicht ist bewusst schreibgeschuetzt: Sie zeigt die Zusammenfassungskarten (Sitzungen gesamt, abgeschlossen, Abschlussrate, mittlere Abschlusszeit), die Antwort-Timeline, den Abschlusstrichter und — bei Between-Subjects-Designs — die Arm-Balance, dazu das Rollenabzeichen und wer geteilt hat. Sie respektiert die Freigabe jederzeit: Wird die Freigabe widerrufen oder laeuft sie ab, waehrend die Seite geoeffnet ist, schlaegt ein Live-Refetch fail-closed fehl und die Seite wird zu einer freundlichen Sackgasse — "This share is no longer available … Ask the owner to share it with you again" —, statt Daten preiszugeben.
+
+---
+
+## 12.16 Zusammenfassung
 
 | Funktion                    | Implementierung                         | Schluesseldetails                |
 |----------------------------|----------------------------------------|----------------------------------|
 | Dashboard                   | Echtzeit-WebSocket/SSE-Monitoring       | 10+ konfigurierbare Metriken     |
+| Session detail              | Antwortbrowser pro Teilnehmer           | Antworten, Per-Trial-Tabelle, Timing-Provenienz, Variablen, Ereignis-Timeline; gepinnte Version |
+| Advanced Analytics          | FilterBuilder + CohortComparison        | Segmentierung, Cohens d, t-Test fuer unabhaengige Stichproben |
+| Server Variable auf Trial-Ebene | Aggregat ueber Trials, explizites `minN` | Ausblenden/Platzhalter unterhalb der Schwelle, verpflichtende n-Offenlegung |
+| Teilnehmer-vs-Kohorte-Boxplot | `ReactionCohortBox` + `FeedbackChart` | Offline: Kohorten-Whisker vorab synchronisiert, eigener Punkt lokal |
+| Geteilte Analytics          | Schreibgeschuetzte Gast-Route            | Respektiert Freigaben; schlaegt bei Widerruf fail-closed fehl |
 | Deskriptive Statistik       | `calculateDescriptiveStats()`           | Mittelwert, Median, Modus, SD, Quartile, Schiefe, Kurtosis |
 | Pearson-Korrelation         | `calculateCorrelation('pearson')`       | Mit Fisher-z-KI                  |
 | Spearman-Korrelation        | `calculateCorrelation('spearman')`      | Rangbasiert                      |

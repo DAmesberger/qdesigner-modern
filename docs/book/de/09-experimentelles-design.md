@@ -319,7 +319,82 @@ Der Between-Subjects-Faktor (Trainingstyp) nutzt die Bedingungszuweisung. Der Wi
 
 ---
 
-## 9.7 Design-Validierung
+## 9.7 Teilnahmequoten (Participation Quotas)
+
+Die Bedingungszuweisung entscheidet, *welcher* Gruppe ein Teilnehmer beitritt; **Quotas** (Teilnahmequoten) entscheiden, *wie viele* Teilnehmer eine Bedingung oder eine demografische Zelle annehmen darf, bevor sie schliesst. Oeffnen Sie sie ueber den Befehl **Quotas** im Designer (das Zielscheiben-Symbol), der den Dialog **Quota Management** oeffnet: "Set participation caps per condition or demographic. When a quota is full, respondents matching that condition are routed according to the over-quota action." (Legen Sie Teilnahmeobergrenzen pro Bedingung oder Demografie fest; ist eine Quota voll, werden passende Teilnehmer gemaess der over-quota-Aktion umgeleitet.)
+
+### 9.7.1 Was Sie festlegen
+
+1. Klicken Sie auf **Add Quota Group**. Jede Gruppe hat einen Namen und eine **Logik**: **Independent** (unabhaengig) oder **Cross-quota** (verschraenkt).
+2. Klicken Sie innerhalb einer Gruppe auf **Add Quota**. Jede Quota besitzt:
+   - **Target (n)** -- die maximale Anzahl abgeschlossener Antworten, die diese Quota annimmt.
+   - **Condition (formula)** -- wen diese Quota zaehlt. Verwenden Sie `true` fuer eine Auffang-Quota oder Vergleiche wie `age >= 18`, verknuepft mit `&&` / `||` (Platzhalterbeispiel: `gender == "female" && age >= 18`).
+   - **Over-quota action** -- **Terminate**, **Redirect**, **Skip to end** oder **Continue (flag only)**.
+   - Eine **Over-quota message** (bei Terminate / Skip to end) oder eine **Redirect URL** (bei Redirect).
+   - Einen **Enabled**-Schalter.
+
+Quota-Bedingungen werden mit derselben Formel-Engine geparst, die sie auch ausfuehrt, sodass eine vom Dialog akzeptierte Bedingung auch zur Laufzeit ausgewertet werden kann. Ein Syntaxfehler wird inline markiert und blockiert **Save**; ein Verweis auf eine Variable, die der Fragebogen nicht deklariert hat, warnt, blockiert aber nicht.
+
+### 9.7.2 Wie das Gating tatsaechlich funktioniert
+
+Quota-Bedingungen werden **ausgewertet**, nicht per Muster abgeglichen. Zusammengesetzte Bedingungen mit `&&` / `||`, Klammern und Funktionsaufrufen loesen sich allesamt gegen die aktuellen In-Survey-Variablen des Teilnehmers auf. (In frueheren Builds wurde eine Bedingung von einem regulaeren Ausdruck gelesen, der nur einen einzelnen Vergleich `variable op value` verstand und jede zusammengesetzte Bedingung stillschweigend *durchliess*, sodass eine mehrteilige Quota nie tatsaechlich gatete -- das ist behoben.)
+
+Die Gating-Regeln:
+
+- **Leere / unausgefuellte Bedingung** -- ein Auffang, der immer passt.
+- **Ein wahres Ergebnis** -- die Bedingung passt auf diesen Teilnehmer.
+- **Ein Parse- oder Auswertungsfehler** -- wird als **nicht passend** behandelt: Die Quota gilt fuer diesen Teilnehmer einfach nicht (und der Fehler wird protokolliert). Eine defekte Zielformel kann eine Quota niemals verfaelschen, indem sie die falschen Personen zaehlt oder blockiert.
+- Eine Quota gatet einen Teilnehmer **nur dann, wenn ihre Bedingung passt *und* die Quota voll ist** (ihr aktueller Zaehler abgeschlossener Antworten hat das Target erreicht).
+
+### 9.7.3 Was der Teilnehmer sieht
+
+Die Quota-Pruefung laeuft beim Eintritt, bevor eine Session erstellt wird. Wenn die Bedingung einer vollen Quota passt:
+
+- **Terminate** / **Skip to end** -- der Teilnehmer sieht den Bildschirm "Studie ausgelastet" mit der over-quota-Nachricht (Standard: "Diese Studie hat die angestrebte Teilnehmerzahl erreicht."). Es wird kein Abschlusscode angezeigt.
+- **Redirect** -- der Teilnehmer wird an die konfigurierte URL gesendet.
+- **Continue (flag only)** -- der Teilnehmer wird zugelassen, die Session wird jedoch als over-quota markiert, um sie spaeter herauszufiltern.
+
+Beispiel: Eine Quota mit **Target** = 1, die bereits eine abgeschlossene Antwort hat, leitet einen passenden zweiten Teilnehmer korrekt auf "Studie ausgelastet".
+
+### 9.7.4 Verschraenkte (Cross-Quota) Zellen
+
+Eine **Cross-quota**-Gruppe definiert verschraenkte Zellen -- Kombinationen demografischer Werte (z.B. Altersgruppe x Geschlecht). Wie der Dialog anmerkt: "Interlocking cells fill independently; a participant is blocked only when their own cell (their combination of values) is full." (Verschraenkte Zellen fuellen sich unabhaengig; ein Teilnehmer wird nur blockiert, wenn seine eigene Zelle -- seine Wertekombination -- voll ist.) Ein Teilnehmer, dessen Werte ausserhalb des Rasters liegen, wird von der Cross-Quota nicht gegatet. Die Standardnachricht fuer eine volle Zelle lautet "Diese Studie hat das Ziel fuer Ihre Gruppe erreicht."
+
+Da sich Zellen aus den aktuellen In-Survey-Antworten aufloesen, kann die Zellenpruefung nach den demografischen Fragen, die die Zelle des Teilnehmers bestimmen, erneut durchgefuehrt werden -- nicht nur beim Eintritt.
+
+### 9.7.5 Offline-Durchsetzung
+
+Der letzte erfolgreiche Quota-Snapshot wird lokal zwischengespeichert, sodass ein Offline-Start Quotas dennoch durchsetzen kann. Ist weder eine Live-Pruefung noch ein zwischengespeicherter Snapshot verfuegbar, darf der Teilnehmer fortfahren, und die Session wird als **unchecked** (ungeprueft) markiert, damit nicht verifizierte Abschluesse spaeter herausgefiltert werden koennen.
+
+---
+
+## 9.8 Eligibility-Screener (Eligibility Screeners)
+
+Quotas sind eine **Kapazitaets**-Entscheidung -- eine Gruppe ist voll. **Screener** sind eine **Teilnahmeberechtigungs**-Entscheidung -- der Teilnehmer faellt ausserhalb der Zielpopulation. Beide leiten auf unterschiedliche Bildschirme und werden getrennt erfasst.
+
+### 9.8.1 Einen Screen-Out festlegen
+
+Ein Eligibility-Screen-Out wird als Flow-Control-Regel **Terminate** festgelegt (siehe Kapitel 8: Flusssteuerung und Logik). Das Ausfuellen der **Screen-out message** der Regel (und optional ihrer **Redirect URL**) verwandelt ein einfaches vorzeitiges Ende in einen Eligibility-Screen-Out. Der Designer sagt dies direkt: "Fill either field to turn this into an eligibility screen-out: the participant sees a distinct 'not eligible' screen (no completion code) instead of the thank-you page. Leave both blank for a plain early end." (Fuellen Sie eines der Felder aus, um daraus einen Eligibility-Screen-Out zu machen: Der Teilnehmer sieht einen eigenen "nicht teilnahmeberechtigt"-Bildschirm -- ohne Abschlusscode -- statt der Dankesseite. Lassen Sie beide leer fuer ein einfaches vorzeitiges Ende.)
+
+Strukturierte Screener-Regeln werten an einer Seitengrenze eine `eligibleWhen`-Formel aus; die erste Regel, die als falsch auswertet, sortiert den Teilnehmer mit dem Grund, der Nachricht und der Weiterleitung dieser Regel aus.
+
+### 9.8.2 Was der aussortierte Teilnehmer sieht
+
+Ein aussortierter Teilnehmer wird auf einen eigenen Bildschirm geleitet -- **nicht** auf den Dankes- / Abschlussbildschirm und **ohne Abschlusscode**:
+
+- **Titel:** "Sie sind fuer diese Studie nicht teilnahmeberechtigt"
+- **Nachricht:** die Screen-out-Nachricht des Autors oder der Standard "Vielen Dank fuer Ihr Interesse. Basierend auf Ihren Antworten koennen Sie nicht an dieser Studie teilnehmen. Ihre Antworten wurden nicht als Abschluss gewertet."
+- Eine optionale automatische Weiterleitung (mit sichtbarem Countdown), wenn eine Redirect URL gesetzt ist.
+
+Das Screen-out-Ergebnis wird in die Session-Metadaten gestempelt, sodass eine wiederaufgenommene, nicht teilnahmeberechtigte Session weiterhin den Screened-out-Bildschirm zeigt statt eines Abschlusses. Dies korrigiert die aeltere Annahme, dass nicht teilnahmeberechtigte Teilnehmer auf der Dankesseite landen: Sie sehen sie nie, und es wird kein Abschlusscode ausgestellt.
+
+### 9.8.3 Fail-Open bei defekten Formeln
+
+Ein Screener, dessen `eligibleWhen`-Formel einen Fehler wirft (eine fehlerhafte Formel oder eine fehlende Variable), wird als **teilnahmeberechtigt** behandelt und fuer den Designer protokolliert -- eine defekte Regel weist niemals faelschlicherweise einen echten Teilnehmer ab. Dies ist bewusst das Gegenteil einer defekten *Quota*-Bedingung (die im Fehlerfall als nicht passend gilt, also fail-closed): Ein Screener irrt zugunsten des Zulassens, eine Quota zugunsten des Nicht-Gatens.
+
+---
+
+## 9.9 Design-Validierung
 
 QDesigner enthaelt eine integrierte Validierung fuer experimentelle Designs:
 
@@ -328,10 +403,11 @@ QDesigner enthaelt eine integrierte Validierung fuer experimentelle Designs:
 - **Gewichtungsvalidierung:** Null- oder negative Gewichtungen loesen Warnungen aus.
 - **Sichtbarkeitsabdeckung:** Der Designer warnt, wenn eine Bedingung keine sichtbaren Bloecke hat (leere Erfahrung).
 - **Stichprobengroessenempfehlung:** Fuer Designs mit balanciertem Lateinischem Quadrat empfiehlt der Designer Stichprobengroessen, die Vielfache der Anzahl der Reihenfolgen sind.
+- **Quota-Bedingungsvalidierung:** Quota-Zielformeln werden mit der Laufzeit-Formel-Engine geparst. Ein Syntaxfehler wird inline markiert und blockiert **Save** des Quota-Management-Dialogs; Verweise auf nicht deklarierte Variablen warnen, blockieren aber nicht.
 
 ---
 
-## 9.8 Zusammenfassung
+## 9.10 Zusammenfassung
 
 | Funktion                      | Implementierung                        | Schluesselparameter     |
 |------------------------------|----------------------------------------|----------------------|
@@ -345,3 +421,6 @@ QDesigner enthaelt eine integrierte Validierung fuer experimentelle Designs:
 | Blockrandomisierung           | Geseedeter Shuffle mit Fixieroptionen  | Erster/Letzter/Beide   |
 | Bedingungssichtbarkeit        | Block-Level-Bedingungsfilter           | Bedingungsnamen        |
 | Reproduzierbare Randomisierung| Mulberry32-PRNG mit Basis-Seed + TN-ID | `seed`-Feld            |
+| Teilnahmequoten               | Formelgegatete Obergrenzen pro Bedingung / Zelle | `condition`, `overQuotaAction` |
+| Verschraenkte (Cross-)Quotas  | Unabhaengige Belegung pro Zelle        | Zellwerte-Tupel        |
+| Eligibility-Screener          | Terminate-Regel mit Screen-out-Feldern | `screenOutMessage`, `screenOutRedirectUrl` |
