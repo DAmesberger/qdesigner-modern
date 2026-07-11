@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import paletteSource from './DesignerCommandPalette.svelte?raw';
 import { reactionTimeTour } from '$lib/help/tours/definitions/reactionTimeTour';
 import { statisticalFeedbackTour } from '$lib/help/tours/definitions/statisticalFeedbackTour';
+import { flowControlTour } from '$lib/help/tours/definitions/flowControlTour';
 
 // The command palette is the launcher for the designer help tours. Each tour
 // wired here must (a) resolve to a real definition file and (b) reference the
@@ -20,6 +21,7 @@ describe('DesignerCommandPalette tour launchers', () => {
 			path: 'statisticalFeedbackTour',
 			named: 'statisticalFeedbackTour',
 		},
+		{ command: 'help-flow-control-tour', path: 'flowControlTour', named: 'flowControlTour' },
 	];
 
 	for (const { command, path, named } of WIRED) {
@@ -43,5 +45,6 @@ describe('DesignerCommandPalette tour launchers', () => {
 	it('exposes tours that resolve to real, non-empty definitions', () => {
 		expect(reactionTimeTour.steps.length).toBeGreaterThan(0);
 		expect(statisticalFeedbackTour.steps.length).toBeGreaterThan(0);
+		expect(flowControlTour.steps.length).toBeGreaterThan(0);
 	});
 });

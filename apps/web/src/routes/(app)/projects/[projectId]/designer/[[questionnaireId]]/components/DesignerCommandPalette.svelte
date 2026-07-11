@@ -232,6 +232,16 @@
       },
     },
     {
+      id: 'help-flow-control-tour',
+      title: 'Flow Control Tour',
+      section: 'Help',
+      run: async () => {
+        const mod = await import('$lib/help/tours/definitions/flowControlTour');
+        const tour = mod.flowControlTour;
+        if (tour) tourEngine.start(tour);
+      },
+    },
+    {
       id: 'help-formula-reference',
       title: 'Formula Reference',
       shortcut: '?',
