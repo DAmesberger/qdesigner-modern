@@ -37,7 +37,9 @@
       config = existing
         ? {
             ...structuredClone(DEFAULT_CONFIG),
-            ...structuredClone(existing),
+            // `existing` is a Svelte state proxy — snapshot it (structuredClone
+            // throws on proxies in some runtimes) before spreading.
+            ...$state.snapshot(existing),
             layout: existing.layout ?? { columns: 12, rowHeight: 80, gap: 16 },
             widgets: (existing.widgets ?? []).map((w) => ({ ...w })),
           }
@@ -49,6 +51,7 @@
     { value: 'score-tile', label: 'Score tile' },
     { value: 'bar', label: 'Bar chart' },
     { value: 'box-cohort', label: 'Box vs cohort' },
+    { value: 'reaction-cohort-box', label: 'Reaction vs cohort' },
     { value: 'radar-profile', label: 'Radar profile' },
     { value: 'distribution-with-marker', label: 'Distribution + marker' },
     { value: 'gauge', label: 'Gauge / arc' },
@@ -88,6 +91,20 @@
     (designerStore.questionnaire.variables || [])
       .filter((v) => v.server && v.type === 'object')
       .map((v) => ({ value: v.name, label: v.name }))
+  );
+  // The reaction-cohort-box binds its OWN cohort to a `source: 'trials'` object
+  // server variable (RT-5 / ADR 0028) — the object bundle carries the quartiles.
+  const trialsServerVariableOptions = $derived(
+    (designerStore.questionnaire.variables || [])
+      .filter((v) => v.server?.source === 'trials' && v.type === 'object')
+      .map((v) => ({ value: v.name, label: v.name }))
+  );
+  // Reaction questions are the only valid `binding.key` for a reaction-cohort-box:
+  // the participant's own local trials for that question form the comparison marker.
+  const reactionQuestionOptions = $derived(
+    (designerStore.questionnaire.questions || [])
+      .filter((q) => q.type === 'reaction-time' || q.type === 'reaction-experiment')
+      .map((q) => ({ value: q.id, label: q.name || q.id }))
   );
   const normOptions = NORM_TABLES.map((n) => ({ value: n.id, label: n.label }));
 
@@ -139,6 +156,17 @@
     if (!w) return;
     const base: NonNullable<ReportWidget['comparison']> = w.comparison ?? { source: 'none', fallback: 'hide' };
     updateWidget(index, { comparison: { ...base, ...patch } });
+  }
+
+  function updateReaction(index: number, patch: Partial<NonNullable<ReportWidget['reaction']>>): void {
+    const w = config.widgets[index];
+    if (!w) return;
+    const base: NonNullable<ReportWidget['reaction']> = w.reaction ?? {
+      stat: 'median',
+      metric: 'rt',
+      includeInvalidated: false,
+    };
+    updateWidget(index, { reaction: { ...base, ...patch } });
   }
 
   function keyOptionsFor(source: ReportWidget['binding']['source']) {
@@ -366,8 +394,80 @@
             {/each}
           </div>
 
+          <!-- Reaction-vs-cohort: its own binding (reaction question + trials
+               server variable + participant-stat controls, RT-5 / ADR 0028). -->
+          {#if widget.type === 'reaction-cohort-box'}
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[11px] text-muted-foreground mb-0.5" for={`w-rq-${widget.id}`}>Reaction question</label>
+                <Select
+                  id={`w-rq-${widget.id}`}
+                  value={widget.binding.key}
+                  onchange={(e) => updateBinding(i, { source: 'variable', key: e.currentTarget.value })}
+                  placeholder=""
+                  class="text-sm"
+                >
+                  <option value="">Select reaction question…</option>
+                  {#each reactionQuestionOptions as opt}
+                    <option value={opt.value}>{opt.label}</option>
+                  {/each}
+                </Select>
+              </div>
+              <div>
+                <label class="block text-[11px] text-muted-foreground mb-0.5" for={`w-rcohort-${widget.id}`}>Cohort server variable</label>
+                <Select
+                  id={`w-rcohort-${widget.id}`}
+                  value={widget.comparison?.serverVariable ?? ''}
+                  onchange={(e) => updateComparison(i, { source: 'server-variable', serverVariable: e.currentTarget.value })}
+                  placeholder=""
+                  class="text-sm"
+                >
+                  <option value="">Select trials server variable…</option>
+                  {#each trialsServerVariableOptions as opt}
+                    <option value={opt.value}>{opt.label}</option>
+                  {/each}
+                </Select>
+              </div>
+              <div>
+                <label class="block text-[11px] text-muted-foreground mb-0.5" for={`w-rmetric-${widget.id}`}>Metric</label>
+                <Select
+                  id={`w-rmetric-${widget.id}`}
+                  value={widget.reaction?.metric ?? 'rt'}
+                  onchange={(e) => updateReaction(i, { metric: e.currentTarget.value as NonNullable<ReportWidget['reaction']>['metric'] })}
+                  placeholder=""
+                  class="text-sm"
+                >
+                  <option value="rt">Reaction time</option>
+                  <option value="accuracy">Accuracy</option>
+                </Select>
+              </div>
+              <div>
+                <label class="block text-[11px] text-muted-foreground mb-0.5" for={`w-rstat-${widget.id}`}>Participant statistic</label>
+                <Select
+                  id={`w-rstat-${widget.id}`}
+                  value={widget.reaction?.stat ?? 'median'}
+                  onchange={(e) => updateReaction(i, { stat: e.currentTarget.value as NonNullable<ReportWidget['reaction']>['stat'] })}
+                  placeholder=""
+                  class="text-sm"
+                >
+                  <option value="median">Median</option>
+                  <option value="mean">Mean</option>
+                </Select>
+              </div>
+              <label class="col-span-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={widget.reaction?.includeInvalidated ?? false}
+                  onchange={(e) => updateReaction(i, { includeInvalidated: e.currentTarget.checked })}
+                  class="rounded border-border"
+                />
+                Include invalidated trials
+              </label>
+            </div>
+          {/if}
+
           <!-- Binding -->
-          {#if widget.type !== 'completion-meta' && widget.type !== 'interpretive-text'}
+          {#if widget.type !== 'completion-meta' && widget.type !== 'interpretive-text' && widget.type !== 'reaction-cohort-box'}
             <div class="grid grid-cols-3 gap-2">
               <div>
                 <label class="block text-[11px] text-muted-foreground mb-0.5" for={`w-bsrc-${widget.id}`}>Bind to</label>

@@ -20,7 +20,7 @@
     isAudioMedia,
   } from '$lib/shared/types/media';
   import theme from '$lib/theme';
-  import { Grid, List, Upload, Image, Check } from 'lucide-svelte';
+  import { Grid, List, Upload, Image, Check, Trash2, Settings2 } from 'lucide-svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
   interface Props {
@@ -43,6 +43,12 @@
     onselect,
   }: Props = $props();
 
+  // The library can be flipped between picking media (select) and housekeeping
+  // (manage — per-asset delete) from the header, so a caller that opens the
+  // picker can still reach the delete affordances without a separate surface.
+  // Seeded once from the `mode` prop; the header toggle drives it thereafter.
+  let activeMode = $state<'select' | 'manage'>(untrack(() => mode));
+
   // State
   let mediaAssets = $state<MediaAsset[]>([]);
   let loading = $state(false);
@@ -51,7 +57,6 @@
   let filter = $state<MediaFilter>({ type: 'all' });
   let searchQuery = $state('');
   let viewMode = $state<'grid' | 'list'>('grid');
-  let selectedIds = $state(new Set<string>());
   let showUploadArea = $state(false);
   let dragActive = $state(false);
   let uploadError = $state<string | null>(null);
@@ -355,56 +360,59 @@
   }
 
   function toggleSelection(asset: MediaAsset) {
-    if (mode === 'manage') {
-      if (selectedIds.has(asset.id)) {
-        selectedIds.delete(asset.id);
+    // Manage mode is housekeeping-only — the per-asset Delete button owns the
+    // interaction, so a card tap must never register as a pick (which, in a
+    // single-select picker, would confirm and close the dialog).
+    if (activeMode === 'manage') return;
+
+    // Select mode
+    if (allowMultiple) {
+      const index = selectedMedia.findIndex((m) => m.id === asset.id);
+      if (index >= 0) {
+        selectedMedia.splice(index, 1);
       } else {
-        selectedIds.add(asset.id);
+        selectedMedia.push(asset);
       }
     } else {
-      // Select mode
-      if (allowMultiple) {
-        const index = selectedMedia.findIndex((m) => m.id === asset.id);
-        if (index >= 0) {
-          selectedMedia.splice(index, 1);
-        } else {
-          selectedMedia.push(asset);
-        }
-      } else {
-        selectedMedia = [asset];
-      }
-
-      onselect?.({
-        media: selectedMedia,
-        asset: asset,
-      });
+      selectedMedia = [asset];
     }
+
+    onselect?.({
+      media: selectedMedia,
+      asset: asset,
+    });
   }
 
-  async function deleteSelected() {
+  // Per-asset delete (F-47). The server DELETE hard-deletes regardless of
+  // references — there is no in-use/409 guard — so the confirm copy warns that
+  // any questionnaire still pointing at this asset will lose it.
+  async function deleteAsset(asset: MediaAsset) {
+    const dims = formatDimensions(asset);
+    const label = dims ? `${asset.originalFilename} (${dims})` : asset.originalFilename;
+
     if (
       !(await confirmDialog({
         title: 'Delete media?',
-        message: `Delete ${selectedIds.size} selected media files?`,
+        message:
+          `Permanently delete “${label}”? ` +
+          `Any questionnaire that references this asset will lose it — this cannot be undone.`,
         confirmLabel: 'Delete',
         destructive: true,
       }))
     )
       return;
 
-    loading = true;
-
-    for (const id of selectedIds) {
-      try {
-        await mediaService.deleteMedia(id);
-        mediaAssets = mediaAssets.filter((m) => m.id !== id);
-      } catch (error) {
-        console.error(`Failed to delete media ${id}:`, error);
-      }
+    try {
+      await mediaService.deleteMedia(asset.id);
+      mediaAssets = mediaAssets.filter((m) => m.id !== asset.id);
+      selectedMedia = selectedMedia.filter((m) => m.id !== asset.id);
+      toast.success('Media deleted', { message: label });
+    } catch (error) {
+      console.error(`Failed to delete media ${asset.id}:`, error);
+      toast.error('Delete failed', {
+        message: error instanceof Error ? error.message : 'Could not delete this media asset.',
+      });
     }
-
-    selectedIds.clear();
-    loading = false;
   }
 
   function getMediaIcon(mimeType: string | undefined): string {
@@ -470,6 +478,22 @@
           </button>
         </div>
 
+        <!-- Manage-library toggle: flips the picker into housekeeping mode where
+             each asset exposes a Delete button (F-47). -->
+        <button
+          onclick={() => (activeMode = activeMode === 'manage' ? 'select' : 'manage')}
+          class="{activeMode === 'manage'
+            ? theme.components.button.variants.default
+            : theme.components.button.variants.outline} {theme.components.button.sizes
+            .sm} rounded-md"
+          aria-pressed={activeMode === 'manage'}
+          data-testid="media-manage-toggle"
+          title={activeMode === 'manage' ? 'Exit manage mode' : 'Manage library (delete assets)'}
+        >
+          <Settings2 size={16} class="mr-1" />
+          {activeMode === 'manage' ? 'Done' : 'Manage'}
+        </button>
+
         <!-- Upload button -->
         <button
           onclick={() => (showUploadArea = !showUploadArea)}
@@ -479,16 +503,6 @@
           <Upload size={16} class="mr-1" />
           Upload
         </button>
-
-        {#if mode === 'manage' && selectedIds.size > 0}
-          <button
-            onclick={deleteSelected}
-            class="{theme.components.button.variants.destructive} {theme.components.button.sizes
-              .sm} rounded-md"
-          >
-            Delete ({selectedIds.size})
-          </button>
-        {/if}
       </div>
     </div>
 
@@ -626,101 +640,135 @@
       <!-- Grid view -->
       <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
         {#each mediaAssets as asset}
-          <button
-            onclick={() => toggleSelection(asset)}
-            class="group relative aspect-square {theme.semantic
-              .bgSurface} rounded-lg overflow-hidden border-2 transition-all
-                   {selectedMedia.some((m) => m.id === asset.id) || selectedIds.has(asset.id)
-              ? 'border-primary ring-2 ring-primary/20'
-              : theme.semantic.borderDefault + ' hover:border-muted-foreground'}"
-          >
-            {#if isImageMedia(asset)}
-              <!-- object-contain letterboxes against the tile background so the
-                   author judges true aspect instead of a blind centre-crop. -->
-              <img
-                src={(asset as any).thumbnailUrl || (asset as any).url || '/placeholder-image.svg'}
-                alt={asset.originalFilename}
-                class="w-full h-full object-contain {theme.semantic.bgSubtle}"
-                loading="lazy"
-              />
-            {:else}
-              <div class="w-full h-full flex items-center justify-center {theme.semantic.bgSubtle}">
-                <span class="text-4xl">{getMediaIcon(asset.mimeType)}</span>
-              </div>
-            {/if}
-
-            <!-- Overlay info -->
-            <div
-              class="absolute inset-0 bg-gradient-to-t from-foreground/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"
+          <!-- Wrapper hosts the delete button as a SIBLING of the card button —
+               a <button> cannot legally nest inside another <button>. -->
+          <div class="relative aspect-square">
+            <button
+              onclick={() => toggleSelection(asset)}
+              class="group relative w-full h-full block {theme.semantic
+                .bgSurface} rounded-lg overflow-hidden border-2 transition-all
+                     {selectedMedia.some((m) => m.id === asset.id)
+                ? 'border-primary ring-2 ring-primary/20'
+                : theme.semantic.borderDefault + ' hover:border-muted-foreground'}"
             >
-              <div class="absolute bottom-0 left-0 right-0 p-2 text-background">
-                <p class="text-xs truncate">{asset.originalFilename}</p>
-                <p class="text-xs opacity-75">
-                  {formatFileSize(asset.sizeBytes)}{#if formatDimensions(asset)} • {formatDimensions(asset)}{/if}
-                </p>
-              </div>
-            </div>
+              {#if isImageMedia(asset)}
+                <!-- object-contain letterboxes against the tile background so the
+                     author judges true aspect instead of a blind centre-crop. -->
+                <img
+                  src={(asset as any).thumbnailUrl || (asset as any).url || '/placeholder-image.svg'}
+                  alt={asset.originalFilename}
+                  class="w-full h-full object-contain {theme.semantic.bgSubtle}"
+                  loading="lazy"
+                />
+              {:else}
+                <div class="w-full h-full flex items-center justify-center {theme.semantic.bgSubtle}">
+                  <span class="text-4xl">{getMediaIcon(asset.mimeType)}</span>
+                </div>
+              {/if}
 
-            <!-- Selection indicator -->
-            {#if selectedMedia.some((m) => m.id === asset.id) || selectedIds.has(asset.id)}
+              <!-- Overlay info -->
               <div
-                class="absolute top-2 right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center"
+                class="absolute inset-0 bg-gradient-to-t from-foreground/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"
               >
-                <Check size={16} class="text-primary-foreground" strokeWidth={3} />
+                <div class="absolute bottom-0 left-0 right-0 p-2 text-background">
+                  <p class="text-xs truncate">{asset.originalFilename}</p>
+                  <p class="text-xs opacity-75">
+                    {formatFileSize(asset.sizeBytes)}{#if formatDimensions(asset)} • {formatDimensions(asset)}{/if}
+                  </p>
+                </div>
               </div>
+
+              <!-- Selection indicator -->
+              {#if selectedMedia.some((m) => m.id === asset.id)}
+                <div
+                  class="absolute top-2 right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center"
+                >
+                  <Check size={16} class="text-primary-foreground" strokeWidth={3} />
+                </div>
+              {/if}
+            </button>
+
+            {#if activeMode === 'manage'}
+              <button
+                onclick={() => deleteAsset(asset)}
+                class="absolute top-2 right-2 w-7 h-7 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow hover:bg-destructive/90 transition-colors"
+                aria-label={`Delete ${asset.originalFilename}`}
+                title={`Delete ${asset.originalFilename}`}
+                data-testid={`media-delete-${asset.id}`}
+              >
+                <Trash2 size={15} />
+              </button>
             {/if}
-          </button>
+          </div>
         {/each}
       </div>
     {:else}
       <!-- List view -->
       <div class="space-y-2">
         {#each mediaAssets as asset}
-          <button
-            onclick={() => toggleSelection(asset)}
-            class="w-full flex items-center gap-4 p-3 {theme.semantic
-              .bgSurface} rounded-lg border transition-all
-                   {selectedMedia.some((m) => m.id === asset.id) || selectedIds.has(asset.id)
+          <!-- Row wrapper so the Delete button sits beside the card button rather
+               than nested inside it (invalid button-in-button). -->
+          <div
+            class="flex items-center gap-2 rounded-lg border transition-all {selectedMedia.some(
+              (m) => m.id === asset.id
+            )
               ? 'border-primary bg-primary/5'
               : theme.semantic.borderDefault + ' hover:border-muted-foreground'}"
           >
-            <!-- Thumbnail -->
-            <div class="w-16 h-16 flex-shrink-0 {theme.semantic.bgSubtle} rounded overflow-hidden">
-              {#if isImageMedia(asset)}
-                <img
-                  src={(asset as any).thumbnailUrl ||
-                    (asset as any).url ||
-                    '/placeholder-image.svg'}
-                  alt={asset.originalFilename}
-                  class="w-full h-full object-cover"
-                  loading="lazy"
-                />
-              {:else}
-                <div class="w-full h-full flex items-center justify-center">
-                  <span class="text-2xl">{getMediaIcon(asset.mimeType)}</span>
+            <button
+              onclick={() => toggleSelection(asset)}
+              class="flex-1 flex items-center gap-4 p-3 {theme.semantic.bgSurface} rounded-lg text-left"
+            >
+              <!-- Thumbnail -->
+              <div class="w-16 h-16 flex-shrink-0 {theme.semantic.bgSubtle} rounded overflow-hidden">
+                {#if isImageMedia(asset)}
+                  <img
+                    src={(asset as any).thumbnailUrl ||
+                      (asset as any).url ||
+                      '/placeholder-image.svg'}
+                    alt={asset.originalFilename}
+                    class="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                {:else}
+                  <div class="w-full h-full flex items-center justify-center">
+                    <span class="text-2xl">{getMediaIcon(asset.mimeType)}</span>
+                  </div>
+                {/if}
+              </div>
+
+              <!-- Info -->
+              <div class="flex-1 text-left">
+                <p class="{theme.typography.label} {theme.semantic.textPrimary} truncate">
+                  {asset.originalFilename}
+                </p>
+                <p class="{theme.typography.caption} {theme.semantic.textSecondary}">
+                  {formatFileSize(asset.sizeBytes)} • {asset.mimeType}{#if formatDimensions(asset)} • {formatDimensions(asset)}{/if} • {formatDate(asset.createdAt)}
+                </p>
+              </div>
+
+              <!-- Selection indicator -->
+              {#if selectedMedia.some((m) => m.id === asset.id)}
+                <div
+                  class="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0"
+                >
+                  <Check size={16} class="text-primary-foreground" strokeWidth={3} />
                 </div>
               {/if}
-            </div>
+            </button>
 
-            <!-- Info -->
-            <div class="flex-1 text-left">
-              <p class="{theme.typography.label} {theme.semantic.textPrimary} truncate">
-                {asset.originalFilename}
-              </p>
-              <p class="{theme.typography.caption} {theme.semantic.textSecondary}">
-                {formatFileSize(asset.sizeBytes)} • {asset.mimeType}{#if formatDimensions(asset)} • {formatDimensions(asset)}{/if} • {formatDate(asset.createdAt)}
-              </p>
-            </div>
-
-            <!-- Selection indicator -->
-            {#if selectedMedia.some((m) => m.id === asset.id) || selectedIds.has(asset.id)}
-              <div
-                class="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0"
+            {#if activeMode === 'manage'}
+              <button
+                onclick={() => deleteAsset(asset)}
+                class="mr-2 flex-shrink-0 w-8 h-8 rounded-md text-destructive hover:bg-destructive/10 flex items-center justify-center transition-colors"
+                aria-label={`Delete ${asset.originalFilename}`}
+                title={`Delete ${asset.originalFilename}`}
+                data-testid={`media-delete-${asset.id}`}
               >
-                <Check size={16} class="text-primary-foreground" strokeWidth={3} />
-              </div>
+                <Trash2 size={16} />
+              </button>
             {/if}
-          </button>
+          </div>
         {/each}
       </div>
     {/if}
