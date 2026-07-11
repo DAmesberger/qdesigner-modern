@@ -8,6 +8,13 @@ import { provisionWorkspace, type ProvisionedWorkspace } from '../helpers/fullst
  * single shared workspace; the register call is retried once through the window if
  * an earlier run already spent the budget. Studies are still isolated (each spec
  * publishes its own questionnaire under this workspace).
+ *
+ * The `test:e2e:reaction` script pins `--workers=1`. Parallel workers share the same
+ * per-IP `/sync`+auth limiter budget (the key falls back to the peer IP for anonymous
+ * fillout), so running specs in parallel bursts past it and answers dead-letter (issue
+ * #51) — the same exposure documented at length in e2e/form/form-fixtures.ts. Keep it
+ * pinned until #51 raises/rescopes the limiter. (CI is already serial: playwright.config.ts
+ * sets `workers: isCI ? 1 : undefined`.)
  */
 async function provisionWithRetry(request: APIRequestContext): Promise<ProvisionedWorkspace> {
   try {
