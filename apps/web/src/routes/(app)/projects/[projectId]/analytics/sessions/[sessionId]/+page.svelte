@@ -65,6 +65,25 @@
 		return String(value);
 	}
 
+	// A binary answer (file-upload / media-response) whose blob has not yet been
+	// delivered carries `status:'pending'` in its response value (ADR 0029 Half 2).
+	// Surface it honestly rather than implying the answer is fully in hand.
+	function isPendingBinary(v: unknown): boolean {
+		if (v && typeof v === 'object' && 'status' in v && 'clientId' in v) {
+			return (v as { status?: string }).status === 'pending';
+		}
+		return false;
+	}
+
+	function answerHasPendingBinary(rawValue: unknown): boolean {
+		if (Array.isArray(rawValue)) return rawValue.some(isPendingBinary);
+		return isPendingBinary(rawValue);
+	}
+
+	const pendingBinaryCount = $derived(
+		data.answers.filter((a) => answerHasPendingBinary(a.rawValue)).length
+	);
+
 	const pinnedVersion = $derived(
 		data.session.questionnaireVersionMajor != null
 			? `${data.session.questionnaireVersionMajor}.${data.session.questionnaireVersionMinor ?? 0}.${data.session.questionnaireVersionPatch ?? 0}`
@@ -272,6 +291,14 @@
 			<div class="px-6 py-4 border-b border-border flex items-center gap-2">
 				<ListChecks class="h-5 w-5 text-muted-foreground" />
 				<h2 class="text-lg font-medium text-foreground">Answers</h2>
+				{#if pendingBinaryCount > 0}
+					<span
+						class="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning"
+						title="Binary answers captured on the participant's device but not yet uploaded"
+					>
+						{pendingBinaryCount} binary answer{pendingBinaryCount === 1 ? '' : 's'} not yet received
+					</span>
+				{/if}
 				<span class="ml-auto text-sm text-muted-foreground">{data.answers.length} responses</span>
 			</div>
 
@@ -320,6 +347,11 @@
 									</td>
 									<td class="px-6 py-4 text-sm text-foreground max-w-sm">
 										<div class="whitespace-pre-wrap break-words">{answer.displayValue}</div>
+										{#if answerHasPendingBinary(answer.rawValue)}
+											<div class="mt-1 inline-flex items-center gap-1 text-xs text-warning">
+												binary answer not yet received
+											</div>
+										{/if}
 										{#if answer.clientId}
 											<div class="mt-0.5 text-xs text-muted-foreground font-mono" title="Sync client_id">
 												{answer.clientId.slice(0, 8)}

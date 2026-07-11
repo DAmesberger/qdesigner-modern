@@ -3,8 +3,13 @@
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
   import { onMount } from 'svelte';
-  import { api } from '$lib/services/api';
   import Button from '$lib/components/ui/Button.svelte';
+  import {
+    OfflineBinaryPersistence,
+    BinaryCaptureError,
+    DEFAULT_BINARY_MAX_BYTES,
+    type BinaryAnswerReference,
+  } from '$lib/fillout/services/OfflineBinaryPersistence';
 
   type RecordingMode = 'audio' | 'video-audio' | 'video-only';
   type AudioQuality = 'low' | 'medium' | 'high';
@@ -20,10 +25,13 @@
     countdown?: number;
   }
 
-  interface MediaResponseValue {
-    mediaUrl: string;
-    mimeType: string;
+  // The recorded answer is an offline-first binary reference (ADR 0029 Half 2):
+  // the Blob is written to IndexedDB and this value carries only the structured
+  // reference (never a blob: URL), widened with the recording metadata analytics
+  // reads. `mediaUrl` is absent until FilloutUploadSync patches it on upload ack.
+  interface MediaResponseValue extends BinaryAnswerReference {
     duration: number;
+    /** Alias of `size`, kept for the analytics storage layer. */
     fileSize: number;
     recordedAt: number;
   }
@@ -48,7 +56,7 @@
   const config = $derived(question.config);
   const recordingMode = $derived<RecordingMode>(config.recordingMode || 'audio');
   const maxDuration = $derived(config.maxDuration || 120);
-  const maxFileSize = $derived(config.maxFileSize || 50 * 1024 * 1024);
+  const maxFileSize = $derived(config.maxFileSize || DEFAULT_BINARY_MAX_BYTES);
   const audioQuality = $derived<AudioQuality>(config.audioQuality || 'medium');
   const videoQuality = $derived<VideoQuality>(config.videoQuality || 'medium');
   const allowRerecord = $derived(config.allowRerecord !== false);
@@ -62,6 +70,9 @@
 
   // State
   let blobSizeWarning = $state('');
+  // A capture failure (device quota) blocks Continue via onValidation (ADR 0029
+  // Half 2). Oversize recordings surface through the existing error phase.
+  let captureError = $state('');
   let phase = $state<'idle' | 'requesting' | 'countdown' | 'recording' | 'recorded' | 'error'>('idle');
   let errorMessage = $state('');
   let stream = $state<MediaStream | null>(null);
@@ -132,10 +143,16 @@
     return hasVideo ? 'video/webm' : 'audio/webm';
   }
 
-  // Validation
+  // Validation (ADR 0029 Half 2). A failed durable write blocks unconditionally
+  // (the participant is present and can retry); required-presence stays central.
   $effect(() => {
     const errors: string[] = [];
     let isValid = true;
+
+    if (captureError) {
+      errors.push(captureError);
+      isValid = false;
+    }
 
     if (question.required && !value) {
       errors.push('A recording is required');
@@ -243,7 +260,7 @@
     };
 
     recorder.onstop = () => {
-      finalizeRecording();
+      void finalizeRecording();
     };
 
     recorder.start(1000); // Collect data every second
@@ -295,16 +312,17 @@
     }
   }
 
-  function finalizeRecording() {
+  async function finalizeRecording() {
     if (recordedChunks.length === 0) {
       phase = 'idle';
       return;
     }
 
+    captureError = '';
     const mimeType = getSupportedMimeType();
     const blob = new Blob(recordedChunks, { type: mimeType });
 
-    // Check file size
+    // Check file size (oversize is a participant-correctable problem → error phase).
     if (blob.size > maxFileSize) {
       phase = 'error';
       errorMessage = `Recording exceeds maximum file size of ${formatBytes(maxFileSize)}.`;
@@ -318,16 +336,50 @@
       blobSizeWarning = '';
     }
 
+    // Local preview URL is UI-only (playback element src); it is NEVER stored in
+    // the response value, which carries the offline-first binary reference.
     recordedBlob = blob;
     recordedUrl = URL.createObjectURL(blob);
+
+    const ext = mimeType.includes('video') ? 'webm' : mimeType.includes('audio') ? 'webm' : 'bin';
+    const filename = `recording_${Date.now()}.${ext}`;
+
+    const sessionId =
+      typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('qd_api_session_id') : null;
+
+    let reference: BinaryAnswerReference;
+    try {
+      reference = sessionId
+        ? await OfflineBinaryPersistence.capture(sessionId, question.id, blob, filename, maxFileSize)
+        : // Designer preview (no session): keep the reference transient.
+          {
+            clientId: crypto.randomUUID(),
+            name: filename,
+            size: blob.size,
+            mimeType,
+            status: 'pending',
+          };
+    } catch (err) {
+      // A failed durable write (typically device quota) must not silently lose the
+      // recording — block Continue and let the participant re-record / free space.
+      captureError =
+        err instanceof BinaryCaptureError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Could not save the recording to this device.';
+      phase = 'error';
+      errorMessage = captureError;
+      return;
+    }
+
     phase = 'recorded';
 
-    // Build response value
+    // Build response value: the binary reference widened with recording metadata.
     const responseValue: MediaResponseValue = {
-      mediaUrl: recordedUrl,
-      mimeType,
+      ...reference,
       duration: elapsedTime,
-      fileSize: blob.size,
+      fileSize: reference.size,
       recordedAt: Date.now(),
     };
 
@@ -339,34 +391,6 @@
       timestamp: Date.now(),
       data: { action: 'recording-complete', duration: elapsedTime, size: blob.size },
     });
-
-    // Upload to server in background if a session is active
-    uploadMediaToServer(blob, mimeType);
-  }
-
-  async function uploadMediaToServer(blob: Blob, mimeType: string) {
-    const sessionId = sessionStorage.getItem('qd_api_session_id');
-    if (!sessionId) return;
-
-    const ext = mimeType.includes('video') ? 'webm' : mimeType.includes('audio') ? 'webm' : 'bin';
-    const filename = `recording_${Date.now()}.${ext}`;
-
-    try {
-      const result = await api.sessions.uploadMedia(sessionId, blob, filename);
-
-      // Replace blob URL with server URL in response value
-      if (value && typeof value === 'object' && 'mediaUrl' in value) {
-        const updated: MediaResponseValue = {
-          ...(value as MediaResponseValue),
-          mediaUrl: result.url,
-        };
-        value = updated;
-        onResponse?.(updated);
-      }
-    } catch (err) {
-      // Upload failure is non-critical; the blob URL still works locally
-      console.warn('Media upload failed, keeping local blob URL:', err);
-    }
   }
 
   function reRecord() {
@@ -375,9 +399,15 @@
       URL.revokeObjectURL(recordedUrl);
       recordedUrl = '';
     }
+    // Discard the pinned blob for the retired recording so it isn't uploaded later.
+    if (value && typeof value === 'object' && 'clientId' in value) {
+      void OfflineBinaryPersistence.delete((value as MediaResponseValue).clientId);
+    }
+
     recordedBlob = null;
     recordedChunks = [];
     blobSizeWarning = '';
+    captureError = '';
     value = null;
     onResponse?.(null);
     phase = 'idle';

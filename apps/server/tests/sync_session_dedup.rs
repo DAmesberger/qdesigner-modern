@@ -472,6 +472,149 @@ async fn batched_multi_row_insert_dedups_and_counts_only_new_rows() {
 }
 
 #[tokio::test]
+async fn responses_upsert_patches_value_on_conflict() {
+    // issue #34: a binary answer first syncs carrying `{status:'pending'}`; once
+    // the blob uploads, the client re-sends the SAME client_id with
+    // `{status:'uploaded', mediaUrl}`. The handler's responses upsert is
+    // `ON CONFLICT (client_id) DO UPDATE SET value = EXCLUDED.value`, so the
+    // patched value OVERWRITES the pending one — unlike events/trials, which stay
+    // `DO NOTHING` and keep their first value. Exactly one row survives.
+    let Some(pool) = fixture_pool().await else {
+        eprintln!("Skipping: DATABASE_URL not set");
+        return;
+    };
+
+    let session_id = make_session(&pool).await.expect("session");
+    // The exact write-once-except-pending clause the handler issues.
+    let upsert = "INSERT INTO responses (session_id, client_id, question_id, value) \
+         VALUES ($1, $2, 'q-file', $3) \
+         ON CONFLICT (client_id) DO UPDATE SET value = EXCLUDED.value \
+         WHERE (jsonb_typeof(responses.value) = 'object' \
+                AND responses.value->>'status' = 'pending') \
+             OR (jsonb_typeof(responses.value) = 'array' AND EXISTS ( \
+                 SELECT 1 FROM jsonb_array_elements(responses.value) e \
+                 WHERE e->>'status' = 'pending'))";
+
+    // (a) A pending binary reference IS patched to its uploaded value.
+    let client_id = Uuid::new_v4();
+    let pending = serde_json::json!({ "clientId": "b-1", "name": "a.png", "status": "pending" });
+    let affected1 = sqlx::query(upsert)
+        .bind(session_id)
+        .bind(client_id)
+        .bind(&pending)
+        .execute(&pool)
+        .await
+        .expect("insert pending")
+        .rows_affected();
+    assert_eq!(affected1, 1, "first upsert inserts the pending reference");
+
+    let uploaded = serde_json::json!({
+        "clientId": "b-1", "name": "a.png", "status": "uploaded",
+        "mediaUrl": "/api/media/xyz/content"
+    });
+    let affected2 = sqlx::query(upsert)
+        .bind(session_id)
+        .bind(client_id)
+        .bind(&uploaded)
+        .execute(&pool)
+        .await
+        .expect("patch upload")
+        .rows_affected();
+    assert_eq!(affected2, 1, "pending → uploaded conflicting upsert UPDATEs the row");
+
+    let value: serde_json::Value =
+        sqlx::query_scalar("SELECT value FROM responses WHERE client_id = $1")
+            .bind(client_id)
+            .fetch_one(&pool)
+            .await
+            .expect("value");
+    assert_eq!(value["status"], serde_json::json!("uploaded"), "status patched");
+    assert_eq!(
+        value["mediaUrl"],
+        serde_json::json!("/api/media/xyz/content"),
+        "mediaUrl landed on the response"
+    );
+
+    // (a-idempotent) Re-sending the SAME uploaded value is now a no-op (the stored
+    // row is no longer pending) — the client tolerates this because acks come from
+    // accepted_client_ids, not rows_affected.
+    let affected_noop = sqlx::query(upsert)
+        .bind(session_id)
+        .bind(client_id)
+        .bind(&uploaded)
+        .execute(&pool)
+        .await
+        .expect("resend uploaded")
+        .rows_affected();
+    assert_eq!(affected_noop, 0, "resend against an already-uploaded row does not update");
+
+    // (b) A tampered resend against the now-uploaded (non-pending) row must NOT
+    // overwrite it — write-once integrity is preserved.
+    let tampered = serde_json::json!({
+        "clientId": "b-1", "name": "a.png", "status": "uploaded",
+        "mediaUrl": "/api/media/ATTACKER/content"
+    });
+    let affected_tamper = sqlx::query(upsert)
+        .bind(session_id)
+        .bind(client_id)
+        .bind(&tampered)
+        .execute(&pool)
+        .await
+        .expect("tamper resend")
+        .rows_affected();
+    assert_eq!(affected_tamper, 0, "non-pending row is not rewritable");
+    let after_tamper: serde_json::Value =
+        sqlx::query_scalar("SELECT value FROM responses WHERE client_id = $1")
+            .bind(client_id)
+            .fetch_one(&pool)
+            .await
+            .expect("value after tamper");
+    assert_eq!(
+        after_tamper["mediaUrl"],
+        serde_json::json!("/api/media/xyz/content"),
+        "the original mediaUrl survives a tampered resend"
+    );
+
+    // (b) An ordinary scalar answer is write-once: a re-send with a different value
+    // never overwrites the recorded answer.
+    let scalar_cid = Uuid::new_v4();
+    let original = serde_json::json!("my answer");
+    sqlx::query(upsert)
+        .bind(session_id)
+        .bind(scalar_cid)
+        .bind(&original)
+        .execute(&pool)
+        .await
+        .expect("insert scalar");
+    let scalar_resend = sqlx::query(upsert)
+        .bind(session_id)
+        .bind(scalar_cid)
+        .bind(serde_json::json!("changed answer"))
+        .execute(&pool)
+        .await
+        .expect("scalar resend")
+        .rows_affected();
+    assert_eq!(scalar_resend, 0, "a recorded scalar answer is not rewritable");
+    let scalar_value: serde_json::Value =
+        sqlx::query_scalar("SELECT value FROM responses WHERE client_id = $1")
+            .bind(scalar_cid)
+            .fetch_one(&pool)
+            .await
+            .expect("scalar value");
+    assert_eq!(scalar_value, original, "original scalar answer survives the resend");
+
+    // Still exactly two rows total (binary + scalar) — no duplicates created.
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM responses WHERE client_id = ANY($1)",
+    )
+    .bind(vec![client_id, scalar_cid])
+    .fetch_one(&pool)
+    .await
+    .expect("count");
+    assert_eq!(count, 2, "one binary + one scalar row, no duplicates");
+}
+
+#[tokio::test]
 async fn distinct_client_ids_each_create_a_row() {
     let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");

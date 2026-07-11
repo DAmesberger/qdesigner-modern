@@ -3,6 +3,7 @@ import { FilloutCrypto } from './crypto/FilloutCrypto';
 import { computeChecksum, verifyChecksum } from './integrity/checksum';
 import { SyncLedger } from './integrity/SyncLedger';
 import { OfflineTrialPersistence } from './OfflineTrialPersistence';
+import { isBinaryAnswerReference } from './OfflineBinaryPersistence';
 
 /**
  * Per-response timing provenance (contract C-PROVENANCE). Captured alongside
@@ -32,6 +33,33 @@ export interface TimingProvenance {
 export type StoredFilloutResponse = FilloutResponse & {
 	timingProvenance?: TimingProvenance;
 };
+
+/**
+ * Rewrite a binary-answer reference (or one element of an array of them) from
+ * `pending` to `uploaded` with its server `mediaUrl` (ADR 0029 Half 2). Returns
+ * a fresh plain value (never mutating the input) plus whether anything matched.
+ */
+function patchBinaryReference(
+	value: unknown,
+	binaryClientId: string,
+	mediaUrl: string
+): { changed: boolean; value: unknown } {
+	if (isBinaryAnswerReference(value) && value.clientId === binaryClientId) {
+		return { changed: true, value: { ...value, status: 'uploaded', mediaUrl } };
+	}
+	if (Array.isArray(value)) {
+		let changed = false;
+		const out = value.map((entry) => {
+			if (isBinaryAnswerReference(entry) && entry.clientId === binaryClientId) {
+				changed = true;
+				return { ...entry, status: 'uploaded', mediaUrl };
+			}
+			return entry;
+		});
+		return changed ? { changed, value: out } : { changed: false, value };
+	}
+	return { changed: false, value };
+}
 
 /**
  * Offline-first response persistence using IndexedDB.
@@ -153,6 +181,41 @@ export class OfflineResponsePersistence {
 			`variable ${sessionId}/${name}`
 		);
 		await SyncLedger.enqueue('variable', clientId, sessionId);
+	}
+
+	/**
+	 * Patch the response that references binary `binaryClientId` so its value flips
+	 * from `{status:'pending'}` to `{status:'uploaded', mediaUrl}` (ADR 0029 Half 2).
+	 * Called by the sync engine after the blob upload acks. Re-arms the row
+	 * (`synced=0`, checksum recomputed) so the next `/sync` pass re-sends the
+	 * mediaUrl; the server upserts it via `ON CONFLICT (client_id) DO UPDATE`.
+	 *
+	 * Handles both single-file (`value` is one reference) and multi-file (`value`
+	 * is an array of references) answers. Returns true when a matching reference
+	 * was found and patched.
+	 */
+	static async patchBinaryResponse(
+		sessionId: string,
+		binaryClientId: string,
+		mediaUrl: string
+	): Promise<boolean> {
+		const rows = await db.filloutResponses.where('sessionId').equals(sessionId).toArray();
+		for (const row of rows) {
+			const decrypted = await FilloutCrypto.decryptField(row.sessionId, row.value);
+			const patched = patchBinaryReference(decrypted, binaryClientId, mediaUrl);
+			if (!patched.changed) continue;
+
+			const value = await FilloutCrypto.encryptField(sessionId, patched.value);
+			const updated: StoredFilloutResponse = {
+				...(row as StoredFilloutResponse),
+				value,
+				synced: 0,
+			};
+			updated.checksum = await computeChecksum(this.responseChecksumPayload(updated));
+			await db.filloutResponses.put(updated);
+			return true;
+		}
+		return false;
 	}
 
 	// ── Integrity helpers (E-OFF-5) ──────────────────────────────────────

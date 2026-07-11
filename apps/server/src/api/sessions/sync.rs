@@ -181,10 +181,21 @@ pub async fn sync_session(
     };
 
     // Sync responses with dedup — chunked multi-row inserts instead of one
-    // round-trip per row. `ON CONFLICT (client_id) DO NOTHING` preserves the
-    // idempotent dedup, and `rows_affected()` on the batch counts only the rows
-    // actually inserted (skipped duplicates don't count), matching the prior
-    // per-row `> 0` accounting exactly. presented_at/answered_at keep the
+    // round-trip per row. The `ON CONFLICT (client_id)` clause is WRITE-ONCE for
+    // ordinary answers (a re-send never rewrites a recorded value) but lets a
+    // deferred binary answer patch land: the client first syncs
+    // `{clientId, …, status:'pending'}`, then (once the blob uploads, issue #34)
+    // re-sends the SAME client_id with `{…, status:'uploaded', mediaUrl}`. The
+    // `DO UPDATE … WHERE` therefore overwrites `value` ONLY when the CURRENTLY
+    // stored row is still a pending binary reference (object with
+    // `status='pending'`, or an array containing one for maxFiles>1) — a tampered
+    // resend against any already-recorded (non-pending) answer is a no-op. RLS
+    // admits the UPDATE via `responses_update_dual`; all other columns stay
+    // immutable after first insert. The no-op case is safe for the client: acks
+    // are driven by `accepted_client_ids` (extended per committed chunk), not by
+    // `rows_affected()`, so a conflicted-but-not-updated row is still acknowledged
+    // and never re-loops. `rows_affected()` (informational `responses_synced`) now
+    // counts a genuinely-patched row. presented_at/answered_at keep the
     // Postgres-side text→timestamptz parse (bound as Option<String>); metadata
     // keeps the COALESCE(..,'{}') default.
     for chunk in body.responses.chunks(SYNC_BATCH_ROWS) {
@@ -218,7 +229,14 @@ pub async fn sync_session(
             row.push_bind(resp.client_id)
                 .push_bind(&resp.timing_provenance);
         });
-        builder.push(" ON CONFLICT (client_id) DO NOTHING");
+        builder.push(
+            " ON CONFLICT (client_id) DO UPDATE SET value = EXCLUDED.value \
+             WHERE (jsonb_typeof(responses.value) = 'object' \
+                    AND responses.value->>'status' = 'pending') \
+                OR (jsonb_typeof(responses.value) = 'array' AND EXISTS ( \
+                    SELECT 1 FROM jsonb_array_elements(responses.value) e \
+                    WHERE e->>'status' = 'pending'))",
+        );
         let result = builder.build().execute(&mut **tx).await?;
         responses_synced += result.rows_affected() as i32;
         // Statement committed → every client_id in this chunk is now durably held.

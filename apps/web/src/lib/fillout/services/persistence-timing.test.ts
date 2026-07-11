@@ -49,6 +49,10 @@ beforeEach(async () => {
 	// trials + ledger tables too (shared fake-indexeddb singleton, cross-file leak).
 	await db.filloutTrials.clear();
 	await db.filloutSyncLedger.clear();
+	// #34: the drain also unions in sessions with pending binary rows
+	// (getSessionIdsWithPendingBinaries), so clear filloutBinaries too or a leftover
+	// pending binary from a binary test file pulls a stale session into the drain.
+	await db.filloutBinaries.clear();
 	apiMock.sessions.get.mockReset();
 	apiMock.sessions.create.mockReset();
 	apiMock.sessions.sync.mockReset();

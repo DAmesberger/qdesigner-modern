@@ -5,15 +5,14 @@
   import Input from '$lib/components/ui/forms/Input.svelte';
   import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
 
+  // The storage-mode selector (base64 / url / reference) and its companion
+  // processing toggles are DELETED (ADR 0029 Half 2): binary answers now take one
+  // offline-first path. Only the capture constraints remain designer-configurable.
   interface FileUploadConfig {
     accept?: string[];
     maxSize?: number;
     maxFiles?: number;
     dragDrop?: boolean;
-    storage?: 'reference' | 'base64' | 'url';
-    saveMetadata?: boolean;
-    showPreview?: boolean;
-    autoUpload?: boolean;
   }
 
   interface Props {
@@ -48,13 +47,9 @@
   // Initialize config defaults
   $effect(() => {
     if (!question.config.accept) question.config.accept = [];
-    if (!question.config.maxSize) question.config.maxSize = 10 * 1024 * 1024;
+    if (!question.config.maxSize) question.config.maxSize = 25 * 1024 * 1024;
     if (!question.config.maxFiles) question.config.maxFiles = 1;
     if (question.config.dragDrop === undefined) question.config.dragDrop = true;
-    if (!question.config.storage) question.config.storage = 'reference';
-    if (question.config.saveMetadata === undefined) question.config.saveMetadata = true;
-    if (question.config.showPreview === undefined) question.config.showPreview = true;
-    if (question.config.autoUpload === undefined) question.config.autoUpload = true;
   });
 
   function addAcceptType() {
@@ -174,38 +169,6 @@
     <p class="help-text">Allow multiple file uploads (1 = single file only)</p>
   </div>
 
-  <!-- Storage Options -->
-  <div class="section">
-    <h4 class="section-title">Storage Options</h4>
-
-    <div class="form-group">
-      <label for="storage">Storage Mode</label>
-      <Select id="storage" bind:value={question.config.storage}>
-        <option value="reference">Reference (metadata only)</option>
-        <option value="base64">Base64 (embed in response)</option>
-        <option value="url">Object URL (temporary preview)</option>
-      </Select>
-      <p class="help-text">
-        {#if question.config.storage === 'reference'}
-          Only file metadata is stored, actual file must be uploaded separately
-        {:else if question.config.storage === 'base64'}
-          File content is embedded as base64 string - increases response size
-        {:else}
-          Creates temporary URLs for preview - only valid during session
-        {/if}
-      </p>
-    </div>
-
-    <div class="form-group">
-      <Checkbox
-        id="file-save-metadata"
-        label="Save file metadata (last modified, upload time)"
-        checked={question.config.saveMetadata ?? false}
-        onchange={(e) => (question.config.saveMetadata = e.currentTarget.checked)}
-      />
-    </div>
-  </div>
-
   <!-- UI Options -->
   <div class="section">
     <h4 class="section-title">User Interface</h4>
@@ -219,23 +182,10 @@
       />
     </div>
 
-    <div class="form-group">
-      <Checkbox
-        id="file-show-preview"
-        label="Show file preview (images only)"
-        checked={question.config.showPreview ?? false}
-        onchange={(e) => (question.config.showPreview = e.currentTarget.checked)}
-      />
-    </div>
-
-    <div class="form-group">
-      <Checkbox
-        id="file-auto-upload"
-        label="Auto-process files on selection"
-        checked={question.config.autoUpload ?? false}
-        onchange={(e) => (question.config.autoUpload = e.currentTarget.checked)}
-      />
-    </div>
+    <p class="help-text">
+      Uploaded files are saved on the device first and delivered when the participant is online,
+      so capture works fully offline. The response is complete as soon as the file is chosen.
+    </p>
   </div>
 
   <!-- Preview -->
@@ -261,11 +211,7 @@
           <div class="stat">
             <span class="stat-label">Features:</span>
             <span class="stat-value">
-              {[
-                question.config.dragDrop && 'Drag & Drop',
-                question.config.showPreview && 'Preview',
-                question.config.autoUpload && 'Auto-upload',
-              ]
+              {[question.config.dragDrop && 'Drag & Drop']
                 .filter(Boolean)
                 .join(', ') || 'Basic upload'}
             </span>

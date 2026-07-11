@@ -2,29 +2,23 @@
   import BaseQuestion from '../shared/BaseQuestion.svelte';
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
-  import { api } from '$lib/services/api';
+  import {
+    OfflineBinaryPersistence,
+    BinaryCaptureError,
+    DEFAULT_BINARY_MAX_BYTES,
+    type BinaryAnswerReference,
+  } from '$lib/fillout/services/OfflineBinaryPersistence';
 
+  // The storage-mode selector (base64 / url / reference) is DELETED (ADR 0029
+  // Half 2). Both binary question types now share one offline-first contract:
+  // the Blob is written to IndexedDB and the response stores a structured
+  // reference. `storage` / `saveMetadata` / `autoUpload` fields on legacy
+  // definitions are simply ignored.
   interface FileUploadConfig {
     accept?: string[];
     maxSize?: number;
     maxFiles?: number;
     dragDrop?: boolean;
-    storage?: 'reference' | 'base64' | 'url';
-    saveMetadata?: boolean;
-    showPreview?: boolean;
-    autoUpload?: boolean;
-  }
-
-  interface FileData {
-    id: string;
-    name: string;
-    size: number;
-    type: string;
-    data: any;
-    metadata?: {
-      lastModified: number;
-      uploadTime: number;
-    };
   }
 
   interface Props extends QuestionProps {
@@ -46,24 +40,32 @@
   // Configuration
   const config = $derived(question.config);
   const accept = $derived(config.accept?.join(',') || '*');
-  const maxSize = $derived(config.maxSize || 10 * 1024 * 1024);
+  const maxSize = $derived(config.maxSize || DEFAULT_BINARY_MAX_BYTES);
   const maxFiles = $derived(config.maxFiles || 1);
   const allowMultiple = $derived(maxFiles > 1);
   const dragDrop = $derived(config.dragDrop !== false);
 
   // State
   let files = $state<File[]>([]);
-  let uploadProgress = $state<Map<string, number>>(new Map());
   let uploadErrors = $state<Map<string, string>>(new Map());
-  // Form-level (not per-file) validation message, e.g. the max-files guard.
+  // Form-level (not per-file) validation message, e.g. the max-files guard or a
+  // capture failure (oversize / device quota). Drives the blocking onValidation
+  // verdict so Continue is held until the participant fixes it (ADR 0029 Half 2).
   let formError = $state<string | null>(null);
   let isDragging = $state(false);
   let fileInput: HTMLInputElement;
 
-  // Validation
+  // Validation (ADR 0029 Half 2). A capture failure blocks unconditionally — the
+  // participant is present and can act — while required-presence gating stays
+  // central in the fillout controller.
   $effect(() => {
     const errors: string[] = [];
     let isValid = true;
+
+    if (formError) {
+      errors.push(formError);
+      isValid = false;
+    }
 
     if (question.required && (!value || (Array.isArray(value) && value.length === 0))) {
       errors.push('At least one file is required');
@@ -103,16 +105,11 @@
     });
   }
 
-  // File size validation
-  function isValidFileSize(file: File): boolean {
-    return file.size <= maxSize;
-  }
-
   // Handle file selection
   function handleFileSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files) {
-      handleFiles(Array.from(input.files));
+      void handleFiles(Array.from(input.files));
     }
   }
 
@@ -140,12 +137,17 @@
     isDragging = false;
 
     if (event.dataTransfer?.files) {
-      handleFiles(Array.from(event.dataTransfer.files));
+      void handleFiles(Array.from(event.dataTransfer.files));
     }
   }
 
-  // Process files
-  function handleFiles(newFiles: File[]) {
+  /**
+   * Validate, persist offline-first, and record each selected file. The Blob is
+   * written to IndexedDB via {@link OfflineBinaryPersistence.capture}; the
+   * response value holds only the structured reference (never a blob: URL). A
+   * capture failure (oversize / quota) is surfaced loudly and blocks Continue.
+   */
+  async function handleFiles(newFiles: File[]) {
     uploadErrors.clear();
     formError = null;
 
@@ -156,147 +158,89 @@
       return;
     }
 
-    // Validate and process each file
-    const validFiles: File[] = [];
+    const sessionId =
+      typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('qd_api_session_id') : null;
+
+    const acceptedFiles: File[] = [];
+    const references: BinaryAnswerReference[] = [];
 
     for (const file of newFiles) {
       const fileId = `${file.name}-${file.size}-${file.lastModified}`;
 
-      // Validate file type
+      // Type validation is a participant-correctable constraint.
       if (!isValidFileType(file)) {
         uploadErrors.set(fileId, `Invalid file type. Allowed: ${config.accept?.join(', ')}`);
+        formError = 'Please choose a file of an allowed type.';
         continue;
       }
 
-      // Validate file size
-      if (!isValidFileSize(file)) {
-        uploadErrors.set(fileId, `File too large. Maximum size: ${formatFileSize(maxSize)}`);
-        continue;
+      try {
+        const reference = sessionId
+          ? await OfflineBinaryPersistence.capture(
+              sessionId,
+              question.id,
+              file,
+              file.name,
+              maxSize
+            )
+          : // Designer preview (no session): validate the size cap but keep the
+            // reference transient — nothing is persisted or synced.
+            captureTransient(file);
+        acceptedFiles.push(file);
+        references.push(reference);
+      } catch (err) {
+        if (err instanceof BinaryCaptureError) {
+          uploadErrors.set(fileId, err.message);
+          formError = err.message;
+        } else {
+          const message = err instanceof Error ? err.message : 'Failed to save file';
+          uploadErrors.set(fileId, message);
+          formError = message;
+        }
       }
-
-      validFiles.push(file);
-      uploadProgress.set(fileId, 0);
     }
 
-    // Add valid files
-    files = [...files, ...validFiles];
+    if (acceptedFiles.length > 0) {
+      files = [...files, ...acceptedFiles];
 
-    // Process files based on storage type
-    if (config.autoUpload !== false) {
-      processFiles(validFiles);
+      if (allowMultiple) {
+        const current: BinaryAnswerReference[] = Array.isArray(value)
+          ? (value as BinaryAnswerReference[])
+          : [];
+        value = [...current, ...references];
+      } else {
+        value = references[0] ?? null;
+      }
+
+      onResponse?.(value);
     }
 
     onInteraction?.({
       type: 'files-selected' as any,
       timestamp: Date.now(),
       data: {
-        count: validFiles.length,
-        totalSize: validFiles.reduce((sum, f) => sum + f.size, 0),
+        count: acceptedFiles.length,
+        totalSize: acceptedFiles.reduce((sum, f) => sum + f.size, 0),
       },
     });
   }
 
-  // Process files based on storage configuration
-  async function processFiles(filesToProcess: File[]) {
-    const results: FileData[] = [];
-
-    for (const file of filesToProcess) {
-      const fileId = `${file.name}-${file.size}-${file.lastModified}`;
-
-      try {
-        let fileData: any;
-
-        if (config.storage === 'base64') {
-          // Convert to base64
-          fileData = await fileToBase64(file);
-        } else if (config.storage === 'url') {
-          // Create object URL (for preview)
-          fileData = URL.createObjectURL(file);
-        } else {
-          // Reference mode - just store file metadata
-          fileData = {
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            lastModified: file.lastModified,
-          };
-        }
-
-        results.push({
-          id: fileId,
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          data: fileData,
-          metadata: config.saveMetadata
-            ? {
-                lastModified: file.lastModified,
-                uploadTime: Date.now(),
-              }
-            : undefined,
-        });
-
-        uploadProgress.set(fileId, 100);
-      } catch (error: any) {
-        uploadErrors.set(fileId, `Failed to process file: ${error.message}`);
-        uploadProgress.delete(fileId);
-      }
+  /** Non-persisting reference for designer preview (size cap still enforced). */
+  function captureTransient(file: File): BinaryAnswerReference {
+    const cap = maxSize;
+    if (file.size > cap) {
+      throw new BinaryCaptureError(
+        'oversize',
+        `File is ${formatFileSize(file.size)}; the maximum is ${formatFileSize(cap)}.`
+      );
     }
-
-    // Update value
-    if (allowMultiple) {
-      const currentValue = Array.isArray(value) ? value : [];
-      value = [...currentValue, ...results];
-    } else {
-      value = results[0] || null;
-    }
-
-    onResponse?.(value);
-
-    // Upload files to server in background if a session is active
-    uploadFilesToServer(filesToProcess, results);
-  }
-
-  async function uploadFilesToServer(filesToProcess: File[], results: FileData[]) {
-    const sessionId = sessionStorage.getItem('qd_api_session_id');
-    if (!sessionId) return;
-
-    for (let i = 0; i < filesToProcess.length; i++) {
-      const file = filesToProcess[i];
-      if (!file) continue;
-
-      try {
-        const result = await api.sessions.uploadMedia(sessionId, file, file.name);
-
-        // Update the file data with the server URL
-        const fileResult = results[i];
-        if (fileResult) {
-          fileResult.data = result.url;
-        }
-      } catch (err) {
-        console.warn(`File upload failed for ${file.name}, keeping local data:`, err);
-      }
-    }
-
-    // Re-emit value with updated URLs
-    onResponse?.(value);
-  }
-
-  // Convert file to base64
-  function fileToBase64(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        resolve(reader.result as string);
-      };
-
-      reader.onerror = () => {
-        reject(new Error('Failed to read file'));
-      };
-
-      reader.readAsDataURL(file);
-    });
+    return {
+      clientId: crypto.randomUUID(),
+      name: file.name,
+      size: file.size,
+      mimeType: file.type || 'application/octet-stream',
+      status: 'pending',
+    };
   }
 
   // Remove file
@@ -305,21 +249,14 @@
     if (!removedFile) return;
 
     const fileId = `${removedFile.name}-${removedFile.size}-${removedFile.lastModified}`;
-
-    // Clean up
-    uploadProgress.delete(fileId);
     uploadErrors.delete(fileId);
+    // Removing the offending file clears a capture block.
+    formError = null;
 
-    if (config.storage === 'url' && value) {
-      // Revoke object URL
-      const fileData = Array.isArray(value) ? value[index] : value;
-      if (
-        fileData?.data &&
-        typeof fileData.data === 'string' &&
-        fileData.data.startsWith('blob:')
-      ) {
-        URL.revokeObjectURL(fileData.data);
-      }
+    // Discard the pinned blob for the removed entry so it isn't uploaded later.
+    const removedRef = allowMultiple && Array.isArray(value) ? value[index] : value;
+    if (removedRef && typeof removedRef === 'object' && 'clientId' in removedRef) {
+      void OfflineBinaryPersistence.delete((removedRef as BinaryAnswerReference).clientId);
     }
 
     // Update files
@@ -344,25 +281,6 @@
   function triggerFileInput() {
     fileInput?.click();
   }
-
-  // Cleanup on unmount
-  $effect(() => {
-    return () => {
-      // Revoke any object URLs on unmount
-      if (config.storage === 'url' && value) {
-        const values = Array.isArray(value) ? value : [value];
-        values.forEach((fileData) => {
-          if (
-            fileData?.data &&
-            typeof fileData.data === 'string' &&
-            fileData.data.startsWith('blob:')
-          ) {
-            URL.revokeObjectURL(fileData.data);
-          }
-        });
-      }
-    };
-  });
 </script>
 
 <BaseQuestion {question} {mode} bind:value {disabled} {onResponse} {onValidation} {onInteraction}>
@@ -424,7 +342,6 @@
       <div class="mt-4 flex flex-col gap-2">
         {#each files as file, index}
           {@const fileId = `${file.name}-${file.size}-${file.lastModified}`}
-          {@const progress = uploadProgress.get(fileId) || 0}
           {@const error = uploadErrors.get(fileId)}
 
           <div class="file-item flex items-center px-4 py-3 bg-background border border-border rounded-md relative" class:error>
@@ -452,10 +369,6 @@
 
             {#if error}
               <div class="file-error absolute -bottom-5 left-0 text-xs text-destructive">{error}</div>
-            {:else if progress < 100}
-              <div class="progress-bar absolute bottom-0 left-0 right-0 h-[3px] bg-border rounded-b-md overflow-hidden">
-                <div class="h-full bg-primary transition-[width] duration-300" style="width: {progress}%"></div>
-              </div>
             {/if}
 
             <button

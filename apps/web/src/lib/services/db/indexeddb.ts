@@ -291,6 +291,44 @@ export interface FilloutServerVariable {
   syncedAt: number;
 }
 
+/**
+ * A participant-produced binary answer (`file-upload` / `media-response`) held
+ * offline-first (ADR 0029 Half 2, issue #34). The captured `Blob` lives here —
+ * NEVER a `blob:` URL and never inline base64 — keyed by a `clientId` the module
+ * mints at capture and embeds into the response value as
+ * `{clientId, name, size, mimeType, status}`. `FilloutUploadSync` uploads the
+ * blob through the session media endpoint, patches the paired response value to
+ * `{mediaUrl, status:'uploaded'}`, then deletes this row. Until that server ack
+ * the blob is PINNED against eviction (mirrors ADR 0026's reaction-media
+ * pinning): the synced-data purge never touches it, so an offline-completed
+ * session's binaries survive to be delivered later.
+ */
+export interface FilloutBinary {
+  /** Primary key: the capture-time clientId embedded in the response value reference. */
+  clientId: string;
+  sessionId: string;
+  questionId: string;
+  name: string;
+  size: number;
+  mimeType: string;
+  /**
+   * The captured bytes as an ArrayBuffer. Stored as bytes (not a `Blob` object)
+   * because IndexedDB Blob support is historically inconsistent across engines;
+   * the sync path reconstructs a `Blob` from `data` + `mimeType` at upload time.
+   * Deleted after upload ack.
+   */
+  data: ArrayBuffer;
+  /** `pending` until uploaded; the row is deleted on ack so `uploaded` is transient. */
+  status: 'pending' | 'uploaded';
+  /** Server media URL, set once the upload endpoint acks (before the row is deleted). */
+  mediaUrl?: string;
+  /** Upload attempt counter (diagnostics). */
+  attempts?: number;
+  /** Last upload error seen. */
+  lastError?: string;
+  createdAt: number;
+}
+
 /** Reserved primary key of the single device-root-key row in `filloutKeys`. */
 export const DEVICE_ROOT_KEY_ID = '__device_root__';
 
@@ -331,6 +369,7 @@ class QDesignerDatabase extends Dexie {
   filloutMedia!: Table<FilloutMediaEntry>;
   filloutServerVariables!: Table<FilloutServerVariable>;
   filloutTrials!: Table<FilloutTrial, string>;
+  filloutBinaries!: Table<FilloutBinary, string>;
   filloutKeys!: Table<FilloutKeyRow, string>;
   filloutSyncLedger!: Table<FilloutSyncLedgerEntry, string>;
 
@@ -518,6 +557,31 @@ class QDesignerDatabase extends Dexie {
       filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt',
       filloutServerVariables: '[definitionKey+variableId], definitionKey, questionnaireId, syncedAt',
       filloutTrials: 'clientId, sessionId, synced, [sessionId+synced]',
+      filloutKeys: 'sessionId',
+      filloutSyncLedger: 'clientId, sessionId, kind, state, updatedAt, [sessionId+state]'
+    });
+
+    // v9: offline-first binary answers (ADR 0029 Half 2, issue #34).
+    //  - filloutBinaries is new: one row per captured file-upload / media-response
+    //    Blob, PK `clientId` (the ref embedded in the response value), with
+    //    `sessionId`/`status`/`[sessionId+status]` indexes so the sync drain and
+    //    the pending-count surface use the same compound-index pattern as the
+    //    other fillout stores. Purely additive — no .upgrade() body, so Dexie
+    //    creates the empty table on next open. All v8 stores are restated verbatim.
+    this.version(9).stores({
+      questionnaires: 'id, userId, syncStatus, lastModified, [id+userId]',
+      syncQueue: '++id, userId, status, timestamp, [userId+status]',
+      resources: 'id, url, lastAccessed, expiresAt',
+      drafts: 'id, userId, questionnaireId, timestamp, [userId+questionnaireId]',
+      filloutQuestionnaires: 'id, questionnaireId, accessCode, syncedAt',
+      filloutSessions: 'id, questionnaireId, status, createdAt, synced, [questionnaireId+status]',
+      filloutResponses: '++id, sessionId, clientId, questionId, synced, [sessionId+synced]',
+      filloutEvents: '++id, sessionId, clientId, synced, [sessionId+synced]',
+      filloutVariables: '[sessionId+name], sessionId, synced',
+      filloutMedia: '[url+questionnaireKey], url, questionnaireKey, questionnaireId, cachedAt',
+      filloutServerVariables: '[definitionKey+variableId], definitionKey, questionnaireId, syncedAt',
+      filloutTrials: 'clientId, sessionId, synced, [sessionId+synced]',
+      filloutBinaries: 'clientId, sessionId, status, [sessionId+status]',
       filloutKeys: 'sessionId',
       filloutSyncLedger: 'clientId, sessionId, kind, state, updatedAt, [sessionId+state]'
     });
@@ -748,6 +812,15 @@ class QDesignerDatabase extends Dexie {
       }
     }
 
+    // Binary answers (issue #34) store the raw Blob in IndexedDB (not the Cache
+    // API), so their bytes dominate the readout — count `size` directly rather
+    // than JSON-stringifying the row (which would not measure the Blob).
+    const binaries = await this.filloutBinaries.toArray();
+    for (const bin of binaries) {
+      totalSize += bin.size;
+      itemCount++;
+    }
+
     return { used: totalSize, items: itemCount };
   }
 
@@ -868,6 +941,7 @@ class QDesignerDatabase extends Dexie {
         this.filloutEvents,
         this.filloutVariables,
         this.filloutTrials,
+        this.filloutBinaries,
         this.filloutKeys,
         this.filloutSyncLedger,
       ],
@@ -876,6 +950,9 @@ class QDesignerDatabase extends Dexie {
         await this.filloutEvents.where('sessionId').equals(sessionId).delete();
         await this.filloutVariables.where('sessionId').equals(sessionId).delete();
         await this.filloutTrials.where('sessionId').equals(sessionId).delete();
+        // Force-discard drops even un-uploaded binary answers (this is the
+        // intentional-data-loss path — callers confirm + offer export first).
+        await this.filloutBinaries.where('sessionId').equals(sessionId).delete();
         await this.filloutSessions.delete(sessionId);
         await this.filloutKeys.delete(sessionId);
         await this.filloutSyncLedger.where('sessionId').equals(sessionId).delete();
@@ -891,6 +968,7 @@ class QDesignerDatabase extends Dexie {
         this.filloutEvents,
         this.filloutVariables,
         this.filloutTrials,
+        this.filloutBinaries,
       ],
       async () => {
         await Promise.all([
@@ -898,7 +976,8 @@ class QDesignerDatabase extends Dexie {
           this.filloutResponses.clear(),
           this.filloutEvents.clear(),
           this.filloutVariables.clear(),
-          this.filloutTrials.clear()
+          this.filloutTrials.clear(),
+          this.filloutBinaries.clear()
         ]);
       }
     );
@@ -928,6 +1007,7 @@ class QDesignerDatabase extends Dexie {
         this.filloutQuestionnaires,
         this.filloutMedia,
         this.filloutServerVariables,
+        this.filloutBinaries,
         this.filloutKeys,
         this.filloutSyncLedger,
       ],
@@ -941,6 +1021,7 @@ class QDesignerDatabase extends Dexie {
           this.filloutQuestionnaires.clear(),
           this.filloutMedia.clear(),
           this.filloutServerVariables.clear(),
+          this.filloutBinaries.clear(),
           this.filloutKeys.clear(),
           this.filloutSyncLedger.clear()
         ]);

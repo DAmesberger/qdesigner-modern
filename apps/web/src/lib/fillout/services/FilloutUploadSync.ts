@@ -3,6 +3,7 @@ import { api } from '$lib/services/api';
 import { OfflineSessionService } from './OfflineSessionService';
 import { OfflineResponsePersistence, type StoredFilloutResponse } from './OfflineResponsePersistence';
 import { OfflineTrialPersistence } from './OfflineTrialPersistence';
+import { OfflineBinaryPersistence } from './OfflineBinaryPersistence';
 import { SyncLedger } from './integrity/SyncLedger';
 import { FilloutContentCache } from './FilloutContentCache';
 import { db, filloutDefinitionKey, type FilloutSession, type FilloutResponse, type FilloutEvent, type FilloutVariable, type FilloutTrial } from '$lib/services/db/indexeddb';
@@ -193,7 +194,9 @@ export class FilloutUploadSync {
 					result.chunks += sessionResult.chunks;
 					result.accepted += sessionResult.accepted;
 					result.rejected += sessionResult.rejected;
-					if (sessionResult.rejected > 0) needsRetry = true;
+					// A still-pending binary (upload failed, or its response isn't committed
+					// yet) must schedule another pass so the blob is retried (issue #34).
+					if (sessionResult.rejected > 0 || sessionResult.binariesPending > 0) needsRetry = true;
 					// A stub (online-created) session has no local definition to refresh.
 					if (session.questionnaireId) {
 						drainedDefinitionKeys.add(
@@ -278,7 +281,11 @@ export class FilloutUploadSync {
 		}
 
 		const orphanIds = await OfflineResponsePersistence.getSessionIdsWithUnsyncedData();
-		for (const id of orphanIds) {
+		// A session whose response already synced (as `pending`) but whose binary
+		// upload has not landed yet has no unsynced child record — pull it back in so
+		// the blob is retried and the response is patched to its mediaUrl (issue #34).
+		const binaryIds = await OfflineBinaryPersistence.getSessionIdsWithPendingBinaries();
+		for (const id of [...orphanIds, ...binaryIds]) {
 			if (byId.has(id)) continue;
 			const row = await OfflineSessionService.getSession(id);
 			byId.set(id, row ?? this.stubSession(id));
@@ -392,7 +399,14 @@ export class FilloutUploadSync {
 		chunks: number;
 		accepted: number;
 		rejected: number;
+		binariesPending: number;
 	}> {
+		// Binary answers (issue #34) drain FIRST: each pending blob is uploaded via the
+		// session media endpoint and the paired response is patched to its mediaUrl and
+		// re-armed (synced=0). Running this before reading the unsynced responses means a
+		// just-patched response ships its mediaUrl in the SAME pass.
+		const binariesPending = await this.uploadSessionBinaries(session.id);
+
 		const responses = await OfflineResponsePersistence.getUnsyncedResponses(session.id);
 		const events = await OfflineResponsePersistence.getUnsyncedEvents(session.id);
 		const variables = await OfflineResponsePersistence.getUnsyncedVariables(session.id);
@@ -558,10 +572,12 @@ export class FilloutUploadSync {
 			(events.length - eventIds.length) +
 			(trials.length - acceptedTrialClientIds.length);
 
-		// Only claim the session fully drained when nothing was left unacked. A
-		// partial drain leaves the session-synced flag at 0 so the next pass revisits
-		// it, and skips the destructive purge so unacked rows survive.
-		if (rejected === 0) {
+		// Only claim the session fully drained when nothing was left unacked AND no
+		// binary answer is still pending (issue #34). A partial drain leaves the
+		// session-synced flag at 0 so the next pass revisits it, and skips the
+		// destructive purge so unacked rows — and the response rows a pending binary
+		// still needs patched — survive.
+		if (rejected === 0 && binariesPending === 0) {
 			await OfflineSessionService.markSynced(session.id);
 
 			// Purge the now-synced participant data from IndexedDB (F005): once the
@@ -583,7 +599,49 @@ export class FilloutUploadSync {
 			chunks: numChunks,
 			accepted: acceptedIds.size,
 			rejected,
+			binariesPending,
 		};
+	}
+
+	/**
+	 * Upload every pending binary answer for a session (issue #34) and patch its
+	 * paired response value to `{status:'uploaded', mediaUrl}`. Idempotent and
+	 * offline-safe:
+	 *  - A blob already uploaded (its `mediaUrl` was stored on the row) is never
+	 *    re-uploaded; only the patch is retried.
+	 *  - The pinned blob is deleted ONLY once its response is patched — so a blob
+	 *    captured but not yet committed to a response (participant hasn't advanced)
+	 *    survives, and the patch lands on a later pass.
+	 *  - A failed upload records the failure and keeps the blob pinned for retry.
+	 * Returns the number of binaries STILL pending after this pass.
+	 */
+	private async uploadSessionBinaries(sessionId: string): Promise<number> {
+		const pending = await OfflineBinaryPersistence.getPending(sessionId);
+		for (const bin of pending) {
+			try {
+				let mediaUrl = bin.mediaUrl;
+				if (!mediaUrl) {
+					const blob = OfflineBinaryPersistence.toBlob(bin);
+					const result = await api.sessions.uploadMedia(sessionId, blob, bin.name);
+					mediaUrl = result.url;
+					// Remember the URL so a patch-only retry never re-uploads the bytes.
+					await db.filloutBinaries.update(bin.clientId, { mediaUrl });
+				}
+				const patched = await OfflineResponsePersistence.patchBinaryResponse(
+					sessionId,
+					bin.clientId,
+					mediaUrl
+				);
+				if (patched) {
+					// Server durably holds the bytes and the response now points at them.
+					await OfflineBinaryPersistence.delete(bin.clientId);
+				}
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : 'binary upload failed';
+				await OfflineBinaryPersistence.recordFailure(bin.clientId, msg);
+			}
+		}
+		return OfflineBinaryPersistence.countPending(sessionId);
 	}
 
 	/**

@@ -50,6 +50,9 @@ beforeEach(async () => {
 	await db.filloutVariables.clear();
 	await db.filloutTrials.clear();
 	await db.filloutSyncLedger.clear();
+	// #34: the drain also unions in sessions with pending binary rows, so clear
+	// filloutBinaries too or a stray binary from a binary test file leaks a session in.
+	await db.filloutBinaries.clear();
 	apiMock.sessions.get.mockReset();
 	apiMock.sessions.create.mockReset();
 	apiMock.sessions.sync.mockReset();
