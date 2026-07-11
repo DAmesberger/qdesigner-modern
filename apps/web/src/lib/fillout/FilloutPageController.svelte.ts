@@ -212,6 +212,16 @@ export class FilloutPageController {
   lastSyncedAt = $state<number | null>(null);
   private statsTimer: ReturnType<typeof setInterval> | null = null;
 
+  // Dead-study affordance (F-53). `deadletterCount` above is scoped to THIS questionnaire's
+  // sessions so a stale, unsubmittable session for an unrelated/deleted study never inflates
+  // this page's banner. Those orphaned dead-letter sessions are surfaced ONCE here instead:
+  // `deadStudyCount` drives a dismissible "a previous study on this device no longer accepts
+  // answers — export or discard" notice; `deadStudySessionIds` are the sessions the discard
+  // crypto-erases. Never auto-deletes — export is always offered first.
+  deadStudyCount = $state(0);
+  deadStudyDismissed = $state(false);
+  private deadStudySessionIds: string[] = [];
+
   // Resume state (E-OFF-1 / E-FLOW-3, FIX-F12).
   resumeNotice = $state<string | null>(null);
   pinnedFallbackDismissed = $state(false);
@@ -433,12 +443,65 @@ export class FilloutPageController {
    */
   async refreshSyncStats(): Promise<void> {
     try {
-      const stats = await SyncLedger.stats();
+      // F-53: scope the panel tallies to THIS questionnaire's sessions. The sync engine
+      // still drains every session globally — only the DISPLAYED count is per-study, so a
+      // dead-letter session for an unrelated/deleted questionnaire can't keep showing "N
+      // answers could not be submitted" on every /q/* load.
+      const scoped = await this.currentQuestionnaireSessionIds();
+      const stats = await SyncLedger.statsForSessions(scoped);
       this.pendingCount = stats.pending;
       this.deadletterCount = stats.deadletter;
+
+      // Orphaned dead-letter sessions (belong to a different / no-longer-present study)
+      // become the one-time dead-study affordance rather than an eternal banner count.
+      const dead = await SyncLedger.deadletterSessionIds();
+      this.deadStudySessionIds = [...dead].filter((id) => !scoped.has(id));
+      this.deadStudyCount = this.deadStudySessionIds.length;
     } catch {
       // Non-critical: the panel keeps its last-known counts.
     }
+  }
+
+  /**
+   * Session ids belonging to the CURRENT questionnaire (F-53): every locally-tracked
+   * session for this questionnaire id, plus the active session (an online-created session
+   * has no local `filloutSessions` row, but its ledger rows are still this study's).
+   */
+  private async currentQuestionnaireSessionIds(): Promise<Set<string>> {
+    const ids = new Set<string>();
+    try {
+      const qid = this.data.questionnaire.id;
+      if (qid) {
+        const rows = await db.filloutSessions.where('questionnaireId').equals(qid).toArray();
+        for (const row of rows) ids.add(row.id);
+      }
+    } catch {
+      // Unreadable session table — leave the set as-is (active session still included below).
+    }
+    if (this.session?.id) ids.add(this.session.id);
+    return ids;
+  }
+
+  /** Dismiss the dead-study notice for this page view (F-53). */
+  dismissDeadStudyNotice(): void {
+    this.deadStudyDismissed = true;
+  }
+
+  /**
+   * Discard (crypto-erase) the unsubmittable answers of previous studies on this device
+   * (F-53): the sessions whose dead-letter records don't belong to the current
+   * questionnaire. Force-deletes each session's records + encryption key + ledger rows —
+   * intentional, irreversible loss, so the caller MUST confirm and offer export first.
+   */
+  async discardDeadStudies(): Promise<void> {
+    const ids = this.deadStudySessionIds.slice();
+    for (const id of ids) {
+      await db.purgeSessionCompletely(id).catch(() => {});
+    }
+    this.deadStudySessionIds = [];
+    this.deadStudyCount = 0;
+    this.deadStudyDismissed = true;
+    await this.refreshSyncStats();
   }
 
   /**
@@ -1284,6 +1347,8 @@ export class FilloutPageController {
     }
     this.pendingCount = 0;
     this.deadletterCount = 0;
+    this.deadStudyCount = 0;
+    this.deadStudySessionIds = [];
   }
 
   /**

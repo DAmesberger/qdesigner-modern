@@ -189,9 +189,34 @@ export class SyncLedger {
 		return { pending, acked, deadletter, total };
 	}
 
+	/**
+	 * Ledger counts scoped to a set of session ids (F-53). The connectivity banner is a
+	 * per-questionnaire surface, so it counts only the sessions of the questionnaire being
+	 * filled out — a stale dead-letter session for an unrelated/deleted questionnaire must
+	 * not inflate every other study's "N answers could not be submitted" count browser-wide.
+	 */
+	static async statsForSessions(sessionIds: Set<string>): Promise<LedgerStats> {
+		const out: LedgerStats = { pending: 0, acked: 0, deadletter: 0, total: 0 };
+		if (sessionIds.size === 0) return out;
+		for (const row of await db.filloutSyncLedger.toArray()) {
+			if (!sessionIds.has(row.sessionId)) continue;
+			out.total++;
+			if (row.state === 'pending') out.pending++;
+			else if (row.state === 'acked') out.acked++;
+			else if (row.state === 'deadletter') out.deadletter++;
+		}
+		return out;
+	}
+
 	/** Dead-letter rows (permanently-failing records) for the integrity readout. */
 	static async deadletters(): Promise<FilloutSyncLedgerEntry[]> {
 		return db.filloutSyncLedger.where('state').equals('deadletter').toArray();
+	}
+
+	/** Distinct session ids that currently hold at least one dead-letter record (F-53). */
+	static async deadletterSessionIds(): Promise<Set<string>> {
+		const rows = await db.filloutSyncLedger.where('state').equals('deadletter').toArray();
+		return new Set(rows.map((r) => r.sessionId));
 	}
 
 	/**

@@ -135,6 +135,39 @@ describe('FilloutContentCache.cacheServerVariables', () => {
 		await FilloutContentCache.cacheServerVariables(questionnaireData());
 		expect(await db.filloutServerVariables.count()).toBe(0);
 	});
+
+	it('caps the aggregate fetch with an AbortSignal (F-58 parity)', async () => {
+		const fetchFn = mockFetch(statsResponse());
+		await FilloutContentCache.cacheServerVariables(questionnaireData());
+		expect(fetchFn).toHaveBeenCalledWith(
+			expect.stringContaining('/server-variables'),
+			expect.objectContaining({ signal: expect.any(AbortSignal) })
+		);
+	});
+
+	it('swallows an aborted (hung) fetch and leaves the prior cache intact', async () => {
+		// Seed a good row first.
+		mockFetch(statsResponse());
+		await FilloutContentCache.cacheServerVariables(questionnaireData(60_000), undefined, {
+			force: true,
+		});
+		expect(await db.filloutServerVariables.count()).toBe(1);
+
+		// A fetch that rejects as the abort-timeout would: cacheServerVariables must not throw
+		// and must keep the previously-cached row (offline correctness beats freshness).
+		const hung = vi.fn(async () => {
+			throw new DOMException('The operation timed out.', 'TimeoutError');
+		});
+		vi.stubGlobal('fetch', hung);
+		await expect(
+			FilloutContentCache.cacheServerVariables(questionnaireData(60_000), undefined, { force: true })
+		).resolves.toBeUndefined();
+		expect(hung).toHaveBeenCalledWith(
+			expect.stringContaining('/server-variables'),
+			expect.objectContaining({ signal: expect.any(AbortSignal) })
+		);
+		expect(await db.filloutServerVariables.count()).toBe(1);
+	});
 });
 
 describe('FilloutContentCache.pruneDefinitions server-variable GC', () => {

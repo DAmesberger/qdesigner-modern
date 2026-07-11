@@ -852,6 +852,37 @@ class QDesignerDatabase extends Dexie {
    * participant's in-flight definition pin without cleaning the paired Cache-API
    * store, so definition/media GC stays owned by FilloutContentCache.
    */
+  /**
+   * FORCE-discard EVERY record for one session, regardless of sync state (F-53) — backs the
+   * "discard a previous study's unsubmittable answers" affordance. Unlike
+   * {@link purgeSyncedSessionData} this drops UNSYNCED rows too, deletes the session row,
+   * clears its sync-ledger entries, and crypto-erases the session's encryption key
+   * (`filloutKeys`) so any residual ciphertext becomes permanently unreadable. This is
+   * intentional, irreversible data loss: callers MUST confirm and offer export first.
+   */
+  async purgeSessionCompletely(sessionId: string): Promise<void> {
+    await this.transaction('rw',
+      [
+        this.filloutSessions,
+        this.filloutResponses,
+        this.filloutEvents,
+        this.filloutVariables,
+        this.filloutTrials,
+        this.filloutKeys,
+        this.filloutSyncLedger,
+      ],
+      async () => {
+        await this.filloutResponses.where('sessionId').equals(sessionId).delete();
+        await this.filloutEvents.where('sessionId').equals(sessionId).delete();
+        await this.filloutVariables.where('sessionId').equals(sessionId).delete();
+        await this.filloutTrials.where('sessionId').equals(sessionId).delete();
+        await this.filloutSessions.delete(sessionId);
+        await this.filloutKeys.delete(sessionId);
+        await this.filloutSyncLedger.where('sessionId').equals(sessionId).delete();
+      }
+    );
+  }
+
   async clearAllFilloutData(): Promise<void> {
     await this.transaction('rw',
       [

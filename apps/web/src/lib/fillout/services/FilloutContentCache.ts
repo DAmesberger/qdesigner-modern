@@ -18,6 +18,14 @@ import { mediaContentUrl } from '$lib/services/mediaService';
 const DEFAULT_SERVER_VARS_REFRESH_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * Per-request budget (ms) for the server-variable aggregate fetch. The aggregate is a
+ * small JSON payload, so it gets the tight 3s cap the load path always intended (F-58) —
+ * mirroring the abort-timeout applied to the media fetch in {@link
+ * FilloutContentCache.fetchAndCacheAsset} — so one hung request can never stall the load.
+ */
+const SERVER_VARS_FETCH_TIMEOUT_MS = 3000;
+
+/**
  * Result of {@link FilloutContentCache.prepareOffline} / {@link FilloutContentCache.checkOfflineReadiness}
  * (explicit offline provisioning, F-21). Recomputed from Cache-API membership so it survives a
  * reload without any new schema — a fully-cached definition reads back `ready` on next mount.
@@ -126,6 +134,21 @@ export class FilloutContentCache {
 		const versionPatch = (questionnaireData.version_patch as number) ?? 0;
 		const key = filloutDefinitionKey(questionnaireId, versionMajor, versionMinor, versionPatch);
 
+		// F-57 — same-version REPUBLISH invalidation. A republish without a version bump
+		// reuses this exact key, so the definition `.put` below refreshes the snapshot — but
+		// the media already cached under this key (Cache-API bytes + accounting rows) would
+		// otherwise linger, so a swapped/removed/edited asset keeps serving its HISTORICAL
+		// bytes at run time. Detect a content change against the previously-cached snapshot
+		// and, when it changed, evict this version's media first so `cacheMedia` re-fetches
+		// ONLY the current asset set fresh. Gated on an actual change: an unchanged reload
+		// (the common case) keeps its cache, and a true-offline run never reaches this path
+		// (the load only caches while online), so its pinned cache is untouched.
+		const previous = await db.filloutQuestionnaires.get(key);
+		const contentChanged =
+			!!previous &&
+			JSON.stringify(definitionContent(previous.data)) !==
+				JSON.stringify(definitionContent(questionnaireData));
+
 		const record: FilloutQuestionnaire = {
 			id: key,
 			questionnaireId,
@@ -138,6 +161,12 @@ export class FilloutContentCache {
 		};
 
 		await db.filloutQuestionnaires.put(record);
+
+		if (contentChanged) {
+			// Drop the stale media (Cache-API entries not shared with another version + this
+			// version's accounting rows) before re-caching the fresh asset set.
+			await this.evictDefinitionMedia(key);
+		}
 
 		// Cache media assets, tagged with this version so eviction can protect pinned ones.
 		await this.cacheMedia(questionnaireData, key, questionnaireId, versionMajor, versionMinor, versionPatch);
@@ -232,7 +261,10 @@ export class FilloutContentCache {
 			: '';
 		let resp: ServerVariablesResponse;
 		try {
-			const r = await fetch(`/api/questionnaires/${questionnaireId}/server-variables${versionParam}`);
+			const r = await fetch(
+				`/api/questionnaires/${questionnaireId}/server-variables${versionParam}`,
+				{ signal: AbortSignal.timeout(SERVER_VARS_FETCH_TIMEOUT_MS) }
+			);
 			if (!r.ok) return;
 			resp = (await r.json()) as ServerVariablesResponse;
 		} catch {

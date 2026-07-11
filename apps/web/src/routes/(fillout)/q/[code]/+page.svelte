@@ -210,6 +210,20 @@
     controller.pendingCount > 0 &&
       (controller.screen === 'welcome' || controller.screen === 'consent')
   );
+  // Dead-study affordance (F-53): a one-time notice for unsubmittable answers left by a
+  // PREVIOUS study on this device (often a deleted questionnaire), offered on the entry
+  // screens with export + discard rather than counted forever in this study's banner.
+  const showDeadStudyBanner = $derived(
+    controller.deadStudyCount > 0 &&
+      !controller.deadStudyDismissed &&
+      (controller.screen === 'welcome' || controller.screen === 'consent')
+  );
+  async function discardDeadStudies() {
+    if (typeof window !== 'undefined' && !window.confirm(m.fillout_dead_study_discard_confirm())) {
+      return;
+    }
+    await controller.discardDeadStudies();
+  }
   // Honest offline-quota disclosure (step 4): eligibility can't be checked offline, so
   // say so up front rather than silently admitting — server re-checks on submission (P1-T4).
   const showOfflineQuotaDisclosure = $derived(
@@ -380,6 +394,33 @@
   {#if showUnsyncedBanner}
     <div class="unsynced-banner" data-testid="fillout-unsynced-banner" role="status">
       {m.fillout_unsynced_banner({ count: controller.pendingCount })}
+    </div>
+  {/if}
+
+  <!-- Dead-study affordance (F-53): unsubmittable answers from a previous/deleted study. -->
+  {#if showDeadStudyBanner}
+    <div class="dead-study-banner" data-testid="fillout-dead-study-banner" role="status">
+      <span class="dead-study-text">{m.fillout_dead_study_notice()}</span>
+      <div class="dead-study-actions">
+        <button
+          type="button"
+          class="dead-study-btn"
+          onclick={() => controller.exportUnsyncedData()}
+        >
+          {m.fillout_dead_study_export()}
+        </button>
+        <button type="button" class="dead-study-btn danger" onclick={discardDeadStudies}>
+          {m.fillout_dead_study_discard()}
+        </button>
+        <button
+          type="button"
+          class="dead-study-dismiss"
+          aria-label={m.fillout_dead_study_dismiss()}
+          onclick={() => controller.dismissDeadStudyNotice()}
+        >
+          ×
+        </button>
+      </div>
     </div>
   {/if}
 
@@ -774,6 +815,57 @@
     font-size: 0.8125rem;
     line-height: 1.4;
     text-align: center;
+  }
+
+  .dead-study-banner {
+    position: fixed;
+    top: 3rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 96;
+    width: min(560px, calc(100vw - 1.5rem));
+    padding: 0.625rem 1rem;
+    border-radius: 0.5rem;
+    background: hsl(var(--warning) / 0.12);
+    border: 1px solid hsl(var(--warning) / 0.35);
+    color: hsl(var(--foreground));
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .dead-study-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .dead-study-btn {
+    padding: 0.3125rem 0.75rem;
+    border-radius: 0.375rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .dead-study-btn.danger {
+    border-color: hsl(var(--destructive) / 0.5);
+    color: hsl(var(--destructive));
+  }
+
+  .dead-study-dismiss {
+    margin-left: auto;
+    padding: 0.125rem 0.5rem;
+    border: none;
+    background: transparent;
+    color: hsl(var(--foreground));
+    font-size: 1.125rem;
+    line-height: 1;
+    cursor: pointer;
   }
 
   .offline-quota-note {
