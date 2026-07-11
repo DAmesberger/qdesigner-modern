@@ -73,21 +73,34 @@ async function readJson<T>(response: Response): Promise<T> {
 
 type AuthChangeCallback = (event: AuthChangeEvent) => void;
 
+/**
+ * Outcome of a `/api/auth/session` load. `authenticated`/`unauthenticated` are
+ * *definitive* answers from the server (the session either resolved or it did
+ * not); `failed` is a transient network/rate-limit condition that must not be
+ * treated as "signed out" — otherwise a single 429 from the auth limiter would
+ * strand an authenticated participant with no CSRF token (see issue #47).
+ */
+type LoadOutcome = 'authenticated' | 'unauthenticated' | 'failed';
+
+// Exponential backoff bounds applied after a transient session-load failure so
+// the interceptor cannot hammer the auth rate limiter deeper into its window.
+const BASE_LOAD_BACKOFF_MS = 1_000;
+const MAX_LOAD_BACKOFF_MS = 30_000;
+
 class AuthService {
   private session: Session | null = null;
   private listeners: Set<AuthChangeCallback> = new Set();
   private initialized = false;
-  private initPromise: Promise<void> | null = null;
+  // Single-flight guard: concurrent session loads share one in-flight fetch so
+  // a burst of state-changing requests triggers at most one `/api/auth/session`.
+  private loadInFlight: Promise<LoadOutcome> | null = null;
+  // Epoch-ms until which non-forced loads are suppressed after a failure.
+  private loadBackoffUntil = 0;
+  private loadFailureCount = 0;
 
   async init(): Promise<void> {
     if (this.initialized) return;
-    if (!this.initPromise) {
-      this.initPromise = (async () => {
-        await this.loadSession();
-        this.initialized = true;
-      })();
-    }
-    return this.initPromise;
+    await this.loadSession();
   }
 
   async signIn(email: string, password: string): Promise<AuthResult> {
@@ -161,6 +174,29 @@ class AuthService {
     return this.session?.csrfToken ?? null;
   }
 
+  /**
+   * Resolve the current session CSRF token for the request interceptor. Returns
+   * the cached token synchronously via {@link getCsrfToken} when present; only
+   * on a cache miss does it (single-flight, backoff-guarded) load the session.
+   * A definitively-anonymous client returns `null` without any network call.
+   */
+  async ensureCsrfToken(): Promise<string | null> {
+    const cached = this.getCsrfToken();
+    if (cached) return cached;
+    await this.getSession();
+    return this.getCsrfToken();
+  }
+
+  /**
+   * Force one fresh session load (bypassing backoff) to recover a rotated or
+   * dropped CSRF token, e.g. after a 403 "Missing/Invalid CSRF token". Callers
+   * must retry at most once — this does not loop.
+   */
+  async refreshCsrfToken(): Promise<string | null> {
+    await this.loadSession({ force: true });
+    return this.getCsrfToken();
+  }
+
   onAuthStateChange(callback: AuthChangeCallback): () => void {
     this.listeners.add(callback);
     if (this.session) callback({ event: 'SIGNED_IN', session: this.session });
@@ -179,20 +215,92 @@ class AuthService {
     )}`;
   }
 
-  private async loadSession(): Promise<boolean> {
-    try {
-      const view = await this.request<SessionView>('/api/auth/session', { method: 'GET' });
-      const session = this.sessionFromView(view);
-      if (session) {
-        this.setSession(session, this.session ? 'TOKEN_REFRESHED' : 'SIGNED_IN');
-        return true;
-      }
-      this.clearSession();
-      return false;
-    } catch {
-      this.clearSession();
-      return false;
+  private async loadSession(options: { force?: boolean } = {}): Promise<LoadOutcome> {
+    // Coalesce concurrent loads onto one in-flight fetch. A forced refresh joins
+    // an existing load too — any successful load yields the same session token.
+    if (this.loadInFlight) return this.loadInFlight;
+
+    // Respect backoff after a transient failure unless a caller explicitly needs
+    // a fresh token (the one-shot 403 recovery path).
+    if (!options.force && Date.now() < this.loadBackoffUntil) {
+      return 'failed';
     }
+
+    this.loadInFlight = this.performSessionLoad();
+    try {
+      return await this.loadInFlight;
+    } finally {
+      this.loadInFlight = null;
+    }
+  }
+
+  private async performSessionLoad(): Promise<LoadOutcome> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE}/api/auth/session`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: this.headers(false),
+      });
+    } catch {
+      // Network error / offline — transient, keep any existing session.
+      this.registerLoadFailure(null);
+      return 'failed';
+    }
+
+    // Rate limited or server error: transient. Do NOT clear the session — the
+    // participant is still logged in; we just could not confirm it this instant.
+    if (response.status === 429 || response.status >= 500) {
+      this.registerLoadFailure(response.headers.get('Retry-After'));
+      return 'failed';
+    }
+
+    // Definitive answer received — reset failure backoff and mark initialized.
+    this.loadFailureCount = 0;
+    this.loadBackoffUntil = 0;
+    this.initialized = true;
+
+    let view: SessionView | null = null;
+    try {
+      const text = await response.text();
+      view = text ? (JSON.parse(text) as SessionView) : null;
+    } catch {
+      view = null;
+    }
+
+    const session = view ? this.sessionFromView(view) : null;
+    if (session) {
+      this.setSession(session, this.session ? 'TOKEN_REFRESHED' : 'SIGNED_IN');
+      return 'authenticated';
+    }
+    this.clearSession();
+    return 'unauthenticated';
+  }
+
+  private registerLoadFailure(retryAfter: string | null): void {
+    this.loadFailureCount += 1;
+    const retryAfterMs = this.parseRetryAfter(retryAfter);
+    const backoff =
+      retryAfterMs ??
+      Math.min(
+        BASE_LOAD_BACKOFF_MS * 2 ** (this.loadFailureCount - 1),
+        MAX_LOAD_BACKOFF_MS
+      );
+    this.loadBackoffUntil = Date.now() + backoff;
+  }
+
+  private parseRetryAfter(value: string | null): number | null {
+    if (!value) return null;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(seconds * 1000, MAX_LOAD_BACKOFF_MS);
+    }
+    const date = Date.parse(value);
+    if (!Number.isNaN(date)) {
+      const delta = date - Date.now();
+      return delta > 0 ? Math.min(delta, MAX_LOAD_BACKOFF_MS) : 0;
+    }
+    return null;
   }
 
   private async request<T = unknown>(path: string, init: RequestInit): Promise<T> {
