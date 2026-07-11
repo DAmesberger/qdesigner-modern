@@ -10,6 +10,7 @@ export default defineConfig({
     '**/*.regression.spec.ts',
     '**/*.fullstack.spec.ts',
     '**/*.reaction.spec.ts',
+    '**/*.form.spec.ts',
   ],
   fullyParallel: !isCI,
   forbidOnly: isCI,
@@ -71,6 +72,17 @@ export default defineConfig({
         launchOptions: {
           args: ['--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader'],
         },
+      },
+    },
+    {
+      // @form lane (issue #35). The DOM fillout path — form-style questions render as
+      // Svelte components in the HTML overlay, not WebGL — so it needs no SwiftShader.
+      // Like @fullstack it drives a real browser against a live backend (provisions a
+      // study via the API, then asserts persisted response values server-side).
+      name: 'form-chromium',
+      grep: /@form/,
+      use: {
+        ...devices['Desktop Chrome'],
       },
     },
     {

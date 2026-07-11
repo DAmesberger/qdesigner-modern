@@ -293,6 +293,12 @@ jobs:
         # window (10 req/IP) with the fullstack lane's registrations.
         run: pnpm test:e2e:reaction
 
+      - name: Run form E2E tests
+        # @form lane (issue #35). DOM fillout path against the same live backend;
+        # one shared workspace per worker (like @reaction) so it registers a single
+        # user rather than tripping the 60 s auth-limiter window.
+        run: pnpm test:e2e:form
+
       - name: Dump server log on failure
         if: failure()
         run: cat server.log || true
