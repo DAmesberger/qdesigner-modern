@@ -259,7 +259,9 @@ export const sessions = {
         responseStyle: 'data',
         throwOnError: true,
         path: { id: sessionId },
-        body: { file: file instanceof File ? file : new File([file], filename) },
+        body: {
+          file: file instanceof File ? file : new File([file], filename, { type: file.type }),
+        },
       })
     ).then((raw) => ({
       url: raw.url,
