@@ -58,6 +58,32 @@ export interface ServerVariableBundle {
   p95?: number;
   p99?: number;
   computedAt: string;
+  /**
+   * The declaration's disclosure floor (ADR 0028), carried into the bundle so an
+   * OFFLINE consumer (e.g. the reaction cohort box) can decide hide-vs-placeholder
+   * without the raw declaration. Resolved via {@link effectiveMinN}.
+   */
+  minN: number;
+  /** The declaration's below-floor behavior (`hide` default). */
+  belowFloor: 'hide' | 'placeholder';
+}
+
+/**
+ * The legacy platform anonymity floor. Used as the fallback when a declaration
+ * carries no explicit {@link ServerComputationDef.minN} (pre-ADR-0028 data that
+ * escaped the content migration). Mirrors the server's `MIN_COHORT_N`.
+ */
+export const LEGACY_MIN_N = 5;
+
+/**
+ * The effective disclosure floor for a declaration (ADR 0028): its explicit
+ * `minN` (integer >= 1) when present, else {@link LEGACY_MIN_N}. Both the offline
+ * consumers and the server enforce this same resolution so a cohort renders
+ * identically online and off.
+ */
+export function effectiveMinN(def: Pick<ServerComputationDef, 'minN'> | undefined): number {
+  const n = def?.minN;
+  return typeof n === 'number' && Number.isInteger(n) && n >= 1 ? n : LEGACY_MIN_N;
 }
 
 /** Maps a scalar {@link ServerStat} onto its field in {@link ServerVariableStats}. */
@@ -177,6 +203,8 @@ export function materializeServerValue(
   return {
     n: row.n,
     computedAt: row.computedAt,
+    minN: effectiveMinN(def),
+    belowFloor: def.belowFloor ?? 'hide',
     mean: s?.mean,
     sd: s?.stdDev,
     min: s?.min,

@@ -923,11 +923,12 @@ pub async fn public_server_variables(
             Some(k) if !k.trim().is_empty() => k.trim().to_string(),
             _ => continue,
         };
-        // Only 'response' switches away from the default 'variable' source.
-        let source = if server.get("source").and_then(|v| v.as_str()) == Some("response") {
-            "response"
-        } else {
-            "variable"
+        // Source selects the aggregate function: 'trials' → fillout_trial_stats,
+        // otherwise the response/variable branches of fillout_dataset_stats.
+        let source = match server.get("source").and_then(|v| v.as_str()) {
+            Some("response") => "response",
+            Some("trials") => "trials",
+            _ => "variable",
         };
 
         let dataset = server.get("dataset").filter(|d| d.is_object());
@@ -960,20 +961,55 @@ pub async fn public_server_variables(
         }
         let filter = serde_json::Value::Object(filter);
 
-        let row = sqlx::query_as::<_, DatasetStatsRow>(
-            "SELECT n, mean, std_dev, min, max, p10, p25, median, p75, p90, p95, p99 \
-             FROM public.fillout_dataset_stats($1, $2, $3, $4)",
-        )
-        .bind(questionnaire_id)
-        .bind(source)
-        .bind(&key)
-        .bind(&filter)
-        .fetch_one(&state.pool)
-        .await?;
+        // Trial-source declarations aggregate the per-trial `trials` table
+        // (ADR 0028): `key` is the reaction question id, `metric` selects the
+        // aggregated column, and invalidated trials are excluded by default.
+        let row = if source == "trials" {
+            let metric = match server.get("metric").and_then(|v| v.as_str()) {
+                Some("accuracy") => "accuracy",
+                _ => "rt",
+            };
+            let include_invalidated = server
+                .get("includeInvalidated")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            sqlx::query_as::<_, DatasetStatsRow>(
+                "SELECT n, mean, std_dev, min, max, p10, p25, median, p75, p90, p95, p99 \
+                 FROM public.fillout_trial_stats($1, $2, $3, $4, $5)",
+            )
+            .bind(questionnaire_id)
+            .bind(&key)
+            .bind(metric)
+            .bind(include_invalidated)
+            .bind(&filter)
+            .fetch_one(&state.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, DatasetStatsRow>(
+                "SELECT n, mean, std_dev, min, max, p10, p25, median, p75, p90, p95, p99 \
+                 FROM public.fillout_dataset_stats($1, $2, $3, $4)",
+            )
+            .bind(questionnaire_id)
+            .bind(source)
+            .bind(&key)
+            .bind(&filter)
+            .fetch_one(&state.pool)
+            .await?
+        };
+
+        // Explicit per-declaration disclosure floor (ADR 0028): the declaration's
+        // `minN` (integer >= 1) replaces the former platform-hardcoded n>=5. When
+        // absent (pre-0028 data that escaped the content migration) fall back to
+        // the legacy floor. The count is ALWAYS reported; stats are withheld below.
+        let min_n = server
+            .get("minN")
+            .and_then(|v| v.as_i64())
+            .filter(|n| *n >= 1)
+            .unwrap_or(MIN_COHORT_N);
 
         let sample_count = row.n.max(0) as usize;
-        let stats = if row.n < MIN_COHORT_N {
-            // Below the anonymity floor: count only, every stat withheld.
+        let stats = if row.n < min_n {
+            // Below the disclosure floor: count only, every stat withheld.
             None
         } else {
             Some(NumericStatsSummary {

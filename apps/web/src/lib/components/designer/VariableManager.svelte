@@ -144,6 +144,9 @@
     if (draft.defaultValue === undefined || draft.defaultValue === '') {
       errors.push('A default value is required — participants offline (or below the anonymity floor) see it as the fallback.');
     }
+    if (srv?.minN !== undefined && (!Number.isInteger(srv.minN) || srv.minN < 1)) {
+      errors.push('Disclosure floor (minimum n) must be a whole number of at least 1.');
+    }
     const known = new Set(sessionVariableOptions.map((o) => o.value));
     (srv?.dataset?.where ?? []).forEach((w, i) => {
       if (!w.var) errors.push(`Filter row ${i + 1}: choose a variable.`);
@@ -153,7 +156,9 @@
   });
 
   function defaultServerDef(): ServerComputationDef {
-    return { source: 'variable', key: '', stat: 'mean' };
+    // ADR 0028: new declarations default to minN 1 (author-visible, not a hidden
+    // platform floor) and hide below-floor.
+    return { source: 'variable', key: '', stat: 'mean', minN: 1, belowFloor: 'hide' };
   }
 
   function setComputationMode(mode: ComputationMode): void {
@@ -843,15 +848,18 @@
                 <Select
                   id="srv-source"
                   value={draft.server?.source ?? 'variable'}
-                  onchange={(e) => updateServer({ source: e.currentTarget.value as 'variable' | 'response', key: '' })}
+                  onchange={(e) => updateServer({ source: e.currentTarget.value as 'variable' | 'response' | 'trials', key: '' })}
                   placeholder=""
                 >
                   <option value="variable">Session variable / score</option>
                   <option value="response">Question response</option>
+                  <option value="trials">Reaction trials (RT)</option>
                 </Select>
               </div>
               <div>
-                <label class="block text-xs font-medium text-foreground mb-1" for="srv-key">Source key</label>
+                <label class="block text-xs font-medium text-foreground mb-1" for="srv-key">
+                  {draft.server?.source === 'trials' ? 'Reaction question' : 'Source key'}
+                </label>
                 <Select
                   id="srv-key"
                   value={draft.server?.key ?? ''}
@@ -859,19 +867,49 @@
                   placeholder=""
                 >
                   <option value="">Select…</option>
-                  {#each (draft.server?.source === 'response' ? questionKeyOptions : variableKeyOptions) as opt}
+                  {#each (draft.server?.source === 'variable' ? variableKeyOptions : questionKeyOptions) as opt}
                     <option value={opt.value}>{opt.label}</option>
                   {/each}
                 </Select>
-                <input
-                  type="text"
-                  value={draft.server?.key ?? ''}
-                  oninput={(e) => updateServer({ key: e.currentTarget.value })}
-                  class="mt-1 w-full px-2 py-1 text-xs border border-border rounded bg-background text-foreground font-mono"
-                  placeholder="or type a key (e.g. score.anxiety.value)"
-                />
+                {#if draft.server?.source !== 'trials'}
+                  <input
+                    type="text"
+                    value={draft.server?.key ?? ''}
+                    oninput={(e) => updateServer({ key: e.currentTarget.value })}
+                    class="mt-1 w-full px-2 py-1 text-xs border border-border rounded bg-background text-foreground font-mono"
+                    placeholder="or type a key (e.g. score.anxiety.value)"
+                  />
+                {/if}
               </div>
             </div>
+
+            {#if draft.server?.source === 'trials'}
+              <!-- Trial aggregation options -->
+              <div class="grid grid-cols-2 gap-3" data-testid="srv-trials-options">
+                <div>
+                  <label class="block text-xs font-medium text-foreground mb-1" for="srv-metric">Trial metric</label>
+                  <Select
+                    id="srv-metric"
+                    value={draft.server?.metric ?? 'rt'}
+                    onchange={(e) => updateServer({ metric: e.currentTarget.value as 'rt' | 'accuracy' })}
+                    placeholder=""
+                  >
+                    <option value="rt">Reaction time (µs)</option>
+                    <option value="accuracy">Accuracy (0–1)</option>
+                  </Select>
+                </div>
+                <div class="flex items-end pb-1">
+                  <label class="flex items-center gap-2 text-xs text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={draft.server?.includeInvalidated ?? false}
+                      onchange={(e) => updateServer({ includeInvalidated: e.currentTarget.checked })}
+                    />
+                    Include invalidated trials
+                  </label>
+                </div>
+              </div>
+            {/if}
 
             <!-- Materialization -->
             <div class="grid grid-cols-2 gap-3">
@@ -908,6 +946,35 @@
                   — bind it in feedback / report cohort widgets.
                 </p>
               {/if}
+            </div>
+
+            <!-- Disclosure floor (ADR 0028) -->
+            <div class="grid grid-cols-2 gap-3" data-testid="srv-disclosure">
+              <div>
+                <label class="block text-xs font-medium text-foreground mb-1" for="srv-min-n">Minimum n (disclosure floor)</label>
+                <input
+                  id="srv-min-n"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={draft.server?.minN ?? 1}
+                  oninput={(e) => updateServer({ minN: Math.max(1, Math.floor(Number(e.currentTarget.value) || 1)) })}
+                  class="w-full px-2 py-1 text-xs border border-border rounded bg-background text-foreground"
+                />
+                <p class="mt-0.5 text-[11px] text-muted-foreground">Stats are withheld until this many participants contribute. n is always shown.</p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-foreground mb-1" for="srv-below-floor">Below the floor</label>
+                <Select
+                  id="srv-below-floor"
+                  value={draft.server?.belowFloor ?? 'hide'}
+                  onchange={(e) => updateServer({ belowFloor: e.currentTarget.value as 'hide' | 'placeholder' })}
+                  placeholder=""
+                >
+                  <option value="hide">Hide the widget</option>
+                  <option value="placeholder">Show "still forming" placeholder</option>
+                </Select>
+              </div>
             </div>
 
             <!-- Dataset filter -->

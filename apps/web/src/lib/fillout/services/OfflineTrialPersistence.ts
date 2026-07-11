@@ -169,6 +169,27 @@ export class OfflineTrialPersistence {
 		return [...ids];
 	}
 
+	/**
+	 * Read a session's local trials for one question (RT-5), synced or not, returning
+	 * only the CLEARTEXT measurement columns the offline cohort box needs
+	 * (`rtUs` / `correct` / `invalidated`). No decryption — the encrypted `optionId`
+	 * answer slot is deliberately not touched, so this stays cheap and side-effect
+	 * free on the feedback render path.
+	 */
+	static async getTrialMeasurements(
+		sessionId: string,
+		questionId: string
+	): Promise<Array<{ rtUs: number | null; correct: boolean | null; invalidated: string | null }>> {
+		const rows = await db.filloutTrials.where('sessionId').equals(sessionId).toArray();
+		return rows
+			.filter((t) => t.questionId === questionId)
+			.map((t) => ({
+				rtUs: t.rtUs ?? null,
+				correct: t.correct ?? null,
+				invalidated: t.invalidated ?? null,
+			}));
+	}
+
 	/** Mark the given trial clientIds synced (ack-driven, E-OFF-4). */
 	static async markTrialsSynced(clientIds: string[]): Promise<void> {
 		if (clientIds.length === 0) return;

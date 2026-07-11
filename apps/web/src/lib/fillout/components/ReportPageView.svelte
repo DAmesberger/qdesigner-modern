@@ -24,6 +24,7 @@
   import type { ChartSeriesContract } from '$lib/services/sessionAnalytics';
   import FeedbackChart from '$lib/modules/display/statistical-feedback/charts/FeedbackChart.svelte';
   import GaugeChart from '$lib/modules/display/statistical-feedback/charts/GaugeChart.svelte';
+  import ReactionCohortBox from '$lib/modules/display/statistical-feedback/ReactionCohortBox.svelte';
   import {
     interpretScore,
     type ScoreInterpreterConfig,
@@ -274,6 +275,8 @@
                 scoreName={widget.text ?? 'Value'}
                 cohortMean={series.summary?.cohortMean ?? series.distribution?.mean ?? null}
                 cohortStdDev={series.summary?.cohortStdDev ?? series.distribution?.stdDev ?? null}
+                boxStats={series.cohortQuartiles ?? null}
+                markerValue={series.summary?.participantValue ?? null}
                 height={rowHeight * Math.max(1, widget.position.h ?? 3) - 32}
               />
               {#if series.normSource}
@@ -282,6 +285,19 @@
             {:catch}
               <div class="widget-error">Feedback unavailable.</div>
             {/await}
+          {:else if widget.type === 'reaction-cohort-box'}
+            <ReactionCohortBox
+              cohortBundle={widget.comparison?.serverVariable
+                ? resolveValue(widget.comparison.serverVariable)
+                : undefined}
+              questionId={widget.binding.key}
+              sessionId={session?.id}
+              stat={widget.reaction?.stat ?? 'median'}
+              metric={widget.reaction?.metric ?? 'rt'}
+              includeInvalidated={widget.reaction?.includeInvalidated ?? false}
+              label={widget.text}
+              height={rowHeight * Math.max(1, widget.position.h ?? 3) - 32}
+            />
           {:else if widget.type === 'interpretive-text'}
             <p class="interp-text">{interpText(widget)}</p>
           {:else if widget.type === 'results-table'}

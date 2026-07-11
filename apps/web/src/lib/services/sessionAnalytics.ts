@@ -55,6 +55,19 @@ export interface ChartSeriesContract {
     n: number;
     values?: number[];
   };
+  /**
+   * Precomputed cohort quartiles (F-16) for a box-whisker rendered from an
+   * already-aggregated cohort (server-variable / trial-cohort modes) — the
+   * participant never holds the cohort's raw values, so the box draws these
+   * directly. `min`/`max` are the whisker caps.
+   */
+  cohortQuartiles?: {
+    min: number;
+    q1: number;
+    median: number;
+    q3: number;
+    max: number;
+  } | null;
 }
 
 const PUBLIC_API_BASE = import.meta.env.VITE_API_URL || '';

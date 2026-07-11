@@ -44,6 +44,19 @@
     cohortStdDev?: number | null;
     /** Color rules for conditional coloring (from score interpretation ranges) */
     colorRules?: ColorRule[];
+    /**
+     * Precomputed box-whisker quartiles (F-16). When set, the `box` chart renders
+     * these DIRECTLY instead of deriving them from raw values — the offline
+     * reaction cohort box whose quartiles arrive already-aggregated from the
+     * server (the participant never holds the cohort's raw trial values).
+     */
+    boxStats?: { min: number; q1: number; median: number; q3: number; max: number } | null;
+    /**
+     * Participant's own statistic overlaid on the `box` chart as a distinct
+     * vertical marker + dot ("you are here"), so a precomputed cohort box still
+     * shows where the participant falls.
+     */
+    markerValue?: number | null;
   }
 
   let {
@@ -55,6 +68,8 @@
     cohortMean = null,
     cohortStdDev = null,
     colorRules = [],
+    boxStats = null,
+    markerValue = null,
   }: Props = $props();
 
   const hasColorRules = $derived(colorRules.length > 0);
@@ -631,7 +646,20 @@
   // Box plot — custom canvas rendering via Chart.js plugin
   // -----------------------------------------------------------------------
   function buildBox(canvas: HTMLCanvasElement, labels: string[], data: number[]): Chart {
-    const stats = boxPlotStats(data);
+    // F-16: prefer precomputed quartiles (offline cohort box) over deriving them
+    // from raw values — the participant never holds the cohort's raw trials.
+    const stats =
+      boxStats && Number.isFinite(boxStats.q1) && Number.isFinite(boxStats.q3)
+        ? {
+            min: boxStats.min,
+            q1: boxStats.q1,
+            median: boxStats.median,
+            q3: boxStats.q3,
+            max: boxStats.max,
+            outliers: [] as number[],
+          }
+        : boxPlotStats(data);
+    const marker = markerValue !== null && Number.isFinite(markerValue) ? markerValue : null;
 
     // Color the IQR box based on the median value if color rules exist
     const iqrColor = hasColorRules
@@ -752,6 +780,24 @@
                 : COLORS.marker;
               ctx.beginPath();
               ctx.arc(xO, yCenter, 4, 0, Math.PI * 2);
+              ctx.fill();
+            }
+
+            // Participant marker ("you are here"): a full-height vertical line
+            // plus a dot, distinct from the cohort's median line.
+            if (marker !== null) {
+              const xMarker = xScale.getPixelForValue(marker);
+              ctx.strokeStyle = COLORS.marker;
+              ctx.lineWidth = 2;
+              ctx.setLineDash([4, 3]);
+              ctx.beginPath();
+              ctx.moveTo(xMarker, bar.y - bar.height / 2 - 4);
+              ctx.lineTo(xMarker, bar.y + bar.height / 2 + 4);
+              ctx.stroke();
+              ctx.setLineDash([]);
+              ctx.fillStyle = COLORS.marker;
+              ctx.beginPath();
+              ctx.arc(xMarker, yCenter, 4.5, 0, Math.PI * 2);
               ctx.fill();
             }
 

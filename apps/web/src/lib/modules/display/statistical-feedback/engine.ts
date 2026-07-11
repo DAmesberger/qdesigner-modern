@@ -365,6 +365,24 @@ function buildServerVariableSeries(
       ? (participantValue - cohort.mean) / cohort.sd
       : null;
 
+  // Precomputed cohort quartiles for a box-whisker (F-16), when the aggregate
+  // carried the full percentile bundle. Falls back to null so the chart derives
+  // the box only when raw values are available (non-server modes).
+  const cohortQuartiles =
+    cohort.min !== null &&
+    cohort.p25 !== null &&
+    cohort.median !== null &&
+    cohort.p75 !== null &&
+    cohort.max !== null
+      ? {
+          min: cohort.min,
+          q1: cohort.p25,
+          median: cohort.median,
+          q3: cohort.p75,
+          max: cohort.max,
+        }
+      : null;
+
   return {
     mode: 'participant-vs-cohort',
     metric,
@@ -373,6 +391,7 @@ function buildServerVariableSeries(
       { label: 'Cohort', value: cohort.mean },
     ],
     normSource: serverCohortCaption(cohort),
+    cohortQuartiles,
     summary: {
       participantValue,
       cohortMean: cohort.mean,

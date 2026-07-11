@@ -159,6 +159,24 @@ describe('materializeServerValue', () => {
     expect(bundle.median).toBeUndefined();
   });
 
+  it('object bundle carries the declaration minN + belowFloor (ADR 0028)', () => {
+    const explicit = serverVar('rt', {
+      source: 'trials',
+      key: 'q_rt',
+      minN: 8,
+      belowFloor: 'placeholder',
+    });
+    const bundle = materializeServerValue(explicit, row(142)) as Record<string, unknown>;
+    expect(bundle.minN).toBe(8);
+    expect(bundle.belowFloor).toBe('placeholder');
+
+    // Absent minN falls back to the legacy floor of 5 and hides by default.
+    const legacy = serverVar('obj', { source: 'variable', key: 'k' });
+    const legacyBundle = materializeServerValue(legacy, row(142)) as Record<string, unknown>;
+    expect(legacyBundle.minN).toBe(5);
+    expect(legacyBundle.belowFloor).toBe('hide');
+  });
+
   it('returns undefined when the variable has no server block', () => {
     const v: Variable = { id: 'x', name: 'x', type: 'number', scope: 'global' };
     expect(materializeServerValue(v, row(10))).toBeUndefined();

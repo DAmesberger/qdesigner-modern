@@ -182,13 +182,33 @@ export interface DatasetFilter {
  * resolves it with zero changes once the runtime injects its synced value.
  */
 export interface ServerComputationDef {
-  /** Where the aggregated value comes from. */
-  source: 'variable' | 'response';
   /**
-   * The session variable name (`source: 'variable'`, e.g. `score.anxiety.value`)
-   * or the question id (`source: 'response'`) aggregated across the cohort.
+   * Where the aggregated value comes from.
+   * - `variable`  — a session variable (e.g. `score.anxiety.value`).
+   * - `response`  — a single question's response value.
+   * - `trials`    — the per-trial `trials` table (ADR 0028): `key` names the
+   *   REACTION question id, {@link metric} selects the aggregated column, and
+   *   {@link includeInvalidated} decides whether invalidated trials count.
+   */
+  source: 'variable' | 'response' | 'trials';
+  /**
+   * The session variable name (`source: 'variable'`, e.g. `score.anxiety.value`),
+   * the question id (`source: 'response'`), or the REACTION question id
+   * (`source: 'trials'`) aggregated across the cohort.
    */
   key: string;
+  /**
+   * Trial aggregation metric (only meaningful for `source: 'trials'`):
+   * - `rt`        — reaction time in microseconds (`trials.rt_us`). Default.
+   * - `accuracy`  — per-trial correctness as 0/1 (`trials.correct`).
+   */
+  metric?: 'rt' | 'accuracy';
+  /**
+   * Trials source only: when `true`, invalidated trials (`trials.invalidated`
+   * IS NOT NULL — anticipatory / visibility / render-failure) are INCLUDED in
+   * the aggregate. Defaults to `false` (invalidated rows excluded).
+   */
+  includeInvalidated?: boolean;
   /**
    * Present ⇒ SCALAR materialization of the single statistic (requires
    * `variable.type === 'number'`). Absent ⇒ full stats OBJECT bundle (requires
@@ -197,6 +217,22 @@ export interface ServerComputationDef {
   stat?: ServerStat;
   /** Cohort scoping. Absent ⇒ every completed session at the same major. */
   dataset?: DatasetFilter;
+  /**
+   * Explicit disclosure floor (ADR 0028): the aggregate's stats are withheld
+   * (count still reported) until at least `minN` DISTINCT sessions contribute.
+   * Replaces the former hardcoded platform `n >= 5`. Integer >= 1. NEW
+   * declarations default to `1` (authored in the designer); pre-existing
+   * declarations were migrated to `5` so nothing changed silently. When absent
+   * the server falls back to the legacy floor of 5.
+   */
+  minN?: number;
+  /**
+   * What a consumer renders while the cohort is below {@link minN} (ADR 0028):
+   * - `hide`         — the widget is absent entirely. Default.
+   * - `placeholder`  — a "cohort still forming — n=X of minN" progress note.
+   * The current n is ALWAYS disclosed regardless.
+   */
+  belowFloor?: 'hide' | 'placeholder';
   /**
    * Render-anyway-with-warning threshold: a synced row older than this is still
    * used (offline correctness beats freshness) but flagged stale for captions.
@@ -610,6 +646,7 @@ export interface ReportWidget {
     | 'score-tile'
     | 'bar'
     | 'box-cohort'
+    | 'reaction-cohort-box'
     | 'radar-profile'
     | 'distribution-with-marker'
     | 'gauge'
@@ -619,6 +656,16 @@ export interface ReportWidget {
   /** 12-column grid placement (shape copied from the analytics dashboard-builder). */
   position: { x: number; y: number; w: number; h: number };
   binding: { source: 'variable' | 'score'; key: string; field?: string };
+  /**
+   * `reaction-cohort-box` only (RT-5 / ADR 0028): how the participant's own
+   * statistic is computed from their LOCAL reaction trials for `binding.key`
+   * (the reaction question id). `comparison.serverVariable` supplies the cohort.
+   */
+  reaction?: {
+    stat?: 'mean' | 'median';
+    metric?: 'rt' | 'accuracy';
+    includeInvalidated?: boolean;
+  };
   comparison?: {
     source: 'none' | 'norm-table' | 'custom-norm' | 'self-baseline' | 'server-variable';
     /** NAME of an object-typed server-computed variable for the cohort band. */
