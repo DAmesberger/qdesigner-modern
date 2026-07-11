@@ -212,6 +212,26 @@
       },
     },
     {
+      id: 'help-reaction-time-tour',
+      title: 'Reaction Time Tasks Tour',
+      section: 'Help',
+      run: async () => {
+        const mod = await import('$lib/help/tours/definitions/reactionTimeTour');
+        const tour = mod.reactionTimeTour;
+        if (tour) tourEngine.start(tour);
+      },
+    },
+    {
+      id: 'help-statistical-feedback-tour',
+      title: 'Statistical Feedback Tour',
+      section: 'Help',
+      run: async () => {
+        const mod = await import('$lib/help/tours/definitions/statisticalFeedbackTour');
+        const tour = mod.statisticalFeedbackTour;
+        if (tour) tourEngine.start(tour);
+      },
+    },
+    {
       id: 'help-formula-reference',
       title: 'Formula Reference',
       shortcut: '?',
