@@ -14,7 +14,7 @@
  * QuestionnaireRuntime path with performance.now() is sufficient.
  */
 
-import type { FrameSample, RGBAColor } from '$lib/shared';
+import type { FrameSample, RGBAColor, ValidityPolicy } from '$lib/shared';
 import { WebGLRenderer } from '$lib/renderer';
 import type { Renderable } from '$lib/renderer';
 import type { ResourceManager } from '../resources/ResourceManager';
@@ -89,6 +89,14 @@ function resolveSpatialOption(
     if (!(b.binding as PointerBinding | TouchBinding).region) return b;
   }
   return bindings[0] ?? null;
+}
+
+/** Whether an error is a DOMException AbortError (F-59 trial-abort discrimination). */
+function isAbortError(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    err.name === 'AbortError'
+  );
 }
 
 /** Max number of video frames retained in the per-trial reconstruction ring. */
@@ -218,6 +226,12 @@ interface ReactionEngineOptions {
   requestFrame?: (callback: (time: number) => void) => number;
   /** Injectable frame canceller for the gamepad poller. Defaults to cAF. */
   cancelFrame?: (handle: number) => void;
+  /**
+   * Timing-validity posture (F-59, ADR 0027). `record` (default) flags a
+   * visibility loss and completes the trial; `enforce` aborts the in-flight trial
+   * on a visibility/focus loss so the block loop can pause + re-queue it.
+   */
+  validityPolicy?: ValidityPolicy;
 }
 
 /**
@@ -350,6 +364,17 @@ export class ReactionEngine {
   private activePhaseName: string | null = null;
   private activePhaseStart = 0;
 
+  // Enforce-mode visibility abort (F-59, ADR 0027). Under `enforce`, a visibility/
+  // focus loss during a trial ABORTS the in-flight trial (rather than the record-
+  // mode flag-and-continue): the response window is closed with no response and any
+  // timed phase is interrupted, so the block loop pauses + re-queues the trial.
+  private readonly validityPolicy: ValidityPolicy;
+  private visibilityAborted = false;
+  /** Per-trial abort controller (enforce only), chained to the external signal. */
+  private trialAbortController: AbortController | null = null;
+  /** The external-signal → trial-controller forwarder, tracked for teardown. */
+  private trialExternalAbort: (() => void) | null = null;
+
   // Audio-priming state (W-1). Logged once per engine on the first resume timeout
   // so a device that can never satisfy the autoplay policy does not spam the log.
   private audioPrimeTimeoutLogged = false;
@@ -446,6 +471,7 @@ export class ReactionEngine {
     this.hidSource = options.hidSource;
     this.requestFrame = options.requestFrame;
     this.cancelFrame = options.cancelFrame;
+    this.validityPolicy = options.validityPolicy ?? 'record';
 
     this.gatekeeper = options.gatekeeper;
 
@@ -1034,8 +1060,13 @@ export class ReactionEngine {
     const frameLog: FrameSample[] = [];
     const timeline: ReactionPhaseMark[] = [];
 
+    // F-59: under `enforce`, an internal per-trial abort controller (chained to the
+    // external signal) lets a visibility loss interrupt the in-flight timed phase.
+    // In `record` mode this returns the external signal unchanged — byte-identical.
+    const trialSignal = this.beginTrialAbort(signal);
+
     this.subscribeFrameLogging(frameLog);
-    this.setupResponseCapture(config, signal);
+    this.setupResponseCapture(config, trialSignal);
     this.subscribeRenderErrors();
     this.subscribeVisibilityLoss();
 
@@ -1044,10 +1075,10 @@ export class ReactionEngine {
     }
 
     try {
-      await this.runFixation(config, timeline, signal);
-      await this.runPreStimulusDelay(config, timeline, signal);
+      await this.runFixation(config, timeline, trialSignal);
+      await this.runPreStimulusDelay(config, timeline, trialSignal);
 
-      const stimulus = await this.runStimulus(config, timeline, signal);
+      const stimulus = await this.runStimulus(config, timeline, trialSignal);
 
       // 3.2 / E-REACT-3: schedule the stimulus offset CONCURRENTLY with the
       // response window. When the duration elapses we remove the visual stimulus
@@ -1059,7 +1090,7 @@ export class ReactionEngine {
       this.armStimulusOffset(config, stimulus);
 
       const timeoutMs = config.responseTimeoutMs ?? 2000;
-      const waitResult = await this.waitForResponse(timeoutMs, signal);
+      const waitResult = await this.waitForResponse(timeoutMs, trialSignal);
 
       // A trial is invalid when its stimulus never reliably reached the screen, so
       // any captured timestamp was measured against nothing shown — discarded, no
@@ -1070,12 +1101,17 @@ export class ReactionEngine {
       //   the belt-and-braces backstop that keeps a blank block from persisting
       //   clean-looking NULL rows even if a future enumeration hole reappears.
       const noStimulus = this.stimulusExpectedVisual && !this.stimulusRenderablePresented;
-      const invalid = this.renderErrorDuringTrial || noStimulus;
+      // F-59: an enforce-mode visibility loss during the response window resolves the
+      // wait without a response; the trial is invalidated here (the block loop then
+      // pauses + re-queues it via `abortedForVisibility`).
+      const invalid = this.renderErrorDuringTrial || noStimulus || this.visibilityAborted;
       const invalidReason = this.renderErrorDuringTrial
         ? (this.renderErrorReason ?? 'stimulus-render-failed')
         : noStimulus
           ? 'no-stimulus'
-          : undefined;
+          : this.visibilityAborted
+            ? 'visibility'
+            : undefined;
       const response = invalid ? null : waitResult.response;
       const timeout = invalid ? true : waitResult.timeout;
 
@@ -1095,15 +1131,15 @@ export class ReactionEngine {
         // E-REACT-4: trial-level feedback. Rendered after the response window
         // closes, before the inter-trial interval. A display-only phase — it
         // captures no response, so it never contaminates scored RT.
-        await this.runFeedback(config, isCorrect, timeout, response, timeline, signal);
+        await this.runFeedback(config, isCorrect, timeout, response, timeline, trialSignal);
 
         for (const phase of this.scheduledPhases) {
-          await this.runScheduledPhase(phase, timeline, signal);
+          await this.runScheduledPhase(phase, timeline, trialSignal);
         }
 
         if (config.interTrialIntervalMs && config.interTrialIntervalMs > 0) {
           const closePhase = this.openPhase('inter-trial', timeline);
-          await this.wait(config.interTrialIntervalMs, signal);
+          await this.wait(config.interTrialIntervalMs, trialSignal);
           closePhase();
         }
       }
@@ -1159,11 +1195,23 @@ export class ReactionEngine {
         timeout,
         invalid,
         invalidReason,
+        abortedForVisibility: this.visibilityAborted,
         frameLog,
         phaseTimeline: timeline,
         stats,
         provenance,
       };
+    } catch (err) {
+      // F-59: an enforce-mode visibility loss during a TIMED phase (fixation /
+      // pre-stimulus / feedback / ITI) surfaces here as the internal trial signal's
+      // AbortError. Convert it to an invalid trial result — discarded, no response —
+      // so the block loop pauses + re-queues it, rather than throwing out of the
+      // whole block. A genuine EXTERNAL abort (teardown) is not a visibility abort,
+      // so it rethrows and unwinds the run as before.
+      if (this.visibilityAborted && isAbortError(err)) {
+        return this.buildAbortedVisibilityResult(config, startedAt, frameLog, timeline);
+      }
+      throw err;
     } finally {
       this.cleanupRuntimeState();
       this.renderer.clearRenderables();
@@ -1217,6 +1265,7 @@ export class ReactionEngine {
     this.visibilityLossPhases = [];
     this.activePhaseName = null;
     this.activePhaseStart = 0;
+    this.visibilityAborted = false;
 
     this.renderErrorDuringTrial = false;
     this.renderErrorReason = null;
@@ -1727,6 +1776,187 @@ export class ReactionEngine {
       phase: this.activePhaseName ?? 'unknown',
       phaseElapsedMs: this.activePhaseName ? this.now() - this.activePhaseStart : 0,
     });
+    // F-59 (ADR 0027): enforce mode ABORTS the in-flight trial on a visibility loss
+    // (record mode only flags it, above, and continues).
+    if (this.validityPolicy === 'enforce') {
+      this.abortTrialForVisibility();
+    }
+  }
+
+  /**
+   * Abort the in-flight trial for a visibility/focus loss (F-59, enforce only).
+   * Mirrors {@link handleRenderError}: disable responses and end the response
+   * window WITHOUT recording a response, and additionally interrupt any in-flight
+   * TIMED phase (fixation / pre-stimulus / feedback / ITI) via the internal trial
+   * signal, so the trial unwinds to an invalid result the block loop re-queues.
+   * Idempotent — the first loss aborts; further losses within the trial are no-ops.
+   */
+  private abortTrialForVisibility(): void {
+    if (this.visibilityAborted) return;
+    this.visibilityAborted = true;
+    this.responseEnabled = false;
+    this.resolveResponse(null);
+    this.trialAbortController?.abort();
+  }
+
+  /**
+   * Build the combined per-trial abort signal (F-59). In `record` mode returns the
+   * external signal unchanged (zero behaviour change). In `enforce` mode creates an
+   * internal controller — aborted by a visibility loss — chained to the external
+   * signal so a genuine teardown still cancels the trial.
+   */
+  private beginTrialAbort(external?: AbortSignal): AbortSignal | undefined {
+    this.trialAbortController = null;
+    this.trialExternalAbort = null;
+    if (this.validityPolicy !== 'enforce') return external;
+
+    const controller = new AbortController();
+    this.trialAbortController = controller;
+    if (external) {
+      if (external.aborted) {
+        controller.abort();
+      } else {
+        const forward = () => controller.abort();
+        external.addEventListener('abort', forward, { once: true });
+        this.trialExternalAbort = () => external.removeEventListener('abort', forward);
+      }
+    }
+    return controller.signal;
+  }
+
+  /**
+   * Pause on a "return to the study" overlay until the tab is visible again (F-59,
+   * ADR 0027). Reuses the Layer-2 gate-overlay presentation machinery (incl. F-56
+   * `renderOnce`) so the paused state is actually painted while no trial drives the
+   * render loop. Resolves immediately when the document is already visible (e.g. a
+   * focus loss without a tab hide). Rejects on a genuine teardown abort.
+   */
+  public async awaitVisibilityRestored(signal?: AbortSignal): Promise<void> {
+    if (this.isDocumentVisible()) return;
+    this.setGateOverlay([
+      'Please return to the study to continue.',
+      'The task will resume automatically.',
+    ]);
+    try {
+      await this.waitForVisibilityReturn(signal);
+    } finally {
+      this.clearGateOverlay();
+    }
+  }
+
+  /** Whether the document is currently visible (not backgrounded). */
+  private isDocumentVisible(): boolean {
+    return typeof document === 'undefined' || document.visibilityState !== 'hidden';
+  }
+
+  /**
+   * Resolve when the document next becomes visible (F-59). Rejects with an
+   * AbortError if the trial/run is torn down while paused.
+   */
+  private waitForVisibilityReturn(signal?: AbortSignal): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      if (this.isDocumentVisible()) {
+        resolve();
+        return;
+      }
+      if (signal?.aborted) {
+        reject(new DOMException('Operation aborted', 'AbortError'));
+        return;
+      }
+      const cleanup = () => {
+        if (typeof document !== 'undefined') {
+          document.removeEventListener('visibilitychange', onVisible);
+        }
+        if (typeof window !== 'undefined') {
+          window.removeEventListener('focus', onVisible);
+        }
+        if (signal) signal.removeEventListener('abort', onAbort);
+      };
+      const onVisible = () => {
+        if (this.isDocumentVisible()) {
+          cleanup();
+          resolve();
+        }
+      };
+      const onAbort = () => {
+        cleanup();
+        reject(new DOMException('Operation aborted', 'AbortError'));
+      };
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', onVisible);
+      }
+      if (typeof window !== 'undefined') {
+        window.addEventListener('focus', onVisible);
+      }
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  /**
+   * Build the invalid result for an enforce-mode visibility abort that unwound a
+   * TIMED phase (F-59). No response, `timeout` true, `invalid` + `invalidReason:
+   * 'visibility'` + `abortedForVisibility`, and full degradation provenance so the
+   * discarded attempt is auditable.
+   */
+  private buildAbortedVisibilityResult(
+    config: ReactionTrialConfig,
+    startedAt: number,
+    frameLog: FrameSample[],
+    timeline: ReactionPhaseMark[]
+  ): ReactionTrialResult {
+    const stats = this.renderer.getStats();
+    const provenance: ReactionTrialProvenance = {
+      onsetMethod: this.stimulusTimingMethod,
+      responseMethod: null,
+      displayLatencyMs: this.onsetDisplayLatencyMs,
+      outputLatencyMs: this.onsetOutputLatencyMs,
+      rawRtMs: null,
+      anticipatory: this.anticipatory,
+      falseStart: this.falseStartCount > 0,
+      falseStartCount: this.falseStartCount,
+      degraded: this.onsetDegraded,
+      offsetMethod: this.stimulusOffsetMethod,
+      actualDurationFrames: this.stimulusActualDurationFrames,
+      crossOriginIsolated: this.readCrossOriginIsolated(),
+      timerResolutionMs: this.measureTimerResolutionMs(),
+      measuredRefreshRateHz: this.measuredRefreshRateHz(),
+      invalidated: 'visibility',
+      visibilityLossCount: this.visibilityLossCount,
+      visibilityLossPhases:
+        this.visibilityLossPhases.length > 0 ? [...this.visibilityLossPhases] : [],
+      frameStats: {
+        fps: stats.fps,
+        droppedFrames: stats.droppedFrames,
+        jitter: stats.jitter,
+      },
+      videoFrames: this.videoFrameRing.length > 0 ? [...this.videoFrameRing] : undefined,
+    };
+    return {
+      trialId: config.id,
+      startedAt,
+      stimulusOnsetTime: this.stimulusOnsetTime,
+      stimulusOnsetRawTime: this.stimulusOnsetRaw,
+      stimulusOffsetTime: this.stimulusOffsetTime,
+      offsetMethod: this.stimulusOffsetMethod,
+      actualDurationFrames: this.stimulusActualDurationFrames,
+      stimulusTimingMethod: this.stimulusTimingMethod,
+      displayLatencyMs: this.onsetDisplayLatencyMs,
+      outputLatencyMs: this.onsetOutputLatencyMs,
+      anticipatory: this.anticipatory,
+      falseStart: this.falseStartCount > 0,
+      falseStartCount: this.falseStartCount,
+      videoFrames: [...this.videoFrameRing],
+      response: null,
+      isCorrect: null,
+      timeout: true,
+      invalid: true,
+      invalidReason: 'visibility',
+      abortedForVisibility: true,
+      frameLog,
+      phaseTimeline: timeline,
+      stats,
+      provenance,
+    };
   }
 
   /** Whether the document is cross-origin isolated (W-2); false when unavailable. */
@@ -2922,6 +3152,13 @@ export class ReactionEngine {
 
     this.cleanupListeners.forEach((cleanup) => cleanup());
     this.cleanupListeners = [];
+
+    // F-59: drop the external-signal forwarder + per-trial abort controller so a
+    // later external abort can't reach a defunct controller and no listener leaks
+    // onto the shared run signal across a block's trials.
+    this.trialExternalAbort?.();
+    this.trialExternalAbort = null;
+    this.trialAbortController = null;
 
     if (this.stimulusDurationTimerId != null) {
       clearTimeout(this.stimulusDurationTimerId);

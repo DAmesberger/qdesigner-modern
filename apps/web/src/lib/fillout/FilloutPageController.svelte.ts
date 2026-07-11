@@ -141,6 +141,15 @@ function defaultServiceBag(): FilloutServiceBag {
 const SERVER_VAR_DEFAULT_STALE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
+ * Whether the document is cross-origin isolated (F-59, ADR 0027). Full timer
+ * resolution (~5µs vs ~100µs) requires COOP/COEP. The enforce-mode isolation gate
+ * consults this before creating a session for a timing-critical reaction study.
+ */
+function isCrossOriginIsolated(): boolean {
+  return typeof globalThis !== 'undefined' && globalThis.crossOriginIsolated === true;
+}
+
+/**
  * Headless controller for the `(fillout)/q/[code]` entry page (F040). Owns the
  * service wiring (offline session, upload sync, quotas, fraud, timing gatekeeper,
  * runtime) and the screen state machine, leaving the `.svelte` file a thin view that
@@ -159,6 +168,7 @@ export class FilloutPageController {
     | 'over-quota'
     | 'screened-out'
     | 'webgl-unsupported'
+    | 'timing-isolation-required'
     | 'media-error'
   >('welcome');
   overQuotaMessage = $state('');
@@ -687,10 +697,27 @@ export class FilloutPageController {
     // The v1-contract predicate reads the module registry; ensure it is populated first.
     await ensureModulesRegistered();
     if (!definitionNeedsWebGL(this.data.questionnaire.definition)) return true;
-    if (probeWebGL2Support()) return true;
-    this.screen = 'webgl-unsupported';
-    this.loading = false;
-    return false;
+    if (!probeWebGL2Support()) {
+      this.screen = 'webgl-unsupported';
+      this.loading = false;
+      return false;
+    }
+    // F-59 (ADR 0027, enforce): a timing-critical study refuses to run without
+    // cross-origin isolation — `performance.now()` is clamped (~100µs) and the
+    // sub-ms timing claim cannot be met. Turn the participant away honestly BEFORE
+    // any session is created, mirroring the webgl-unsupported gate. In the default
+    // `record` posture this branch is skipped: the degradation is stamped into
+    // per-trial provenance and the study runs to completion (byte-identical to
+    // today for all existing content, which has no `validityPolicy`).
+    if (
+      this.data.questionnaire.definition.settings?.validityPolicy === 'enforce' &&
+      !isCrossOriginIsolated()
+    ) {
+      this.screen = 'timing-isolation-required';
+      this.loading = false;
+      return false;
+    }
+    return true;
   }
 
   /**

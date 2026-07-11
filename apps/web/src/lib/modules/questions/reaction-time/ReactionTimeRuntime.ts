@@ -3,7 +3,12 @@ import type {
   QuestionRuntimeContext,
   QuestionRuntimeResult,
 } from '$lib/runtime/core/question-runtime';
-import { ReactionEngine, assignCounterbalance, HidDeviceManager } from '$lib/runtime/reaction';
+import {
+  ReactionEngine,
+  assignCounterbalance,
+  HidDeviceManager,
+  runBlockWithVisibilityRequeue,
+} from '$lib/runtime/reaction';
 import type { Binding } from '$lib/runtime/reaction';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import { mediaContentUrl } from '$lib/services/mediaService';
@@ -107,6 +112,8 @@ interface TrialResponse {
   invalidReason: string | null;
   /** The participant's assigned counterbalance cell (E-REACT-6), or null when none. */
   counterbalanceCell: string | null;
+  /** Enforce-mode visibility abort (F-59): the trial was discarded + re-queued. */
+  abortedForVisibility: boolean;
 }
 
 export class ReactionTimeRuntime implements IQuestionRuntime {
@@ -134,6 +141,9 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       // if the participant granted one at study start. Null when none is
       // connected, so hid bindings stay inert and keyboard/touch still work.
       hidSource: HidDeviceManager.shared().getActiveSource() ?? undefined,
+      // F-59 (ADR 0027): under `enforce`, a visibility loss aborts the in-flight
+      // trial so the block loop can pause + re-queue it. Absent ⇒ `record`.
+      validityPolicy: context.questionnaire?.settings?.validityPolicy ?? 'record',
     });
 
     this.engine.seedFromResourceManager(context.resourceManager);
@@ -195,18 +205,40 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
     // E-REACT-4: how many practice passes each criterion-gated block actually
     // took, surfaced in metadata for the researcher.
     const practiceAttempts: Record<string, number> = {};
-    // Monotonic across every executed trial (including repeated practice passes)
-    // so each persisted response keeps a unique, ordered trial number.
+    // Monotonic across every executed trial (including repeated practice passes
+    // and enforce-mode re-runs) so each persisted response keeps a unique, ordered
+    // trial number.
     let trialNumber = 0;
+    // F-59 (ADR 0027): timing-validity posture + re-queue accounting.
+    const policy = context.questionnaire?.settings?.validityPolicy ?? 'record';
+    let visibilityRequeues = 0;
+    let visibilityRequeuesLost = 0;
 
     const runGroup = async (group: PlannedReactionTrial[]): Promise<TrialResponse[]> => {
       const groupResponses: TrialResponse[] = [];
-      for (const planned of group) {
-        trialNumber += 1;
-        groupResponses.push(
-          await this.runPlannedTrial(engine, planned, trialNumber, context, counterbalanceCell)
-        );
-      }
+      // F-59: run the block through the visibility re-queue orchestration. In
+      // `record` mode this is a plain sequential run (no trial is ever aborted for
+      // visibility); in `enforce` mode an aborted trial pauses on the return-to-
+      // study overlay and is re-queued at the block's end under a bounded cap.
+      const outcome = await runBlockWithVisibilityRequeue({
+        block: group,
+        policy,
+        onVisibilityPause: () => engine.awaitVisibilityRestored(context.abortSignal),
+        runTrial: async (planned) => {
+          trialNumber += 1;
+          const response = await this.runPlannedTrial(
+            engine,
+            planned,
+            trialNumber,
+            context,
+            counterbalanceCell
+          );
+          groupResponses.push(response);
+          return { abortedForVisibility: response.abortedForVisibility };
+        },
+      });
+      visibilityRequeues += outcome.requeued;
+      visibilityRequeuesLost += outcome.lost;
       return groupResponses;
     };
 
@@ -296,6 +328,10 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
         // C-PROVENANCE: roll per-trial timing up so reaction-time responses persist a
         // non-empty timing_provenance (parity with reaction-experiment).
         timingProvenance: aggregateReactionProvenance(testResponses, averageRT),
+        // F-59 (ADR 0027): enforce-mode visibility re-queue accounting so analysts
+        // see how many trials were interrupted, re-run, or lost to the cap.
+        visibilityRequeues,
+        visibilityRequeuesLost,
       },
     };
   }
@@ -374,6 +410,7 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       invalid: trialResult.invalid ?? false,
       invalidReason: trialResult.invalidReason ?? null,
       counterbalanceCell,
+      abortedForVisibility: trialResult.abortedForVisibility ?? false,
     };
 
     // RT-1b: persist this trial IMMEDIATELY (fire-and-forget on the fillout side).

@@ -351,6 +351,8 @@
   "fillout_over_quota_title": "Study Full",
   "fillout_webgl_title": "Graphics support required",
   "fillout_webgl_desc": "This study contains reaction-time tasks that need graphics support your browser or device doesn't provide. Please try again on a desktop browser such as Chrome or Firefox.",
+  "fillout_timing_isolation_title": "Precise timing required",
+  "fillout_timing_isolation_desc": "This study measures reaction times and requires precise timing that this server or browser configuration can't currently provide. Please try again on a desktop browser such as Chrome or Firefox, or contact the study organizer.",
   "fillout_media_error_title": "Some media files couldn't load",
   "fillout_media_error_desc_count": "{count} media files needed for this study couldn't be downloaded. This is usually a temporary network problem.",
   "fillout_media_error_desc": "Some media files needed for this study couldn't be downloaded. This is usually a temporary network problem.",

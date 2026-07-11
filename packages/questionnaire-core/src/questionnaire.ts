@@ -699,6 +699,18 @@ export interface ReportPageConfig {
  */
 export type SurveyTimeoutAction = 'auto-submit' | 'terminate';
 
+/**
+ * How the runtime reacts to degraded timing validity (ADR 0027).
+ * - `record` (default, absent ⇒ this): never stops the participant. A degraded
+ *   trial/session (backgrounded tab, no cross-origin isolation, throttled timers)
+ *   is stamped with explicit provenance and surfaced in analytics, but always runs
+ *   to completion. Zero behaviour change for existing content.
+ * - `enforce`: for timing-critical studies. Reaction blocks refuse to run without
+ *   cross-origin isolation, and a visibility loss aborts the in-flight trial
+ *   (flagged, re-queued at block end under a bounded retry cap).
+ */
+export type ValidityPolicy = 'record' | 'enforce';
+
 export interface QuestionnaireSettings {
   allowBackNavigation?: boolean;
   showProgressBar?: boolean;
@@ -717,6 +729,13 @@ export interface QuestionnaireSettings {
   /** Participant-facing message when the survey deadline terminates the session. */
   surveyTimeoutMessage?: string;
   webgl?: WebGLSettings;
+  /**
+   * Timing-validity posture for degraded conditions (ADR 0027). Absent ⇒ `record`
+   * (never stops the participant; stamps provenance). `enforce` refuses reaction
+   * blocks without cross-origin isolation and aborts+re-queues trials on a
+   * visibility loss. See {@link ValidityPolicy}.
+   */
+  validityPolicy?: ValidityPolicy;
   requireConsent?: boolean;
   requireAuthentication?: boolean;
   allowAnonymous?: boolean;

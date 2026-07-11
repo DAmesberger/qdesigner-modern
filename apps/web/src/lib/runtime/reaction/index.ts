@@ -41,6 +41,13 @@ export type { FeedbackVerdict, FeedbackRenderableSpec } from './feedback/feedbac
 
 export { FrameCountdown, framesForDurationMs, durationMsForFrames } from './frameScheduler';
 
+// Enforce-mode visibility re-queue orchestration (F-59, ADR 0027).
+export {
+  runBlockWithVisibilityRequeue,
+  MAX_VISIBILITY_REQUEUES_PER_BLOCK,
+} from './blockRequeue';
+export type { BlockRequeueOutcome, RunBlockOptions } from './blockRequeue';
+
 // Participant-level counterbalancing (E-REACT-6)
 export {
   assignCounterbalance,

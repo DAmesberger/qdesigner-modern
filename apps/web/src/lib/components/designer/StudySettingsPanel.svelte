@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getDesignerContext } from '$lib/stores/designer-context';
   import { generateId } from '$lib/shared';
-  import type { ConsentCheckbox, ConsentContent } from '$lib/shared';
+  import type { ConsentCheckbox, ConsentContent, ValidityPolicy } from '$lib/shared';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import { Plus, Trash2 } from 'lucide-svelte';
 
@@ -12,6 +12,7 @@
   // Local edit copies, committed on Save (mirrors DataQualityPanel / QuotaPanel) so
   // the panel never churns Yjs / undo history on every keystroke.
   let localShowProgressBar = $state(true);
+  let localValidityPolicy = $state<ValidityPolicy>('record');
   let localRequireConsent = $state(false);
   let localConsentTitle = $state('');
   let localConsentContent = $state('');
@@ -24,6 +25,8 @@
       const consent = designerStore.questionnaire.consent;
       // showProgressBar defaults to true (matches DocumentStore.createEmptyQuestionnaire).
       localShowProgressBar = settings.showProgressBar ?? true;
+      // ADR 0027: absent ⇒ 'record' (never stops participants; stamps provenance).
+      localValidityPolicy = settings.validityPolicy ?? 'record';
       localRequireConsent = settings.requireConsent ?? false;
       localConsentTitle = consent?.title ?? '';
       localConsentContent = consent?.content ?? '';
@@ -71,6 +74,7 @@
       settings: {
         ...designerStore.questionnaire.settings,
         showProgressBar: localShowProgressBar,
+        validityPolicy: localValidityPolicy,
         requireConsent: localRequireConsent,
       },
       consent,
@@ -103,6 +107,35 @@
           </span>
         </span>
       </label>
+    </div>
+
+    <!-- Timing validity (ADR 0027) -->
+    <div>
+      <h4 class="text-sm font-medium text-foreground mb-3">Timing validity</h4>
+      <label for="validity-policy" class="block text-sm text-foreground mb-1">
+        When precise timing degrades
+      </label>
+      <select
+        id="validity-policy"
+        bind:value={localValidityPolicy}
+        class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground focus:ring-2 focus:ring-primary"
+        data-testid="settings-validity-policy"
+      >
+        <option value="record">Record and continue (recommended)</option>
+        <option value="enforce">Enforce — refuse or abort under degraded timing</option>
+      </select>
+      <p class="text-xs text-muted-foreground mt-1" data-testid="settings-validity-policy-help">
+        {#if localValidityPolicy === 'enforce'}
+          For timing-critical studies. Reaction blocks refuse to start unless the
+          browser can provide precise timing (cross-origin isolation), and losing
+          focus mid-trial aborts that trial and re-runs it later in the block. Some
+          participants on unsupported setups will be turned away.
+        {:else}
+          Never stops participants. Degraded conditions (a backgrounded tab, a
+          browser without precise-timing support) are recorded with full provenance
+          and flagged in analytics, but the study always runs to completion.
+        {/if}
+      </p>
     </div>
 
     <!-- Informed consent -->

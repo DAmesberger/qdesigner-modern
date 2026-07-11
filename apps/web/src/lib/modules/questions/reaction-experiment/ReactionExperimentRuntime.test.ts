@@ -24,24 +24,31 @@ vi.mock('$lib/runtime/timing', () => ({
   TimingGatekeeper: { shared: () => ({}) },
 }));
 
-vi.mock('$lib/runtime/reaction', () => ({
-  ReactionEngine: class {
-    seedFromResourceManager() {}
-    async primeAudio() {}
-    clearScheduledPhases() {}
-    schedulePhase() {}
-    async gateBlockMedia(stimuli: ReactionStimulusConfig[]) {
-      gateCalls.push(stimuli);
-    }
-    async runTrial(trial: { id: string }): Promise<ReactionTrialResult> {
-      return makeTrialResult(trial.id);
-    }
-    destroy() {}
-  },
-  // RT-4: the runtime resolves the session HID manager to arm hardware bindings;
-  // the mock has no device so getActiveSource() is null (bindings stay inert).
-  HidDeviceManager: { shared: () => ({ getActiveSource: () => null }) },
-}));
+vi.mock('$lib/runtime/reaction', async (importOriginal) => {
+  // Keep the REAL block-requeue orchestration (F-59) — a pure ordering fn — so the
+  // runtime's block loop runs faithfully; only the engine + HID manager are faked.
+  const actual = await importOriginal<typeof import('$lib/runtime/reaction')>();
+  return {
+    ...actual,
+    ReactionEngine: class {
+      seedFromResourceManager() {}
+      async primeAudio() {}
+      clearScheduledPhases() {}
+      schedulePhase() {}
+      async gateBlockMedia(stimuli: ReactionStimulusConfig[]) {
+        gateCalls.push(stimuli);
+      }
+      async runTrial(trial: { id: string }): Promise<ReactionTrialResult> {
+        return makeTrialResult(trial.id);
+      }
+      async awaitVisibilityRestored() {}
+      destroy() {}
+    },
+    // RT-4: the runtime resolves the session HID manager to arm hardware bindings;
+    // the mock has no device so getActiveSource() is null (bindings stay inert).
+    HidDeviceManager: { shared: () => ({ getActiveSource: () => null }) },
+  };
+});
 
 import { ReactionExperimentRuntime } from './ReactionExperimentRuntime';
 

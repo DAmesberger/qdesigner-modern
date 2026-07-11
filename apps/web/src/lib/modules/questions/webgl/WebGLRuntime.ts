@@ -25,6 +25,10 @@ export class WebGLRuntime implements IQuestionRuntime {
       canvas: context.canvas,
       renderer: context.renderer,
       eventTarget: document,
+      // F-59 (ADR 0027): honour the study's timing-validity posture. This is a
+      // single-trial paradigm, so an enforce-mode visibility abort simply yields an
+      // invalid result (there is no block to re-queue into); `record` is unchanged.
+      validityPolicy: context.questionnaire?.settings?.validityPolicy ?? 'record',
     });
 
     // Seed the engine's caches with preloaded assets from ResourceManager

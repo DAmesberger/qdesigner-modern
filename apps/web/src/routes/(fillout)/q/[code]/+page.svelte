@@ -687,6 +687,19 @@
         onAction={() => goto('/')}
       />
     </div>
+  {:else if controller.screen === 'timing-isolation-required'}
+    <!-- Timing-validity enforce gate (F-59, ADR 0027): a timing-critical study on a
+         server/browser configuration that can't provide precise timing (no cross-origin
+         isolation). Honest turn-away BEFORE any session was created; the record-mode
+         default never reaches here (it stamps the degradation and continues). -->
+    <div class="loading-container" data-testid="fillout-timing-isolation-required">
+      <EmptyState
+        title={m.fillout_timing_isolation_title()}
+        description={m.fillout_timing_isolation_desc()}
+        buttonText={m.fillout_action_go_back()}
+        onAction={() => goto('/')}
+      />
+    </div>
   {:else if controller.screen === 'media-error'}
     <!-- Recoverable media-preload failure (R2-5): a curated screen with the failed count
          and a Retry that re-runs only the preload against the same session (offline-first,

@@ -3,7 +3,7 @@ import type {
   QuestionRuntimeContext,
   QuestionRuntimeResult,
 } from '$lib/runtime/core/question-runtime';
-import { ReactionEngine, HidDeviceManager } from '$lib/runtime/reaction';
+import { ReactionEngine, HidDeviceManager, runBlockWithVisibilityRequeue } from '$lib/runtime/reaction';
 import type { Binding } from '$lib/runtime/reaction';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import { mediaContentUrl } from '$lib/services/mediaService';
@@ -89,6 +89,8 @@ interface TrialResponse {
   /** True when the trial was invalidated (e.g. stimulus render failed); not a genuine timeout. */
   invalid: boolean;
   invalidReason: string | null;
+  /** Enforce-mode visibility abort (F-59): the trial was discarded + re-queued. */
+  abortedForVisibility: boolean;
 }
 
 export class ReactionExperimentRuntime implements IQuestionRuntime {
@@ -115,6 +117,9 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
       // RT-4 (ADR 0024): arm against the session's connected HID response device
       // if one was granted at study start; null leaves hid bindings inert.
       hidSource: HidDeviceManager.shared().getActiveSource() ?? undefined,
+      // F-59 (ADR 0027): under `enforce`, a visibility loss aborts the in-flight
+      // trial so the block loop can pause + re-queue it. Absent ⇒ `record`.
+      validityPolicy: context.questionnaire?.settings?.validityPolicy ?? 'record',
     });
 
     this.engine.seedFromResourceManager(context.resourceManager);
@@ -162,43 +167,23 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
     );
 
     const responses: TrialResponse[] = [];
+    // F-59 (ADR 0027): timing-validity posture threaded from the definition.
+    const policy = context.questionnaire?.settings?.validityPolicy ?? 'record';
+    // Monotonic across every executed trial (including enforce-mode re-runs) so each
+    // persisted response keeps a unique, ordered trial number.
+    let trialNumber = 0;
+    let visibilityRequeues = 0;
+    let visibilityRequeuesLost = 0;
 
-    // Layer-2 decode gate (ADR 0026): fully load + decode a block's stimuli from
-    // cache before its first trial, behind a visible preparing state, fail-closed
-    // if any asset can't be prepared. Gated per block so no network I/O or decode
-    // ever happens inside a running block.
-    //
-    // F-54: `hasGated` guarantees the FIRST block is always gated. The previous
-    // `blockId !== gatedBlockId` guard seeded with `null` skipped the gate entirely
-    // for a first block whose `blockId` was itself `null` (`null !== null` is
-    // false), letting that block run with un-prepared stimuli.
-    let gatedBlockId: string | null | undefined;
-    let hasGated = false;
-
-    for (let index = 0; index < trialPlan.length; index++) {
-      const planned = trialPlan[index]!;
-
-      if (!hasGated || planned.metadata.blockId !== gatedBlockId) {
-        hasGated = true;
-        gatedBlockId = planned.metadata.blockId;
-        const blockStimuli = trialPlan
-          .filter((p) => p.metadata.blockId === gatedBlockId)
-          .map((p) => p.trial.stimulus)
-          .filter(Boolean);
-        await engine.gateBlockMedia(blockStimuli, context.abortSignal);
-      }
-
-      engine.clearScheduledPhases();
-      const scheduledPhases = planned.metadata.scheduledPhases || [];
-      scheduledPhases.forEach((phase) => engine.schedulePhase(phase));
-
-      const result = await engine.runTrial(planned.trial, context.abortSignal);
+    const mapResponse = (
+      planned: (typeof trialPlan)[number],
+      result: Awaited<ReturnType<typeof engine.runTrial>>
+    ): TrialResponse => {
       const key =
         result.response && typeof result.response.value === 'string' ? result.response.value : null;
-
-      const response: TrialResponse = {
+      return {
         trialId: planned.trial.id,
-        trialNumber: index + 1,
+        trialNumber,
         isPractice: planned.metadata.isPractice,
         taskType: planned.metadata.taskType,
         blockId: planned.metadata.blockId,
@@ -242,18 +227,47 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
         visibilityInvalidated: result.provenance.invalidated === 'visibility',
         invalid: result.invalid ?? false,
         invalidReason: result.invalidReason ?? null,
+        abortedForVisibility: result.abortedForVisibility ?? false,
       };
+    };
 
-      responses.push(response);
+    // Layer-2 decode gate (ADR 0026): fully load + decode a block's stimuli from
+    // cache before its first trial, behind a visible preparing state, fail-closed
+    // if any asset can't be prepared. Gated per block so no network I/O or decode
+    // ever happens inside a running block. F-59: each block then runs through the
+    // visibility re-queue orchestration (a no-op ordering in `record` mode).
+    for (const block of groupConsecutiveBlocks(trialPlan)) {
+      const blockStimuli = block.map((p) => p.trial.stimulus).filter(Boolean);
+      await engine.gateBlockMedia(blockStimuli, context.abortSignal);
 
-      // RT-1b: persist each trial the instant it completes (fire-and-forget on the
-      // fillout side). The `value.responses` block summary below stays unchanged.
-      context.onTrialComplete?.(
-        buildRuntimeTrialEvent(context.question.id, response, [
-          ...materializedPhasesFromTrial(planned.trial),
-          ...(planned.metadata.scheduledPhases ?? []),
-        ])
-      );
+      const outcome = await runBlockWithVisibilityRequeue({
+        block,
+        policy,
+        onVisibilityPause: () => engine.awaitVisibilityRestored(context.abortSignal),
+        runTrial: async (planned) => {
+          engine.clearScheduledPhases();
+          const scheduledPhases = planned.metadata.scheduledPhases || [];
+          scheduledPhases.forEach((phase) => engine.schedulePhase(phase));
+
+          const result = await engine.runTrial(planned.trial, context.abortSignal);
+          trialNumber += 1;
+          const response = mapResponse(planned, result);
+          responses.push(response);
+
+          // RT-1b: persist each trial the instant it completes (fire-and-forget on
+          // the fillout side). The `value.responses` block summary stays unchanged.
+          context.onTrialComplete?.(
+            buildRuntimeTrialEvent(context.question.id, response, [
+              ...materializedPhasesFromTrial(planned.trial),
+              ...(planned.metadata.scheduledPhases ?? []),
+            ])
+          );
+
+          return { abortedForVisibility: response.abortedForVisibility };
+        },
+      });
+      visibilityRequeues += outcome.requeued;
+      visibilityRequeuesLost += outcome.lost;
     }
 
     const testResponses = responses.filter((response) => !response.isPractice);
@@ -290,6 +304,10 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
         // health up to the response level so `timing_provenance` is populated on
         // the persistence path (per-trial detail stays in `value.responses`).
         timingProvenance: aggregateReactionProvenance(testResponses, averageRT),
+        // F-59 (ADR 0027): enforce-mode visibility re-queue accounting so analysts
+        // see how many trials were interrupted, re-run, or lost to the cap.
+        visibilityRequeues,
+        visibilityRequeuesLost,
       },
     };
   }
@@ -298,4 +316,27 @@ export class ReactionExperimentRuntime implements IQuestionRuntime {
     this.engine?.destroy();
     this.engine = null;
   }
+}
+
+/**
+ * Split a flat compiled plan into consecutive runs sharing a block id (F-59). Each
+ * run is the unit the visibility re-queue orchestration operates over — a re-queued
+ * trial re-runs at the END of its own block, before the next block starts.
+ */
+function groupConsecutiveBlocks<T extends { metadata: { blockId: string } }>(
+  plan: readonly T[]
+): T[][] {
+  const groups: T[][] = [];
+  let current: T[] | null = null;
+  let currentBlockId: string | null = null;
+  for (const planned of plan) {
+    const blockId = planned.metadata.blockId;
+    if (!current || blockId !== currentBlockId) {
+      current = [];
+      currentBlockId = blockId;
+      groups.push(current);
+    }
+    current.push(planned);
+  }
+  return groups;
 }

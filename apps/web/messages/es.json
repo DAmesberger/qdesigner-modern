@@ -348,6 +348,8 @@
   "fillout_over_quota_title": "Estudio completo",
   "fillout_webgl_title": "Se requiere compatibilidad gráfica",
   "fillout_webgl_desc": "Este estudio contiene tareas de tiempo de reacción que necesitan una compatibilidad gráfica que su navegador o dispositivo no ofrece. Inténtelo de nuevo en un navegador de escritorio como Chrome o Firefox.",
+  "fillout_timing_isolation_title": "Se requiere una medición precisa del tiempo",
+  "fillout_timing_isolation_desc": "Este estudio mide tiempos de reacción y requiere una medición precisa del tiempo que esta configuración de servidor o navegador no puede ofrecer actualmente. Inténtelo de nuevo en un navegador de escritorio como Chrome o Firefox, o póngase en contacto con la persona responsable del estudio.",
   "fillout_media_error_title": "Algunos archivos multimedia no se pudieron cargar",
   "fillout_media_error_desc_count": "No se pudieron descargar {count} archivos multimedia necesarios para este estudio. Suele ser un problema temporal de red.",
   "fillout_media_error_desc": "No se pudieron descargar algunos archivos multimedia necesarios para este estudio. Suele ser un problema temporal de red.",

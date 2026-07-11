@@ -563,6 +563,14 @@ export interface ReactionTrialResult {
   invalid: boolean;
   /** Machine-readable reason the trial was marked invalid (`invalid === true`). */
   invalidReason?: string;
+  /**
+   * True when the trial was aborted for a visibility/focus loss under the
+   * `enforce` validity policy (F-59, ADR 0027). Distinct from the record-mode
+   * `provenance.invalidated === 'visibility'` flag (which leaves the trial valid
+   * and completed): an enforce abort discards the trial (`invalid`, null response)
+   * so the block loop can pause and re-queue it. Always false in record mode.
+   */
+  abortedForVisibility?: boolean;
   frameLog: FrameSample[];
   phaseTimeline: ReactionPhaseMark[];
   stats: FrameStats;

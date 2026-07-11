@@ -149,6 +149,9 @@ beforeEach(() => {
   // Reset the WebGL preflight doubles to their "form-only, supported" defaults.
   vi.mocked(definitionNeedsWebGL).mockReturnValue(false);
   vi.mocked(probeWebGL2Support).mockReturnValue(true);
+  // Default to an isolated document so the F-59 isolation gate is a no-op unless a
+  // test opts into the degraded environment.
+  Object.defineProperty(globalThis, 'crossOriginIsolated', { configurable: true, value: true });
 });
 
 describe('FilloutPageController', () => {
@@ -213,6 +216,42 @@ describe('FilloutPageController', () => {
     expect(probeWebGL2Support).toHaveBeenCalledTimes(1);
     expect(mocks.offlineSession.createSession).not.toHaveBeenCalled();
     expect(mocks.services.makeRuntime).not.toHaveBeenCalled();
+  });
+
+  it('enforce policy blocks a reaction study without cross-origin isolation and never creates a session (F-59)', async () => {
+    const data = makeData({ settings: { requireConsent: false, validityPolicy: 'enforce' } });
+    const mocks = makeMocks();
+    // WebGL is available, so the webgl gate passes — the isolation gate is what turns away.
+    vi.mocked(definitionNeedsWebGL).mockReturnValue(true);
+    vi.mocked(probeWebGL2Support).mockReturnValue(true);
+    Object.defineProperty(globalThis, 'crossOriginIsolated', { configurable: true, value: false });
+
+    const controller = makeController(data, mocks);
+    wireRuntimeInputs(controller, data.questionnaire.definition);
+
+    await controller.handleStart();
+
+    expect(controller.screen).toBe('timing-isolation-required');
+    expect(mocks.offlineSession.createSession).not.toHaveBeenCalled();
+    expect(mocks.services.makeRuntime).not.toHaveBeenCalled();
+  });
+
+  it('record policy (default) proceeds without cross-origin isolation — degradation is stamped, not blocked (F-59 regression)', async () => {
+    // No validityPolicy ⇒ record. Same degraded environment as the enforce case above.
+    const data = makeData({ settings: { requireConsent: false } });
+    const mocks = makeMocks();
+    vi.mocked(definitionNeedsWebGL).mockReturnValue(true);
+    vi.mocked(probeWebGL2Support).mockReturnValue(true);
+    Object.defineProperty(globalThis, 'crossOriginIsolated', { configurable: true, value: false });
+
+    const controller = makeController(data, mocks);
+    wireRuntimeInputs(controller, data.questionnaire.definition);
+
+    await controller.handleStart();
+
+    // Not turned away: the session is created and the runtime starts.
+    expect(controller.screen).toBe('runtime');
+    expect(mocks.offlineSession.createSession).toHaveBeenCalledTimes(1);
   });
 
   it('does not consult the WebGL probe for a form-only definition (R2-4)', async () => {

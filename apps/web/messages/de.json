@@ -351,6 +351,8 @@
   "fillout_over_quota_title": "Studie ausgelastet",
   "fillout_webgl_title": "Grafikunterstützung erforderlich",
   "fillout_webgl_desc": "Diese Studie enthält Reaktionszeitaufgaben, die eine Grafikunterstützung erfordern, die Ihr Browser oder Gerät nicht bietet. Bitte versuchen Sie es erneut mit einem Desktop-Browser wie Chrome oder Firefox.",
+  "fillout_timing_isolation_title": "Präzises Timing erforderlich",
+  "fillout_timing_isolation_desc": "Diese Studie misst Reaktionszeiten und erfordert ein präzises Timing, das diese Server- oder Browserkonfiguration derzeit nicht bereitstellen kann. Bitte versuchen Sie es erneut mit einem Desktop-Browser wie Chrome oder Firefox, oder wenden Sie sich an die Studienleitung.",
   "fillout_media_error_title": "Einige Mediendateien konnten nicht geladen werden",
   "fillout_media_error_desc_count": "{count} für diese Studie benötigte Mediendateien konnten nicht heruntergeladen werden. Dies ist in der Regel ein vorübergehendes Netzwerkproblem.",
   "fillout_media_error_desc": "Einige für diese Studie benötigte Mediendateien konnten nicht heruntergeladen werden. Dies ist in der Regel ein vorübergehendes Netzwerkproblem.",

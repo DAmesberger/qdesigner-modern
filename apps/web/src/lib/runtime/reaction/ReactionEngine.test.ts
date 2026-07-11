@@ -1018,6 +1018,7 @@ function createMockEngine(opts?: {
   hidSource?: ConstructorParameters<typeof ReactionEngine>[0]['hidSource'];
   requestFrame?: ConstructorParameters<typeof ReactionEngine>[0]['requestFrame'];
   cancelFrame?: ConstructorParameters<typeof ReactionEngine>[0]['cancelFrame'];
+  validityPolicy?: ConstructorParameters<typeof ReactionEngine>[0]['validityPolicy'];
 }) {
   const canvas = document.createElement('canvas');
   canvas.width = 800;
@@ -1035,6 +1036,7 @@ function createMockEngine(opts?: {
     hidSource: opts?.hidSource,
     requestFrame: opts?.requestFrame,
     cancelFrame: opts?.cancelFrame,
+    validityPolicy: opts?.validityPolicy,
   });
   return { engine, target, canvas, ...mock };
 }
@@ -1324,6 +1326,72 @@ describe('ReactionEngine — timing correctness', () => {
     expect(result.provenance.visibilityLossPhases).toBeDefined();
     expect(result.provenance.visibilityLossPhases!.length).toBeGreaterThanOrEqual(1);
 
+    engine.destroy();
+  });
+
+  it('enforce policy aborts + discards a trial on a visibility loss in the response window (F-59)', async () => {
+    const { engine, target, emitFrame } = createMockEngine({ validityPolicy: 'enforce' });
+
+    const resultPromise = engine.runTrial({
+      id: 'enforce-vis',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: false },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 2000,
+    });
+
+    await flush();
+    emitFrame({ now: 1000, presented: true }); // onset — response window open
+    await flush();
+    // Backgrounding / focus loss mid-response: enforce mode ABORTS (record flags).
+    window.dispatchEvent(new Event('blur'));
+
+    const result = await resultPromise;
+
+    expect(result.invalid).toBe(true);
+    expect(result.invalidReason).toBe('visibility');
+    expect(result.abortedForVisibility).toBe(true);
+    expect(result.response).toBeNull();
+    expect(result.provenance.invalidated).toBe('visibility');
+    expect(result.provenance.visibilityLossCount).toBeGreaterThanOrEqual(1);
+
+    engine.destroy();
+  });
+
+  it('enforce policy aborts a trial when focus is lost DURING a timed fixation phase (F-59)', async () => {
+    const { engine } = createMockEngine({ validityPolicy: 'enforce' });
+
+    const resultPromise = engine.runTrial({
+      id: 'enforce-fix',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      // A long fixation so the abort interrupts the timed phase (not the response
+      // window). The blur must reject the fixation wait and unwind to an invalid
+      // result rather than throwing out of the block.
+      fixation: { enabled: true, durationMs: 10000 },
+      stimulus: { kind: 'shape', shape: 'circle', id: 'stim' },
+      responseTimeoutMs: 2000,
+    });
+
+    await flush();
+    window.dispatchEvent(new Event('blur'));
+
+    const result = await resultPromise;
+
+    expect(result.invalid).toBe(true);
+    expect(result.abortedForVisibility).toBe(true);
+    expect(result.invalidReason).toBe('visibility');
+    expect(result.response).toBeNull();
+
+    engine.destroy();
+  });
+
+  it('awaitVisibilityRestored resolves immediately when the document is visible (F-59)', async () => {
+    const { engine } = createMockEngine({ validityPolicy: 'enforce' });
+    // jsdom reports visibilityState 'visible' — a focus loss without a tab hide
+    // must not deadlock the pause.
+    await expect(engine.awaitVisibilityRestored()).resolves.toBeUndefined();
     engine.destroy();
   });
 

@@ -109,6 +109,30 @@ describe('StudySettingsPanel (F-44)', () => {
     expect(consent?.checkboxes?.[0]?.id.length).toBeGreaterThan(0);
   });
 
+  it('writes settings.validityPolicy through the store and round-trips it through Yjs (F-59)', async () => {
+    const { questionnaireToYDoc, yDocToQuestionnaire } = await import('$lib/collaboration/YjsSchema');
+    const store = new DesignerStore();
+    seed(store);
+
+    // Absent ⇒ record (ADR 0027 default; zero behaviour change for existing content).
+    expect(store.questionnaire.settings.validityPolicy).toBeUndefined();
+
+    render(Harness, { props: { store } });
+
+    const policy = document.querySelector(testId('settings-validity-policy')) as HTMLSelectElement;
+    expect(policy.value).toBe('record');
+    await fireEvent.change(policy, { target: { value: 'enforce' } });
+
+    await fireEvent.click(document.querySelector(testId('study-settings-save')) as HTMLElement);
+
+    await waitFor(() => expect(store.questionnaire.settings.validityPolicy).toBe('enforce'));
+
+    // R4-6 pattern: the new setting must survive the collaboration (Yjs) round-trip
+    // that the designer / fillout load path runs it through.
+    const roundTripped = yDocToQuestionnaire(questionnaireToYDoc(store.questionnaire));
+    expect(roundTripped.settings.validityPolicy).toBe('enforce');
+  });
+
   it('adds and removes acknowledgement checkboxes by row', async () => {
     const store = new DesignerStore();
     seed(store);
