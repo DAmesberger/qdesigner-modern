@@ -82,19 +82,6 @@ export interface AnswerType {
   schema: DynamicValue; // TypeScript schema for the answer
 }
 
-// Storage interface
-export interface ModuleStorage {
-  save(id: string, data: DynamicValue): Promise<void>;
-  load(id: string): Promise<DynamicValue>;
-  clear(id: string): Promise<void>;
-  getAll(): Promise<Record<string, DynamicValue>>;
-}
-
-// Validator interface
-export interface ModuleValidator {
-  validate(value: DynamicValue, config: DynamicValue): ValidationResult;
-}
-
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
