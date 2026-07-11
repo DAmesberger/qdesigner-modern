@@ -43,6 +43,7 @@ use uuid::Uuid;
 
 use crate::audit::{self, resource, AuditAction, AuditEvent, ClientIp};
 use crate::auth::models::{AuthenticatedUser, UserInfo};
+use crate::auth::oidc_client::{CodeExchange, IdTokenInput, OidcClient};
 use crate::auth::session;
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
@@ -728,31 +729,6 @@ pub async fn resolve_sso(
 
 // ── OIDC flow ────────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
-struct OidcDiscovery {
-    issuer: String,
-    authorization_endpoint: String,
-    token_endpoint: String,
-    jwks_uri: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct Jwks {
-    keys: Vec<Jwk>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Jwk {
-    kid: Option<String>,
-    n: Option<String>,
-    e: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TokenResponse {
-    id_token: String,
-}
-
 /// The IdP config columns the flow needs.
 #[derive(Debug, sqlx::FromRow)]
 struct IdpFlowRow {
@@ -768,18 +744,13 @@ struct IdpFlowRow {
     enforce_role_mapping: bool,
 }
 
+/// HTTP client for the metadata-reachability probe in the admin CRUD. The OIDC
+/// flow itself runs on [`OidcClient`], not this.
 fn http_client() -> Result<reqwest::Client, ApiError> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| ApiError::Internal(format!("HTTP client build failed: {e}")))
-}
-
-fn random_token() -> String {
-    use rand::RngCore;
-    let mut bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
-    hex::encode(bytes)
 }
 
 /// Build the server-facing OIDC redirect_uri from the inbound request host.
@@ -880,23 +851,16 @@ pub async fn sso_start(
         .filter(|c| !c.is_empty())
         .ok_or_else(|| ApiError::BadRequest("Identity provider has no client_id".into()))?;
 
-    let client = http_client()?;
-    let disc: OidcDiscovery = client
-        .get(metadata_url)
-        .send()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("OIDC discovery failed: {e}")))?
-        .error_for_status()
-        .map_err(|e| ApiError::BadRequest(format!("OIDC discovery HTTP error: {e}")))?
-        .json()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("OIDC discovery is not valid JSON: {e}")))?;
+    let disc = OidcClient::new()?.discover(metadata_url).await?;
 
-    let state_tok = random_token();
-    let nonce = random_token();
+    let state_tok = session::random_token();
+    let nonce = session::random_token();
     let redirect_uri = callback_redirect_uri(&headers);
     let expires_at = Utc::now() + ChronoDuration::minutes(10);
 
+    // Nonce is hashed at rest (ADR 0031): the raw nonce goes to the IdP in the
+    // authorize URL and comes back in the id_token; only its hash is stored, so
+    // a leaked login-state row can't be replayed.
     sqlx::query(
         r#"
         INSERT INTO sso_login_states
@@ -906,7 +870,7 @@ pub async fn sso_start(
     )
     .bind(&state_tok)
     .bind(idp.id)
-    .bind(&nonce)
+    .bind(session::hash_token(&nonce))
     .bind(&redirect_uri)
     .bind(&disc.token_endpoint)
     .bind(&disc.jwks_uri)
@@ -975,7 +939,7 @@ pub async fn sso_callback(
     #[derive(sqlx::FromRow)]
     struct LoginState {
         idp_id: Uuid,
-        nonce: String,
+        nonce_hash: String,
         redirect_uri: String,
         token_endpoint: String,
         jwks_uri: String,
@@ -986,7 +950,7 @@ pub async fn sso_callback(
     let login_state = sqlx::query_as::<_, LoginState>(
         r#"
         DELETE FROM sso_login_states WHERE state = $1
-        RETURNING idp_id, nonce, redirect_uri, token_endpoint, jwks_uri, issuer, expires_at
+        RETURNING idp_id, nonce AS nonce_hash, redirect_uri, token_endpoint, jwks_uri, issuer, expires_at
         "#,
     )
     .bind(state_tok)
@@ -1024,42 +988,30 @@ pub async fn sso_callback(
         None => None,
     };
 
-    // ── Token exchange ──
-    let http = http_client()?;
-    let mut form: Vec<(&str, String)> = vec![
-        ("grant_type", "authorization_code".into()),
-        ("code", code.to_string()),
-        ("redirect_uri", login_state.redirect_uri.clone()),
-        ("client_id", client_id.clone()),
-    ];
-    if let Some(secret) = client_secret.as_deref() {
-        form.push(("client_secret", secret.to_string()));
-    }
-    let token: TokenResponse = http
-        .post(&login_state.token_endpoint)
-        .form(&form)
-        .send()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Token exchange failed: {e}")))?
-        .error_for_status()
-        .map_err(|e| ApiError::BadRequest(format!("Token endpoint HTTP error: {e}")))?
-        .json()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Token response is not valid JSON: {e}")))?;
+    // ── Token exchange + id_token validation on the shared OIDC client ──
+    let oidc = OidcClient::new()?;
+    let token = oidc
+        .exchange_code(CodeExchange {
+            token_endpoint: &login_state.token_endpoint,
+            code,
+            redirect_uri: &login_state.redirect_uri,
+            client_id: &client_id,
+            client_secret: client_secret.as_deref(),
+            code_verifier: None,
+        })
+        .await?;
 
-    // ── id_token validation ──
-    let claims = validate_id_token(
-        &http,
-        &token.id_token,
-        &login_state.jwks_uri,
-        &client_id,
-        &login_state.issuer,
-    )
-    .await?;
-
-    if claims.get("nonce").and_then(|v| v.as_str()) != Some(login_state.nonce.as_str()) {
-        return Err(ApiError::BadRequest("id_token nonce mismatch".into()));
-    }
+    // Signature, iss/aud/exp, and nonce are all verified inside the client;
+    // `claims` is proof-of-validation.
+    let claims = oidc
+        .verify_id_token(IdTokenInput {
+            id_token: &token.id_token,
+            jwks_uri: &login_state.jwks_uri,
+            client_id: &client_id,
+            issuer: &login_state.issuer,
+            expected_nonce_hash: &login_state.nonce_hash,
+        })
+        .await?;
 
     let external_subject = claims
         .get("sub")
@@ -1074,7 +1026,7 @@ pub async fn sso_callback(
         .get("name")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
-    let groups = extract_groups(&claims, &idp.group_claim);
+    let groups = extract_groups(claims.as_json(), &idp.group_claim);
     let mapped_role =
         map_group_role(&idp.group_role_map, &groups).unwrap_or_else(|| idp.default_role.clone());
 
@@ -1263,64 +1215,6 @@ pub async fn sso_callback(
     // Bounce back to the SPA. The session is available only via qd_session.
     let dest = format!("{}/sso/complete", app_origin(&state));
     Ok((jar, Redirect::to(&dest)))
-}
-
-/// Validate an OIDC id_token: fetch the JWKS, select the signing key by `kid`,
-/// verify the RS256 signature, and check `iss`/`aud`/`exp`. Returns the claim
-/// set as a JSON object on success.
-async fn validate_id_token(
-    http: &reqwest::Client,
-    id_token: &str,
-    jwks_uri: &str,
-    client_id: &str,
-    issuer: &str,
-) -> Result<serde_json::Value, ApiError> {
-    use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
-
-    let header =
-        decode_header(id_token).map_err(|e| ApiError::BadRequest(format!("Bad id_token: {e}")))?;
-
-    let jwks: Jwks = http
-        .get(jwks_uri)
-        .send()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("JWKS fetch failed: {e}")))?
-        .error_for_status()
-        .map_err(|e| ApiError::BadRequest(format!("JWKS HTTP error: {e}")))?
-        .json()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("JWKS is not valid JSON: {e}")))?;
-
-    // Match on kid when the header carries one; otherwise take the first RSA key.
-    let jwk = jwks
-        .keys
-        .iter()
-        .find(|k| match (&header.kid, &k.kid) {
-            (Some(h), Some(k)) => h == k,
-            _ => false,
-        })
-        .or_else(|| jwks.keys.iter().find(|k| k.n.is_some() && k.e.is_some()))
-        .ok_or_else(|| ApiError::BadRequest("No matching JWKS key for id_token".into()))?;
-
-    let n = jwk
-        .n
-        .as_deref()
-        .ok_or_else(|| ApiError::BadRequest("JWKS key missing modulus".into()))?;
-    let e = jwk
-        .e
-        .as_deref()
-        .ok_or_else(|| ApiError::BadRequest("JWKS key missing exponent".into()))?;
-
-    let key = DecodingKey::from_rsa_components(n, e)
-        .map_err(|e| ApiError::BadRequest(format!("Invalid JWKS RSA key: {e}")))?;
-
-    let mut validation = Validation::new(Algorithm::RS256);
-    validation.set_audience(&[client_id]);
-    validation.set_issuer(&[issuer]);
-
-    let data = decode::<serde_json::Value>(id_token, &key, &validation)
-        .map_err(|e| ApiError::BadRequest(format!("id_token validation failed: {e}")))?;
-    Ok(data.claims)
 }
 
 /// Pull the group list from an id_token claim. Accepts a JSON array of strings

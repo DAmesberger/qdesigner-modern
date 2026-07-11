@@ -57,6 +57,16 @@ impl ApiError {
     }
 }
 
+/// A failed outbound request to an OIDC IdP (discovery, token, JWKS) is a bad
+/// upstream, surfaced to the browser as a 400 the same way both SSO callers
+/// already mapped these edges by hand (ADR 0031). Lets the `OidcClient`
+/// mechanism use `?` instead of repeating `.map_err(...)` on every hop.
+impl From<reqwest::Error> for ApiError {
+    fn from(err: reqwest::Error) -> Self {
+        ApiError::BadRequest(format!("Upstream request failed: {err}"))
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {

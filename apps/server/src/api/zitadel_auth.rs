@@ -2,17 +2,15 @@ use axum::extract::{Query, State};
 use axum::http::HeaderMap;
 use axum::response::Redirect;
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
 use chrono::{Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use sqlx::Row;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::audit::ClientIp;
 use crate::auth::models::UserInfo;
+use crate::auth::oidc_client::{code_challenge, discovery_url, CodeExchange, IdTokenInput, OidcClient};
 use crate::auth::session;
 use crate::config::AuthProvider;
 use crate::error::ApiError;
@@ -31,37 +29,6 @@ pub struct CallbackQuery {
 }
 
 #[derive(Debug, Deserialize)]
-struct OidcDiscovery {
-    issuer: String,
-    authorization_endpoint: String,
-    token_endpoint: String,
-    jwks_uri: String,
-    introspection_endpoint: Option<String>,
-    revocation_endpoint: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TokenResponse {
-    access_token: Option<String>,
-    refresh_token: Option<String>,
-    id_token: String,
-    token_type: Option<String>,
-    expires_in: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Jwks {
-    keys: Vec<Jwk>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Jwk {
-    kid: Option<String>,
-    n: Option<String>,
-    e: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
 struct IntrospectionResponse {
     active: bool,
     amr: Option<serde_json::Value>,
@@ -71,13 +38,6 @@ struct IntrospectionResponse {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AuthStartResponse {
     pub authorization_url: String,
-}
-
-fn http_client() -> Result<reqwest::Client, ApiError> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| ApiError::Internal(format!("HTTP client build failed: {e}")))
 }
 
 fn safe_return_to(raw: Option<String>) -> String {
@@ -97,18 +57,6 @@ fn app_redirect(state: &AppState, path: &str) -> String {
         state.config.public_app_origin.trim_end_matches('/'),
         if path.starts_with('/') { path } else { "/" }
     )
-}
-
-fn discovery_url(issuer: &str) -> String {
-    format!(
-        "{}/.well-known/openid-configuration",
-        issuer.trim_end_matches('/')
-    )
-}
-
-fn code_challenge(verifier: &str) -> String {
-    let digest = Sha256::digest(verifier.as_bytes());
-    URL_SAFE_NO_PAD.encode(digest)
 }
 
 fn session_cookie(token: String, max_age_secs: i64, secure: bool) -> Cookie<'static> {
@@ -242,17 +190,7 @@ pub async fn zitadel_start(
         .as_deref()
         .ok_or_else(|| ApiError::Internal("Zitadel redirect URI is not configured".into()))?;
 
-    let http = http_client()?;
-    let discovery: OidcDiscovery = http
-        .get(discovery_url(issuer))
-        .send()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel discovery failed: {e}")))?
-        .error_for_status()
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel discovery HTTP error: {e}")))?
-        .json()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel discovery JSON error: {e}")))?;
+    let discovery = OidcClient::new()?.discover(&discovery_url(issuer)).await?;
 
     if discovery.issuer.trim_end_matches('/') != issuer.trim_end_matches('/') {
         return Err(ApiError::BadRequest("Zitadel issuer mismatch".into()));
@@ -353,52 +291,36 @@ pub async fn zitadel_callback(
         &login_state.pkce_verifier_enc,
     )?;
 
-    let http = http_client()?;
-    let mut form = vec![
-        ("grant_type", "authorization_code".to_string()),
-        ("code", code.to_string()),
-        ("redirect_uri", login_state.redirect_uri.clone()),
-        ("client_id", login_state.client_id.clone()),
-        ("code_verifier", pkce_verifier),
-    ];
-    if let Some(secret) = state.config.zitadel_client_secret.as_deref() {
-        form.push(("client_secret", secret.to_string()));
-    }
-    let token: TokenResponse = http
-        .post(&login_state.token_endpoint)
-        .form(&form)
-        .send()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel token exchange failed: {e}")))?
-        .error_for_status()
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel token endpoint HTTP error: {e}")))?
-        .json()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel token response JSON error: {e}")))?;
+    // Token exchange + id_token validation (signature, iss/aud/exp, nonce) run
+    // on the shared OIDC client; `claims` is proof-of-validation.
+    let oidc = OidcClient::new()?;
+    let token = oidc
+        .exchange_code(CodeExchange {
+            token_endpoint: &login_state.token_endpoint,
+            code,
+            redirect_uri: &login_state.redirect_uri,
+            client_id: &login_state.client_id,
+            client_secret: state.config.zitadel_client_secret.as_deref(),
+            code_verifier: Some(&pkce_verifier),
+        })
+        .await?;
 
-    let claims = validate_id_token(
-        &http,
-        &token.id_token,
-        &login_state.jwks_uri,
-        &login_state.client_id,
-        &login_state.issuer,
-    )
-    .await?;
+    let claims = oidc
+        .verify_id_token(IdTokenInput {
+            id_token: &token.id_token,
+            jwks_uri: &login_state.jwks_uri,
+            client_id: &login_state.client_id,
+            issuer: &login_state.issuer,
+            expected_nonce_hash: &login_state.nonce_hash,
+        })
+        .await?;
 
-    if claims
-        .get("nonce")
-        .and_then(|v| v.as_str())
-        .map(session::hash_token)
-        != Some(login_state.nonce_hash.clone())
+    let mfa_verified = if mfa_from_claims(claims.as_json(), state.config.zitadel_allow_sms_email_mfa)
     {
-        return Err(ApiError::BadRequest("id_token nonce mismatch".into()));
-    }
-
-    let mfa_verified = if mfa_from_claims(&claims, state.config.zitadel_allow_sms_email_mfa) {
         true
     } else {
         mfa_from_introspection(
-            &http,
+            oidc.http(),
             login_state.introspection_endpoint.as_deref(),
             token.access_token.as_deref(),
             &state,
@@ -624,57 +546,6 @@ async fn provision_or_link_user(
         row.get("full_name"),
         row.get("avatar_url"),
     ))
-}
-
-async fn validate_id_token(
-    http: &reqwest::Client,
-    id_token: &str,
-    jwks_uri: &str,
-    client_id: &str,
-    issuer: &str,
-) -> Result<serde_json::Value, ApiError> {
-    use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
-
-    let header =
-        decode_header(id_token).map_err(|e| ApiError::BadRequest(format!("Bad id_token: {e}")))?;
-    let jwks: Jwks = http
-        .get(jwks_uri)
-        .send()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel JWKS fetch failed: {e}")))?
-        .error_for_status()
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel JWKS HTTP error: {e}")))?
-        .json()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel JWKS JSON error: {e}")))?;
-
-    let jwk = if let Some(kid) = header.kid.as_deref() {
-        jwks.keys
-            .iter()
-            .find(|k| k.kid.as_deref() == Some(kid))
-            .ok_or_else(|| ApiError::BadRequest("No matching JWKS key for id_token kid".into()))?
-    } else {
-        jwks.keys
-            .iter()
-            .find(|k| k.n.is_some() && k.e.is_some())
-            .ok_or_else(|| ApiError::BadRequest("No usable JWKS key for id_token".into()))?
-    };
-    let n = jwk
-        .n
-        .as_deref()
-        .ok_or_else(|| ApiError::BadRequest("JWKS key missing modulus".into()))?;
-    let e = jwk
-        .e
-        .as_deref()
-        .ok_or_else(|| ApiError::BadRequest("JWKS key missing exponent".into()))?;
-    let key = DecodingKey::from_rsa_components(n, e)
-        .map_err(|e| ApiError::BadRequest(format!("Invalid JWKS RSA key: {e}")))?;
-    let mut validation = Validation::new(Algorithm::RS256);
-    validation.set_audience(&[client_id]);
-    validation.set_issuer(&[issuer]);
-    let data = decode::<serde_json::Value>(id_token, &key, &validation)
-        .map_err(|e| ApiError::BadRequest(format!("id_token validation failed: {e}")))?;
-    Ok(data.claims)
 }
 
 #[allow(clippy::too_many_arguments)]
