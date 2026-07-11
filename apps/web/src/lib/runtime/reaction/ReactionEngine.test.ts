@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ReactionEngine, STIMULUS_PREP_TIMEOUT_MS, type StimulusPrepResult } from './ReactionEngine';
 import { createPvtTrials } from './presets/pvt';
 import type { HidBinding, ReactionTrialConfig } from './types';
@@ -3221,5 +3221,95 @@ describe('ReactionEngine — WebHID responses (RT-4)', () => {
     expect(result.isCorrect).toBe(true);
 
     engine.destroy();
+  });
+});
+
+// ── RT-6 phase hook (dev/test observability seam) ────────────────────────────
+describe('ReactionEngine RT-6 phase hook', () => {
+  function collectPhaseEvents() {
+    const events: Array<{ phase: string; trialIndex: number; timestamp: number }> = [];
+    const listener = (event: Event) => {
+      events.push((event as CustomEvent).detail);
+    };
+    window.addEventListener('rt-phase', listener as EventListener);
+    return {
+      events,
+      dispose: () => window.removeEventListener('rt-phase', listener as EventListener),
+    };
+  }
+
+  async function runOneTrial() {
+    const { engine } = createEngine();
+    const resultPromise = engine.runTrial({
+      id: 'phase-hook-trial',
+      responseMode: 'keyboard',
+      validKeys: ['f'],
+      fixation: { enabled: true, durationMs: 20 },
+      preStimulusDelayMs: 20,
+      stimulus: { kind: 'text', text: 'GO' },
+      responseTimeoutMs: 400,
+      interTrialIntervalMs: 20,
+      targetFPS: 120,
+    });
+    setTimeout(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f' }));
+    }, 80);
+    await resultPromise;
+    engine.destroy();
+  }
+
+  beforeEach(() => {
+    // `localStorage` is a vi.fn() mock in this suite (tests/setup/test-setup.ts):
+    // default getItem → undefined, i.e. the flag reads as OFF.
+    vi.mocked(localStorage.getItem).mockReturnValue(undefined as unknown as string);
+    delete document.documentElement.dataset.rtPhase;
+  });
+
+  afterEach(() => {
+    delete document.documentElement.dataset.rtPhase;
+  });
+
+  it('is a hard no-op when the flag is unset — no dataset write, no event', async () => {
+    const { events, dispose } = collectPhaseEvents();
+    try {
+      await runOneTrial();
+      expect(events).toEqual([]);
+      expect(document.documentElement.dataset.rtPhase).toBeUndefined();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('mirrors phase transitions onto the DOM + window event when the flag is set', async () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      key === 'qdesigner-rt-phase-hook' ? 'true' : null
+    );
+    const { events, dispose } = collectPhaseEvents();
+    try {
+      await runOneTrial();
+
+      const phases = events.map((event) => event.phase);
+      // Onset drives `stimulus` (not the phase open), so it is always present;
+      // fixation + prestimulus precede it given the trial config above.
+      expect(phases).toContain('fixation');
+      expect(phases).toContain('prestimulus');
+      expect(phases).toContain('stimulus');
+      // Ordered: fixation before prestimulus before stimulus.
+      expect(phases.indexOf('fixation')).toBeLessThan(phases.indexOf('prestimulus'));
+      expect(phases.indexOf('prestimulus')).toBeLessThan(phases.indexOf('stimulus'));
+
+      // The DOM mirror holds the most recent phase and every event carries the
+      // observability detail shape the lane reads.
+      expect(typeof document.documentElement.dataset.rtPhase).toBe('string');
+      for (const detail of events) {
+        expect(typeof detail.phase).toBe('string');
+        expect(typeof detail.trialIndex).toBe('number');
+        expect(typeof detail.timestamp).toBe('number');
+      }
+      // First trial reports index 0.
+      expect(events[0]!.trialIndex).toBe(0);
+    } finally {
+      dispose();
+    }
   });
 });

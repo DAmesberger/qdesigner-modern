@@ -116,6 +116,58 @@ const AUDIO_RESUME_TIMEOUT_MS = 500;
  */
 export const STIMULUS_PREP_TIMEOUT_MS = 15000;
 
+/**
+ * RT-6 dev/test observability seam. When this `localStorage` flag is set on a
+ * dev build, the engine mirrors each phase transition onto the DOM
+ * (`document.documentElement.dataset.rtPhase`) AND a `window` CustomEvent
+ * (`rt-phase`), so the Playwright reaction lane can `await` a real state change
+ * and drive trusted keyboard input against the live state machine rather than
+ * guessing at wall-clock timing. Gated exactly like `window.testMode`
+ * (`import.meta.env.DEV` + a localStorage flag); a production bundle statically
+ * drops the whole branch, and an unset flag makes every emit a no-op.
+ */
+export const RT_PHASE_HOOK_KEY = 'qdesigner-rt-phase-hook';
+
+/** Public phase names the observability hook emits (see {@link RT_PHASE_HOOK_KEY}). */
+export type RtPhaseName =
+  | 'fixation'
+  | 'prestimulus'
+  | 'stimulus'
+  | 'response'
+  | 'feedback'
+  | 'iti'
+  | 'gate-preparing'
+  | 'gate-failed';
+
+/**
+ * Whether the RT-6 phase hook is active. Read once per engine (at construction);
+ * the Playwright lane sets the flag via `addInitScript` before the fillout
+ * runtime mounts, so it is already present when the engine reads it.
+ */
+function rtPhaseHookEnabled(): boolean {
+  if (!import.meta.env.DEV || typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(RT_PHASE_HOOK_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Map an internal `openPhase` label to the public {@link RtPhaseName} the hook
+ * emits. Internal labels are an implementation detail (they differ per paradigm
+ * and carry extra scheduled-phase names); the lane asserts against the stable
+ * public set. `stimulus` is intentionally absent — the engine emits `stimulus`
+ * at ONSET (when responses actually count), not when the stimulus phase opens,
+ * so the lane can press without racing a pre-onset false start.
+ */
+const RT_PUBLIC_PHASE_BY_INTERNAL: Record<string, RtPhaseName> = {
+  fixation: 'fixation',
+  'pre-stimulus-delay': 'prestimulus',
+  feedback: 'feedback',
+  'inter-trial': 'iti',
+};
+
 /** Progress of the Layer-2 per-block decode gate (ADR 0026). */
 export interface StimulusPrepProgress {
   /** Assets fully loaded + decoded so far. */
@@ -252,6 +304,10 @@ export class ReactionEngine {
   private readonly renderer: WebGLRenderer;
   private readonly ownsRenderer: boolean;
   private readonly hooks?: ReactionEngineHooks;
+  /** RT-6: whether to mirror phase transitions to the DOM + window (dev/test only). */
+  private readonly phaseHookEnabled = rtPhaseHookEnabled();
+  /** RT-6: monotonic trial counter reported in the `rt-phase` event detail. */
+  private phaseHookTrialIndex = -1;
   private eventTarget: Document | HTMLElement;
   private readonly now: () => number;
   private readonly gamepadSource?: GamepadSource;
@@ -560,12 +616,18 @@ export class ReactionEngine {
       for (;;) {
         if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError');
 
+        // RT-6: the block is holding on its decode gate (no-op unless the flag is set).
+        this.emitTestPhase('gate-preparing', this.now());
+
         const result = await this.prepareBlockStimuli(
           stimuli,
           ({ done, total }) => this.setGateOverlay([`Preparing stimuli… ${done} of ${total}`]),
           signal
         );
         if (result.failures.length === 0) return;
+
+        // RT-6: at least one asset could not be prepared — the gate has failed closed.
+        this.emitTestPhase('gate-failed', this.now());
 
         // Fail-closed: never run a timed block with partial stimuli. Honest,
         // retryable copy distinct from the generic media-error screen.
@@ -929,6 +991,9 @@ export class ReactionEngine {
     this.renderer.setVSync(config.vsync ?? true);
     this.renderer.setBackgroundColor(config.backgroundColor || [0, 0, 0, 1]);
     this.renderer.clearRenderables();
+
+    // RT-6: advance the observability trial counter (includes practice trials).
+    this.phaseHookTrialIndex += 1;
 
     // Run device qualification before the first trial if a gatekeeper is provided,
     // then read the measured display latency (CONTRACT-CAL). Applied to visual
@@ -1442,6 +1507,11 @@ export class ReactionEngine {
     this.activePhaseStart = startTime;
     this.hooks?.onPhaseChange?.(name, startTime);
 
+    // RT-6: mirror the transition for the e2e lane (no-op unless the flag is set).
+    // `stimulus` is emitted at onset (see recordStimulusOnset), not here.
+    const publicPhase = RT_PUBLIC_PHASE_BY_INTERNAL[name];
+    if (publicPhase) this.emitTestPhase(publicPhase, startTime);
+
     return () => {
       timeline.push({
         name,
@@ -1450,6 +1520,26 @@ export class ReactionEngine {
       });
       if (this.activePhaseName === name) this.activePhaseName = null;
     };
+  }
+
+  /**
+   * RT-6: mirror a phase transition onto `document.documentElement.dataset.rtPhase`
+   * and a `window` CustomEvent('rt-phase') so the Playwright reaction lane can
+   * observe the live state machine. A hard no-op unless the phase-hook flag is
+   * set on a dev build; wrapped so observability can never perturb a trial.
+   */
+  private emitTestPhase(phase: RtPhaseName, timestamp: number): void {
+    if (!this.phaseHookEnabled) return;
+    try {
+      document.documentElement.dataset.rtPhase = phase;
+      window.dispatchEvent(
+        new CustomEvent('rt-phase', {
+          detail: { phase, trialIndex: this.phaseHookTrialIndex, timestamp },
+        })
+      );
+    } catch {
+      // Never let the observability seam affect the run.
+    }
   }
 
   private subscribeFrameLogging(frameLog: FrameSample[]): void {
@@ -2145,6 +2235,10 @@ export class ReactionEngine {
     this.awaitingVideoOnset = false;
 
     this.renderer.markStimulusOnset();
+
+    // RT-6: onset is the moment responses truly count — emit `stimulus` here (not
+    // at openPhase('stimulus')) so the lane presses inside the valid window.
+    this.emitTestPhase('stimulus', opts.raw);
 
     this.hooks?.onStimulusOnset?.({
       method: opts.method,

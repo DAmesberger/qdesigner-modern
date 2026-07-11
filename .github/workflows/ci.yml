@@ -286,6 +286,13 @@ jobs:
       - name: Run visual regression tests
         run: pnpm test:e2e:visual
 
+      - name: Run reaction (WebGL) E2E tests
+        # RT-6 lane. Same live backend as @fullstack; the reaction-chromium project
+        # adds SwiftShader + autoplay launch flags for headless WebGL + audio. Runs
+        # last so its anonymous session-creates don't share the 60 s auth-limiter
+        # window (10 req/IP) with the fullstack lane's registrations.
+        run: pnpm test:e2e:reaction
+
       - name: Dump server log on failure
         if: failure()
         run: cat server.log || true

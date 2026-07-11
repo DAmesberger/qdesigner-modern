@@ -117,6 +117,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm test:e2e:visual
 
+      - name: Run reaction (WebGL) E2E tests
+        # Runs last so its anonymous session-creates don't share the 60 s
+        # auth-limiter window with the fullstack lane's registrations.
+        if: ${{ !cancelled() }}
+        run: pnpm test:e2e:reaction
+
       - name: Dump server log on failure
         if: failure()
         run: cat server.log || true

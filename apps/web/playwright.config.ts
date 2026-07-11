@@ -5,7 +5,12 @@ const isCI = Boolean(process.env.CI);
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: ['**/*.smoke.spec.ts', '**/*.regression.spec.ts', '**/*.fullstack.spec.ts'],
+  testMatch: [
+    '**/*.smoke.spec.ts',
+    '**/*.regression.spec.ts',
+    '**/*.fullstack.spec.ts',
+    '**/*.reaction.spec.ts',
+  ],
   fullyParallel: !isCI,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
@@ -52,6 +57,20 @@ export default defineConfig({
       grep: /@fullstack/,
       use: {
         ...devices['Desktop Chrome'],
+      },
+    },
+    {
+      // RT-6 WebGL reaction lane. Needs the SwiftShader software GL fallback for
+      // headless CI, and the autoplay override so the engine's AudioContext can
+      // resume without a synthetic user gesture. Like @fullstack it drives a real
+      // browser against a live backend (provisions studies via the API).
+      name: 'reaction-chromium',
+      grep: /@reaction/,
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: ['--autoplay-policy=no-user-gesture-required', '--enable-unsafe-swiftshader'],
+        },
       },
     },
     {
