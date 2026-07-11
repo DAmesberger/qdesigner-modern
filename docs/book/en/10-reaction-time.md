@@ -23,7 +23,7 @@ The reaction system uses a small, precise vocabulary. These terms are used consi
 | **ResponseOption** | One semantic response alternative, identified by a stable id (`left`, `target-present`, …) that analysis and export key on — independent of which physical input produced it. |
 | **Binding** | The attachment of one physical input (a keyboard key, a HID button, a touch region) to a ResponseOption, including whether it fires on press or release. |
 | **ResponseSource** | A device family that can deliver responses — keyboard, pointer, touch, gamepad, or a WebHID device. Several may be armed at once; the first event wins. |
-| **ValidityPolicy** | A per-study posture toward degraded timing conditions. The default, `record`, stamps provenance and continues (see Chapter 11). |
+| **ValidityPolicy** | A per-study posture toward degraded timing conditions, set in Study Settings. The default, `record`, stamps provenance and continues; `enforce` refuses timing-critical blocks without cross-origin isolation and aborts, pauses, and re-runs any trial interrupted by a focus loss (see Chapter 11). |
 | **Offline-complete** | The state in which every asset a study can present exists in local storage. Reaction studies with media must reach this before any timed block starts. |
 
 ### 10.1.1 The two rendering paths

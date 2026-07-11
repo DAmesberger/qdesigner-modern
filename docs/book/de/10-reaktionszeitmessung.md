@@ -23,7 +23,7 @@ Das Reaktionssystem verwendet ein kleines, praezises Vokabular. Diese Begriffe w
 | **ResponseOption** | Eine semantische Antwortalternative, identifiziert durch eine stabile id (`left`, `target-present`, ...), auf die sich Analyse und Export stuetzen -- unabhaengig davon, welche physische Eingabe sie erzeugt hat. |
 | **Binding** | Die Anbindung einer physischen Eingabe (einer Tastaturtaste, eines HID-Buttons, einer Beruehrungsregion) an eine ResponseOption, einschliesslich der Frage, ob sie bei press oder release ausloest. |
 | **ResponseSource** | Eine Geraetefamilie, die Antworten liefern kann -- Tastatur, Zeiger, Touch, Gamepad oder ein WebHID-Geraet. Mehrere koennen gleichzeitig scharfgeschaltet sein; das erste Ereignis gewinnt. |
-| **ValidityPolicy** | Eine studienweite Haltung gegenueber verschlechterten Timing-Bedingungen. Der Standard, `record`, stempelt Provenienz und faehrt fort (siehe Kapitel 11). |
+| **ValidityPolicy** | Eine studienweite Haltung gegenueber verschlechterten Timing-Bedingungen, festgelegt in den Fragebogen-Einstellungen. Der Standard, `record`, stempelt Provenienz und faehrt fort; `enforce` verweigert timing-kritische Bloecke ohne Cross-Origin-Isolation und bricht jeden durch Fokusverlust unterbrochenen Trial ab, pausiert und wiederholt ihn (siehe Kapitel 11). |
 | **Offline-complete** | Der Zustand, in dem jedes Asset, das eine Studie praesentieren kann, im lokalen Speicher vorliegt. Reaktionsstudien mit Medien muessen diesen erreichen, bevor irgendein zeitkritischer Block startet. |
 
 ### 10.1.1 Die zwei Rendering-Pfade

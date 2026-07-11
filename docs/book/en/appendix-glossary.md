@@ -370,7 +370,7 @@ A 128-bit identifier used as the primary key for most database records. Ensures 
 ### V
 
 **ValidityPolicy**
-A per-study posture toward degraded timing conditions. Under `record` (the default) the runtime stamps timing provenance and warns the researcher but never stops the participant; under `enforce` it would refuse or abort timing-critical blocks when conditions are degraded. In the current release only `record` behaviour ships — the runtime always records and continues; `enforce` is a designed escalation path (ADR 0027) with no author-facing toggle yet. See Chapter 11.
+A per-study posture toward degraded timing conditions, chosen in Study Settings (ADR 0027). Under `record` (the default) the runtime stamps timing provenance and warns the researcher but never stops the participant. Under `enforce` — for timing-critical studies — two protections engage: if the browser or server cannot provide cross-origin isolation the study refuses to start (a dedicated screen turns the participant away before any data is collected), and a focus loss mid-trial aborts that trial, pauses the task on a "return to the study" overlay until the participant comes back, and re-runs the trial at the end of the block (at most three re-runs per block, beyond which the trial is recorded as invalidated-and-lost). Both modes ship. See Chapter 11.
 
 **Variable**
 A named value within a questionnaire that can be computed from formulas, derived from responses, or set by scripts. Variables power flow control, scoring, piping, and data analysis.

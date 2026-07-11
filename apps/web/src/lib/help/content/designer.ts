@@ -110,7 +110,19 @@ export const designerEntries: HelpEntry[] = [
 			'Turn it off for tasks where a visible progress bar could bias behavior — for example, timed or reaction paradigms where you do not want participants pacing themselves against a remaining-length cue.',
 		category: 'designer',
 		tags: ['progress', 'indicator', 'progress bar', 'presentation', 'study settings'],
-		related: ['designer.studySettings.consent', 'designer.publish.overview']
+		related: ['designer.studySettings.consent', 'designer.studySettings.validity', 'designer.publish.overview']
+	},
+	{
+		key: 'designer.studySettings.validity',
+		title: 'Timing Validity Policy',
+		description:
+			'The **Timing validity** setting (Study settings → "When precise timing degrades") controls how the runtime reacts when reaction-timing conditions cannot be trusted — a backgrounded tab, a throttled timer, or a page that is not cross-origin isolated. It is a select with two options:\n\n' +
+			'- **Record and continue (recommended)** — the default. Degraded conditions are stamped with full provenance and flagged in analytics, but the study always runs to completion and no participant is turned away. You exclude untrustworthy trials afterward in analysis.\n' +
+			'- **Enforce — refuse or abort under degraded timing** — for timing-critical studies. A reaction block refuses to start unless the browser can provide cross-origin isolation (an unsupported participant sees a "Precise timing required" screen before any data is collected), and losing focus mid-trial aborts that trial, pauses the task on a "return to the study" overlay, and re-runs the trial later in the block (up to three re-runs, after which it is recorded as invalidated-and-lost).\n\n' +
+			'Choose **Enforce** only when a trustworthy latency measurement is the point of the study — it turns away participants on unsupported setups. Most studies should stay on **Record and continue**.',
+		category: 'designer',
+		tags: ['timing', 'validity', 'enforce', 'record', 'cross-origin', 'isolation', 'reaction', 'study settings'],
+		related: ['dataQuality.validity', 'designer.studySettings.progress']
 	},
 	{
 		key: 'designer.studySettings.consent',
