@@ -13,7 +13,12 @@ export type HelpCategory =
 	| 'variables'
 	| 'flowControl'
 	| 'questionTypes'
+	| 'reaction'
 	| 'statisticalFeedback'
 	| 'experimentalDesign'
+	| 'reporting'
+	| 'analytics'
+	| 'dataQuality'
+	| 'media'
 	| 'formulas'
 	| 'shortcuts';

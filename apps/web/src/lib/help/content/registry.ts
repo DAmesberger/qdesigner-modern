@@ -3,8 +3,13 @@ import { designerEntries } from './designer';
 import { variableEntries } from './variables';
 import { flowControlEntries } from './flowControl';
 import { questionTypeEntries } from './questionTypes';
+import { reactionEntries } from './reaction';
 import { statisticalFeedbackEntries } from './statisticalFeedback';
 import { experimentalDesignEntries } from './experimentalDesign';
+import { reportingEntries } from './reporting';
+import { analyticsEntries } from './analytics';
+import { dataQualityEntries } from './dataQuality';
+import { mediaEntries } from './media';
 import { formulaReferenceEntries } from './formulaReference';
 import { keyboardShortcutEntries } from './keyboardShortcuts';
 
@@ -18,8 +23,13 @@ class HelpRegistry {
 			...variableEntries,
 			...flowControlEntries,
 			...questionTypeEntries,
+			...reactionEntries,
 			...statisticalFeedbackEntries,
 			...experimentalDesignEntries,
+			...reportingEntries,
+			...analyticsEntries,
+			...dataQualityEntries,
+			...mediaEntries,
 			...formulaReferenceEntries,
 			...keyboardShortcutEntries,
 		];

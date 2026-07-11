@@ -62,4 +62,77 @@ describe('HelpRegistry', () => {
 			expect(results[0]?.key).toBe(entry.key);
 		}
 	});
+
+	// --- Entries shipped for the reaction / reporting / analytics / data-quality
+	// / media arcs (ADRs 0024-0028). ---
+
+	it('registers each new help category with at least one entry', () => {
+		for (const category of [
+			'reaction',
+			'reporting',
+			'analytics',
+			'dataQuality',
+			'media',
+		] as const) {
+			const entries = helpRegistry.getByCategory(category);
+			expect(entries.length, `category ${category} has entries`).toBeGreaterThan(0);
+			expect(entries.every((e) => e.category === category)).toBe(true);
+		}
+	});
+
+	it('resolves the newly added entries', () => {
+		const keys = [
+			'reaction.paradigms',
+			'reaction.timingSpec',
+			'reaction.responseSet',
+			'reaction.hardware',
+			'reaction.pvt',
+			'reporting.gridEditor',
+			'reporting.reactionCohortBox',
+			'analytics.sessionDetail',
+			'analytics.advanced',
+			'dataQuality.checks',
+			'dataQuality.validity',
+			'media.library',
+			'media.manage',
+			'media.dimensions',
+			'variables.serverVariables',
+			'designer.studySettings.progress',
+			'designer.studySettings.consent',
+		];
+		for (const key of keys) {
+			const entry = helpRegistry.resolve(key);
+			expect(entry, `entry ${key} is registered`).toBeDefined();
+			expect(entry?.title).toBeTruthy();
+			expect(entry?.description).toBeTruthy();
+		}
+	});
+
+	it('has no dangling related-links on the newly added entries', () => {
+		const newKeys = new Set([
+			'reaction.paradigms',
+			'reaction.timingSpec',
+			'reaction.responseSet',
+			'reaction.hardware',
+			'reaction.pvt',
+			'reporting.gridEditor',
+			'reporting.reactionCohortBox',
+			'analytics.sessionDetail',
+			'analytics.advanced',
+			'dataQuality.checks',
+			'dataQuality.validity',
+			'media.library',
+			'media.manage',
+			'media.dimensions',
+			'variables.serverVariables',
+			'designer.studySettings.progress',
+			'designer.studySettings.consent',
+		]);
+		for (const key of newKeys) {
+			const entry = helpRegistry.resolve(key);
+			for (const rel of entry?.related ?? []) {
+				expect(helpRegistry.resolve(rel), `${key} → related ${rel} resolves`).toBeDefined();
+			}
+		}
+	});
 });

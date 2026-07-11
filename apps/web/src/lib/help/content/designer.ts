@@ -101,5 +101,29 @@ export const designerEntries: HelpEntry[] = [
 		category: 'designer',
 		tags: ['publish', 'share', 'link', 'version', 'distribute', 'QR'],
 		related: ['designer.preview.overview', 'experimentalDesign.quotas']
+	},
+	{
+		key: 'designer.studySettings.progress',
+		title: 'Progress Indicator',
+		description:
+			'The **Show progress indicator** setting (Study settings → Presentation) controls whether participants see a completion progress bar while they fill out the study. It is on by default.\n\n' +
+			'Turn it off for tasks where a visible progress bar could bias behavior — for example, timed or reaction paradigms where you do not want participants pacing themselves against a remaining-length cue.',
+		category: 'designer',
+		tags: ['progress', 'indicator', 'progress bar', 'presentation', 'study settings'],
+		related: ['designer.studySettings.consent', 'designer.publish.overview']
+	},
+	{
+		key: 'designer.studySettings.consent',
+		title: 'Informed Consent',
+		description:
+			'Enable **Require consent before starting** (Study settings → Informed consent) to show a consent screen participants must accept before the study begins. The consent editor lets you author:\n\n' +
+			'- **Heading** — optional; blank uses the default localized "Informed Consent" title.\n' +
+			'- **Consent text** — rendered as Markdown (bold, headings, lists). Describe the study, its risks and benefits, data handling, and participant rights.\n' +
+			'- **Acknowledgement checkboxes** — add as many as you need, each marked **Required** or optional. With none, participants accept with a single button.\n' +
+			'- **Require electronic signature** — participants must type their name to record consent.\n\n' +
+			'Authored consent content is kept even if you toggle the requirement off, so turning it back on does not lose your work. The consent text is authored in the base language and translated per locale in the Translations panel.',
+		category: 'designer',
+		tags: ['consent', 'informed consent', 'signature', 'checkbox', 'markdown', 'study settings', 'ethics'],
+		related: ['designer.studySettings.progress', 'questionTypes.instruction']
 	}
 ];

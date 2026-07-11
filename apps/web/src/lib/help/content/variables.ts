@@ -225,5 +225,19 @@ export const variableEntries: HelpEntry[] = [
 		category: 'variables',
 		tags: ['interpolation', 'template', 'dynamic', 'text', 'placeholder', 'mustache'],
 		related: ['variables.overview', 'variables.formula.description']
+	},
+	{
+		key: 'variables.serverVariables',
+		title: 'Server-Computed Variables',
+		description:
+			'A **server-computed variable** holds an aggregate the server calculates across participants, then pre-syncs to each device so feedback and report widgets resolve offline. Choose **Server** as the computation mode in the variable editor.\n\n' +
+			'**Aggregate over:**\n' +
+			'- **A session variable or a question response** — summary statistics across participants for that value.\n' +
+			'- **Reaction trials** — a trial-level source over the reaction `trials` table. Pick the **trial metric** (reaction time in µs, or accuracy 0–1). Invalidated trials are excluded unless you tick **Include invalidated trials**.\n\n' +
+			'**Materialization** is either a **single statistic** (resolves to a Number — mean, median, an SD, a percentile, count) or **full statistics** (resolves to an Object bundle `{ n, mean, sd, median, p25, p75, … }`) that feedback and report cohort widgets bind to.\n\n' +
+			'**Disclosure floor (minimum n).** Every declaration carries an explicit, author-visible **minN** — the number of contributing participants below which the statistics are withheld (new declarations default to 1). Below the floor the output either **hides** or shows a **"still forming" placeholder**, per your choice; the current **n is always shown**. This replaces any hidden platform floor: the threshold is a number you set and disclose, not a silent suppression.',
+		category: 'variables',
+		tags: ['server', 'variable', 'aggregate', 'cohort', 'trials', 'minN', 'disclosure', 'offline', 'percentile'],
+		related: ['reporting.reactionCohortBox', 'statisticalFeedback.sourceModes', 'dataQuality.validity']
 	}
 ];

@@ -1,5 +1,17 @@
 import type { TourDefinition } from '../types';
 
+// Selectors here are anchored to real, stable ids/classes in ReactionTimeDesigner
+// and its sub-editors (verified against the components, not invented):
+//   #task-type          — the Paradigm <Select>            (always present)
+//   #stimulus-type      — the Stimulus Type <Select>       (always present)
+//   .jitter-toggle      — TimingSpecField's Jitter toggle  (only paradigms with a
+//                         TimingSpec field; waitForElement:false degrades gracefully)
+//   #response-mode      — the Response Device <Select>      (always present)
+//   #responseset-enable — "Customize response set" button   (editable paradigms with
+//                         no custom set yet; waitForElement:false degrades gracefully)
+//   #test-trials        — Number of Test Trials             (standard/custom paradigms)
+//   #target-fps         — Target FPS <Select>               (always present)
+// The reaction question must be selected so the designer panel is mounted.
 export const reactionTimeTour: TourDefinition = {
 	id: 'reaction-time-tour',
 	name: 'Reaction Time Tasks',
@@ -7,47 +19,65 @@ export const reactionTimeTour: TourDefinition = {
 	triggerKey: 'qd-tour:reaction-time',
 	steps: [
 		{
-			id: 'task-type',
-			target: '.designer-panel #task-type',
-			title: 'Reaction Time Tasks',
+			id: 'paradigm',
+			target: '#task-type',
+			title: 'Choose a Paradigm',
 			description:
-				'Choose a paradigm: **Standard** for simple RT, **N-Back** for working memory, **Stroop** for interference, **Flanker** for attention, **IAT** for implicit association, or **Dot-Probe** for attentional bias.',
+				'A **paradigm** is the scientific procedure the task follows — Standard, PVT, Stroop, Flanker, IAT, Go/No-Go, Simon, and more, plus a **Custom Trial Plan**. It fixes the trial structure and what counts as correct. Switching it reloads that paradigm\'s starter parameters, so pick it first.',
 			placement: 'left',
 			waitForElement: true,
 		},
 		{
-			id: 'stimulus-config',
-			target: '.designer-panel .subsection',
-			title: 'Configure Stimuli',
+			id: 'stimulus',
+			target: '#stimulus-type',
+			title: 'Configure the Stimulus',
 			description:
-				'Set up your stimuli for the selected paradigm. Define text, shapes, or images that participants will respond to. Each paradigm has its own specific configuration for stimuli and response keys.',
+				'Choose what participants respond to: text, a shape, or an image / video / audio asset from the media library. The fixation settings below control the pre-stimulus cross or dot.',
 			placement: 'left',
 			waitForElement: true,
 		},
 		{
-			id: 'timing',
-			target: '.designer-panel .form-grid',
-			title: 'Timing Settings',
+			id: 'timing-jitter',
+			target: '.jitter-toggle',
+			title: 'Fixed or Jittered Timing',
 			description:
-				'Configure timing with **high-resolution, frame-accurate onset**: fixation duration, stimulus display time, inter-stimulus interval (ISI), and response timeout. All timing uses high-resolution performance counters with measured display-latency correction.',
+				'Each authored phase duration is a **TimingSpec**. Leave **Jitter** off for a single fixed value, or turn it on for a **min / max** range. Jittered durations are sampled once per trial by the seeded generator when the block is built — reproducible from the seed and recorded as trial data. (Only paradigms with a TimingSpec field show this toggle.)',
+			placement: 'left',
+			waitForElement: false,
+		},
+		{
+			id: 'response-device',
+			target: '#response-mode',
+			title: 'Response Device',
+			description:
+				'Pick how participants respond: keyboard, mouse or touch (spatial click against a target region), or a gamepad button box. External **HID button boxes** are bound in the response set below (Chromium only).',
 			placement: 'left',
 			waitForElement: true,
 		},
 		{
-			id: 'trial-sequence',
-			target: '.designer-panel .section:nth-child(2)',
-			title: 'Trial Sequence',
+			id: 'response-set',
+			target: '#responseset-enable',
+			title: 'Author the Response Set',
 			description:
-				'Define the trial sequence: number of trials, congruent/incongruent ratio, and randomization. The system automatically generates balanced trial lists based on your configuration.',
+				'**Customize response set** gives each answer a stable **id** (what analysis and export key on) and one or more **bindings** — a keyboard key, a click region, a gamepad or HID button — with a **Correct** flag. Standard and Custom paradigms are editable here; other paradigms define their responses procedurally.',
 			placement: 'left',
-			waitForElement: true,
+			waitForElement: false,
 		},
 		{
-			id: 'practice-trials',
-			target: '.designer-panel .section:nth-child(3)',
-			title: 'Practice Trials',
+			id: 'trials',
+			target: '#test-trials',
+			title: 'Trials & Practice',
 			description:
-				'Add practice trials so participants can learn the task before data collection begins. Practice trials are excluded from analysis but help ensure valid response patterns.',
+				'Set the number of test trials, add practice trials so participants learn the task first (practice is excluded from analysis), and optionally show per-response feedback.',
+			placement: 'left',
+			waitForElement: false,
+		},
+		{
+			id: 'timing-precision',
+			target: '#target-fps',
+			title: 'Timing Precision',
+			description:
+				'Stimuli render in the WebGL runtime with explicit frame pacing. Set **Target FPS** to match the experiment device — higher refresh rates give more precise onset and response timing.',
 			placement: 'left',
 			waitForElement: true,
 		},
