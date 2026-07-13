@@ -23,6 +23,13 @@
 //!     opaque browser session is issued through the same
 //!     [`session`](crate::auth::session) path a password login uses.
 //!
+//!     Binding a federated identity to a local account (linking an existing row
+//!     OR provisioning a new one) is gated on the IdP having PROVEN it owns the
+//!     address: the id_token must assert `email_verified`, and the email's
+//!     domain must be a verified `organization_domains` row of the IdP's own
+//!     organization. Without that, any org running an IdP could assert
+//!     `victim@othercompany.com` and take over that account. Fails closed.
+//!
 //! SAML is a first-class config protocol in the data model and admin CRUD, but
 //! the runtime `start`/`callback` for `protocol = 'saml'` is a documented
 //! not-yet-available stub — see [`saml_not_available`]. Enabling a real
@@ -1021,7 +1028,15 @@ pub async fn sso_callback(
     let email = claims
         .get("email")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_lowercase());
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty());
+    // An IdP asserting `email` is only trusted when it also asserts that it
+    // verified that address (same gate as `zitadel_auth`). A missing claim is
+    // treated as unverified — fail closed.
+    let email_verified = claims
+        .get("email_verified")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let full_name = claims
         .get("name")
         .and_then(|v| v.as_str())
@@ -1043,6 +1058,12 @@ pub async fn sso_callback(
     .await?;
 
     let (user_id, user_email, provisioned) = match existing_by_subject {
+        // Already bound to THIS IdP by `(idp_id, external_subject)` — the
+        // binding was established by a previous login that passed the gates
+        // below, and the subject (not the email claim) is what resolves it. No
+        // takeover surface here: the IdP is only re-authenticating an identity
+        // it already owns, and nothing about the account is rewritten from the
+        // claims. Left unchanged deliberately.
         Some(id) => {
             let em = sqlx::query_scalar::<_, String>("SELECT email FROM users WHERE id = $1")
                 .bind(id)
@@ -1054,6 +1075,58 @@ pub async fn sso_callback(
             let email = email.clone().ok_or_else(|| {
                 ApiError::BadRequest("id_token has no email to provision an account".into())
             })?;
+
+            // ── Domain-ownership gate (fail closed) ──
+            //
+            // Reaching here means the id_token's `email` is about to bind a
+            // federated identity to a local account — by LINKING a pre-existing
+            // row or by PROVISIONING a new one. Both are account-takeover /
+            // email-squatting vectors if the IdP is trusted to name arbitrary
+            // addresses: an org that controls an IdP could assert
+            // `victim@othercompany.com` and capture that account (the link even
+            // force-set `email_verified = true`).
+            //
+            // So an org's IdP may only authenticate identities in domains that
+            // org has PROVEN it owns. Both conditions are required, and the
+            // check sits ABOVE the link/provision fork so it covers both:
+            //   1. the IdP asserts the address is verified, and
+            //   2. the address's domain is a VERIFIED `organization_domains`
+            //      row of the IdP's OWN organization.
+            //
+            // Rejections are deliberately uniform and say nothing about whether
+            // a local account exists for the address.
+            if !email_verified {
+                return Err(ApiError::Forbidden(
+                    "This identity provider did not assert a verified email address".into(),
+                ));
+            }
+            let email_domain = email
+                .rsplit_once('@')
+                .map(|(_, d)| d.trim().to_lowercase())
+                .filter(|d| !d.is_empty())
+                .ok_or_else(|| {
+                    ApiError::BadRequest("id_token email is not a valid address".into())
+                })?;
+            let domain_verified = sqlx::query_scalar::<_, bool>(
+                r#"
+                SELECT EXISTS (
+                    SELECT 1 FROM organization_domains
+                    WHERE organization_id = $1
+                      AND lower(domain) = $2
+                      AND verified_at IS NOT NULL
+                )
+                "#,
+            )
+            .bind(idp.organization_id)
+            .bind(&email_domain)
+            .fetch_one(&mut *tx)
+            .await?;
+            if !domain_verified {
+                return Err(ApiError::Forbidden(
+                    "This identity provider is not authorized for this email domain".into(),
+                ));
+            }
+
             // Link an existing password/local account by email.
             let linked = sqlx::query_scalar::<_, Uuid>(
                 r#"

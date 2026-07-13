@@ -12,6 +12,13 @@
 //! The id_token is a real RS256 JWT signed with an embedded test key whose
 //! public modulus is published through the mocked JWKS, so the handler's
 //! signature + `iss`/`aud`/`nonce` validation runs for real.
+//!
+//! The `federated_identity_binding_*` tests are the regression lock for the
+//! SSO account-takeover fix: an org's IdP may only bind a federated identity to
+//! a local account when the id_token asserts `email_verified` AND the email's
+//! domain is a VERIFIED `organization_domains` row of that IdP's own org.
+//! Both the LINK (pre-existing local account) and PROVISION (new account)
+//! paths are gated; the flow fails closed.
 
 mod common;
 
@@ -19,7 +26,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use chrono::Utc;
 use serde_json::json;
-use sqlx::Row;
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -67,17 +74,29 @@ const TEST_KEY_N: &str = "xO2P3GfJiLtc-nWgi4dH7v9Peo10xt7eYb4Kng3GvIKqbGx3SrEtOw
 const HARNESS_JWT_SECRET: &str = "test-secret-32-chars-minimum-padding-padding";
 const CLIENT_ID: &str = "qdesigner-test-client";
 
-fn sign_id_token(issuer: &str, nonce: &str, subject: &str, email: &str, groups: &[&str]) -> String {
+/// Claims for the minted id_token. Split out so the binding tests can vary
+/// `email` / `email_verified` independently of the happy path.
+struct IdToken<'a> {
+    issuer: &'a str,
+    nonce: &'a str,
+    subject: &'a str,
+    email: &'a str,
+    email_verified: bool,
+    groups: &'a [&'a str],
+}
+
+fn sign_id_token(t: IdToken<'_>) -> String {
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
     let now = Utc::now().timestamp();
     let claims = json!({
-        "iss": issuer,
+        "iss": t.issuer,
         "aud": CLIENT_ID,
-        "sub": subject,
-        "email": email,
+        "sub": t.subject,
+        "email": t.email,
+        "email_verified": t.email_verified,
         "name": "Federated User",
-        "groups": groups,
-        "nonce": nonce,
+        "groups": t.groups,
+        "nonce": t.nonce,
         "iat": now,
         "exp": now + 3600,
     });
@@ -89,6 +108,176 @@ fn sign_id_token(issuer: &str, nonce: &str, subject: &str, email: &str, groups: 
         &EncodingKey::from_rsa_pem(TEST_KEY_PEM.as_bytes()).expect("valid test RSA pem"),
     )
     .expect("sign id_token")
+}
+
+/// Mock OIDC provider with discovery + JWKS mounted. `/token` is mounted later,
+/// once the nonce from `start` is known.
+async fn mock_provider() -> (MockServer, String) {
+    let idp = MockServer::start().await;
+    let issuer = idp.uri();
+
+    Mock::given(method("GET"))
+        .and(path("/.well-known/openid-configuration"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "issuer": issuer,
+            "authorization_endpoint": format!("{issuer}/authorize"),
+            "token_endpoint": format!("{issuer}/token"),
+            "jwks_uri": format!("{issuer}/jwks"),
+        })))
+        .mount(&idp)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/jwks"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "keys": [{ "kty": "RSA", "use": "sig", "alg": "RS256", "kid": "test-key", "n": TEST_KEY_N, "e": "AQAB" }]
+        })))
+        .mount(&idp)
+        .await;
+
+    (idp, issuer)
+}
+
+/// Seed an enabled OIDC IdP for `org_id` pointing at the mock provider.
+async fn seed_idp(
+    pool: &PgPool,
+    org_id: Uuid,
+    issuer: &str,
+    default_role: &str,
+    group_role_map: serde_json::Value,
+    enforce_role_mapping: bool,
+) {
+    let secret_enc =
+        qdesigner_server::api::sso::crypto::encrypt(HARNESS_JWT_SECRET, "oidc-secret").unwrap();
+    sqlx::query(
+        r#"
+        INSERT INTO org_identity_providers
+            (organization_id, protocol, display_name, issuer, metadata_url,
+             client_id, client_secret_enc, default_role, group_claim,
+             group_role_map, enforce_role_mapping, enabled)
+        VALUES ($1, 'oidc', 'Test IdP', $2, $3, $4, $5, $6, 'groups',
+                $7::jsonb, $8, true)
+        "#,
+    )
+    .bind(org_id)
+    .bind(issuer)
+    .bind(format!("{issuer}/.well-known/openid-configuration"))
+    .bind(CLIENT_ID)
+    .bind(&secret_enc)
+    .bind(default_role)
+    .bind(group_role_map)
+    .bind(enforce_role_mapping)
+    .execute(pool)
+    .await
+    .expect("seed idp");
+}
+
+/// Claim `domain` for `org_id`. `verified` drives `verified_at` — an unverified
+/// row is a domain the org merely *asserted*, which must NOT authorize its IdP.
+async fn seed_domain(pool: &PgPool, org_id: Uuid, domain: &str, verified: bool) {
+    sqlx::query(
+        "INSERT INTO organization_domains (organization_id, domain, verified_at)
+         VALUES ($1, $2, CASE WHEN $3 THEN now() ELSE NULL END)",
+    )
+    .bind(org_id)
+    .bind(domain)
+    .bind(verified)
+    .execute(pool)
+    .await
+    .expect("seed domain");
+}
+
+/// Drive `GET /api/sso/{slug}/start` and pull the CSRF `state` + `nonce` out of
+/// the authorize redirect.
+async fn start_flow(app: &axum::Router, slug: &str) -> (String, String) {
+    let req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/sso/{slug}/start"))
+        .header("host", "qdesigner.test")
+        .body(Body::empty())
+        .unwrap();
+    let (status, headers, _) = send_full(app, req).await;
+    assert_eq!(status, StatusCode::SEE_OTHER, "start should 303");
+    let location = headers
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .expect("start Location header")
+        .to_string();
+    let authorize = reqwest::Url::parse(&location).expect("authorize url");
+    let param = |k: &str| {
+        authorize
+            .query_pairs()
+            .find(|(key, _)| key == k)
+            .map(|(_, v)| v.to_string())
+            .unwrap_or_else(|| panic!("{k} param"))
+    };
+    (param("state"), param("nonce"))
+}
+
+async fn mount_token_endpoint(idp: &MockServer, id_token: String) {
+    Mock::given(method("POST"))
+        .and(path("/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "opaque-access",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "id_token": id_token,
+        })))
+        .mount(idp)
+        .await;
+}
+
+async fn callback(
+    app: &axum::Router,
+    state_tok: &str,
+) -> (StatusCode, axum::http::HeaderMap, serde_json::Value) {
+    let req = Request::builder()
+        .method("GET")
+        .uri(format!(
+            "/api/sso/callback?code=auth-code-123&state={state_tok}"
+        ))
+        .header("host", "qdesigner.test")
+        .body(Body::empty())
+        .unwrap();
+    send_full(app, req).await
+}
+
+/// A local (password) account, seeded straight into `users` so it is
+/// unmistakably NOT federated: `idp_id` / `external_subject` NULL and
+/// `email_verified = false`.
+async fn seed_local_user(sup: &PgPool, email: &str) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO users (id, email, full_name, password_hash, email_verified)
+         VALUES ($1, $2, 'Victim', 'argon2-placeholder', false)",
+    )
+    .bind(id)
+    .bind(email)
+    .execute(sup)
+    .await
+    .expect("seed local user");
+    id
+}
+
+/// The `users` columns a takeover would have to rewrite.
+struct UserBinding {
+    idp_id: Option<Uuid>,
+    external_subject: Option<String>,
+    email_verified: bool,
+}
+
+async fn read_binding(sup: &PgPool, user_id: Uuid) -> UserBinding {
+    let row =
+        sqlx::query("SELECT idp_id, external_subject, email_verified FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(sup)
+            .await
+            .expect("user row");
+    UserBinding {
+        idp_id: row.get("idp_id"),
+        external_subject: row.get("external_subject"),
+        email_verified: row.get("email_verified"),
+    }
 }
 
 #[tokio::test]
@@ -113,114 +302,33 @@ async fn oidc_callback_provisions_user_and_maps_group_to_admin() {
         .await
         .expect("org slug");
 
-    // ── Mock OIDC provider ──
-    let idp = MockServer::start().await;
-    let issuer = idp.uri();
-
-    Mock::given(method("GET"))
-        .and(path("/.well-known/openid-configuration"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "issuer": issuer,
-            "authorization_endpoint": format!("{issuer}/authorize"),
-            "token_endpoint": format!("{issuer}/token"),
-            "jwks_uri": format!("{issuer}/jwks"),
-        })))
-        .mount(&idp)
-        .await;
-
-    Mock::given(method("GET"))
-        .and(path("/jwks"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "keys": [{
-                "kty": "RSA",
-                "use": "sig",
-                "alg": "RS256",
-                "kid": "test-key",
-                "n": TEST_KEY_N,
-                "e": "AQAB",
-            }]
-        })))
-        .mount(&idp)
-        .await;
-
-    // ── Seed the IdP config (encrypted secret, group→role map) ──
-    let secret_enc = qdesigner_server::api::sso::crypto::encrypt(HARNESS_JWT_SECRET, "oidc-secret")
-        .expect("encrypt secret");
-    sqlx::query(
-        r#"
-        INSERT INTO org_identity_providers
-            (organization_id, protocol, display_name, issuer, metadata_url,
-             client_id, client_secret_enc, default_role, group_claim,
-             group_role_map, enforce_role_mapping, enabled)
-        VALUES ($1, 'oidc', 'Test IdP', $2, $3, $4, $5, 'member', 'groups',
-                $6::jsonb, true, true)
-        "#,
-    )
-    .bind(tenant.org_id)
-    .bind(&issuer)
-    .bind(format!("{issuer}/.well-known/openid-configuration"))
-    .bind(CLIENT_ID)
-    .bind(&secret_enc)
-    .bind(json!({ "lab-admins": "admin" }))
-    .execute(&pool)
-    .await
-    .expect("seed idp");
-
-    // ── start: 303 to the IdP with state + nonce ──
-    let start_req = Request::builder()
-        .method("GET")
-        .uri(format!("/api/sso/{slug}/start"))
-        .header("host", "qdesigner.test")
-        .body(Body::empty())
-        .unwrap();
-    let (status, headers, _) = send_full(&app, start_req).await;
-    assert_eq!(status, StatusCode::SEE_OTHER, "start should 303");
-    let location = headers
-        .get("location")
-        .and_then(|v| v.to_str().ok())
-        .expect("start Location header")
-        .to_string();
-    let authorize = reqwest::Url::parse(&location).expect("authorize url");
-    let state_tok = authorize
-        .query_pairs()
-        .find(|(k, _)| k == "state")
-        .map(|(_, v)| v.to_string())
-        .expect("state param");
-    let nonce = authorize
-        .query_pairs()
-        .find(|(k, _)| k == "nonce")
-        .map(|(_, v)| v.to_string())
-        .expect("nonce param");
-
-    // ── token endpoint returns an id_token carrying that nonce + admin group ──
-    let id_token = sign_id_token(
+    let (idp, issuer) = mock_provider().await;
+    seed_idp(
+        &pool,
+        tenant.org_id,
         &issuer,
-        &nonce,
-        "ext-subject-oidc-1",
-        "sso.federated@example.test",
-        &["lab-admins"],
-    );
-    Mock::given(method("POST"))
-        .and(path("/token"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "access_token": "opaque-access",
-            "token_type": "Bearer",
-            "expires_in": 3600,
-            "id_token": id_token,
-        })))
-        .mount(&idp)
-        .await;
+        "member",
+        json!({ "lab-admins": "admin" }),
+        true,
+    )
+    .await;
+    // The IdP is authorized for its org's verified domain.
+    seed_domain(&pool, tenant.org_id, "example.test", true).await;
+
+    let (state_tok, nonce) = start_flow(&app, &slug).await;
+
+    let id_token = sign_id_token(IdToken {
+        issuer: &issuer,
+        nonce: &nonce,
+        subject: "ext-subject-oidc-1",
+        email: "sso.federated@example.test",
+        email_verified: true,
+        groups: &["lab-admins"],
+    });
+    mount_token_endpoint(&idp, id_token).await;
 
     // ── callback: 303 back to the app with a session ──
-    let cb_req = Request::builder()
-        .method("GET")
-        .uri(format!(
-            "/api/sso/callback?code=auth-code-123&state={state_tok}"
-        ))
-        .header("host", "qdesigner.test")
-        .body(Body::empty())
-        .unwrap();
-    let (status, headers, _) = send_full(&app, cb_req).await;
+    let (status, headers, _) = callback(&app, &state_tok).await;
     assert_eq!(
         status,
         StatusCode::SEE_OTHER,
@@ -293,97 +401,32 @@ async fn oidc_default_role_when_no_group_matches() {
         .await
         .unwrap();
 
-    let idp = MockServer::start().await;
-    let issuer = idp.uri();
-    Mock::given(method("GET"))
-        .and(path("/.well-known/openid-configuration"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "issuer": issuer,
-            "authorization_endpoint": format!("{issuer}/authorize"),
-            "token_endpoint": format!("{issuer}/token"),
-            "jwks_uri": format!("{issuer}/jwks"),
-        })))
-        .mount(&idp)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/jwks"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "keys": [{ "kty": "RSA", "use": "sig", "alg": "RS256", "kid": "test-key", "n": TEST_KEY_N, "e": "AQAB" }]
-        })))
-        .mount(&idp)
-        .await;
-
-    let secret_enc =
-        qdesigner_server::api::sso::crypto::encrypt(HARNESS_JWT_SECRET, "oidc-secret").unwrap();
-    sqlx::query(
-        r#"
-        INSERT INTO org_identity_providers
-            (organization_id, protocol, display_name, issuer, metadata_url,
-             client_id, client_secret_enc, default_role, group_claim,
-             group_role_map, enforce_role_mapping, enabled)
-        VALUES ($1, 'oidc', 'Test IdP', $2, $3, $4, $5, 'viewer', 'groups',
-                $6::jsonb, false, true)
-        "#,
+    let (idp, issuer) = mock_provider().await;
+    seed_idp(
+        &pool,
+        tenant.org_id,
+        &issuer,
+        "viewer",
+        json!({ "lab-admins": "admin" }),
+        false,
     )
-    .bind(tenant.org_id)
-    .bind(&issuer)
-    .bind(format!("{issuer}/.well-known/openid-configuration"))
-    .bind(CLIENT_ID)
-    .bind(&secret_enc)
-    .bind(json!({ "lab-admins": "admin" }))
-    .execute(&pool)
-    .await
-    .unwrap();
+    .await;
+    seed_domain(&pool, tenant.org_id, "example.test", true).await;
 
-    let start_req = Request::builder()
-        .method("GET")
-        .uri(format!("/api/sso/{slug}/start"))
-        .header("host", "qdesigner.test")
-        .body(Body::empty())
-        .unwrap();
-    let (_, headers, _) = send_full(&app, start_req).await;
-    let location = headers
-        .get("location")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-    let authorize = reqwest::Url::parse(&location).unwrap();
-    let state_tok = authorize
-        .query_pairs()
-        .find(|(k, _)| k == "state")
-        .map(|(_, v)| v.to_string())
-        .unwrap();
-    let nonce = authorize
-        .query_pairs()
-        .find(|(k, _)| k == "nonce")
-        .map(|(_, v)| v.to_string())
-        .unwrap();
+    let (state_tok, nonce) = start_flow(&app, &slug).await;
 
     // No matching group → falls back to default_role = viewer.
-    let id_token = sign_id_token(
-        &issuer,
-        &nonce,
-        "ext-subject-oidc-2",
-        "sso.viewer@example.test",
-        &["some-other-group"],
-    );
-    Mock::given(method("POST"))
-        .and(path("/token"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "token_type": "Bearer",
-            "id_token": id_token,
-        })))
-        .mount(&idp)
-        .await;
+    let id_token = sign_id_token(IdToken {
+        issuer: &issuer,
+        nonce: &nonce,
+        subject: "ext-subject-oidc-2",
+        email: "sso.viewer@example.test",
+        email_verified: true,
+        groups: &["some-other-group"],
+    });
+    mount_token_endpoint(&idp, id_token).await;
 
-    let cb_req = Request::builder()
-        .method("GET")
-        .uri(format!("/api/sso/callback?code=xyz&state={state_tok}"))
-        .header("host", "qdesigner.test")
-        .body(Body::empty())
-        .unwrap();
-    let (status, _, _) = send_full(&app, cb_req).await;
+    let (status, _, _) = callback(&app, &state_tok).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
 
     let sup = fixture_pool().await.expect("fixture pool");
@@ -396,6 +439,291 @@ async fn oidc_default_role_when_no_group_matches() {
     .await
     .expect("membership provisioned");
     assert_eq!(role, "viewer", "no group match should use default_role");
+}
+
+// ── Federated-identity binding gate (SSO account-takeover regression lock) ──
+
+/// (a) THE TAKEOVER PoC. Org A runs an IdP. It asserts an id_token for
+/// `victim@other.example` — a pre-existing LOCAL account in a domain org A does
+/// not own. Pre-fix this silently rewrote the victim's `users` row
+/// (`idp_id`/`external_subject` set, `email_verified` forced true) and handed
+/// org A's IdP a session as the victim. It must now be rejected, and — the real
+/// regression lock — the victim's row must be byte-for-byte untouched.
+#[tokio::test]
+async fn federated_identity_binding_rejects_takeover_of_foreign_domain_account() {
+    let Some(state) = build_test_state().await else {
+        eprintln!("skipping: no database");
+        return;
+    };
+    let pool = state.pool.clone();
+    let app = test_app(state);
+    let sup = fixture_pool().await.expect("fixture pool");
+
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+    let slug: String = sqlx::query_scalar("SELECT slug FROM organizations WHERE id = $1")
+        .bind(tenant.org_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let (idp, issuer) = mock_provider().await;
+    seed_idp(&pool, tenant.org_id, &issuer, "admin", json!({}), false).await;
+    // The attacker org has ONLY proven it owns `attacker.example`.
+    seed_domain(&pool, tenant.org_id, "attacker.example", true).await;
+
+    // The victim: a local account in an unrelated domain the attacker org does
+    // not own. Not federated, email not verified.
+    let victim_email = format!("victim-{}@other.example", Uuid::new_v4());
+    let victim_id = seed_local_user(&sup, &victim_email).await;
+
+    let (state_tok, nonce) = start_flow(&app, &slug).await;
+    let id_token = sign_id_token(IdToken {
+        issuer: &issuer,
+        nonce: &nonce,
+        subject: "attacker-controlled-subject",
+        email: &victim_email, // ← the IdP asserts the victim's address
+        email_verified: true, // ← and even claims it verified it
+        groups: &[],
+    });
+    mount_token_endpoint(&idp, id_token).await;
+
+    let (status, headers, _) = callback(&app, &state_tok).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "an IdP must not authenticate an email domain its org has not verified"
+    );
+    assert!(
+        extract_cookie(&headers, "qd_session").is_none(),
+        "no session may be minted for a rejected federated binding"
+    );
+
+    // ── The regression lock: the victim's row is UNCHANGED. ──
+    let after = read_binding(&sup, victim_id).await;
+    assert_eq!(
+        after.idp_id, None,
+        "victim must NOT have been linked to the attacker's idp"
+    );
+    assert_eq!(
+        after.external_subject, None,
+        "victim must NOT carry the attacker-controlled external_subject"
+    );
+    assert!(
+        !after.email_verified,
+        "victim's email_verified must NOT have been force-set by the IdP"
+    );
+
+    // No membership was granted in the attacker's org either.
+    let members: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM organization_members WHERE organization_id = $1 AND user_id = $2",
+    )
+    .bind(tenant.org_id)
+    .bind(victim_id)
+    .fetch_one(&sup)
+    .await
+    .expect("membership count");
+    assert_eq!(members, 0, "no membership may be provisioned on rejection");
+}
+
+/// (b) `email_verified: false` → rejected. The IdP itself says it has not
+/// verified the address, so it may neither link nor provision — even inside a
+/// domain the org HAS verified.
+#[tokio::test]
+async fn federated_identity_binding_rejects_unverified_email_claim() {
+    let Some(state) = build_test_state().await else {
+        eprintln!("skipping: no database");
+        return;
+    };
+    let pool = state.pool.clone();
+    let app = test_app(state);
+    let sup = fixture_pool().await.expect("fixture pool");
+
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+    let slug: String = sqlx::query_scalar("SELECT slug FROM organizations WHERE id = $1")
+        .bind(tenant.org_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let (idp, issuer) = mock_provider().await;
+    seed_idp(&pool, tenant.org_id, &issuer, "member", json!({}), false).await;
+    seed_domain(&pool, tenant.org_id, "verified.example", true).await;
+
+    let email = format!("unverified-{}@verified.example", Uuid::new_v4());
+    let (state_tok, nonce) = start_flow(&app, &slug).await;
+    let id_token = sign_id_token(IdToken {
+        issuer: &issuer,
+        nonce: &nonce,
+        subject: "subject-unverified-email",
+        email: &email,
+        email_verified: false, // ← the only thing wrong
+        groups: &[],
+    });
+    mount_token_endpoint(&idp, id_token).await;
+
+    let (status, headers, _) = callback(&app, &state_tok).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "an unverified email claim must not bind a federated identity"
+    );
+    assert!(
+        extract_cookie(&headers, "qd_session").is_none(),
+        "no session may be minted for an unverified email claim"
+    );
+
+    let provisioned: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_one(&sup)
+        .await
+        .expect("count users");
+    assert_eq!(
+        provisioned, 0,
+        "no account may be provisioned from an unverified email claim"
+    );
+}
+
+/// (c) The domain row EXISTS for the org but `verified_at IS NULL` — the org
+/// merely asserted it. Claiming a domain must not be enough; only proving it is.
+#[tokio::test]
+async fn federated_identity_binding_rejects_unverified_org_domain() {
+    let Some(state) = build_test_state().await else {
+        eprintln!("skipping: no database");
+        return;
+    };
+    let pool = state.pool.clone();
+    let app = test_app(state);
+    let sup = fixture_pool().await.expect("fixture pool");
+
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+    let slug: String = sqlx::query_scalar("SELECT slug FROM organizations WHERE id = $1")
+        .bind(tenant.org_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let (idp, issuer) = mock_provider().await;
+    seed_idp(&pool, tenant.org_id, &issuer, "member", json!({}), false).await;
+    // Claimed, never verified.
+    seed_domain(&pool, tenant.org_id, "pending.example", false).await;
+
+    let email = format!("user-{}@pending.example", Uuid::new_v4());
+    let (state_tok, nonce) = start_flow(&app, &slug).await;
+    let id_token = sign_id_token(IdToken {
+        issuer: &issuer,
+        nonce: &nonce,
+        subject: "subject-pending-domain",
+        email: &email,
+        email_verified: true,
+        groups: &[],
+    });
+    mount_token_endpoint(&idp, id_token).await;
+
+    let (status, headers, _) = callback(&app, &state_tok).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "an unverified (merely claimed) org domain must not authorize the IdP"
+    );
+    assert!(
+        extract_cookie(&headers, "qd_session").is_none(),
+        "no session may be minted against an unverified org domain"
+    );
+
+    let provisioned: i64 = sqlx::query_scalar("SELECT count(*) FROM users WHERE email = $1")
+        .bind(&email)
+        .fetch_one(&sup)
+        .await
+        .expect("count users");
+    assert_eq!(
+        provisioned, 0,
+        "no account may be provisioned against an unverified org domain"
+    );
+}
+
+/// (d) HAPPY PATH — proves the gate did not just break SSO. `email_verified` +
+/// an email inside a VERIFIED domain of the IdP's own org → the pre-existing
+/// local account is LINKED (the legitimate form of the operation the takeover
+/// PoC abuses) and the login succeeds.
+#[tokio::test]
+async fn federated_identity_binding_links_local_account_in_verified_domain() {
+    let Some(state) = build_test_state().await else {
+        eprintln!("skipping: no database");
+        return;
+    };
+    let pool = state.pool.clone();
+    let app = test_app(state);
+    let sup = fixture_pool().await.expect("fixture pool");
+
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+    let slug: String = sqlx::query_scalar("SELECT slug FROM organizations WHERE id = $1")
+        .bind(tenant.org_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let (idp, issuer) = mock_provider().await;
+    seed_idp(&pool, tenant.org_id, &issuer, "member", json!({}), false).await;
+    // The org has PROVEN it owns this domain.
+    seed_domain(&pool, tenant.org_id, "owned.example", true).await;
+
+    // A pre-existing local account inside that owned domain — a real employee
+    // who signed up with a password before SSO was turned on.
+    let staff_email = format!("staff-{}@owned.example", Uuid::new_v4());
+    let staff_id = seed_local_user(&sup, &staff_email).await;
+
+    let (state_tok, nonce) = start_flow(&app, &slug).await;
+    let id_token = sign_id_token(IdToken {
+        issuer: &issuer,
+        nonce: &nonce,
+        subject: "legit-subject-1",
+        email: &staff_email,
+        email_verified: true,
+        groups: &[],
+    });
+    mount_token_endpoint(&idp, id_token).await;
+
+    let (status, headers, _) = callback(&app, &state_tok).await;
+    assert_eq!(
+        status,
+        StatusCode::SEE_OTHER,
+        "a verified email in a verified org domain must complete login: {:?}",
+        headers.get("location")
+    );
+    assert!(
+        extract_cookie(&headers, "qd_session").is_some(),
+        "the happy path must mint a session"
+    );
+
+    // The account was linked to the IdP (same UPDATE the PoC abuses, now legit).
+    let after = read_binding(&sup, staff_id).await;
+    assert!(
+        after.idp_id.is_some(),
+        "the local account should now be linked to the org's idp"
+    );
+    assert_eq!(
+        after.external_subject.as_deref(),
+        Some("legit-subject-1"),
+        "the federated subject should be bound to the account"
+    );
+    assert!(
+        after.email_verified,
+        "linking through a verified domain marks the email verified"
+    );
+
+    let role: String = sqlx::query_scalar(
+        "SELECT role FROM organization_members WHERE organization_id = $1 AND user_id = $2 AND status = 'active'",
+    )
+    .bind(tenant.org_id)
+    .bind(staff_id)
+    .fetch_one(&sup)
+    .await
+    .expect("membership provisioned");
+    assert_eq!(role, "member", "default_role applies with no group match");
 }
 
 /// F-27 interim: the admin CRUD refuses to CREATE a `protocol = 'saml'` IdP
