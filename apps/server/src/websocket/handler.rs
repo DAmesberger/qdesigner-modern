@@ -7,11 +7,13 @@ use axum::{
     response::Response,
 };
 use futures_util::{SinkExt, StreamExt};
-use sqlx::PgPool;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::auth::session;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
+use crate::rbac::models::Permission;
 use crate::state::AppState;
 use crate::websocket::manager::WsMessage;
 use crate::websocket::yjs_relay;
@@ -101,6 +103,14 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
         }
     });
 
+    // Channels this connection subscribed to at the ReadWrite tier. A binary
+    // Yjs frame carries no channel of its own — the relay infers it from the
+    // subscription set — so the write capability decided at Subscribe time is
+    // cached here and consulted on every inbound frame. Re-authorizing per frame
+    // would mean a DB round-trip per keystroke; this is strictly stronger than
+    // the previous code, which never re-checked a binary frame at all.
+    let mut writable_channels: HashSet<String> = HashSet::new();
+
     // Read messages from the client.
     let ws_state = state.websocket_state.clone();
     while let Some(Ok(msg)) = receiver.next().await {
@@ -109,13 +119,26 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
                 if let Ok(cmd) = serde_json::from_str::<ClientCommand>(&text) {
                     match cmd {
                         ClientCommand::Subscribe { channel } => {
-                            if authorize_channel(&state.pool, user_id, &channel).await {
-                                ws_state.subscribe(&conn_id, channel).await;
-                            } else {
-                                tracing::warn!("User {user_id} unauthorized for channel {channel}");
+                            match authorize_channel(&state, user_id, &channel).await {
+                                ChannelAccess::Denied => {
+                                    tracing::warn!(
+                                        "User {user_id} unauthorized for channel {channel}"
+                                    );
+                                }
+                                access => {
+                                    if access.can_write() {
+                                        writable_channels.insert(channel.clone());
+                                    } else {
+                                        // A demotion (editor → viewer) between two
+                                        // subscribes must drop the write capability.
+                                        writable_channels.remove(&channel);
+                                    }
+                                    ws_state.subscribe(&conn_id, channel).await;
+                                }
                             }
                         }
                         ClientCommand::Unsubscribe { channel } => {
+                            writable_channels.remove(&channel);
                             ws_state.unsubscribe(&conn_id, &channel).await;
                         }
                         ClientCommand::Publish {
@@ -123,7 +146,13 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
                             event,
                             payload,
                         } => {
-                            if authorize_channel(&state.pool, user_id, &channel).await {
+                            // Ephemeral JSON broadcast — nothing is applied to the
+                            // document or persisted, so it stays at the read tier
+                            // (unchanged admission semantics, now via the real gate).
+                            if authorize_channel(&state, user_id, &channel)
+                                .await
+                                .is_allowed()
+                            {
                                 ws_state.broadcast(WsMessage {
                                     channel,
                                     event,
@@ -132,7 +161,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
                             }
                         }
                         ClientCommand::Presence { channel } => {
-                            if authorize_channel(&state.pool, user_id, &channel).await {
+                            if authorize_channel(&state, user_id, &channel)
+                                .await
+                                .is_allowed()
+                            {
                                 ws_state.broadcast(WsMessage {
                                     channel,
                                     event: "presence".to_string(),
@@ -156,12 +188,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
                 if let Some(designer_channel) = channels.iter().find(|c| c.starts_with("designer:"))
                 {
                     if let Some(qid) = parse_channel_resource(designer_channel) {
+                        // A read-only subscriber (project viewer) may sync *from*
+                        // the server (step1) but may not mutate it — the relay
+                        // drops its step2/update frames.
+                        let can_write = writable_channels.contains(designer_channel);
                         let responses = yjs_relay::handle_binary_message(
                             &data,
                             qid,
                             &state.yjs_store,
                             &state.websocket_state,
                             &conn_id,
+                            can_write,
                         )
                         .await;
 
@@ -223,51 +260,135 @@ enum ClientCommand {
     Ping,
 }
 
-/// Verify the user has access to a channel by checking project membership.
-/// Channel format: "designer:{questionnaire_id}" or "questionnaire:{questionnaire_id}"
-async fn authorize_channel(pool: &PgPool, user_id: Uuid, channel: &str) -> bool {
-    let questionnaire_id = match parse_channel_resource(channel) {
-        Some(id) => id,
-        None => return false,
+/// What a user may do on a WebSocket channel.
+///
+/// The designer channel is a *write* surface: every subscriber's inbound
+/// `MSG_SYNC_UPDATE` frame is applied to the server `yrs::Doc` and persisted to
+/// `yjs_state` by [`yjs_relay`]. Authorization therefore has to distinguish
+/// "may watch" from "may edit" — a single boolean cannot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelAccess {
+    /// No access at all — the subscribe/publish/presence command is dropped.
+    Denied,
+    /// May subscribe and receive (live view + presence), but inbound Yjs
+    /// *content* frames (sync step2 / update) are rejected by the relay.
+    ReadOnly,
+    /// May subscribe and mutate the shared document.
+    ReadWrite,
+}
+
+impl ChannelAccess {
+    /// Whether the channel may be joined at all (read tier or better).
+    pub fn is_allowed(self) -> bool {
+        !matches!(self, ChannelAccess::Denied)
+    }
+
+    /// Whether inbound document mutations from this connection are accepted.
+    pub fn can_write(self) -> bool {
+        matches!(self, ChannelAccess::ReadWrite)
+    }
+}
+
+/// Authorize `user_id` on a channel through the **same gate the HTTP surface
+/// uses** — [`crate::authz::authorize`] at [`Scope::Project`] (ADR 0030/0032).
+///
+/// Channel format: `designer:{questionnaire_id}`, `questionnaire:{…}` or
+/// `analytics:{…}` (see [`parse_channel_resource`]).
+///
+/// Before this, the channel was gated by a hand-rolled `EXISTS` over
+/// `project_members` with **no role filter**. That had two opposite defects:
+///
+///  * a project **viewer** (post-ADR-0033 possibly a *cross-org* viewer) was
+///    admitted, and the relay applies+persists any subscriber's Yjs update — so
+///    a read-only collaborator could rewrite questionnaire content, while the
+///    HTTP gate for the same content requires editor+; and
+///  * an org **owner/admin who is not a project member** was locked out, even
+///    though the HTTP gate admits them.
+///
+/// Both collapse into one fix by asking the real gate:
+///   * `QuestionnaireWrite` at project scope → `ProjectRole::Editor` ⇒ [`ReadWrite`](ChannelAccess::ReadWrite)
+///   * else `QuestionnaireRead` → `ProjectRole::Viewer` ⇒ [`ReadOnly`](ChannelAccess::ReadOnly)
+///   * else [`Denied`](ChannelAccess::Denied)
+///
+/// No new [`Permission`] variant: the two questionnaire permissions the HTTP
+/// designer endpoints already use map onto the ADR-0032 project tiers.
+///
+/// Fails closed: any DB error, an unparseable channel, or a missing /
+/// soft-deleted questionnaire yields `Denied`.
+pub async fn authorize_channel(state: &AppState, user_id: Uuid, channel: &str) -> ChannelAccess {
+    let Some(questionnaire_id) = parse_channel_resource(channel) else {
+        return ChannelAccess::Denied;
     };
 
-    // `project_members` (and `projects`) are RLS-bound and the app connects as
-    // the non-BYPASSRLS `qdesigner_app` role, so this membership probe must run
-    // inside a transaction that sets the `app.user_id` GUC — otherwise the RLS
-    // SELECT policy hides every row and EXISTS is always false, wrongly rejecting
-    // the channel and breaking collaborative designer sessions.
-    let mut tx = match pool.begin().await {
-        Ok(tx) => tx,
-        Err(_) => return false,
+    // Resolve the parent project. `questionnaire_definitions` is RLS-exempt
+    // (ADR 0012 — the public by-code fillout read), so a plain pool query is
+    // enough and keeps the decision RLS-independent (ADR 0032).
+    let project_id = match sqlx::query_scalar::<_, Uuid>(
+        "SELECT project_id FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(questionnaire_id)
+    .fetch_optional(&state.pool)
+    .await
+    {
+        Ok(Some(id)) => id,
+        Ok(None) => return ChannelAccess::Denied,
+        Err(e) => {
+            tracing::warn!("channel authz: project lookup failed for {questionnaire_id}: {e}");
+            return ChannelAccess::Denied;
+        }
     };
-    if sqlx::query("SELECT set_config('app.user_id', $1, true)")
+
+    // `authorize`'s coarse gate is RLS-immune (SECURITY DEFINER), but its
+    // custom-role tightening layer reads the RLS-bound `organization_members`
+    // directly. Run it on a GUC-bearing transaction, exactly as the HTTP
+    // handlers do via `middleware::rls_context`, or a custom-role member's row
+    // would be invisible and the tightening would silently no-op.
+    let mut tx = match state.pool.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            tracing::warn!("channel authz: begin failed: {e}");
+            return ChannelAccess::Denied;
+        }
+    };
+    if let Err(e) = sqlx::query("SELECT set_config('app.user_id', $1, true)")
         .bind(user_id.to_string())
         .execute(&mut *tx)
         .await
-        .is_err()
     {
-        return false;
+        tracing::warn!("channel authz: set_config failed: {e}");
+        return ChannelAccess::Denied;
     }
 
-    let authorized = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM project_members pm
-            JOIN projects p ON pm.project_id = p.id
-            JOIN questionnaire_definitions qd ON qd.project_id = p.id
-            WHERE pm.user_id = $1 AND qd.id = $2 AND qd.deleted_at IS NULL
-        )
-        "#,
+    let can_write = authorize(
+        &mut tx,
+        &state.rbac,
+        user_id,
+        Scope::Project(project_id),
+        Permission::QuestionnaireWrite,
     )
-    .bind(user_id)
-    .bind(questionnaire_id)
-    .fetch_one(&mut *tx)
     .await
-    .unwrap_or(false);
+    .is_ok();
+
+    let access = if can_write {
+        ChannelAccess::ReadWrite
+    } else if authorize(
+        &mut tx,
+        &state.rbac,
+        user_id,
+        Scope::Project(project_id),
+        Permission::QuestionnaireRead,
+    )
+    .await
+    .is_ok()
+    {
+        ChannelAccess::ReadOnly
+    } else {
+        ChannelAccess::Denied
+    };
 
     // Read-only probe — release the transaction without persisting anything.
     let _ = tx.rollback().await;
-    authorized
+    access
 }
 
 /// Extract the resource UUID from a channel string like "designer:{uuid}" or "questionnaire:{uuid}".

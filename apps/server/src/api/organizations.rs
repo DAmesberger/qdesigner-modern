@@ -1528,6 +1528,31 @@ pub async fn create_invitation(
         ));
     }
 
+    // Only owners can assign the owner role.
+    //
+    // `OrgManageMembers` maps to the **Admin** tier (`min_org_role_for`), and
+    // `accept_invitation` applies the invitation's role verbatim — so without
+    // this guard an org admin could mint an owner by invitation, escalating
+    // past the tier the direct paths enforce. Mirrors the identical guard in
+    // `add_member` and `change_member_role`; the invitation row is the only
+    // place the role is ever set (no update/resend path re-writes it), so
+    // guarding creation closes the escalation.
+    if body.role == "owner"
+        && !state
+            .rbac
+            .has_org_role(
+                &mut **tx,
+                user.user_id,
+                org_id,
+                &crate::rbac::models::OrgRole::Owner,
+            )
+            .await?
+    {
+        return Err(ApiError::Forbidden(
+            "Only owners can assign the owner role".into(),
+        ));
+    }
+
     authorize(
         &mut tx,
         &state.rbac,
