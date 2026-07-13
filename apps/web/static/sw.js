@@ -359,10 +359,27 @@ async function fetchWithOfflineQueue(request) {
 // so the SW offline queue must NOT also capture them — a double retry path would
 // race two writers on the same client_ids. These fall through to a plain network
 // fetch; offline, the fetch simply fails and the app-level engine owns the retry.
+//
+// It is NOT just about double-retry: `fetchWithOfflineQueue` answers a failed POST
+// with a SYNTHETIC 202 `{queued:true}` that the caller cannot distinguish from a
+// real server ack. For an engine-owned route that fake ack is participant-data
+// loss, so the real network error MUST propagate:
+//   * `POST /api/sessions/{id}/media` — the binary-answer upload (ADR 0029 Half 2).
+//     A fake 202 carries no `url`, and the sync engine would then treat the answer
+//     as delivered and DELETE the pinned blob — a photo/audio/video answer that
+//     never reached the server, unrecoverable. Pin-until-ack requires a genuine ack.
+//     (The queue's multipart replay is unsound anyway: it reads the body via
+//     `request.text()`, which cannot faithfully rebuild a multipart upload.)
+//   * `POST /api/sessions` — session create. A fake 202 yields a session object with
+//     no `id`, corrupting every downstream write that keys on it.
+// FilloutUploadSync (media, with per-binary backoff) and the fillout page controller
+// (create) own the retry for these, offline-first from IndexedDB.
 const FILLOUT_SYNC_OWNED_PATHS = [
+  /^\/api\/sessions$/,
   /^\/api\/sessions\/[^/]+\/sync$/,
   /^\/api\/sessions\/[^/]+\/responses$/,
   /^\/api\/sessions\/[^/]+\/events$/,
+  /^\/api\/sessions\/[^/]+\/media$/,
 ];
 // Session progress update (status / metadata) — a PATCH/PUT on the session root.
 // FilloutUploadSync re-drives this via /sync's session-init + status, so it is

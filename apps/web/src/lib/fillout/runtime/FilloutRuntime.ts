@@ -3,7 +3,9 @@ import { SessionManagementService } from '../services/SessionManagementService';
 import { OfflineResponsePersistence } from '../services/OfflineResponsePersistence';
 import { OfflineTrialPersistence } from '../services/OfflineTrialPersistence';
 import { OfflineSessionService } from '../services/OfflineSessionService';
+import { SyncLedger } from '../services/integrity/SyncLedger';
 import { formatDexieError } from '$lib/services/db/errors';
+import type { ResponseData } from '$lib/shared/types/response';
 import { QuestionnaireRuntime } from '$lib/runtime/core/QuestionnaireRuntime';
 import type { ResumeState } from '$lib/runtime/core/ResumeState';
 import type { RuntimeTrialEvent } from '$lib/runtime/core/question-runtime';
@@ -43,6 +45,11 @@ export interface FilloutRuntimeConfig {
 	 */
 	seriesContext?: { waveIndex: number; seriesElapsedDays: number };
 	formHost?: FormQuestionHost;
+	/**
+	 * @deprecated Inert. ADR 0023 D2 makes the durable IndexedDB write the ONLY
+	 * result path — there is no non-offline write branch to switch off. Accepted
+	 * for call-site compatibility; it no longer selects a persistence strategy.
+	 */
 	enableOfflineSync?: boolean;
 	syncInterval?: number;
 	/**
@@ -76,6 +83,26 @@ export interface FilloutRuntimeConfig {
 	 * `wrappedConfig` spread so the fillout page can drive the aria-live announcement.
 	 */
 	onQuestionPresented?: (event: QuestionPresentedEvent) => void;
+	/**
+	 * Fired when a participant's answer could NOT be durably stored (IndexedDB quota
+	 * exhausted, write-verify mismatch, …). The run is already halted by the time this
+	 * fires; the host should surface a blocking, non-dismissible integrity error.
+	 * See {@link FilloutRuntime.retryFailedPersistence}.
+	 */
+	onPersistenceFailure?: (failure: PersistenceFailure) => void;
+}
+
+/**
+ * A participant answer whose durable write failed. The answer exists ONLY in memory
+ * at this point — nothing was written, so nothing can be replayed from the store.
+ */
+export interface PersistenceFailure {
+	questionId: string;
+	error: Error;
+	/** Human-readable cause (the real Dexie error, not the minified class name). */
+	message: string;
+	/** How many answers are currently unstored (this one included). */
+	unstoredCount: number;
 }
 
 export class FilloutRuntime {
@@ -93,6 +120,13 @@ export class FilloutRuntime {
 	private eventBus = new RuntimeEventBus();
 	private unsubscribers: Array<() => void> = [];
 
+	/**
+	 * Answers whose durable write failed and that therefore exist ONLY here, in memory
+	 * (ADR 0023 D2 + ADR 0029 parity). Non-empty ⇒ the run is halted and an integrity
+	 * escalation is on the SyncLedger. Drained by {@link retryFailedPersistence}.
+	 */
+	private unstoredResponses: Array<{ data: ResponseData; ledgerId: string }> = [];
+
 	constructor(private config: FilloutRuntimeConfig) {
 		this.sessionId = config.sessionId;
 		this.onSessionUpdate = config.onSessionUpdate;
@@ -100,10 +134,10 @@ export class FilloutRuntime {
 		// Calculate total questions
 		this.totalQuestions = config.questionnaire.questions.length;
 
-		// Initialize persistence service
+		// Initialize persistence service. There is one write path (ADR 0023 D2): every
+		// record goes to IndexedDB first, always — offline is not a mode to enable.
 		this.persistenceService = new ResponsePersistenceService({
 			sessionId: config.sessionId,
-			enableOffline: config.enableOfflineSync !== false,
 			syncInterval: config.syncInterval || 5000
 		});
 
@@ -115,11 +149,15 @@ export class FilloutRuntime {
 				await this.handleComplete(session);
 			},
 			onProgress: (pageIndex: number, totalPages: number) => {
+				// The 'page:changed' subscription (setupEventSubscriptions) is what persists the
+				// page_navigation event. Calling updatePageProgress() here as WELL wrote the same
+				// navigation twice — two durable rows, two distinct clientIds, so the server's
+				// clientId dedup could not collapse them and interaction analytics double-counted
+				// every page transition. One emit, one durable write (D2: write-once).
 				this.eventBus.emit('page:changed', { pageIndex, totalPages });
 				if (config.onProgress) {
 					config.onProgress(pageIndex, totalPages);
 				}
-				this.updatePageProgress(pageIndex, totalPages);
 			},
 			// True save-and-continue (E-FLOW-3): persist the full ResumeState offline-first
 			// on every answer boundary so a reload / cross-device resume can restore the
@@ -246,8 +284,13 @@ export class FilloutRuntime {
 		// Update current question reference
 		this.currentQuestion = question;
 
-		// Persist to database
-		await this.persistResponse(response, question);
+		// Persist to database. A FAILED durable write halts the run: everything below
+		// (progress %, the resume cursor, the response_submitted event) would record
+		// this answer as though it had been stored — and the resume cursor in particular
+		// would make a reload SKIP the question whose answer was just lost. Nothing may
+		// treat an unstored answer as stored.
+		const persisted = await this.persistResponse(response, question);
+		if (!persisted) return;
 
 		// Update progress
 		this.updateProgress();
@@ -263,30 +306,135 @@ export class FilloutRuntime {
 	}
 
 	/**
-	 * Persist a response to database
+	 * Persist a response to the durable store (ADR 0023 D2: IndexedDB first, then sync).
+	 * Returns false when the durable write failed — the answer was NOT stored.
 	 */
-	private async persistResponse(response: Response, question: Question): Promise<void> {
+	private async persistResponse(response: Response, question: Question): Promise<boolean> {
+		const data: ResponseData = {
+			questionId: response.questionId,
+			value: response.value,
+			stimulusOnset: response.stimulusOnsetTime,
+			responseTime: response.timestamp,
+			reactionTime: response.reactionTime,
+			timeOnQuestion: this.getTimeOnQuestion(question.id),
+			valid: response.valid,
+			metadata: {
+				// Forward the runtime-attached metadata (e.g. the C-PROVENANCE
+				// `timingProvenance` aggregate) so it survives to persistence.
+				...response.metadata,
+				pageId: response.pageId,
+				questionType: question.type,
+				questionIndex: this.completedQuestions
+			}
+		};
+
 		try {
-			await this.persistenceService.saveResponse({
-				questionId: response.questionId,
-				value: response.value,
-				stimulusOnset: response.stimulusOnsetTime,
-				responseTime: response.timestamp,
-				reactionTime: response.reactionTime,
-				timeOnQuestion: this.getTimeOnQuestion(question.id),
-				valid: response.valid,
-				metadata: {
-					// Forward the runtime-attached metadata (e.g. the C-PROVENANCE
-					// `timingProvenance` aggregate) so it survives to persistence.
-					...response.metadata,
-					pageId: response.pageId,
-					questionType: question.type,
-					questionIndex: this.completedQuestions
-				}
-			});
+			await this.persistenceService.saveResponse(data);
+			return true;
 		} catch (error) {
-			console.error('Failed to persist response:', error as Error);
+			await this.handlePersistenceFailure(data, error as Error);
+			return false;
 		}
+	}
+
+	/**
+	 * A participant's answer could not be durably stored (quota exhausted, write-verify
+	 * mismatch, …). This is unrecoverable data — you cannot re-run a participant — so it
+	 * is handled fail-closed, mirroring ADR 0029's binary-capture contract (block loudly
+	 * at capture) rather than the record-and-continue posture reserved for infrastructure
+	 * noise that costs no data:
+	 *
+	 * 1. **Halt the run.** `pause()` freezes the response collector and gates
+	 *    `showCurrentItem()`, so no further item is presented and the participant cannot
+	 *    answer on past the lost answer.
+	 * 2. **Tell the truth in the sync state.** The failed write left NO row (and hence no
+	 *    ledger entry), so the pending counter would happily keep saying "all saved" over
+	 *    a hole. A synthetic `deadletter` ledger row makes `SyncLedger.stats*()` — the
+	 *    source for the connectivity panel's destructive "N answers could not be
+	 *    submitted" state, its export escape hatch, and the completion screen's
+	 *    `syncFailedCount` — reflect reality.
+	 * 3. **Escalate.** `onIntegrityAlert` fires (console.error + any subscriber) and the
+	 *    host's {@link FilloutRuntimeConfig.onPersistenceFailure} is invoked so the page
+	 *    can show a blocking, non-dismissible error.
+	 *
+	 * Recovery is {@link retryFailedPersistence} (re-attempt the exact payload), or a
+	 * reload: resume rebuilds from the answers that ARE durable, so the lost question is
+	 * simply asked again. There is deliberately no automatic retry — the realistic cause
+	 * is an exhausted quota, which an immediate retry cannot fix.
+	 */
+	private async handlePersistenceFailure(data: ResponseData, error: Error): Promise<void> {
+		const message = formatDexieError(error);
+
+		// 1. Halt.
+		try {
+			this.runtime.pause();
+		} catch (pauseError) {
+			console.error('Failed to halt the run after a lost answer:', pauseError as Error);
+		}
+
+		// 2/3. Ledger truth + escalation. The synthetic clientId stands in for the record
+		// that never made it into the store (its real clientId is minted inside the write).
+		const ledgerId = crypto.randomUUID();
+		this.unstoredResponses.push({ data, ledgerId });
+		console.error(
+			`[integrity] answer for question ${data.questionId} could NOT be stored: ${message}`,
+			error
+		);
+		await SyncLedger.escalateWriteFailure(
+			'response',
+			ledgerId,
+			this.sessionId,
+			`durable write failed for question ${data.questionId}: ${message}`
+		).catch((ledgerError) => {
+			// The ledger lives in the same IndexedDB that just failed, so this can fail too.
+			console.error('Failed to record the integrity escalation:', ledgerError as Error);
+		});
+
+		this.config.onPersistenceFailure?.({
+			questionId: data.questionId,
+			error,
+			message,
+			unstoredCount: this.unstoredResponses.length,
+		});
+	}
+
+	/** True while at least one answer is unstored — the run is halted (see above). */
+	get hasUnstoredResponses(): boolean {
+		return this.unstoredResponses.length > 0;
+	}
+
+	/**
+	 * Re-attempt every answer whose durable write failed, and resume the run when they
+	 * all land. Safe to call repeatedly: each attempt writes a fresh row under a fresh
+	 * clientId, and the two failure modes leave nothing behind that could duplicate it —
+	 * a throwing write stores no row, and a write-verify mismatch stores a corrupt row
+	 * that the checksum gate excludes from sync and dead-letters. Returns true when
+	 * nothing is unstored any more.
+	 */
+	async retryFailedPersistence(): Promise<boolean> {
+		const queued = [...this.unstoredResponses];
+		const stillUnstored: Array<{ data: ResponseData; ledgerId: string }> = [];
+
+		for (const item of queued) {
+			try {
+				await this.persistenceService.saveResponse(item.data);
+				// Stored for real now (under its own clientId + pending ledger row) — drop
+				// the placeholder so the panel stops reporting a recovered loss.
+				await SyncLedger.clearWriteFailure(item.ledgerId).catch(() => {});
+			} catch (error) {
+				console.error(
+					`[integrity] retry failed for question ${item.data.questionId}: ${formatDexieError(error)}`,
+					error as Error
+				);
+				stillUnstored.push(item);
+			}
+		}
+
+		this.unstoredResponses = stillUnstored;
+		if (stillUnstored.length > 0) return false;
+
+		this.runtime.resume();
+		return true;
 	}
 
 	/**

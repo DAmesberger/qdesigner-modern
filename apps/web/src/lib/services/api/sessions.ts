@@ -82,17 +82,33 @@ export const sessions = {
           resume_token: data.resumeToken,
         },
       })
-    ).then((raw) => ({
-      ...mapSession(raw),
-      duplicate: Boolean(raw.duplicate),
-      // E-FLOW-6: server-atomic between-subjects assignment + monotonic
-      // participant index, allocated at create time. The runtime seeds
-      // counterbalancing from participantNumber and prefers the server arm.
-      participantNumber: typeof raw.participant_number === 'number' ? raw.participant_number : 0,
-      assignedCondition: raw.assigned_condition ?? null,
-      assignedConditionIndex:
-        typeof raw.assigned_condition_index === 'number' ? raw.assigned_condition_index : null,
-    })),
+    ).then((raw) => {
+      // A create is an ACK only when the server returned a real session id. The
+      // service worker's offline queue can answer a failed POST with a synthetic
+      // `202 {queued:true}` (a 2xx the HTTP client resolves) that carries no id —
+      // `mapSession` would then hand back a session with an empty id and every
+      // downstream write (responses, events, media) would key on nothing. Fail loudly
+      // instead: the caller's offline path owns the retry.
+      // (`static/sw.js` also no longer queues `POST /api/sessions`; this is the guard
+      // that holds even if that ever regresses, or a proxy fabricates a 2xx.)
+      const rawId = (raw as { id?: unknown } | null | undefined)?.id;
+      if (typeof rawId !== 'string' || rawId.trim() === '') {
+        throw new Error(
+          'Session create was not acknowledged by the server (no session id in the response)'
+        );
+      }
+      return {
+        ...mapSession(raw),
+        duplicate: Boolean(raw.duplicate),
+        // E-FLOW-6: server-atomic between-subjects assignment + monotonic
+        // participant index, allocated at create time. The runtime seeds
+        // counterbalancing from participantNumber and prefers the server arm.
+        participantNumber: typeof raw.participant_number === 'number' ? raw.participant_number : 0,
+        assignedCondition: raw.assigned_condition ?? null,
+        assignedConditionIndex:
+          typeof raw.assigned_condition_index === 'number' ? raw.assigned_condition_index : null,
+      };
+    }),
   get: (id: string) =>
     callSdk(() =>
       getSessionRequest<true>({

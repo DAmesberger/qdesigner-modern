@@ -18,7 +18,7 @@ export const DEAD_LETTER_ATTEMPTS = 5;
 export type LedgerKind = FilloutSyncLedgerEntry['kind'];
 
 export interface IntegrityAlert {
-	type: 'deadletter' | 'checksum-mismatch';
+	type: 'deadletter' | 'checksum-mismatch' | 'write-failure';
 	kind: LedgerKind;
 	clientId: string;
 	sessionId: string;
@@ -176,6 +176,60 @@ export class SyncLedger {
 			reason: 'Stored record failed checksum verification; excluded from sync and flagged for recovery.',
 			at: now
 		});
+	}
+
+	/**
+	 * Escalate a record whose DURABLE WRITE failed outright — the IndexedDB write
+	 * (or its write-verify re-read) threw, so there is no row in the store at all
+	 * and the data exists only in the runtime's memory.
+	 *
+	 * This is strictly worse than a failed *sync*: a queued row can be retried by the
+	 * upload engine forever, whereas an unwritten one is gone the moment the tab
+	 * closes. It therefore skips the retry budget and goes straight to `deadletter`
+	 * with a visible alert, so the connectivity panel's failure count and the
+	 * completion screen's "could not be submitted" readout tell the truth instead of
+	 * reporting "all saved" over a hole. The caller is expected to halt the run
+	 * (a participant must not answer on past a lost answer).
+	 *
+	 * `clientId` is a synthetic id minted by the caller for the lost record (the real
+	 * one never existed, because it is generated inside the failed write).
+	 * {@link clearWriteFailure} removes the row if a later re-attempt succeeds.
+	 */
+	static async escalateWriteFailure(
+		kind: LedgerKind,
+		clientId: string,
+		sessionId: string,
+		reason: string
+	): Promise<void> {
+		const now = Date.now();
+		await db.filloutSyncLedger.put({
+			clientId,
+			sessionId,
+			kind,
+			state: 'deadletter',
+			attempts: 0,
+			lastError: reason,
+			updatedAt: now
+		});
+		emitAlert({
+			type: 'write-failure',
+			kind,
+			clientId,
+			sessionId,
+			attempts: 0,
+			reason,
+			at: now
+		});
+	}
+
+	/**
+	 * Drop a {@link escalateWriteFailure} escalation because the record was
+	 * successfully re-written (under a fresh, real clientId that carries its own
+	 * `pending` ledger row). The synthetic placeholder must go, or the panel would
+	 * keep reporting a loss that has since been recovered.
+	 */
+	static async clearWriteFailure(clientId: string): Promise<void> {
+		await db.filloutSyncLedger.delete(clientId);
 	}
 
 	/** Aggregate ledger counts, for the connectivity UX and integrity readout. */

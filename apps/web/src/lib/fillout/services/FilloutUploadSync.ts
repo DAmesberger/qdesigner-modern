@@ -34,21 +34,81 @@ export interface SyncResult {
 }
 
 /**
- * Max response/event records per `POST /sync` call. A large reaction run can queue
- * thousands of rows offline; splitting into bounded chunks keeps each request well
- * under the server body limit and lets the ack-driven marker flip only what each
- * chunk durably wrote. Server-side each chunk is further split into multi-row
- * INSERT statements (SYNC_BATCH_ROWS), so this only bounds the HTTP body.
+ * Max response/event/trial records per `POST /sync` call, per store. A large reaction
+ * run can queue thousands of rows offline; splitting into bounded chunks keeps each
+ * request well under the server body limit and lets the ack-driven marker flip only
+ * what each chunk durably wrote. Server-side each chunk is further split into
+ * multi-row INSERT statements (SYNC_BATCH_ROWS), so this only bounds the HTTP body.
+ *
+ * A row cap ALONE does not bound the body: a reaction-time trial carries a
+ * `timing_provenance` blob (phaseTimeline + frameStats), so 200 such rows can be
+ * megabytes. See {@link SYNC_CHUNK_MAX_BYTES}.
  */
 const SYNC_CHUNK_SIZE = 200;
 
-function chunkArray<T>(items: T[], size: number): T[][] {
-	if (items.length === 0) return [];
-	const out: T[][] = [];
-	for (let i = 0; i < items.length; i += size) {
-		out.push(items.slice(i, i + size));
+/**
+ * Serialized-size budget per `POST /sync` body. Chunks are bounded by BOTH the row
+ * cap and this byte budget, whichever binds first.
+ *
+ * The server accepts 26 MiB. 8 MiB leaves ~3x headroom, which absorbs (a) the JSON
+ * envelope plus the variables + session-init that ride the first chunk, (b) UTF-8
+ * expansion the estimator cannot see (we measure encoded bytes, but the transport
+ * may add framing), and (c) growth in provenance payloads from higher-refresh-rate
+ * displays without anyone having to re-tune this. It also keeps a single request
+ * small enough to actually complete on a flaky mobile uplink — a 26 MiB POST that
+ * times out mid-flight is retried forever and never lands.
+ */
+export const SYNC_CHUNK_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Bytes reserved inside {@link SYNC_CHUNK_MAX_BYTES} for the parts of the payload
+ * that are not per-row records: the JSON envelope, `status`, the session-init block
+ * and the variables, all of which ride the first chunk.
+ */
+const SYNC_ENVELOPE_RESERVE_BYTES = 64 * 1024;
+
+const textEncoder = new TextEncoder();
+
+/** Encoded (UTF-8) byte size of a value as it will appear in the JSON body. */
+function jsonByteSize(value: unknown): number {
+	return textEncoder.encode(JSON.stringify(value ?? null)).length;
+}
+
+/** One planned `POST /sync` body's worth of rows (row-capped AND byte-capped). */
+interface PlannedChunk {
+	responses: FilloutResponse[];
+	events: FilloutEvent[];
+	trials: FilloutTrial[];
+}
+
+/**
+ * Extract the media URL from a binary-upload response, THROWING when the response is
+ * not a genuine server acknowledgement.
+ *
+ * This is the pin-until-ack guard (ADR 0029 Half 2): a captured blob is the
+ * participant's answer and is unrecoverable, so it may only be unpinned once the
+ * server has demonstrably taken the bytes. A response is proof of that ONLY if it
+ * carries a real media URL.
+ *
+ * The concrete hazard: the service worker's offline queue answers a failed POST with
+ * a synthetic `202 {queued:true}` — a 2xx the HTTP client happily resolves, with no
+ * `url` in it. Reading `result.url` straight off that would patch the response to
+ * `mediaUrl: undefined`, mark it uploaded, and DELETE the pinned blob — destroying a
+ * photo/audio/video answer that never reached the server. The SW no longer queues
+ * `/api/sessions/{id}/media` (see `static/sw.js`), but this guard is what makes the
+ * blob survive REGARDLESS: any future SW change, proxy, captive portal or CDN that
+ * fabricates a 2xx without a media URL leaves the blob pinned and the record queued
+ * for retry instead of silently losing it.
+ */
+function requireMediaUrl(result: unknown): string {
+	const url = (result as { url?: unknown } | null | undefined)?.url;
+	if (typeof url !== 'string' || url.trim() === '') {
+		throw new Error(
+			'media upload was not acknowledged by the server (no media url in the response) — ' +
+				'the blob stays pinned and the upload will be retried'
+		);
 	}
-	return out;
+	return url;
 }
 
 /**
@@ -379,11 +439,87 @@ export class FilloutUploadSync {
 	}
 
 	/**
-	 * Sync a single session's data to the backend, CHUNKED (E-OFF-4). Responses and
-	 * events are split into `SYNC_CHUNK_SIZE` batches and uploaded over as many
-	 * `POST /sync` calls as needed; the session-init (offline materialization) and
-	 * variables ride the FIRST chunk, and the completed-status update rides the LAST
-	 * so quota-claim/purge only fire once every record has landed.
+	 * Plan the `POST /sync` chunks for one session: greedily pack responses, then
+	 * events, then trials into bodies bounded by BOTH {@link SYNC_CHUNK_SIZE} rows per
+	 * store AND {@link SYNC_CHUNK_MAX_BYTES} of serialized payload — whichever binds
+	 * first. Rows that don't fit roll into the next chunk; nothing is ever dropped.
+	 *
+	 * Small rows behave exactly as the old row-only chunker did (500 responses → 200 /
+	 * 200 / 100). Provenance-heavy trial rows split earlier, so a long high-refresh-rate
+	 * run can no longer build a body the server rejects — which, being retried
+	 * identically forever, would dead-letter the session and lose the data.
+	 *
+	 * A SINGLE row larger than the budget is sent ALONE in its own chunk (never
+	 * silently dropped, never wedged behind a chunk it cannot fit in): the budget is a
+	 * packing target, not a rejection threshold, and the server's real limit (26 MiB)
+	 * is 3x larger, so such a row still lands. If it is genuinely too big even for the
+	 * server, the request fails, the row is not acked, and the existing ledger path
+	 * (markAttempt → dead-letter + visible alert) escalates it instead of retrying it
+	 * forever in silence.
+	 */
+	private planChunks(
+		responses: FilloutResponse[],
+		events: FilloutEvent[],
+		trials: FilloutTrial[]
+	): PlannedChunk[] {
+		const budget = SYNC_CHUNK_MAX_BYTES - SYNC_ENVELOPE_RESERVE_BYTES;
+		// `+ 1` per row for the JSON array separator it will carry in the body.
+		const respBytes = responses.map((r) => jsonByteSize(this.buildResponseItem(r)) + 1);
+		const evtBytes = events.map((e) => jsonByteSize(this.buildEventItem(e)) + 1);
+		const trialBytes = trials.map((t) => jsonByteSize(this.buildTrialItem(t)) + 1);
+
+		const chunks: PlannedChunk[] = [];
+		let ri = 0;
+		let ei = 0;
+		let ti = 0;
+
+		while (ri < responses.length || ei < events.length || ti < trials.length) {
+			const chunk: PlannedChunk = { responses: [], events: [], trials: [] };
+			let bytes = 0;
+			const isEmpty = () =>
+				chunk.responses.length === 0 && chunk.events.length === 0 && chunk.trials.length === 0;
+
+			const fill = <T>(src: T[], sizes: number[], cursor: number, dest: T[], kind: string) => {
+				let taken = 0;
+				while (cursor < src.length && taken < SYNC_CHUNK_SIZE) {
+					const size = sizes[cursor]!;
+					if (bytes + size > budget) {
+						// Doesn't fit — unless the chunk is empty, in which case this single row
+						// is over budget on its own and must go alone rather than never go.
+						if (!isEmpty()) break;
+						console.warn(
+							`[FilloutUploadSync] ${kind} row exceeds the ${SYNC_CHUNK_MAX_BYTES}B sync chunk budget ` +
+								`(${size}B) — sending it alone; the server (26 MiB) decides.`
+						);
+					}
+					dest.push(src[cursor]!);
+					bytes += size;
+					cursor++;
+					taken++;
+					if (bytes >= budget) break;
+				}
+				return cursor;
+			};
+
+			ri = fill(responses, respBytes, ri, chunk.responses, 'response');
+			ei = fill(events, evtBytes, ei, chunk.events, 'event');
+			ti = fill(trials, trialBytes, ti, chunk.trials, 'trial');
+			chunks.push(chunk);
+		}
+
+		// At least one call: an empty-child session still needs to push its
+		// session-init and/or a completed-status update.
+		if (chunks.length === 0) chunks.push({ responses: [], events: [], trials: [] });
+		return chunks;
+	}
+
+	/**
+	 * Sync a single session's data to the backend, CHUNKED (E-OFF-4). Responses,
+	 * events and trials are packed into row- AND byte-bounded batches
+	 * ({@link planChunks}) and uploaded over as many `POST /sync` calls as needed; the
+	 * session-init (offline materialization) and variables ride the FIRST chunk, and
+	 * the completed-status update rides the LAST so quota-claim/purge only fire once
+	 * every record has landed.
 	 *
 	 * Marking is ACK-DRIVEN: a row flips to `synced=1` only if the server echoed its
 	 * `client_id` in `accepted_client_ids` (falling back to marking all sent when an
@@ -425,12 +561,8 @@ export class FilloutUploadSync {
 			: undefined;
 		const completed = session.status === 'completed';
 
-		const respChunks = chunkArray(responses, SYNC_CHUNK_SIZE);
-		const evtChunks = chunkArray(events, SYNC_CHUNK_SIZE);
-		const trialChunks = chunkArray(trials, SYNC_CHUNK_SIZE);
-		// At least one call: an empty-child session still needs to push its
-		// session-init and/or a completed-status update.
-		const numChunks = Math.max(respChunks.length, evtChunks.length, trialChunks.length, 1);
+		const plannedChunks = this.planChunks(responses, events, trials);
+		const numChunks = plannedChunks.length;
 
 		let responsesSynced = 0;
 		let eventsSynced = 0;
@@ -447,9 +579,10 @@ export class FilloutUploadSync {
 		let variablesAckLegacy = false;
 
 		for (let i = 0; i < numChunks; i++) {
-			const respSlice = respChunks[i] ?? [];
-			const evtSlice = evtChunks[i] ?? [];
-			const trialSlice = trialChunks[i] ?? [];
+			const planned = plannedChunks[i]!;
+			const respSlice = planned.responses;
+			const evtSlice = planned.events;
+			const trialSlice = planned.trials;
 			const isFirst = i === 0;
 			const isLast = i === numChunks - 1;
 
@@ -615,6 +748,9 @@ export class FilloutUploadSync {
 	 *  - A failed upload records the failure and keeps the blob pinned for retry, and is
 	 *    then SKIPPED until its per-binary backoff window elapses (issue #34 QA) — a
 	 *    permanently-failing upload must not be re-hit on every sync trigger.
+	 *  - An upload response that is NOT a genuine ack ({@link requireMediaUrl}) is
+	 *    treated exactly like a failed upload: the blob stays PINNED. This is the
+	 *    load-bearing pin-until-ack guard (ADR 0029) — see the function's note.
 	 * Returns the number of binaries STILL pending after this pass (due or backing off).
 	 */
 	private async uploadSessionBinaries(sessionId: string): Promise<number> {
@@ -628,7 +764,10 @@ export class FilloutUploadSync {
 				if (!mediaUrl) {
 					const blob = OfflineBinaryPersistence.toBlob(bin);
 					const result = await api.sessions.uploadMedia(sessionId, blob, bin.name);
-					mediaUrl = result.url;
+					// PIN-UNTIL-ACK (ADR 0029): only a response carrying a real media URL
+					// proves the server durably holds the bytes. Anything else throws → the
+					// blob stays pinned and the record unsynced. Never `result.url` directly.
+					mediaUrl = requireMediaUrl(result);
 					// Remember the URL so a patch-only retry never re-uploads the bytes.
 					await db.filloutBinaries.update(bin.clientId, { mediaUrl });
 				}
