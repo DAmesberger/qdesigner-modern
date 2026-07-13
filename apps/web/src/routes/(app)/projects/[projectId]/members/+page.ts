@@ -19,16 +19,20 @@ export const load: PageLoad = async ({ params, parent }) => {
 
     // Project members are readable by any project reader; the mutation
     // controls are gated client-side (and server-enforced) on the viewer's
-    // effective role. Org members feed the add-member picker.
-    const [members, orgMembers] = await Promise.all([
+    // effective role. Org members feed the add-member picker. Pending project
+    // invitations (ADR 0033) are manager-only server-side, so a non-manager's
+    // request 403s and falls back to an empty list.
+    const [members, orgMembers, invitations] = await Promise.all([
       api.projects.members.list(params.projectId),
       api.organizations.members.list(organizationId).catch(() => []),
+      api.projectInvitations.list(params.projectId).catch(() => []),
     ]);
 
     return {
       project,
       members,
       orgMembers,
+      invitations,
       organizationId,
       currentUserId: user?.id ?? null,
     };

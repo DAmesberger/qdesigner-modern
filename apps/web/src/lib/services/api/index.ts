@@ -7,7 +7,7 @@ import { projects } from './projects';
 import { questionnaires } from './questionnaires';
 import { series } from './series';
 import { sessions } from './sessions';
-import { shares } from './shares';
+import { projectInvitations } from './project-invitations';
 import { media } from './media';
 import { templates } from './templates';
 import { comments } from './comments';
@@ -25,7 +25,7 @@ export const api = {
   questionnaires,
   series,
   sessions,
-  shares,
+  projectInvitations,
   media,
   templates,
   comments,

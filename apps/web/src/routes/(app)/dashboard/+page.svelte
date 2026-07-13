@@ -7,7 +7,6 @@
   import { appPaths } from '$lib/routing/paths';
   import { ws, type WsEvent } from '$lib/services/ws';
   import { api } from '$lib/services/api';
-  import type { SharedResource } from '$lib/services/api/shares';
   import TourOverlay from '$lib/help/components/TourOverlay.svelte';
   import { tourEngine } from '$lib/help/tours/TourEngine.svelte';
   import { dashboardWelcomeTour } from '$lib/help/tours/definitions/dashboardWelcome';
@@ -25,7 +24,6 @@
     FolderKanban,
     PieChart,
     Plus,
-    Share2,
     Sparkles,
     TrendingUp,
     Users,
@@ -48,10 +46,6 @@
     avgCompletionRate: 0,
   });
   let sparklineData = $state<Record<string, number[]>>({});
-
-  // Resources shared with this user by collaborators in other projects/orgs
-  // (E-RBAC-10). Loaded post-mount; the section is hidden when empty.
-  let sharedWithMe = $state<SharedResource[]>([]);
 
   // Post-mount hydration flag: stat values and the activity feed come from the
   // SSR load, so they render skeletons for the first client frame and fill in
@@ -215,8 +209,6 @@
       loadSparklines();
     }
 
-    void loadSharedWithMe();
-
     // First-run: auto-start the welcome tour once for users who have
     // neither seen nor completed it, then mark it seen so it won't refire.
     const tourKey = dashboardWelcomeTour.triggerKey ?? dashboardWelcomeTour.id;
@@ -238,33 +230,6 @@
         window.location.href = url;
       }
     }
-  }
-
-  async function loadSharedWithMe() {
-    try {
-      sharedWithMe = await api.shares.sharedWithMe();
-    } catch {
-      // Non-fatal: the dashboard renders fine without the shared-with-me rail.
-      sharedWithMe = [];
-    }
-  }
-
-  // Open a shared resource. Project shares deep-link to the project; a
-  // questionnaire share opens the read-only guest analytics view (F-32), which
-  // only calls endpoints the grantee's share access admits.
-  function openSharedResource(item: SharedResource) {
-    if (item.resource_type === 'project') {
-      void navigateTo(appPaths.project(item.resource_id));
-    } else {
-      void navigateTo(appPaths.sharedQuestionnaireAnalytics(item.resource_id));
-    }
-  }
-
-  function sharedExpiryLabel(iso: string | null): string {
-    if (!iso) return 'No expiry';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return 'No expiry';
-    return `Access until ${d.toLocaleDateString()}`;
   }
 
   function getStatusColor(status: string) {
@@ -457,61 +422,6 @@
       </article>
     {/each}
   </section>
-
-  {#if sharedWithMe.length > 0}
-    <section
-      class="rounded-[32px] border border-border/70 bg-card/92 p-6 shadow-sm sm:p-8"
-      data-testid="shared-with-me"
-    >
-      <div class="flex items-center gap-3">
-        <span class="grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-primary">
-          <Share2 class="h-5 w-5" />
-        </span>
-        <div>
-          <h2 class="text-lg font-semibold tracking-tight text-foreground">Shared with me</h2>
-          <p class="text-sm text-muted-foreground">
-            Projects and questionnaires collaborators granted you scoped access to.
-          </p>
-        </div>
-      </div>
-
-      <ul class="mt-5 grid gap-3 sm:grid-cols-2">
-        {#each sharedWithMe as item (item.id)}
-          <li>
-            <button
-              type="button"
-              onclick={() => openSharedResource(item)}
-              class="flex w-full items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/60 px-4 py-3 text-left transition-colors enabled:hover:border-primary/40 enabled:hover:bg-accent/40 disabled:cursor-default"
-            >
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  {#if item.resource_type === 'project'}
-                    <FolderKanban class="h-4 w-4 shrink-0 text-muted-foreground" />
-                  {:else}
-                    <FileText class="h-4 w-4 shrink-0 text-muted-foreground" />
-                  {/if}
-                  <span class="truncate text-sm font-semibold text-foreground">
-                    {item.resource_name || 'Untitled'}
-                  </span>
-                  <span
-                    class="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
-                  >
-                    {item.role}
-                  </span>
-                </div>
-                <p class="mt-1 truncate text-xs text-muted-foreground">
-                  {item.resource_type === 'project' ? 'Project' : 'Questionnaire'}
-                  {#if item.shared_by_email}· from {item.shared_by_email}{/if}
-                  · {sharedExpiryLabel(item.expires_at)}
-                </p>
-              </div>
-              <ArrowRight class="h-4 w-4 shrink-0 text-muted-foreground" />
-            </button>
-          </li>
-        {/each}
-      </ul>
-    </section>
-  {/if}
 
   <section class="grid gap-6 2xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,0.95fr)]">
     <div class="rounded-[32px] border border-border/70 bg-card/92 shadow-sm" data-tour="dashboard-questionnaires">

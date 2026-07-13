@@ -7,9 +7,9 @@
   import Badge from '$lib/components/ui/feedback/Badge.svelte';
   import Alert from '$lib/components/ui/feedback/Alert.svelte';
   import Button from '$lib/components/ui/Button.svelte';
-  import ShareDialog from '$lib/components/ShareDialog.svelte';
-  import { ArrowLeft, UserPlus, Share2 } from 'lucide-svelte';
+  import { ArrowLeft, UserPlus, Mail } from 'lucide-svelte';
   import type { ProjectMember } from '$lib/api/generated/types.gen';
+  import type { ProjectInvitation } from '$lib/services/api/project-invitations';
   import type { PageData } from './$types';
 
   interface Props {
@@ -31,9 +31,13 @@
   let addRole = $state<string>('editor');
   let adding = $state(false);
 
-  // External sharing (E-RBAC-10) — grant a scoped, time-limited role to a
-  // collaborator/guest who is NOT (and need not become) an org member.
-  let shareDialogOpen = $state(false);
+  // Invite-collaborator form (ADR 0033) — invite ANY email to collaborate on
+  // this project; accepting lands a (possibly cross-org) project_members row.
+  let invitations = $state<ProjectInvitation[]>(data.invitations ?? []);
+  let inviteEmail = $state('');
+  let inviteRole = $state<string>('editor');
+  let inviting = $state(false);
+  let revokingInviteId = $state<string | null>(null);
 
   const currentUserId = data.currentUserId;
 
@@ -93,6 +97,61 @@
 
   async function reloadMembers() {
     members = await api.projects.members.list(data.project.id);
+  }
+
+  async function reloadInvitations() {
+    try {
+      invitations = await api.projectInvitations.list(data.project.id);
+    } catch {
+      // Non-fatal: leave the current list in place if the refresh fails.
+    }
+  }
+
+  async function inviteCollaborator() {
+    const email = inviteEmail.trim();
+    if (!email) return;
+
+    inviting = true;
+    error = null;
+    try {
+      await api.projectInvitations.create(data.project.id, {
+        email,
+        role: inviteRole as 'viewer' | 'editor' | 'admin' | 'owner',
+      });
+      toast.success(`Invitation sent to ${email}`);
+      inviteEmail = '';
+      inviteRole = 'editor';
+      await reloadInvitations();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to send invitation';
+      error = message;
+      toast.error(message);
+    } finally {
+      inviting = false;
+    }
+  }
+
+  async function revokeInvitation(invitation: ProjectInvitation) {
+    if (
+      !(await confirmDialog({
+        title: 'Revoke invitation?',
+        message: `Revoke the invitation sent to ${invitation.email}?`,
+        confirmLabel: 'Revoke',
+        destructive: true,
+      }))
+    )
+      return;
+
+    revokingInviteId = invitation.id;
+    try {
+      await api.projectInvitations.revoke(data.project.id, invitation.id);
+      invitations = invitations.filter((i) => i.id !== invitation.id);
+      toast.success('Invitation revoked');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to revoke invitation');
+    } finally {
+      revokingInviteId = null;
+    }
   }
 
   async function addMember() {
@@ -230,12 +289,6 @@
           Manage who can access and edit {data.project.name}.
         </p>
       </div>
-      {#if canManage}
-        <Button variant="outline" onclick={() => (shareDialogOpen = true)}>
-          <Share2 class="h-4 w-4 mr-2" />
-          Share externally
-        </Button>
-      {/if}
     </div>
   </div>
 
@@ -312,6 +365,89 @@
           Add
         </Button>
       </form>
+    </Card>
+
+    <Card class="mb-6">
+      <h3 class="text-lg font-semibold mb-4">Invite collaborator</h3>
+      <p class="text-sm text-muted-foreground mb-4">
+        Invite anyone by email to collaborate on this project — they need not be
+        an organization member. They receive a link to accept; on acceptance they
+        become a project member with the role you choose.
+      </p>
+      <form
+        class="flex flex-wrap items-end gap-3"
+        onsubmit={(e) => {
+          e.preventDefault();
+          inviteCollaborator();
+        }}
+      >
+        <div class="flex-1 min-w-[220px]">
+          <label for="invite-email" class="block text-sm font-medium text-foreground mb-1">
+            Email
+          </label>
+          <input
+            id="invite-email"
+            type="email"
+            bind:value={inviteEmail}
+            placeholder="collaborator@example.com"
+            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+          />
+        </div>
+        <div class="min-w-[140px]">
+          <label for="invite-role" class="block text-sm font-medium text-foreground mb-1">
+            Role
+          </label>
+          <select
+            id="invite-role"
+            bind:value={inviteRole}
+            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+          >
+            {#each ROLE_OPTIONS as opt}
+              <option
+                value={opt}
+                disabled={opt === 'owner' &&
+                  currentProjectRole !== 'owner' &&
+                  currentOrgRole !== 'owner'}
+              >
+                {roleLabel(opt)}
+              </option>
+            {/each}
+          </select>
+        </div>
+        <Button type="submit" variant="primary" loading={inviting} disabled={!inviteEmail.trim()}>
+          <Mail class="h-4 w-4 mr-2" />
+          Send invite
+        </Button>
+      </form>
+
+      {#if invitations.length > 0}
+        <div class="mt-6">
+          <h4 class="text-sm font-semibold text-foreground mb-3">Pending invitations</h4>
+          <ul class="divide-y divide-border border-t border-border">
+            {#each invitations as invitation (invitation.id)}
+              <li class="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div class="min-w-0">
+                  <p class="font-medium text-foreground truncate">{invitation.email}</p>
+                  <p class="text-sm text-muted-foreground">
+                    Expires {formatDate(invitation.expires_at)}
+                  </p>
+                </div>
+                <div class="flex items-center gap-3">
+                  <Badge {...getRoleBadge(invitation.role)} />
+                  <button
+                    type="button"
+                    class="inline-flex items-center px-3 py-1.5 rounded-md border border-border text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={revokingInviteId === invitation.id}
+                    onclick={() => revokeInvitation(invitation)}
+                  >
+                    {revokingInviteId === invitation.id ? 'Revoking…' : 'Revoke'}
+                  </button>
+                </div>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
     </Card>
   {/if}
 
@@ -407,10 +543,3 @@
     {/if}
   </Card>
 </div>
-
-<ShareDialog
-  bind:open={shareDialogOpen}
-  kind="project"
-  resourceId={data.project.id}
-  resourceName={data.project.name}
-/>

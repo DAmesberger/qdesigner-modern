@@ -36,11 +36,6 @@ export const appPaths = {
   // analytics sessions table.
   projectAnalyticsSession: (projectId: string, sessionId: string): string =>
     `/projects/${encodeSegment(projectId)}/analytics/sessions/${encodeSegment(sessionId)}`,
-  // Read-only analytics a questionnaire-share grantee can open (F-32). Unlike
-  // the org-scoped analytics pages, this route only calls endpoints the
-  // `verify_questionnaire_access` share gate admits.
-  sharedQuestionnaireAnalytics: (questionnaireId: string): string =>
-    `/shared/questionnaires/${encodeSegment(questionnaireId)}/analytics`,
   projectMembers: (projectId: string): string =>
     `/projects/${encodeSegment(projectId)}/members`,
 };
