@@ -5,8 +5,14 @@
 //! stored as SHA-256 at rest — see 00039). A SCIM `User` create adds an active
 //! `organization_members` row (`source='scim'`); a `PATCH active:false`, a
 //! `PUT active:false`, or a `DELETE` suspends it (`status='suspended'`). Only
-//! rows this connector provisioned (`source='scim'`) are ever mutated, so a
-//! directory can never suspend a hand-added owner.
+//! rows this connector provisioned (`source='scim'`) are ever mutated, and an
+//! owner is never deactivated — so a directory can neither take over nor suspend
+//! a hand-added owner. That rule is enforced on EVERY write, `POST` included:
+//! a create whose email is already a member of the org is an update in disguise
+//! and runs the same [`scim_mutation_denial`] guard (its `ON CONFLICT` upsert
+//! used to rewrite `source`/`status` on a hand-added row, which both suspended
+//! the member and re-labelled the row as SCIM-owned — after which the PATCH/PUT/
+//! DELETE `source` checks admitted it).
 //!
 //! AUTH: the SCIM routes carry no JWT / RLS middleware (the caller is a machine
 //! connector). Each handler resolves the bearer token to an org via
@@ -178,6 +184,11 @@ struct MemberRow {
     full_name: Option<String>,
     status: String,
     source: String,
+    /// The member's org role. Not part of the SCIM `User` projection — it is
+    /// read so the owner-protection guards below can refuse to deactivate an
+    /// owner (a human may promote a SCIM-provisioned member to owner; the row
+    /// keeps `source = 'scim'`, so the source check alone would not stop it).
+    role: String,
 }
 
 impl MemberRow {
@@ -192,11 +203,43 @@ impl MemberRow {
 }
 
 const MEMBER_SELECT: &str = r#"
-    SELECT u.id AS user_id, u.email, u.full_name, om.status, om.source
+    SELECT u.id AS user_id, u.email, u.full_name, om.status, om.source, om.role
     FROM organization_members om
     JOIN users u ON u.id = om.user_id
     WHERE om.organization_id = $1
 "#;
+
+/// SCIM may only touch rows it provisioned, and may never deactivate an owner.
+///
+/// Returns the SCIM 409 to send back, or `None` when the mutation is allowed.
+///
+///   * **(a) takeover** — a row with `source <> 'scim'` was added by a human;
+///     the connector must not claim, rename, suspend or deprovision it. (The
+///     create path previously did exactly this: its `ON CONFLICT DO UPDATE`
+///     rewrote `source` to `'scim'` and `status` on a hand-added row, after
+///     which the `source != "scim"` checks on PATCH/PUT/DELETE — which exist to
+///     stop precisely this — happily admitted the now-"SCIM-managed" row.)
+///   * **(b) owner deactivation** — an owner is never deactivated by a
+///     directory, even one whose row IS SCIM-sourced (a human can promote a
+///     SCIM member to owner; the row keeps `source = 'scim'`).
+///
+/// Reactivating (`deactivating == false`) a SCIM-sourced owner stays allowed —
+/// restoring access is not an escalation.
+fn scim_mutation_denial(existing: &MemberRow, deactivating: bool) -> Option<Response> {
+    if existing.source != "scim" {
+        return Some(scim_error(
+            StatusCode::CONFLICT,
+            "This member is not managed by SCIM",
+        ));
+    }
+    if deactivating && existing.role == "owner" {
+        return Some(scim_error(
+            StatusCode::CONFLICT,
+            "An organization owner cannot be deactivated by SCIM",
+        ));
+    }
+    None
+}
 
 // ── SCIM Users ───────────────────────────────────────────────────────
 
@@ -295,15 +338,32 @@ async fn create_user_inner(
 
     let mut tx = begin_scoped(state, &ctx).await?;
 
-    // Find or create the users row (a SCIM-provisioned account carries no
-    // password; it authenticates via the org's federated SSO or an invite).
-    let user_id = match sqlx::query_scalar::<_, Uuid>(
+    // An existing account for this email, if any. Resolved BEFORE any write so
+    // the ownership guard below can refuse without having already mutated the
+    // `users` row (a directory must not be able to rename a hand-added member
+    // either).
+    let existing_user_id = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL",
     )
     .bind(&email)
     .fetch_optional(&mut *tx)
-    .await?
-    {
+    .await?;
+
+    // Ownership guard (see `scim_mutation_denial`): a create against an email
+    // that is ALREADY a member of this org is an update in disguise, and must
+    // obey the same rules as PATCH / PUT / DELETE — never take over a row this
+    // connector did not provision, never deactivate an owner.
+    if let Some(uid) = existing_user_id {
+        if let Some(existing) = fetch_member(&mut tx, ctx.organization_id, uid).await? {
+            if let Some(denial) = scim_mutation_denial(&existing, !active) {
+                return Ok(denial);
+            }
+        }
+    }
+
+    // Find or create the users row (a SCIM-provisioned account carries no
+    // password; it authenticates via the org's federated SSO or an invite).
+    let user_id = match existing_user_id {
         Some(id) => {
             // Keep the display name fresh from the directory.
             sqlx::query(
@@ -333,12 +393,20 @@ async fn create_user_inner(
         }
     };
 
+    // The `DO UPDATE ... WHERE` re-states the guard at the DB layer so no future
+    // caller (or a race between the check above and this statement) can revive
+    // the takeover: the update only lands on a row this connector owns, and only
+    // when it is not deactivating an owner. `role` is never written on conflict —
+    // SCIM does not manage role assignment (that stays in the roles/membership
+    // APIs), so an owner's role survives regardless.
     sqlx::query(
         r#"
         INSERT INTO organization_members (organization_id, user_id, role, status, source, joined_at)
         VALUES ($1, $2, 'member', $3, 'scim', NOW())
         ON CONFLICT (organization_id, user_id)
           DO UPDATE SET status = $3, source = 'scim'
+          WHERE organization_members.source = 'scim'
+            AND (organization_members.role <> 'owner' OR $3 = 'active')
         "#,
     )
     .bind(ctx.organization_id)
@@ -575,13 +643,10 @@ async fn set_active_inner(
         return Ok(scim_error(StatusCode::NOT_FOUND, "User not found"));
     };
 
-    // Only SCIM-provisioned rows are directory-managed; refuse to flip a
-    // hand-added member so the connector can't suspend an org owner.
-    if existing.source != "scim" {
-        return Ok(scim_error(
-            StatusCode::CONFLICT,
-            "This member is not managed by SCIM",
-        ));
+    // Only SCIM-provisioned rows are directory-managed, and an owner is never
+    // deactivated by the directory (see `scim_mutation_denial`).
+    if let Some(denial) = scim_mutation_denial(&existing, active == Some(false)) {
+        return Ok(denial);
     }
 
     let final_status = match active {
@@ -665,11 +730,9 @@ async fn delete_user_inner(
     let Some(existing) = fetch_member(&mut tx, ctx.organization_id, user_id).await? else {
         return Ok(scim_error(StatusCode::NOT_FOUND, "User not found"));
     };
-    if existing.source != "scim" {
-        return Ok(scim_error(
-            StatusCode::CONFLICT,
-            "This member is not managed by SCIM",
-        ));
+    // DELETE is a deprovision (suspend) — same guard as PATCH/PUT.
+    if let Some(denial) = scim_mutation_denial(&existing, true) {
+        return Ok(denial);
     }
 
     sqlx::query(

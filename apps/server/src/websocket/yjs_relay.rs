@@ -26,6 +26,16 @@ const MSG_SYNC_UPDATE: u8 = 2;
 /// Handle an incoming binary frame from a client subscribed to a
 /// `designer:{questionnaire_id}` channel.
 ///
+/// `can_write` is the connection's channel tier as decided by
+/// [`authorize_channel`](crate::websocket::handler::authorize_channel): `true`
+/// only for an editor+ on the parent project. A **read-only** subscriber (a
+/// project viewer) may still run sync step1 — a pure read of the server doc —
+/// and may relay awareness (presence/cursors), but its content-bearing frames
+/// (`MSG_SYNC_STEP2` / `MSG_SYNC_UPDATE`) are dropped here rather than applied
+/// to the server `yrs::Doc` and persisted to `yjs_state`. This is the
+/// enforcement point for the WS write boundary; the gate is
+/// `authorize_channel`.
+///
 /// Returns binary frames to send back to the originating client.
 /// Also broadcasts to other subscribers via the WebSocketState.
 pub async fn handle_binary_message(
@@ -34,6 +44,7 @@ pub async fn handle_binary_message(
     yjs_store: &YjsStore,
     ws_state: &WebSocketState,
     conn_id: &Uuid,
+    can_write: bool,
 ) -> Vec<Vec<u8>> {
     if data.len() < 2 {
         return vec![];
@@ -51,6 +62,7 @@ pub async fn handle_binary_message(
                 ws_state,
                 conn_id,
                 data,
+                can_write,
             )
             .await
         }
@@ -70,6 +82,7 @@ pub async fn handle_binary_message(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_sync(
     payload: &[u8],
     questionnaire_id: Uuid,
@@ -77,6 +90,7 @@ async fn handle_sync(
     ws_state: &WebSocketState,
     conn_id: &Uuid,
     raw_frame: &[u8],
+    can_write: bool,
 ) -> Vec<Vec<u8>> {
     if payload.is_empty() {
         return vec![];
@@ -84,6 +98,19 @@ async fn handle_sync(
 
     let sync_type = payload[0];
     let sync_payload = &payload[1..];
+
+    // Write boundary: a content-bearing sync frame from a read-only subscriber
+    // is dropped before the room is even opened — not applied, not relayed, not
+    // persisted. Step1 (state-vector exchange) is a read and stays open to all
+    // admitted subscribers.
+    if !can_write && matches!(sync_type, MSG_SYNC_STEP2 | MSG_SYNC_UPDATE) {
+        tracing::warn!(
+            %questionnaire_id,
+            "rejected Yjs content frame from a read-only subscriber"
+        );
+        return vec![];
+    }
+
     let room_lock = yjs_store.get_or_create_room(questionnaire_id).await;
 
     let mut responses: Vec<Vec<u8>> = Vec::new();

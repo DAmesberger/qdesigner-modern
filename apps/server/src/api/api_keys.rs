@@ -25,6 +25,13 @@
 //! access, and it stops working if the creator loses membership (belt-and-braces
 //! with explicit revocation). The machine handlers additionally assert the
 //! resolved org matches the key's org so a multi-org creator can't cross tenants.
+//!
+//! That "never exceeds its creator" promise is *enforced in the handlers*, not by
+//! the middleware: EVERY machine route — reads and the one mutation alike — runs
+//! `authz::authorize(.., ctx.created_by, ..)` for the tier it needs before doing
+//! any work. RLS alone would not carry it (the `organization_members` mutation
+//! policy is permissive by ADR 0013 D2a), so a machine route that skips the
+//! `authorize` call keeps working after its creator is demoted or removed.
 
 use axum::{
     extract::{Path, Query, State},
@@ -538,6 +545,7 @@ pub struct MachineAddMemberRequest {
 /// Requires the `org:manage_members` scope. This is the write endpoint that an
 /// export/read-only key is denied (403), proving scope enforcement.
 pub async fn machine_add_member(
+    State(state): State<AppState>,
     api_key: ApiKey,
     tx: Tx,
     Path(org_id): Path<Uuid>,
@@ -554,6 +562,25 @@ pub async fn machine_add_member(
     }
 
     let mut tx = tx.tx().await?;
+
+    // Gate on the key CREATOR's *current* authority, exactly as the machine read
+    // paths do (`machine_aggregate` / `machine_export`). The key's `scopes` say
+    // what it was granted; they do not say whether the human behind it may still
+    // do it. `organization_members` INSERT is permissive under RLS (ADR 0013 D2a)
+    // — `authorize` is the gate — so without this call a key outlived its
+    // creator's demotion/removal and kept full member-provisioning power (the
+    // module note above promises the opposite). `OrgManageMembers` at
+    // `Scope::Organization` resolves to the Admin tier via `min_org_role_for`,
+    // and `has_org_role` only counts `status = 'active'` rows, so a demoted,
+    // suspended, or removed creator is denied here.
+    authorize(
+        &mut tx,
+        &state.rbac,
+        ctx.created_by,
+        Scope::Organization(org_id),
+        Permission::OrgManageMembers,
+    )
+    .await?;
 
     let target_user = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM users WHERE lower(email) = lower($1) AND deleted_at IS NULL",

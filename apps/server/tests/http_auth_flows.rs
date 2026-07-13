@@ -18,7 +18,8 @@ use axum::http::StatusCode;
 
 mod common;
 use common::{
-    build_test_state, extract_cookie, json_req, json_request, register_user, send_full, test_app,
+    build_test_state, extract_cookie, fixture_pool, json_req, json_request, register_user,
+    send_full, test_app,
 };
 
 #[tokio::test]
@@ -248,5 +249,129 @@ async fn post_without_csrf_header_is_403() {
         status,
         StatusCode::FORBIDDEN,
         "CSRF-missing POST must be 403: {json:?}"
+    );
+}
+
+/// A completed password reset must kill every LIVE BROWSER SESSION of the
+/// account, not just its refresh tokens.
+///
+/// `confirm_password_reset` used to call only `session::revoke_all_user_tokens`
+/// (the `refresh_tokens` table) despite its "Revoke all existing sessions"
+/// comment. Real logins are opaque `qd_session` rows in `auth_sessions`, which
+/// survived untouched — so an attacker who had already stolen a session cookie
+/// kept full access across the victim's password reset (up to the 7-day
+/// absolute TTL), which is the one thing a reset is supposed to stop.
+///
+/// Asserts on real post-reset state, not on the reset's 200: the pre-reset
+/// cookie must be REJECTED (401) on an authenticated endpoint, and the account
+/// must hold no live `auth_sessions` row.
+#[tokio::test]
+async fn password_reset_revokes_live_browser_sessions() {
+    let Some(state) = build_test_state().await else {
+        eprintln!("skipping: no DB reachable");
+        return;
+    };
+    let Some(fx) = fixture_pool().await else {
+        eprintln!("skipping: no fixture pool");
+        return;
+    };
+    let app = test_app(state);
+
+    // The victim's account, with a live browser session (the "attacker's"
+    // pre-existing session — a stolen cookie is indistinguishable from this).
+    let victim = register_user(&app).await;
+    let stolen = victim.token.clone();
+
+    // Precondition: the session is live and authenticates.
+    let (status, me) = json_request(&app, "GET", "/api/users/me", Some(&stolen), None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "precondition: the pre-reset session must authenticate: {me:?}"
+    );
+    let live_before: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM auth_sessions WHERE user_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(victim.id)
+    .fetch_one(&fx)
+    .await
+    .expect("count live auth_sessions");
+    assert!(
+        live_before >= 1,
+        "precondition: at least one live auth_sessions row"
+    );
+
+    // Victim requests a reset; read the emitted token straight from the DB (the
+    // link is delivered by SMTP, which is not the subject under test).
+    let (status, json) = json_request(
+        &app,
+        "POST",
+        "/api/auth/password-reset",
+        None,
+        Some(&serde_json::json!({ "email": victim.email })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "password-reset request: {json:?}");
+
+    let reset_token: String = sqlx::query_scalar(
+        "SELECT token FROM password_resets WHERE user_id = $1 AND used_at IS NULL \
+         ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(victim.id)
+    .fetch_one(&fx)
+    .await
+    .expect("a password_resets row must exist");
+
+    // Victim completes the reset.
+    let (status, json) = json_request(
+        &app,
+        "POST",
+        "/api/auth/password-reset/confirm",
+        None,
+        Some(&serde_json::json!({
+            "token": reset_token,
+            "new_password": "brand-new-password-123",
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "reset confirm: {json:?}");
+
+    // (1) The pre-reset session cookie must no longer authenticate.
+    let (status, json) = json_request(&app, "GET", "/api/users/me", Some(&stolen), None).await;
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "a password reset must reject the pre-reset browser session: {json:?}"
+    );
+
+    // (2) …and there must be no live auth_sessions row left for the account.
+    let live_after: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM auth_sessions WHERE user_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(victim.id)
+    .fetch_one(&fx)
+    .await
+    .expect("count live auth_sessions");
+    assert_eq!(
+        live_after, 0,
+        "a password reset must revoke every auth_sessions row for the user"
+    );
+
+    // The new password works — the reset itself is not broken by the revocation.
+    let (status, json) = json_request(
+        &app,
+        "POST",
+        "/api/auth/login",
+        None,
+        Some(&serde_json::json!({
+            "email": victim.email,
+            "password": "brand-new-password-123",
+        })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the new password must still log in: {json:?}"
     );
 }

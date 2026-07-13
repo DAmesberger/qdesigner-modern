@@ -745,7 +745,19 @@ pub async fn confirm_password_reset(
         .execute(&state.pool)
         .await?;
 
-    // Revoke all existing sessions for security
+    // Revoke every credential minted under the OLD password, in both stores:
+    //
+    //  1. `auth_sessions` — the opaque `qd_session` browser sessions. These are
+    //     what a real logged-in browser actually holds; revoking only the
+    //     refresh tokens below left an attacker's pre-existing browser session
+    //     alive across the victim's password reset (up to the 7-day absolute
+    //     TTL), which defeats the whole point of a reset.
+    //  2. `refresh_tokens` — the JWT refresh material.
+    //
+    // Mirrors `users::delete_account`, which revokes both. Both run on the pool
+    // (this handler is not inside the per-request RLS transaction) and neither
+    // table is RLS-bound, so no GUC is needed.
+    session::revoke_all_auth_sessions(&state.pool, user_id).await?;
     session::revoke_all_user_tokens(&state.pool, user_id).await?;
 
     Ok(Json(
