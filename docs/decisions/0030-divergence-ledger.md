@@ -90,7 +90,25 @@ reversals are not silent:
 | S4 | L14 note — `shares.rs::authorize_manage_shares` converted to `authorize(...)` | **Moot** — `shares.rs` is deleted entirely. | **Landed** (Unit 4a): `api/shares.rs` deleted; `pub mod shares`, all share routes, and the `/api/shares` nest removed. |
 | S5 | `verify_questionnaire_access` / `verify_project_*` / `require_permission` share branches | **Removed**; replaced by project-member branches / project-member pass-through (ADR 0033 §Decision). | **Landed** (Unit 4a): the share SELECT branches (`00041`/`00048`/`00050`) are dropped in `00058`; `user_can_access_questionnaire` loses its `user_can_read_questionnaire_via_share` branch (keeps org-member + `is_project_member`); the `require_permission` non-member branch is a pure project-member pass-through; share SECURITY DEFINER helpers + `resource_shares` table dropped. |
 
-## Deferred to ADR 0034 (comment/series)
+## Resolved by ADR 0034 (comment/series folded)
+
+L12 (comments) and L13 (series) are **RESOLVED**. ADR 0034 folds both into
+`authorize()` at `Scope::Project` (no new `Permission` — mapped to project
+tiers) and fixes their audit bugs:
+- **Comments:** list/create/resolve → `authorize(Scope::Project, ProjectRead)`;
+  edit-body author-only (the `OR $5 IS NOT NULL` body-edit leak removed);
+  delete → author OR `verify_project_access(Admin)` (moderation).
+- **Series:** reads (`list_series`/`list_enrollments`) → `ProjectRead`;
+  mutations (`create`/`update`/`enroll`) → `ProjectWrite` (a viewer can no
+  longer mutate schedules). Participant token endpoints untouched.
+- **Incidental fix (S-vis):** routing reads through `verify_project_access(Viewer)`
+  makes comments/series respect `projectVisibility='members'` — closes the
+  audit's visibility-bypass for these endpoints. Behavior change beyond the two
+  named bugs, recorded here.
+- Accepted wart: `ProjectRead` authorizes comment create/resolve (read perm
+  gating a write) — the cost of not minting `Comment*` permissions.
+
+### (historical) Deferred to ADR 0034 (comment/series)
 
 L12 (comments) and L13 (series) stay unfolded until ADR 0034, which — with the
 guest role gone (ADR 0033) — folds them cleanly at `Scope::Project` (option B)
