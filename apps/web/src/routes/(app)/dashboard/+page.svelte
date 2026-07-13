@@ -12,7 +12,6 @@
   import { dashboardWelcomeTour } from '$lib/help/tours/definitions/dashboardWelcome';
   import { helpStore } from '$lib/help/stores/helpStore.svelte';
   import Skeleton from '$lib/components/ui/Skeleton.svelte';
-  import { lazyRender } from '$lib/components/ui/actions/lazyRender';
   import {
     Activity,
     ArrowRight,
@@ -52,23 +51,11 @@
   // once mounted (no async wait — see WATCH note in the unit charter).
   let hydrated = $state(false);
 
-  // Lazy-render bookkeeping: rows are revealed on first intersection so long
-  // lists don't mount hundreds of heavy nodes eagerly (see lazyRender action).
-  let visibleQuestionnaires = $state(new Set<string>());
-  let visibleActivities = $state(new Set<string>());
-
-  function revealQuestionnaire(id: string) {
-    if (visibleQuestionnaires.has(id)) return;
-    visibleQuestionnaires.add(id);
-    visibleQuestionnaires = new Set(visibleQuestionnaires);
-  }
-
-  function revealActivity(id: string) {
-    if (visibleActivities.has(id)) return;
-    visibleActivities.add(id);
-    visibleActivities = new Set(visibleActivities);
-  }
-
+  // NOTE: these two lists render eagerly on purpose. They are small and bounded
+  // (recent activity is server-capped at 20; the questionnaire cards are plain
+  // DOM + a tiny inline SVG), so there is nothing to defer. Lazy-gating them
+  // behind `lazyRender` used to leave them blank on load whenever the first row
+  // sat just past the observer's rootMargin on a short viewport.
   let displayName = $derived(user?.fullName || user?.email?.split('@')[0] || 'Researcher');
   let statCards = $derived.by(() => [
     {
@@ -496,8 +483,6 @@
       {:else}
         <div class="space-y-4 p-6">
           {#each questionnaires as questionnaire (questionnaire.questionnaire_id)}
-            <div use:lazyRender={{ id: questionnaire.questionnaire_id, onVisible: revealQuestionnaire }}>
-            {#if visibleQuestionnaires.has(questionnaire.questionnaire_id)}
             <button
               type="button"
               class="group block w-full overflow-hidden rounded-[28px] border border-border/70 bg-background/75 p-6 text-left transition hover:border-primary/40 hover:bg-accent/40"
@@ -594,11 +579,6 @@
                 </div>
               </div>
             </button>
-            {:else}
-              <!-- Fixed-height pulse placeholder until the row approaches the viewport. -->
-              <div class="h-64 animate-pulse rounded-[28px] border border-border/70 bg-background/60"></div>
-            {/if}
-            </div>
           {/each}
         </div>
       {/if}
@@ -633,11 +613,7 @@
         {:else if recentActivity.length > 0}
           <ul class="space-y-4">
             {#each recentActivity as activity, i (i)}
-              <li
-                class="rounded-[28px] border border-border/70 bg-background/75 p-4"
-                use:lazyRender={{ id: String(i), onVisible: revealActivity }}
-              >
-                {#if visibleActivities.has(String(i))}
+              <li class="rounded-[28px] border border-border/70 bg-background/75 p-4">
                 <div class="flex items-start gap-3">
                   <div class={`rounded-2xl p-3 ${getActivityStatusColor(activity.status)}`}>
                     {#if activity.status === 'completed'}
@@ -671,9 +647,6 @@
                     </div>
                   </div>
                 </div>
-                {:else}
-                  <div class="h-20 animate-pulse rounded-2xl bg-background/60"></div>
-                {/if}
               </li>
             {/each}
           </ul>
