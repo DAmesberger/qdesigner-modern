@@ -47,7 +47,21 @@ jobs:
       - name: Start test infrastructure
         # postgres :15435, redis :16382, minio :19005 (+ minio-init bucket),
         # mailpit :11027 — all defined in docker-compose.test.yml.
-        run: docker compose -f docker-compose.test.yml up -d --wait
+        #
+        # --wait requires every service to end up running/healthy, but minio-init
+        # is a one-shot that runs `mc mb` and exits — which makes `up -d --wait`
+        # return 1 even when every service is Healthy and the init exits 0. Wait
+        # on the long-running services, then check the init's exit code directly.
+        run: |
+          docker compose -f docker-compose.test.yml up -d --wait postgres redis minio mailpit
+          docker compose -f docker-compose.test.yml up -d minio-init
+          code=$(docker wait qdesigner-test-minio-init)
+          if [ "$code" != "0" ]; then
+            echo "::error::minio-init failed (exit $code)"
+            docker logs qdesigner-test-minio-init || true
+            exit 1
+          fi
+          echo "minio-init completed successfully"
 
       - name: Install Rust toolchain (pinned by rust-toolchain.toml)
         run: |
