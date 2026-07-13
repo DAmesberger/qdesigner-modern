@@ -1,6 +1,8 @@
 use aws_config::Region;
 use aws_sdk_s3::{
     config::{BehaviorVersion, Builder as S3ConfigBuilder, Credentials},
+    error::ProvideErrorMetadata,
+    operation::create_bucket::CreateBucketError,
     presigning::PresigningConfig,
     primitives::ByteStream,
     Client,
@@ -35,17 +37,30 @@ impl S3StorageService {
 
         let client = Client::from_conf(config);
 
-        // Ensure the bucket exists
-        let exists = client.head_bucket().bucket(bucket).send().await;
-
-        if exists.is_err() {
-            client
-                .create_bucket()
-                .bucket(bucket)
-                .send()
-                .await
-                .map_err(|e| ApiError::Internal(format!("Failed to create S3 bucket: {e}")))?;
-            tracing::info!("Created S3 bucket: {bucket}");
+        // Ensure the bucket exists.
+        //
+        // `head_bucket` is only a fast path (it also keeps startup working for
+        // credentials that may read but not create when the bucket is
+        // pre-provisioned). It is NOT a guard: check-then-act races. When
+        // several server instances — or several test binaries — start at once
+        // they all observe "absent" and all issue `CreateBucket`; exactly one
+        // wins and the losers get `BucketAlreadyOwnedByYou` (or
+        // `BucketAlreadyExists`). Both outcomes satisfy the post-condition we
+        // actually want ("the bucket now exists"), so creation is made
+        // idempotent: those two are swallowed, every other failure (auth,
+        // network, policy) still propagates.
+        if client.head_bucket().bucket(bucket).send().await.is_err() {
+            match client.create_bucket().bucket(bucket).send().await {
+                Ok(_) => tracing::info!("Created S3 bucket: {bucket}"),
+                Err(e) if e.as_service_error().is_some_and(is_bucket_already_present) => {
+                    tracing::debug!("S3 bucket {bucket} already exists (concurrent create) — ok");
+                }
+                Err(e) => {
+                    return Err(ApiError::Internal(format!(
+                        "Failed to create S3 bucket: {e}"
+                    )));
+                }
+            }
         }
 
         Ok(Self {
@@ -272,6 +287,24 @@ impl S3StorageService {
         let region = sanitize_region(region);
         format!("{region}/exports/{org_id}/{job_id}.zip")
     }
+}
+
+/// True when a `CreateBucket` service error means "the bucket is already
+/// there" — i.e. the create lost a race but its post-condition holds anyway.
+///
+/// `BucketAlreadyOwnedByYou` is the canonical S3 answer for "you already own
+/// this one"; `BucketAlreadyExists` is the global-namespace collision. We also
+/// match the raw wire codes because MinIO (and S3-compatible gateways) do not
+/// always map them onto the modeled variants — an unmodeled error would
+/// otherwise fall through as `Unhandled` and hard-fail startup. Nothing else is
+/// swallowed: auth, network and policy failures still surface.
+fn is_bucket_already_present(err: &CreateBucketError) -> bool {
+    err.is_bucket_already_owned_by_you()
+        || err.is_bucket_already_exists()
+        || matches!(
+            err.code(),
+            Some("BucketAlreadyOwnedByYou") | Some("BucketAlreadyExists")
+        )
 }
 
 /// Reduce an untrusted upload filename to a safe ASCII token for a

@@ -175,7 +175,19 @@
     }
   }
 
-  async function changeRole(member: ProjectMember, newRole: string) {
+  // `select` is the element the change came from. The role <select> is
+  // one-way bound (`value={member.role}`) and commits only after the confirm,
+  // so between the user's pick and the commit the DOM holds a value that
+  // `member.role` does not. On cancel nothing mutates, so there is no state
+  // change for Svelte to re-render from — we must re-sync the element back to
+  // the committed role by hand. (`members` is a deeply reactive $state proxy:
+  // once we DO mutate `member.role`, that alone re-renders the option — no
+  // reassignment of `members` is needed.)
+  async function changeRole(
+    member: ProjectMember,
+    newRole: string,
+    select?: HTMLSelectElement
+  ) {
     if (newRole === member.role) return;
 
     const name = member.full_name || member.email || 'this member';
@@ -186,21 +198,19 @@
         confirmLabel: 'Change role',
       }))
     ) {
-      members = members; // revert the <select>
+      if (select) select.value = member.role; // revert the <select>
       return;
     }
 
     const prevRole = member.role;
     updatingUserId = member.user_id;
     member.role = newRole;
-    members = members; // optimistic
     try {
       await api.projects.members.update(data.project.id, member.user_id, { role: newRole });
       toast.success('Role updated');
       await reloadMembers();
     } catch (err) {
       member.role = prevRole;
-      members = members; // roll back
       toast.error(err instanceof Error ? err.message : 'Failed to update role');
     } finally {
       updatingUserId = null;
@@ -487,7 +497,7 @@
                       value={member.role}
                       disabled={updatingUserId === member.user_id}
                       aria-label="Change role for {member.email}"
-                      onchange={(e) => changeRole(member, e.currentTarget.value)}
+                      onchange={(e) => changeRole(member, e.currentTarget.value, e.currentTarget)}
                     >
                       {#each ROLE_OPTIONS as opt}
                         <option

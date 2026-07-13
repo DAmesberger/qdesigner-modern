@@ -164,7 +164,19 @@
     return getRoleBadge(role).label;
   }
 
-  async function changeRole(member: OrganizationMember, newRole: string) {
+  // `select` is the element the change came from. The role <select> is
+  // one-way bound (`value={member.role}`) and commits only after the confirm,
+  // so between the user's pick and the commit the DOM holds a value that
+  // `member.role` does not. On cancel nothing mutates, so there is no state
+  // change for Svelte to re-render from — we must re-sync the element back to
+  // the committed role by hand. (`members` is a deeply reactive $state proxy:
+  // once we DO mutate `member.role`, that alone re-renders the option — no
+  // reassignment of `members` is needed.)
+  async function changeRole(
+    member: OrganizationMember,
+    newRole: string,
+    select?: HTMLSelectElement
+  ) {
     if (!currentOrg || newRole === member.role) return;
 
     const name =
@@ -176,21 +188,19 @@
         confirmLabel: 'Change role',
       }))
     ) {
-      members = members; // revert the <select> back to the current role
+      if (select) select.value = member.role; // revert the <select> to the current role
       return;
     }
 
     const prevRole = member.role;
     updatingUserId = member.userId;
     member.role = newRole as OrganizationMember['role'];
-    members = members; // optimistic update
     try {
       await api.organizations.members.changeRole(currentOrg.id, member.userId, newRole);
       toast.success('Role updated');
       await loadMembers(); // refetch the authoritative list
     } catch (err) {
       member.role = prevRole;
-      members = members; // roll back the optimistic change
       console.error('Error changing role:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to update role');
     } finally {
@@ -199,6 +209,8 @@
   }
 
   // Assign (or clear, with '') a custom role for a member (E-RBAC-3).
+  // No confirm step here: the change commits straight away, so every write
+  // below mutates the reactive `member` proxy and re-renders on its own.
   async function assignCustomRole(member: OrganizationMember, roleId: string) {
     if (!currentOrg) return;
     const next = roleId === '' ? null : roleId;
@@ -207,16 +219,16 @@
     const prev = member.customRoleId ?? null;
     const prevName = member.customRoleName ?? null;
     assigningUserId = member.userId;
+    // Optimistic.
     member.customRoleId = next;
     member.customRoleName = next ? (customRoles.find((r) => r.id === next)?.name ?? null) : null;
-    members = members; // optimistic
     try {
       await api.roles.assign(currentOrg.id, member.userId, next);
       toast.success(next ? 'Custom role assigned' : 'Custom role cleared');
     } catch (err) {
+      // Roll back.
       member.customRoleId = prev;
       member.customRoleName = prevName;
-      members = members; // roll back
       console.error('Error assigning custom role:', err);
       toast.error(err instanceof Error ? err.message : 'Failed to assign custom role');
     } finally {
@@ -334,7 +346,7 @@
                       value={member.role}
                       disabled={updatingUserId === member.userId}
                       aria-label="Change role for {member.user?.email || 'member'}"
-                      onchange={(e) => changeRole(member, e.currentTarget.value)}
+                      onchange={(e) => changeRole(member, e.currentTarget.value, e.currentTarget)}
                     >
                       {#each ROLE_OPTIONS as opt}
                         <option value={opt} disabled={opt === 'owner' && currentUserRole !== 'owner'}>
