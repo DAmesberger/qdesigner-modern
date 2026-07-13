@@ -182,7 +182,9 @@ async fn trial_stats_quartiles_and_session_distinct_n() {
     assert!((stats.p75.unwrap() - 400.0).abs() < 1e-9);
     assert!((stats.min.unwrap() - 100.0).abs() < 1e-9);
     assert!((stats.max.unwrap() - 500.0).abs() < 1e-9);
-    assert!(stats.p10.is_some() && stats.p90.is_some() && stats.p95.is_some() && stats.p99.is_some());
+    assert!(
+        stats.p10.is_some() && stats.p90.is_some() && stats.p95.is_some() && stats.p99.is_some()
+    );
     assert!(stats.std_dev.unwrap() > 0.0);
 }
 
@@ -197,7 +199,16 @@ async fn trial_stats_excludes_invalidated_by_default() {
     let qid = mk_questionnaire(&pool, project, user, serde_json::json!({}), "published").await;
     let s1 = mk_session(&pool, qid).await;
     insert_trial(&pool, s1, "q_rt", 0, Some(400), Some(true), None).await;
-    insert_trial(&pool, s1, "q_rt", 1, Some(10), Some(false), Some("anticipatory")).await;
+    insert_trial(
+        &pool,
+        s1,
+        "q_rt",
+        1,
+        Some(10),
+        Some(false),
+        Some("anticipatory"),
+    )
+    .await;
 
     // Default: the invalidated 10µs anticipation is excluded, so mean == 400.
     let excluded = trial_stats(&pool, qid, "q_rt", "rt", false, serde_json::json!({})).await;
@@ -276,12 +287,19 @@ async fn endpoint_trials_source_enforces_declaration_min_n() {
     let vars = body["variables"].as_array().expect("variables array");
 
     let high = vars.iter().find(|v| v["name"] == "rtHigh").expect("rtHigh");
-    assert_eq!(high["sample_count"].as_i64(), Some(2), "count always reported");
+    assert_eq!(
+        high["sample_count"].as_i64(),
+        Some(2),
+        "count always reported"
+    );
     assert!(high["stats"].is_null(), "n=2 < minN=3 → stats withheld");
 
     let low = vars.iter().find(|v| v["name"] == "rtLow").expect("rtLow");
     assert_eq!(low["sample_count"].as_i64(), Some(2));
     assert_eq!(low["source"].as_str(), Some("trials"));
-    assert!(low["stats"]["p25"].as_f64().is_some(), "n=2 >= minN=2 → stats present");
+    assert!(
+        low["stats"]["p25"].as_f64().is_some(),
+        "n=2 >= minN=2 → stats present"
+    );
     assert!(low["stats"]["median"].as_f64().is_some());
 }

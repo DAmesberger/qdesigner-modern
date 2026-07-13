@@ -10,7 +10,9 @@ use uuid::Uuid;
 
 use crate::audit::ClientIp;
 use crate::auth::models::UserInfo;
-use crate::auth::oidc_client::{code_challenge, discovery_url, CodeExchange, IdTokenInput, OidcClient};
+use crate::auth::oidc_client::{
+    code_challenge, discovery_url, CodeExchange, IdTokenInput, OidcClient,
+};
 use crate::auth::session;
 use crate::config::AuthProvider;
 use crate::error::ApiError;
@@ -315,18 +317,18 @@ pub async fn zitadel_callback(
         })
         .await?;
 
-    let mfa_verified = if mfa_from_claims(claims.as_json(), state.config.zitadel_allow_sms_email_mfa)
-    {
-        true
-    } else {
-        mfa_from_introspection(
-            oidc.http(),
-            login_state.introspection_endpoint.as_deref(),
-            token.access_token.as_deref(),
-            &state,
-        )
-        .await?
-    };
+    let mfa_verified =
+        if mfa_from_claims(claims.as_json(), state.config.zitadel_allow_sms_email_mfa) {
+            true
+        } else {
+            mfa_from_introspection(
+                oidc.http(),
+                login_state.introspection_endpoint.as_deref(),
+                token.access_token.as_deref(),
+                &state,
+            )
+            .await?
+        };
     if !mfa_verified {
         record_security(
             &state,

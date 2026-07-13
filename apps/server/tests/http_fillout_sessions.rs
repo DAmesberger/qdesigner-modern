@@ -117,7 +117,8 @@ async fn anonymous_fillout_lifecycle_and_isolation() {
     // consumer) shares `ensure_session_access`/`ensure_session_participant_
     // or_member` and the 00021 dual-path RLS with responses; prove a
     // researcher can read it and a cross-tenant user cannot.
-    let event_body = serde_json::json!([{ "event_type": "focus", "question_id": "q1", "timestamp_us": 1000 }]);
+    let event_body =
+        serde_json::json!([{ "event_type": "focus", "question_id": "q1", "timestamp_us": 1000 }]);
     let (status, evt) = json_request(
         &app,
         "POST",
@@ -266,7 +267,11 @@ async fn anonymous_trials_sync_read_dedup_and_w8() {
     let create_body = serde_json::json!({ "questionnaire_id": qid });
     let (status, session) =
         json_request(&app, "POST", "/api/sessions", None, Some(&create_body)).await;
-    assert_eq!(status, StatusCode::CREATED, "anon create session: {session:?}");
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "anon create session: {session:?}"
+    );
     let sid = session["id"].as_str().unwrap();
 
     // Sync a two-trial reaction response for `rt-q` together with a scalar
@@ -296,7 +301,11 @@ async fn anonymous_trials_sync_read_dedup_and_w8() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "anon trials sync: {synced:?}");
-    assert_eq!(synced["trials_synced"].as_i64(), Some(2), "two trials stored");
+    assert_eq!(
+        synced["trials_synced"].as_i64(),
+        Some(2),
+        "two trials stored"
+    );
     assert_eq!(synced["responses_synced"].as_i64(), Some(1));
 
     // Researcher reads the trials, ordered by (question_id, trial_index).
@@ -388,8 +397,14 @@ async fn anonymous_trials_sync_read_dedup_and_w8() {
     );
 
     // Anonymous read of trials is gated (endpoint requires auth).
-    let (status, _json) =
-        json_request(&app, "GET", &format!("/api/sessions/{sid}/trials"), None, None).await;
+    let (status, _json) = json_request(
+        &app,
+        "GET",
+        &format!("/api/sessions/{sid}/trials"),
+        None,
+        None,
+    )
+    .await;
     assert_eq!(
         status,
         StatusCode::UNAUTHORIZED,

@@ -167,10 +167,7 @@ impl OidcClient {
     }
 
     /// Exchange an authorization code for tokens at the token endpoint.
-    pub async fn exchange_code(
-        &self,
-        params: CodeExchange<'_>,
-    ) -> Result<TokenResponse, ApiError> {
+    pub async fn exchange_code(&self, params: CodeExchange<'_>) -> Result<TokenResponse, ApiError> {
         let mut form: Vec<(&str, String)> = vec![
             ("grant_type", "authorization_code".to_string()),
             ("code", params.code.to_string()),
@@ -244,10 +241,7 @@ impl OidcClient {
 
         // Nonce hashed at rest: hash the token's nonce claim and compare to the
         // stored hash. A missing/other nonce yields no match.
-        let nonce_matches = claims
-            .get("nonce")
-            .and_then(|v| v.as_str())
-            .map(hash_token)
+        let nonce_matches = claims.get("nonce").and_then(|v| v.as_str()).map(hash_token)
             == Some(input.expected_nonce_hash.to_string());
         if !nonce_matches {
             return Err(ApiError::BadRequest("id_token nonce mismatch".into()));

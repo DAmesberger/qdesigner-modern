@@ -35,7 +35,11 @@ async fn register_session_login_logout_happy_path() {
     // GET /api/auth/session with the register credential
     let (status, view) =
         json_request(&app, "GET", "/api/auth/session", Some(&user.token), None).await;
-    assert_eq!(status, StatusCode::OK, "session view should succeed: {view:?}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "session view should succeed: {view:?}"
+    );
     assert_eq!(view["authenticated"].as_bool(), Some(true));
     assert_eq!(
         view["user"]["id"]
@@ -87,7 +91,11 @@ async fn register_session_login_logout_happy_path() {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "session view should succeed: {view:?}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "session view should succeed: {view:?}"
+    );
     assert_eq!(view["authenticated"].as_bool(), Some(true));
     let rotated_csrf = view["csrf_token"]
         .as_str()
@@ -143,7 +151,11 @@ async fn stale_session_cookie_is_cleared_on_session_view() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::OK, "session view is always 200: {view:?}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "session view is always 200: {view:?}"
+    );
     assert_eq!(
         view["authenticated"].as_bool(),
         Some(false),
@@ -181,7 +193,11 @@ async fn anonymous_session_view_emits_no_set_cookie() {
     let (status, headers, view) =
         send_full(&app, json_req("GET", "/api/auth/session", None, None)).await;
 
-    assert_eq!(status, StatusCode::OK, "session view is always 200: {view:?}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "session view is always 200: {view:?}"
+    );
     assert_eq!(view["authenticated"].as_bool(), Some(false));
     assert!(
         headers.get_all("set-cookie").iter().next().is_none(),

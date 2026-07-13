@@ -71,4 +71,3 @@ pub async fn submit_events(
         Json(serde_json::json!({ "count": events.len() })),
     ))
 }
-

@@ -191,7 +191,11 @@ async fn rejects_bad_signature() {
 async fn rejects_unknown_kid() {
     let server = jwks_server().await;
     // Valid signature, but the header points at a kid the JWKS never published.
-    let token = sign_rs256(KEY_A_PEM, "some-other-kid", &token_claims(ISSUER, "the-nonce", 3600));
+    let token = sign_rs256(
+        KEY_A_PEM,
+        "some-other-kid",
+        &token_claims(ISSUER, "the-nonce", 3600),
+    );
     assert!(verify(&server, &token, ISSUER, &hash_token("the-nonce"))
         .await
         .is_err());
@@ -200,11 +204,17 @@ async fn rejects_unknown_kid() {
 #[tokio::test]
 async fn rejects_nonce_mismatch() {
     let server = jwks_server().await;
-    let token = sign_rs256(KEY_A_PEM, KID, &token_claims(ISSUER, "attacker-nonce", 3600));
+    let token = sign_rs256(
+        KEY_A_PEM,
+        KID,
+        &token_claims(ISSUER, "attacker-nonce", 3600),
+    );
     // Expected hash is for a different nonce than the token carries.
-    assert!(verify(&server, &token, ISSUER, &hash_token("the-real-nonce"))
-        .await
-        .is_err());
+    assert!(
+        verify(&server, &token, ISSUER, &hash_token("the-real-nonce"))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -221,7 +231,11 @@ async fn rejects_expired_token() {
 async fn rejects_wrong_issuer() {
     let server = jwks_server().await;
     // Token's iss claim is a different issuer than the one we expect.
-    let token = sign_rs256(KEY_A_PEM, KID, &token_claims("https://evil.example", "the-nonce", 3600));
+    let token = sign_rs256(
+        KEY_A_PEM,
+        KID,
+        &token_claims("https://evil.example", "the-nonce", 3600),
+    );
     assert!(verify(&server, &token, ISSUER, &hash_token("the-nonce"))
         .await
         .is_err());
@@ -232,7 +246,11 @@ async fn rejects_algorithm_confusion_hs256() {
     let server = jwks_server().await;
     // HS256 token whose HMAC secret is the RSA public modulus. An RS256-only
     // verifier must reject it on the algorithm allowlist before ever comparing.
-    let token = sign_hs256(KEY_A_N.as_bytes(), KID, &token_claims(ISSUER, "the-nonce", 3600));
+    let token = sign_hs256(
+        KEY_A_N.as_bytes(),
+        KID,
+        &token_claims(ISSUER, "the-nonce", 3600),
+    );
     assert!(verify(&server, &token, ISSUER, &hash_token("the-nonce"))
         .await
         .is_err());

@@ -238,9 +238,7 @@ pub async fn request_export(
     .await
     .map_err(|e| {
         if e.as_database_error().and_then(|d| d.code()).as_deref() == Some("23505") {
-            ApiError::Conflict(
-                "An export is already in progress for this organization".into(),
-            )
+            ApiError::Conflict("An export is already in progress for this organization".into())
         } else {
             ApiError::Database(e)
         }

@@ -18,11 +18,13 @@ use common::{
 /// Seed a non-NULL `yjs_state` on the questionnaire (as the collab room would
 /// have persisted), returning nothing — read it back via the fixture pool.
 async fn seed_yjs_state(fx: &sqlx::PgPool, qid: Uuid) {
-    sqlx::query("UPDATE questionnaire_definitions SET yjs_state = '\\x0102030405'::bytea WHERE id = $1")
-        .bind(qid)
-        .execute(fx)
-        .await
-        .expect("seed yjs_state");
+    sqlx::query(
+        "UPDATE questionnaire_definitions SET yjs_state = '\\x0102030405'::bytea WHERE id = $1",
+    )
+    .bind(qid)
+    .execute(fx)
+    .await
+    .expect("seed yjs_state");
 }
 
 async fn yjs_state_is_null(fx: &sqlx::PgPool, qid: Uuid) -> bool {
@@ -50,10 +52,7 @@ async fn content_write_invalidates_yjs_state_but_metadata_write_does_not() {
     let owner = register_user(&app).await;
     let tenant = provision_tenant(&app, &owner.token).await;
     let qid = tenant.questionnaire_id;
-    let uri = format!(
-        "/api/projects/{}/questionnaires/{}",
-        tenant.project_id, qid
-    );
+    let uri = format!("/api/projects/{}/questionnaires/{}", tenant.project_id, qid);
 
     // (1) A content write must NULL yjs_state.
     seed_yjs_state(&fx, qid).await;
@@ -62,7 +61,8 @@ async fn content_write_invalidates_yjs_state_but_metadata_write_does_not() {
     let content_body = serde_json::json!({
         "content": { "pages": [{ "id": "p1", "blocks": [] }] }
     });
-    let (status, json) = json_request(&app, "PATCH", &uri, Some(&owner.token), Some(&content_body)).await;
+    let (status, json) =
+        json_request(&app, "PATCH", &uri, Some(&owner.token), Some(&content_body)).await;
     assert_eq!(status, StatusCode::OK, "content update ok: {json:?}");
     assert!(
         yjs_state_is_null(&fx, qid).await,
@@ -73,7 +73,8 @@ async fn content_write_invalidates_yjs_state_but_metadata_write_does_not() {
     // invalidation is scoped to content writes, not every update.
     seed_yjs_state(&fx, qid).await;
     let name_body = serde_json::json!({ "name": "Renamed, no content change" });
-    let (status, json) = json_request(&app, "PATCH", &uri, Some(&owner.token), Some(&name_body)).await;
+    let (status, json) =
+        json_request(&app, "PATCH", &uri, Some(&owner.token), Some(&name_body)).await;
     assert_eq!(status, StatusCode::OK, "name update ok: {json:?}");
     assert!(
         !yjs_state_is_null(&fx, qid).await,

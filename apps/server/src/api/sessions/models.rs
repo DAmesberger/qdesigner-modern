@@ -1732,7 +1732,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn parses_numeric_json_values() {
         assert_eq!(json_value_to_f64(&json!(42)), Some(42.0));

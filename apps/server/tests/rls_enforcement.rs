@@ -406,12 +406,11 @@ async fn session_media_upload_reads_completed_session_status_under_session_guc()
     // handler's status query admits the row and reads `completed`.
     let mut tx = pool.begin().await.expect("begin");
     pin_as_app_role(&mut tx, None, Some(completed_session)).await;
-    let status: Option<String> =
-        sqlx::query_scalar("SELECT status FROM sessions WHERE id = $1")
-            .bind(completed_session)
-            .fetch_optional(&mut *tx)
-            .await
-            .expect("status query");
+    let status: Option<String> = sqlx::query_scalar("SELECT status FROM sessions WHERE id = $1")
+        .bind(completed_session)
+        .fetch_optional(&mut *tx)
+        .await
+        .expect("status query");
     tx.rollback().await.ok();
     assert_eq!(
         status.as_deref(),
@@ -423,12 +422,11 @@ async fn session_media_upload_reads_completed_session_status_under_session_guc()
     // handler used): the dual-path SELECT policy denies the row → the exact 404.
     let mut tx2 = pool.begin().await.expect("begin");
     pin_as_app_role(&mut tx2, None, Some(Uuid::new_v4())).await;
-    let denied: Option<String> =
-        sqlx::query_scalar("SELECT status FROM sessions WHERE id = $1")
-            .bind(completed_session)
-            .fetch_optional(&mut *tx2)
-            .await
-            .expect("status query");
+    let denied: Option<String> = sqlx::query_scalar("SELECT status FROM sessions WHERE id = $1")
+        .bind(completed_session)
+        .fetch_optional(&mut *tx2)
+        .await
+        .expect("status query");
     tx2.rollback().await.ok();
     assert_eq!(
         denied, None,

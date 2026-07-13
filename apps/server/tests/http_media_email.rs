@@ -226,8 +226,16 @@ async fn media_upload_returns_image_dimensions() {
         .expect("build get-media request");
     let (status, _headers, json) = common::send_full(&app, req).await;
     assert_eq!(status, StatusCode::OK, "get-media should 200: {json:?}");
-    assert_eq!(json["width"].as_i64(), Some(1920), "persisted width: {json:?}");
-    assert_eq!(json["height"].as_i64(), Some(1080), "persisted height: {json:?}");
+    assert_eq!(
+        json["width"].as_i64(),
+        Some(1920),
+        "persisted width: {json:?}"
+    );
+    assert_eq!(
+        json["height"].as_i64(),
+        Some(1080),
+        "persisted height: {json:?}"
+    );
 }
 
 // ── email verification: send → verify → MailPit confirms ─────────────

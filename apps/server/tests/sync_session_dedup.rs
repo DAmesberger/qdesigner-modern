@@ -287,7 +287,10 @@ async fn trials_backfill_is_idempotent() {
         .await
         .expect("backfill 1")
         .rows_affected();
-    assert_eq!(first, 2, "two trials materialized from the two-element array");
+    assert_eq!(
+        first, 2,
+        "two trials materialized from the two-element array"
+    );
 
     let again = sqlx::query(backfill)
         .bind(resp_id)
@@ -297,13 +300,17 @@ async fn trials_backfill_is_idempotent() {
         .rows_affected();
     assert_eq!(again, 0, "re-running the backfill is a deterministic no-op");
 
-    let count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM trials WHERE session_id = $1 AND question_id = 'rt-q'")
-            .bind(session_id)
-            .fetch_one(&pool)
-            .await
-            .expect("count");
-    assert_eq!(count, 2, "still exactly two trials after two backfill passes");
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM trials WHERE session_id = $1 AND question_id = 'rt-q'",
+    )
+    .bind(session_id)
+    .fetch_one(&pool)
+    .await
+    .expect("count");
+    assert_eq!(
+        count, 2,
+        "still exactly two trials after two backfill passes"
+    );
 
     // The second trial was flagged anticipatory; the first kept.
     let invalidated: Option<String> = sqlx::query_scalar(
@@ -520,7 +527,10 @@ async fn responses_upsert_patches_value_on_conflict() {
         .await
         .expect("patch upload")
         .rows_affected();
-    assert_eq!(affected2, 1, "pending → uploaded conflicting upsert UPDATEs the row");
+    assert_eq!(
+        affected2, 1,
+        "pending → uploaded conflicting upsert UPDATEs the row"
+    );
 
     let value: serde_json::Value =
         sqlx::query_scalar("SELECT value FROM responses WHERE client_id = $1")
@@ -528,7 +538,11 @@ async fn responses_upsert_patches_value_on_conflict() {
             .fetch_one(&pool)
             .await
             .expect("value");
-    assert_eq!(value["status"], serde_json::json!("uploaded"), "status patched");
+    assert_eq!(
+        value["status"],
+        serde_json::json!("uploaded"),
+        "status patched"
+    );
     assert_eq!(
         value["mediaUrl"],
         serde_json::json!("/api/media/xyz/content"),
@@ -546,7 +560,10 @@ async fn responses_upsert_patches_value_on_conflict() {
         .await
         .expect("resend uploaded")
         .rows_affected();
-    assert_eq!(affected_noop, 0, "resend against an already-uploaded row does not update");
+    assert_eq!(
+        affected_noop, 0,
+        "resend against an already-uploaded row does not update"
+    );
 
     // (b) A tampered resend against the now-uploaded (non-pending) row must NOT
     // overwrite it — write-once integrity is preserved.
@@ -594,23 +611,27 @@ async fn responses_upsert_patches_value_on_conflict() {
         .await
         .expect("scalar resend")
         .rows_affected();
-    assert_eq!(scalar_resend, 0, "a recorded scalar answer is not rewritable");
+    assert_eq!(
+        scalar_resend, 0,
+        "a recorded scalar answer is not rewritable"
+    );
     let scalar_value: serde_json::Value =
         sqlx::query_scalar("SELECT value FROM responses WHERE client_id = $1")
             .bind(scalar_cid)
             .fetch_one(&pool)
             .await
             .expect("scalar value");
-    assert_eq!(scalar_value, original, "original scalar answer survives the resend");
+    assert_eq!(
+        scalar_value, original,
+        "original scalar answer survives the resend"
+    );
 
     // Still exactly two rows total (binary + scalar) — no duplicates created.
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM responses WHERE client_id = ANY($1)",
-    )
-    .bind(vec![client_id, scalar_cid])
-    .fetch_one(&pool)
-    .await
-    .expect("count");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM responses WHERE client_id = ANY($1)")
+        .bind(vec![client_id, scalar_cid])
+        .fetch_one(&pool)
+        .await
+        .expect("count");
     assert_eq!(count, 2, "one binary + one scalar row, no duplicates");
 }
 

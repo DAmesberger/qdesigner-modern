@@ -123,7 +123,8 @@ impl Config {
             .ok()
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty());
-        if let Err(msg) = require_cors_in_production(is_production_like(), cors_origins_raw.as_deref())
+        if let Err(msg) =
+            require_cors_in_production(is_production_like(), cors_origins_raw.as_deref())
         {
             panic!("{msg}");
         }
@@ -320,14 +321,12 @@ fn require_cors_in_production(
         .map(|v| !v.trim().is_empty())
         .unwrap_or(false);
     if production_like && !has_origin {
-        return Err(
-            "CORS_ORIGINS is required in production-like environments \
+        return Err("CORS_ORIGINS is required in production-like environments \
              (APP_ENV/RUST_ENV/NODE_ENV/ENVIRONMENT set to prod/production/staging/shared). \
              It is the sole source of the app origin used to build invitation and SSO \
              callback links; without it those links would point at the http://localhost:4173 \
              dev fallback."
-                .into(),
-        );
+            .into());
     }
     Ok(())
 }

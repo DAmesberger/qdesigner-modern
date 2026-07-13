@@ -77,7 +77,11 @@ async fn create_invitation_insert_returns_token_and_pending_status() {
     assert_eq!(row.1, org_id);
     assert_eq!(row.2, "invitee@test.example");
     assert_eq!(row.3, "member");
-    assert_ne!(row.4, Uuid::nil(), "token default must generate a real uuid");
+    assert_ne!(
+        row.4,
+        Uuid::nil(),
+        "token default must generate a real uuid"
+    );
     assert_eq!(row.5, "pending", "status default must be 'pending'");
     assert_eq!(row.6, Some(user_id));
     assert_eq!(row.7.as_deref(), Some("welcome aboard"));
@@ -122,24 +126,33 @@ async fn list_pending_select_resolves_all_projected_columns() {
     .expect("seed invitation");
 
     // Mirror the handler projection (aliased join → just assert columns exist).
-    let found: (Uuid, Uuid, String, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>) =
-        sqlx::query_as(
-            r#"
+    let found: (
+        Uuid,
+        Uuid,
+        String,
+        String,
+        Option<String>,
+        Option<chrono::DateTime<chrono::Utc>>,
+    ) = sqlx::query_as(
+        r#"
             SELECT i.id, i.token, i.status, i.email, i.custom_message, i.declined_at
             FROM organization_invitations i
             WHERE i.email = $1 AND i.status = 'pending' AND i.expires_at > NOW()
             "#,
-        )
-        .bind("listme@test.example")
-        .fetch_one(&pool)
-        .await
-        .expect("list_pending SELECT must resolve i.token/i.status/i.custom_message/i.declined_at");
+    )
+    .bind("listme@test.example")
+    .fetch_one(&pool)
+    .await
+    .expect("list_pending SELECT must resolve i.token/i.status/i.custom_message/i.declined_at");
 
     assert_eq!(found.0, inv_id);
     assert_ne!(found.1, Uuid::nil());
     assert_eq!(found.2, "pending");
     assert_eq!(found.4.as_deref(), Some("hi"));
-    assert!(found.5.is_none(), "declined_at is null for a pending invite");
+    assert!(
+        found.5.is_none(),
+        "declined_at is null for a pending invite"
+    );
 
     // Cleanup.
     let _ = sqlx::query("DELETE FROM organization_invitations WHERE id = $1")

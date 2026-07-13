@@ -436,12 +436,13 @@ async fn create_saml_provider_is_rejected() {
 
     // Nothing was persisted for the rejected saml create.
     let sup = fixture_pool().await.expect("fixture pool");
-    let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM org_identity_providers WHERE organization_id = $1")
-            .bind(tenant.org_id)
-            .fetch_one(&sup)
-            .await
-            .expect("count providers");
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM org_identity_providers WHERE organization_id = $1",
+    )
+    .bind(tenant.org_id)
+    .fetch_one(&sup)
+    .await
+    .expect("count providers");
     assert_eq!(count, 0, "no saml provider should have been persisted");
 
     // Control: an OIDC provider (no metadata_url → skips the reachability probe)

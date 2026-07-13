@@ -72,7 +72,12 @@ fn block_to_prelim(block: &Value) -> MapPrelim {
         ("name".to_string(), str_in(&str_field(block, "name"))),
         (
             "type".to_string(),
-            str_in(block.get("type").and_then(Value::as_str).unwrap_or("standard")),
+            str_in(
+                block
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .unwrap_or("standard"),
+            ),
         ),
     ];
 
@@ -129,11 +134,7 @@ fn page_to_prelim(page: &Value) -> MapPrelim {
 fn object_to_prelim(obj: &Value) -> MapPrelim {
     let entries: Vec<(String, In)> = obj
         .as_object()
-        .map(|map| {
-            map.iter()
-                .map(|(k, v)| (k.clone(), any_in(v)))
-                .collect()
-        })
+        .map(|map| map.iter().map(|(k, v)| (k.clone(), any_in(v))).collect())
         .unwrap_or_default();
     MapPrelim::from_iter(entries)
 }
@@ -162,7 +163,12 @@ pub fn seed_doc_from_content(doc: &Doc, content: &Value) {
     meta.insert(
         &mut txn,
         "version",
-        str_in(content.get("version").and_then(Value::as_str).unwrap_or("1.0.0")),
+        str_in(
+            content
+                .get("version")
+                .and_then(Value::as_str)
+                .unwrap_or("1.0.0"),
+        ),
     );
     for (key, default) in [
         ("versionMajor", 1.0),
@@ -177,9 +183,17 @@ pub fn seed_doc_from_content(doc: &Doc, content: &Value) {
         "organizationId",
         str_in(&str_field(content, "organizationId")),
     );
-    meta.insert(&mut txn, "projectId", str_in(&str_field(content, "projectId")));
+    meta.insert(
+        &mut txn,
+        "projectId",
+        str_in(&str_field(content, "projectId")),
+    );
     meta.insert(&mut txn, "created", str_in(&str_field(content, "created")));
-    meta.insert(&mut txn, "modified", str_in(&str_field(content, "modified")));
+    meta.insert(
+        &mut txn,
+        "modified",
+        str_in(&str_field(content, "modified")),
+    );
     if let Some(settings) = content.get("settings") {
         if !settings.is_null() {
             meta.insert(&mut txn, "settings", any_in(settings));
@@ -315,7 +329,10 @@ mod tests {
             let txn = doc.transact();
             txn.encode_state_as_update_v1(&yrs::StateVector::default())
         };
-        assert!(!state.is_empty(), "seeded state encodes to a non-empty update");
+        assert!(
+            !state.is_empty(),
+            "seeded state encodes to a non-empty update"
+        );
 
         // Applying the encoded state to a fresh doc reproduces the same page count
         // (idempotent round-trip — the property the corruption fix depends on).
