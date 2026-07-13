@@ -9,12 +9,16 @@
 //!
 //! Exact status codes (read against `api/access.rs` + `error.rs` and the
 //! RLS SELECT posture, then verified live):
-//!   - PATCH/DELETE `/api/projects/{a_proj}` → **404**. Both handlers first
-//!     resolve the project's `organization_id` via a plain `SELECT ... FROM
-//!     projects`, which the 00014 projects SELECT policy hides from a
-//!     non-member (the draft questionnaire means the
-//!     `projects_select_via_published_questionnaire` branch does not admit
-//!     it either) → `NotFound`.
+//!   - PATCH/DELETE `/api/projects/{a_proj}` → **403** (ADR 0032, ledger L11).
+//!     Both handlers now gate-first via `authorize(Scope::Project, …)`: the
+//!     SECURITY DEFINER tiered gate (`user_has_project_access`) denies the
+//!     non-member BEFORE the org resolver runs, so they converge with the
+//!     questionnaire mutations below that already 403. Pre-0032 these returned
+//!     **404** only incidentally — the inline handlers resolved
+//!     `organization_id` via a plain RLS-subject `SELECT ... FROM projects`
+//!     that the 00014 projects SELECT policy hid from a non-member. ADR 0032
+//!     removes that RLS-ordering artifact (an authz outcome must not masquerade
+//!     as "not found").
 //!   - questionnaire create/update/delete/bump → **403**.
 //!     `verify_project_write_access` runs a boolean `SELECT EXISTS(...)` that
 //!     returns false and maps to `Forbidden` without a prior existence probe.
@@ -58,7 +62,7 @@ async fn cross_tenant_mutations_denied_positive_controls_pass() {
         Some(&patch_body),
     )
     .await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "B PATCH project A: {json:?}");
+    assert_eq!(status, StatusCode::FORBIDDEN, "B PATCH project A: {json:?}");
 
     let (status, json) = json_request(
         &app,
@@ -70,7 +74,7 @@ async fn cross_tenant_mutations_denied_positive_controls_pass() {
     .await;
     assert_eq!(
         status,
-        StatusCode::NOT_FOUND,
+        StatusCode::FORBIDDEN,
         "B DELETE project A: {json:?}"
     );
 

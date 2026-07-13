@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query},
+    extract::{Path, Query, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -8,10 +8,12 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
+use crate::rbac::models::Permission;
+use crate::state::AppState;
 
 // ── Models ───────────────────────────────────────────────────────────
 
@@ -96,6 +98,7 @@ pub struct OrgTemplatePath {
     tags = ["templates"]
 )]
 pub async fn list_templates(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(org_id): Path<Uuid>,
@@ -103,7 +106,14 @@ pub async fn list_templates(
 ) -> Result<Json<Vec<QuestionTemplate>>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    access::verify_org_membership(&mut **tx, user.user_id, org_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::OrgRead,
+    )
+    .await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -161,6 +171,7 @@ pub async fn list_templates(
     tags = ["templates"]
 )]
 pub async fn create_template(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(org_id): Path<Uuid>,
@@ -171,7 +182,14 @@ pub async fn create_template(
 
     let mut tx = tx.tx().await?;
 
-    access::verify_org_membership(&mut **tx, user.user_id, org_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::OrgRead,
+    )
+    .await?;
 
     let is_shared = body.is_shared.unwrap_or(false);
     let tags = body.tags.unwrap_or_default();
@@ -220,13 +238,21 @@ pub async fn create_template(
     tags = ["templates"]
 )]
 pub async fn get_template(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(path): Path<OrgTemplatePath>,
 ) -> Result<Json<QuestionTemplate>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    access::verify_org_membership(&mut **tx, user.user_id, path.id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(path.id),
+        Permission::OrgRead,
+    )
+    .await?;
 
     let template = sqlx::query_as::<_, QuestionTemplate>(
         r#"
@@ -277,6 +303,7 @@ pub async fn get_template(
     tags = ["templates"]
 )]
 pub async fn update_template(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(path): Path<OrgTemplatePath>,
@@ -287,7 +314,14 @@ pub async fn update_template(
 
     let mut tx = tx.tx().await?;
 
-    access::verify_org_membership(&mut **tx, user.user_id, path.id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(path.id),
+        Permission::OrgRead,
+    )
+    .await?;
 
     // Only the creator or org admins can update
     verify_template_write_access(&mut **tx, user.user_id, path.id, path.tid).await?;
@@ -383,13 +417,21 @@ pub async fn update_template(
     tags = ["templates"]
 )]
 pub async fn delete_template(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(path): Path<OrgTemplatePath>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    access::verify_org_membership(&mut **tx, user.user_id, path.id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(path.id),
+        Permission::OrgRead,
+    )
+    .await?;
     verify_template_write_access(&mut **tx, user.user_id, path.id, path.tid).await?;
 
     let result =

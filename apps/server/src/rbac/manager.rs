@@ -126,7 +126,13 @@ impl RbacManager {
     /// Because a system-role member is passed through, this method must be
     /// paired with the endpoint's existing coarse gate — it is a *tightening*
     /// layer for custom roles, not a standalone authorization.
-    pub async fn require_permission<'e>(
+    ///
+    /// ADR 0030: this is now `pub(crate)` — [`crate::authz::authorize`] is the
+    /// single entry point that pairs it with the coarse gate so a caller can
+    /// never hold half the check. It stays reachable for `authorize` and the
+    /// still-divergent sites in the ADR-0030 ledger (e.g. the inline
+    /// org-membership analytics endpoints).
+    pub(crate) async fn require_permission<'e>(
         &self,
         executor: impl PgExecutor<'e>,
         user_id: Uuid,

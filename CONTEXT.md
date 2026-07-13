@@ -104,7 +104,12 @@ _Avoid_: warning, error (unqualified)
 **Scope**:
 The one resource an authorization decision is made against — an
 organization, project, or questionnaire. Every application-layer check
-names exactly one Scope.
+names exactly one Scope. The set is closed at three (ADR 0032): media
+authorizes at organization scope, session/response reads at questionnaire
+scope; nothing with no independent ownership row gets its own Scope.
+Questionnaire scope is **read-only** — every questionnaire mutation
+authorizes at project scope, because a questionnaire's editability is its
+project's editability.
 _Avoid_: resource, target
 
 **Permission**:
@@ -112,3 +117,17 @@ A named capability from the platform's closed list (read, write, publish,
 manage-members, …), resolved from a member's system role and any custom
 role. Checked against a Scope; never checked without one.
 _Avoid_: right, privilege, action
+
+**Coarse gate**:
+The membership/role-tier half of an authorization decision, derived inside
+`authorize()` from `(Scope, Permission)` — a required system-role tier
+(`min_org_role_for` / `min_project_role_for`, ADR 0032) checked before the
+custom-role tightening. Runs first; deny wins.
+_Avoid_: access check (ambiguous with the whole decision)
+
+**RLS-independence** (ADR 0032):
+An authorization decision never depends on RLS row-visibility — every query
+inside `authorize()` runs `SECURITY DEFINER`. RLS is a *separate*
+defense-in-depth net on data queries, never the reason a check passes or
+fails. Two independent nets, not one whose holes corrupt the other.
+_Avoid_: "RLS enforces authorization"

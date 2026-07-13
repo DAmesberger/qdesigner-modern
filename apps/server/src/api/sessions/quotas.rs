@@ -5,10 +5,11 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
+use crate::rbac::models::Permission;
 use crate::state::AppState;
 
 /// GET /api/questionnaires/:id/condition-counts
@@ -28,13 +29,21 @@ use crate::state::AppState;
     tags = ["analytics"]
 )]
 pub async fn condition_counts(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(questionnaire_id): Path<Uuid>,
 ) -> Result<Json<Vec<ConditionCount>>, ApiError> {
     let mut tx = tx.tx().await?;
     // Verify access via the questionnaire's project
-    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Questionnaire(questionnaire_id),
+        Permission::SessionRead,
+    )
+    .await?;
 
     // E-FLOW-6: prefer the authoritative `assigned_condition` column persisted
     // at create time; fall back to the legacy `metadata->>'assignedCondition'`
@@ -79,12 +88,20 @@ pub async fn condition_counts(
     tags = ["analytics"]
 )]
 pub async fn arm_counts(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(questionnaire_id): Path<Uuid>,
 ) -> Result<Json<Vec<ArmCount>>, ApiError> {
     let mut tx = tx.tx().await?;
-    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Questionnaire(questionnaire_id),
+        Permission::SessionRead,
+    )
+    .await?;
 
     let counts = sqlx::query_as::<_, ArmCount>(
         r#"

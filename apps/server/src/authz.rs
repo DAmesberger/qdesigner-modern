@@ -31,7 +31,7 @@ use uuid::Uuid;
 use crate::api::access;
 use crate::error::ApiError;
 use crate::rbac::manager::RbacManager;
-use crate::rbac::models::{OrgRole, Permission};
+use crate::rbac::models::{OrgRole, Permission, ProjectRole};
 
 /// The resource a [`authorize`] check is made against. The coarse
 /// membership gate and the org context for the custom-role tightening are
@@ -54,12 +54,17 @@ pub enum Scope {
 /// The `(scope, permission)` → coarse-gate mapping (behavior-equal to the
 /// dominant existing pairing, ADR 0030):
 ///
-/// | Scope           | Permission tier      | Coarse gate                                 |
-/// |-----------------|----------------------|---------------------------------------------|
-/// | `Organization`  | any                  | `has_org_role(min system tier holding it)`  |
-/// | `Project`       | read                 | `access::verify_project_read_access`        |
-/// | `Project`       | write / manage / del | `access::verify_project_write_access`       |
-/// | `Questionnaire` | any                  | `access::verify_questionnaire_access`        |
+/// | Scope           | Permission tier      | Coarse gate                                          |
+/// |-----------------|----------------------|------------------------------------------------------|
+/// | `Organization`  | any                  | `has_org_role(min system tier holding it)`           |
+/// | `Project`       | any                  | `access::verify_project_access(min_project_role_for)` |
+/// | `Questionnaire` | read only            | `access::verify_questionnaire_access`                |
+///
+/// ADR 0032: `Project` scope is **tiered** — `verify_project_access` enforces
+/// the exact [`ProjectRole`] [`min_project_role_for`] maps the permission to,
+/// generalizing the old binary read/write pair. `Questionnaire` scope is
+/// **read-only** (a debug-assert trips on a non-read permission); questionnaire
+/// mutations authorize at `Scope::Project`.
 ///
 /// For `Organization` scope the coarse gate is the lowest built-in
 /// [`OrgRole`] whose [`OrgRole::default_permissions`] set contains the
@@ -97,14 +102,31 @@ pub async fn authorize(
             org_id
         }
         Scope::Project(project_id) => {
-            if is_read_permission(permission) {
-                access::verify_project_read_access(&mut *conn, user_id, project_id).await?;
-            } else {
-                access::verify_project_write_access(&mut *conn, user_id, project_id).await?;
-            }
+            // ADR 0032: the tiered gate enforces the exact ProjectRole tier the
+            // permission maps to (read → Viewer == old read gate; write / publish
+            // → Editor == old write gate; manage-members → Admin; project delete /
+            // transfer-ownership → Owner — the six inline sites folded in at
+            // rollout step 2, ledger L5–L10).
+            access::verify_project_access(
+                &mut *conn,
+                user_id,
+                project_id,
+                min_project_role_for(permission),
+            )
+            .await?;
             access::get_project_org_id(&mut *conn, project_id).await?
         }
         Scope::Questionnaire(questionnaire_id) => {
+            // ADR 0032: questionnaire scope is READ-ONLY. All questionnaire
+            // mutations authorize at `Scope::Project` against the parent
+            // project's tier; the share-aware gate here is membership-or-share
+            // read only. A write mis-routed here would silently under-gate to
+            // membership, so trip loudly in debug builds.
+            debug_assert!(
+                is_read_permission(permission),
+                "non-read permission {permission:?} routed through Scope::Questionnaire — \
+                 questionnaire scope is read-only (ADR 0032); authorize mutations at Scope::Project",
+            );
             access::verify_questionnaire_access(&mut *conn, user_id, questionnaire_id).await?;
             access::get_questionnaire_org_id(&mut *conn, questionnaire_id).await?
         }
@@ -153,6 +175,60 @@ fn min_org_role_for(permission: Permission) -> OrgRole {
     OrgRole::Owner
 }
 
+/// The [`ProjectRole`] tier the project-scope coarse gate requires for
+/// `permission` (ADR 0032). Mirrors [`min_org_role_for`] but for project
+/// scope: it names the exact tier [`access::verify_project_access`] enforces.
+///
+/// **Behavior-preserving** with the pre-0032 gates once the six inline sites
+/// fold in (ADR 0032 rollout step 2, ledger L5–L10): the read-family maps to
+/// `Viewer` (the old `verify_project_read_access`) and the write-family to
+/// `Editor` (the old `verify_project_write_access`), so every already-swept
+/// `Scope::Project` site is unchanged. `ProjectManageMembers` → `Admin` (the
+/// tier the three project-member sites enforce), `MediaDelete` → `Admin`.
+/// `ProjectDelete` and the new `ProjectTransferOwnership` → `Owner` — the two
+/// destructive sites (`delete_project`, `transfer_project_ownership`) require a
+/// project *owner* (or an org owner/admin via the L5 override), not merely
+/// Admin (ledger L6/L7; the grill's "ProjectDelete→Admin" was corrected). The
+/// org-family lands on `Owner` as a fail-closed floor: those permissions never
+/// legitimately reach project scope.
+///
+/// Exhaustive with **no wildcard arm** — a newly-added [`Permission`] fails to
+/// compile until its project-scope tier is declared here. Per the ADR 0032
+/// divergence ledger, `QuestionnaireDelete` stays `Editor` (candidate C1 to
+/// raise it to `Admin` is deferred to a separately-reviewed change).
+fn min_project_role_for(permission: Permission) -> ProjectRole {
+    match permission {
+        // Read family → Viewer (== old verify_project_read_access).
+        Permission::ProjectRead
+        | Permission::QuestionnaireRead
+        | Permission::SessionRead
+        | Permission::ResponseRead
+        | Permission::MediaRead => ProjectRole::Viewer,
+        // Write / publish / delete family → Editor (== old
+        // verify_project_write_access). QuestionnaireDelete stays Editor (C1).
+        Permission::ProjectWrite
+        | Permission::QuestionnaireWrite
+        | Permission::QuestionnairePublish
+        | Permission::QuestionnaireDelete
+        | Permission::SessionWrite
+        | Permission::ResponseWrite
+        | Permission::MediaWrite => ProjectRole::Editor,
+        // Manage-members / media-delete → Admin (the three project-member
+        // sites + media delete, folded in at rollout step 2).
+        Permission::ProjectManageMembers | Permission::MediaDelete => ProjectRole::Admin,
+        // Destructive project ownership ops → Owner (delete_project /
+        // transfer_project_ownership; ledger L6/L7). The org owner/admin
+        // override lives in the definer gate's 'owner' arm (L5).
+        Permission::ProjectDelete | Permission::ProjectTransferOwnership => ProjectRole::Owner,
+        // Org-family permissions never legitimately reach project scope —
+        // fail closed at the top tier.
+        Permission::OrgRead
+        | Permission::OrgWrite
+        | Permission::OrgManageMembers
+        | Permission::OrgDelete => ProjectRole::Owner,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,13 +247,55 @@ mod tests {
             OrgRole::Admin
         );
         assert_eq!(min_org_role_for(Permission::OrgDelete), OrgRole::Owner);
+        assert_eq!(min_org_role_for(Permission::ProjectRead), OrgRole::Viewer);
+        assert_eq!(min_org_role_for(Permission::ProjectDelete), OrgRole::Admin);
+    }
+
+    #[test]
+    fn min_project_role_matches_handler_tiers() {
+        // ADR 0032: behavior-preserving tiers. Read-family → Viewer (old read
+        // gate); write/publish/delete → Editor (old write gate);
+        // manage-members / media-delete → Admin; project-delete /
+        // transfer-ownership → Owner (ledger L6/L7); org-family → Owner
+        // (fail-closed floor).
+        for p in [
+            Permission::ProjectRead,
+            Permission::QuestionnaireRead,
+            Permission::SessionRead,
+            Permission::ResponseRead,
+            Permission::MediaRead,
+        ] {
+            assert_eq!(min_project_role_for(p), ProjectRole::Viewer, "{p:?}");
+        }
+        for p in [
+            Permission::ProjectWrite,
+            Permission::QuestionnaireWrite,
+            Permission::QuestionnairePublish,
+            Permission::QuestionnaireDelete,
+            Permission::SessionWrite,
+            Permission::ResponseWrite,
+            Permission::MediaWrite,
+        ] {
+            assert_eq!(min_project_role_for(p), ProjectRole::Editor, "{p:?}");
+        }
+        for p in [Permission::ProjectManageMembers, Permission::MediaDelete] {
+            assert_eq!(min_project_role_for(p), ProjectRole::Admin, "{p:?}");
+        }
+        // Owner tier: destructive project ops (ledger L6/L7) + org-family floor.
+        for p in [
+            Permission::ProjectDelete,
+            Permission::ProjectTransferOwnership,
+            Permission::OrgRead,
+            Permission::OrgWrite,
+            Permission::OrgManageMembers,
+            Permission::OrgDelete,
+        ] {
+            assert_eq!(min_project_role_for(p), ProjectRole::Owner, "{p:?}");
+        }
+        // C1 (ledger): QuestionnaireDelete deliberately stays Editor, not Admin.
         assert_eq!(
-            min_org_role_for(Permission::ProjectRead),
-            OrgRole::Viewer
-        );
-        assert_eq!(
-            min_org_role_for(Permission::ProjectDelete),
-            OrgRole::Admin
+            min_project_role_for(Permission::QuestionnaireDelete),
+            ProjectRole::Editor
         );
     }
 

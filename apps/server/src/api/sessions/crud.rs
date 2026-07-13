@@ -5,11 +5,12 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::auth::OptionalUser;
 use crate::middleware::tx::Tx;
+use crate::rbac::models::Permission;
 use crate::state::AppState;
 use crate::websocket::manager::WsMessage;
 
@@ -272,6 +273,7 @@ pub async fn create_session(
     tags = ["sessions"]
 )]
 pub async fn list_sessions(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Query(query): Query<SessionListQuery>,
@@ -283,7 +285,14 @@ pub async fn list_sessions(
     })?;
 
     // Verify the user has access to this questionnaire's project org
-    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Questionnaire(questionnaire_id),
+        Permission::SessionRead,
+    )
+    .await?;
 
     let normalized_status = query
         .status
@@ -349,6 +358,7 @@ pub async fn list_sessions(
     tags = ["sessions"]
 )]
 pub async fn get_session(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(session_id): Path<Uuid>,
@@ -370,7 +380,14 @@ pub async fn get_session(
     .ok_or_else(|| ApiError::NotFound("Session not found".into()))?;
 
     // Verify the user has access to this session's questionnaire
-    access::verify_questionnaire_access(&mut **tx, user.user_id, session.questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Questionnaire(session.questionnaire_id),
+        Permission::SessionRead,
+    )
+    .await?;
 
     Ok(Json(session))
 }

@@ -10,9 +10,10 @@ use validator::Validate;
 use crate::api::access;
 use crate::audit::{self, resource, AuditAction, AuditEvent, ClientIp};
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
-use crate::rbac::models::OrgRole;
+use crate::rbac::models::Permission;
 use crate::state::AppState;
 
 // ── Models ───────────────────────────────────────────────────────────
@@ -241,21 +242,14 @@ pub async fn create_project(
 
     let mut tx = tx.tx().await?;
 
-    // Require at least member role in the org
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            body.organization_id,
-            &OrgRole::Member,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden(
-            "Requires member role in the organization".into(),
-        ));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(body.organization_id),
+        Permission::ProjectWrite,
+    )
+    .await?;
 
     let project = sqlx::query_as::<_, Project>(
         r#"
@@ -307,6 +301,7 @@ pub async fn create_project(
     tags = ["projects"]
 )]
 pub async fn get_project(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(project_id): Path<Uuid>,
@@ -317,7 +312,14 @@ pub async fn get_project(
     // owners/admins and explicit project members always pass; plain org members
     // pass only under 'org' visibility. Denied callers get 403 (not 404), so a
     // confidential project's existence is not leaked.
-    access::verify_project_read_access(&mut **tx, user.user_id, project_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectRead,
+    )
+    .await?;
 
     let project = sqlx::query_as::<_, Project>(
         r#"
@@ -368,33 +370,17 @@ pub async fn update_project(
 
     let mut tx = tx.tx().await?;
 
-    // Check project-level permission
-    if !state
-        .rbac
-        .has_project_role(
-            &mut **tx,
-            user.user_id,
-            project_id,
-            &crate::rbac::models::ProjectRole::Editor,
-        )
-        .await?
-    {
-        // Fall back to org-level check
-        let org_id =
-            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
-                .bind(project_id)
-                .fetch_optional(&mut **tx)
-                .await?
-                .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
-
-        if !state
-            .rbac
-            .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
-            .await?
-        {
-            return Err(ApiError::Forbidden("Insufficient permissions".into()));
-        }
-    }
+    // ADR 0032 (ledger L8): project write. The Editor tier adds the
+    // editor-project-share path the inline gate lacked — a deliberate
+    // loosening so an external editor-share holder may edit project settings.
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectWrite,
+    )
+    .await?;
 
     // Build dynamic UPDATE
     let mut parts: Vec<String> = Vec::new();
@@ -485,33 +471,18 @@ pub async fn delete_project(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    // Require project owner or org admin
-    let org_id =
-        sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
-            .bind(project_id)
-            .fetch_optional(&mut **tx)
-            .await?
-            .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
+    // ADR 0032 (ledger L6): project delete requires the Owner tier — a project
+    // owner, or an org owner/admin via the L5 override in the definer gate.
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectDelete,
+    )
+    .await?;
 
-    let is_project_owner = state
-        .rbac
-        .has_project_role(
-            &mut **tx,
-            user.user_id,
-            project_id,
-            &crate::rbac::models::ProjectRole::Owner,
-        )
-        .await?;
-    let is_org_admin = state
-        .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
-        .await?;
-
-    if !is_project_owner && !is_org_admin {
-        return Err(ApiError::Forbidden(
-            "Only project owner or org admin can delete".into(),
-        ));
-    }
+    let org_id = access::get_project_org_id(&mut **tx, project_id).await?;
 
     sqlx::query("UPDATE projects SET deleted_at = NOW(), status = 'deleted' WHERE id = $1")
         .bind(project_id)
@@ -584,13 +555,21 @@ pub struct TransferProjectOwnershipRequest {
     tags = ["projects"]
 )]
 pub async fn list_project_members(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(project_id): Path<Uuid>,
 ) -> Result<Json<Vec<ProjectMember>>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    access::verify_project_read_access(&mut **tx, user.user_id, project_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectRead,
+    )
+    .await?;
 
     let members = sqlx::query_as::<_, ProjectMember>(
         r#"
@@ -648,33 +627,16 @@ pub async fn add_project_member(
 
     let mut tx = tx.tx().await?;
 
-    // Require project admin+ or org admin+
-    let has_project_admin = state
-        .rbac
-        .has_project_role(
-            &mut **tx,
-            user.user_id,
-            project_id,
-            &crate::rbac::models::ProjectRole::Admin,
-        )
-        .await?;
-
-    if !has_project_admin {
-        let org_id =
-            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
-                .bind(project_id)
-                .fetch_optional(&mut **tx)
-                .await?
-                .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
-
-        if !state
-            .rbac
-            .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
-            .await?
-        {
-            return Err(ApiError::Forbidden("Requires admin role".into()));
-        }
-    }
+    // ADR 0032 (ledger L9): manage project members — Admin tier (project
+    // admin+, or org owner/admin via the L5 override).
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectManageMembers,
+    )
+    .await?;
 
     let target_user = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL",
@@ -770,33 +732,16 @@ pub async fn update_project_member(
 
     let mut tx = tx.tx().await?;
 
-    // Require project admin+ or org admin+
-    let has_project_admin = state
-        .rbac
-        .has_project_role(
-            &mut **tx,
-            user.user_id,
-            project_id,
-            &crate::rbac::models::ProjectRole::Admin,
-        )
-        .await?;
-
-    if !has_project_admin {
-        let org_id =
-            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
-                .bind(project_id)
-                .fetch_optional(&mut **tx)
-                .await?
-                .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
-
-        if !state
-            .rbac
-            .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
-            .await?
-        {
-            return Err(ApiError::Forbidden("Requires admin role".into()));
-        }
-    }
+    // ADR 0032 (ledger L9): manage project members — Admin tier (project
+    // admin+, or org owner/admin via the L5 override).
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectManageMembers,
+    )
+    .await?;
 
     let rows_affected =
         sqlx::query("UPDATE project_members SET role = $1 WHERE project_id = $2 AND user_id = $3")
@@ -861,33 +806,16 @@ pub async fn remove_project_member(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    // Require project admin+ or org admin+
-    let has_project_admin = state
-        .rbac
-        .has_project_role(
-            &mut **tx,
-            user.user_id,
-            project_id,
-            &crate::rbac::models::ProjectRole::Admin,
-        )
-        .await?;
-
-    if !has_project_admin {
-        let org_id =
-            sqlx::query_scalar::<_, Uuid>("SELECT organization_id FROM projects WHERE id = $1")
-                .bind(project_id)
-                .fetch_optional(&mut **tx)
-                .await?
-                .ok_or_else(|| ApiError::NotFound("Project not found".into()))?;
-
-        if !state
-            .rbac
-            .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
-            .await?
-        {
-            return Err(ApiError::Forbidden("Requires admin role".into()));
-        }
-    }
+    // ADR 0032 (ledger L9): manage project members — Admin tier (project
+    // admin+, or org owner/admin via the L5 override).
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectManageMembers,
+    )
+    .await?;
 
     // Prevent removing the last owner
     let target_role = sqlx::query_scalar::<_, String>(
@@ -1051,29 +979,18 @@ pub async fn transfer_project_ownership(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = tx.tx().await?;
 
+    // ADR 0032 (ledger L7): the new Owner-tier `ProjectTransferOwnership`
+    // permission — a project owner, or an org owner/admin via the L5 override.
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectTransferOwnership,
+    )
+    .await?;
+
     let org_id = access::get_project_org_id(&mut **tx, project_id).await?;
-
-    // Caller must be the project owner, or an org owner/admin.
-    let is_project_owner = state
-        .rbac
-        .has_project_role(
-            &mut **tx,
-            user.user_id,
-            project_id,
-            &crate::rbac::models::ProjectRole::Owner,
-        )
-        .await?;
-
-    let is_org_admin = state
-        .rbac
-        .has_org_role(&mut **tx, user.user_id, org_id, &OrgRole::Admin)
-        .await?;
-
-    if !is_project_owner && !is_org_admin {
-        return Err(ApiError::Forbidden(
-            "Only the project owner or an org admin can transfer ownership".into(),
-        ));
-    }
 
     transfer_project_ownership_tx(
         &mut tx,

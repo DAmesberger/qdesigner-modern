@@ -9,10 +9,8 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::api::access::{
-    get_project_org_id, verify_project_read_access, verify_project_write_access,
-};
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
 use crate::rbac::models::Permission;
@@ -180,6 +178,7 @@ pub async fn get_questionnaire_by_code(
     tags = ["questionnaires"]
 )]
 pub async fn list_questionnaires(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(project_id): Path<Uuid>,
@@ -188,7 +187,14 @@ pub async fn list_questionnaires(
     let mut tx = tx.tx().await?;
 
     // Verify access to the project
-    verify_project_read_access(&mut **tx, user.user_id, project_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::QuestionnaireRead,
+    )
+    .await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -252,6 +258,7 @@ pub async fn list_questionnaires(
     tags = ["questionnaires"]
 )]
 pub async fn create_questionnaire(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(project_id): Path<Uuid>,
@@ -263,7 +270,14 @@ pub async fn create_questionnaire(
     let mut tx = tx.tx().await?;
 
     // Verify write access
-    verify_project_write_access(&mut **tx, user.user_id, project_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::QuestionnaireWrite,
+    )
+    .await?;
 
     let content = body.content.unwrap_or_else(|| serde_json::json!({}));
     let settings = body.settings.unwrap_or_else(|| serde_json::json!({}));
@@ -314,13 +328,21 @@ pub async fn create_questionnaire(
     tags = ["questionnaires"]
 )]
 pub async fn get_questionnaire(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<Questionnaire>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    verify_project_read_access(&mut **tx, user.user_id, path.id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(path.id),
+        Permission::QuestionnaireRead,
+    )
+    .await?;
 
     let q = sqlx::query_as::<_, Questionnaire>(
         r#"
@@ -371,19 +393,14 @@ pub async fn update_questionnaire(
 
     let mut tx = tx.tx().await?;
 
-    verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
-    // Granular gate (E-RBAC-3): tightens for custom roles lacking
-    // questionnaire:write; pass-through for the built-in tiers.
-    let org_id = get_project_org_id(&mut **tx, path.id).await?;
-    state
-        .rbac
-        .require_permission(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            Permission::QuestionnaireWrite,
-        )
-        .await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(path.id),
+        Permission::QuestionnaireWrite,
+    )
+    .await?;
 
     // Snapshot current state into questionnaire_versions before updating
     snapshot_questionnaire_version(&mut tx, path.qid, user.user_id).await?;
@@ -512,20 +529,14 @@ pub async fn publish_questionnaire(
 ) -> Result<Json<Questionnaire>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
-    // Granular gate (E-RBAC-3): the coarse project-write check above governs
-    // system roles; this additionally denies a custom role (e.g. a read-only
-    // "Analyst") that lacks questionnaire:publish, even at admin tier.
-    let org_id = get_project_org_id(&mut **tx, path.id).await?;
-    state
-        .rbac
-        .require_permission(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            Permission::QuestionnairePublish,
-        )
-        .await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(path.id),
+        Permission::QuestionnairePublish,
+    )
+    .await?;
 
     snapshot_questionnaire_version(&mut tx, path.qid, user.user_id).await?;
 
@@ -575,6 +586,7 @@ pub struct BumpVersionRequest {
     tags = ["questionnaires"]
 )]
 pub async fn bump_version(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
@@ -582,7 +594,14 @@ pub async fn bump_version(
 ) -> Result<Json<Questionnaire>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(path.id),
+        Permission::QuestionnaireWrite,
+    )
+    .await?;
 
     // Snapshot current version first
     snapshot_questionnaire_version(&mut tx, path.qid, user.user_id).await?;
@@ -676,13 +695,21 @@ pub async fn bump_version(
     tags = ["questionnaires"]
 )]
 pub async fn delete_questionnaire(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(path): Path<ProjectQuestionnairePath>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    verify_project_write_access(&mut **tx, user.user_id, path.id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(path.id),
+        Permission::QuestionnaireDelete,
+    )
+    .await?;
 
     let result = sqlx::query(
         "UPDATE questionnaire_definitions SET deleted_at = NOW() WHERE id = $1 AND project_id = $2",
@@ -776,13 +803,14 @@ pub async fn export_responses(
 ) -> Result<Response, ApiError> {
     let mut tx = tx.tx().await?;
 
-    verify_project_read_access(&mut **tx, user.user_id, path.id).await?;
-    // Granular gate (E-RBAC-3): denies custom roles lacking response:read.
-    let org_id = get_project_org_id(&mut **tx, path.id).await?;
-    state
-        .rbac
-        .require_permission(&mut **tx, user.user_id, org_id, Permission::ResponseRead)
-        .await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(path.id),
+        Permission::ResponseRead,
+    )
+    .await?;
 
     // Verify questionnaire exists
     let exists = sqlx::query_scalar::<_, bool>(
@@ -1027,6 +1055,7 @@ pub struct VersionListQuery {
     tags = ["questionnaires"]
 )]
 pub async fn list_versions(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(questionnaire_id): Path<Uuid>,
@@ -1043,7 +1072,14 @@ pub async fn list_versions(
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
 
-    verify_project_read_access(&mut **tx, user.user_id, project_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::QuestionnaireRead,
+    )
+    .await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);

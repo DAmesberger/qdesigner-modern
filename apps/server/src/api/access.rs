@@ -9,24 +9,36 @@
 //! transaction (for protected routes). Running these checks on the same
 //! transaction-pinned connection as the surrounding handler is what lets
 //! them benefit from RLS once Phase 5 P5.3 lands the FORCE migration.
+//!
+//! ADR 0030: the coarse `verify_*` gates below are `pub(crate)` — the single
+//! application-layer authorization entry point is
+//! [`crate::authz::authorize`], which composes the right `verify_*` gate with
+//! the custom-role tightening. New authenticated handlers call `authorize`;
+//! these gates stay reachable only for `authorize` itself and the handful of
+//! still-divergent sites recorded in the ADR-0030 divergence ledger.
 
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
 use crate::error::ApiError;
+use crate::rbac::models::ProjectRole;
 
 /// Look up the organization that owns a project.
+///
+/// ADR 0032: resolves through the `SECURITY DEFINER` `public.project_org_id`
+/// so org resolution is RLS-immune — an authorization decision can no longer
+/// 404 because the caller cannot *see* the `projects` row under RLS. The
+/// function returns NULL for an absent/soft-deleted project, which maps to
+/// the same `NotFound` as before.
 pub async fn get_project_org_id<'e>(
     executor: impl PgExecutor<'e>,
     project_id: Uuid,
 ) -> Result<Uuid, ApiError> {
-    sqlx::query_scalar::<_, Uuid>(
-        "SELECT organization_id FROM projects WHERE id = $1 AND deleted_at IS NULL",
-    )
-    .bind(project_id)
-    .fetch_optional(executor)
-    .await?
-    .ok_or_else(|| ApiError::NotFound("Project not found".into()))
+    sqlx::query_scalar::<_, Option<Uuid>>("SELECT public.project_org_id($1)")
+        .bind(project_id)
+        .fetch_one(executor)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Project not found".into()))
 }
 
 /// Look up the organization that owns a questionnaire (via its project).
@@ -34,22 +46,21 @@ pub async fn get_project_org_id<'e>(
 /// Used by the analytics/export handlers to resolve the org context needed
 /// for a granular [`RbacManager::require_permission`](crate::rbac::manager::RbacManager::require_permission)
 /// check after the coarse questionnaire-access gate has already run.
+///
+/// ADR 0032: resolves through the `SECURITY DEFINER` `public.questionnaire_org_id`
+/// so a cross-org questionnaire-share guest — admitted by the share-aware
+/// coarse gate — no longer 404s here because the parent `projects` row is
+/// invisible to them under RLS (the `resource_shares:486` regression). NULL
+/// (absent/soft-deleted) maps to `NotFound` exactly as before.
 pub async fn get_questionnaire_org_id<'e>(
     executor: impl PgExecutor<'e>,
     questionnaire_id: Uuid,
 ) -> Result<Uuid, ApiError> {
-    sqlx::query_scalar::<_, Uuid>(
-        r#"
-        SELECT p.organization_id
-        FROM questionnaire_definitions qd
-        JOIN projects p ON p.id = qd.project_id
-        WHERE qd.id = $1 AND qd.deleted_at IS NULL AND p.deleted_at IS NULL
-        "#,
-    )
-    .bind(questionnaire_id)
-    .fetch_optional(executor)
-    .await?
-    .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))
+    sqlx::query_scalar::<_, Option<Uuid>>("SELECT public.questionnaire_org_id($1)")
+        .bind(questionnaire_id)
+        .fetch_one(executor)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))
 }
 
 /// Read an organization's data-residency region (E-RBAC-9), defaulting to
@@ -71,7 +82,7 @@ pub async fn org_data_region<'e>(
 }
 
 /// Verify that `user_id` is an active member of `org_id`.
-pub async fn verify_org_membership<'e>(
+pub(crate) async fn verify_org_membership<'e>(
     executor: impl PgExecutor<'e>,
     user_id: Uuid,
     org_id: Uuid,
@@ -92,37 +103,49 @@ pub async fn verify_org_membership<'e>(
     Ok(())
 }
 
-/// Verify that `user_id` is an active member of the project's parent
-/// organization — **org-wide** read visibility.
+/// The tiered project access gate (ADR 0032). Generalizes the read/write pair
+/// to all four [`ProjectRole`] tiers in one gate, keyed on `required`, so
+/// `authorize`'s `Scope::Project` arm can enforce the exact tier
+/// `min_project_role_for` maps a permission to. Each tier reproduces the
+/// pre-0032 predicate branch-for-branch
+/// (see the `public.user_has_project_access` migration comment):
 ///
-/// This admits *every* active org member to *every* project in the org,
-/// regardless of `project_members`. It is retained only for call sites that
-/// intentionally want org-wide visibility. For project-confidential resources
-/// prefer [`verify_project_read_access`], which is the default read gate: it
-/// honours the org's `projectVisibility` setting so a project can be made
-/// confidential to org members who are not on it (see [`ProjectVisibility`]).
+/// - [`Viewer`](ProjectRole::Viewer) ≡ [`verify_project_read_access`]: org
+///   owner/admin, any project member, org-visibility-default active org member,
+///   or an active project share.
+/// - [`Editor`](ProjectRole::Editor) ≡ [`verify_project_write_access`]: project
+///   member owner/admin/editor, org owner/admin, or an active editor share.
+/// - [`Admin`](ProjectRole::Admin) / [`Owner`](ProjectRole::Owner) ≡
+///   [`RbacManager::has_project_role`](crate::rbac::manager::RbacManager::has_project_role):
+///   a `project_members` row of at least that role. No share branch (shares
+///   cap at editor), no visibility branch.
+///
+/// ADR 0032: runs through the `SECURITY DEFINER` `public.user_has_project_access`
+/// so the authorization decision is RLS-immune. On denial returns
+/// [`ApiError::Forbidden`] with the message the corresponding pre-0032 gate
+/// used, so the read/write wrappers and `authorize`'s Project arm stay
+/// byte-identical.
 pub async fn verify_project_access<'e>(
     executor: impl PgExecutor<'e>,
     user_id: Uuid,
     project_id: Uuid,
+    required: ProjectRole,
 ) -> Result<(), ApiError> {
-    let has_access = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM projects p
-            JOIN organization_members om ON om.organization_id = p.organization_id
-            WHERE p.id = $1 AND om.user_id = $2 AND om.status = 'active'
-              AND p.deleted_at IS NULL
-        )
-        "#,
-    )
-    .bind(project_id)
-    .bind(user_id)
-    .fetch_one(executor)
-    .await?;
+    let has_access =
+        sqlx::query_scalar::<_, bool>("SELECT public.user_has_project_access($1, $2, $3)")
+            .bind(project_id)
+            .bind(user_id)
+            .bind(required.as_str())
+            .fetch_one(executor)
+            .await?;
 
     if !has_access {
-        return Err(ApiError::Forbidden("No access to this project".into()));
+        let message = match required {
+            ProjectRole::Viewer => "No access to this project",
+            ProjectRole::Editor => "No write access to this project",
+            ProjectRole::Admin | ProjectRole::Owner => "Insufficient project role for this action",
+        };
+        return Err(ApiError::Forbidden(message.into()));
     }
     Ok(())
 }
@@ -188,64 +211,26 @@ pub async fn org_project_visibility<'e>(
 /// agree that `ProjectRole` is load-bearing for reads under `'members'`
 /// visibility.
 ///
-/// Prefer this over [`verify_project_access`] (which grants org-wide read
-/// unconditionally) for any project-confidential resource. Returns
-/// [`ApiError::Forbidden`] when the user may not read the project (including
-/// when the project does not exist, to avoid leaking existence).
+/// Prefer this over the org-wide-visibility path for any project-confidential
+/// resource. Returns [`ApiError::Forbidden`] when the user may not read the
+/// project (including when the project does not exist, to avoid leaking
+/// existence).
 ///
 /// E-RBAC-10: an active (non-expired) `resource_shares` grant on the project
 /// also admits read, so an external collaborator gains scoped visibility
 /// without any org/project membership. Guests never appear in the org project
 /// list (that path stays membership-scoped) — they reach the project only
 /// through this by-id gate and the "Shared with me" surface.
-pub async fn verify_project_read_access<'e>(
+///
+/// ADR 0032: a thin wrapper over the tiered [`verify_project_access`] at the
+/// [`Viewer`](ProjectRole::Viewer) tier — same predicate, same
+/// `"No access to this project"` message, so every caller stays byte-identical.
+pub(crate) async fn verify_project_read_access<'e>(
     executor: impl PgExecutor<'e>,
     user_id: Uuid,
     project_id: Uuid,
 ) -> Result<(), ApiError> {
-    let has_access = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM projects p
-            JOIN organizations o ON o.id = p.organization_id
-            WHERE p.id = $1 AND p.deleted_at IS NULL
-              AND (
-                -- org owner/admin: unconditional read
-                EXISTS (
-                    SELECT 1 FROM organization_members om
-                    WHERE om.organization_id = p.organization_id
-                      AND om.user_id = $2 AND om.status = 'active'
-                      AND om.role IN ('owner', 'admin')
-                )
-                -- explicit project member: read regardless of visibility
-                OR EXISTS (
-                    SELECT 1 FROM project_members pm
-                    WHERE pm.project_id = p.id AND pm.user_id = $2
-                )
-                -- org-wide visibility (default): any active org member
-                OR (
-                    COALESCE(o.settings->>'projectVisibility', 'org') = 'org'
-                    AND EXISTS (
-                        SELECT 1 FROM organization_members om
-                        WHERE om.organization_id = p.organization_id
-                          AND om.user_id = $2 AND om.status = 'active'
-                    )
-                )
-                -- external guest with an active project share (E-RBAC-10)
-                OR public.user_has_active_share('project', p.id, $2)
-              )
-        )
-        "#,
-    )
-    .bind(project_id)
-    .bind(user_id)
-    .fetch_one(executor)
-    .await?;
-
-    if !has_access {
-        return Err(ApiError::Forbidden("No access to this project".into()));
-    }
-    Ok(())
+    verify_project_access(executor, user_id, project_id, ProjectRole::Viewer).await
 }
 
 /// Verify that `user_id` can *write* to the given project.
@@ -254,35 +239,20 @@ pub async fn verify_project_read_access<'e>(
 /// `editor` role, **or** an org-level `admin`/`owner`, **or** (E-RBAC-10) holds
 /// an active `editor` `resource_shares` grant on the project — the scoped-edit
 /// path for an external collaborator. A `viewer` share never confers write.
-pub async fn verify_project_write_access<'e>(
+///
+/// ADR 0032: a thin wrapper over the tiered [`verify_project_access`] at the
+/// [`Editor`](ProjectRole::Editor) tier — same predicate, same
+/// `"No write access to this project"` message, so every caller stays
+/// byte-identical. Currently reached only via `authorize`'s Editor-tier
+/// permissions (which call `verify_project_access` directly) and the sweep
+/// sites still to be converted, so it is retained as the named write gate.
+#[allow(dead_code)]
+pub(crate) async fn verify_project_write_access<'e>(
     executor: impl PgExecutor<'e>,
     user_id: Uuid,
     project_id: Uuid,
 ) -> Result<(), ApiError> {
-    let has_write = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM project_members
-            WHERE project_id = $1 AND user_id = $2 AND role IN ('owner', 'admin', 'editor')
-        ) OR EXISTS(
-            SELECT 1 FROM projects p
-            JOIN organization_members om ON om.organization_id = p.organization_id
-            WHERE p.id = $1 AND om.user_id = $2 AND om.status = 'active'
-              AND om.role IN ('owner', 'admin')
-        ) OR public.user_has_active_edit_share('project', $1, $2)
-        "#,
-    )
-    .bind(project_id)
-    .bind(user_id)
-    .fetch_one(executor)
-    .await?;
-
-    if !has_write {
-        return Err(ApiError::Forbidden(
-            "No write access to this project".into(),
-        ));
-    }
-    Ok(())
+    verify_project_access(executor, user_id, project_id, ProjectRole::Editor).await
 }
 
 /// Verify that `user_id` has access to a questionnaire through its project's
@@ -293,26 +263,22 @@ pub async fn verify_project_write_access<'e>(
 /// path (a guest reviewer in another org reads exactly the shared
 /// questionnaire's data and nothing else). The grant confers read/analytics
 /// only; org-management surfaces stay gated by membership.
-pub async fn verify_questionnaire_access<'e>(
+///
+/// ADR 0032: resolves through the `SECURITY DEFINER`
+/// `public.user_can_access_questionnaire` so this read gate is RLS-immune.
+/// Questionnaire scope is **read-only** under ADR 0032 — all questionnaire
+/// mutations authorize at `Scope::Project` against the parent project's tier.
+pub(crate) async fn verify_questionnaire_access<'e>(
     executor: impl PgExecutor<'e>,
     user_id: Uuid,
     questionnaire_id: Uuid,
 ) -> Result<(), ApiError> {
-    let has_access = sqlx::query_scalar::<_, bool>(
-        r#"
-        SELECT EXISTS(
-            SELECT 1 FROM questionnaire_definitions qd
-            JOIN projects p ON p.id = qd.project_id
-            JOIN organization_members om ON om.organization_id = p.organization_id
-            WHERE qd.id = $1 AND om.user_id = $2 AND om.status = 'active'
-              AND qd.deleted_at IS NULL AND p.deleted_at IS NULL
-        ) OR public.user_can_read_questionnaire_via_share($1, $2)
-        "#,
-    )
-    .bind(questionnaire_id)
-    .bind(user_id)
-    .fetch_one(executor)
-    .await?;
+    let has_access =
+        sqlx::query_scalar::<_, bool>("SELECT public.user_can_access_questionnaire($1, $2)")
+            .bind(questionnaire_id)
+            .bind(user_id)
+            .fetch_one(executor)
+            .await?;
 
     if !has_access {
         return Err(ApiError::Forbidden(

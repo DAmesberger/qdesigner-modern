@@ -9,8 +9,8 @@ use std::sync::OnceLock;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
 use crate::rbac::models::Permission;
@@ -38,14 +38,14 @@ pub async fn aggregate_sessions(
     Query(query): Query<SessionAggregateQuery>,
 ) -> Result<Json<SessionAggregateResponse>, ApiError> {
     let mut tx = tx.tx().await?;
-    access::verify_questionnaire_access(&mut **tx, user.user_id, query.questionnaire_id).await?;
-    // Granular gate (E-RBAC-3): unchanged for system roles, denies custom
-    // roles lacking session:read.
-    let org_id = access::get_questionnaire_org_id(&mut **tx, query.questionnaire_id).await?;
-    state
-        .rbac
-        .require_permission(&mut **tx, user.user_id, org_id, Permission::SessionRead)
-        .await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Questionnaire(query.questionnaire_id),
+        Permission::SessionRead,
+    )
+    .await?;
     let source = parse_aggregate_source(query.source.as_deref())?;
     let key = query.key.trim();
 
@@ -102,13 +102,14 @@ pub async fn compare_sessions(
     Query(query): Query<SessionCompareQuery>,
 ) -> Result<Json<SessionCompareResponse>, ApiError> {
     let mut tx = tx.tx().await?;
-    access::verify_questionnaire_access(&mut **tx, user.user_id, query.questionnaire_id).await?;
-    // Granular gate (E-RBAC-3): see aggregate_sessions.
-    let org_id = access::get_questionnaire_org_id(&mut **tx, query.questionnaire_id).await?;
-    state
-        .rbac
-        .require_permission(&mut **tx, user.user_id, org_id, Permission::SessionRead)
-        .await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Questionnaire(query.questionnaire_id),
+        Permission::SessionRead,
+    )
+    .await?;
     let source = parse_aggregate_source(query.source.as_deref())?;
     let key = query.key.trim();
     let left_participant_id = query.left_participant_id.trim();
@@ -1072,12 +1073,20 @@ pub async fn public_server_variables(
     tags = ["analytics"]
 )]
 pub async fn timeseries(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Query(query): Query<TimeSeriesQuery>,
 ) -> Result<Json<Vec<TimeSeriesBucket>>, ApiError> {
     let mut tx = tx.tx().await?;
-    access::verify_questionnaire_access(&mut **tx, user.user_id, query.questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Questionnaire(query.questionnaire_id),
+        Permission::SessionRead,
+    )
+    .await?;
 
     let interval = match query.interval.as_deref().unwrap_or("day") {
         "hour" => "hour",

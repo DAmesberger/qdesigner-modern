@@ -12,8 +12,10 @@ use validator::Validate;
 
 use crate::audit::{self, resource, AuditAction, AuditEvent, ClientIp};
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
+use crate::rbac::models::Permission;
 use crate::state::AppState;
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -579,19 +581,14 @@ pub async fn update_organization(
         validate_org_settings(settings)?;
     }
 
-    // Require at least admin role
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            &crate::rbac::models::OrgRole::Admin,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden("Requires admin role".into()));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::OrgWrite,
+    )
+    .await?;
 
     let mut sets: Vec<String> = Vec::new();
     let mut idx = 2u32;
@@ -698,20 +695,14 @@ pub async fn delete_organization(
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = tx.tx().await?;
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            &crate::rbac::models::OrgRole::Owner,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden(
-            "Only owner can delete organization".into(),
-        ));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::OrgDelete,
+    )
+    .await?;
 
     sqlx::query("UPDATE organizations SET deleted_at = NOW() WHERE id = $1")
         .bind(org_id)
@@ -952,18 +943,14 @@ pub async fn add_member(
         ));
     }
 
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            &crate::rbac::models::OrgRole::Admin,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden("Requires admin role".into()));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::OrgManageMembers,
+    )
+    .await?;
 
     let target_user = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL",
@@ -1050,18 +1037,14 @@ pub async fn remove_member(
     Path((org_id, target_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = tx.tx().await?;
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            &crate::rbac::models::OrgRole::Admin,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden("Requires admin role".into()));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::OrgManageMembers,
+    )
+    .await?;
 
     // Capture the target's current role (for both the last-owner guard and
     // the audit trail).
@@ -1151,18 +1134,14 @@ pub async fn change_member_role(
     }
 
     // Caller must be at least an admin of this org.
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            &crate::rbac::models::OrgRole::Admin,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden("Requires admin role".into()));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::OrgManageMembers,
+    )
+    .await?;
 
     // Look up the target member's current role (must be an active member).
     let current_role = sqlx::query_scalar::<_, String>(
@@ -1487,18 +1466,14 @@ pub async fn list_invitations(
     Path(org_id): Path<Uuid>,
 ) -> Result<Json<Vec<Invitation>>, ApiError> {
     let mut tx = tx.tx().await?;
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            &crate::rbac::models::OrgRole::Admin,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden("Requires admin role".into()));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::OrgManageMembers,
+    )
+    .await?;
 
     let invitations = sqlx::query_as::<_, Invitation>(
         r#"
@@ -1553,18 +1528,14 @@ pub async fn create_invitation(
         ));
     }
 
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            &crate::rbac::models::OrgRole::Admin,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden("Requires admin role".into()));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::OrgManageMembers,
+    )
+    .await?;
 
     // Seat model (E-RBAC-4): a pending invitation reserves a prospective seat.
     enforce_seat_limit(&mut tx, org_id).await?;
@@ -1980,18 +1951,14 @@ pub async fn revoke_invitation(
     Path((org_id, invitation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = tx.tx().await?;
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            &crate::rbac::models::OrgRole::Admin,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden("Requires admin role".into()));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::OrgManageMembers,
+    )
+    .await?;
 
     let revoked_email = sqlx::query_scalar::<_, String>(
         r#"

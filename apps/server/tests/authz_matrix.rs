@@ -18,10 +18,11 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use qdesigner_server::api::access;
 use qdesigner_server::authz::{self, Scope};
 use qdesigner_server::error::ApiError;
 use qdesigner_server::rbac::manager::RbacManager;
-use qdesigner_server::rbac::models::Permission;
+use qdesigner_server::rbac::models::{Permission, ProjectRole};
 
 mod common;
 use common::fixture_pool;
@@ -93,6 +94,43 @@ async fn create_project(pool: &PgPool, org: Uuid) -> Uuid {
     .fetch_one(pool)
     .await
     .expect("project")
+}
+
+/// Add `user` to `project` at `role` (a `project_members` row).
+async fn add_project_member(pool: &PgPool, project: Uuid, user: Uuid, role: &str) {
+    sqlx::query("INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, $3)")
+        .bind(project)
+        .bind(user)
+        .bind(role)
+        .execute(pool)
+        .await
+        .expect("project member");
+}
+
+/// Seed an active `viewer` questionnaire share for `grantee` on `questionnaire`
+/// within `org` — the cross-org guest analytics-access grant (E-RBAC-10).
+async fn add_questionnaire_share(
+    pool: &PgPool,
+    org: Uuid,
+    questionnaire: Uuid,
+    grantee: Uuid,
+    grantee_email: &str,
+) {
+    sqlx::query(
+        r#"
+        INSERT INTO resource_shares
+            (resource_type, resource_id, organization_id, grantee_user_id,
+             grantee_email, role, expires_at)
+        VALUES ('questionnaire', $1, $2, $3, $4, 'viewer', NULL)
+        "#,
+    )
+    .bind(questionnaire)
+    .bind(org)
+    .bind(grantee)
+    .bind(grantee_email)
+    .execute(pool)
+    .await
+    .expect("questionnaire share");
 }
 
 async fn create_questionnaire(pool: &PgPool, project: Uuid, author: Uuid) -> Uuid {
@@ -181,9 +219,15 @@ async fn org_scope_read_admits_every_member() {
     // OrgRead → coarse min tier Viewer: all four system members pass.
     for user in [t.owner, t.admin, t.member, t.viewer] {
         assert!(
-            check(&pool, &rbac, user, Scope::Organization(t.org), Permission::OrgRead)
-                .await
-                .is_ok(),
+            check(
+                &pool,
+                &rbac,
+                user,
+                Scope::Organization(t.org),
+                Permission::OrgRead
+            )
+            .await
+            .is_ok(),
             "every active member should read the org"
         );
     }
@@ -200,16 +244,29 @@ async fn org_scope_write_requires_admin_tier() {
     // OrgWrite → coarse min tier Admin: owner/admin allow, member/viewer deny.
     for user in [t.owner, t.admin] {
         assert!(
-            check(&pool, &rbac, user, Scope::Organization(t.org), Permission::OrgWrite)
-                .await
-                .is_ok(),
+            check(
+                &pool,
+                &rbac,
+                user,
+                Scope::Organization(t.org),
+                Permission::OrgWrite
+            )
+            .await
+            .is_ok(),
             "owner/admin write the org"
         );
     }
     for user in [t.member, t.viewer] {
         assert!(
             is_forbidden(
-                &check(&pool, &rbac, user, Scope::Organization(t.org), Permission::OrgWrite).await
+                &check(
+                    &pool,
+                    &rbac,
+                    user,
+                    Scope::Organization(t.org),
+                    Permission::OrgWrite
+                )
+                .await
             ),
             "plain member/viewer must not write the org"
         );
@@ -225,13 +282,26 @@ async fn org_scope_delete_requires_owner_tier() {
     let t = build_tenant(&pool).await;
 
     // OrgDelete → coarse min tier Owner.
-    assert!(check(&pool, &rbac, t.owner, Scope::Organization(t.org), Permission::OrgDelete)
-        .await
-        .is_ok());
+    assert!(check(
+        &pool,
+        &rbac,
+        t.owner,
+        Scope::Organization(t.org),
+        Permission::OrgDelete
+    )
+    .await
+    .is_ok());
     for user in [t.admin, t.member, t.viewer] {
         assert!(
             is_forbidden(
-                &check(&pool, &rbac, user, Scope::Organization(t.org), Permission::OrgDelete).await
+                &check(
+                    &pool,
+                    &rbac,
+                    user,
+                    Scope::Organization(t.org),
+                    Permission::OrgDelete
+                )
+                .await
             ),
             "only the owner tier may delete the org"
         );
@@ -252,9 +322,15 @@ async fn project_scope_read_admits_org_members_under_default_visibility() {
     // admits every active org member.
     for user in [t.owner, t.admin, t.member, t.viewer] {
         assert!(
-            check(&pool, &rbac, user, Scope::Project(t.project), Permission::ProjectRead)
-                .await
-                .is_ok(),
+            check(
+                &pool,
+                &rbac,
+                user,
+                Scope::Project(t.project),
+                Permission::ProjectRead
+            )
+            .await
+            .is_ok(),
             "org-wide visibility admits every member to project read"
         );
     }
@@ -345,10 +421,24 @@ async fn non_member_denied_at_every_scope() {
 
     // The outsider belongs only to another org.
     assert!(is_forbidden(
-        &check(&pool, &rbac, t.outsider, Scope::Organization(t.org), Permission::OrgRead).await
+        &check(
+            &pool,
+            &rbac,
+            t.outsider,
+            Scope::Organization(t.org),
+            Permission::OrgRead
+        )
+        .await
     ));
     assert!(is_forbidden(
-        &check(&pool, &rbac, t.outsider, Scope::Project(t.project), Permission::ProjectRead).await
+        &check(
+            &pool,
+            &rbac,
+            t.outsider,
+            Scope::Project(t.project),
+            Permission::ProjectRead
+        )
+        .await
     ));
     assert!(is_forbidden(
         &check(
@@ -489,5 +579,192 @@ async fn custom_role_grant_cannot_widen_past_the_coarse_gate() {
             .await
         ),
         "custom grant of media:delete does not clear the Admin-tier coarse gate at org scope"
+    );
+}
+
+// ── ADR 0032: tiered project gate ─────────────────────────────────────
+
+/// A project `editor` (project_members row, no org role) is admitted at the
+/// Viewer and Editor tiers of the new tiered gate but DENIED at Admin. Locks
+/// the ADR 0032 guardrail (a): the tier is load-bearing, and raising a
+/// permission to Admin genuinely narrows who passes.
+#[tokio::test]
+async fn tiered_gate_project_editor_denied_admin_allowed_editor_and_viewer() {
+    let Some(pool) = fixture_pool().await else {
+        return;
+    };
+    let t = build_tenant(&pool).await;
+
+    // A project `editor`. A schema trigger requires a project member to also
+    // be an active org member, so seed the lowest org role (`viewer`) — the
+    // Admin/Owner tiers have NO org branch, so this org role never admits them;
+    // the project role is what's under test.
+    let editor = create_user(&pool).await;
+    add_member(&pool, t.org, editor, "viewer", None).await;
+    add_project_member(&pool, t.project, editor, "editor").await;
+
+    let mut conn = pool.acquire().await.expect("acquire");
+
+    // Viewer tier (== old read gate): allowed (they are an explicit project member).
+    assert!(
+        access::verify_project_access(&mut *conn, editor, t.project, ProjectRole::Viewer)
+            .await
+            .is_ok(),
+        "a project editor may read the project (Viewer tier)"
+    );
+    // Editor tier (== old write gate): allowed (project role editor).
+    assert!(
+        access::verify_project_access(&mut *conn, editor, t.project, ProjectRole::Editor)
+            .await
+            .is_ok(),
+        "a project editor passes the Editor tier"
+    );
+    // Admin tier: DENIED (editor < admin; no share/visibility branch admits).
+    assert!(
+        matches!(
+            access::verify_project_access(&mut *conn, editor, t.project, ProjectRole::Admin).await,
+            Err(ApiError::Forbidden(_))
+        ),
+        "a project editor is denied the Admin tier"
+    );
+    // Owner tier: DENIED as well.
+    assert!(
+        matches!(
+            access::verify_project_access(&mut *conn, editor, t.project, ProjectRole::Owner).await,
+            Err(ApiError::Forbidden(_))
+        ),
+        "a project editor is denied the Owner tier"
+    );
+}
+
+/// ADR 0032 ledger L5: the Admin and Owner tiers of the tiered gate gain the
+/// org owner/admin override (Viewer/Editor already had it), so folding the six
+/// inline `has_project_role(Admin/Owner) OR has_org_role(Admin)` sites into
+/// `authorize` is behavior-preserving. An **org admin who is NOT a project
+/// member** must be ADMITTED at both the Admin and Owner tiers via that
+/// override, while a **project Editor** (org viewer) stays DENIED at both — the
+/// override keys on org role, not project role.
+#[tokio::test]
+async fn tiered_gate_org_admin_override_admits_admin_and_owner_tiers() {
+    let Some(pool) = fixture_pool().await else {
+        return;
+    };
+    let t = build_tenant(&pool).await;
+
+    // t.admin is an active org `admin` with NO project_members row on t.project.
+    let mut conn = pool.acquire().await.expect("acquire");
+
+    // L5 override: org admin passes the Admin tier despite no project membership.
+    assert!(
+        access::verify_project_access(&mut *conn, t.admin, t.project, ProjectRole::Admin)
+            .await
+            .is_ok(),
+        "an org admin (no project row) must pass the Admin tier via the L5 org override"
+    );
+    // L5 override: org admin also passes the Owner tier (owner arm admits org
+    // owner/admin) — this is what makes delete/transfer folds byte-identical.
+    assert!(
+        access::verify_project_access(&mut *conn, t.admin, t.project, ProjectRole::Owner)
+            .await
+            .is_ok(),
+        "an org admin (no project row) must pass the Owner tier via the L5 org override"
+    );
+
+    // A project Editor (org viewer, project editor) is DENIED both tiers — the
+    // override is org-role-scoped, so a mere project role never clears Admin/Owner.
+    let editor = create_user(&pool).await;
+    add_member(&pool, t.org, editor, "viewer", None).await;
+    add_project_member(&pool, t.project, editor, "editor").await;
+
+    assert!(
+        matches!(
+            access::verify_project_access(&mut *conn, editor, t.project, ProjectRole::Admin).await,
+            Err(ApiError::Forbidden(_))
+        ),
+        "a project editor is still denied the Admin tier (no org override applies)"
+    );
+    assert!(
+        matches!(
+            access::verify_project_access(&mut *conn, editor, t.project, ProjectRole::Owner).await,
+            Err(ApiError::Forbidden(_))
+        ),
+        "a project editor is still denied the Owner tier (no org override applies)"
+    );
+}
+
+/// ADR 0032 guardrail (b): questionnaire scope is READ-ONLY. Routing a WRITE
+/// permission through `Scope::Questionnaire` trips the read-only invariant
+/// (a `debug_assert` in `authorize`) rather than silently under-gating to
+/// membership. Verified via a spawned task so the panic surfaces as a
+/// `JoinError`; only meaningful under `debug_assertions` (cargo test default).
+#[tokio::test]
+async fn questionnaire_scope_write_permission_trips_read_only_invariant() {
+    let Some(pool) = fixture_pool().await else {
+        return;
+    };
+    let rbac = RbacManager::new();
+    let t = build_tenant(&pool).await;
+
+    // t.owner can access the questionnaire; the invariant fires BEFORE the
+    // gate query, so the verdict of the underlying gate is irrelevant.
+    let questionnaire = t.questionnaire;
+    let owner = t.owner;
+    let joined = tokio::spawn(async move {
+        let mut conn = pool.acquire().await.expect("acquire");
+        // QuestionnaireWrite is a non-read permission — illegal at questionnaire scope.
+        authz::authorize(
+            &mut conn,
+            &rbac,
+            owner,
+            Scope::Questionnaire(questionnaire),
+            Permission::QuestionnaireWrite,
+        )
+        .await
+    })
+    .await;
+
+    if cfg!(debug_assertions) {
+        assert!(
+            joined.is_err(),
+            "a write permission at questionnaire scope must trip the read-only debug-assert"
+        );
+    }
+}
+
+/// ADR 0032 guardrail (c) — the R1 regression, locked. A cross-org guest who
+/// holds only a questionnaire SHARE (no org/project membership) is ADMITTED
+/// through the full `authorize(Scope::Questionnaire, SessionRead)` path: the
+/// share-aware coarse gate admits, the `SECURITY DEFINER` org resolver resolves
+/// the org (this is exactly where the sweep previously 404'd), and the
+/// custom-role tightening passes a guest through on the live share.
+#[tokio::test]
+async fn cross_org_questionnaire_share_guest_admitted_through_authorize() {
+    let Some(pool) = fixture_pool().await else {
+        return;
+    };
+    let rbac = RbacManager::new();
+    let t = build_tenant(&pool).await;
+
+    // A guest whose only tie to t.org is a questionnaire share. They belong to
+    // their own separate org (never a member of t.org), mirroring a reviewer in
+    // another tenant.
+    let guest = create_user(&pool).await;
+    let guest_email = format!("guest-{}@test.local", Uuid::new_v4());
+    let _guest_org = create_org(&pool, guest).await;
+    add_questionnaire_share(&pool, t.org, t.questionnaire, guest, &guest_email).await;
+
+    // Full authorize path admits the guest for a read.
+    assert!(
+        check(
+            &pool,
+            &rbac,
+            guest,
+            Scope::Questionnaire(t.questionnaire),
+            Permission::SessionRead
+        )
+        .await
+        .is_ok(),
+        "a cross-org questionnaire-share guest must be admitted through authorize() \
+         (R1 regression lock): coarse gate + definer org resolver + guest-share tightening"
     );
 }

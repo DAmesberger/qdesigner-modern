@@ -43,6 +43,7 @@ use crate::api::sessions::{
 use crate::audit::{self, resource, AuditAction, AuditEvent, ClientIp};
 use crate::auth::models::AuthenticatedUser;
 use crate::auth::password::hash_password;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::api_key::ApiKey;
 use crate::middleware::tx::Tx;
@@ -356,6 +357,7 @@ pub struct MachineAggregateQuery {
 /// GET /api/v1/questionnaires/:qid/aggregate — machine analytics read.
 /// Requires the `session:read` scope.
 pub async fn machine_aggregate(
+    State(state): State<AppState>,
     api_key: ApiKey,
     tx: Tx,
     Path(qid): Path<Uuid>,
@@ -367,7 +369,16 @@ pub async fn machine_aggregate(
     let mut tx = tx.tx().await?;
     let org_id = access::get_questionnaire_org_id(&mut **tx, qid).await?;
     assert_org(&ctx, org_id)?;
-    access::verify_questionnaire_access(&mut **tx, ctx.created_by, qid).await?;
+    // Gate on the key creator's read access to the questionnaire (ADR 0030
+    // single entry point; questionnaire scope is read-only under ADR 0032).
+    authorize(
+        &mut tx,
+        &state.rbac,
+        ctx.created_by,
+        Scope::Questionnaire(qid),
+        Permission::SessionRead,
+    )
+    .await?;
 
     let key = q.key.trim();
     if key.is_empty() {
@@ -399,6 +410,7 @@ pub async fn machine_aggregate(
 /// GET /api/v1/questionnaires/:qid/export — machine CSV export of raw responses.
 /// Requires the `response:read` scope.
 pub async fn machine_export(
+    State(state): State<AppState>,
     api_key: ApiKey,
     tx: Tx,
     Path(qid): Path<Uuid>,
@@ -417,7 +429,16 @@ pub async fn machine_export(
     .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))?;
-    access::verify_project_read_access(&mut **tx, ctx.created_by, project_id).await?;
+    // Gate on the key creator's project read access (ADR 0030 single entry
+    // point; ProjectRead → Viewer tier == the former verify_project_read_access).
+    authorize(
+        &mut tx,
+        &state.rbac,
+        ctx.created_by,
+        Scope::Project(project_id),
+        Permission::ProjectRead,
+    )
+    .await?;
 
     #[derive(sqlx::FromRow)]
     struct ExportRow {

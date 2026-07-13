@@ -82,6 +82,7 @@ pub enum Permission {
     ProjectWrite,
     ProjectManageMembers,
     ProjectDelete,
+    ProjectTransferOwnership,
 
     // Questionnaire
     QuestionnaireRead,
@@ -112,6 +113,7 @@ impl Permission {
             Permission::ProjectWrite => "project:write",
             Permission::ProjectManageMembers => "project:manage_members",
             Permission::ProjectDelete => "project:delete",
+            Permission::ProjectTransferOwnership => "project:transfer_ownership",
             Permission::QuestionnaireRead => "questionnaire:read",
             Permission::QuestionnaireWrite => "questionnaire:write",
             Permission::QuestionnairePublish => "questionnaire:publish",
@@ -141,6 +143,7 @@ impl Permission {
             "project:write" => Some(Permission::ProjectWrite),
             "project:manage_members" => Some(Permission::ProjectManageMembers),
             "project:delete" => Some(Permission::ProjectDelete),
+            "project:transfer_ownership" => Some(Permission::ProjectTransferOwnership),
             "questionnaire:read" => Some(Permission::QuestionnaireRead),
             "questionnaire:write" => Some(Permission::QuestionnaireWrite),
             "questionnaire:publish" => Some(Permission::QuestionnairePublish),
@@ -158,7 +161,7 @@ impl Permission {
 
     /// Every permission, in declaration order. Powers the frontend
     /// permission-matrix editor and the migration's system-role seed.
-    pub const ALL: [Permission; 19] = [
+    pub const ALL: [Permission; 20] = [
         Permission::OrgRead,
         Permission::OrgWrite,
         Permission::OrgManageMembers,
@@ -167,6 +170,7 @@ impl Permission {
         Permission::ProjectWrite,
         Permission::ProjectManageMembers,
         Permission::ProjectDelete,
+        Permission::ProjectTransferOwnership,
         Permission::QuestionnaireRead,
         Permission::QuestionnaireWrite,
         Permission::QuestionnairePublish,
@@ -205,6 +209,7 @@ impl OrgRole {
                 ProjectWrite,
                 ProjectManageMembers,
                 ProjectDelete,
+                ProjectTransferOwnership,
                 QuestionnaireRead,
                 QuestionnaireWrite,
                 QuestionnairePublish,

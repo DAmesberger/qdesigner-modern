@@ -11,8 +11,10 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
+use crate::rbac::models::Permission;
 use crate::state::AppState;
 use crate::storage::s3::S3StorageService;
 
@@ -218,21 +220,14 @@ pub async fn list_media(
 ) -> Result<Json<Vec<MediaAsset>>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    // Verify org membership
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            q.organization_id,
-            &crate::rbac::models::OrgRole::Viewer,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden(
-            "Not a member of this organization".into(),
-        ));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(q.organization_id),
+        Permission::MediaRead,
+    )
+    .await?;
 
     let limit = q.limit.unwrap_or(50).min(100);
     let offset = q.offset.unwrap_or(0);
@@ -326,19 +321,14 @@ pub async fn upload_media(
 
     let mut tx = tx.tx().await?;
 
-    // Verify write access
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            org_id,
-            &crate::rbac::models::OrgRole::Member,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden("No write access".into()));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(org_id),
+        Permission::MediaWrite,
+    )
+    .await?;
 
     let size_bytes = bytes.len() as i64;
     // Sniff intrinsic dimensions from the image header before the bytes are
@@ -427,19 +417,14 @@ pub async fn get_media(
     .await?
     .ok_or_else(|| ApiError::NotFound("Media asset not found".into()))?;
 
-    // Verify org access
-    if !state
-        .rbac
-        .has_org_role(
-            &mut **tx,
-            user.user_id,
-            asset.organization_id,
-            &crate::rbac::models::OrgRole::Viewer,
-        )
-        .await?
-    {
-        return Err(ApiError::Forbidden("No access to this asset".into()));
-    }
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Organization(asset.organization_id),
+        Permission::MediaRead,
+    )
+    .await?;
 
     let url = state
         .storage
@@ -864,7 +849,8 @@ mod validate_upload_tests {
 
     #[test]
     fn accepts_pdf() {
-        let (mime, ext) = validate_upload(&pdf_bytes(), "application/pdf").expect("pdf should pass");
+        let (mime, ext) =
+            validate_upload(&pdf_bytes(), "application/pdf").expect("pdf should pass");
         assert_eq!(mime, "application/pdf");
         assert_eq!(ext, "pdf");
     }
@@ -878,7 +864,8 @@ mod validate_upload_tests {
 
     #[test]
     fn accepts_zip() {
-        let (mime, ext) = validate_upload(&zip_bytes(), "application/zip").expect("zip should pass");
+        let (mime, ext) =
+            validate_upload(&zip_bytes(), "application/zip").expect("zip should pass");
         assert_eq!(mime, "application/zip");
         assert_eq!(ext, "zip");
     }
@@ -929,8 +916,8 @@ mod validate_upload_tests {
         // ELF magic → MatcherType::App, never allowlisted.
         let mut elf = vec![0x7F, b'E', b'L', b'F', 0x02, 0x01, 0x01, 0x00];
         elf.extend_from_slice(&[0u8; 32]);
-        let err = validate_upload(&elf, "application/octet-stream")
-            .expect_err("ELF must be rejected");
+        let err =
+            validate_upload(&elf, "application/octet-stream").expect_err("ELF must be rejected");
         assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
     }
 
@@ -948,8 +935,11 @@ mod validate_upload_tests {
     fn rejects_untyped_binary_without_carve_out() {
         // Sniff-miss with a non-text declared type is not the carve-out and
         // stays rejected.
-        let err = validate_upload(b"\x00\x01\x02 arbitrary binary blob \x00", "application/octet-stream")
-            .expect_err("unrecognized binary must be rejected");
+        let err = validate_upload(
+            b"\x00\x01\x02 arbitrary binary blob \x00",
+            "application/octet-stream",
+        )
+        .expect_err("unrecognized binary must be rejected");
         assert!(matches!(err, ApiError::BadRequest(_)), "got {err:?}");
     }
 
@@ -987,12 +977,18 @@ mod validate_upload_tests {
     #[test]
     fn returns_none_for_non_image_mime() {
         // Even with parseable image bytes, an audio mime carries no dimensions.
-        assert_eq!(extract_image_dimensions("audio/mpeg", &png_with_dims(4, 2)), None);
+        assert_eq!(
+            extract_image_dimensions("audio/mpeg", &png_with_dims(4, 2)),
+            None
+        );
     }
 
     #[test]
     fn returns_none_for_unparseable_image_bytes() {
         // image/* mime but no valid raster header (e.g. svg / garbage).
-        assert_eq!(extract_image_dimensions("image/png", b"not a real png"), None);
+        assert_eq!(
+            extract_image_dimensions("image/png", b"not a real png"),
+            None
+        );
     }
 }

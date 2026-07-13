@@ -34,10 +34,11 @@ use validator::Validate;
 use crate::api::access;
 use crate::audit::{self, resource, AuditAction, AuditEvent, ClientIp};
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
 use crate::rbac::manager::RbacManager;
-use crate::rbac::models::{OrgRole, ProjectRole};
+use crate::rbac::models::Permission;
 use crate::state::AppState;
 
 // ── Models ───────────────────────────────────────────────────────────
@@ -108,28 +109,31 @@ const SHARE_SELECT_COLUMNS: &str = r#"
 
 /// Managing shares requires project admin/owner **or** org admin/owner —
 /// identical to the `add_project_member` gate. Runs on the caller's tx.
+///
+/// ADR 0030/0032: routes through the single [`authorize`] entry point at
+/// [`Scope::Project`] with [`Permission::ProjectManageMembers`], whose tier is
+/// `Admin`. The `00052` definer gate's `'admin'` arm is `project_members
+/// (owner,admin) OR org_members(owner,admin)` — byte-identical to the former
+/// inline `has_project_role(Admin) OR has_org_role(Admin)` pair. The fold adds
+/// the org-scoped custom-role tightening (ADR 0030's intended deliverable). The
+/// `org_id` argument is retained so the call sites (which resolve it for the
+/// share insert / audit event) stay unchanged; `authorize` re-derives the org
+/// from `project_id` internally.
 async fn authorize_manage_shares(
     rbac: &RbacManager,
     conn: &mut PgConnection,
     user_id: Uuid,
     project_id: Uuid,
-    org_id: Uuid,
+    _org_id: Uuid,
 ) -> Result<(), ApiError> {
-    if rbac
-        .has_project_role(&mut *conn, user_id, project_id, &ProjectRole::Admin)
-        .await?
-    {
-        return Ok(());
-    }
-    if rbac
-        .has_org_role(&mut *conn, user_id, org_id, &OrgRole::Admin)
-        .await?
-    {
-        return Ok(());
-    }
-    Err(ApiError::Forbidden(
-        "Requires project admin or org admin to manage shares".into(),
-    ))
+    authorize(
+        conn,
+        rbac,
+        user_id,
+        Scope::Project(project_id),
+        Permission::ProjectManageMembers,
+    )
+    .await
 }
 
 /// Validate the requested role string (shares are viewer/editor only).

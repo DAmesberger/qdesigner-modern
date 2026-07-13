@@ -163,10 +163,11 @@ async fn system_roles_are_immutable_through_the_api() {
     let system_id = system_role["id"].as_str().expect("system role id");
 
     // Available-permissions catalogue is returned for the matrix editor.
+    // ADR 0032 added `project:transfer_ownership` (Permission::ALL 19 → 20).
     assert_eq!(
         listing["available_permissions"].as_array().map(|a| a.len()),
-        Some(19),
-        "all 19 permissions surfaced for the matrix editor"
+        Some(20),
+        "all 20 permissions surfaced for the matrix editor"
     );
 
     // PATCH a system role → 403 (immutable).
