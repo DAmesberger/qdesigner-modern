@@ -29,5 +29,18 @@ pub struct AppState {
     /// (`apikey:{id}`). Kept separate from `rate_limiter` so machine
     /// integrations get a higher budget without loosening the auth cap (F-30).
     pub api_key_rate_limiter: RateLimiter,
+    /// Per-IP budget on anonymous session creation (`POST /api/sessions`).
+    /// Deliberately generous (default 60/60s) — the auth-tuned `rate_limiter`
+    /// would lock out a whole classroom starting a study behind one NAT.
+    pub session_create_limiter: RateLimiter,
+    /// Per-QUESTIONNAIRE budget on session creation (`qcreate:{qid}`, default
+    /// 600/60s). Keyed on the study, not the caller, so a distributed flood
+    /// cannot spray one questionnaire's `arm_counts` / participant numbering by
+    /// rotating source IPs. Enforced inside `create_session` (the questionnaire
+    /// id lives in the request body, not the URL).
+    pub questionnaire_create_limiter: RateLimiter,
+    /// Per-IP budget on the anonymous session-media upload route (default
+    /// 120/60s). Complements the per-session file-count / total-bytes quota.
+    pub session_media_limiter: RateLimiter,
     pub config: Arc<Config>,
 }

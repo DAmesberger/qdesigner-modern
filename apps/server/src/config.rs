@@ -98,6 +98,64 @@ pub struct Config {
     // COOKIE_SECURE=false only for non-localhost plain-http dev where the
     // browser would otherwise drop the cookie.
     pub cookie_secure: bool,
+
+    /// Number of TRUSTED reverse proxies sitting between the internet and this
+    /// server (`TRUSTED_PROXY_HOPS`). Governs how the rate limiter derives a
+    /// client IP.
+    ///
+    /// - **Unset / 0 (default)** — the socket peer IP (`ConnectInfo`) is the
+    ///   bucket key and `X-Forwarded-For` is **ignored entirely**. A
+    ///   directly-exposed deployment therefore cannot be spoofed out of its
+    ///   bucket by a forged header.
+    /// - **`N` ≥ 1** — the client IP is taken from the `X-Forwarded-For` chain
+    ///   **counting from the right** (the trusted end): the `N`-th entry from
+    ///   the right, i.e. `chain[len - N]`. Each trusted proxy appends the peer
+    ///   it received the request from, so the rightmost `N` entries were
+    ///   written by our own infrastructure and the entry just left of them is
+    ///   the address the outermost trusted proxy actually saw. Anything further
+    ///   left is client-supplied and untrustworthy — a client can freely
+    ///   PREPEND fake entries, which shifts the chain left but cannot move the
+    ///   right-counted index. Left-counting (`chain[0]`) would hand the client
+    ///   direct control of its own bucket key.
+    ///
+    /// A chain shorter than `N` (or an unparseable entry at the counted index)
+    /// means the request did not traverse the configured proxies; the limiter
+    /// falls back to the socket peer IP rather than trusting client input.
+    pub trusted_proxy_hops: Option<usize>,
+
+    /// Per-IP budget on anonymous session creation (`POST /api/sessions`).
+    /// Default 60 req / 60 s — comfortably above a whole classroom starting a
+    /// study together behind one NAT, far below a flood.
+    /// `SESSION_CREATE_RATE_LIMIT_MAX` / `SESSION_CREATE_RATE_LIMIT_WINDOW_SECS`.
+    pub session_create_rate_max: u64,
+    pub session_create_rate_window_secs: i64,
+
+    /// Per-QUESTIONNAIRE budget on session creation (`qcreate:{qid}`). A
+    /// distributed flood spread over many IPs would slip past the per-IP budget
+    /// while still inflating that study's `arm_counts` / participant numbering,
+    /// so the study itself carries a creation-rate ceiling. Default 600 req /
+    /// 60 s — 10 starts/second on a single questionnaire, an order of magnitude
+    /// above the largest realistic simultaneous cohort.
+    /// `QUESTIONNAIRE_CREATE_RATE_LIMIT_MAX` / `..._WINDOW_SECS`.
+    pub questionnaire_create_rate_max: u64,
+    pub questionnaire_create_rate_window_secs: i64,
+
+    /// Per-IP budget on the anonymous session-media upload route
+    /// (`POST /api/sessions/{id}/media`). Default 120 req / 60 s — twice the
+    /// session-create budget because one session may answer several
+    /// file-upload questions.
+    /// `SESSION_MEDIA_RATE_LIMIT_MAX` / `SESSION_MEDIA_RATE_LIMIT_WINDOW_SECS`.
+    pub session_media_rate_max: u64,
+    pub session_media_rate_window_secs: i64,
+
+    /// Per-SESSION storage quota on anonymous session-media uploads: a file
+    /// COUNT and a total BYTES budget, both enforced server-side before the S3
+    /// write. Defaults: 20 files / 100 MiB — a questionnaire with a couple of
+    /// dozen file-answer questions still fits, while a single session can no
+    /// longer push unbounded 25 MiB blobs into object storage.
+    /// `SESSION_MEDIA_MAX_FILES` / `SESSION_MEDIA_MAX_TOTAL_BYTES`.
+    pub session_media_max_files: i64,
+    pub session_media_max_total_bytes: i64,
 }
 
 impl Config {
@@ -249,6 +307,23 @@ impl Config {
                 .ok()
                 .map(|v| !matches!(v.trim().to_ascii_lowercase().as_str(), "false" | "0" | "no"))
                 .unwrap_or(true),
+            // 0 is spelled the same as "absent": no trusted proxy → socket IP.
+            trusted_proxy_hops: env_parse::<usize>("TRUSTED_PROXY_HOPS").filter(|&n| n > 0),
+            session_create_rate_max: env_parse("SESSION_CREATE_RATE_LIMIT_MAX").unwrap_or(60),
+            session_create_rate_window_secs: env_parse("SESSION_CREATE_RATE_LIMIT_WINDOW_SECS")
+                .unwrap_or(60),
+            questionnaire_create_rate_max: env_parse("QUESTIONNAIRE_CREATE_RATE_LIMIT_MAX")
+                .unwrap_or(600),
+            questionnaire_create_rate_window_secs: env_parse(
+                "QUESTIONNAIRE_CREATE_RATE_LIMIT_WINDOW_SECS",
+            )
+            .unwrap_or(60),
+            session_media_rate_max: env_parse("SESSION_MEDIA_RATE_LIMIT_MAX").unwrap_or(120),
+            session_media_rate_window_secs: env_parse("SESSION_MEDIA_RATE_LIMIT_WINDOW_SECS")
+                .unwrap_or(60),
+            session_media_max_files: env_parse("SESSION_MEDIA_MAX_FILES").unwrap_or(20),
+            session_media_max_total_bytes: env_parse("SESSION_MEDIA_MAX_TOTAL_BYTES")
+                .unwrap_or(100 * 1024 * 1024),
         }
     }
 
@@ -279,6 +354,15 @@ fn env_required(key: &str) -> String {
 
 fn env_or(key: &str, default: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+/// Parse an env var into `T`, yielding `None` when unset, blank, or malformed
+/// (callers supply the default). Mirrors the `.ok().and_then(|v| v.parse().ok())`
+/// idiom already used for the numeric expiries.
+fn env_parse<T: std::str::FromStr>(key: &str) -> Option<T> {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.trim().parse::<T>().ok())
 }
 
 fn env_flag(key: &str, default: bool) -> bool {

@@ -643,8 +643,74 @@ pub struct SessionMediaUploadRequest {
     pub file: String,
 }
 
+/// Decide whether one more `incoming_bytes` file fits inside a session's media
+/// quota, given what it has already stored.
+///
+/// Pure so the arithmetic (off-by-one on the count, the "this file alone
+/// already busts the budget" case) is unit-testable without a database.
+/// Returns the rejection message on violation.
+fn check_session_media_quota(
+    used_files: i64,
+    used_bytes: i64,
+    incoming_bytes: i64,
+    max_files: i64,
+    max_total_bytes: i64,
+) -> Result<(), String> {
+    if used_files + 1 > max_files {
+        return Err(format!(
+            "Session upload limit reached: {used_files} of {max_files} files already stored"
+        ));
+    }
+    if used_bytes.saturating_add(incoming_bytes) > max_total_bytes {
+        return Err(format!(
+            "Session storage limit reached: {used_bytes} + {incoming_bytes} bytes exceeds the \
+             {max_total_bytes} byte per-session budget"
+        ));
+    }
+    Ok(())
+}
+
+/// Enforce the per-session media quota against the rows already in
+/// `session_media`, before anything is written to S3.
+///
+/// COUNT/SUM over the session's existing rows — no migration, no counter column
+/// to drift out of sync with reality. Runs on the caller's fillout-RLS
+/// transaction, so it observes exactly the rows this session is admitted to see
+/// (and its own uncommitted INSERTs, were there any).
+async fn enforce_session_media_quota(
+    conn: &mut sqlx::PgConnection,
+    state: &AppState,
+    session_id: Uuid,
+    incoming_bytes: i64,
+) -> Result<(), ApiError> {
+    let (used_files, used_bytes) = sqlx::query_as::<_, (i64, i64)>(
+        r#"
+        SELECT COUNT(*)::bigint, COALESCE(SUM(size_bytes), 0)::bigint
+        FROM session_media WHERE session_id = $1
+        "#,
+    )
+    .bind(session_id)
+    .fetch_one(conn)
+    .await?;
+
+    check_session_media_quota(
+        used_files,
+        used_bytes,
+        incoming_bytes,
+        state.config.session_media_max_files,
+        state.config.session_media_max_total_bytes,
+    )
+    .map_err(ApiError::BadRequest)
+}
+
 /// POST /api/sessions/:id/media — anonymous multipart upload scoped to a session.
 /// No JWT required; validates the session exists and is active.
+///
+/// Bounded on three axes, all of which must hold for the S3 write to happen:
+/// the route's per-IP rate limit (default 120/60s), [`validate_upload`]'s 25 MiB
+/// per-file cap + magic-byte allowlist, and the per-session file-count /
+/// total-bytes quota ([`enforce_session_media_quota`], default 20 files /
+/// 100 MiB).
 #[utoipa::path(
     post,
     path = "/api/sessions/{id}/media",
@@ -654,8 +720,9 @@ pub struct SessionMediaUploadRequest {
     ),
     responses(
         (status = 201, description = "Session-scoped media uploaded", body = SessionMediaWithUrl),
-        (status = 400, description = "Invalid upload request", body = crate::openapi::ErrorEnvelope),
-        (status = 404, description = "Session not found", body = crate::openapi::ErrorEnvelope)
+        (status = 400, description = "Invalid upload request, or the per-session file-count / total-bytes quota is exhausted", body = crate::openapi::ErrorEnvelope),
+        (status = 404, description = "Session not found", body = crate::openapi::ErrorEnvelope),
+        (status = 429, description = "Upload rate limit exceeded", body = crate::openapi::ErrorEnvelope)
     ),
     tags = ["media"]
 )]
@@ -721,6 +788,20 @@ pub async fn upload_session_media(
     let (canonical_mime, ext) = validate_upload(&bytes, &content_type)?;
 
     let size_bytes = bytes.len() as i64;
+
+    // Per-session storage quota (anonymous, unauthenticated path). `validate_
+    // upload` caps ONE file at 25 MiB but said nothing about how MANY: without
+    // this, a caller could push unlimited 25 MiB blobs into S3 and `session_media`
+    // under a single session id — unbounded storage and egress cost on a public
+    // route. Enforce a file COUNT and a total BYTES budget from the rows already
+    // stored for this session, BEFORE the S3 write, so a rejected upload leaves
+    // no object and no row.
+    //
+    // Derived from `session_media` itself (COUNT/SUM) — no schema change and no
+    // counter to drift. The read runs inside the same fillout-RLS tx as the
+    // INSERT below, so it sees exactly the rows this session may see.
+    enforce_session_media_quota(&mut tx, &state, session_id, size_bytes).await?;
+
     let file_id = Uuid::new_v4();
     // Drop the untrusted client filename from the S3 key entirely; it is kept
     // only in the DB `filename` column for display.
@@ -990,5 +1071,43 @@ mod validate_upload_tests {
             extract_image_dimensions("image/png", b"not a real png"),
             None
         );
+    }
+
+    // ── per-session media quota (anonymous path) ─────────────────────
+
+    #[test]
+    fn quota_admits_upload_within_both_budgets() {
+        assert!(check_session_media_quota(3, 1_000, 500, 20, 100_000).is_ok());
+    }
+
+    #[test]
+    fn quota_admits_the_exact_last_file() {
+        // 19 stored + this one == the 20-file cap: still allowed.
+        assert!(check_session_media_quota(19, 0, 1, 20, 100_000).is_ok());
+        // And the byte budget is inclusive of its own boundary.
+        assert!(check_session_media_quota(0, 99_000, 1_000, 20, 100_000).is_ok());
+    }
+
+    #[test]
+    fn quota_rejects_when_file_count_is_exhausted() {
+        // 20 already stored → the 21st is refused even though it is tiny.
+        let err = check_session_media_quota(20, 0, 1, 20, 100_000)
+            .expect_err("file-count cap must reject");
+        assert!(err.contains("files already stored"), "{err}");
+    }
+
+    #[test]
+    fn quota_rejects_when_byte_budget_is_exhausted() {
+        // Under the file cap, but this file tips the session over its bytes.
+        let err = check_session_media_quota(1, 99_500, 1_000, 20, 100_000)
+            .expect_err("byte cap must reject");
+        assert!(err.contains("per-session budget"), "{err}");
+    }
+
+    #[test]
+    fn quota_rejects_a_single_file_larger_than_the_whole_budget() {
+        let err = check_session_media_quota(0, 0, 200_000, 20, 100_000)
+            .expect_err("a first file over the total budget must reject");
+        assert!(err.contains("per-session budget"), "{err}");
     }
 }
