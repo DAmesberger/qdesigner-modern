@@ -93,12 +93,6 @@ pub enum AuditAction {
     OrgDataRegionSet,
     /// An org's legal hold was enabled or released.
     OrgLegalHoldChanged,
-    // Cross-project / external-guest sharing (E-RBAC-10).
-    /// A project or questionnaire was shared with a (possibly external) user
-    /// by email, granting a scoped, optionally time-limited role.
-    ShareCreated,
-    /// A previously-granted resource share was revoked.
-    ShareRevoked,
 }
 
 impl AuditAction {
@@ -138,8 +132,6 @@ impl AuditAction {
             AuditAction::OrgDataErased => "organization.data_erased",
             AuditAction::OrgDataRegionSet => "organization.data_region_set",
             AuditAction::OrgLegalHoldChanged => "organization.legal_hold_changed",
-            AuditAction::ShareCreated => "share.created",
-            AuditAction::ShareRevoked => "share.revoked",
         }
     }
 }

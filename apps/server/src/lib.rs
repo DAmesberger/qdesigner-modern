@@ -12,7 +12,6 @@ pub mod authz;
 pub mod config;
 pub mod db;
 pub mod error;
-pub mod housekeeping;
 pub mod middleware;
 pub mod openapi;
 pub mod rbac;

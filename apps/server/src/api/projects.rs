@@ -370,9 +370,10 @@ pub async fn update_project(
 
     let mut tx = tx.tx().await?;
 
-    // ADR 0032 (ledger L8): project write. The Editor tier adds the
-    // editor-project-share path the inline gate lacked — a deliberate
-    // loosening so an external editor-share holder may edit project settings.
+    // ADR 0032/0033 (ledger L8/S2): project write at the Editor tier. The
+    // former editor-project-share path was reverted by ADR 0033 — an external
+    // editor is now a cross-org project `Editor` member, admitted by the same
+    // tiered gate.
     authorize(
         &mut tx,
         &state.rbac,

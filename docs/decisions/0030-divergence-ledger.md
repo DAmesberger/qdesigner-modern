@@ -82,13 +82,13 @@ cross-org project membership. Several committed ADR-0030/0032 behaviors that
 existed *only* to serve the guest role are reverted there; recorded so the
 reversals are not silent:
 
-| # | Committed behavior | ADR 0033 disposition |
-|---|--------------------|----------------------|
-| S1 | Migration `00050` `projects_select_via_questionnaire_share` (fixed the `resource_shares:486` guest 404) | **Dropped** — no questionnaire-share guest exists. Cross-org project members resolve the project row via the `is_project_member` branch instead. |
-| S2 | L8 — `update_project` fold added the editor-project-share write path | **Reverted** — the edit-share branch is removed from `user_has_project_access` (00051); an external editor is now a project `Editor` member. |
-| S3 | R1 — `authz_matrix` cross-org questionnaire-share-guest test | **Rewritten** — asserts a cross-org *project member* reads analytics end to end (same isolation property, new mechanism). |
-| S4 | L14 note — `shares.rs::authorize_manage_shares` converted to `authorize(...)` | **Moot** — `shares.rs` is deleted entirely. |
-| S5 | `verify_questionnaire_access` / `verify_project_*` / `require_permission` share branches | **Removed**; replaced by project-member branches / project-member pass-through (ADR 0033 §Decision). |
+| # | Committed behavior | ADR 0033 disposition | Status |
+|---|--------------------|----------------------|--------|
+| S1 | Migration `00050` `projects_select_via_questionnaire_share` (fixed the `resource_shares:486` guest 404) | **Dropped** — no questionnaire-share guest exists. Cross-org project members resolve the project row via the `is_project_member` branch instead. | **Landed** (Unit 4a): `00050`'s policy is dropped in migration `00058`; the cross-org read path (`00054`) is the live resolver. |
+| S2 | L8 — `update_project` fold added the editor-project-share write path | **Reverted** — the edit-share branch is removed from `user_has_project_access`; an external editor is now a project `Editor` member. | **Landed** (Unit 4a): `00058` rewrites `user_has_project_access` (the live 00052 body) minus the `user_has_active_edit_share` (editor) and `user_has_active_share` (viewer) arms; org-override + project-member arms intact. |
+| S3 | R1 — `authz_matrix` cross-org questionnaire-share-guest test | **Rewritten** — asserts a cross-org *project member* reads analytics end to end (same isolation property, new mechanism). | **Landed** (Unit 4a): `authz_matrix::cross_org_project_member_admitted_through_authorize` — a cross-org `project_members` viewer is admitted through `authorize(Scope::Questionnaire, SessionRead)`; an outsider with no project row stays denied. |
+| S4 | L14 note — `shares.rs::authorize_manage_shares` converted to `authorize(...)` | **Moot** — `shares.rs` is deleted entirely. | **Landed** (Unit 4a): `api/shares.rs` deleted; `pub mod shares`, all share routes, and the `/api/shares` nest removed. |
+| S5 | `verify_questionnaire_access` / `verify_project_*` / `require_permission` share branches | **Removed**; replaced by project-member branches / project-member pass-through (ADR 0033 §Decision). | **Landed** (Unit 4a): the share SELECT branches (`00041`/`00048`/`00050`) are dropped in `00058`; `user_can_access_questionnaire` loses its `user_can_read_questionnaire_via_share` branch (keeps org-member + `is_project_member`); the `require_permission` non-member branch is a pure project-member pass-through; share SECURITY DEFINER helpers + `resource_shares` table dropped. |
 
 ## Deferred to ADR 0034 (comment/series)
 

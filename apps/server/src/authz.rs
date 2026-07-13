@@ -119,9 +119,10 @@ pub async fn authorize(
         Scope::Questionnaire(questionnaire_id) => {
             // ADR 0032: questionnaire scope is READ-ONLY. All questionnaire
             // mutations authorize at `Scope::Project` against the parent
-            // project's tier; the share-aware gate here is membership-or-share
-            // read only. A write mis-routed here would silently under-gate to
-            // membership, so trip loudly in debug builds.
+            // project's tier; the gate here is membership read only (org member
+            // OR cross-org project member, ADR 0033). A write mis-routed here
+            // would silently under-gate to membership, so trip loudly in debug
+            // builds.
             debug_assert!(
                 is_read_permission(permission),
                 "non-read permission {permission:?} routed through Scope::Questionnaire — \

@@ -138,11 +138,9 @@ impl RbacManager {
     /// *tightening* layer has nothing to enforce — it must not itself deny.
     /// `authorize()` always runs the coarse gate first, and it is that gate
     /// (`verify_project_access` / `verify_questionnaire_access`, which admit a
-    /// cross-org project member or — while shares survive this unit — a share
-    /// guest) that actually authorizes the non-member. Denying here would break
-    /// cross-org project membership end to end. This supersedes the E-RBAC-10
-    /// `has_active_share` gate: the share COARSE gates in `verify_*` are
-    /// untouched, so a share guest still authorizes exactly as before.
+    /// cross-org project member) that actually authorizes the non-member.
+    /// Denying here would break cross-org project membership end to end. This
+    /// replaced the former E-RBAC-10 `has_active_share` guest pass-through.
     pub(crate) async fn require_permission<'e>(
         &self,
         executor: impl PgExecutor<'e>,
@@ -177,12 +175,11 @@ impl RbacManager {
         match member_role {
             // Not an org member. The coarse gate in `authorize()` has already
             // authorized this caller against the resource (a cross-org project
-            // member via verify_project_access / verify_questionnaire_access, or
-            // — while shares survive — a share guest). A non-member carries no
-            // org custom role, so this custom-role *tightening* layer has
-            // nothing to enforce: pass through (ADR 0033). Denying here would
-            // deny an authorized cross-org project member at the tightening
-            // layer.
+            // member via verify_project_access / verify_questionnaire_access).
+            // A non-member carries no org custom role, so this custom-role
+            // *tightening* layer has nothing to enforce: pass through (ADR
+            // 0033). Denying here would deny an authorized cross-org project
+            // member at the tightening layer.
             None => Ok(()),
             // Member on a system role: governed by the coarse checks — pass through.
             Some(_) if custom_perms.is_none() => Ok(()),

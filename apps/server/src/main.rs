@@ -240,11 +240,6 @@ async fn main() {
     // app pool can still see the cross-tenant due set.
     qdesigner_server::series::spawn_scheduler(state.clone());
 
-    // ── Expired-resource-share purger (F-31) ─────────────────────────
-    // Hourly cleanup of lapsed `resource_shares` rows (already inert on reads,
-    // but they accrete without this). Fire-and-forget, like the scheduler above.
-    qdesigner_server::housekeeping::spawn_share_purge(state.clone());
-
     // ── Router ───────────────────────────────────────────────────────
     let app = api::router(state.clone())
         .layer(axum::middleware::from_fn_with_state(

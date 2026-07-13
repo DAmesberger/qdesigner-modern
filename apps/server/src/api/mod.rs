@@ -29,7 +29,6 @@ pub mod roles;
 pub mod scim;
 pub mod series;
 pub mod sessions;
-pub mod shares;
 pub mod sso;
 pub mod templates;
 pub mod users;
@@ -226,15 +225,6 @@ pub fn router(state: AppState) -> Router {
             "/{id}/transfer-ownership",
             post(projects::transfer_project_ownership),
         )
-        // Cross-project / external-guest sharing (E-RBAC-10).
-        .route(
-            "/{id}/shares",
-            get(shares::list_project_shares).post(shares::create_project_share),
-        )
-        .route(
-            "/{id}/shares/{share_id}",
-            delete(shares::revoke_project_share),
-        )
         // Project invitations (ADR 0033, Unit 3) — invite an email to
         // collaborate on THIS project; accept lands a (possibly cross-org)
         // project_members row. Token-keyed accept/get/decline live on the
@@ -248,14 +238,6 @@ pub fn router(state: AppState) -> Router {
             "/{id}/invitations/{inv_id}",
             delete(project_invitations::revoke_project_invitation),
         )
-        .layer(CatchPanicLayer::new())
-        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
-
-    // Cross-project / external-guest sharing — the "Shared with me" listing
-    // (E-RBAC-10). Resource-scoped share management lives on the project /
-    // questionnaire nests; this is the per-user inbound view.
-    let shares_routes = Router::new()
-        .route("/shared-with-me", get(shares::list_shared_with_me))
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
@@ -313,16 +295,6 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/comments/{cid}",
             patch(comments::update_comment).delete(comments::delete_comment),
-        )
-        // Cross-project / external-guest sharing (E-RBAC-10) — share a single
-        // questionnaire's analytics with a collaborator/reviewer.
-        .route(
-            "/{id}/shares",
-            get(shares::list_questionnaire_shares).post(shares::create_questionnaire_share),
-        )
-        .route(
-            "/{id}/shares/{share_id}",
-            delete(shares::revoke_questionnaire_share),
         )
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
@@ -510,7 +482,6 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/users", user_routes)
         .nest("/api/organizations", org_routes)
         .nest("/api/projects", project_routes)
-        .nest("/api/shares", shares_routes)
         .nest("/api/invitations", invitation_routes)
         .nest("/api/project-invitations", project_invitation_routes)
         .nest("/api/questionnaires", questionnaire_routes)

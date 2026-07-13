@@ -107,32 +107,6 @@ async fn add_project_member(pool: &PgPool, project: Uuid, user: Uuid, role: &str
         .expect("project member");
 }
 
-/// Seed an active `viewer` questionnaire share for `grantee` on `questionnaire`
-/// within `org` — the cross-org guest analytics-access grant (E-RBAC-10).
-async fn add_questionnaire_share(
-    pool: &PgPool,
-    org: Uuid,
-    questionnaire: Uuid,
-    grantee: Uuid,
-    grantee_email: &str,
-) {
-    sqlx::query(
-        r#"
-        INSERT INTO resource_shares
-            (resource_type, resource_id, organization_id, grantee_user_id,
-             grantee_email, role, expires_at)
-        VALUES ('questionnaire', $1, $2, $3, $4, 'viewer', NULL)
-        "#,
-    )
-    .bind(questionnaire)
-    .bind(org)
-    .bind(grantee)
-    .bind(grantee_email)
-    .execute(pool)
-    .await
-    .expect("questionnaire share");
-}
-
 async fn create_questionnaire(pool: &PgPool, project: Uuid, author: Uuid) -> Uuid {
     sqlx::query_scalar::<_, Uuid>(
         "INSERT INTO questionnaire_definitions (project_id, name, content, status, created_by) \
@@ -731,40 +705,67 @@ async fn questionnaire_scope_write_permission_trips_read_only_invariant() {
     }
 }
 
-/// ADR 0032 guardrail (c) — the R1 regression, locked. A cross-org guest who
-/// holds only a questionnaire SHARE (no org/project membership) is ADMITTED
-/// through the full `authorize(Scope::Questionnaire, SessionRead)` path: the
-/// share-aware coarse gate admits, the `SECURITY DEFINER` org resolver resolves
-/// the org (this is exactly where the sweep previously 404'd), and the
-/// custom-role tightening passes a guest through on the live share.
+/// ADR 0033 ledger S3 — the R1 regression, rewritten for cross-org project
+/// membership (the guest/share role it originally locked is gone). A cross-org
+/// **project member** who belongs to a *different* org and holds no membership
+/// in `t.org` is ADMITTED through the full `authorize(Scope::Questionnaire,
+/// SessionRead)` path: the membership-aware coarse gate
+/// `verify_questionnaire_access` admits via the `is_project_member` branch, the
+/// `SECURITY DEFINER` org resolver resolves the org (this is exactly where the
+/// sweep previously 404'd for a non-org-member), and the custom-role tightening
+/// passes the non-org-member through (they carry no org custom role).
+///
+/// This asserts the same isolation property the share test did (a person with
+/// no org membership reads exactly that resource's analytics) via the new
+/// mechanism. Cross-org membership at the HTTP layer is covered separately in
+/// `cross_org_project_membership.rs`; this locks the `authorize()` unit level.
 #[tokio::test]
-async fn cross_org_questionnaire_share_guest_admitted_through_authorize() {
+async fn cross_org_project_member_admitted_through_authorize() {
     let Some(pool) = fixture_pool().await else {
         return;
     };
     let rbac = RbacManager::new();
     let t = build_tenant(&pool).await;
 
-    // A guest whose only tie to t.org is a questionnaire share. They belong to
-    // their own separate org (never a member of t.org), mirroring a reviewer in
-    // another tenant.
-    let guest = create_user(&pool).await;
-    let guest_email = format!("guest-{}@test.local", Uuid::new_v4());
-    let _guest_org = create_org(&pool, guest).await;
-    add_questionnaire_share(&pool, t.org, t.questionnaire, guest, &guest_email).await;
+    // A collaborator whose only tie to t.org is a project_members row on
+    // t.project. They belong to their own separate org and are NEVER a member
+    // of t.org — mirroring an outside co-author invited to one project. The
+    // 00009 org-check trigger was dropped in 00055 (ADR 0033), so a cross-org
+    // project_members row is now legal.
+    let collaborator = create_user(&pool).await;
+    let _collaborator_org = create_org(&pool, collaborator).await;
+    add_project_member(&pool, t.project, collaborator, "viewer").await;
 
-    // Full authorize path admits the guest for a read.
+    // Full authorize path admits the cross-org project member for a read.
     assert!(
         check(
             &pool,
             &rbac,
-            guest,
+            collaborator,
             Scope::Questionnaire(t.questionnaire),
             Permission::SessionRead
         )
         .await
         .is_ok(),
-        "a cross-org questionnaire-share guest must be admitted through authorize() \
-         (R1 regression lock): coarse gate + definer org resolver + guest-share tightening"
+        "a cross-org project member must be admitted through authorize() \
+         (S3, ex-R1): is_project_member coarse gate + definer org resolver + \
+         non-org-member tightening pass-through"
+    );
+
+    // Isolation: a non-member of BOTH orgs (t.outsider belongs only to another
+    // org and has no project_members row on t.project) stays DENIED — proving
+    // the admission is the project_members row, not a blanket cross-org grant.
+    assert!(
+        is_forbidden(
+            &check(
+                &pool,
+                &rbac,
+                t.outsider,
+                Scope::Questionnaire(t.questionnaire),
+                Permission::SessionRead
+            )
+            .await
+        ),
+        "an outsider with no project_members row must stay denied"
     );
 }

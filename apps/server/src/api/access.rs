@@ -47,11 +47,11 @@ pub async fn get_project_org_id<'e>(
 /// for a granular [`RbacManager::require_permission`](crate::rbac::manager::RbacManager::require_permission)
 /// check after the coarse questionnaire-access gate has already run.
 ///
-/// ADR 0032: resolves through the `SECURITY DEFINER` `public.questionnaire_org_id`
-/// so a cross-org questionnaire-share guest — admitted by the share-aware
-/// coarse gate — no longer 404s here because the parent `projects` row is
-/// invisible to them under RLS (the `resource_shares:486` regression). NULL
-/// (absent/soft-deleted) maps to `NotFound` exactly as before.
+/// ADR 0032/0033: resolves through the `SECURITY DEFINER` `public.questionnaire_org_id`
+/// so a cross-org project member — admitted by the membership-aware coarse gate
+/// `verify_questionnaire_access` — no longer 404s here because the parent
+/// `projects` row is invisible to them under RLS. NULL (absent/soft-deleted)
+/// maps to `NotFound` exactly as before.
 pub async fn get_questionnaire_org_id<'e>(
     executor: impl PgExecutor<'e>,
     questionnaire_id: Uuid,
@@ -117,14 +117,16 @@ pub(crate) async fn verify_org_membership<'e>(
 /// (see the `public.user_has_project_access` migration comment):
 ///
 /// - [`Viewer`](ProjectRole::Viewer) ≡ [`verify_project_read_access`]: org
-///   owner/admin, any project member, org-visibility-default active org member,
-///   or an active project share.
+///   owner/admin, any project member (ADR 0033: including a cross-org project
+///   member), or an org-visibility-default active org member.
 /// - [`Editor`](ProjectRole::Editor) ≡ [`verify_project_write_access`]: project
-///   member owner/admin/editor, org owner/admin, or an active editor share.
+///   member owner/admin/editor, or org owner/admin. (ADR 0033 reverted the
+///   former editor-share branch, ledger L8/S2 — an external editor is now a
+///   project `Editor` member.)
 /// - [`Admin`](ProjectRole::Admin) / [`Owner`](ProjectRole::Owner) ≡
-///   [`RbacManager::has_project_role`](crate::rbac::manager::RbacManager::has_project_role):
-///   a `project_members` row of at least that role. No share branch (shares
-///   cap at editor), no visibility branch.
+///   [`RbacManager::has_project_role`](crate::rbac::manager::RbacManager::has_project_role)
+///   OR the org owner/admin override (ledger L5): a `project_members` row of at
+///   least that role, or an org owner/admin. No visibility branch.
 ///
 /// ADR 0032: runs through the `SECURITY DEFINER` `public.user_has_project_access`
 /// so the authorization decision is RLS-immune. On denial returns
@@ -222,11 +224,12 @@ pub async fn org_project_visibility<'e>(
 /// project (including when the project does not exist, to avoid leaking
 /// existence).
 ///
-/// E-RBAC-10: an active (non-expired) `resource_shares` grant on the project
-/// also admits read, so an external collaborator gains scoped visibility
-/// without any org/project membership. Guests never appear in the org project
-/// list (that path stays membership-scoped) — they reach the project only
-/// through this by-id gate and the "Shared with me" surface.
+/// ADR 0033: external collaboration is cross-org project membership — an
+/// explicit `project_members` row (possibly for a user who is not an org
+/// member) admits read here, so an outside collaborator gains scoped visibility
+/// to that one project. Such a member is invisible at org scope (the org
+/// project list stays membership-scoped); they reach the project only through
+/// this by-id gate.
 ///
 /// ADR 0032: a thin wrapper over the tiered [`verify_project_access`] at the
 /// [`Viewer`](ProjectRole::Viewer) tier — same predicate, same
@@ -242,9 +245,9 @@ pub(crate) async fn verify_project_read_access<'e>(
 /// Verify that `user_id` can *write* to the given project.
 ///
 /// Write access is granted when the user is a project member with at least
-/// `editor` role, **or** an org-level `admin`/`owner`, **or** (E-RBAC-10) holds
-/// an active `editor` `resource_shares` grant on the project — the scoped-edit
-/// path for an external collaborator. A `viewer` share never confers write.
+/// `editor` role (ADR 0033: including a cross-org project `Editor` — the
+/// scoped-edit path for an external collaborator, which replaced the former
+/// editor-share grant), **or** an org-level `admin`/`owner`.
 ///
 /// ADR 0032: a thin wrapper over the tiered [`verify_project_access`] at the
 /// [`Editor`](ProjectRole::Editor) tier — same predicate, same
@@ -264,11 +267,11 @@ pub(crate) async fn verify_project_write_access<'e>(
 /// Verify that `user_id` has access to a questionnaire through its project's
 /// parent organization.
 ///
-/// E-RBAC-10: an active `resource_shares` grant on the questionnaire itself, or
-/// on its parent project, also admits access — this is the analytics-sharing
-/// path (a guest reviewer in another org reads exactly the shared
-/// questionnaire's data and nothing else). The grant confers read/analytics
-/// only; org-management surfaces stay gated by membership.
+/// ADR 0033: access is granted to an active org member of the questionnaire's
+/// parent org, **or** to a member of the questionnaire's parent project
+/// (`is_project_member`) — a cross-org project member reads exactly that
+/// project's questionnaires and nothing else in the org. This replaced the
+/// former external-guest share grant path (ADR 0033).
 ///
 /// ADR 0032: resolves through the `SECURITY DEFINER`
 /// `public.user_can_access_questionnaire` so this read gate is RLS-immune.

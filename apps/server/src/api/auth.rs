@@ -211,15 +211,6 @@ pub async fn register(
     // 409 Conflict rather than leaking a 500 on a benign duplicate race.
     .map_err(ApiError::from_db_error)?;
 
-    // Link any pending resource shares addressed to this email (E-RBAC-10 step
-    // 2): a project/questionnaire shared before this account existed becomes
-    // active on first sign-up. Best-effort — never block registration on it.
-    let _ = sqlx::query("SELECT public.resolve_pending_resource_shares($1, $2)")
-        .bind(&body.email)
-        .bind(user_id)
-        .execute(&state.pool)
-        .await;
-
     let user = UserInfo {
         id: user_id,
         email: body.email,
@@ -299,14 +290,6 @@ pub async fn login(
     if !password::verify_password(&body.password, hash)? {
         return Err(ApiError::Unauthorized("Invalid email or password".into()));
     }
-
-    // Link any pending resource shares addressed to this email (E-RBAC-10 step
-    // 2). Covers grants created before the user's first sign-in. Best-effort.
-    let _ = sqlx::query("SELECT public.resolve_pending_resource_shares($1, $2)")
-        .bind(&user.email)
-        .bind(user.id)
-        .execute(&state.pool)
-        .await;
 
     // Update last login
     sqlx::query("UPDATE users SET last_login_at = NOW(), login_count = COALESCE(login_count, 0) + 1 WHERE id = $1")
