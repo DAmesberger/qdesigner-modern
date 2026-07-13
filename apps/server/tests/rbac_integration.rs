@@ -120,15 +120,25 @@ async fn rls_context_set_and_reset() {
     tx.rollback().await.ok();
 }
 
-// ── Trigger / constraint tests (unchanged from prior suite) ───────────
+// ── Cross-org project membership (ADR 0033) ───────────────────────────
+//
+// ADR 0033 makes external collaboration cross-org project membership: the
+// 00009 `trg_project_members_org_check` trigger (which required every project
+// member to be an active org member of the project's parent org) is DROPPED
+// (migration 00055). These three tests previously asserted that trigger's
+// restriction; they are rewritten to the new contract — a project member need
+// NOT be an org member, and cross-tenant isolation for such a member is now
+// enforced by the study-data RLS scoping (00054) + the handler `authorize`
+// gate, not by this schema-layer trigger.
 
 #[tokio::test]
-async fn project_member_trigger_exists() {
+async fn project_member_org_check_trigger_removed() {
     let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
     };
 
+    // ADR 0033: the trigger is gone so cross-org project membership is possible.
     let exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_project_members_org_check')",
     )
@@ -136,13 +146,13 @@ async fn project_member_trigger_exists() {
     .await
     .expect("query");
     assert!(
-        exists,
-        "trg_project_members_org_check trigger should exist on project_members"
+        !exists,
+        "trg_project_members_org_check must be dropped (ADR 0033 — cross-org project membership)"
     );
 }
 
 #[tokio::test]
-async fn project_member_must_be_org_member() {
+async fn project_member_need_not_be_org_member() {
     let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
@@ -159,8 +169,9 @@ async fn project_member_must_be_org_member() {
         .await
         .expect("project");
 
-    // user_b is not a member of org_a; the trigger should block adding them
-    // as a project member of org_a's project.
+    // ADR 0033: user_b is not a member of org_a, but may now be added as a
+    // project member of org_a's project (external collaborator). The schema no
+    // longer blocks this; isolation is enforced by RLS + the authorize gate.
     let result = sqlx::query(
         "INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'viewer')",
     )
@@ -170,13 +181,20 @@ async fn project_member_must_be_org_member() {
     .await;
 
     assert!(
-        result.is_err(),
-        "expected trigger to reject non-org-member, got: {result:?}"
+        result.is_ok(),
+        "ADR 0033: a project member need not be an org member, got: {result:?}"
     );
+
+    // Cleanup the persisted cross-org membership row.
+    let _ = sqlx::query("DELETE FROM project_members WHERE project_id = $1 AND user_id = $2")
+        .bind(project_a)
+        .bind(user_b)
+        .execute(&pool)
+        .await;
 }
 
 #[tokio::test]
-async fn cross_tenant_project_member_insertion_denied() {
+async fn cross_tenant_project_member_insertion_allowed_at_schema_layer() {
     let Some(pool) = fixture_pool().await else {
         eprintln!("Skipping: DATABASE_URL not set");
         return;
@@ -198,7 +216,11 @@ async fn cross_tenant_project_member_insertion_denied() {
         .await
         .expect("project");
 
-    // user_org2 belongs to org2 only; cannot be added to a project in org1.
+    // ADR 0033: user_org2 (org2 only) may be added to a project in org1 as a
+    // cross-org collaborator. The schema-layer trigger no longer denies this;
+    // such a member sees ONLY that project's study data (RLS 00054), never any
+    // other org1 data — the tenant-isolation contract proven end-to-end in
+    // tests/cross_org_project_membership.rs.
     let result = sqlx::query(
         "INSERT INTO project_members (project_id, user_id, role) VALUES ($1, $2, 'viewer')",
     )
@@ -208,9 +230,15 @@ async fn cross_tenant_project_member_insertion_denied() {
     .await;
 
     assert!(
-        result.is_err(),
-        "expected cross-tenant insert to be denied, got: {result:?}"
+        result.is_ok(),
+        "ADR 0033: cross-org project membership is allowed at the schema layer, got: {result:?}"
     );
+
+    let _ = sqlx::query("DELETE FROM project_members WHERE project_id = $1 AND user_id = $2")
+        .bind(project_in_org1)
+        .bind(user_org2)
+        .execute(&pool)
+        .await;
 }
 
 // ── RLS policy tests (allow + adversarial deny) ──────────────────────

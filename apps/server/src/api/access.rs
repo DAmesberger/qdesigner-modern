@@ -82,6 +82,12 @@ pub async fn org_data_region<'e>(
 }
 
 /// Verify that `user_id` is an active member of `org_id`.
+///
+/// ADR 0033: `add_project_member` no longer requires the target to be an org
+/// member (external collaboration is cross-org project membership), which was
+/// this helper's only caller. Retained for the org-membership probes reused by
+/// later units (e.g. `project_invitations`) and the org read gate.
+#[allow(dead_code)]
 pub(crate) async fn verify_org_membership<'e>(
     executor: impl PgExecutor<'e>,
     user_id: Uuid,

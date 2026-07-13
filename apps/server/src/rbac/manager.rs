@@ -132,6 +132,17 @@ impl RbacManager {
     /// never hold half the check. It stays reachable for `authorize` and the
     /// still-divergent sites in the ADR-0030 ledger (e.g. the inline
     /// org-membership analytics endpoints).
+    ///
+    /// ADR 0033: the non-member branch is a pure **pass-through**. A caller who
+    /// is not an org member carries no org custom role, so this org-scoped
+    /// *tightening* layer has nothing to enforce — it must not itself deny.
+    /// `authorize()` always runs the coarse gate first, and it is that gate
+    /// (`verify_project_access` / `verify_questionnaire_access`, which admit a
+    /// cross-org project member or — while shares survive this unit — a share
+    /// guest) that actually authorizes the non-member. Denying here would break
+    /// cross-org project membership end to end. This supersedes the E-RBAC-10
+    /// `has_active_share` gate: the share COARSE gates in `verify_*` are
+    /// untouched, so a share guest still authorizes exactly as before.
     pub(crate) async fn require_permission<'e>(
         &self,
         executor: impl PgExecutor<'e>,
@@ -139,25 +150,17 @@ impl RbacManager {
         org_id: Uuid,
         permission: Permission,
     ) -> Result<(), ApiError> {
-        // One round-trip resolves three facts: is the caller an active member
-        // (`member_role`), do they carry a custom role (`custom_perms`), and —
-        // for a non-member — do they hold a live resource share in this org
-        // (`has_active_share`, E-RBAC-10). The `(SELECT 1) _one` base keeps
-        // exactly one row so a non-member still returns (NULL, NULL, has_share)
-        // rather than an empty set; `impl PgExecutor` is single-use so the three
-        // facts must come from a single statement.
-        let (member_role, custom_perms, has_active_share) =
-            sqlx::query_as::<_, (Option<String>, Option<Vec<String>>, bool)>(
+        // One round-trip resolves two facts: is the caller an active member
+        // (`member_role`), and do they carry a custom role (`custom_perms`). The
+        // `(SELECT 1) _one` base keeps exactly one row so a non-member still
+        // returns (NULL, NULL) rather than an empty set; `impl PgExecutor` is
+        // single-use so both facts must come from a single statement.
+        let (member_role, custom_perms) =
+            sqlx::query_as::<_, (Option<String>, Option<Vec<String>>)>(
                 r#"
                 SELECT
                     om.role,
-                    r.permissions,
-                    EXISTS(
-                        SELECT 1 FROM resource_shares rs
-                        WHERE rs.grantee_user_id = $2
-                          AND rs.organization_id = $1
-                          AND (rs.expires_at IS NULL OR rs.expires_at > now())
-                    ) AS has_active_share
+                    r.permissions
                 FROM (SELECT 1) AS _one
                 LEFT JOIN organization_members om
                        ON om.organization_id = $1
@@ -172,21 +175,15 @@ impl RbacManager {
             .await?;
 
         match member_role {
-            // Not a member. The caller may still be an external guest holding
-            // an active resource share in this org (E-RBAC-10): the coarse gate
-            // (verify_project_read_access / verify_questionnaire_access) has
-            // already scoped them to the shared resource, and require_permission
-            // is only the custom-role *tightening* layer — a guest carries no
-            // custom role, so pass through when a live share exists, else deny.
-            None => {
-                if has_active_share {
-                    Ok(())
-                } else {
-                    Err(ApiError::Forbidden(
-                        "Not a member of this organization".into(),
-                    ))
-                }
-            }
+            // Not an org member. The coarse gate in `authorize()` has already
+            // authorized this caller against the resource (a cross-org project
+            // member via verify_project_access / verify_questionnaire_access, or
+            // — while shares survive — a share guest). A non-member carries no
+            // org custom role, so this custom-role *tightening* layer has
+            // nothing to enforce: pass through (ADR 0033). Denying here would
+            // deny an authorized cross-org project member at the tightening
+            // layer.
+            None => Ok(()),
             // Member on a system role: governed by the coarse checks — pass through.
             Some(_) if custom_perms.is_none() => Ok(()),
             // Member on a custom role: enforce the granular set.

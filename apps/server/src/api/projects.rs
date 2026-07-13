@@ -646,16 +646,14 @@ pub async fn add_project_member(
     .await?
     .ok_or_else(|| ApiError::NotFound("User not found".into()))?;
 
-    // Verify the target user is an active member of the project's parent org.
+    // ADR 0033: a project member need not be an active member of the project's
+    // parent org — external collaboration IS cross-org project membership. The
+    // former `verify_org_membership(target_user, org_id)` precondition is
+    // removed (and the 00009 org-check trigger dropped in 00055) so a user who
+    // is not an org member can be added as a project member. The target must
+    // still be an existing (registered) user — the invite-unregistered-email
+    // flow is a later unit. `org_id` is still resolved for the audit record.
     let org_id = access::get_project_org_id(&mut **tx, project_id).await?;
-    access::verify_org_membership(&mut **tx, target_user, org_id)
-        .await
-        .map_err(|_| {
-            ApiError::BadRequest(
-                "User must be an active member of the organization before being added to a project"
-                    .into(),
-            )
-        })?;
 
     sqlx::query(
         r#"
