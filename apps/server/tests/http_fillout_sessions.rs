@@ -411,3 +411,164 @@ async fn anonymous_trials_sync_read_dedup_and_w8() {
         "anonymous GET trials must be 401"
     );
 }
+
+/// Build a realistic per-trial `timing_provenance` blob — the phase timeline and
+/// per-frame stats a reaction-time trial actually carries. ~14 KB serialized, so
+/// a full 200-row client chunk (`SYNC_CHUNK_SIZE` in `FilloutUploadSync`) lands
+/// around 3 MiB, comfortably past axum's implicit 2 MiB body default.
+fn provenance_blob() -> serde_json::Value {
+    let phase_timeline: Vec<serde_json::Value> = (0..40i64)
+        .map(|i| {
+            serde_json::json!({
+                "phase": "stimulus",
+                "index": i,
+                "requestedAtUs": 1_000_000 + i * 16_667,
+                "presentedAtUs": 1_000_400 + i * 16_667,
+                "vsyncAlignedUs": 1_000_016 + i * 16_667,
+                "displayLatencyUs": 8_300,
+            })
+        })
+        .collect();
+    let frame_stats: Vec<serde_json::Value> = (0..120i64)
+        .map(|i| {
+            serde_json::json!({
+                "frame": i,
+                "deltaUs": 16_667,
+                "jitterUs": i % 7,
+                "dropped": false,
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "clockSource": "performance.now",
+        "crossOriginIsolated": true,
+        "displayRefreshHz": 60.0,
+        "outputLatencyUs": 12_000,
+        "phaseTimeline": phase_timeline,
+        "frameStats": frame_stats,
+    })
+}
+
+/// A full 200-row offline chunk of provenance-rich reaction trials — the payload
+/// the platform's headline feature produces — is LARGER THAN 2 MiB and must be
+/// ACCEPTED by `POST /api/sessions/{id}/sync`.
+///
+/// The payload is asserted to exceed 2 MiB (axum's implicit `DefaultBodyLimit`)
+/// before it is sent, so the request can only succeed because of the route's
+/// explicit 26 MiB override in `api/mod.rs`. Drop that layer and this test fails
+/// with 413 Payload Too Large and zero rows stored — the exact silent
+/// data-loss-to-server path it guards (the client retries the SAME chunk forever,
+/// then deadletters the session).
+#[tokio::test]
+async fn oversized_offline_trial_chunk_syncs_past_the_default_body_limit() {
+    let Some(state) = build_test_state().await else {
+        eprintln!("skipping: no DB reachable (set REQUIRE_DB=1 to hard-fail)");
+        return;
+    };
+    let app = test_app(state);
+
+    let user_a = register_user(&app).await;
+    let a = provision_tenant(&app, &user_a.token).await;
+    let (proj, qid) = (a.project_id, a.questionnaire_id);
+    let (status, pubd) = json_request(
+        &app,
+        "POST",
+        &format!("/api/projects/{proj}/questionnaires/{qid}/publish"),
+        Some(&user_a.token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "publish questionnaire: {pubd:?}");
+
+    // Anonymous create session.
+    let create_body = serde_json::json!({ "questionnaire_id": qid });
+    let (status, session) =
+        json_request(&app, "POST", "/api/sessions", None, Some(&create_body)).await;
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "anon create session: {session:?}"
+    );
+    let sid = session["id"].as_str().expect("session id");
+
+    // One client chunk: 200 trials, each carrying its timing-provenance blob.
+    const CHUNK_ROWS: i64 = 200; // == SYNC_CHUNK_SIZE in FilloutUploadSync
+    let blob = provenance_blob();
+    let trials: Vec<serde_json::Value> = (0..CHUNK_ROWS)
+        .map(|i| {
+            serde_json::json!({
+                "client_id": uuid::Uuid::new_v4(),
+                "question_id": "rt-q",
+                "trial_index": i,
+                "option_id": if i % 2 == 0 { "left" } else { "right" },
+                "source": "keyboard",
+                "rt_us": 300_000 + i * 137,
+                "correct": i % 3 != 0,
+                "sampled_timings": { "fixationMs": 500, "isiMs": 250 },
+                "provenance": blob.clone(),
+            })
+        })
+        .collect();
+    let sync_body = serde_json::json!({
+        "responses": [{
+            "client_id": uuid::Uuid::new_v4(),
+            "question_id": "rt-q",
+            "value": { "trialCount": CHUNK_ROWS },
+        }],
+        "events": [],
+        "variables": [],
+        "trials": trials,
+    });
+
+    // Size guard: if this payload ever shrinks below axum's implicit 2 MiB
+    // default, the test stops proving anything about the route override.
+    let encoded = serde_json::to_vec(&sync_body).expect("encode sync payload");
+    assert!(
+        encoded.len() > 2 * 1024 * 1024,
+        "payload must exceed axum's implicit 2 MiB DefaultBodyLimit to exercise \
+         the route override, got {} bytes",
+        encoded.len()
+    );
+
+    let (status, synced) = json_request(
+        &app,
+        "POST",
+        &format!("/api/sessions/{sid}/sync"),
+        None,
+        Some(&sync_body),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a {}-byte offline chunk must sync (413 here = the client retries forever \
+         and the session deadletters): {synced:?}",
+        encoded.len()
+    );
+    assert_eq!(
+        synced["trials_synced"].as_i64(),
+        Some(CHUNK_ROWS),
+        "every trial in the oversized chunk must be stored"
+    );
+
+    // The rows really landed: the researcher reads all 200 back, provenance intact.
+    let (status, trials) = json_request(
+        &app,
+        "GET",
+        &format!("/api/sessions/{sid}/trials"),
+        Some(&user_a.token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "owner read trials: {trials:?}");
+    let arr = trials.as_array().expect("trials array");
+    assert_eq!(arr.len(), CHUNK_ROWS as usize, "all trials persisted");
+    assert_eq!(arr[0]["trial_index"].as_i64(), Some(0));
+    assert_eq!(
+        arr[0]["provenance"]["frameStats"]
+            .as_array()
+            .map(|f| f.len()),
+        Some(120),
+        "the provenance blob survives the round trip"
+    );
+}

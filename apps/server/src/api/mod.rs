@@ -330,10 +330,22 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/{id}/sync",
-            post(sessions::sync_session).route_layer(axum_mw::from_fn_with_state(
-                state.clone(),
-                rate_limit_middleware,
-            )),
+            post(sessions::sync_session)
+                .route_layer(axum_mw::from_fn_with_state(
+                    state.clone(),
+                    rate_limit_middleware,
+                ))
+                // Offline-first fillout exists to accumulate LARGE batches: the
+                // client (`FilloutUploadSync`) chunks at 200 rows, and a
+                // reaction-time trial row carries a `timing_provenance` blob
+                // (phaseTimeline + frameStats), so one chunk can plausibly
+                // exceed axum's implicit 2 MiB default. A 413 there is
+                // unrecoverable — the client retries the SAME payload forever
+                // and the session eventually deadletters, losing its data to the
+                // server. Override for this route only (same 26 MiB constant the
+                // two media upload routes use); the global default still guards
+                // every other JSON endpoint.
+                .layer(DefaultBodyLimit::max(26 * 1024 * 1024)),
         )
         .route("/{id}/synced-client-ids", get(sessions::synced_client_ids))
         .route("/{id}/trials", get(sessions::get_trials))
