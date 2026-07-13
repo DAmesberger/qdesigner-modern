@@ -1,0 +1,14 @@
+# Pins the Rust toolchain so CI cannot drift onto a newer `stable` and break
+# spontaneously: the backend gate runs `clippy -D warnings`, so every new lint
+# in a future stable release is an automatic CI failure on an unchanged tree.
+#
+# The version tracks the nix flake (`pkgs.rustc`, currently 1.94.1), which is
+# the source of truth for local dev. When you bump the flake, bump this too.
+#
+# Note for local dev: the nix devShell provides cargo/rustc directly (not via
+# rustup), so this file is inert inside `direnv`/`nix develop` — it governs CI
+# (where rustup is preinstalled) and any rustup-based contributor.
+[toolchain]
+channel = "1.94.1"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

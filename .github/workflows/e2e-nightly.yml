@@ -10,9 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      # Backend stack DSNs + app/server ports for the appended fullstack +
-      # visual lanes (they need the live Rust server + compose stack). main.rs
-      # runs sqlx::migrate! via DATABASE_URL_MIGRATIONS at startup, creating the
+      # Backend stack DSNs + app/server ports. Every lane below (regression,
+      # fullstack, visual, reaction, form) can hit provisionWorkspace(), so the
+      # live Rust server + compose stack are started up-front. main.rs runs
+      # sqlx::migrate! via DATABASE_URL_MIGRATIONS at startup, creating the
       # non-superuser qdesigner_app role the app pool (DATABASE_URL) connects as.
       DATABASE_URL: postgresql://qdesigner_app:qdesigner_app@localhost:15435/qdesigner_test
       DATABASE_URL_MIGRATIONS: postgresql://qdesigner:qdesigner@localhost:15435/qdesigner_test
@@ -36,53 +37,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
-
-      - name: Run E2E regression tests
-        run: pnpm test:e2e:regression:all
-        env:
-          VITE_APP_URL: http://localhost:5173
-
-      - name: Upload regression report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report-nightly
-          path: apps/web/playwright-report/
-          retention-days: 30
-
-      # ── Fullstack + visual lanes (live backend) ───────────────────────────
-      # These run even when the regression run above fails: that lane has
-      # pre-existing gaps (the :121/:165 provisionWorkspace tests need a backend
-      # it doesn't start), and default step gating would silently skip the whole
-      # mirror — the exact "orphaned lane never runs" failure this wiring fixes.
+      # ── Backend first ─────────────────────────────────────────────────────
+      # Previously the regression lane ran BEFORE any backend existed, so its
+      # provisionWorkspace() specs could never pass — the nightly was red by
+      # construction, and the later lanes were bolted on with `if: !cancelled()`
+      # to paper over it. Starting the stack up-front removes the root cause, so
+      # every lane below runs against a live server and a failure now means a
+      # real regression.
       - name: Start test infrastructure
-        if: ${{ !cancelled() }}
         # postgres :15435, redis :16382, minio :19005 (+ minio-init bucket),
         # mailpit :11027 — all defined in docker-compose.test.yml.
         run: docker compose -f docker-compose.test.yml up -d --wait
 
-      - name: Install Rust toolchain
-        if: ${{ !cancelled() }}
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version && cargo --version
 
       - name: Cache cargo
-        if: ${{ !cancelled() }}
         uses: actions/cache@v4
         with:
           path: |
@@ -91,53 +63,76 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             apps/server/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('apps/server/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('rust-toolchain.toml', 'apps/server/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
 
       - name: Build server (release)
-        if: ${{ !cancelled() }}
         run: cargo build --manifest-path apps/server/Cargo.toml --release
 
       - name: Start server
-        if: ${{ !cancelled() }}
         run: |
           nohup ./apps/server/target/release/qdesigner-server > server.log 2>&1 &
           echo "server started (pid $!)"
 
       - name: Wait for server health
-        if: ${{ !cancelled() }}
         run: >-
           curl --retry 30 --retry-delay 2 --retry-connrefused --fail
           http://localhost:4100/health
 
+      # ── Frontend + browsers ───────────────────────────────────────────────
+      # No `version:` input — root package.json's `packageManager: pnpm@8.15.2`
+      # is the single source of truth. Passing both made pnpm/action-setup@v4
+      # hard-error with "Multiple versions of pnpm specified".
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      # Node 22 to match the nix flake (pkgs.nodejs_22).
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
+
+      # ── Lanes ─────────────────────────────────────────────────────────────
+      # The stale `VITE_APP_URL: http://localhost:5173` override is gone: with no
+      # override, dev-urls.ts derives the frontend URL from APP_PORT (4173),
+      # which is the port the playwright webServer (`pnpm dev` = vite) actually
+      # binds. 5173 pointed baseURL at a port nothing listens on.
+      - name: Run E2E regression tests (chromium + firefox + webkit)
+        run: pnpm test:e2e:regression:all
+
       - name: Run fullstack E2E tests
-        if: ${{ !cancelled() }}
         run: pnpm test:e2e:fullstack
 
       - name: Run visual regression tests
-        if: ${{ !cancelled() }}
         run: pnpm test:e2e:visual
 
       - name: Run reaction (WebGL) E2E tests
-        # Runs last so its anonymous session-creates don't share the 60 s
-        # auth-limiter window with the fullstack lane's registrations.
-        if: ${{ !cancelled() }}
+        # Runs late so its anonymous session-creates don't share the 60 s
+        # auth-limiter window (10 req/IP) with the other lanes' registrations.
         run: pnpm test:e2e:reaction
 
       - name: Run form E2E tests
-        # @form lane (issue #35). DOM fillout path; one shared workspace per worker so
-        # it doesn't share the 60 s auth-limiter window with the other lanes.
-        if: ${{ !cancelled() }}
+        # @form lane (issue #35). DOM fillout path; one shared workspace per worker
+        # so it doesn't share the 60 s auth-limiter window with the other lanes.
         run: pnpm test:e2e:form
 
       - name: Dump server log on failure
         if: failure()
         run: cat server.log || true
 
-      - name: Upload fullstack + visual report
+      - name: Upload Playwright report
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: playwright-report-nightly-fullstack
+          name: playwright-report-nightly
           path: apps/web/playwright-report/
           retention-days: 30
 
