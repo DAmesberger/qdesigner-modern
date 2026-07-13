@@ -75,6 +75,28 @@ recorded here; their `access::verify_*` / `require_permission` halves stay
 |------|--------|
 | `shares.rs` — `authorize_manage_shares` (was inline `has_project_role(Admin) OR has_org_role(Admin)`, lines 119/125) | **Converted** to `authorize(Scope::Project(project_id), ProjectManageMembers)`. The `00052` `'admin'` arm is `project_members(owner,admin) OR org_members(owner,admin)` — byte-identical *authorization* outcome to the former pair; adds the org-scoped custom-role tightening (ADR 0030 deliverable). The denial **message** changes `"Requires project admin or org admin to manage shares"` → `"Insufficient project role for this action"` (still `403 Forbidden`; no test asserts the old text). |
 
+## Superseded by ADR 0033 (guest role removed)
+
+ADR 0033 deletes the `resource_shares` / guest role and replaces it with
+cross-org project membership. Several committed ADR-0030/0032 behaviors that
+existed *only* to serve the guest role are reverted there; recorded so the
+reversals are not silent:
+
+| # | Committed behavior | ADR 0033 disposition |
+|---|--------------------|----------------------|
+| S1 | Migration `00050` `projects_select_via_questionnaire_share` (fixed the `resource_shares:486` guest 404) | **Dropped** — no questionnaire-share guest exists. Cross-org project members resolve the project row via the `is_project_member` branch instead. |
+| S2 | L8 — `update_project` fold added the editor-project-share write path | **Reverted** — the edit-share branch is removed from `user_has_project_access` (00051); an external editor is now a project `Editor` member. |
+| S3 | R1 — `authz_matrix` cross-org questionnaire-share-guest test | **Rewritten** — asserts a cross-org *project member* reads analytics end to end (same isolation property, new mechanism). |
+| S4 | L14 note — `shares.rs::authorize_manage_shares` converted to `authorize(...)` | **Moot** — `shares.rs` is deleted entirely. |
+| S5 | `verify_questionnaire_access` / `verify_project_*` / `require_permission` share branches | **Removed**; replaced by project-member branches / project-member pass-through (ADR 0033 §Decision). |
+
+## Deferred to ADR 0034 (comment/series)
+
+L12 (comments) and L13 (series) stay unfolded until ADR 0034, which — with the
+guest role gone (ADR 0033) — folds them cleanly at `Scope::Project` (option B)
+and fixes their two audit bugs (comment cross-author body rewrite; series
+read-level-gated writes). Their `verify_*` halves stay `pub(crate)` until then.
+
 ## How to use during the ADR-0030 sweep completion (~43 sites remaining)
 
 For each converted site: if the effective check is identical, no row. If it
