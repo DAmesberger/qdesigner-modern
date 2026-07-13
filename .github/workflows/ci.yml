@@ -118,6 +118,33 @@ jobs:
           docker logs minio || true
           exit 1
 
+      # Pre-create every bucket the suite touches, mirroring the `minio-init`
+      # sidecar in docker-compose.test.yml (which is why the suite is green
+      # locally but was red here).
+      #
+      # Without this, S3StorageService::new races itself:
+      #     let exists = client.head_bucket()...;      // all see "missing"
+      #     if exists.is_err() { client.create_bucket()... }   // losers 500
+      # cargo runs test binaries as parallel processes, and storage_minio.rs,
+      # http_media_email.rs and anon_path_limits.rs all build a service over the
+      # SAME qdesigner-media-test bucket, so they collide on create_bucket and
+      # the losers get BucketAlreadyOwnedByYou:
+      #     Failed to create S3 bucket: service error
+      # Pre-creating makes head_bucket succeed, so create_bucket never fires.
+      # (The TOCTOU in s3.rs is a real latent bug — flagged separately; this
+      # step reproduces the working local environment rather than papering over
+      # it in the tests.)
+      #
+      # The minio image ships `mc`, so no extra image pull is needed.
+      - name: Create MinIO buckets
+        run: |
+          docker exec minio mc alias set local http://localhost:9000 minioadmin minioadmin
+          for b in qdesigner-media qdesigner-media-test qdesigner-gdpr-test; do
+            docker exec minio mc mb --ignore-existing "local/$b"
+          done
+          docker exec minio mc anonymous set download local/qdesigner-media
+          docker exec minio mc ls local
+
       # rustup reads /rust-toolchain.toml (channel + clippy/rustfmt), so the
       # toolchain is pinned in-tree rather than floating on `stable`. A floating
       # stable meant any new upstream lint broke `clippy -D warnings` on an
@@ -288,7 +315,23 @@ jobs:
       - name: Start test infrastructure
         # postgres :15435, redis :16382, minio :19005 (+ minio-init bucket),
         # mailpit :11027 — all defined in docker-compose.test.yml.
-        run: docker compose -f docker-compose.test.yml up -d --wait
+        #
+        # `up -d --wait` on the whole file fails even when everything works:
+        # --wait requires every service to end up running/healthy, but minio-init
+        # is a one-shot that runs `mc mb` and exits. The previous run showed all
+        # four services Healthy and `minio-init exited (0)` — and compose still
+        # returned exit code 1. So: --wait on the long-running services only,
+        # then run the init container and check its exit code explicitly.
+        run: |
+          docker compose -f docker-compose.test.yml up -d --wait postgres redis minio mailpit
+          docker compose -f docker-compose.test.yml up -d minio-init
+          code=$(docker wait qdesigner-test-minio-init)
+          if [ "$code" != "0" ]; then
+            echo "::error::minio-init failed (exit $code)"
+            docker logs qdesigner-test-minio-init || true
+            exit 1
+          fi
+          echo "minio-init completed successfully"
 
       - name: Install Rust toolchain (pinned by rust-toolchain.toml)
         run: |
