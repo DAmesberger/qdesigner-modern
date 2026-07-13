@@ -22,6 +22,7 @@ pub mod gdpr;
 pub mod health;
 pub mod media;
 pub mod organizations;
+pub mod project_invitations;
 pub mod projects;
 pub mod questionnaires;
 pub mod roles;
@@ -234,6 +235,19 @@ pub fn router(state: AppState) -> Router {
             "/{id}/shares/{share_id}",
             delete(shares::revoke_project_share),
         )
+        // Project invitations (ADR 0033, Unit 3) — invite an email to
+        // collaborate on THIS project; accept lands a (possibly cross-org)
+        // project_members row. Token-keyed accept/get/decline live on the
+        // sibling `/api/project-invitations` nest below.
+        .route(
+            "/{id}/invitations",
+            get(project_invitations::list_project_invitations)
+                .post(project_invitations::create_project_invitation),
+        )
+        .route(
+            "/{id}/invitations/{inv_id}",
+            delete(project_invitations::revoke_project_invitation),
+        )
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
@@ -256,6 +270,24 @@ pub fn router(state: AppState) -> Router {
             )),
         )
         .route("/{id}/decline", post(organizations::decline_invitation))
+        .layer(CatchPanicLayer::new())
+        .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
+
+    // Project-invitation accept / get / decline — token-keyed, sibling of the
+    // org `invitation_routes` above (ADR 0033, Unit 3). Accept is rate-limited
+    // like the org accept.
+    let project_invitation_routes = Router::new()
+        .route("/{token}", get(project_invitations::get_project_invitation))
+        .route(
+            "/{token}/accept",
+            post(project_invitations::accept_project_invitation).route_layer(
+                axum_mw::from_fn_with_state(state.clone(), rate_limit_middleware),
+            ),
+        )
+        .route(
+            "/{token}/decline",
+            post(project_invitations::decline_project_invitation),
+        )
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
@@ -480,6 +512,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/projects", project_routes)
         .nest("/api/shares", shares_routes)
         .nest("/api/invitations", invitation_routes)
+        .nest("/api/project-invitations", project_invitation_routes)
         .nest("/api/questionnaires", questionnaire_routes)
         .nest("/api/sessions", session_routes)
         .nest("/api/series", series_routes)
