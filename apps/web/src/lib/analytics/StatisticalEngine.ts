@@ -354,13 +354,16 @@ export class StatisticalEngine {
     const t = (mean - mu0) / standardError;
     const df = n - 1;
     const pValue = 2 * (1 - this.studentTCDF(Math.abs(t), df));
-    
-    const tCritical = this.studentTInverse(0.025, df);
+
+    // Two-sided 95% critical value is the 0.975 quantile (positive).
+    // Asking for the 0.025 quantile (as this used to) yields a NEGATIVE margin,
+    // which inverts the interval.
+    const tCritical = this.studentTInverse(0.975, df);
     const marginOfError = tCritical * standardError;
     const confidenceInterval: [number, number] = [mean - marginOfError, mean + marginOfError];
-    
+
     const effectSize = (mean - mu0) / std;
-    const power = this.calculateTTestPower(effectSize, n, 0.05);
+    const power = this.calculateTTestPower(effectSize, n, null, 0.05);
 
     return {
       statistic: t,
@@ -390,15 +393,17 @@ export class StatisticalEngine {
                (Math.pow(var1 / n1, 2) / (n1 - 1) + Math.pow(var2 / n2, 2) / (n2 - 1));
     
     const pValue = 2 * (1 - this.studentTCDF(Math.abs(t), df));
-    
-    const tCritical = this.studentTInverse(0.025, df);
+
+    const tCritical = this.studentTInverse(0.975, df);
     const marginOfError = tCritical * standardError;
     const meanDiff = mean1 - mean2;
     const confidenceInterval: [number, number] = [meanDiff - marginOfError, meanDiff + marginOfError];
-    
+
     const pooledStd = Math.sqrt(((n1 - 1) * var1 + (n2 - 1) * var2) / (n1 + n2 - 2));
     const effectSize = (mean1 - mean2) / pooledStd;
-    const power = this.calculateTTestPower(effectSize, Math.min(n1, n2), 0.05);
+    // Two-sample power uses df = n1 + n2 - 2 and ncp = d * sqrt(n1 n2 / (n1 + n2)),
+    // not the one-sample formula applied to min(n1, n2).
+    const power = this.calculateTTestPower(effectSize, n1, n2, 0.05);
 
     return {
       statistic: t,
@@ -1366,6 +1371,18 @@ export class StatisticalEngine {
     }
   }
 
+  /**
+   * Regularized upper incomplete gamma function Q(a, x) = 1 - P(a, x).
+   * Computed directly (never as 1 - P) so that tiny upper tails keep their
+   * relative accuracy — this is what makes small p-values trustworthy.
+   */
+  private regularizedGammaQ(a: number, x: number): number {
+    if (x <= 0) return 1;
+    return x < a + 1
+      ? 1 - this.gammaPSeries(a, x)
+      : this.gammaQContinuedFraction(a, x);
+  }
+
   private gammaPSeries(a: number, x: number): number {
     const maxIter = 200;
     const eps = 1e-15;
@@ -1426,10 +1443,11 @@ export class StatisticalEngine {
    * Approximate critical value for studentized range distribution
    */
   private studentizedRangeInverse(alpha: number, k: number, df: number): number {
-    // Approximate using Bonferroni-corrected t critical value
+    // Approximate using Bonferroni-corrected t critical value.
+    // Upper-tail quantile (positive) — 1 - adjustedAlpha/2, not adjustedAlpha/2.
     const numComparisons = (k * (k - 1)) / 2;
     const adjustedAlpha = alpha / numComparisons;
-    const tCrit = Math.abs(this.studentTInverse(adjustedAlpha / 2, df));
+    const tCrit = this.studentTInverse(1 - adjustedAlpha / 2, df);
     return tCrit * Math.sqrt(2);
   }
 
@@ -1463,190 +1481,398 @@ export class StatisticalEngine {
     return 1;
   }
 
+  /**
+   * Fisher z confidence interval for a correlation coefficient.
+   * The standard error 1/sqrt(n-3) is undefined for n <= 3, and the
+   * exp-based back-transform produced NaN there (Infinity/Infinity);
+   * tanh/atanh is the numerically clean form of the same transform.
+   */
   private calculateCorrelationCI(r: number, n: number, confidence: number = 0.95): [number, number] {
-    const z = 0.5 * Math.log((1 + r) / (1 - r)); // Fisher z-transformation
+    if (!Number.isFinite(r) || n <= 3) {
+      // No information about the population r: the interval is the whole range.
+      return [-1, 1];
+    }
+
+    // atanh is undefined at |r| = 1; the interval degenerates to the point estimate.
+    const rClamped = Math.min(1 - 1e-15, Math.max(-1 + 1e-15, r));
+
+    const z = Math.atanh(rClamped); // Fisher z-transformation
     const se = 1 / Math.sqrt(n - 3);
     const alpha = 1 - confidence;
     const zCritical = this.standardNormalInverse(1 - alpha / 2);
-    
-    const zLower = z - zCritical * se;
-    const zUpper = z + zCritical * se;
-    
-    // Transform back
-    const rLower = (Math.exp(2 * zLower) - 1) / (Math.exp(2 * zLower) + 1);
-    const rUpper = (Math.exp(2 * zUpper) - 1) / (Math.exp(2 * zUpper) + 1);
-    
-    return [rLower, rUpper];
+
+    return [Math.tanh(z - zCritical * se), Math.tanh(z + zCritical * se)];
   }
 
-  private calculateTTestPower(effectSize: number, n: number, alpha: number): number {
-    // Simplified power calculation
-    const tCritical = this.studentTInverse(alpha / 2, n - 1);
-    const nonCentrality = effectSize * Math.sqrt(n);
-    
-    // Approximate power using normal distribution
-    const power = 1 - this.standardNormalCDF(tCritical - nonCentrality) + 
-                      this.standardNormalCDF(-tCritical - nonCentrality);
-    
+  /**
+   * Power of a two-sided t-test at the given effect size (Cohen's d).
+   *
+   * Exact, via the noncentral t distribution:
+   *   power = P(|T| > t_crit),  T ~ t(df, ncp)
+   * with
+   *   one-sample / paired: df = n1 - 1,        ncp = d * sqrt(n1)
+   *   two-sample:          df = n1 + n2 - 2,   ncp = d * sqrt(n1 n2 / (n1 + n2))
+   *
+   * The previous version (a) asked studentTInverse for the alpha/2 quantile,
+   * getting a NEGATIVE critical value, and (b) evaluated the tails with the
+   * normal CDF. The two errors compounded into power ~= 1.0 for every input,
+   * including a zero effect size.
+   *
+   * @param n2 pass null for a one-sample or paired test
+   */
+  private calculateTTestPower(effectSize: number, n1: number, n2: number | null, alpha: number): number {
+    const df = n2 === null ? n1 - 1 : n1 + n2 - 2;
+    if (!(df > 0) || Number.isNaN(effectSize)) return NaN;
+
+    const ncp = n2 === null
+      ? effectSize * Math.sqrt(n1)
+      : effectSize * Math.sqrt((n1 * n2) / (n1 + n2));
+
+    // A degenerate (zero-variance) sample gives an infinite effect size.
+    if (!Number.isFinite(ncp)) return 1;
+
+    const tCritical = this.studentTInverse(1 - alpha / 2, df);
+    const power =
+      1 - this.nonCentralTCDF(tCritical, df, ncp) +
+      this.nonCentralTCDF(-tCritical, df, ncp);
+
     return Math.max(0, Math.min(1, power));
   }
 
-  // Statistical distribution functions (simplified implementations)
-  private studentTCDF(t: number, _df: number): number {
-    // Simplified t-distribution CDF approximation
-    // For large degrees of freedom, t-distribution converges to normal distribution
-    return this.standardNormalCDF(t);
+  // ============================================================================
+  // Statistical distribution functions
+  //
+  // These are exposed publicly so that the correctness of the platform's
+  // p-values can be validated directly against reference tables (see
+  // StatisticalEngine.test.ts). They are pure functions with no state.
+  // ============================================================================
+
+  /**
+   * Student's t cumulative distribution function: P(T <= t) for T ~ t(df).
+   *
+   * Exact (to double precision) via the regularized incomplete beta function:
+   *
+   *   P(T <= t) = 1 - 0.5 * I_{df/(df+t^2)}(df/2, 1/2)   for t > 0
+   *   P(T <= t) = 0.5 * I_{df/(df+t^2)}(df/2, 1/2)       for t < 0
+   *
+   * (Abramowitz & Stegun 26.7.1; the same identity scipy.stats.t and R's pt use.)
+   *
+   * NOTE: this previously discarded `df` and returned the standard normal CDF,
+   * which made every t-based p-value in the platform anti-conservative
+   * (too small) at small samples.
+   */
+  studentTCDF(t: number, df: number): number {
+    if (Number.isNaN(t) || Number.isNaN(df) || df <= 0) return NaN;
+    if (t === Number.POSITIVE_INFINITY) return 1;
+    if (t === Number.NEGATIVE_INFINITY) return 0;
+    if (!Number.isFinite(df)) return this.standardNormalCDF(t);
+    if (t === 0) return 0.5;
+
+    const x = df / (df + t * t);
+    const upperTail = 0.5 * this.regularizedIncompleteBeta(df / 2, 0.5, x);
+
+    const result = t > 0 ? 1 - upperTail : upperTail;
+    return Math.min(1, Math.max(0, result));
   }
 
-  private studentTInverse(p: number, df: number): number {
-    // Simplified t-distribution inverse CDF
-    if (df >= 30) {
-      return this.standardNormalInverse(p);
-    }
-    
-    // Approximation for t-distribution
-    const z = this.standardNormalInverse(p);
-    const correction = (z ** 3 + z) / (4 * df) + (5 * z ** 5 + 16 * z ** 3 + 3 * z) / (96 * df ** 2);
-    return z + correction;
-  }
-
-  private standardNormalCDF(z: number): number {
-    // Abramowitz and Stegun approximation
-    const sign = z >= 0 ? 1 : -1;
-    const x = Math.abs(z) / Math.sqrt(2);
-    
-    const a1 = 0.254829592;
-    const a2 = -0.284496736;
-    const a3 = 1.421413741;
-    const a4 = -1.453152027;
-    const a5 = 1.061405429;
-    const p = 0.3275911;
-    
-    const t = 1.0 / (1.0 + p * x);
-    const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
-    
-    return 0.5 * (1.0 + sign * y);
-  }
-
-  private standardNormalInverse(p: number): number {
-    // Beasley-Springer-Moro approximation
+  /**
+   * Student's t inverse CDF (quantile function): returns t such that
+   * studentTCDF(t, df) === p.
+   *
+   * Robust bracketing bisection on the (monotone) CDF, seeded from the normal
+   * quantile. Accuracy is limited only by the CDF itself (~1e-12 here).
+   * Speed is irrelevant: analytics datasets are small and this is not a hot loop.
+   *
+   * Returns the true quantile, so studentTInverse(0.025, df) is NEGATIVE.
+   * Callers wanting a two-sided critical value must ask for 1 - alpha/2.
+   */
+  studentTInverse(p: number, df: number): number {
     if (p <= 0 || p >= 1) {
       throw new Error('p must be between 0 and 1');
     }
-    
-    const a = [0, -3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
-    const b = [0, -5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
-    const c = [0, -7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
-    const d = [0, 7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
-    
+    if (Number.isNaN(df) || df <= 0) return NaN;
+    if (!Number.isFinite(df)) return this.standardNormalInverse(p);
+    if (p === 0.5) return 0;
+
+    // Seed the bracket from the normal quantile (the t is always wider-tailed).
+    const seed = Math.abs(this.standardNormalInverse(p));
+    let lo = -Math.max(1, seed);
+    let hi = Math.max(1, seed);
+
+    // Expand until the root is bracketed (bounded: t quantiles are finite).
+    for (let i = 0; i < 200 && this.studentTCDF(lo, df) > p; i++) lo *= 2;
+    for (let i = 0; i < 200 && this.studentTCDF(hi, df) < p; i++) hi *= 2;
+
+    for (let i = 0; i < 300; i++) {
+      const mid = 0.5 * (lo + hi);
+      if (this.studentTCDF(mid, df) < p) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+      if (hi - lo <= 1e-13 * (1 + Math.abs(mid))) break;
+    }
+
+    return 0.5 * (lo + hi);
+  }
+
+  /**
+   * Noncentral Student's t CDF: P(T <= t) for T ~ t(df, ncp).
+   *
+   * Port of Lenth (1989), "Algorithm AS 243: Cumulative Distribution Function
+   * of the Non-Central t Distribution", Applied Statistics 38(1):185-189 —
+   * the same algorithm R's pt(..., ncp=) uses. Needed for honest power
+   * calculations: the central-t/normal shortcut is not a valid substitute.
+   */
+  nonCentralTCDF(t: number, df: number, ncp: number): number {
+    if (Number.isNaN(t) || Number.isNaN(df) || Number.isNaN(ncp) || df <= 0) return NaN;
+    if (ncp === 0) return this.studentTCDF(t, df);
+    if (t === Number.POSITIVE_INFINITY) return 1;
+    if (t === Number.NEGATIVE_INFINITY) return 0;
+
+    // Reflect so that we always work with t >= 0.
+    const negdel = t < 0;
+    const tt = negdel ? -t : t;
+    const del = negdel ? -ncp : ncp;
+
+    const errmax = 1e-12;
+    const itrmax = 1000;
+
+    let tnc = 0;
+    const x = (tt * tt) / (tt * tt + df);
+
+    if (x > 0) {
+      const lambda = del * del;
+      let p = 0.5 * Math.exp(-0.5 * lambda);
+      let q = Math.sqrt(2 / Math.PI) * p * del;
+      let s = 0.5 - p;
+      if (s < 1e-7) s = -0.5 * Math.expm1(-0.5 * lambda);
+
+      let a = 0.5;
+      const b = 0.5 * df;
+      const rxb = Math.pow(1 - x, b);
+      // ln B(1/2, b) = ln sqrt(pi) + lnGamma(b) - lnGamma(b + 1/2)
+      const albeta = 0.5 * Math.log(Math.PI) + this.logGamma(b) - this.logGamma(0.5 + b);
+
+      let xodd = this.regularizedIncompleteBeta(a, b, x);
+      let godd = 2 * rxb * Math.exp(a * Math.log(x) - albeta);
+      let xeven = 1 - rxb;
+      let geven = b * x * rxb;
+
+      tnc = p * xodd + q * xeven;
+
+      for (let it = 1; it <= itrmax; it++) {
+        a += 1;
+        xodd -= godd;
+        xeven -= geven;
+        godd *= (x * (a + b - 1)) / a;
+        geven *= (x * (a + b - 0.5)) / (a + 0.5);
+        p *= lambda / (2 * it);
+        q *= lambda / (2 * it + 1);
+        s -= p;
+        if (s <= 0) break;
+        tnc += p * xodd + q * xeven;
+        const errbd = 2 * s * (xodd - godd);
+        if (Math.abs(errbd) < errmax) break;
+      }
+    }
+
+    tnc += this.standardNormalCDF(-del);
+    tnc = Math.min(1, Math.max(0, tnc));
+
+    return negdel ? 1 - tnc : tnc;
+  }
+
+  /**
+   * Standard normal CDF, computed from the complementary error function
+   * (erfc via the regularized upper incomplete gamma Q(1/2, z^2/2)).
+   *
+   * Full double precision, including relative accuracy far into the tails.
+   * The previous Abramowitz & Stegun 7.1.26 rational approximation carried
+   * ~1.5e-7 absolute error, which is not adequate for small p-values.
+   */
+  standardNormalCDF(z: number): number {
+    if (Number.isNaN(z)) return NaN;
+    if (z === Number.POSITIVE_INFINITY) return 1;
+    if (z === Number.NEGATIVE_INFINITY) return 0;
+    return 0.5 * this.erfc(-z / Math.SQRT2);
+  }
+
+  /**
+   * Standard normal inverse CDF (quantile function).
+   *
+   * Acklam's rational approximation (relative error < 1.15e-9), polished with
+   * one Halley step against `standardNormalCDF`, which takes it to full double
+   * precision.
+   *
+   * NOTE: the previous implementation evaluated Acklam's polynomials with the
+   * coefficient order REVERSED, so it returned nonsense — Phi^-1(0.975) came
+   * out as 0.0544 instead of 1.9600, and Phi^-1(0.005) came out POSITIVE.
+   * Every confidence interval and power figure that went through it was wrong.
+   */
+  standardNormalInverse(p: number): number {
+    if (!(p > 0) || !(p < 1)) {
+      throw new Error('p must be between 0 and 1');
+    }
+
+    // Acklam coefficients (a1..a6, b1..b5, c1..c6, d1..d4)
+    const a = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2, -3.066479806614716e1, 2.506628277459239];
+    const b = [-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1];
+    const c = [-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+    const d = [7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416];
+
     const pLow = 0.02425;
     const pHigh = 1 - pLow;
-    
+
     let x: number;
-    
     if (p < pLow) {
       const q = Math.sqrt(-2 * Math.log(p));
-      x = (((((c[6]! * q + c[5]!) * q + c[4]!) * q + c[3]!) * q + c[2]!) * q + c[1]!) * q + c[0]!;
-      x /= ((((d[4]! * q + d[3]!) * q + d[2]!) * q + d[1]!) * q + 1);
+      x = (((((c[0]! * q + c[1]!) * q + c[2]!) * q + c[3]!) * q + c[4]!) * q + c[5]!) /
+        ((((d[0]! * q + d[1]!) * q + d[2]!) * q + d[3]!) * q + 1);
     } else if (p <= pHigh) {
       const q = p - 0.5;
       const r = q * q;
-      x = (((((a[6]! * r + a[5]!) * r + a[4]!) * r + a[3]!) * r + a[2]!) * r + a[1]!) * r + a[0]!;
-      x *= q;
-      x /= ((((b[5]! * r + b[4]!) * r + b[3]!) * r + b[2]!) * r + b[1]!) * r + 1;
+      x = ((((((a[0]! * r + a[1]!) * r + a[2]!) * r + a[3]!) * r + a[4]!) * r + a[5]!) * q) /
+        (((((b[0]! * r + b[1]!) * r + b[2]!) * r + b[3]!) * r + b[4]!) * r + 1);
     } else {
       const q = Math.sqrt(-2 * Math.log(1 - p));
-      x = -(((((c[6]! * q + c[5]!) * q + c[4]!) * q + c[3]!) * q + c[2]!) * q + c[1]!) * q + c[0]!;
-      x /= ((((d[4]! * q + d[3]!) * q + d[2]!) * q + d[1]!) * q + 1);
+      x = -(((((c[0]! * q + c[1]!) * q + c[2]!) * q + c[3]!) * q + c[4]!) * q + c[5]!) /
+        ((((d[0]! * q + d[1]!) * q + d[2]!) * q + d[3]!) * q + 1);
     }
-    
+
+    // Halley refinement against the (now exact) CDF.
+    const e = this.standardNormalCDF(x) - p;
+    const u = e * Math.sqrt(2 * Math.PI) * Math.exp((x * x) / 2);
+    if (Number.isFinite(u)) {
+      x = x - u / (1 + (x * u) / 2);
+    }
+
     return x;
   }
 
+  /**
+   * F-distribution CDF. Uses the identity
+   *   F(f; d1, d2) = I_{d1 f / (d1 f + d2)}(d1/2, d2/2)
+   * expressed here through the complement so the beta argument stays in the
+   * numerically favourable branch.
+   */
   private fCDF(f: number, df1: number, df2: number): number {
-    // Simplified F-distribution CDF approximation
-    if (f <= 0) return 0;
-    
+    if (Number.isNaN(f) || f <= 0) return 0;
+    if (!Number.isFinite(f)) return 1;
     const x = df2 / (df2 + df1 * f);
-    return 1 - this.betaIncomplete(df2 / 2, df1 / 2, x);
+    return 1 - this.regularizedIncompleteBeta(df2 / 2, df1 / 2, x);
   }
 
-  private betaIncomplete(a: number, b: number, x: number): number {
-    // Simplified incomplete beta function
+  /**
+   * Regularized incomplete beta function I_x(a, b).
+   *
+   * Continued fraction evaluated with the modified Lentz algorithm, using the
+   * symmetry I_x(a,b) = 1 - I_{1-x}(b,a) to stay in the region where the
+   * fraction converges quickly (Numerical Recipes, 3rd ed., section 6.4).
+   */
+  regularizedIncompleteBeta(a: number, b: number, x: number): number {
+    if (Number.isNaN(a) || Number.isNaN(b) || Number.isNaN(x)) return NaN;
+    if (a <= 0 || b <= 0) return NaN;
     if (x <= 0) return 0;
     if (x >= 1) return 1;
-    
-    // Use continued fraction approximation
-    let result = Math.exp(this.logGamma(a + b) - this.logGamma(a) - this.logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
-    
-    if (x < (a + 1) / (a + b + 2)) {
-      return result * this.betaContinuedFraction(a, b, x) / a;
-    } else {
-      return 1 - result * this.betaContinuedFraction(b, a, 1 - x) / b;
-    }
+
+    const lnFront =
+      this.logGamma(a + b) - this.logGamma(a) - this.logGamma(b) +
+      a * Math.log(x) + b * Math.log1p(-x);
+    const front = Math.exp(lnFront);
+
+    const result = x < (a + 1) / (a + b + 2)
+      ? (front * this.betaContinuedFraction(a, b, x)) / a
+      : 1 - (front * this.betaContinuedFraction(b, a, 1 - x)) / b;
+
+    return Math.min(1, Math.max(0, result));
   }
 
+  /**
+   * Continued fraction for the incomplete beta function (modified Lentz).
+   * FPMIN is a true underflow guard, not the convergence epsilon — conflating
+   * the two (as the previous implementation did) corrupts the recurrence.
+   */
   private betaContinuedFraction(a: number, b: number, x: number): number {
-    // Simplified continued fraction for incomplete beta
-    const maxIterations = 100;
-    const epsilon = 1e-15;
-    
-    let qab = a + b;
-    let qap = a + 1;
-    let qam = a - 1;
+    const maxIterations = 500;
+    const epsilon = 3e-16;
+    const fpmin = 1e-300;
+
+    const qab = a + b;
+    const qap = a + 1;
+    const qam = a - 1;
+
     let c = 1;
-    let d = 1 - qab * x / qap;
-    
-    if (Math.abs(d) < epsilon) d = epsilon;
+    let d = 1 - (qab * x) / qap;
+    if (Math.abs(d) < fpmin) d = fpmin;
     d = 1 / d;
     let h = d;
-    
+
     for (let m = 1; m <= maxIterations; m++) {
-      let m2 = 2 * m;
-      let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+      const m2 = 2 * m;
+
+      // Even step
+      let aa = (m * (b - m) * x) / ((qam + m2) * (a + m2));
       d = 1 + aa * d;
-      if (Math.abs(d) < epsilon) d = epsilon;
+      if (Math.abs(d) < fpmin) d = fpmin;
       c = 1 + aa / c;
-      if (Math.abs(c) < epsilon) c = epsilon;
+      if (Math.abs(c) < fpmin) c = fpmin;
       d = 1 / d;
       h *= d * c;
-      
-      aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+
+      // Odd step
+      aa = (-(a + m) * (qab + m) * x) / ((a + m2) * (qap + m2));
       d = 1 + aa * d;
-      if (Math.abs(d) < epsilon) d = epsilon;
+      if (Math.abs(d) < fpmin) d = fpmin;
       c = 1 + aa / c;
-      if (Math.abs(c) < epsilon) c = epsilon;
+      if (Math.abs(c) < fpmin) c = fpmin;
       d = 1 / d;
-      let del = d * c;
+      const del = d * c;
       h *= del;
-      
+
       if (Math.abs(del - 1) < epsilon) break;
     }
-    
+
     return h;
   }
 
-  private gamma(z: number): number {
-    // Lanczos approximation
-    const g = 7;
-    const C = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
-    
-    if (z < 0.5) {
-      return Math.PI / (Math.sin(Math.PI * z) * this.gamma(1 - z));
-    }
-    
-    z -= 1;
-    let x = C[0] ?? 0;
-    for (let i = 1; i < g + 2; i++) {
-      x += (C[i] ?? 0) / (z + i);
-    }
-    
-    const t = z + g + 0.5;
-    return Math.sqrt(2 * Math.PI) * Math.pow(t, z + 0.5) * Math.exp(-t) * x;
+  /**
+   * Complementary error function erfc(x), via the regularized incomplete gamma.
+   * erfc(x) = Q(1/2, x^2) for x >= 0, and 2 - erfc(-x) for x < 0.
+   * Computing the upper tail directly (rather than 1 - P) preserves relative
+   * accuracy for large x, which is what small p-values are made of.
+   */
+  private erfc(x: number): number {
+    if (Number.isNaN(x)) return NaN;
+    return x >= 0
+      ? this.regularizedGammaQ(0.5, x * x)
+      : 1 + this.regularizedGammaP(0.5, x * x);
   }
 
+  /**
+   * Log-gamma, evaluated in log space (Lanczos, g=7, n=9).
+   *
+   * Previously this was Math.log(gamma(z)), which overflows to Infinity for
+   * z >~ 171 — i.e. exactly the large-df regime the incomplete beta needs.
+   */
   private logGamma(z: number): number {
-    return Math.log(this.gamma(z));
+    if (Number.isNaN(z)) return NaN;
+    if (z < 0.5) {
+      // Reflection formula: lnGamma(z) = ln(pi / |sin(pi z)|) - lnGamma(1 - z)
+      return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * z))) - this.logGamma(1 - z);
+    }
+
+    const g = 7;
+    const C = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+
+    const zz = z - 1;
+    let x = C[0]!;
+    for (let i = 1; i < g + 2; i++) {
+      x += C[i]! / (zz + i);
+    }
+
+    const t = zz + g + 0.5;
+    return 0.5 * Math.log(2 * Math.PI) + (zz + 0.5) * Math.log(t) - t + Math.log(x);
   }
 
   private hypergeometric2F1(a: number, b: number, c: number, z: number): number {
