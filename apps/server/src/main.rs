@@ -147,6 +147,31 @@ async fn main() {
         .unwrap_or(60);
     let api_key_rate_limiter =
         RateLimiter::new(api_key_rate_max, api_key_rate_window, redis.clone());
+    // Anonymous participant surface. `POST /api/sessions` carried NO limiter at
+    // all, so any caller with a published questionnaire id could mint unbounded
+    // sessions — each one burning a participant number and claiming an
+    // experiment arm, i.e. corrupting the study's balance, not just row counts.
+    // Two complementary budgets (both env-tunable, see `Config`):
+    //   • per-IP (default 60/60s) — generous enough for a NAT'd classroom;
+    //   • per-questionnaire (default 600/60s) — a ceiling a distributed flood
+    //     cannot dodge by rotating source IPs.
+    let session_create_limiter = RateLimiter::new(
+        config.session_create_rate_max,
+        config.session_create_rate_window_secs,
+        redis.clone(),
+    );
+    let questionnaire_create_limiter = RateLimiter::new(
+        config.questionnaire_create_rate_max,
+        config.questionnaire_create_rate_window_secs,
+        redis.clone(),
+    );
+    // Anonymous session-media upload (default 120/60s per IP), on top of the
+    // per-session file-count / total-bytes quota enforced in the handler.
+    let session_media_limiter = RateLimiter::new(
+        config.session_media_rate_max,
+        config.session_media_rate_window_secs,
+        redis.clone(),
+    );
 
     // ── WebSocket ────────────────────────────────────────────────────
     let mut websocket_state = WebSocketState::new();
@@ -229,6 +254,9 @@ async fn main() {
         verify_send_limiter,
         verify_attempt_limiter,
         api_key_rate_limiter,
+        session_create_limiter,
+        questionnaire_create_limiter,
+        session_media_limiter,
         config: Arc::new(config.clone()),
     };
 

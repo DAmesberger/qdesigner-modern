@@ -22,7 +22,8 @@ use crate::websocket::manager::WsMessage;
     responses(
         (status = 201, description = "Session created", body = CreateSessionResponse),
         (status = 403, description = "Questionnaire not published or access denied", body = crate::openapi::ErrorEnvelope),
-        (status = 404, description = "Questionnaire not found", body = crate::openapi::ErrorEnvelope)
+        (status = 404, description = "Questionnaire not found", body = crate::openapi::ErrorEnvelope),
+        (status = 429, description = "Session-creation rate limit exceeded (per-IP or per-questionnaire)", body = crate::openapi::ErrorEnvelope)
     ),
     tags = ["sessions"]
 )]
@@ -45,6 +46,26 @@ pub async fn create_session(
 
     if q_status != "published" && user.is_none() {
         return Err(ApiError::Forbidden("Questionnaire is not published".into()));
+    }
+
+    // Per-QUESTIONNAIRE creation budget (default 600/60s). The route's per-IP
+    // budget bounds one source; this bounds one STUDY, so a flood distributed
+    // across many IPs still cannot spray this questionnaire's `arm_counts` and
+    // participant sequence — every create below burns a participant number and
+    // claims an arm, which permanently skews experiment balance rather than
+    // merely adding rows.
+    //
+    // Enforced HERE and not as a route layer because the questionnaire id
+    // arrives in the JSON BODY: a layer would have to buffer and parse the body
+    // to key on it, which duplicates the extractor and (worse) would rate-limit
+    // before we know the id is even real. Placing it after the exists/published
+    // gate also means probes for nonexistent or unpublished questionnaires
+    // (404/403, no arm claim) cannot burn a live study's budget. The same
+    // Redis-backed `RateLimiter` as every other budget — just a different key
+    // space.
+    let qkey = format!("qcreate:{}", body.questionnaire_id);
+    if !state.questionnaire_create_limiter.check(&qkey).await {
+        return Err(ApiError::RateLimited);
     }
 
     let participant_id = body

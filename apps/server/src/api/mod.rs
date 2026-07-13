@@ -8,7 +8,10 @@ use tower_http::catch_panic::CatchPanicLayer;
 
 use crate::middleware::api_key::set_api_key_context;
 use crate::middleware::fillout_rls_context::set_fillout_rls_context;
-use crate::middleware::rate_limit::rate_limit_middleware;
+use crate::middleware::rate_limit::{
+    rate_limit_middleware, session_create_rate_limit_middleware,
+    session_media_rate_limit_middleware,
+};
 use crate::middleware::rls_context::set_rls_context;
 use crate::middleware::series_rls_context::set_series_rls_context;
 use crate::state::AppState;
@@ -300,9 +303,17 @@ pub fn router(state: AppState) -> Router {
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context));
 
     let session_routes = Router::new()
+        // `POST /` is the anonymous session-create entry point — no JWT, and
+        // every call burns a participant number + claims an experiment arm. It
+        // carries its own generous per-IP budget (default 60/60s), applied to
+        // the POST method ONLY so the authenticated researcher's `GET /` listing
+        // keeps its normal (unlimited-here) path. The complementary
+        // per-questionnaire ceiling lives in the handler.
         .route(
             "/",
-            get(sessions::list_sessions).post(sessions::create_session),
+            get(sessions::list_sessions).merge(post(sessions::create_session).route_layer(
+                axum_mw::from_fn_with_state(state.clone(), session_create_rate_limit_middleware),
+            )),
         )
         .route("/aggregate", get(sessions::aggregate_sessions))
         .route("/compare", get(sessions::compare_sessions))
@@ -330,6 +341,13 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/{id}/media",
             post(media::upload_session_media)
+                // Anonymous, unauthenticated write into object storage: rate-limit
+                // it (default 120/60s per IP). The hard storage ceiling is the
+                // per-session file-count / total-bytes quota inside the handler.
+                .route_layer(axum_mw::from_fn_with_state(
+                    state.clone(),
+                    session_media_rate_limit_middleware,
+                ))
                 // Bound the multipart body before `field.bytes()` buffers it.
                 // Sits just above the 25 MiB `validate_upload` cap so the
                 // transport layer rejects gross oversends early. Overrides
@@ -358,7 +376,21 @@ pub fn router(state: AppState) -> Router {
         ));
 
     let media_routes = Router::new()
-        .route("/", get(media::list_media).post(media::upload_media))
+        .route(
+            "/",
+            get(media::list_media).merge(
+                post(media::upload_media)
+                    // Without this override axum's IMPLICIT 2 MiB default body
+                    // limit applies, so every designer upload above ~2 MiB was
+                    // rejected with 413 and the documented 25 MiB
+                    // `media::MAX_UPLOAD_BYTES` cap was unreachable — audio and
+                    // video stimuli routinely exceed 2 MiB. Matches the 26 MiB
+                    // used on the session-media route: just above the 25 MiB
+                    // `validate_upload` cap, so the transport layer sheds gross
+                    // oversends and `validate_upload` still owns the real limit.
+                    .layer(DefaultBodyLimit::max(26 * 1024 * 1024)),
+            ),
+        )
         .route("/{id}", get(media::get_media).delete(media::delete_media))
         .layer(CatchPanicLayer::new())
         .layer(axum_mw::from_fn_with_state(state.clone(), set_rls_context))

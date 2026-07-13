@@ -308,6 +308,21 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         zitadel_allow_sms_email_mfa: false,
         sso_encryption_key: None,
         cookie_secure: false,
+        // No reverse proxy in the harness: X-Forwarded-For is ignored and the
+        // socket peer (the `ConnectInfo` a test injects) is the bucket key.
+        trusted_proxy_hops: None,
+        // Anonymous-path budgets are set far above anything a test drives, so
+        // the production caps can't flake unrelated suites. The tests that
+        // ASSERT a budget override the relevant limiter/config field on the
+        // returned state before building the router.
+        session_create_rate_max: 10_000,
+        session_create_rate_window_secs: 60,
+        questionnaire_create_rate_max: 10_000,
+        questionnaire_create_rate_window_secs: 60,
+        session_media_rate_max: 10_000,
+        session_media_rate_window_secs: 60,
+        session_media_max_files: 10_000,
+        session_media_max_total_bytes: 10 * 1024 * 1024 * 1024,
     };
 
     Some(AppState {
@@ -322,6 +337,9 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         verify_send_limiter: RateLimiter::new(10_000, 60, None),
         verify_attempt_limiter: RateLimiter::new(10_000, 60, None),
         api_key_rate_limiter: RateLimiter::new(10_000, 60, None),
+        session_create_limiter: RateLimiter::new(10_000, 60, None),
+        questionnaire_create_limiter: RateLimiter::new(10_000, 60, None),
+        session_media_limiter: RateLimiter::new(10_000, 60, None),
         config: Arc::new(config),
     })
 }
