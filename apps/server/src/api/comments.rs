@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query},
+    extract::{Path, Query, State},
     Json,
 };
 use chrono::{DateTime, Utc};
@@ -9,8 +9,31 @@ use uuid::Uuid;
 
 use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
+use crate::rbac::models::{Permission, ProjectRole};
+use crate::state::AppState;
+
+/// Resolve the owning project for a questionnaire via a plain query.
+///
+/// `questionnaire_definitions` is RLS-exempt (ADR 0012), so this lookup is
+/// RLS-independent — it always resolves regardless of the caller's row
+/// visibility. Comments/series then authorize at `Scope::Project` (ADR 0034).
+/// Returns `NotFound` when the questionnaire is absent/soft-deleted, matching
+/// the existing 404 contract.
+async fn questionnaire_project_id<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    questionnaire_id: Uuid,
+) -> Result<Uuid, ApiError> {
+    sqlx::query_scalar::<_, Uuid>(
+        "SELECT project_id FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(questionnaire_id)
+    .fetch_optional(executor)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Questionnaire not found".to_string()))
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -71,6 +94,7 @@ pub struct ListCommentsQuery {
     tags = ["comments"]
 )]
 pub async fn create_comment(
+    State(state): State<AppState>,
     Path(questionnaire_id): Path<Uuid>,
     user: AuthenticatedUser,
     tx: Tx,
@@ -78,7 +102,15 @@ pub async fn create_comment(
 ) -> Result<Json<CommentResponse>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
+    let project_id = questionnaire_project_id(&mut **tx, questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectRead,
+    )
+    .await?;
 
     let comment = sqlx::query_as::<_, CommentResponse>(
         r#"
@@ -119,6 +151,7 @@ pub async fn create_comment(
     tags = ["comments"]
 )]
 pub async fn list_comments(
+    State(state): State<AppState>,
     Path(questionnaire_id): Path<Uuid>,
     user: AuthenticatedUser,
     tx: Tx,
@@ -126,7 +159,15 @@ pub async fn list_comments(
 ) -> Result<Json<Vec<CommentResponse>>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
+    let project_id = questionnaire_project_id(&mut **tx, questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectRead,
+    )
+    .await?;
 
     let comments = sqlx::query_as::<_, CommentResponse>(
         r#"
@@ -170,6 +211,7 @@ pub async fn list_comments(
     tags = ["comments"]
 )]
 pub async fn update_comment(
+    State(state): State<AppState>,
     Path((questionnaire_id, comment_id)): Path<(Uuid, Uuid)>,
     user: AuthenticatedUser,
     tx: Tx,
@@ -177,7 +219,37 @@ pub async fn update_comment(
 ) -> Result<Json<CommentResponse>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
+    let project_id = questionnaire_project_id(&mut **tx, questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectRead,
+    )
+    .await?;
+
+    // ADR 0034 bug fix: split the body concern from the resolve concern.
+    // Load the target comment so a body edit can be gated on authorship
+    // independently of a resolve change. A `resolved` value no longer buys a
+    // caller the right to rewrite another author's body.
+    let author_id: Uuid = sqlx::query_scalar(
+        "SELECT author_id FROM questionnaire_comments WHERE id = $1 AND questionnaire_id = $2",
+    )
+    .bind(comment_id)
+    .bind(questionnaire_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Comment not found or unauthorized".to_string()))?;
+
+    // A body change requires authorship; reject loudly rather than silently
+    // no-op'ing the body so a non-author's combined body+resolve PATCH fails.
+    // A resolve-only change needs only project read (already granted above).
+    if body.body.is_some() && author_id != user.user_id {
+        return Err(ApiError::Forbidden(
+            "Only the author can edit a comment's body".to_string(),
+        ));
+    }
 
     let resolved_by: Option<Uuid> = if body.resolved == Some(true) {
         Some(user.user_id)
@@ -194,28 +266,26 @@ pub async fn update_comment(
     let comment = sqlx::query_as::<_, CommentResponse>(
         r#"
         UPDATE questionnaire_comments
-        SET body = COALESCE($4, body),
-            resolved = COALESCE($5, resolved),
+        SET body = COALESCE($3, body),
+            resolved = COALESCE($4, resolved),
             resolved_by = CASE
-                WHEN $5 = true THEN $6
-                WHEN $5 = false THEN NULL
+                WHEN $4 = true THEN $5
+                WHEN $4 = false THEN NULL
                 ELSE resolved_by
             END,
             resolved_at = CASE
-                WHEN $5 = true THEN $7
-                WHEN $5 = false THEN NULL
+                WHEN $4 = true THEN $6
+                WHEN $4 = false THEN NULL
                 ELSE resolved_at
             END,
             updated_at = NOW()
         WHERE id = $1 AND questionnaire_id = $2
-          AND (author_id = $3 OR $5 IS NOT NULL)
         RETURNING id, questionnaire_id, parent_id, author_id, anchor_type, anchor_id,
                   body, resolved, resolved_by, resolved_at, created_at, updated_at
         "#,
     )
     .bind(comment_id)
     .bind(questionnaire_id)
-    .bind(user.user_id)
     .bind(&body.body)
     .bind(body.resolved)
     .bind(resolved_by)
@@ -246,23 +316,41 @@ pub async fn update_comment(
     tags = ["comments"]
 )]
 pub async fn delete_comment(
+    State(state): State<AppState>,
     Path((questionnaire_id, comment_id)): Path<(Uuid, Uuid)>,
     user: AuthenticatedUser,
     tx: Tx,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let mut tx = tx.tx().await?;
 
-    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
+    let project_id = questionnaire_project_id(&mut **tx, questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectRead,
+    )
+    .await?;
+
+    // ADR 0034: the author OR a project admin (moderation) may delete. Reuse
+    // the tiered project gate for the admin check — a plain non-author member
+    // matches neither branch and gets the 404 below, as before.
+    let is_project_admin =
+        access::verify_project_access(&mut **tx, user.user_id, project_id, ProjectRole::Admin)
+            .await
+            .is_ok();
 
     let result = sqlx::query(
         r#"
         DELETE FROM questionnaire_comments
-        WHERE id = $1 AND questionnaire_id = $2 AND author_id = $3
+        WHERE id = $1 AND questionnaire_id = $2 AND (author_id = $3 OR $4)
         "#,
     )
     .bind(comment_id)
     .bind(questionnaire_id)
     .bind(user.user_id)
+    .bind(is_project_admin)
     .execute(&mut **tx)
     .await?;
 

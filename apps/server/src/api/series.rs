@@ -5,8 +5,12 @@
 //!
 //! - **Researcher** (`set_rls_context`, `app.user_id`): create/list/update
 //!   a [`study_series`], enroll participants, list enrollments. Authorized
-//!   by `api::access::verify_questionnaire_access` (the mutation gate, ADR
-//!   0013) on top of the RLS org-member policy.
+//!   by [`crate::authz::authorize`] at `Scope::Project` (ADR 0034): the
+//!   reads (`list_series`/`list_enrollments`) require `ProjectRead`, the
+//!   mutations (`create_series`/`update_series`/`enroll`) require
+//!   `ProjectWrite` — so a project viewer can no longer mutate schedules or
+//!   enroll participants. The owning project is resolved from the
+//!   questionnaire id (RLS-exempt `questionnaire_definitions`).
 //! - **Participant** (`set_series_rls_context`, `app.enrollment_token`):
 //!   resolve a reminder link, post completion back (advances the
 //!   enrollment + schedules the next wave), and unsubscribe. Anonymous —
@@ -24,10 +28,11 @@ use serde_json::Value;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
-use crate::api::access;
 use crate::auth::models::AuthenticatedUser;
+use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
+use crate::rbac::models::Permission;
 use crate::series::schedule::{self, ScheduleKind, WaveDef};
 use crate::state::AppState;
 
@@ -178,12 +183,21 @@ pub struct UnsubscribeResponse {
     tags = ["series"]
 )]
 pub async fn create_series(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Json(body): Json<CreateSeriesRequest>,
 ) -> Result<(axum::http::StatusCode, Json<SeriesRecord>), ApiError> {
     let mut tx = tx.tx().await?;
-    access::verify_questionnaire_access(&mut **tx, user.user_id, body.questionnaire_id).await?;
+    let project_id = questionnaire_project_id(&mut **tx, body.questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectWrite,
+    )
+    .await?;
 
     let kind = ScheduleKind::parse(body.schedule_kind.as_deref().unwrap_or("fixed"));
     let wave_defs = body.wave_defs.unwrap_or_else(|| Value::Array(Vec::new()));
@@ -228,12 +242,21 @@ pub async fn create_series(
     tags = ["series"]
 )]
 pub async fn list_series(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Query(q): Query<SeriesListQuery>,
 ) -> Result<Json<Vec<SeriesRecord>>, ApiError> {
     let mut tx = tx.tx().await?;
-    access::verify_questionnaire_access(&mut **tx, user.user_id, q.questionnaire_id).await?;
+    let project_id = questionnaire_project_id(&mut **tx, q.questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectRead,
+    )
+    .await?;
 
     let rows = sqlx::query_as::<_, SeriesRecord>(
         r#"
@@ -265,6 +288,7 @@ pub async fn list_series(
     tags = ["series"]
 )]
 pub async fn update_series(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(series_id): Path<Uuid>,
@@ -272,7 +296,15 @@ pub async fn update_series(
 ) -> Result<Json<SeriesRecord>, ApiError> {
     let mut tx = tx.tx().await?;
     let questionnaire_id = series_questionnaire_id(&mut tx, series_id).await?;
-    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
+    let project_id = questionnaire_project_id(&mut **tx, questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectWrite,
+    )
+    .await?;
 
     let normalized_kind = body
         .schedule_kind
@@ -346,7 +378,15 @@ pub async fn enroll(
     .await?
     .ok_or_else(|| ApiError::NotFound("Series not found".into()))?;
 
-    access::verify_questionnaire_access(&mut **tx, user.user_id, series.questionnaire_id).await?;
+    let project_id = questionnaire_project_id(&mut **tx, series.questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectWrite,
+    )
+    .await?;
 
     let channel_kind = body.channel_kind.as_deref().unwrap_or("email");
     if channel_kind != "email" {
@@ -452,13 +492,22 @@ pub async fn enroll(
     tags = ["series"]
 )]
 pub async fn list_enrollments(
+    State(state): State<AppState>,
     user: AuthenticatedUser,
     tx: Tx,
     Path(series_id): Path<Uuid>,
 ) -> Result<Json<Vec<EnrollmentRecord>>, ApiError> {
     let mut tx = tx.tx().await?;
     let questionnaire_id = series_questionnaire_id(&mut tx, series_id).await?;
-    access::verify_questionnaire_access(&mut **tx, user.user_id, questionnaire_id).await?;
+    let project_id = questionnaire_project_id(&mut **tx, questionnaire_id).await?;
+    authorize(
+        &mut tx,
+        &state.rbac,
+        user.user_id,
+        Scope::Project(project_id),
+        Permission::ProjectRead,
+    )
+    .await?;
 
     let rows = sqlx::query_as::<_, EnrollmentRecord>(
         r#"
@@ -790,6 +839,24 @@ async fn series_questionnaire_id(
         .fetch_optional(&mut *conn)
         .await?
         .ok_or_else(|| ApiError::NotFound("Series not found".into()))
+}
+
+/// Resolve the owning project for a questionnaire via a plain query.
+///
+/// `questionnaire_definitions` is RLS-exempt (ADR 0012), so this lookup is
+/// RLS-independent — series then authorize at `Scope::Project` (ADR 0034).
+/// Returns `NotFound` when the questionnaire is absent/soft-deleted.
+async fn questionnaire_project_id<'e>(
+    executor: impl sqlx::PgExecutor<'e>,
+    questionnaire_id: Uuid,
+) -> Result<Uuid, ApiError> {
+    sqlx::query_scalar::<_, Uuid>(
+        "SELECT project_id FROM questionnaire_definitions WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(questionnaire_id)
+    .fetch_optional(executor)
+    .await?
+    .ok_or_else(|| ApiError::NotFound("Questionnaire not found".into()))
 }
 
 /// Derive the public fillout code from a questionnaire id — the first 8
