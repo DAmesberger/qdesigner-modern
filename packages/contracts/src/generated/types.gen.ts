@@ -25,6 +25,11 @@ export type AddProjectMemberRequest = {
 
 export type AggregateOverview = {
     total_responses: number;
+    /**
+     * Denominator of `overall_completion_rate` (see
+     * [`QuestionnaireAnalytics::total_sessions`]).
+     */
+    total_sessions: number;
     total_completed_sessions: number;
     overall_completion_rate: number;
     overall_timing_stats?: null | NumericStatsSummary;
@@ -249,6 +254,12 @@ export type CreateOrgRequest = {
     data_region?: string | null;
 };
 
+export type CreateProjectInvitationRequest = {
+    email: string;
+    role: string;
+    custom_message?: string | null;
+};
+
 export type CreateProjectRequest = {
     organization_id: string;
     name: string;
@@ -368,11 +379,28 @@ export type CreateTemplateRequest = {
     is_shared?: boolean | null;
 };
 
+/**
+ * A pairwise comparison of two questionnaires on the same aggregation key.
+ *
+ * `mean_delta` / `median_delta` are ARM-LEVEL differences: they compare the two
+ * questionnaires' whole samples and need no pairing, exactly like a
+ * between-groups mean difference.
+ *
+ * `correlation` is a different animal — a Pearson r only means anything over
+ * PAIRED observations, so it is computed strictly over participants observed in
+ * BOTH questionnaires (see [`pair_samples_by_participant`]). `paired_n` reports
+ * how many such participants there were, and `correlation` is `None` whenever
+ * that count is below [`MIN_CORRELATION_PAIRS`] (or the pairs have no variance).
+ */
 export type CrossComparison = {
     questionnaire_a: string;
     questionnaire_b: string;
     mean_delta?: number | null;
     median_delta?: number | null;
+    /**
+     * Participants contributing an observation to BOTH questionnaires.
+     */
+    paired_n: number;
     correlation?: number | null;
 };
 
@@ -832,6 +860,47 @@ export type Project = {
     questionnaire_count?: number | null;
 };
 
+export type ProjectInvitation = {
+    id: string;
+    project_id: string;
+    email: string;
+    role: string;
+    token: string;
+    status: string;
+    invited_by?: string | null;
+    created_at?: string | null;
+    expires_at?: string | null;
+    accepted_at?: string | null;
+    custom_message?: string | null;
+};
+
+export type ProjectInvitationDetail = {
+    id: string;
+    project_id: string;
+    email: string;
+    role: string;
+    token: string;
+    status: string;
+    invited_by?: null | ProjectInvitationInviterSummary;
+    created_at?: string | null;
+    expires_at?: string | null;
+    accepted_at?: string | null;
+    custom_message?: string | null;
+    project: ProjectInvitationProjectSummary;
+};
+
+export type ProjectInvitationInviterSummary = {
+    id: string;
+    email: string;
+    full_name?: string | null;
+};
+
+export type ProjectInvitationProjectSummary = {
+    id: string;
+    name: string;
+    code: string;
+};
+
 export type ProjectMember = {
     user_id: string;
     email: string;
@@ -878,6 +947,13 @@ export type QuestionnaireAnalytics = {
     questionnaire_id: string;
     name: string;
     response_count: number;
+    /**
+     * Sessions started against this questionnaire — the denominator of
+     * `completion_rate`. `response_count` counts response ROWS and is a
+     * different quantity entirely (a 10-question questionnaire yields ~10
+     * response rows per session).
+     */
+    total_sessions: number;
     completed_sessions: number;
     completion_rate: number;
     timing_stats?: null | NumericStatsSummary;
@@ -910,7 +986,17 @@ export type QuestionnaireSummary = {
     name: string;
     project_id: string;
     status: string;
+    /**
+     * Response ROWS (`COUNT(DISTINCT r.id)`) — one questionnaire run produces
+     * one row per answered question. NOT a session count, and never a
+     * completion denominator.
+     */
     total_responses: number;
+    /**
+     * Sessions started against this questionnaire (`COUNT(DISTINCT s.id)`).
+     * This is the completion-rate denominator.
+     */
+    total_sessions: number;
     completed_sessions: number;
     avg_completion_time_ms?: number | null;
     created_at: string;
@@ -1348,6 +1434,12 @@ export type SyncTrialItem = {
     source?: string | null;
     rt_us?: number | null;
     correct?: boolean | null;
+    /**
+     * Practice (warm-up) trial. `None` means UNKNOWN — an older client that never
+     * carried the flag — and is deliberately distinct from `Some(false)`: cohort
+     * aggregates admit only trials KNOWN not to be practice (ADR 0028).
+     */
+    is_practice?: boolean | null;
     sampled_timings?: unknown;
     provenance?: unknown;
     invalidated?: string | null;
@@ -3947,6 +4039,206 @@ export type TransferProjectOwnershipResponses = {
 
 export type TransferProjectOwnershipResponse = TransferProjectOwnershipResponses[keyof TransferProjectOwnershipResponses];
 
+export type ListProjectInvitationsData = {
+    body?: never;
+    path: {
+        /**
+         * Project id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/invitations';
+};
+
+export type ListProjectInvitationsErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListProjectInvitationsError = ListProjectInvitationsErrors[keyof ListProjectInvitationsErrors];
+
+export type ListProjectInvitationsResponses = {
+    /**
+     * Pending project invitations
+     */
+    200: Array<ProjectInvitation>;
+};
+
+export type ListProjectInvitationsResponse = ListProjectInvitationsResponses[keyof ListProjectInvitationsResponses];
+
+export type CreateProjectInvitationData = {
+    body: CreateProjectInvitationRequest;
+    path: {
+        /**
+         * Project id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/invitations';
+};
+
+export type CreateProjectInvitationErrors = {
+    /**
+     * Invalid invitation request
+     */
+    400: ErrorEnvelope;
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * A pending invitation already exists for this email
+     */
+    409: ErrorEnvelope;
+    /**
+     * Validation error
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateProjectInvitationError = CreateProjectInvitationErrors[keyof CreateProjectInvitationErrors];
+
+export type CreateProjectInvitationResponses = {
+    /**
+     * Invitation created
+     */
+    201: ProjectInvitation;
+};
+
+export type CreateProjectInvitationResponse = CreateProjectInvitationResponses[keyof CreateProjectInvitationResponses];
+
+export type GetProjectInvitationData = {
+    body?: never;
+    path: {
+        /**
+         * Invitation token
+         */
+        token: string;
+    };
+    query?: never;
+    url: '/api/project-invitations/{token}';
+};
+
+export type GetProjectInvitationErrors = {
+    /**
+     * Invitation not found
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetProjectInvitationError = GetProjectInvitationErrors[keyof GetProjectInvitationErrors];
+
+export type GetProjectInvitationResponses = {
+    /**
+     * Invitation detail
+     */
+    200: ProjectInvitationDetail;
+};
+
+export type GetProjectInvitationResponse = GetProjectInvitationResponses[keyof GetProjectInvitationResponses];
+
+export type AcceptProjectInvitationData = {
+    body?: never;
+    path: {
+        /**
+         * Invitation token
+         */
+        token: string;
+    };
+    query?: never;
+    url: '/api/project-invitations/{token}/accept';
+};
+
+export type AcceptProjectInvitationErrors = {
+    /**
+     * Invitation not found or expired
+     */
+    404: ErrorEnvelope;
+};
+
+export type AcceptProjectInvitationError = AcceptProjectInvitationErrors[keyof AcceptProjectInvitationErrors];
+
+export type AcceptProjectInvitationResponses = {
+    /**
+     * Invitation accepted
+     */
+    200: MessageResponse;
+};
+
+export type AcceptProjectInvitationResponse = AcceptProjectInvitationResponses[keyof AcceptProjectInvitationResponses];
+
+export type DeclineProjectInvitationData = {
+    body?: never;
+    path: {
+        /**
+         * Invitation token
+         */
+        token: string;
+    };
+    query?: never;
+    url: '/api/project-invitations/{token}/decline';
+};
+
+export type DeclineProjectInvitationErrors = {
+    /**
+     * Invitation not found or already processed
+     */
+    404: ErrorEnvelope;
+};
+
+export type DeclineProjectInvitationError = DeclineProjectInvitationErrors[keyof DeclineProjectInvitationErrors];
+
+export type DeclineProjectInvitationResponses = {
+    /**
+     * Invitation declined
+     */
+    200: MessageResponse;
+};
+
+export type DeclineProjectInvitationResponse = DeclineProjectInvitationResponses[keyof DeclineProjectInvitationResponses];
+
+export type RevokeProjectInvitationData = {
+    body?: never;
+    path: {
+        /**
+         * Project id
+         */
+        id: string;
+        /**
+         * Invitation id
+         */
+        inv_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/invitations/{inv_id}';
+};
+
+export type RevokeProjectInvitationErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * Invitation not found or already processed
+     */
+    404: ErrorEnvelope;
+};
+
+export type RevokeProjectInvitationError = RevokeProjectInvitationErrors[keyof RevokeProjectInvitationErrors];
+
+export type RevokeProjectInvitationResponses = {
+    /**
+     * Invitation revoked
+     */
+    200: MessageResponse;
+};
+
+export type RevokeProjectInvitationResponse = RevokeProjectInvitationResponses[keyof RevokeProjectInvitationResponses];
+
 export type GetQuestionnaireByCodeData = {
     body?: never;
     path: {
@@ -4675,6 +4967,10 @@ export type CreateSessionErrors = {
      * Questionnaire not found
      */
     404: ErrorEnvelope;
+    /**
+     * Session-creation rate limit exceeded (per-IP or per-questionnaire)
+     */
+    429: ErrorEnvelope;
 };
 
 export type CreateSessionError = CreateSessionErrors[keyof CreateSessionErrors];
@@ -5510,13 +5806,17 @@ export type UploadSessionMediaData = {
 
 export type UploadSessionMediaErrors = {
     /**
-     * Invalid upload request
+     * Invalid upload request, or the per-session file-count / total-bytes quota is exhausted
      */
     400: ErrorEnvelope;
     /**
      * Session not found
      */
     404: ErrorEnvelope;
+    /**
+     * Upload rate limit exceeded
+     */
+    429: ErrorEnvelope;
 };
 
 export type UploadSessionMediaError = UploadSessionMediaErrors[keyof UploadSessionMediaErrors];

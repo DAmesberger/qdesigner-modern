@@ -4411,6 +4411,352 @@
         ]
       }
     },
+    "/api/projects/{id}/invitations": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "GET /api/projects/:id/invitations",
+        "operationId": "list_project_invitations",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Project id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending project invitations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectInvitation"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "POST /api/projects/:id/invitations",
+        "operationId": "create_project_invitation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Project id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Invitation created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInvitation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid invitation request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A pending invitation already exists for this email",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/project-invitations/{token}": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "GET /api/project-invitations/:token",
+        "description": "Public accept-page lookup keyed on the token (mirrors `get_invitation`).\nComputes `expired` dynamically without mutating the row.",
+        "operationId": "get_project_invitation",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "Invitation token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInvitationDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invitation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/project-invitations/{token}/accept": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "POST /api/project-invitations/:token/accept",
+        "description": "The security-sensitive path: the authenticated caller may only accept an\ninvitation addressed to THEIR email, that is still `pending` and unexpired.\nOn success it lands a `project_members` row with the invited role (cross-org\nallowed post-Unit-1/2) and marks the invitation accepted. Idempotency\nmirrors the org flow: the membership INSERT upserts on the project-member PK.",
+        "operationId": "accept_project_invitation",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "Invitation token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invitation not found or expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/project-invitations/{token}/decline": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "POST /api/project-invitations/:token/decline",
+        "operationId": "decline_project_invitation",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "description": "Invitation token",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation declined",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invitation not found or already processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{id}/invitations/{inv_id}": {
+      "delete": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "DELETE /api/projects/:id/invitations/:inv_id  (revoke)",
+        "operationId": "revoke_project_invitation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Project id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "inv_id",
+            "in": "path",
+            "description": "Invitation id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invitation not found or already processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/questionnaires/by-code/{code}": {
       "get": {
         "tags": [
@@ -5920,6 +6266,16 @@
           },
           "404": {
             "description": "Questionnaire not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Session-creation rate limit exceeded (per-IP or per-questionnaire)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7452,6 +7808,7 @@
           "media"
         ],
         "summary": "POST /api/sessions/:id/media — anonymous multipart upload scoped to a session.\nNo JWT required; validates the session exists and is active.",
+        "description": "Bounded on three axes, all of which must hold for the S3 write to happen:\nthe route's per-IP rate limit (default 120/60s), [`validate_upload`]'s 25 MiB\nper-file cap + magic-byte allowlist, and the per-session file-count /\ntotal-bytes quota ([`enforce_session_media_quota`], default 20 files /\n100 MiB).",
         "operationId": "upload_session_media",
         "parameters": [
           {
@@ -7487,7 +7844,7 @@
             }
           },
           "400": {
-            "description": "Invalid upload request",
+            "description": "Invalid upload request, or the per-session file-count / total-bytes quota is exhausted",
             "content": {
               "application/json": {
                 "schema": {
@@ -7498,6 +7855,16 @@
           },
           "404": {
             "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Upload rate limit exceeded",
             "content": {
               "application/json": {
                 "schema": {
@@ -7966,6 +8333,7 @@
         "type": "object",
         "required": [
           "total_responses",
+          "total_sessions",
           "total_completed_sessions",
           "overall_completion_rate"
         ],
@@ -7973,6 +8341,11 @@
           "total_responses": {
             "type": "integer",
             "format": "int64"
+          },
+          "total_sessions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Denominator of `overall_completion_rate` (see\n[`QuestionnaireAnalytics::total_sessions`])."
           },
           "total_completed_sessions": {
             "type": "integer",
@@ -8628,6 +9001,27 @@
           }
         }
       },
+      "CreateProjectInvitationRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "role"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "custom_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "CreateProjectRequest": {
         "type": "object",
         "required": [
@@ -8945,9 +9339,11 @@
       },
       "CrossComparison": {
         "type": "object",
+        "description": "A pairwise comparison of two questionnaires on the same aggregation key.\n\n`mean_delta` / `median_delta` are ARM-LEVEL differences: they compare the two\nquestionnaires' whole samples and need no pairing, exactly like a\nbetween-groups mean difference.\n\n`correlation` is a different animal — a Pearson r only means anything over\nPAIRED observations, so it is computed strictly over participants observed in\nBOTH questionnaires (see [`pair_samples_by_participant`]). `paired_n` reports\nhow many such participants there were, and `correlation` is `None` whenever\nthat count is below [`MIN_CORRELATION_PAIRS`] (or the pairs have no variance).",
         "required": [
           "questionnaire_a",
-          "questionnaire_b"
+          "questionnaire_b",
+          "paired_n"
         ],
         "properties": {
           "questionnaire_a": {
@@ -8971,6 +9367,11 @@
               "null"
             ],
             "format": "double"
+          },
+          "paired_n": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Participants contributing an observation to BOTH questionnaires."
           },
           "correlation": {
             "type": [
@@ -10433,6 +10834,191 @@
           }
         }
       },
+      "ProjectInvitation": {
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "email",
+          "role",
+          "token",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "invited_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "accepted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "custom_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ProjectInvitationDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "email",
+          "role",
+          "token",
+          "status",
+          "project"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "invited_by": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectInvitationInviterSummary"
+              }
+            ]
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "accepted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "custom_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project": {
+            "$ref": "#/components/schemas/ProjectInvitationProjectSummary"
+          }
+        }
+      },
+      "ProjectInvitationInviterSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "email"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ProjectInvitationProjectSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "code"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
       "ProjectMember": {
         "type": "object",
         "required": [
@@ -10635,6 +11221,7 @@
           "questionnaire_id",
           "name",
           "response_count",
+          "total_sessions",
           "completed_sessions",
           "completion_rate"
         ],
@@ -10649,6 +11236,11 @@
           "response_count": {
             "type": "integer",
             "format": "int64"
+          },
+          "total_sessions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sessions started against this questionnaire — the denominator of\n`completion_rate`. `response_count` counts response ROWS and is a\ndifferent quantity entirely (a 10-question questionnaire yields ~10\nresponse rows per session)."
           },
           "completed_sessions": {
             "type": "integer",
@@ -10751,6 +11343,7 @@
           "project_id",
           "status",
           "total_responses",
+          "total_sessions",
           "completed_sessions",
           "created_at",
           "updated_at"
@@ -10772,7 +11365,13 @@
           },
           "total_responses": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Response ROWS (`COUNT(DISTINCT r.id)`) — one questionnaire run produces\none row per answered question. NOT a session count, and never a\ncompletion denominator."
+          },
+          "total_sessions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sessions started against this questionnaire (`COUNT(DISTINCT s.id)`).\nThis is the completion-rate denominator."
           },
           "completed_sessions": {
             "type": "integer",
@@ -12051,6 +12650,13 @@
               "boolean",
               "null"
             ]
+          },
+          "is_practice": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Practice (warm-up) trial. `None` means UNKNOWN — an older client that never\ncarried the flag — and is deliberately distinct from `Some(false)`: cohort\naggregates admit only trials KNOWN not to be practice (ADR 0028)."
           },
           "sampled_timings": {},
           "provenance": {},
