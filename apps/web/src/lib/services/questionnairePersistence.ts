@@ -1,4 +1,5 @@
 import { api } from './api';
+import { describeApiError, type ApiErrorInfo } from './api/errors';
 import type { Questionnaire } from '$lib/shared';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- persistence layer hydrates dynamic questionnaire JSON payloads
@@ -8,6 +9,8 @@ export interface SaveResult {
   success: boolean;
   questionnaireId?: string;
   error?: string;
+  /** Failure class (offline / auth / conflict / server), so the caller can report why. */
+  failure?: ApiErrorInfo;
 }
 
 export interface LoadResult {
@@ -76,9 +79,11 @@ export class QuestionnairePersistenceService {
       }
     } catch (error) {
       console.error('Error saving questionnaire:', error as Error);
+      const failure = describeApiError(error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: failure.message,
+        failure
       };
     }
   }

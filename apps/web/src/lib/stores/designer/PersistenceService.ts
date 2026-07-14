@@ -1,6 +1,7 @@
 import type { Questionnaire } from '$lib/shared/types/questionnaire';
 import { QuestionnairePersistenceService } from '$lib/services/questionnairePersistence';
 import { api } from '$lib/services/api';
+import { describeApiError, type ApiErrorInfo } from '$lib/services/api/errors';
 
 export interface PersistedQuestionnaireSummary {
   id: string;
@@ -14,6 +15,14 @@ export interface PersistedQuestionnaireSummary {
 export interface SavePayload {
   projectId: string;
   questionnaire: Questionnaire;
+}
+
+export interface SaveOutcome {
+  success: boolean;
+  id?: string;
+  error?: string;
+  /** Failure class, present when `success` is false. */
+  failure?: ApiErrorInfo;
 }
 
 export class DesignerPersistenceService {
@@ -36,12 +45,13 @@ export class DesignerPersistenceService {
     return { id: created.id };
   }
 
-  public async save({ projectId, questionnaire }: SavePayload): Promise<{ success: boolean; id?: string; error?: string }> {
+  public async save({ projectId, questionnaire }: SavePayload): Promise<SaveOutcome> {
     const result = await QuestionnairePersistenceService.saveQuestionnaire(questionnaire, projectId);
     return {
       success: result.success,
       id: result.questionnaireId,
       error: result.error,
+      failure: result.failure,
     };
   }
 
@@ -63,15 +73,13 @@ export class DesignerPersistenceService {
     return result.questionnaire;
   }
 
-  public async publish(projectId: string, questionnaireId: string): Promise<{ success: boolean; error?: string }> {
+  public async publish(projectId: string, questionnaireId: string): Promise<SaveOutcome> {
     try {
       await api.questionnaires.publish(projectId, questionnaireId);
       return { success: true };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to publish questionnaire',
-      };
+      const failure = describeApiError(error);
+      return { success: false, error: failure.message, failure };
     }
   }
 }

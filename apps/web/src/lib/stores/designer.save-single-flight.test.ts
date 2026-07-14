@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readable } from 'svelte/store';
 
 // F-48: the designer periodic autosave kept POSTing the CREATE endpoint after the
 // first successful create — every subsequent tick collided on the
@@ -19,8 +20,14 @@ vi.mock('$lib/services/api', () => ({
   },
 }));
 
+// `toasts` (the live list) is read by the store's save-error dedupe, which
+// suppresses a repeat only while the identical toast is still on screen. These
+// tests are about the save chokepoint, not the reporting — an always-empty list
+// means "nothing on screen", so every failure here reports. What the author
+// actually sees is pinned in designer.save-failure-reporting.test.ts.
 vi.mock('$lib/stores/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+  toasts: readable([]),
 }));
 
 import { api } from '$lib/services/api';

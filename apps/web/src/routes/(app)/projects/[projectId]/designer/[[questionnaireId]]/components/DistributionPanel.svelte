@@ -77,6 +77,9 @@
   }
 
   async function handlePublish() {
+    // Publish must not proceed on a failed save. saveQuestionnaire() has already
+    // told the author why it failed (it toasts on every failure exit), so bail
+    // quietly here — reporting again would double-toast the same failure.
     const saved = await designerStore.saveQuestionnaire();
     if (!saved) return;
     await designerStore.publishQuestionnaire();

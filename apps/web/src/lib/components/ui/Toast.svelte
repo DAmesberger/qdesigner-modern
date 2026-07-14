@@ -34,6 +34,8 @@
       <div
         animate:flip={{ duration: 200 }}
         transition:fly={{ y: 20, duration: 300 }}
+        data-testid="toast"
+        data-toast-type={item.type}
         class="pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg bg-card shadow-lg ring-1 ring-black ring-opacity-5"
       >
         <div class="p-4">

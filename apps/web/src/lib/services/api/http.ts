@@ -1,4 +1,5 @@
 import { auth } from '../auth';
+import { ApiError } from './errors';
 
 type ApiErrorPayload = {
   error?: string | { message?: string; status?: number };
@@ -79,6 +80,15 @@ export function unwrapSdkResult<T>(result: T | SdkFieldResponse<T>): T {
   return result as T;
 }
 
+/**
+ * Keep the status on the way out. Collapsing a failure to `new Error(message)`
+ * left every catch site unable to tell offline from 409 from 401, so a failed
+ * save could only ever be reported as a generic "something went wrong".
+ */
+function toApiError(error: unknown): ApiError {
+  return new ApiError(parseApiErrorMessage(error, 'Request failed'), getApiErrorStatus(error));
+}
+
 export async function callSdk<T>(request: () => Promise<T | SdkFieldResponse<T>>): Promise<T> {
   try {
     return unwrapSdkResult(await request());
@@ -86,11 +96,20 @@ export async function callSdk<T>(request: () => Promise<T | SdkFieldResponse<T>>
     if (getApiErrorStatus(error) === 401) {
       const session = await auth.getSession();
       if (session) {
-        return unwrapSdkResult(await request());
+        // The post-refresh retry must be wrapped too. Left bare, its rejection
+        // escaped as the SDK's raw payload object — not an Error at all — and the
+        // caller could only render it as "Unknown error occurred". This is the
+        // live 401 path (a signed-in author whose token went stale), so the one
+        // failure most likely to be misreported was the one we misreported.
+        try {
+          return unwrapSdkResult(await request());
+        } catch (retryError) {
+          throw toApiError(retryError);
+        }
       }
       await auth.signOut();
     }
 
-    throw new Error(parseApiErrorMessage(error, 'Request failed'));
+    throw toApiError(error);
   }
 }

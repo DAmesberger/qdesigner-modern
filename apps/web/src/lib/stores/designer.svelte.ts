@@ -14,7 +14,10 @@ import { readRightPanelPinned, persistRightPanelPinned } from './designer/ui';
 import { DesignerPersistenceService } from './designer/PersistenceService';
 import { VariableEngine } from '@qdesigner/scripting-engine';
 import type { CollaborativeDesigner } from '$lib/collaboration/CollaborativeDesigner';
-import { toast } from '$lib/stores/toast';
+import { toast, toasts } from '$lib/stores/toast';
+import { get } from 'svelte/store';
+import { describeApiError, type ApiErrorInfo } from '$lib/services/api/errors';
+import { m } from '$lib/paraglide/messages';
 
 export type SelectedItem = Question | Page | Block | Variable;
 export type SelectedItemType = 'question' | 'page' | 'block' | 'variable' | null;
@@ -117,10 +120,11 @@ export class DesignerStore {
   isPublishing = $state(false);
   lastSaved = $state<number | null>(null);
   saveError = $state<string | null>(null);
-  // Last save-failure message we surfaced via a toast. Used to avoid spamming
-  // identical error toasts (e.g. a persistent failure re-hit by the 30s
-  // autosave loop); cleared on the next successful save.
+  // Last save-failure message we surfaced via a toast, and the id of that toast.
+  // Together they suppress a duplicate only while the identical toast is still on
+  // screen (see surfaceSaveError); both are cleared on the next successful save.
   private lastSaveErrorToast: string | null = null;
+  private lastSaveErrorToastId: string | null = null;
   // F-48: single-flight guard so exactly ONE create is ever dispatched for a
   // questionnaire that has no server id yet. Concurrent/queued autosave ticks
   // (30s interval + 2.5s debounce + Cmd+S + beforeunload) await this instead of
@@ -421,7 +425,12 @@ export class DesignerStore {
           });
           return persisted.id;
         } catch (error) {
-          this.saveError = error instanceof Error ? error.message : 'Failed to create questionnaire';
+          // The author asked for a new questionnaire and the server said no. They
+          // are about to start typing into a document that has no id and cannot be
+          // saved — tell them now, not after an hour of work.
+          const failure = describeApiError(error);
+          this.saveError = failure.message;
+          this.surfaceSaveError(m.designer_create_error_title(), failure.message);
           return '';
         }
       })();
@@ -920,10 +929,17 @@ export class DesignerStore {
    * interval, the debounced save-on-edit, Cmd+S, in-app navigation and tab-close
    * flushes. It decides create-vs-update once per call and single-flights the
    * create so a questionnaire is only ever POSTed once (F-48).
+   *
+   * Every failure exit from here MUST surface a toast. Most callers are
+   * fire-and-forget (`void save()`) — the debounce effect, beforeNavigate,
+   * beforeunload, the autosave tick — and beforeunload cannot even await, so a
+   * caller structurally cannot do the reporting. If a `return false` below is
+   * ever silent again, the author works on and loses everything.
    */
   async saveQuestionnaire(): Promise<boolean> {
     if (!this.projectId) {
-      this.saveError = 'Missing project ID';
+      this.saveError = m.designer_save_error_no_project();
+      this.surfaceSaveError(m.designer_save_error_title(), this.saveError);
       return false;
     }
 
@@ -959,7 +975,11 @@ export class DesignerStore {
   private async runCreate(): Promise<boolean> {
     // A same-name create already failed as a server-side conflict — don't hammer
     // the create endpoint every autosave tick. A rename (new signature) lifts it.
+    // Re-surface rather than returning silently: this is the path an explicit
+    // Save/Publish takes on every attempt after the first, and the author needs
+    // an answer each time they ask. surfaceSaveError dedupes the autosave loop.
     if (this.blockedCreateSignature === this.createSignature()) {
+      this.surfaceNameConflict();
       return false;
     }
 
@@ -983,14 +1003,11 @@ export class DesignerStore {
         // different questionnaire that merely shares the name.
         if (await this.createConflictExists()) {
           this.blockedCreateSignature = this.createSignature();
-          this.saveError = `A questionnaire named “${this.questionnaire.name}” already exists in this project.`;
-          this.surfaceSaveError(
-            'Rename to save',
-            `A questionnaire named “${this.questionnaire.name}” already exists in this project. Rename it to save.`
-          );
+          this.surfaceNameConflict();
           return false;
         }
-        throw new Error(result.error || 'Save failed');
+        this.reportSaveFailure(result.failure, result.error);
+        return false;
       }
 
       if (result.id && !this.questionnaire.id) {
@@ -1000,10 +1017,10 @@ export class DesignerStore {
       this.lastSaved = Date.now();
       this.isDirty = false;
       this.lastSaveErrorToast = null;
+      this.lastSaveErrorToastId = null;
       return true;
     } catch (error) {
-      this.saveError = error instanceof Error ? error.message : 'Unknown save error';
-      this.surfaceSaveError('Failed to save questionnaire', this.saveError);
+      this.reportSaveFailure(describeApiError(error));
       return false;
     } finally {
       this.isLoading = false;
@@ -1020,20 +1037,60 @@ export class DesignerStore {
       });
 
       if (!result.success) {
-        throw new Error(result.error || 'Save failed');
+        this.reportSaveFailure(result.failure, result.error);
+        return false;
       }
 
       this.lastSaved = Date.now();
       this.isDirty = false;
       this.lastSaveErrorToast = null;
+      this.lastSaveErrorToastId = null;
       return true;
     } catch (error) {
-      this.saveError = error instanceof Error ? error.message : 'Unknown save error';
-      this.surfaceSaveError('Failed to save questionnaire', this.saveError);
+      this.reportSaveFailure(describeApiError(error));
       return false;
     } finally {
       this.isLoading = false;
     }
+  }
+
+  /**
+   * Record a failed save on the store AND tell the author, in one call, so the
+   * two can't drift apart. The message is chosen from the failure class the API
+   * layer could actually establish (offline / auth / conflict / server); when it
+   * couldn't establish one we show the server's own words rather than invent a
+   * reason the author would then act on wrongly.
+   */
+  private reportSaveFailure(failure: ApiErrorInfo | undefined, rawError?: string): void {
+    const reason = failure?.message ?? rawError ?? 'Unknown save error';
+
+    let message: string;
+    switch (failure?.kind) {
+      case 'offline':
+        message = m.designer_save_error_offline();
+        break;
+      case 'auth':
+        message = m.designer_save_error_auth();
+        break;
+      case 'conflict':
+        message = m.designer_save_error_conflict();
+        break;
+      case 'server':
+        message = m.designer_save_error_server();
+        break;
+      default:
+        message = m.designer_save_error_unknown({ reason });
+        break;
+    }
+
+    this.saveError = message;
+    this.surfaceSaveError(m.designer_save_error_title(), message);
+  }
+
+  /** The create is blocked because the name is taken — the one self-inflicted, fixable case. */
+  private surfaceNameConflict(): void {
+    this.saveError = m.designer_save_error_name_conflict({ name: this.questionnaire.name });
+    this.surfaceSaveError(m.designer_save_error_name_conflict_title(), this.saveError);
   }
 
   /** Does a questionnaire with the current name already exist in this project? */
@@ -1047,21 +1104,32 @@ export class DesignerStore {
   }
 
   /**
-   * Surface a save failure via a toast, deduping identical consecutive messages
-   * so the autosave loop can't stack a wall of non-dismissing error toasts.
-   * Cleared on the next successful save.
+   * Surface a save failure via a toast.
+   *
+   * Deduped against the toast that is *still on screen*, not merely against the
+   * last message we sent: the autosave loop re-hitting the same failure every 30s
+   * must not stack a wall of non-dismissing error toasts, but an author who
+   * dismissed the toast and pressed Save again asked a fresh question and is owed
+   * a fresh answer. Keying on the message alone would give them silence.
    */
   private surfaceSaveError(title: string, message?: string): void {
     const key = message ?? title;
-    if (key !== this.lastSaveErrorToast) {
-      toast.error(title, message ? { message } : undefined);
-      this.lastSaveErrorToast = key;
-    }
+    const stillOnScreen =
+      this.lastSaveErrorToastId !== null &&
+      get(toasts).some((t) => t.id === this.lastSaveErrorToastId);
+
+    if (key === this.lastSaveErrorToast && stillOnScreen) return;
+
+    this.lastSaveErrorToastId = toast.error(title, message ? { message } : undefined);
+    this.lastSaveErrorToast = key;
   }
 
   async publishQuestionnaire(): Promise<boolean> {
+    // Reachable when the save that should have preceded this failed — the author
+    // pressed Publish and there is still no server id. Say so; don't just no-op.
     if (!this.projectId || !this.questionnaire.id) {
-      this.saveError = 'Cannot publish before questionnaire is saved.';
+      this.saveError = m.designer_publish_error_unsaved();
+      toast.error(m.designer_publish_error_title(), { message: this.saveError });
       return false;
     }
 
@@ -1070,8 +1138,8 @@ export class DesignerStore {
     try {
       const result = await this.persistenceService.publish(this.projectId, this.questionnaire.id);
       if (!result.success) {
-        this.saveError = result.error || 'Publish failed';
-        toast.error(result.error || 'Failed to publish questionnaire');
+        this.saveError = result.error || m.designer_publish_error_title();
+        toast.error(m.designer_publish_error_title(), { message: this.saveError });
         return false;
       }
 
@@ -1083,7 +1151,7 @@ export class DesignerStore {
       };
       this.lastSaved = Date.now();
       this.saveError = null;
-      toast.success('Questionnaire published');
+      toast.success(m.designer_publish_success());
       return true;
     } finally {
       this.isPublishing = false;
