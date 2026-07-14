@@ -126,19 +126,18 @@ export class QuestionnaireBuilder {
   }
 }
 
-export function createAutoAdvanceQuestion(id: string, text: string): RuntimeQuestion {
-  return {
-    id,
-    type: 'multiple-choice',
-    required: true,
-    text,
-    responseType: {
-      type: 'none',
-      delay: 20,
-    },
-  };
-}
-
+/**
+ * A single-choice question in the shape the fillout runtime actually reads: the module
+ * type drives the DOM-overlay component, the prompt lives under `display.prompt`, and the
+ * options under `config.options` (mirrors the @form lane's proven builders in form-api.ts).
+ *
+ * This replaces the former `createAutoAdvanceQuestion`, which emitted
+ * `responseType: { type: 'none', delay: 20 }` on a `required` multiple-choice. No such
+ * contract exists anywhere in the product — `moduleConfigAdapter` knows only
+ * single/multiple/scale/matrix — so it rendered as a required choice question with ZERO
+ * options: unanswerable, Continue permanently disabled, fillout impossible to complete.
+ * The specs that used it "waited for auto-advance" that was never going to come.
+ */
 export function createSingleChoiceQuestion(params: {
   id: string;
   text: string;
@@ -146,12 +145,16 @@ export function createSingleChoiceQuestion(params: {
 }): RuntimeQuestion {
   return {
     id: params.id,
-    type: 'multiple-choice',
+    type: 'single-choice',
     required: true,
-    text: params.text,
-    responseType: {
-      type: 'single',
-      options: params.options,
+    display: { prompt: params.text },
+    config: {
+      responseType: { type: 'single' },
+      options: params.options.map((option, index) => ({
+        id: option.key ?? `opt-${index}`,
+        label: option.label,
+        value: option.value,
+      })),
     },
   };
 }

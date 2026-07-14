@@ -1,7 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test';
 import { DEV_URLS } from './dev-urls';
 import {
-  createAutoAdvanceQuestion,
+  createSingleChoiceQuestion,
   pageWithQuestions,
   QuestionnaireBuilder,
 } from './questionnaire-builder';
@@ -101,16 +101,34 @@ export async function installAuthSession(page: Page, session: SessionCredential)
   ]);
 }
 
-function buildAutoFilloutDefinition(name: string) {
+/**
+ * The two questions the @fullstack golden path answers. Exported so the spec asserts the
+ * persisted server-side value against the same source of truth it clicked.
+ */
+export const FILLOUT_ITEMS = [
+  { id: 'q_intro', text: 'Pick a fruit', chose: 'Banana', value: 'banana' },
+  { id: 'q_done', text: 'Pick a colour', chose: 'Green', value: 'green' },
+] as const;
+
+function buildFilloutDefinition(name: string) {
   const builder = new QuestionnaireBuilder(name, {
     id: `fullstack-${Date.now()}`,
     randomizationSeed: 'seed-fullstack',
   });
 
-  builder
-    .addPage(pageWithQuestions('p1', ['q_intro', 'q_done']))
-    .addQuestion(createAutoAdvanceQuestion('q_intro', 'Auto step 1'))
-    .addQuestion(createAutoAdvanceQuestion('q_done', 'Auto step 2'));
+  builder.addPage(pageWithQuestions('p1', FILLOUT_ITEMS.map((item) => item.id)));
+  for (const item of FILLOUT_ITEMS) {
+    builder.addQuestion(
+      createSingleChoiceQuestion({
+        id: item.id,
+        text: item.text,
+        options: [
+          { key: 'a', label: item.chose, value: item.value },
+          { key: 'b', label: 'Something else', value: 'other' },
+        ],
+      })
+    );
+  }
 
   const definition = builder.build();
 
@@ -133,6 +151,43 @@ export function buildFilloutPath(questionnaireCode: string): string {
   return `/q/${questionnaireCode.toUpperCase()}`;
 }
 
+/** The auth limiter's window (10 requests / 60 s per IP), plus a second of slack. */
+const AUTH_RATE_WINDOW_MS = 61000;
+
+/**
+ * Register, waiting out the auth rate limiter on a 429 rather than failing the lane.
+ *
+ * `/api/auth/register` is anonymous, so its rate-limit bucket is keyed by client IP
+ * (`rate_limit_key` falls back to the IP when no user is authenticated) — one shared 10/60 s
+ * budget for every worker, every lane, and every developer re-run from the same machine. A
+ * lane that happens to start inside a window an earlier lane already spent would die at
+ * provisioning with a 429 that says nothing about the code under test.
+ *
+ * This is a test-harness accommodation, NOT a relaxation of the limiter: the limit is a real
+ * defence against credential-stuffing and is left exactly as it is (it is not even
+ * env-tunable — see `AppState::rate_limiter`). We simply wait for the window to roll over.
+ */
+async function registerWithRateRetry(
+  requestContext: APIRequestContext,
+  data: { email: string; password: string; full_name: string }
+) {
+  const post = () =>
+    requestContext.fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      data,
+    });
+
+  const first = await post();
+  if (first.status() !== 429) return first;
+
+  await new Promise((resolve) => setTimeout(resolve, AUTH_RATE_WINDOW_MS));
+  return post();
+}
+
 export async function provisionWorkspace(
   requestContext: APIRequestContext,
   options?: {
@@ -152,17 +207,10 @@ export async function provisionWorkspace(
   const projectCode = options?.projectCode || `FS${Date.now().toString().slice(-8)}`;
   const fullName = 'Playwright Fullstack User';
 
-  const authResponse = await requestContext.fetch('/api/auth/register', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest',
-    },
-    data: {
-      email,
-      password: TEST_PASSWORD,
-      full_name: fullName,
-    },
+  const authResponse = await registerWithRateRetry(requestContext, {
+    email,
+    password: TEST_PASSWORD,
+    full_name: fullName,
   });
 
   if (!authResponse.ok()) {
@@ -235,12 +283,45 @@ export async function getSessionById(
   return requestJson(requestContext, 'GET', `/sessions/${sessionId}`, undefined, session);
 }
 
+export interface PersistedResponse {
+  question_id: string;
+  value: unknown;
+}
+
+/**
+ * Poll `GET /api/sessions/{id}/responses` until at least `expected` rows have synced.
+ * The runtime writes answers IndexedDB-first and syncs them (ADR 0023 D2), so a
+ * completion screen does not imply the rows have landed server-side yet.
+ */
+export async function pollSessionResponses(
+  requestContext: APIRequestContext,
+  sessionId: string,
+  session: SessionCredential,
+  expected: number,
+  timeoutMs = 30000
+): Promise<PersistedResponse[]> {
+  const deadline = Date.now() + timeoutMs;
+  let rows: PersistedResponse[] = [];
+  while (Date.now() < deadline) {
+    rows = await requestJson(
+      requestContext,
+      'GET',
+      `/sessions/${sessionId}/responses`,
+      undefined,
+      session
+    );
+    if (rows.length >= expected) return rows;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return rows;
+}
+
 export async function provisionPublishedQuestionnaire(
   requestContext: APIRequestContext
 ): Promise<ProvisionedQuestionnaire> {
   const workspace = await provisionWorkspace(requestContext);
   const questionnaireName = `Fullstack Fillout ${Date.now()}`;
-  const definition = buildAutoFilloutDefinition(questionnaireName);
+  const definition = buildFilloutDefinition(questionnaireName);
 
   const questionnaire = await requestJson(
     requestContext,

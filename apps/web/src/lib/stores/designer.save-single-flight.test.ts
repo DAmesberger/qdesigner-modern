@@ -131,4 +131,27 @@ describe('designer save single-flight (F-48)', () => {
     // The unsaved work is still flagged dirty (not cleared) so the next tick retries.
     expect(store.isDirty).toBe(true);
   });
+
+  // The collaboration path re-entered the exact failure mode F-48 closed above. The Y.Doc
+  // room is seeded from the questionnaire's stored `content` blob — which was serialized
+  // during createNewQuestionnaire, BEFORE the server minted the row id, so it carries id:''.
+  // applyRemoteUpdate replaced the whole questionnaire with that doc content, blanking the
+  // id the create had just adopted. The store fell back to the create path forever: every
+  // autosave re-POSTed and 409'd, Publish bailed at `if (!saved) return`, and nothing the
+  // designer authored was ever persisted. Identity is server-minted, not CRDT content.
+  it('a remote (Y.Doc) update carrying no id does not blank the id — saves stay UPDATEs', async () => {
+    const store = freshStore();
+    await store.createNewQuestionnaire({ name: 'New Questionnaire', projectId: 'p1' });
+    expect(store.questionnaire.id).toBe('server-uuid-1');
+
+    // The room syncs, seeded from a content blob that predates the id.
+    const docContent = JSON.parse(JSON.stringify(store.questionnaire));
+    store.applyRemoteUpdate({ ...docContent, id: '' });
+
+    expect(store.questionnaire.id).toBe('server-uuid-1');
+
+    await store.saveQuestionnaire();
+    expect(createMock).toHaveBeenCalledTimes(1); // the create never fires a second time
+    expect(updateMock).toHaveBeenCalledTimes(1); // and the save is an update-by-id
+  });
 });

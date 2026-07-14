@@ -32,6 +32,24 @@
             pkgs.openssl
             # Browser tooling for end-to-end / live UI QA (Playwright + agent-browser
             # drive this chromium; declared here so the flake is self-contained).
+            #
+            # VERSION COUPLING — read before bumping nixpkgs.
+            # playwright-driver.browsers ships browser builds stamped with the
+            # revisions of ONE playwright release; @playwright/test refuses to
+            # launch a revision it wasn't built against. PLAYWRIGHT_BROWSERS_PATH
+            # below points the npm package at these nix-store browsers, so the two
+            # versions must agree EXACTLY:
+            #
+            #   pkgs.playwright-driver 1.59.1  ->  chromium-1217 firefox-1511 webkit-2272
+            #   apps/web/package.json "@playwright/test": "1.59.1"  (pinned exact, no caret)
+            #
+            # A caret here floats npm onto a release wanting different revisions and
+            # e2e dies locally with a browser-not-found. If you bump nixpkgs and this
+            # derivation's version moves, re-pin @playwright/test to match. Check with:
+            #   nix eval --raw .#devShells.<sys>.default  # then inspect the browsers dir
+            #   node -p "require('playwright-core/browsers.json').browsers"
+            # CI does not use nix (it runs `playwright install`), so it follows
+            # package.json alone and stays correct either way.
             pkgs.chromium
             pkgs.playwright-driver.browsers
           ];

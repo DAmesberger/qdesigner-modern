@@ -7,7 +7,18 @@ import {
   listProjectQuestionnaires,
   provisionWorkspace,
 } from '../helpers/fullstack-api';
+// Canonical DOM-overlay drivers — see the note in creation-fillout.fullstack.spec.ts.
+import { clickContinue, continueButton, waitForCard } from '../form/form-api';
 
+/**
+ * The only lane that drives the DESIGNER UI end to end: author a questionnaire in the
+ * designer, publish it from the designer, then fill it out by code as a participant.
+ *
+ * That coverage earned its keep — it is what caught the `applyRemoteUpdate` identity wipe
+ * (the Y.Doc room, seeded from a create payload serialized before the server minted the id,
+ * blanked the store's questionnaire id; every later save then re-POSTed a create, 409'd, and
+ * Publish silently bailed — so nothing a designer authored was ever persisted).
+ */
 test.describe('@fullstack designer creation, publish, and participant fillout', () => {
   test.describe.configure({ timeout: 180000 });
 
@@ -113,17 +124,16 @@ test.describe('@fullstack designer creation, publish, and participant fillout', 
       timeout: 30000,
     });
 
-    const completionScreen = page.getByTestId('fillout-completion-screen');
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      if (await completionScreen.isVisible()) {
-        break;
-      }
-      await page.keyboard.press('a');
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(100);
-    }
+    // Answer the text-input item the designer just authored, through its real runtime
+    // component. (This previously mashed `a` + `Enter` at an unfocused page 20 times, which
+    // types into nothing: the required answer stayed empty, Continue stayed disabled, and
+    // completion was unreachable. Fill the field and press the button the participant sees.)
+    const card = await waitForCard(page, 'text-input');
+    await card.getByRole('textbox').fill('fullstack answer');
+    await expect(continueButton(page)).toBeEnabled();
+    await clickContinue(page);
 
-    await expect(completionScreen).toBeVisible({
+    await expect(page.getByTestId('fillout-completion-screen')).toBeVisible({
       timeout: 30000,
     });
     await expect(page.getByTestId('fillout-error')).toHaveCount(0);

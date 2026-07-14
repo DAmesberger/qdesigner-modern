@@ -1,4 +1,4 @@
-import { test as base, request as playwrightRequest, type APIRequestContext } from '@playwright/test';
+import { test as base, request as playwrightRequest } from '@playwright/test';
 import { DEV_URLS } from '../helpers/dev-urls';
 import { provisionWorkspace, type ProvisionedWorkspace } from '../helpers/fullstack-api';
 
@@ -9,17 +9,6 @@ import { provisionWorkspace, type ProvisionedWorkspace } from '../helpers/fullst
  * earlier run already spent the budget. Studies stay isolated — each spec publishes its own
  * questionnaire under this workspace.
  */
-async function provisionWithRetry(request: APIRequestContext): Promise<ProvisionedWorkspace> {
-  try {
-    return await provisionWorkspace(request, { emailPrefix: 'form' });
-  } catch (error) {
-    if (!String(error).includes('429')) throw error;
-    // Wait out the 60 s auth window once, then retry.
-    await new Promise((resolve) => setTimeout(resolve, 61000));
-    return provisionWorkspace(request, { emailPrefix: 'form' });
-  }
-}
-
 /** Shared worker state so the rate gate can space consecutive tests. */
 interface RateGateState {
   lastFinishedAt: number;
@@ -73,13 +62,16 @@ export const test = base.extend<
     async ({}, use) => {
       const request = await playwrightRequest.newContext({ baseURL: DEV_URLS.frontend });
       try {
-        const workspace = await provisionWithRetry(request);
+        const workspace = await provisionWorkspace(request, { emailPrefix: 'form' });
         await use(workspace);
       } finally {
         await request.dispose();
       }
     },
-    { scope: 'worker' },
+    // The 429 retry lives in provisionWorkspace and waits out the limiter's 60 s window, so
+    // the fixture must be allowed to outlive it — Playwright's default fixture-setup cap is
+    // 30 s, under which the retry could never complete. See reaction-fixtures.ts.
+    { scope: 'worker', timeout: 120000 },
   ],
 });
 

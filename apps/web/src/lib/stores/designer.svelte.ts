@@ -321,6 +321,18 @@ export class DesignerStore {
     this.isApplyingRemote = true;
     try {
       const normalized = this.documentStore.normalizeQuestionnaire(questionnaire);
+
+      // The Y.Doc carries collaborative CONTENT; the row id (and the project/org it
+      // belongs to) is server-minted identity and is NOT part of the CRDT. A room
+      // seeded from a create payload — whose content blob was serialized before the
+      // server assigned the id, so it holds id:'' — would otherwise blank the id we
+      // just minted. That strands the store on the create path forever: every autosave
+      // re-POSTs a create and 409s, Publish silently bails at `if (!saved) return`, and
+      // the author's work is never persisted. Identity survives a remote update.
+      normalized.id ||= this.questionnaire.id;
+      normalized.projectId ||= this.questionnaire.projectId;
+      normalized.organizationId ||= this.questionnaire.organizationId;
+
       this.questionnaire = normalized;
 
       // Re-resolve selectedItem if present (the object reference changed)
