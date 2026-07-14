@@ -238,6 +238,106 @@ jobs:
       - name: Build
         run: pnpm --filter @qdesigner/web build
 
+  # ── Contracts gate ────────────────────────────────────────────────────────
+  # `packages/contracts` is GENERATED code that is committed: the server's
+  # utoipa schema (apps/server/src/openapi.rs) is exported to
+  # packages/contracts/openapi/openapi.json, and @hey-api/openapi-ts turns that
+  # into the TypeScript client the frontend imports. Nothing forced the two to
+  # agree, so they silently drifted: the committed client was stale from the
+  # ADR-0033 merge until 2026-07-14 — it was missing the /api/project-invitations
+  # routes that shipped WITH that ADR and have been live in
+  # apps/server/src/api/mod.rs ever since. A 605-line diff appeared the next
+  # time anyone happened to regenerate. Neither `cargo test` nor `pnpm check`
+  # can see this class of bug: the frontend typechecks happily against a client
+  # describing a server that no longer exists.
+  #
+  # So: regenerate from the server, and fail if that changed anything in the
+  # tree. Standard "generated code is committed and must be up to date" gate.
+  #
+  # Needs BOTH toolchains (cargo to export the schema, node to codegen the
+  # client), which is why it is its own job rather than a step in backend/ or
+  # frontend/. It needs no services — `--export-openapi` returns before
+  # Config::from_env() ever touches the DB.
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Same reason as the backend job: expand the sqlx query macros from the
+    # committed apps/server/.sqlx cache. There is no database in this job at all.
+    env:
+      SQLX_OFFLINE: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustc --version && cargo --version
+
+      # Distinct cache key from the backend job. Two jobs saving the same key
+      # is not an error, but the loser logs a scary "Unable to reserve cache"
+      # warning on every run; a separate namespace keeps the log honest.
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            apps/server/target/
+          key: ${{ runner.os }}-cargo-contracts-${{ hashFiles('rust-toolchain.toml', 'apps/server/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-contracts-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `pnpm contracts:generate` = export openapi.json from the server binary,
+      # then run openapi-ts over it. Both write into packages/contracts/.
+      - name: Regenerate contracts from the server
+        run: pnpm contracts:generate
+
+      - name: Fail if the committed contracts are stale
+        run: |
+          # --intent-to-add so a BRAND NEW generated file (an added route can
+          # produce one) shows up in `git diff` instead of hiding as untracked.
+          git add --intent-to-add -- \
+            packages/contracts/openapi packages/contracts/src/generated
+          if git diff --quiet -- \
+            packages/contracts/openapi packages/contracts/src/generated; then
+            echo "Contracts are up to date with apps/server/src/openapi.rs."
+            exit 0
+          fi
+          echo "::error title=Generated API contracts are stale::packages/contracts no longer matches the server's OpenAPI schema. Run 'pnpm contracts:generate' and commit the result (packages/contracts/openapi/openapi.json + packages/contracts/src/generated)."
+          echo
+          echo "──────────────────────────────────────────────────────────────"
+          echo "The committed contracts do NOT match the server."
+          echo
+          echo "The frontend imports @qdesigner/contracts as its API client."
+          echo "Left stale, it typechecks against routes the server does not"
+          echo "have (or misses routes it does). Fix it locally:"
+          echo
+          echo "    pnpm contracts:generate"
+          echo "    git add packages/contracts"
+          echo "    git commit -m 'chore(contracts): regenerate'"
+          echo
+          echo "Drift this run would have introduced:"
+          echo "──────────────────────────────────────────────────────────────"
+          git --no-pager diff --stat -- \
+            packages/contracts/openapi packages/contracts/src/generated
+          echo "──────────────────────────────────────────────────────────────"
+          git --no-pager diff -- \
+            packages/contracts/openapi packages/contracts/src/generated
+          exit 1
+
 # ── Note on the E2E lanes ────────────────────────────────────────────────────
 # The Playwright lanes (smoke / regression / fullstack / visual / reaction /
 # form) are NOT part of this PR gate. They live in e2e.yml, and every spec is

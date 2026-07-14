@@ -10,6 +10,14 @@
 //!
 //! Uses the migration DSN (qdesigner superuser) for fixture INSERTs so the
 //! setup is not subject to RLS, matching `org_seats.rs` / `rls_enforcement.rs`.
+//!
+//! Every fixture email is per-run unique (`invitee-<uuid>@test.example`) and
+//! every lookup is scoped to the org this run seeded. A hard-coded email made
+//! the list test self-poisoning: it seeded `listme@test.example`, and a run
+//! that failed (or was interrupted) before its cleanup left the row behind, so
+//! the *next* run's unscoped `fetch_one` returned the previous run's
+//! invitation and the id assertion failed. Green on a fresh DB, permanently red
+//! for a human running it twice.
 
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -47,6 +55,7 @@ async fn create_invitation_insert_returns_token_and_pending_status() {
         return;
     };
     let (org_id, user_id) = seed_org_and_user(&pool).await;
+    let email = format!("invitee-{}@test.example", Uuid::new_v4());
 
     let row: (
         Uuid,           // id
@@ -66,7 +75,7 @@ async fn create_invitation_insert_returns_token_and_pending_status() {
         "#,
     )
     .bind(org_id)
-    .bind("invitee@test.example")
+    .bind(&email)
     .bind("member")
     .bind(user_id)
     .bind("welcome aboard")
@@ -75,7 +84,7 @@ async fn create_invitation_insert_returns_token_and_pending_status() {
     .expect("create_invitation INSERT...RETURNING must succeed");
 
     assert_eq!(row.1, org_id);
-    assert_eq!(row.2, "invitee@test.example");
+    assert_eq!(row.2, email);
     assert_eq!(row.3, "member");
     assert_ne!(
         row.4,
@@ -111,6 +120,7 @@ async fn list_pending_select_resolves_all_projected_columns() {
         return;
     };
     let (org_id, user_id) = seed_org_and_user(&pool).await;
+    let email = format!("listme-{}@test.example", Uuid::new_v4());
 
     let inv_id: Uuid = sqlx::query_scalar(
         r#"INSERT INTO organization_invitations
@@ -119,13 +129,15 @@ async fn list_pending_select_resolves_all_projected_columns() {
            RETURNING id"#,
     )
     .bind(org_id)
-    .bind("listme@test.example")
+    .bind(&email)
     .bind(user_id)
     .fetch_one(&pool)
     .await
     .expect("seed invitation");
 
     // Mirror the handler projection (aliased join → just assert columns exist).
+    // Scoped to this run's org as well as its unique email, so no row seeded by
+    // another run — or another test running concurrently — can satisfy it.
     let found: (
         Uuid,
         Uuid,
@@ -137,10 +149,12 @@ async fn list_pending_select_resolves_all_projected_columns() {
         r#"
             SELECT i.id, i.token, i.status, i.email, i.custom_message, i.declined_at
             FROM organization_invitations i
-            WHERE i.email = $1 AND i.status = 'pending' AND i.expires_at > NOW()
+            WHERE i.email = $1 AND i.organization_id = $2
+              AND i.status = 'pending' AND i.expires_at > NOW()
             "#,
     )
-    .bind("listme@test.example")
+    .bind(&email)
+    .bind(org_id)
     .fetch_one(&pool)
     .await
     .expect("list_pending SELECT must resolve i.token/i.status/i.custom_message/i.declined_at");
@@ -148,6 +162,7 @@ async fn list_pending_select_resolves_all_projected_columns() {
     assert_eq!(found.0, inv_id);
     assert_ne!(found.1, Uuid::nil());
     assert_eq!(found.2, "pending");
+    assert_eq!(found.3, email);
     assert_eq!(found.4.as_deref(), Some("hi"));
     assert!(
         found.5.is_none(),
