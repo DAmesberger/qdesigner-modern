@@ -1451,8 +1451,14 @@ mod export_csv_tests {
     fn spss_header_carries_them_too_within_the_8_char_limit() {
         let csv = render_export_csv(&[row(|_| {})], true);
         let header = csv.lines().next().unwrap();
-        assert!(header.contains("q_ver"), "SPSS header drops the version pin");
-        assert!(header.contains("t_prov"), "SPSS header drops the provenance");
+        assert!(
+            header.contains("q_ver"),
+            "SPSS header drops the version pin"
+        );
+        assert!(
+            header.contains("t_prov"),
+            "SPSS header drops the provenance"
+        );
         for name in header.split(',') {
             assert!(name.len() <= 8, "SPSS name over 8 chars: {name}");
         }
@@ -1501,7 +1507,10 @@ mod export_csv_tests {
         // cells and every column after it was off by one.
         let csv = render_export_csv(&[row(|r| r.participant_id = Some("a,b".into()))], false);
         let line = data_line(&csv);
-        assert!(line.contains("\"a,b\""), "participant_id not quoted: {line}");
+        assert!(
+            line.contains("\"a,b\""),
+            "participant_id not quoted: {line}"
+        );
 
         // The row still has exactly 12 fields, and the version is still in slot 3.
         let record = parse_record(&csv, 1);

@@ -74,7 +74,11 @@ mod tests {
     fn neutralizes_every_formula_payload() {
         for payload in INJECTION_PAYLOADS {
             let out = neutralize_formula(payload);
-            assert_eq!(out, format!("'{payload}"), "payload not neutralized: {payload}");
+            assert_eq!(
+                out,
+                format!("'{payload}"),
+                "payload not neutralized: {payload}"
+            );
             // The defining property: the field no longer STARTS a formula.
             assert!(
                 !out.starts_with(['=', '+', '-', '@']),

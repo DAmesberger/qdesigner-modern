@@ -1809,7 +1809,7 @@ pub struct TimeSeriesBucket {
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_numeric_stats, completion_rate, decl_hash, json_value_to_f64,
+        completion_rate, compute_numeric_stats, decl_hash, json_value_to_f64,
         pair_samples_by_participant, paired_pearson_correlation, parse_aggregate_source,
         NumericSample, MIN_CORRELATION_PAIRS,
     };

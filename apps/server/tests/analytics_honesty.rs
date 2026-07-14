@@ -25,7 +25,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 mod common;
-use common::{build_test_state, fixture_pool, json_request, provision_tenant, register_user, test_app};
+use common::{
+    build_test_state, fixture_pool, json_request, provision_tenant, register_user, test_app,
+};
 
 /// Seed one session and its per-question response rows.
 ///

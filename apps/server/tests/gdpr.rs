@@ -586,15 +586,20 @@ async fn erasure_deletes_participant_uploaded_session_media() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "erase completes: {body:?}");
-    assert_eq!(body["status"], "complete", "erase reports complete: {body:?}");
+    assert_eq!(
+        body["status"], "complete",
+        "erase reports complete: {body:?}"
+    );
     assert_eq!(body["objects_pending"], 0, "nothing left owed: {body:?}");
 
     // The row cascaded away — it always did. The OBJECT is the point.
-    let rows_left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_media WHERE id IS NOT NULL AND session_id = $1")
-        .bind(session_id)
-        .fetch_one(&fixtures)
-        .await
-        .expect("count session_media");
+    let rows_left: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM session_media WHERE id IS NOT NULL AND session_id = $1",
+    )
+    .bind(session_id)
+    .fetch_one(&fixtures)
+    .await
+    .expect("count session_media");
     assert_eq!(rows_left, 0, "session_media row cascaded away");
 
     assert!(
@@ -647,7 +652,10 @@ async fn erasure_deletes_export_artifacts_and_rows() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "erase completes: {body:?}");
-    assert_eq!(body["status"], "complete", "erase reports complete: {body:?}");
+    assert_eq!(
+        body["status"], "complete",
+        "erase reports complete: {body:?}"
+    );
 
     assert!(
         !object_exists(&state, &key).await,
@@ -740,8 +748,14 @@ async fn erasure_under_storage_failure_keeps_keys_and_reports_incomplete() {
         "an erasure that could not delete its objects must NOT report success \
          (200); it is incomplete: {body:?}"
     );
-    assert_eq!(body["status"], "incomplete", "status is incomplete: {body:?}");
-    assert_eq!(body["objects_pending"], 3, "all 3 objects still owed: {body:?}");
+    assert_eq!(
+        body["status"], "incomplete",
+        "status is incomplete: {body:?}"
+    );
+    assert_eq!(
+        body["objects_pending"], 3,
+        "all 3 objects still owed: {body:?}"
+    );
     assert_eq!(body["objects_deleted"], 0, "storage was down: {body:?}");
     assert!(
         body["last_error"].as_str().is_some(),
@@ -788,7 +802,10 @@ async fn erasure_under_storage_failure_keeps_keys_and_reports_incomplete() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(st["status"], "incomplete", "status endpoint sees it: {st:?}");
+    assert_eq!(
+        st["status"], "incomplete",
+        "status endpoint sees it: {st:?}"
+    );
     assert_eq!(st["objects_pending"], 3, "…and counts it: {st:?}");
 
     // 3. Storage recovers → the retry finishes the job.
