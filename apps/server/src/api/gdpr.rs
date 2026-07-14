@@ -773,17 +773,252 @@ fn export_row_to_job(row: ExportRow, download_url: Option<String>) -> ExportJob 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct EraseResult {
     pub message: String,
+    /// `complete` — every DB row destroyed AND every object confirmed deleted.
+    /// `incomplete` — the DB destruction committed, but objects remain on the
+    /// ledger. The keys are durable; retry via `POST …/erasure/retry`.
+    pub status: String,
     pub projects_deleted: i64,
     pub sessions_deleted: i64,
     pub responses_deleted: i64,
+    /// Objects confirmed deleted from storage by this call.
+    pub objects_deleted: i64,
+    /// Objects still awaiting deletion. Non-zero ⇒ the erasure is NOT complete.
+    pub objects_pending: i64,
+    /// The storage failure that left objects pending, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+}
+
+/// State of an organization's outstanding object-deletion ledger.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ErasureStatus {
+    pub organization_id: Uuid,
+    /// `complete` (nothing outstanding) | `incomplete` (objects still pending).
+    pub status: String,
+    /// Objects confirmed deleted by THIS call. Always 0 for the status read.
+    pub objects_deleted: i64,
+    pub objects_pending: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+}
+
+/// One key on the pending-deletion ledger: its row id and the object to kill.
+type PendingObject = (Uuid, String);
+
+/// What a purge pass actually achieved. Deliberately not a `Result`: a purge
+/// that deletes 3 of 5 objects is neither a success nor a failure, and
+/// collapsing it to either is how the old code came to report success while
+/// leaving participant data in the bucket.
+struct PurgeOutcome {
+    deleted: i64,
+    last_error: Option<String>,
+}
+
+/// Delete each staged object, clearing its ledger row ONLY on confirmed
+/// success. A failure leaves the row in place — with `attempts` and
+/// `last_error` — so the key is never lost and the work stays retryable.
+///
+/// Safe to re-run over a partially-purged batch: S3 `DeleteObject` is
+/// idempotent, so a key whose object is already gone simply confirms again.
+///
+/// Runs on bare pooled connections with no `app.user_id` GUC (the background
+/// sweeper has no user to offer), so the ledger writes go through the 00060
+/// SECURITY DEFINER functions. They are not a convenience: a GUC-less
+/// `DELETE … WHERE id = $1` is *silently* a no-op under the ledger's SELECT
+/// policy — Postgres applies SELECT policies to an UPDATE/DELETE whose WHERE
+/// clause reads a column — and it returns success while clearing nothing.
+///
+/// For the same reason `confirm_object_deletion` returns a ROW COUNT and a
+/// deletion is counted only when a row really went away. Anything else is a
+/// clear that never happened being reported as one, which is the exact class of
+/// lie this whole change exists to remove.
+async fn purge_objects(state: &AppState, rows: &[PendingObject]) -> PurgeOutcome {
+    let mut deleted = 0i64;
+    let mut last_error = None;
+
+    for (row_id, key) in rows {
+        match state.storage.delete(key).await {
+            Ok(()) => {
+                // Confirmed gone from storage → and only now may the ledger
+                // forget it.
+                let cleared: Result<i32, _> =
+                    sqlx::query_scalar("SELECT confirm_object_deletion($1)")
+                        .bind(row_id)
+                        .fetch_one(&state.pool)
+                        .await;
+                match cleared {
+                    Ok(1) => deleted += 1,
+                    Ok(_) => {
+                        // The object is gone but the row is still there. Not a
+                        // confirmed clear, so it is not counted as one: the next
+                        // pass re-deletes an absent key (a no-op) and retries.
+                        // Erring this way leaves a stale ledger row; erring the
+                        // other way loses the key.
+                        tracing::error!(
+                            "purge: object {key} deleted but ledger row {row_id} not cleared"
+                        );
+                        last_error = Some(format!("ledger row {row_id} not cleared"));
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "purge: object {key} deleted but clearing row {row_id} failed: {e}"
+                        );
+                        last_error = Some(e.to_string());
+                    }
+                }
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                tracing::warn!("purge: storage delete failed for {key}: {msg}");
+                let _ = sqlx::query("SELECT fail_object_deletion($1, $2)")
+                    .bind(row_id)
+                    .bind(&msg)
+                    .execute(&state.pool)
+                    .await;
+                last_error = Some(msg);
+            }
+        }
+    }
+
+    PurgeOutcome {
+        deleted,
+        last_error,
+    }
+}
+
+/// Read the ARMED ledger rows for an org (RLS-admitted via the owner GUC).
+///
+/// Unarmed rows are deliberately invisible here: they describe data that has
+/// not been destroyed and may never be.
+async fn armed_rows_for_org(
+    pool: &sqlx::PgPool,
+    owner_id: Uuid,
+    org_id: Uuid,
+) -> Result<Vec<PendingObject>, ApiError> {
+    let mut tx = pool.begin().await?;
+    set_owner_guc(&mut tx, owner_id).await?;
+    let rows: Vec<PendingObject> = sqlx::query_as(
+        "SELECT id, storage_key FROM pending_object_deletions
+         WHERE organization_id = $1 AND armed_at IS NOT NULL
+         ORDER BY created_at",
+    )
+    .bind(org_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(rows)
+}
+
+/// The last recorded storage failure on an org's ledger, if any.
+async fn last_ledger_error(
+    pool: &sqlx::PgPool,
+    owner_id: Uuid,
+    org_id: Uuid,
+) -> Result<Option<String>, ApiError> {
+    let mut tx = pool.begin().await?;
+    set_owner_guc(&mut tx, owner_id).await?;
+    let err: Option<String> = sqlx::query_scalar(
+        "SELECT last_error FROM pending_object_deletions
+         WHERE organization_id = $1 AND armed_at IS NOT NULL AND last_error IS NOT NULL
+         ORDER BY last_attempt_at DESC NULLS LAST LIMIT 1",
+    )
+    .bind(org_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .flatten();
+    tx.commit().await?;
+    Ok(err)
+}
+
+/// Every object-storage key this organization owns, tagged with its source
+/// column. These are the bytes an erasure must actually destroy.
+///
+/// All three sources, because for most of this system's life it was one:
+///   * `media_assets.storage_key`  — designer-uploaded stimuli
+///   * `session_media.s3_key`      — PARTICIPANT-uploaded binary answers
+///   * `data_exports.artifact_key` — zips containing a full export of the above
+async fn collect_org_object_keys(
+    conn: &mut sqlx::PgConnection,
+    org_id: Uuid,
+) -> Result<Vec<(&'static str, String)>, ApiError> {
+    let mut keys: Vec<(&'static str, String)> = Vec::new();
+
+    let media: Vec<String> =
+        sqlx::query_scalar("SELECT storage_key FROM media_assets WHERE organization_id = $1")
+            .bind(org_id)
+            .fetch_all(&mut *conn)
+            .await?;
+    keys.extend(media.into_iter().map(|k| ("media_assets", k)));
+
+    // Reached through the org's projects — the same join the cascade will walk
+    // when `DELETE FROM projects` takes these rows (and their keys) away.
+    let session_media: Vec<String> = sqlx::query_scalar(
+        r#"SELECT sm.s3_key FROM session_media sm
+           JOIN sessions s ON s.id = sm.session_id
+           JOIN questionnaire_definitions qd ON qd.id = s.questionnaire_id
+           JOIN projects p ON p.id = qd.project_id
+           WHERE p.organization_id = $1"#,
+    )
+    .bind(org_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    keys.extend(session_media.into_iter().map(|k| ("session_media", k)));
+
+    // The org is only SOFT-deleted, so these rows survive the cascade entirely.
+    // Erasure must destroy them explicitly, zip and row alike.
+    let exports: Vec<String> = sqlx::query_scalar(
+        "SELECT artifact_key FROM data_exports
+         WHERE organization_id = $1 AND artifact_key IS NOT NULL",
+    )
+    .bind(org_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    keys.extend(exports.into_iter().map(|k| ("data_export", k)));
+
+    Ok(keys)
 }
 
 /// POST /api/organizations/{id}/erase
 ///
 /// Owner-gated, password + typed-confirmation guarded, blocked under a legal
-/// hold. Removes the tenant's participant data (deleting the org's projects
-/// cascades through questionnaires → sessions → responses / events / variables
-/// / media rows) and soft-deletes the organization, retaining `audit_events`.
+/// hold. Destroys the tenant's participant data — DB rows *and* the objects in
+/// storage those rows name — and soft-deletes the organization, retaining
+/// `audit_events`.
+///
+/// ## Durability (migration 00060)
+///
+/// The objects are the point. An erasure that drops the DB rows and then
+/// *tries* to delete the objects has destroyed the only record of what it still
+/// owes; if storage is down at that instant the keys are gone forever and the
+/// participant files live on in the bucket, unfindable. So the keys are written
+/// to a durable ledger BEFORE anything is destroyed:
+///
+///   1. **Stage** — every key (`media_assets`, `session_media`, `data_exports`)
+///      is INSERTed into `pending_object_deletions` and COMMITTED on its own
+///      connection. `armed_at` is NULL: nothing is destroyed yet, so the rows
+///      are inert.
+///   2. **Destroy** — one transaction: audit → delete the export rows → delete
+///      the projects (cascading to sessions → responses / events / variables /
+///      session_media) → delete the media rows → soft-delete the org → **arm
+///      the staged rows**. The arming commits with the destruction, so an
+///      intent becomes actionable exactly when — and only if — the data it
+///      describes is really gone.
+///   3. **Purge** — delete each armed object, clearing its ledger row only on
+///      confirmed success.
+///
+/// Crash after (2) and the ledger holds every key, armed and durable: the
+/// sweeper or `POST …/erasure/retry` finishes the job. Nothing is lost, and
+/// nothing is claimed that isn't true — see the return contract below.
+///
+/// ## What it reports
+///
+/// * **200** `status: "complete"` — every row destroyed and every object
+///   confirmed deleted from storage.
+/// * **202** `status: "incomplete"` — the DB destruction committed (it is
+///   irreversible), but `objects_pending` objects remain. The erasure is NOT
+///   finished. The keys are on the durable ledger and the work is retryable.
+///
+/// A partial erasure never returns 200. That is the whole contract.
 #[utoipa::path(
     post,
     path = "/api/organizations/{id}/erase",
@@ -791,7 +1026,8 @@ pub struct EraseResult {
     params(("id" = Uuid, Path, description = "Organization id")),
     security(("bearerAuth" = [])),
     responses(
-        (status = 200, description = "Tenant data erased", body = EraseResult),
+        (status = 200, description = "Tenant data erased — rows AND objects", body = EraseResult),
+        (status = 202, description = "DB erased; objects still pending — retryable", body = EraseResult),
         (status = 400, description = "Confirmation mismatch", body = crate::openapi::ErrorEnvelope),
         (status = 401, description = "Password incorrect", body = crate::openapi::ErrorEnvelope),
         (status = 403, description = "Requires owner role", body = crate::openapi::ErrorEnvelope),
@@ -806,7 +1042,7 @@ pub async fn erase_org(
     tx: Tx,
     Path(org_id): Path<Uuid>,
     Json(body): Json<EraseOrgRequest>,
-) -> Result<Json<EraseResult>, ApiError> {
+) -> Result<(StatusCode, Json<EraseResult>), ApiError> {
     let mut txg = tx.tx().await?;
 
     if !state
@@ -886,21 +1122,155 @@ pub async fn erase_org(
     )
     .await?;
 
-    // Capture media storage keys for best-effort object cleanup after the DB
-    // rows are gone.
-    let media_keys: Vec<String> =
-        sqlx::query_scalar("SELECT storage_key FROM media_assets WHERE organization_id = $1")
-            .bind(org_id)
-            .fetch_all(&mut **txg)
-            .await?;
+    // Every object-storage key the org owns — all three sources. Read while the
+    // rows still exist; after step 2 they are unrecoverable.
+    let keys = collect_org_object_keys(&mut txg, org_id).await?;
 
-    // Audit BEFORE the deletes — the org row survives (soft delete), so the
-    // audit_events row (org-scoped) persists through the erasure.
+    // The request tx is read-only from here on and its work is done. Release the
+    // guard so the destructive transactions below don't run under it.
+    drop(txg);
+
+    let request_id = Uuid::new_v4();
+
+    // ── 1. STAGE ─────────────────────────────────────────────────────
+    // Commit the keys to the durable ledger, UNARMED, on their own connection —
+    // before a single row is destroyed. If this fails, nothing has happened yet
+    // and the erasure aborts with the tenant fully intact.
+    stage_pending_deletions(&state.pool, user.user_id, org_id, request_id, &keys).await?;
+
+    // ── 2. DESTROY ───────────────────────────────────────────────────
+    // Audit + destroy + ARM, atomically. If this rolls back, the staged rows
+    // stay unarmed — inert, and reaped by the next staging pass.
+    destroy_tenant(
+        &state,
+        user.user_id,
+        org_id,
+        request_id,
+        client_ip,
+        (projects_count, sessions_count, responses_count),
+        keys.len() as i64,
+    )
+    .await?;
+
+    // ── 3. PURGE ─────────────────────────────────────────────────────
+    // Past this line the DB destruction is committed and irreversible. Every
+    // remaining key is armed and durable, so a failure here costs time, not
+    // evidence.
+    let armed = armed_rows_for_org(&state.pool, user.user_id, org_id).await?;
+    let staged = armed.len() as i64;
+    let outcome = purge_objects(&state, &armed).await;
+    let objects_pending = staged - outcome.deleted;
+
+    // ── 4. REPORT, honestly ──────────────────────────────────────────
+    let complete = objects_pending == 0;
+    let status_code = if complete {
+        StatusCode::OK
+    } else {
+        StatusCode::ACCEPTED
+    };
+    let message = if complete {
+        "Organization data erased".to_string()
+    } else {
+        format!(
+            "Organization data erased from the database, but {objects_pending} object(s) could \
+             not be deleted from storage. The erasure is NOT complete. The keys are recorded and \
+             the deletion will be retried automatically; retry now with \
+             POST /api/organizations/{org_id}/erasure/retry"
+        )
+    };
+
+    Ok((
+        status_code,
+        Json(EraseResult {
+            message,
+            status: if complete { "complete" } else { "incomplete" }.into(),
+            projects_deleted: projects_count,
+            sessions_deleted: sessions_count,
+            responses_deleted: responses_count,
+            objects_deleted: outcome.deleted,
+            objects_pending,
+            last_error: outcome.last_error,
+        }),
+    ))
+}
+
+/// Step 1 — write the keys to the durable ledger and COMMIT, before any
+/// destruction. Runs on its own pooled connection precisely so that its commit
+/// is independent of (and prior to) the destructive transaction.
+///
+/// Also reaps this org's UNARMED leftovers first: rows from an earlier attempt
+/// that staged and then died before destroying anything. They describe data that
+/// still exists, so they are meaningless — and re-staging would double them.
+async fn stage_pending_deletions(
+    pool: &sqlx::PgPool,
+    owner_id: Uuid,
+    org_id: Uuid,
+    request_id: Uuid,
+    keys: &[(&'static str, String)],
+) -> Result<(), ApiError> {
+    let mut tx = pool.begin().await?;
+    set_owner_guc(&mut tx, owner_id).await?;
+
+    sqlx::query(
+        "DELETE FROM pending_object_deletions WHERE organization_id = $1 AND armed_at IS NULL",
+    )
+    .bind(org_id)
+    .execute(&mut *tx)
+    .await?;
+
+    if !keys.is_empty() {
+        let sources: Vec<String> = keys.iter().map(|(s, _)| (*s).to_string()).collect();
+        let storage_keys: Vec<String> = keys.iter().map(|(_, k)| k.clone()).collect();
+        sqlx::query(
+            r#"
+            INSERT INTO pending_object_deletions
+                (organization_id, request_id, reason, source, storage_key)
+            SELECT $1, $2, 'org_erasure', t.source, t.storage_key
+            FROM UNNEST($3::text[], $4::text[]) AS t(source, storage_key)
+            "#,
+        )
+        .bind(org_id)
+        .bind(request_id)
+        .bind(&sources)
+        .bind(&storage_keys)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Step 2 — the destructive transaction. Audit, destroy, and ARM the staged
+/// ledger rows, all or nothing.
+///
+/// The arming lives here, not in step 1 and not in step 3, and that placement is
+/// the entire correctness argument: a staged-but-unarmed key must never be
+/// purged (its data may still be live), and an armed key must never be
+/// forgotten (its data is definitely gone). Committing `armed_at` in the same
+/// transaction as the deletes is what makes those two statements simultaneously
+/// true, with no window between them.
+async fn destroy_tenant(
+    state: &AppState,
+    owner_id: Uuid,
+    org_id: Uuid,
+    request_id: Uuid,
+    client_ip: ClientIp,
+    counts: (i64, i64, i64),
+    objects_staged: i64,
+) -> Result<(), ApiError> {
+    let (projects_count, sessions_count, responses_count) = counts;
+
+    let mut tx = state.pool.begin().await?;
+    set_owner_guc(&mut tx, owner_id).await?;
+
+    // Audit BEFORE the deletes, in the same tx — the org row survives (soft
+    // delete), so the org-scoped audit_events row persists through the erasure.
     audit::record(
-        &mut txg,
+        &mut tx,
         AuditEvent {
             organization_id: org_id,
-            actor_user_id: user.user_id,
+            actor_user_id: owner_id,
             action: AuditAction::OrgDataErased,
             resource_type: resource::ORGANIZATION,
             resource_id: Some(org_id),
@@ -908,6 +1278,8 @@ pub async fn erase_org(
                 "projects_deleted": projects_count,
                 "sessions_deleted": sessions_count,
                 "responses_deleted": responses_count,
+                "objects_staged": objects_staged,
+                "erasure_request_id": request_id,
                 "erased_at": chrono::Utc::now().to_rfc3339(),
             }),
             ip: client_ip.0,
@@ -915,20 +1287,31 @@ pub async fn erase_org(
     )
     .await?;
 
-    // Delete the tenant's projects — cascades through questionnaires → sessions
-    // → responses / interaction_events / session_variables / session_media /
+    // Export jobs FIRST. The org is only soft-deleted, so nothing cascades to
+    // these rows — without this they survive an erasure still pointing at a zip
+    // holding a complete copy of everything being erased. (Their artifacts are
+    // on the ledger; this kills the rows.) Admitted by the 00060
+    // `data_exports_delete` policy — 00040 shipped none, so before that policy
+    // existed this DELETE would have silently matched zero rows.
+    sqlx::query("DELETE FROM data_exports WHERE organization_id = $1")
+        .bind(org_id)
+        .execute(&mut *tx)
+        .await?;
+
+    // The tenant's projects — cascades through questionnaires → sessions →
+    // responses / interaction_events / session_variables / session_media /
     // snapshots / quota / arm rows, and project_members. Admitted by the
     // permissive 00020 projects_delete_all policy; the cascade bypasses
     // child-row RLS (referential actions are not subject to row security).
     sqlx::query("DELETE FROM projects WHERE organization_id = $1")
         .bind(org_id)
-        .execute(&mut **txg)
+        .execute(&mut *tx)
         .await?;
 
     // Org-level media metadata (session media already cascaded above).
     sqlx::query("DELETE FROM media_assets WHERE organization_id = $1")
         .bind(org_id)
-        .execute(&mut **txg)
+        .execute(&mut *tx)
         .await?;
 
     // Soft-delete the organization itself. The row is RETAINED (not hard
@@ -936,23 +1319,174 @@ pub async fn erase_org(
     // org list via the deleted_at filter.
     sqlx::query("UPDATE organizations SET deleted_at = now(), updated_at = now() WHERE id = $1")
         .bind(org_id)
-        .execute(&mut **txg)
+        .execute(&mut *tx)
         .await?;
 
-    // Best-effort purge of the media objects themselves (never fail the
-    // erasure on a storage hiccup — the DB rows are already gone).
-    for key in &media_keys {
-        if let Err(e) = state.storage.delete(key).await {
-            tracing::warn!("erase {org_id}: failed to delete media object {key}: {e}");
+    // ARM. Commits with the destruction above — see the doc comment.
+    sqlx::query("UPDATE pending_object_deletions SET armed_at = now() WHERE request_id = $1")
+        .bind(request_id)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+// ── Erasure completion: status + retry ───────────────────────────────
+
+/// GET /api/organizations/{id}/erasure
+///
+/// Admin-gated. Reports whether an erasure is actually finished — i.e. whether
+/// any objects remain on the durable ledger. This is what makes a half-failed
+/// erasure *visible* rather than a warning in a log nobody reads.
+#[utoipa::path(
+    get,
+    path = "/api/organizations/{id}/erasure",
+    params(("id" = Uuid, Path, description = "Organization id")),
+    security(("bearerAuth" = [])),
+    responses(
+        (status = 200, description = "Erasure completion status", body = ErasureStatus),
+        (status = 403, description = "Requires admin role", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["gdpr"]
+)]
+pub async fn get_erasure_status(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    tx: Tx,
+    Path(org_id): Path<Uuid>,
+) -> Result<Json<ErasureStatus>, ApiError> {
+    let mut txg = tx.tx().await?;
+
+    if !state
+        .rbac
+        .has_org_role(
+            &mut **txg,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Admin,
+        )
+        .await?
+    {
+        return Err(ApiError::Forbidden("Requires admin role".into()));
+    }
+    drop(txg);
+
+    let pending = armed_rows_for_org(&state.pool, user.user_id, org_id).await?;
+    let objects_pending = pending.len() as i64;
+
+    Ok(Json(ErasureStatus {
+        organization_id: org_id,
+        status: if objects_pending == 0 {
+            "complete"
+        } else {
+            "incomplete"
         }
+        .into(),
+        objects_deleted: 0,
+        objects_pending,
+        last_error: last_ledger_error(&state.pool, user.user_id, org_id).await?,
+    }))
+}
+
+/// POST /api/organizations/{id}/erasure/retry
+///
+/// Owner-gated. Re-attempts the object deletions still on the ledger for this
+/// org. Idempotent, and safe to call when nothing is pending (reports
+/// `complete`, deletes nothing).
+///
+/// Needs no password/confirmation guard: it can only ever delete objects whose
+/// DB rows are already destroyed — the arming invariant guarantees it. The
+/// destructive decision was made, audited, and committed at erase time; this
+/// only finishes carrying it out.
+///
+/// Returns **200** once the ledger is clear, **202** while objects remain.
+#[utoipa::path(
+    post,
+    path = "/api/organizations/{id}/erasure/retry",
+    params(("id" = Uuid, Path, description = "Organization id")),
+    security(("bearerAuth" = [])),
+    responses(
+        (status = 200, description = "Ledger clear — erasure complete", body = ErasureStatus),
+        (status = 202, description = "Objects still pending — retry again", body = ErasureStatus),
+        (status = 403, description = "Requires owner role", body = crate::openapi::ErrorEnvelope)
+    ),
+    tags = ["gdpr"]
+)]
+pub async fn retry_erasure(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    tx: Tx,
+    Path(org_id): Path<Uuid>,
+) -> Result<(StatusCode, Json<ErasureStatus>), ApiError> {
+    let mut txg = tx.tx().await?;
+
+    if !state
+        .rbac
+        .has_org_role(
+            &mut **txg,
+            user.user_id,
+            org_id,
+            &crate::rbac::models::OrgRole::Owner,
+        )
+        .await?
+    {
+        return Err(ApiError::Forbidden("Requires owner role".into()));
+    }
+    drop(txg);
+
+    let armed = armed_rows_for_org(&state.pool, user.user_id, org_id).await?;
+    let staged = armed.len() as i64;
+    let outcome = purge_objects(&state, &armed).await;
+    let objects_pending = staged - outcome.deleted;
+    let complete = objects_pending == 0;
+
+    Ok((
+        if complete {
+            StatusCode::OK
+        } else {
+            StatusCode::ACCEPTED
+        },
+        Json(ErasureStatus {
+            organization_id: org_id,
+            status: if complete { "complete" } else { "incomplete" }.into(),
+            objects_deleted: outcome.deleted,
+            objects_pending,
+            last_error: outcome.last_error,
+        }),
+    ))
+}
+
+/// Background sweep — purge the armed backlog across ALL tenants.
+///
+/// Driven by the periodic task in `main.rs`, so a half-failed erasure completes
+/// itself once storage recovers, with no operator in the loop. The retry
+/// endpoint exists for when someone does not want to wait.
+///
+/// Reads via the 00060 SECURITY DEFINER function: this runs on a bare pool
+/// connection with no `app.user_id` GUC, so the ledger's SELECT policy would
+/// otherwise hide every row. The confirm/fail writes are permissive and need no
+/// such escape hatch.
+pub async fn sweep_pending_object_deletions(state: &AppState) -> Result<i64, ApiError> {
+    let rows: Vec<PendingObject> =
+        sqlx::query_as("SELECT id, storage_key FROM sweep_pending_object_deletions($1)")
+            .bind(200i32)
+            .fetch_all(&state.pool)
+            .await?;
+
+    if rows.is_empty() {
+        return Ok(0);
     }
 
-    Ok(Json(EraseResult {
-        message: "Organization data erased".into(),
-        projects_deleted: projects_count,
-        sessions_deleted: sessions_count,
-        responses_deleted: responses_count,
-    }))
+    let outcome = purge_objects(state, &rows).await;
+    if let Some(err) = &outcome.last_error {
+        tracing::warn!(
+            "object-deletion sweep: {} of {} purged; last error: {err}",
+            outcome.deleted,
+            rows.len()
+        );
+    }
+    Ok(outcome.deleted)
 }
 
 async fn scoped_count(

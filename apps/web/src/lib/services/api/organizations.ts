@@ -82,9 +82,20 @@ export interface ExportJob {
 /** Result of a guarded tenant erasure (E-RBAC-9). */
 export interface EraseResult {
   message: string;
+  /**
+   * `complete` — every row destroyed AND every object confirmed deleted from
+   * storage. `incomplete` (HTTP 202) — the database erasure committed, but
+   * `objects_pending` objects could not be deleted. The keys are held on a
+   * durable ledger and the deletion is retried automatically; it is NOT a
+   * finished erasure and must never be presented as one.
+   */
+  status: 'complete' | 'incomplete';
   projects_deleted: number;
   sessions_deleted: number;
   responses_deleted: number;
+  objects_deleted: number;
+  objects_pending: number;
+  last_error?: string | null;
 }
 
 export const organizations = {

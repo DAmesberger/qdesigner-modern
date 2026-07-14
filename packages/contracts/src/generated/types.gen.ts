@@ -508,9 +508,44 @@ export type EraseOrgRequest = {
  */
 export type EraseResult = {
     message: string;
+    /**
+     * `complete` — every DB row destroyed AND every object confirmed deleted.
+     * `incomplete` — the DB destruction committed, but objects remain on the
+     * ledger. The keys are durable; retry via `POST …/erasure/retry`.
+     */
+    status: string;
     projects_deleted: number;
     sessions_deleted: number;
     responses_deleted: number;
+    /**
+     * Objects confirmed deleted from storage by this call.
+     */
+    objects_deleted: number;
+    /**
+     * Objects still awaiting deletion. Non-zero ⇒ the erasure is NOT complete.
+     */
+    objects_pending: number;
+    /**
+     * The storage failure that left objects pending, if any.
+     */
+    last_error?: string | null;
+};
+
+/**
+ * State of an organization's outstanding object-deletion ledger.
+ */
+export type ErasureStatus = {
+    organization_id: string;
+    /**
+     * `complete` (nothing outstanding) | `incomplete` (objects still pending).
+     */
+    status: string;
+    /**
+     * Objects confirmed deleted by THIS call. Always 0 for the status read.
+     */
+    objects_deleted: number;
+    objects_pending: number;
+    last_error?: string | null;
 };
 
 export type ErrorBody = {
@@ -3005,12 +3040,80 @@ export type EraseOrgError = EraseOrgErrors[keyof EraseOrgErrors];
 
 export type EraseOrgResponses = {
     /**
-     * Tenant data erased
+     * Tenant data erased — rows AND objects
      */
     200: EraseResult;
+    /**
+     * DB erased; objects still pending — retryable
+     */
+    202: EraseResult;
 };
 
 export type EraseOrgResponse = EraseOrgResponses[keyof EraseOrgResponses];
+
+export type GetErasureStatusData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/erasure';
+};
+
+export type GetErasureStatusErrors = {
+    /**
+     * Requires admin role
+     */
+    403: ErrorEnvelope;
+};
+
+export type GetErasureStatusError = GetErasureStatusErrors[keyof GetErasureStatusErrors];
+
+export type GetErasureStatusResponses = {
+    /**
+     * Erasure completion status
+     */
+    200: ErasureStatus;
+};
+
+export type GetErasureStatusResponse = GetErasureStatusResponses[keyof GetErasureStatusResponses];
+
+export type RetryErasureData = {
+    body?: never;
+    path: {
+        /**
+         * Organization id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/organizations/{id}/erasure/retry';
+};
+
+export type RetryErasureErrors = {
+    /**
+     * Requires owner role
+     */
+    403: ErrorEnvelope;
+};
+
+export type RetryErasureError = RetryErasureErrors[keyof RetryErasureErrors];
+
+export type RetryErasureResponses = {
+    /**
+     * Ledger clear — erasure complete
+     */
+    200: ErasureStatus;
+    /**
+     * Objects still pending — retry again
+     */
+    202: ErasureStatus;
+};
+
+export type RetryErasureResponse = RetryErasureResponses[keyof RetryErasureResponses];
 
 export type SetDataRegionData = {
     body: SetDataRegionRequest;

@@ -146,6 +146,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/{id}/export/{job_id}", get(gdpr::get_export))
         .route("/{id}/erase", post(gdpr::erase_org))
+        // Completion of an erasure is observable and retryable: a storage
+        // failure during the purge leaves the keys on a durable ledger (00060)
+        // rather than losing them, so a half-finished erasure can be seen and
+        // finished instead of being reported as a success.
+        .route("/{id}/erasure", get(gdpr::get_erasure_status))
+        .route("/{id}/erasure/retry", post(gdpr::retry_erasure))
         .route("/{id}/data-region", put(gdpr::set_data_region))
         .route("/{id}/legal-hold", put(gdpr::set_legal_hold))
         .route(

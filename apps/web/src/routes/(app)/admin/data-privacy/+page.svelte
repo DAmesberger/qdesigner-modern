@@ -46,6 +46,8 @@
   let eraseConfirmation = $state('');
   let erasing = $state(false);
   let eraseDone = $state<string | null>(null);
+  /** True when the erasure left objects undeleted — shown as a warning, not a success. */
+  let eraseIncomplete = $state(false);
 
   const exportBusy = $derived(
     exportJob?.status === 'pending' || exportJob?.status === 'running'
@@ -145,13 +147,24 @@
     if (!org) return;
     erasing = true;
     eraseDone = null;
+    eraseIncomplete = false;
     try {
       const result = await api.organizations.gdpr.erase(
         org.id,
         erasePassword,
         eraseConfirmation
       );
-      eraseDone = `Erased ${result.projects_deleted} project(s), ${result.sessions_deleted} session(s), ${result.responses_deleted} response(s). Audit log retained.`;
+      const rows = `${result.projects_deleted} project(s), ${result.sessions_deleted} session(s), ${result.responses_deleted} response(s)`;
+      if (result.status === 'incomplete') {
+        // The database erasure committed, but objects remain in storage. Saying
+        // "erased" here would be the same false compliance claim the server now
+        // refuses to make.
+        eraseIncomplete = true;
+        eraseDone = `Erased ${rows} from the database, but ${result.objects_pending} uploaded file(s) could not be deleted from storage. THE ERASURE IS NOT COMPLETE. The files are recorded and deletion will be retried automatically.${result.last_error ? ` Last error: ${result.last_error}` : ''}`;
+      } else {
+        eraseIncomplete = false;
+        eraseDone = `Erased ${rows} and ${result.objects_deleted} uploaded file(s). Audit log retained.`;
+      }
       erasePassword = '';
       eraseConfirmation = '';
     } catch (err) {
@@ -297,7 +310,9 @@
         </p>
 
         {#if eraseDone}
-          <div class="mb-4"><Alert variant="success">{eraseDone}</Alert></div>
+          <div class="mb-4">
+            <Alert variant={eraseIncomplete ? 'warning' : 'success'}>{eraseDone}</Alert>
+          </div>
         {/if}
 
         {#if legalHold}

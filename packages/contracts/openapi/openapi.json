@@ -2377,7 +2377,7 @@
           "gdpr"
         ],
         "summary": "POST /api/organizations/{id}/erase",
-        "description": "Owner-gated, password + typed-confirmation guarded, blocked under a legal\nhold. Removes the tenant's participant data (deleting the org's projects\ncascades through questionnaires → sessions → responses / events / variables\n/ media rows) and soft-deletes the organization, retaining `audit_events`.",
+        "description": "Owner-gated, password + typed-confirmation guarded, blocked under a legal\nhold. Destroys the tenant's participant data — DB rows *and* the objects in\nstorage those rows name — and soft-deletes the organization, retaining\n`audit_events`.\n\n## Durability (migration 00060)\n\nThe objects are the point. An erasure that drops the DB rows and then\n*tries* to delete the objects has destroyed the only record of what it still\nowes; if storage is down at that instant the keys are gone forever and the\nparticipant files live on in the bucket, unfindable. So the keys are written\nto a durable ledger BEFORE anything is destroyed:\n\n  1. **Stage** — every key (`media_assets`, `session_media`, `data_exports`)\n     is INSERTed into `pending_object_deletions` and COMMITTED on its own\n     connection. `armed_at` is NULL: nothing is destroyed yet, so the rows\n     are inert.\n  2. **Destroy** — one transaction: audit → delete the export rows → delete\n     the projects (cascading to sessions → responses / events / variables /\n     session_media) → delete the media rows → soft-delete the org → **arm\n     the staged rows**. The arming commits with the destruction, so an\n     intent becomes actionable exactly when — and only if — the data it\n     describes is really gone.\n  3. **Purge** — delete each armed object, clearing its ledger row only on\n     confirmed success.\n\nCrash after (2) and the ledger holds every key, armed and durable: the\nsweeper or `POST …/erasure/retry` finishes the job. Nothing is lost, and\nnothing is claimed that isn't true — see the return contract below.\n\n## What it reports\n\n* **200** `status: \"complete\"` — every row destroyed and every object\n  confirmed deleted from storage.\n* **202** `status: \"incomplete\"` — the DB destruction committed (it is\n  irreversible), but `objects_pending` objects remain. The erasure is NOT\n  finished. The keys are on the durable ledger and the work is retryable.\n\nA partial erasure never returns 200. That is the whole contract.",
         "operationId": "erase_org",
         "parameters": [
           {
@@ -2403,7 +2403,17 @@
         },
         "responses": {
           "200": {
-            "description": "Tenant data erased",
+            "description": "Tenant data erased — rows AND objects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EraseResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "DB erased; objects still pending — retryable",
             "content": {
               "application/json": {
                 "schema": {
@@ -2444,6 +2454,114 @@
           },
           "409": {
             "description": "Legal hold active — erasure blocked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/erasure": {
+      "get": {
+        "tags": [
+          "gdpr"
+        ],
+        "summary": "GET /api/organizations/{id}/erasure",
+        "description": "Admin-gated. Reports whether an erasure is actually finished — i.e. whether\nany objects remain on the durable ledger. This is what makes a half-failed\nerasure *visible* rather than a warning in a log nobody reads.",
+        "operationId": "get_erasure_status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erasure completion status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires admin role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/organizations/{id}/erasure/retry": {
+      "post": {
+        "tags": [
+          "gdpr"
+        ],
+        "summary": "POST /api/organizations/{id}/erasure/retry",
+        "description": "Owner-gated. Re-attempts the object deletions still on the ledger for this\norg. Idempotent, and safe to call when nothing is pending (reports\n`complete`, deletes nothing).\n\nNeeds no password/confirmation guard: it can only ever delete objects whose\nDB rows are already destroyed — the arming invariant guarantees it. The\ndestructive decision was made, audited, and committed at erase time; this\nonly finishes carrying it out.\n\nReturns **200** once the ledger is clear, **202** while objects remain.",
+        "operationId": "retry_erasure",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Organization id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ledger clear — erasure complete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureStatus"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Objects still pending — retry again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErasureStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requires owner role",
             "content": {
               "application/json": {
                 "schema": {
@@ -9695,13 +9813,20 @@
         "description": "Summary returned by the erase endpoint.",
         "required": [
           "message",
+          "status",
           "projects_deleted",
           "sessions_deleted",
-          "responses_deleted"
+          "responses_deleted",
+          "objects_deleted",
+          "objects_pending"
         ],
         "properties": {
           "message": {
             "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`complete` — every DB row destroyed AND every object confirmed deleted.\n`incomplete` — the DB destruction committed, but objects remain on the\nledger. The keys are durable; retry via `POST …/erasure/retry`."
           },
           "projects_deleted": {
             "type": "integer",
@@ -9714,6 +9839,58 @@
           "responses_deleted": {
             "type": "integer",
             "format": "int64"
+          },
+          "objects_deleted": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Objects confirmed deleted from storage by this call."
+          },
+          "objects_pending": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Objects still awaiting deletion. Non-zero ⇒ the erasure is NOT complete."
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The storage failure that left objects pending, if any."
+          }
+        }
+      },
+      "ErasureStatus": {
+        "type": "object",
+        "description": "State of an organization's outstanding object-deletion ledger.",
+        "required": [
+          "organization_id",
+          "status",
+          "objects_deleted",
+          "objects_pending"
+        ],
+        "properties": {
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "`complete` (nothing outstanding) | `incomplete` (objects still pending)."
+          },
+          "objects_deleted": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Objects confirmed deleted by THIS call. Always 0 for the status read."
+          },
+          "objects_pending": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

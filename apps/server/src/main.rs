@@ -268,6 +268,30 @@ async fn main() {
     // app pool can still see the cross-tenant due set.
     qdesigner_server::series::spawn_scheduler(state.clone());
 
+    // ── Pending object-deletion sweeper (GDPR durability, 00060) ──────
+    // An erasure destroys its DB rows and then deletes the objects those rows
+    // named. When storage is unavailable in that window the keys would once
+    // have been lost with the rows — the participant files surviving in the
+    // bucket, unfindable, while the caller was told "erased". They are now
+    // written to `pending_object_deletions` BEFORE the destructive commit, and
+    // this sweep finishes the job once storage recovers, with no operator in
+    // the loop. (`POST /api/organizations/{id}/erasure/retry` is the manual
+    // path for when someone does not want to wait.)
+    {
+        let state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(15 * 60));
+            loop {
+                interval.tick().await;
+                match api::gdpr::sweep_pending_object_deletions(&state).await {
+                    Ok(0) => {}
+                    Ok(purged) => tracing::info!(purged, "purged pending object deletions"),
+                    Err(e) => tracing::warn!("pending object-deletion sweep failed: {e}"),
+                }
+            }
+        });
+    }
+
     // ── Router ───────────────────────────────────────────────────────
     let app = api::router(state.clone())
         .layer(axum::middleware::from_fn_with_state(
