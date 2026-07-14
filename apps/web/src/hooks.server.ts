@@ -1,6 +1,8 @@
+import { dev } from '$app/environment';
 import type { Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { paraglideMiddleware } from '$lib/paraglide/server';
+import { cspHeaderFor } from '$lib/server/csp';
 
 // Paraglide (ADR 0019): resolve the request locale from the cookie /
 // Accept-Language strategy and expose it to server-rendered `m.*()` calls via
@@ -62,4 +64,34 @@ export const crossOriginIsolationHandle: Handle = async ({ event, resolve }) => 
   return response;
 };
 
-export const handle: Handle = sequence(paraglideHandle, appHandle, crossOriginIsolationHandle);
+/**
+ * Tighten the Content-Security-Policy per route.
+ *
+ * `kit.csp` (in `svelte.config.js`) emits ONE global policy on every document,
+ * carrying the per-request nonce it stamped into the inline scripts. This hook
+ * rewrites that already-nonced header instead of rebuilding it — see
+ * `cspHeaderFor` — so the fillout route gets same-origin-only `img-src`/`media-src`
+ * (participant route, the one place study data lives) while the designer keeps the
+ * `https:`/localhost breadth its presigned S3 media needs.
+ *
+ * Runs after `crossOriginIsolationHandle` so both header layers coexist. Only page
+ * documents carry a CSP header; endpoint/data responses have none and are skipped.
+ */
+export const cspHandle: Handle = async ({ event, resolve }) => {
+  const response = await resolve(event);
+
+  const existing = response.headers.get('content-security-policy');
+  if (existing) {
+    const isFillout = (event.route.id ?? '').startsWith(ISOLATED_ROUTE_PREFIX);
+    response.headers.set('content-security-policy', cspHeaderFor(existing, isFillout, dev));
+  }
+
+  return response;
+};
+
+export const handle: Handle = sequence(
+  paraglideHandle,
+  appHandle,
+  crossOriginIsolationHandle,
+  cspHandle
+);

@@ -11,9 +11,9 @@
     <meta property="og:title" content="QDesigner Modern" />
     <meta property="og:description" content="Professional questionnaire design platform" />
     <meta property="og:type" content="website" />
-    <script>
+    <script nonce="%sveltekit.nonce%">
       // Prevent dark mode flash on page load
-      const theme = localStorage.getItem('theme') || 
+      const theme = localStorage.getItem('theme') ||
         (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
       document.documentElement.classList.add(theme);
     </script>

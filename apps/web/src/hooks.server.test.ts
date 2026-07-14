@@ -96,6 +96,13 @@ describe('hooks.server: cross-origin isolation', () => {
     expect(sequencedHandlers).toContain(hooks.crossOriginIsolationHandle);
   });
 
+  it('wires the CSP rewrite into the server handle', () => {
+    // The per-route CSP tightening (same-origin media on fillout) is only applied
+    // if `cspHandle` is actually in the sequence. Without this, the whole policy
+    // silently falls back to the single global one.
+    expect(sequencedHandlers).toContain(hooks.cspHandle);
+  });
+
   it('serves every fillout route cross-origin isolated', async () => {
     const fillout = routeIds().filter((id) => id.startsWith(hooks.ISOLATED_ROUTE_PREFIX));
 

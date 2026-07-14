@@ -1,5 +1,6 @@
 import adapter from '@sveltejs/adapter-auto';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { APP_CSP_DIRECTIVES } from './src/lib/server/csp.js';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -8,6 +9,18 @@ const config = {
   preprocess: vitePreprocess(),
 
   kit: {
+    // Content-Security-Policy. `kit.csp` is the only mechanism that nonces the
+    // inline hydration script SvelteKit emits into every document (and, via the
+    // `%sveltekit.nonce%` placeholder in `app.html`, the dark-mode script) — so
+    // the base policy has to be declared here, not in `hooks.server.ts`. The hook
+    // then rewrites this header per-route (tighter img/media on fillout). `mode:
+    // 'auto'` uses a per-request nonce for these dynamic pages; nothing in the app
+    // is prerendered, so no document falls back to hash+meta. Single source of
+    // truth: `src/lib/server/csp.js`, shared with the hook.
+    csp: {
+      mode: 'auto',
+      directives: APP_CSP_DIRECTIVES,
+    },
     alias: {
       '@qdesigner/contracts/generated': '../../packages/contracts/src/generated',
       '@qdesigner/contracts': '../../packages/contracts/src/index.ts',
