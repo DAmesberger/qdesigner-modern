@@ -66,11 +66,17 @@ test.describe('@reaction golden path — trusted input → server-side trial row
       expect(trial.rt_us!).toBeGreaterThanOrEqual(50_000);
       expect(trial.rt_us!).toBeLessThanOrEqual(2_500_000);
 
-      // Provenance: raf onset, event.timeStamp response, cross-origin isolation stamped.
+      // Provenance: raf onset, event.timeStamp response, and the run was actually
+      // cross-origin isolated. The last one is a hard `true`, not a type check:
+      // without COOP/COEP the browser clamps `performance.now()` from ~5µs to
+      // ~100µs, and per ADR 0027 the run still completes and merely records the
+      // degradation — so a `typeof === 'boolean'` assertion would stay green on a
+      // 20x-degraded product. The dev server this lane runs against IS isolated
+      // (`hooks.server.ts`), so anything but `true` is a real regression.
       expect(trial.provenance).not.toBeNull();
       expect(trial.provenance!.onsetMethod).toBe('raf');
       expect(trial.provenance!.responseMethod).toBe('event.timeStamp');
-      expect(typeof trial.provenance!.crossOriginIsolated).toBe('boolean');
+      expect(trial.provenance!.crossOriginIsolated).toBe(true);
     });
   });
 });

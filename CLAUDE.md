@@ -35,8 +35,11 @@ pnpm install                     # always pnpm, never npm
 docker compose up -d             # postgres, redis, minio, mailpit
 docker compose -f docker-compose.test.yml up -d   # ephemeral test stack
 
-# Backend (runs migrations on startup)
-cargo run --manifest-path apps/server/Cargo.toml
+# Backend (runs migrations on startup). MUST be run from apps/server/ — config.rs
+# loads `../.env.development` RELATIVE TO CWD, so the --manifest-path form from the
+# repo root panics with "DATABASE_URL environment variable is required".
+# From the root, source the env first instead:  set -a; source .env.development; set +a
+cd apps/server && cargo run
 
 # Frontend
 pnpm --filter @qdesigner/web dev
@@ -62,8 +65,10 @@ cargo test --manifest-path apps/server/Cargo.toml -- --include-ignored
 
 E2E lanes are Playwright projects, not part of the above gate: `pnpm test:e2e:{smoke,regression,fullstack,reaction,form,visual}`.
 
+**The e2e lanes do not currently run locally**, and the reason is a version mismatch, not your setup: the flake pins `playwright-driver.browsers` (ships `chromium-1217`) while `@playwright/test` resolves to a version demanding a different build, so Playwright refuses to launch. Aligning the flake pin to the npm Playwright version is the real fix. Two further traps once it runs: the lanes need `--workers=1` (five workers each signing up trips the per-IP auth rate limiter and the `workspace` fixture times out), and `preload-fail-closed.reaction.spec.ts` already fails on `main`.
+
 Test count baseline (verified 2026-07-14, ADR 0036 branch):
-- frontend web suite: 175 files / 1867 passing (includes package tests via the vitest glob)
+- frontend web suite: 176 files / 1870 passing (includes package tests via the vitest glob)
 - scripting-engine standalone: 8 files / 256
 - server: 302 passing across the lib + 46 integration files in `apps/server/tests/`
 
@@ -182,6 +187,21 @@ The crate is bin+lib hybrid: `tests/` integration tests import via `qdesigner_se
 - At-rest encryption: fillout payloads written from v6 onward are encrypted (`filloutKeys`, per-session); pre-v6 plaintext rows stay readable and are cleared by purge-after-sync.
 
 Dexie tables (**v9**): designer side — `questionnaires, syncQueue, resources, drafts`; fillout side — `filloutQuestionnaires, filloutSessions, filloutResponses, filloutEvents, filloutVariables, filloutMedia, filloutServerVariables, filloutTrials, filloutBinaries, filloutKeys, filloutSyncLedger`.
+
+## Cross-origin isolation (deployment requirement)
+
+The fillout document **must** be served with both:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Without them the browser clamps `performance.now()` from ~5µs to ~100µs as a Spectre mitigation (measured on this app: 0.005 ms vs 0.100 ms minimum tick — a 20× degradation). That clamp voids the platform's core timing guarantee: frame-accurate stimulus onset with sub-millisecond *relative* precision on reaction-time difference scores. It does **not** stop a run — per ADR 0027 (`record` by default) a non-isolated session completes normally and stamps the degradation into per-trial `timing_provenance`; only `validityPolicy: 'enforce'` refuses to run. **Loss of isolation is therefore silent, and shows up as quietly worse data rather than an error.**
+
+- **Set by** `apps/web/src/hooks.server.ts` (`crossOriginIsolationHandle`), scoped to route ids under `/(fillout)`. The scoping is deliberate: COEP `require-corp` constrains what a document may embed, and the designer/app shell should not pay that cost.
+- **Guarded by** `apps/web/src/hooks.server.test.ts` in the default gate — fails if the fillout document loses either header, if the handle is dropped from the `sequence()`, or if the `(fillout)` route group is renamed out from under the prefix. Non-fillout routes are asserted *not* to carry the headers.
+- **Deployment constraint.** `hooks.server.ts` only runs when a **server** adapter serves the app. `apps/web/svelte.config.js` still uses `@sveltejs/adapter-auto` (no production target chosen; hence the "Could not detect a supported production environment" build warning). If the app is ever deployed as a static/edge bundle, or behind a host that strips response headers, cross-origin isolation disappears and the timing guarantee is void. **Such a deployment must set both headers on the `/q/*` document at the CDN/host layer.** Choosing the production adapter is an open decision.
 
 ## Semantic versioning
 

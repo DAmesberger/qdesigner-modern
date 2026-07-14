@@ -19,9 +19,27 @@ const config = {
       '@qdesigner/questionnaire-core': '../../packages/questionnaire-core/src/index.ts',
       '@qdesigner/scripting-engine': '../../packages/scripting-engine/src/index.ts',
     },
-    // adapter-auto only supports some environments, see https://kit.svelte.dev/docs/adapter-auto for a list.
-    // If your environment is not supported or you settled on a specific environment, switch out the adapter.
-    // See https://kit.svelte.dev/docs/adapters for more information about adapters.
+    // DEPLOYMENT CONSTRAINT — cross-origin isolation.
+    //
+    // The fillout route must be served with `Cross-Origin-Opener-Policy:
+    // same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. Without
+    // both, browsers clamp `performance.now()` from ~5µs to ~100µs (Spectre
+    // mitigation), which voids the platform's core timing guarantee: frame-
+    // accurate onset with sub-millisecond relative precision on reaction-time
+    // difference scores. A degraded run does not fail — per ADR 0027 it
+    // completes and records the loss in per-trial `timing_provenance`.
+    //
+    // Those headers are set by `src/hooks.server.ts`, which ONLY runs when a
+    // server adapter serves the app. Deploying the app as a static bundle, or
+    // behind a host that strips or overrides response headers, silently drops
+    // cross-origin isolation. Such a deployment MUST reproduce both headers on
+    // the `/q/*` document at the CDN/host layer.
+    //
+    // No production adapter has been chosen yet, so this is `adapter-auto`,
+    // which cannot detect a target at build time (hence the "Could not detect a
+    // supported production environment" build warning). Choosing one is an open
+    // deployment decision; whichever is chosen must satisfy the above.
+    // See https://kit.svelte.dev/docs/adapters.
     adapter: adapter()
   }
 };
