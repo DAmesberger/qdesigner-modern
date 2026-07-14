@@ -27,7 +27,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 mod common;
-use common::{build_test_state, fixture_pool, json_request, provision_tenant, register_user, test_app};
+use common::{
+    build_test_state, fixture_pool, json_request, provision_tenant, register_user, test_app,
+};
 
 /// `repair_trial_provenance()` operates on the WHOLE `trials` table, so any test
 /// that asserts a before/after around it must not have a sibling test's repair run
