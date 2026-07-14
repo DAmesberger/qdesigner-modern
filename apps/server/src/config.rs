@@ -92,6 +92,20 @@ pub struct Config {
     // [`Config::sso_encryption_key`], which applies the fallback.
     pub sso_encryption_key: Option<String>,
 
+    /// Hosts the SSO/OIDC path may reach over plain `http` and at a non-public
+    /// address (`SSO_ALLOWED_INSECURE_HOSTS`, comma-separated). **Empty by
+    /// default** — the production posture is https-to-the-public-internet only.
+    ///
+    /// This exists because a local Zitadel (`http://localhost:8080`) and the
+    /// test suite's in-process IdP are indistinguishable, at the network layer,
+    /// from the SSRF targets the guard is there to stop (Postgres on 15434,
+    /// Redis on 16381, MinIO on 19003, cloud metadata on 169.254.169.254). So
+    /// the exemption is written down by an operator rather than inferred, and it
+    /// is an exact host match: allowing `localhost` allows nothing else.
+    ///
+    /// See [`auth::ssrf`](crate::auth::ssrf) for what it exempts a host from.
+    pub sso_allowed_insecure_hosts: Vec<String>,
+
     // Whether the refresh_token cookie carries the `Secure` attribute. Defaults
     // to true (production posture). Browsers accept Secure cookies over
     // http://localhost, so the default is fine for the standard dev setup; set
@@ -303,6 +317,12 @@ impl Config {
             sso_encryption_key: std::env::var("SSO_ENCRYPTION_KEY")
                 .ok()
                 .filter(|v| !v.trim().is_empty()),
+            sso_allowed_insecure_hosts: std::env::var("SSO_ALLOWED_INSECURE_HOSTS")
+                .unwrap_or_default()
+                .split(',')
+                .map(|h| h.trim().to_string())
+                .filter(|h| !h.is_empty())
+                .collect(),
             cookie_secure: std::env::var("COOKIE_SECURE")
                 .ok()
                 .map(|v| !matches!(v.trim().to_ascii_lowercase().as_str(), "false" | "0" | "no"))

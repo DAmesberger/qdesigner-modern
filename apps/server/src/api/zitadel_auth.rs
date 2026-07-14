@@ -113,8 +113,16 @@ fn mfa_from_claims(claims: &serde_json::Value, allow_sms_email: bool) -> bool {
         .unwrap_or(false)
 }
 
+/// Ask the IdP's introspection endpoint whether the access token carries an MFA
+/// factor.
+///
+/// The endpoint arrives from a discovery document and is therefore in the same
+/// attacker-controlled class as the rest of the flow, so it goes out through the
+/// [`OidcClient`] (URL-validated, guarded resolver, no redirects) rather than a
+/// bare `reqwest::Client` — which is why this takes the client rather than its
+/// HTTP handle. `OidcClient` no longer exposes one.
 async fn mfa_from_introspection(
-    http: &reqwest::Client,
+    oidc: &OidcClient,
     endpoint: Option<&str>,
     access_token: Option<&str>,
     state: &AppState,
@@ -134,17 +142,9 @@ async fn mfa_from_introspection(
         form.push(("client_secret", secret.to_string()));
     }
 
-    let response: IntrospectionResponse = http
-        .post(endpoint)
-        .form(&form)
-        .send()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel introspection failed: {e}")))?
-        .error_for_status()
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel introspection HTTP error: {e}")))?
-        .json()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("Zitadel introspection JSON error: {e}")))?;
+    let response: IntrospectionResponse = oidc
+        .post_form_json(endpoint, &form, "Zitadel introspection failed")
+        .await?;
 
     if !response.active {
         return Ok(false);
@@ -192,7 +192,9 @@ pub async fn zitadel_start(
         .as_deref()
         .ok_or_else(|| ApiError::Internal("Zitadel redirect URI is not configured".into()))?;
 
-    let discovery = OidcClient::new()?.discover(&discovery_url(issuer)).await?;
+    let discovery = OidcClient::new(&state.config)?
+        .discover(&discovery_url(issuer))
+        .await?;
 
     if discovery.issuer.trim_end_matches('/') != issuer.trim_end_matches('/') {
         return Err(ApiError::BadRequest("Zitadel issuer mismatch".into()));
@@ -295,7 +297,7 @@ pub async fn zitadel_callback(
 
     // Token exchange + id_token validation (signature, iss/aud/exp, nonce) run
     // on the shared OIDC client; `claims` is proof-of-validation.
-    let oidc = OidcClient::new()?;
+    let oidc = OidcClient::new(&state.config)?;
     let token = oidc
         .exchange_code(CodeExchange {
             token_endpoint: &login_state.token_endpoint,
@@ -322,7 +324,7 @@ pub async fn zitadel_callback(
             true
         } else {
             mfa_from_introspection(
-                oidc.http(),
+                &oidc,
                 login_state.introspection_endpoint.as_deref(),
                 token.access_token.as_deref(),
                 &state,

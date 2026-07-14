@@ -52,6 +52,7 @@ use qdesigner_server::auth::jwt::JwtManager;
 use qdesigner_server::config::{AuthProvider, Config};
 use qdesigner_server::middleware::csrf::csrf_middleware;
 use qdesigner_server::middleware::rate_limit::RateLimiter;
+use qdesigner_server::middleware::security_headers::security_headers;
 use qdesigner_server::rbac::manager::RbacManager;
 use qdesigner_server::state::AppState;
 use qdesigner_server::storage::s3::S3StorageService;
@@ -307,6 +308,14 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         zitadel_include_profile_scope: false,
         zitadel_allow_sms_email_mfa: false,
         sso_encryption_key: None,
+        // The wiremock IdP the SSO tests stand up binds 127.0.0.1 over plain
+        // http — which the SSRF guard blocks by default, exactly as it blocks
+        // Postgres/Redis/MinIO on the same interface. The harness therefore
+        // declares the same explicit exemption a local-dev operator would
+        // (`SSO_ALLOWED_INSECURE_HOSTS`). `tests/ssrf_oidc.rs` narrows it to
+        // `localhost` so that 127.0.0.1 is once again a *blocked* target and it
+        // can point a hostile IdP at a real server on it.
+        sso_allowed_insecure_hosts: vec!["127.0.0.1".into()],
         cookie_secure: false,
         // No reverse proxy in the harness: X-Forwarded-For is ignored and the
         // socket peer (the `ConnectInfo` a test injects) is the bucket key.
@@ -382,11 +391,19 @@ pub async fn build_media_test_state(bucket: &str) -> Option<AppState> {
     build_state_with_storage(storage).await
 }
 
-/// Wrap `api::router(state)` with the outermost `csrf_middleware` layer,
-/// mirroring `main.rs`. The CORS/Trace layers are intentionally omitted —
-/// they are not under test here.
+/// Wrap `api::router(state)` with the outermost `csrf_middleware` and
+/// `security_headers` layers, mirroring `main.rs`. The CORS/Trace layers are
+/// intentionally omitted — they are not under test here.
 pub fn test_app(state: AppState) -> Router {
-    api::router(state.clone()).layer(axum::middleware::from_fn_with_state(state, csrf_middleware))
+    api::router(state.clone())
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            csrf_middleware,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            state,
+            security_headers,
+        ))
 }
 
 /// Build a JSON request. Always sets `X-Requested-With: XMLHttpRequest`

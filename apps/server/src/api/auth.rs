@@ -135,12 +135,15 @@ async fn revoke_upstream_if_configured(state: &AppState, session_hash: &str) {
         form.push(("client_secret", secret.to_string()));
     }
 
-    if let Err(e) = reqwest::Client::new()
-        .post(endpoint)
-        .form(&form)
-        .send()
-        .await
-    {
+    // The revocation endpoint came from the IdP's discovery document, so it is
+    // outbound-guarded like every other OIDC hop (SSRF): validated URL, filtered
+    // resolver, no redirect following. Best-effort — a failure only logs.
+    let revoke = async {
+        crate::auth::oidc_client::OidcClient::new(&state.config)?
+            .post_form_ignoring_response(endpoint, &form)
+            .await
+    };
+    if let Err(e) = revoke.await {
         tracing::warn!("upstream token revocation failed: {e}");
     }
 }

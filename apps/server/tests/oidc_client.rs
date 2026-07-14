@@ -13,6 +13,16 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use qdesigner_server::auth::oidc_client::{CodeExchange, IdTokenInput, OidcClient};
 use qdesigner_server::auth::session::hash_token;
+use qdesigner_server::auth::ssrf::OutboundPolicy;
+
+/// The wiremock IdP binds loopback over plain http, which the SSRF guard blocks
+/// by default. These tests are about the *token* rejection matrix, so they hand
+/// the client a policy that exempts the mock — the same explicit exemption a
+/// local-dev operator writes into `SSO_ALLOWED_INSECURE_HOSTS`.
+/// `tests/ssrf_oidc.rs` is where the guard itself is under test.
+fn test_client() -> OidcClient {
+    OidcClient::with_policy(OutboundPolicy::with_exempt_hosts(["127.0.0.1"])).expect("build client")
+}
 
 // Key A: signs the "good" tokens; its modulus is what the mocked JWKS advertises.
 const KEY_A_PEM: &str = "-----BEGIN PRIVATE KEY-----
@@ -137,7 +147,7 @@ async fn verify(
     issuer: &str,
     expected_nonce_hash: &str,
 ) -> Result<(), qdesigner_server::error::ApiError> {
-    let client = OidcClient::new().expect("build client");
+    let client = test_client();
     client
         .verify_id_token(IdTokenInput {
             id_token,
@@ -155,7 +165,7 @@ async fn happy_path_returns_verified_claims() {
     let server = jwks_server().await;
     let token = sign_rs256(KEY_A_PEM, KID, &token_claims(ISSUER, "the-nonce", 3600));
 
-    let client = OidcClient::new().unwrap();
+    let client = test_client();
     let claims = client
         .verify_id_token(IdTokenInput {
             id_token: &token,
@@ -286,7 +296,7 @@ async fn discover_and_exchange_round_trip() {
         .mount(&server)
         .await;
 
-    let client = OidcClient::new().unwrap();
+    let client = test_client();
     let disc = client
         .discover(&format!("{issuer}/.well-known/openid-configuration"))
         .await

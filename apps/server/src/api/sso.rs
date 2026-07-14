@@ -44,7 +44,6 @@ use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use std::time::Duration;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -52,6 +51,7 @@ use crate::audit::{self, resource, AuditAction, AuditEvent, ClientIp};
 use crate::auth::models::{AuthenticatedUser, UserInfo};
 use crate::auth::oidc_client::{CodeExchange, IdTokenInput, OidcClient};
 use crate::auth::session;
+use crate::auth::ssrf::OutboundPolicy;
 use crate::error::ApiError;
 use crate::middleware::tx::Tx;
 use crate::rbac::models::OrgRole;
@@ -316,28 +316,31 @@ fn validate_group_role_map(v: &serde_json::Value) -> Result<(), ApiError> {
     Ok(())
 }
 
-/// Best-effort reachability probe for an OIDC discovery / SAML metadata URL.
-/// Rejects non-http(s) URLs outright and requires a 2xx response within a
-/// short timeout.
-async fn validate_metadata_reachable(url: &str) -> Result<(), ApiError> {
-    let parsed = reqwest::Url::parse(url)
-        .map_err(|_| ApiError::BadRequest("metadata_url is not a valid URL".into()))?;
-    if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(ApiError::BadRequest(
-            "metadata_url must be an http(s) URL".into(),
-        ));
-    }
-    let client = http_client()?;
-    let resp = client
-        .get(parsed)
-        .send()
-        .await
-        .map_err(|e| ApiError::BadRequest(format!("metadata_url is not reachable: {e}")))?;
+/// Best-effort reachability probe for an OIDC discovery / SAML metadata URL,
+/// run when an org owner saves an identity provider.
+///
+/// Two things it must not be. It must not be an **SSRF primitive**: the URL is
+/// supplied by whoever owns the org, and signup is open, so it goes through the
+/// same [`OutboundPolicy`] as the live flow — https to a public address, no
+/// redirects followed.
+///
+/// And it must not be a **port scanner**. The original reported the upstream
+/// status code and the transport error verbatim ("connection refused" vs
+/// "returned HTTP 404"), which is exactly the signal an internal-network probe
+/// wants. Now every failure reads the same and the detail goes to the log. The
+/// probe is a convenience for the admin, not a diagnostic channel.
+async fn validate_metadata_reachable(state: &AppState, url: &str) -> Result<(), ApiError> {
+    let policy = OutboundPolicy::from_config(&state.config);
+    let parsed = policy.validate_url(url)?;
+
+    let unreachable = || ApiError::BadRequest("metadata_url is not reachable".into());
+    let resp = policy.client()?.get(parsed).send().await.map_err(|e| {
+        tracing::warn!(error = %e, "metadata_url probe failed");
+        unreachable()
+    })?;
     if !resp.status().is_success() {
-        return Err(ApiError::BadRequest(format!(
-            "metadata_url returned HTTP {}",
-            resp.status().as_u16()
-        )));
+        tracing::warn!(status = %resp.status(), "metadata_url probe returned non-2xx");
+        return Err(unreachable());
     }
     Ok(())
 }
@@ -430,7 +433,7 @@ pub async fn create_provider(
         .as_deref()
         .filter(|u| !u.trim().is_empty())
     {
-        validate_metadata_reachable(url).await?;
+        validate_metadata_reachable(&state, url).await?;
     }
 
     let secret_enc = match body.client_secret.as_deref().filter(|s| !s.is_empty()) {
@@ -530,7 +533,7 @@ pub async fn update_provider(
         .as_deref()
         .filter(|u| !u.trim().is_empty())
     {
-        validate_metadata_reachable(url).await?;
+        validate_metadata_reachable(&state, url).await?;
     }
 
     // `client_secret`: Some(non-empty) → re-encrypt; Some("") → clear;
@@ -751,15 +754,6 @@ struct IdpFlowRow {
     enforce_role_mapping: bool,
 }
 
-/// HTTP client for the metadata-reachability probe in the admin CRUD. The OIDC
-/// flow itself runs on [`OidcClient`], not this.
-fn http_client() -> Result<reqwest::Client, ApiError> {
-    reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|e| ApiError::Internal(format!("HTTP client build failed: {e}")))
-}
-
 /// Build the server-facing OIDC redirect_uri from the inbound request host.
 /// The IdP redirects the browser back to THIS server, so the callback URL is
 /// the server's own origin (not the SPA's).
@@ -858,7 +852,9 @@ pub async fn sso_start(
         .filter(|c| !c.is_empty())
         .ok_or_else(|| ApiError::BadRequest("Identity provider has no client_id".into()))?;
 
-    let disc = OidcClient::new()?.discover(metadata_url).await?;
+    let disc = OidcClient::new(&state.config)?
+        .discover(metadata_url)
+        .await?;
 
     let state_tok = session::random_token();
     let nonce = session::random_token();
@@ -996,7 +992,7 @@ pub async fn sso_callback(
     };
 
     // ── Token exchange + id_token validation on the shared OIDC client ──
-    let oidc = OidcClient::new()?;
+    let oidc = OidcClient::new(&state.config)?;
     let token = oidc
         .exchange_code(CodeExchange {
             token_endpoint: &login_state.token_endpoint,
