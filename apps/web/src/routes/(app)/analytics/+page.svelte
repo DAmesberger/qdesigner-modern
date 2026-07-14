@@ -9,6 +9,7 @@
   } from '$lib/shared/types/api';
   import type { AnalyticsPageData } from './+page';
   import { api } from '$lib/services/api';
+  import { formatCompletionRate } from '$lib/shared/utils/completion';
   import Select from '$lib/components/ui/forms/Select.svelte';
   import { Button, Input, Checkbox } from '$lib/components/ui';
   import ComparePanel from './ComparePanel.svelte';
@@ -124,14 +125,14 @@
           cmp = a.status.localeCompare(b.status);
           break;
         case 'sessions':
-          cmp = a.total_responses - b.total_responses;
+          cmp = a.total_sessions - b.total_sessions;
           break;
         case 'completed':
           cmp = a.completed_sessions - b.completed_sessions;
           break;
         case 'completion_rate': {
-          const rateA = a.total_responses > 0 ? a.completed_sessions / a.total_responses : 0;
-          const rateB = b.total_responses > 0 ? b.completed_sessions / b.total_responses : 0;
+          const rateA = a.total_sessions > 0 ? a.completed_sessions / a.total_sessions : 0;
+          const rateB = b.total_sessions > 0 ? b.completed_sessions / b.total_sessions : 0;
           cmp = rateA - rateB;
           break;
         }
@@ -193,8 +194,7 @@
   }
 
   function completionRate(q: QuestionnaireSummary): string {
-    if (q.total_responses === 0) return '-';
-    return `${Math.round((q.completed_sessions / q.total_responses) * 100)}%`;
+    return formatCompletionRate(q.completed_sessions, q.total_sessions);
   }
 
   function getStatusColor(status: string) {
@@ -372,7 +372,7 @@
                     {q.status}
                   </span>
                 </td>
-                <td class="px-4 py-3 text-right font-medium">{q.total_responses}</td>
+                <td class="px-4 py-3 text-right font-medium">{q.total_sessions}</td>
                 <td class="px-4 py-3 text-right font-medium">{completionRate(q)}</td>
                 <td class="px-4 py-3 text-right text-muted-foreground">
                   {formatTime(q.avg_completion_time_ms)}

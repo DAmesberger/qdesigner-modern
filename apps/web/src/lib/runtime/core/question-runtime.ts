@@ -32,6 +32,13 @@ export interface RuntimeTrialEvent {
   rtUs: number | null;
   /** Trial correctness, else null (unscored). */
   correct: boolean | null;
+  /**
+   * Whether this was a PRACTICE (warm-up) trial. Load-bearing, not decorative:
+   * practice RTs are systematically slower and must never pool into a cohort
+   * aggregate a participant is shown, so this flag has to survive all the way to
+   * `trials.is_practice` (ADR 0028).
+   */
+  isPractice: boolean;
   /** Materialized (sampled) phase-plan timings for this trial (ADR 0025). */
   sampledTimings: unknown;
   /** Per-trial timing-provenance blob (clocks, latencies, frame health). */

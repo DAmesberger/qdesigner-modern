@@ -259,6 +259,11 @@ pub struct QuestionnaireAnalytics {
     pub questionnaire_id: Uuid,
     pub name: String,
     pub response_count: i64,
+    /// Sessions started against this questionnaire — the denominator of
+    /// `completion_rate`. `response_count` counts response ROWS and is a
+    /// different quantity entirely (a 10-question questionnaire yields ~10
+    /// response rows per session).
+    pub total_sessions: i64,
     pub completed_sessions: i64,
     pub completion_rate: f64,
     pub timing_stats: Option<NumericStatsSummary>,
@@ -268,18 +273,34 @@ pub struct QuestionnaireAnalytics {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AggregateOverview {
     pub total_responses: i64,
+    /// Denominator of `overall_completion_rate` (see
+    /// [`QuestionnaireAnalytics::total_sessions`]).
+    pub total_sessions: i64,
     pub total_completed_sessions: i64,
     pub overall_completion_rate: f64,
     pub overall_timing_stats: Option<NumericStatsSummary>,
     pub overall_variable_stats: Option<NumericStatsSummary>,
 }
 
+/// A pairwise comparison of two questionnaires on the same aggregation key.
+///
+/// `mean_delta` / `median_delta` are ARM-LEVEL differences: they compare the two
+/// questionnaires' whole samples and need no pairing, exactly like a
+/// between-groups mean difference.
+///
+/// `correlation` is a different animal — a Pearson r only means anything over
+/// PAIRED observations, so it is computed strictly over participants observed in
+/// BOTH questionnaires (see [`pair_samples_by_participant`]). `paired_n` reports
+/// how many such participants there were, and `correlation` is `None` whenever
+/// that count is below [`MIN_CORRELATION_PAIRS`] (or the pairs have no variance).
 #[derive(Debug, Serialize, ToSchema)]
 pub struct CrossComparison {
     pub questionnaire_a: Uuid,
     pub questionnaire_b: Uuid,
     pub mean_delta: Option<f64>,
     pub median_delta: Option<f64>,
+    /// Participants contributing an observation to BOTH questionnaires.
+    pub paired_n: i64,
     pub correlation: Option<f64>,
 }
 
@@ -296,7 +317,13 @@ pub struct QuestionnaireSummary {
     pub name: String,
     pub project_id: Uuid,
     pub status: String,
+    /// Response ROWS (`COUNT(DISTINCT r.id)`) — one questionnaire run produces
+    /// one row per answered question. NOT a session count, and never a
+    /// completion denominator.
     pub total_responses: i64,
+    /// Sessions started against this questionnaire (`COUNT(DISTINCT s.id)`).
+    /// This is the completion-rate denominator.
+    pub total_sessions: i64,
     pub completed_sessions: i64,
     pub avg_completion_time_ms: Option<f64>,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -1141,22 +1168,85 @@ pub(crate) async fn ensure_session_exists<'e>(
     Ok(())
 }
 
-pub(crate) fn pearson_correlation(x: &[f64], y: &[f64]) -> Option<f64> {
-    let n = x.len().min(y.len());
-    if n < 2 {
+/// Fewest paired participants for which we are willing to report a Pearson r.
+///
+/// A correlation over 2 pairs is ±1 by construction — the line through two points
+/// is exact — and over 3–4 pairs it is dominated by noise; either way the number
+/// looks authoritative and means nothing. Below this floor `correlation` is
+/// reported as `None` and the UI must say "insufficient data" rather than render
+/// a value. The floor is deliberately the same as [`MIN_COHORT_N`], which also
+/// makes it a small-cohort disclosure floor.
+pub(crate) const MIN_CORRELATION_PAIRS: usize = MIN_COHORT_N as usize;
+
+/// Collapse one questionnaire's samples to a single observation per participant.
+///
+/// A participant can hold several sessions for the same questionnaire (a resumed
+/// run, a repeat administration), so they can contribute several samples. We take
+/// their MEAN, so each participant enters the correlation exactly once with equal
+/// weight — a participant who happened to sit the study three times must not drag
+/// the coefficient around three times as hard.
+///
+/// Samples with no `participant_id` (fully anonymous fillout) have no identity to
+/// match on and are dropped: there is no honest way to pair them.
+fn observations_by_participant(samples: &[NumericSample]) -> HashMap<&str, f64> {
+    let mut sums: HashMap<&str, (f64, usize)> = HashMap::new();
+    for sample in samples {
+        let Some(participant_id) = sample.participant_id.as_deref() else {
+            continue;
+        };
+        let entry = sums.entry(participant_id).or_insert((0.0, 0));
+        entry.0 += sample.value;
+        entry.1 += 1;
+    }
+    sums.into_iter()
+        .map(|(pid, (sum, n))| (pid, sum / n as f64))
+        .collect()
+}
+
+/// Inner-join two questionnaires' per-participant observations.
+///
+/// Only participants present in BOTH arms yield a pair; a participant who took
+/// one questionnaire and not the other is dropped, because there is nothing to
+/// correlate their value against. The result is sorted by participant id so the
+/// pairing is deterministic and does not depend on hash iteration order.
+pub(crate) fn pair_samples_by_participant(
+    a: &[NumericSample],
+    b: &[NumericSample],
+) -> Vec<(f64, f64)> {
+    let left = observations_by_participant(a);
+    let right = observations_by_participant(b);
+
+    let mut pairs: Vec<(&str, f64, f64)> = left
+        .into_iter()
+        .filter_map(|(pid, x)| right.get(pid).map(|&y| (pid, x, y)))
+        .collect();
+    pairs.sort_unstable_by_key(|(pid, _, _)| *pid);
+    pairs.into_iter().map(|(_, x, y)| (x, y)).collect()
+}
+
+/// Pearson r over genuinely paired observations.
+///
+/// Takes pairs rather than two parallel slices on purpose: the previous
+/// two-slice signature invited callers to hand it unrelated vectors, truncate to
+/// the shorter one, and correlate observation *i* of one sample with observation
+/// *i* of another. Returns `None` below [`MIN_CORRELATION_PAIRS`] pairs, and
+/// `None` when either arm has zero variance (r is undefined, not zero).
+pub(crate) fn paired_pearson_correlation(pairs: &[(f64, f64)]) -> Option<f64> {
+    let n = pairs.len();
+    if n < MIN_CORRELATION_PAIRS {
         return None;
     }
 
-    let mean_x = x[..n].iter().sum::<f64>() / n as f64;
-    let mean_y = y[..n].iter().sum::<f64>() / n as f64;
+    let mean_x = pairs.iter().map(|(x, _)| *x).sum::<f64>() / n as f64;
+    let mean_y = pairs.iter().map(|(_, y)| *y).sum::<f64>() / n as f64;
 
     let mut cov = 0.0;
     let mut var_x = 0.0;
     let mut var_y = 0.0;
 
-    for i in 0..n {
-        let dx = x[i] - mean_x;
-        let dy = y[i] - mean_y;
+    for (x, y) in pairs {
+        let dx = x - mean_x;
+        let dy = y - mean_y;
         cov += dx * dy;
         var_x += dx * dx;
         var_y += dy * dy;
@@ -1168,6 +1258,16 @@ pub(crate) fn pearson_correlation(x: &[f64], y: &[f64]) -> Option<f64> {
     }
 
     Some(cov / denom)
+}
+
+/// Completion rate for one questionnaire: completed sessions over sessions
+/// STARTED. Zero sessions → 0.0 (no evidence, not "0% completion" — callers that
+/// need to distinguish those two check `total_sessions` themselves).
+pub(crate) fn completion_rate(completed_sessions: i64, total_sessions: i64) -> f64 {
+    if total_sessions <= 0 {
+        return 0.0;
+    }
+    completed_sessions as f64 / total_sessions as f64
 }
 
 /// Verify the authenticated user has access to a session's questionnaire.
@@ -1632,6 +1732,11 @@ pub struct SyncTrialItem {
     pub rt_us: Option<i64>,
     #[serde(default)]
     pub correct: Option<bool>,
+    /// Practice (warm-up) trial. `None` means UNKNOWN — an older client that never
+    /// carried the flag — and is deliberately distinct from `Some(false)`: cohort
+    /// aggregates admit only trials KNOWN not to be practice (ADR 0028).
+    #[serde(default, alias = "isPractice")]
+    pub is_practice: Option<bool>,
     #[serde(default, alias = "sampledTimings")]
     pub sampled_timings: Option<serde_json::Value>,
     #[serde(default)]
@@ -1703,8 +1808,136 @@ pub struct TimeSeriesBucket {
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_numeric_stats, decl_hash, json_value_to_f64, parse_aggregate_source};
+    use super::{
+        compute_numeric_stats, completion_rate, decl_hash, json_value_to_f64,
+        pair_samples_by_participant, paired_pearson_correlation, parse_aggregate_source,
+        NumericSample, MIN_CORRELATION_PAIRS,
+    };
     use serde_json::json;
+
+    fn sample(participant_id: Option<&str>, value: f64) -> NumericSample {
+        NumericSample {
+            participant_id: participant_id.map(str::to_string),
+            value,
+        }
+    }
+
+    /// The bug in one test. Six participants take both questionnaires. In each
+    /// arm's own chronological order (which is the order the sample loader
+    /// returns rows in, and the order the old code index-paired them in) the
+    /// scores are 1..6 and 10..60 — so pairing by index gives a textbook
+    /// r = +1.0. But arm B's chronological order is a permutation of the
+    /// participants, so the real, participant-keyed correlation is ≈ 0.0286.
+    ///
+    /// There is no relationship in this data. The old code reported a perfect one.
+    #[test]
+    fn correlation_pairs_by_participant_not_by_index() {
+        let arm_a: Vec<NumericSample> = (1..=6)
+            .map(|n| sample(Some(&format!("P{n}")), n as f64))
+            .collect();
+        // Chronological order (P3, P6, P1, P4, P2, P5) scoring 10, 20, … 60.
+        let arm_b: Vec<NumericSample> = [3, 6, 1, 4, 2, 5]
+            .iter()
+            .enumerate()
+            .map(|(rank, n)| sample(Some(&format!("P{n}")), 10.0 * (rank as f64 + 1.0)))
+            .collect();
+
+        // What the old code did: correlate the bare value vectors positionally.
+        let index_paired: Vec<(f64, f64)> = arm_a
+            .iter()
+            .zip(arm_b.iter())
+            .map(|(a, b)| (a.value, b.value))
+            .collect();
+        let spurious = paired_pearson_correlation(&index_paired).expect("index-paired r");
+        assert!(
+            (spurious - 1.0).abs() < 1e-9,
+            "sanity: index-pairing this fixture yields a perfect (and meaningless) r"
+        );
+
+        // What the fixed code does: inner-join on participant id.
+        let pairs = pair_samples_by_participant(&arm_a, &arm_b);
+        assert_eq!(pairs.len(), 6);
+        let r = paired_pearson_correlation(&pairs).expect("participant-paired r");
+        assert!(
+            (r - 5.0 / 175.0).abs() < 1e-9,
+            "participant-paired r must be 5/175 ≈ 0.0286, got {r}"
+        );
+    }
+
+    #[test]
+    fn pairing_drops_unmatched_and_anonymous_participants() {
+        let arm_a = vec![
+            sample(Some("P1"), 1.0),
+            sample(Some("P2"), 2.0),
+            sample(Some("only-in-a"), 99.0),
+            sample(None, 42.0), // anonymous — no identity to match on
+        ];
+        let arm_b = vec![
+            sample(Some("P2"), 20.0),
+            sample(Some("P1"), 10.0),
+            sample(Some("only-in-b"), 98.0),
+            sample(None, 43.0),
+        ];
+
+        // Sorted by participant id, so P1 precedes P2 regardless of input order.
+        assert_eq!(
+            pair_samples_by_participant(&arm_a, &arm_b),
+            vec![(1.0, 10.0), (2.0, 20.0)]
+        );
+    }
+
+    /// A participant with several sessions in one arm contributes ONE
+    /// observation — their mean — so sitting the study three times doesn't drag
+    /// the coefficient around three times as hard.
+    #[test]
+    fn pairing_collapses_repeat_sessions_to_the_participant_mean() {
+        let arm_a = vec![
+            sample(Some("P1"), 2.0),
+            sample(Some("P1"), 4.0),
+            sample(Some("P1"), 6.0),
+        ];
+        let arm_b = vec![sample(Some("P1"), 10.0)];
+
+        assert_eq!(
+            pair_samples_by_participant(&arm_a, &arm_b),
+            vec![(4.0, 10.0)]
+        );
+    }
+
+    #[test]
+    fn correlation_withheld_below_the_pair_floor() {
+        // r over 2 points is ±1 by construction — the line through them is exact.
+        let two = [(1.0, 1.0), (2.0, 2.0)];
+        assert_eq!(paired_pearson_correlation(&two), None);
+
+        let just_under: Vec<(f64, f64)> = (0..MIN_CORRELATION_PAIRS - 1)
+            .map(|i| (i as f64, (2 * i) as f64))
+            .collect();
+        assert_eq!(paired_pearson_correlation(&just_under), None);
+
+        let at_floor: Vec<(f64, f64)> = (0..MIN_CORRELATION_PAIRS)
+            .map(|i| (i as f64, (2 * i) as f64))
+            .collect();
+        let r = paired_pearson_correlation(&at_floor).expect("at the floor, r is reported");
+        assert!((r - 1.0).abs() < 1e-9);
+    }
+
+    /// Zero variance means r is undefined, not zero.
+    #[test]
+    fn correlation_none_when_an_arm_is_constant() {
+        let flat: Vec<(f64, f64)> = (0..6).map(|i| (i as f64, 7.0)).collect();
+        assert_eq!(paired_pearson_correlation(&flat), None);
+    }
+
+    #[test]
+    fn completion_rate_uses_sessions_started() {
+        // The shape of the bug: 10 completed sessions of a 10-question
+        // questionnaire produce ~100 response rows. Dividing by those gave 0.1.
+        assert!((completion_rate(10, 10) - 1.0).abs() < 1e-9);
+        assert!((completion_rate(1, 4) - 0.25).abs() < 1e-9);
+        // No sessions → no evidence, not a division by zero.
+        assert_eq!(completion_rate(0, 0), 0.0);
+    }
 
     #[test]
     fn decl_hash_matches_ts_reference() {

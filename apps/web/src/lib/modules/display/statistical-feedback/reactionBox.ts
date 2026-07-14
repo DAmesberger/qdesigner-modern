@@ -39,6 +39,11 @@ export interface LocalTrial {
   rtUs?: number | null;
   correct?: boolean | null;
   invalidated?: string | null;
+  /**
+   * Practice (warm-up) trial. `undefined` means UNKNOWN — a row persisted before
+   * the flag was carried — which is NOT the same as "known not practice".
+   */
+  isPractice?: boolean;
 }
 
 export interface ReactionBoxInput {
@@ -97,7 +102,17 @@ function mean(values: number[]): number {
   return values.reduce((s, v) => s + v, 0) / values.length;
 }
 
-/** Extract the participant's per-trial display values, filtering per the declaration. */
+/**
+ * Extract the participant's per-trial display values, filtering per the declaration.
+ *
+ * Practice trials are dropped UNCONDITIONALLY, and so is a trial whose practice
+ * status is unknown. This has to match the server cohort exactly (ADR 0028:
+ * `fillout_trial_stats` admits only `is_practice = false`), because the two are
+ * rendered against each other: if the participant's own median included warm-up
+ * trials and the cohort's did not, the participant would be told they are slower
+ * than a cohort that simply measured a different thing. Excluding an unknown trial
+ * costs the participant a data point; including it fabricates a comparison.
+ */
 function participantValues(
   trials: ReadonlyArray<LocalTrial>,
   metric: 'rt' | 'accuracy',
@@ -105,6 +120,7 @@ function participantValues(
 ): number[] {
   const out: number[] = [];
   for (const t of trials) {
+    if (t.isPractice !== false) continue;
     if (!includeInvalidated && t.invalidated != null) continue;
     if (metric === 'accuracy') {
       if (t.correct == null) continue;

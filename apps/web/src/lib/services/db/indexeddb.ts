@@ -227,6 +227,12 @@ export interface FilloutTrial {
   rtUs?: number | null;
   /** Trial correctness, else null (unscored). */
   correct?: boolean | null;
+  /**
+   * Whether this was a PRACTICE (warm-up) trial (ADR 0028). `undefined` means
+   * UNKNOWN — a row written before the flag was carried — and is deliberately not
+   * the same as `false`; see `trials.is_practice` on the server.
+   */
+  isPractice?: boolean;
   /** Materialized (sampled) phase-plan timings for this trial (ADR 0025). */
   sampledTimings?: unknown;
   /** Per-trial timing-provenance blob (which clocks, latencies, frame health). */

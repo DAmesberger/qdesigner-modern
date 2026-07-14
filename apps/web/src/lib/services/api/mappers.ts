@@ -90,6 +90,7 @@ export function mapCrossProjectAnalytics(raw: CrossProjectAnalyticsResponse): Cr
     questionnaireId: String(q.questionnaire_id ?? ''),
     name: String(q.name ?? ''),
     responseCount: Number(q.response_count ?? 0),
+    totalSessions: Number(q.total_sessions ?? 0),
     completedSessions: Number(q.completed_sessions ?? 0),
     completionRate: Number(q.completion_rate ?? 0),
     timingStats: q.timing_stats ? mapStatsSummary(q.timing_stats) : null,
@@ -99,6 +100,7 @@ export function mapCrossProjectAnalytics(raw: CrossProjectAnalyticsResponse): Cr
   const agg = raw.aggregate;
   const aggregate = {
     totalResponses: Number(agg.total_responses ?? 0),
+    totalSessions: Number(agg.total_sessions ?? 0),
     totalCompletedSessions: Number(agg.total_completed_sessions ?? 0),
     overallCompletionRate: Number(agg.overall_completion_rate ?? 0),
     overallTimingStats: agg.overall_timing_stats ? mapStatsSummary(agg.overall_timing_stats) : null,
@@ -113,6 +115,10 @@ export function mapCrossProjectAnalytics(raw: CrossProjectAnalyticsResponse): Cr
         questionnaireB: String(c.questionnaire_b ?? ''),
         meanDelta: c.mean_delta ?? null,
         medianDelta: c.median_delta ?? null,
+        pairedN: Number(c.paired_n ?? 0),
+        // A null correlation means "not computable" (too few paired
+        // participants, or no variance). Preserve the null — coercing it to 0
+        // would render as a real "no relationship" finding.
         correlation: c.correlation ?? null,
       }))
     : null;

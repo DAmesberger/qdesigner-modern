@@ -88,6 +88,22 @@ export interface ReactionTrialRecord {
    * design declared no counterbalancing. Constant across a session's trials.
    */
   counterbalanceCell?: string | null;
+  /**
+   * Environment provenance (W-2 / W-3 / W-6, ADR 0027). Both reaction runtimes
+   * already persist these onto every trial record; they are the four fields that
+   * tell a reviewer whether THIS run's timing can be trusted at all, so they are
+   * declared here and exported. Optional because records written before the
+   * runtimes captured them legitimately lack the measurement — an absent field
+   * exports as empty (unknown), never as a fabricated `false`/`0`.
+   */
+  /** Whether the document was cross-origin isolated. When false, `performance.now()` is clamped (~100µs vs ~5µs) and the sub-ms claim silently degrades. */
+  crossOriginIsolated?: boolean;
+  /** Measured effective `performance.now()` quantum in ms during the trial. */
+  timerResolutionMs?: number | null;
+  /** Measured display refresh rate in Hz used for genuine drop counting (NOT targetFPS). */
+  measuredRefreshRateHz?: number | null;
+  /** True when the tab was backgrounded / lost focus during the trial. */
+  visibilityInvalidated?: boolean;
 }
 
 /**
@@ -112,6 +128,12 @@ export interface TrialRowContext {
   sessionId: string;
   participantId?: string | null;
   questionId: string;
+  /**
+   * The exact questionnaire semver this session was filled out against (e.g.
+   * `"1.4.2"`), or null when the source row carries no pin. Without it a trial
+   * table cannot be tied back to the instrument that produced it.
+   */
+  questionnaireVersion?: string | null;
 }
 
 /**
@@ -123,6 +145,8 @@ export interface ReactionTrialRow {
   sessionId: string;
   participantId: string | null;
   questionId: string;
+  /** Semver of the questionnaire build this session was filled against, or null. */
+  questionnaireVersion: string | null;
   /** The participant's counterbalance cell key (E-REACT-6), or null. */
   counterbalanceCell: string | null;
   blockId: string;
@@ -154,6 +178,18 @@ export interface ReactionTrialRow {
   fps: number | null;
   droppedFrames: number | null;
   jitter: number | null;
+  /**
+   * Whether the timer was at full resolution for this trial. `false` means
+   * `performance.now()` was clamped and the sub-ms claim does not hold here.
+   * Null when the record predates the measurement (unknown, not "fine").
+   */
+  crossOriginIsolated: boolean | null;
+  /** Measured `performance.now()` quantum in ms, or null when unmeasured. */
+  timerResolutionMs: number | null;
+  /** Measured display refresh rate in Hz, or null when unmeasured. */
+  measuredRefreshRateHz: number | null;
+  /** True when the tab lost focus mid-trial, so the timing is untrustworthy. */
+  visibilityInvalidated: boolean | null;
   invalid: boolean;
   invalidReason: string | null;
   /** True when this trial should be excluded from scored reanalysis. */
@@ -172,6 +208,7 @@ export const TRIAL_ROW_COLUMNS: ReadonlyArray<{ key: keyof ReactionTrialRow; hea
   { key: 'sessionId', header: 'session_id' },
   { key: 'participantId', header: 'participant_id' },
   { key: 'questionId', header: 'question_id' },
+  { key: 'questionnaireVersion', header: 'questionnaire_version' },
   { key: 'counterbalanceCell', header: 'counterbalance_cell' },
   { key: 'blockId', header: 'block_id' },
   { key: 'condition', header: 'condition' },
@@ -202,6 +239,10 @@ export const TRIAL_ROW_COLUMNS: ReadonlyArray<{ key: keyof ReactionTrialRow; hea
   { key: 'fps', header: 'fps' },
   { key: 'droppedFrames', header: 'dropped_frames' },
   { key: 'jitter', header: 'jitter' },
+  { key: 'crossOriginIsolated', header: 'cross_origin_isolated' },
+  { key: 'timerResolutionMs', header: 'timer_resolution_ms' },
+  { key: 'measuredRefreshRateHz', header: 'measured_refresh_rate_hz' },
+  { key: 'visibilityInvalidated', header: 'visibility_invalidated' },
   { key: 'invalid', header: 'invalid' },
   { key: 'invalidReason', header: 'invalid_reason' },
   { key: 'excludeFromAnalysis', header: 'exclude_from_analysis' },
@@ -210,12 +251,22 @@ export const TRIAL_ROW_COLUMNS: ReadonlyArray<{ key: keyof ReactionTrialRow; hea
 
 /**
  * Determine whether a trial should be excluded from scored reanalysis, and why.
- * An invalidated trial (render failure) is never a genuine measurement; an
- * anticipatory (pre-onset) response is a false start whose RT is measured
- * against nothing shown. Both are flagged so downstream analysis can drop them
- * defensibly rather than silently.
+ *
+ * Three ways a trial fails to be a genuine measurement, in the same precedence the
+ * runtime stamps `trials.invalidated` with (`trialEvent.ts`), so the exported row
+ * and the persisted row never disagree about why a trial was dropped:
+ *
+ *  - `visibility`  — the tab was hidden mid-trial, so the clock we timed against
+ *                    was not the clock the participant was looking at. This arm was
+ *                    MISSING: a trial whose timing is known-untrustworthy still
+ *                    scored and still entered aggregates.
+ *  - render failure — the stimulus never appeared; nothing was measured.
+ *  - `anticipatory` — a false start, timed against a stimulus not yet shown.
  */
 function resolveExclusion(trial: ReactionTrialRecord): { exclude: boolean; reason: string | null } {
+  if (trial.visibilityInvalidated) {
+    return { exclude: true, reason: 'visibility' };
+  }
   if (trial.invalid) {
     return { exclude: true, reason: trial.invalidReason ?? 'invalid' };
   }
@@ -239,6 +290,7 @@ export function buildTrialRow(
     sessionId: context.sessionId,
     participantId: context.participantId ?? null,
     questionId: context.questionId,
+    questionnaireVersion: context.questionnaireVersion ?? null,
     counterbalanceCell: trial.counterbalanceCell ?? null,
     blockId: trial.blockId,
     condition: trial.condition ?? null,
@@ -269,6 +321,10 @@ export function buildTrialRow(
     fps: trial.frameStats?.fps ?? null,
     droppedFrames: trial.frameStats?.droppedFrames ?? null,
     jitter: trial.frameStats?.jitter ?? null,
+    crossOriginIsolated: trial.crossOriginIsolated ?? null,
+    timerResolutionMs: trial.timerResolutionMs ?? null,
+    measuredRefreshRateHz: trial.measuredRefreshRateHz ?? null,
+    visibilityInvalidated: trial.visibilityInvalidated ?? null,
     invalid: trial.invalid,
     invalidReason: trial.invalidReason ?? null,
     excludeFromAnalysis: exclusion.exclude,

@@ -20,6 +20,7 @@ pub mod access;
 pub mod api_keys;
 pub mod auth;
 pub mod comments;
+pub mod csv;
 pub mod dev;
 pub mod gdpr;
 pub mod health;

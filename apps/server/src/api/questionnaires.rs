@@ -9,6 +9,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
 
+use crate::api::csv::csv_field;
 use crate::auth::models::AuthenticatedUser;
 use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
@@ -751,7 +752,48 @@ struct ExportRow {
     reaction_time_us: Option<i64>,
     presented_at: Option<chrono::DateTime<chrono::Utc>>,
     answered_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// The exact questionnaire semver the session was filled out against. Without
+    /// it an export cannot be tied back to the instrument that produced it, which
+    /// makes the result set unusable for replication. Three separate components
+    /// (never a pre-rendered string) — the consumer composes `major.minor.patch`.
+    /// Null for sessions that predate version pinning.
+    questionnaire_version_major: Option<i32>,
+    questionnaire_version_minor: Option<i32>,
+    questionnaire_version_patch: Option<i32>,
+    /// Per-response timing provenance: which clocks produced the onset and the
+    /// response stamp, the display/output latency corrections applied, and frame
+    /// health. This blob is the evidence behind the platform's sub-millisecond
+    /// timing claim, so it has to travel with the data it justifies.
+    timing_provenance: Option<serde_json::Value>,
 }
+
+/// The export SELECT.
+///
+/// Public so `tests/export_integrity.rs` exercises the query the handler
+/// actually runs rather than a copy that can silently drift out of sync — the
+/// version pin and the timing provenance are only trustworthy if THIS statement
+/// selects them.
+pub const EXPORT_ROWS_SQL: &str = r#"
+        SELECT
+            s.id AS session_id,
+            s.participant_id,
+            s.status AS session_status,
+            s.started_at,
+            s.completed_at,
+            r.question_id,
+            r.value,
+            r.reaction_time_us,
+            r.presented_at,
+            r.answered_at,
+            s.questionnaire_version_major,
+            s.questionnaire_version_minor,
+            s.questionnaire_version_patch,
+            r.timing_provenance
+        FROM sessions s
+        JOIN responses r ON r.session_id = s.id
+        WHERE s.questionnaire_id = $1
+        ORDER BY s.created_at ASC, r.created_at ASC
+        "#;
 
 #[derive(Debug, Serialize, sqlx::FromRow, ToSchema)]
 struct ExportVariableRow {
@@ -840,28 +882,10 @@ pub async fn export_responses(
     let include_metadata = include_set.contains("metadata");
     let spss_names = query.spss.unwrap_or(false);
 
-    let rows = sqlx::query_as::<_, ExportRow>(
-        r#"
-        SELECT
-            s.id AS session_id,
-            s.participant_id,
-            s.status AS session_status,
-            s.started_at,
-            s.completed_at,
-            r.question_id,
-            r.value,
-            r.reaction_time_us,
-            r.presented_at,
-            r.answered_at
-        FROM sessions s
-        JOIN responses r ON r.session_id = s.id
-        WHERE s.questionnaire_id = $1
-        ORDER BY s.created_at ASC, r.created_at ASC
-        "#,
-    )
-    .bind(path.qid)
-    .fetch_all(&mut **tx)
-    .await?;
+    let rows = sqlx::query_as::<_, ExportRow>(EXPORT_ROWS_SQL)
+        .bind(path.qid)
+        .fetch_all(&mut **tx)
+        .await?;
 
     // Optionally fetch variables
     let variables = if include_variables {
@@ -920,55 +944,7 @@ pub async fn export_responses(
 
     match format {
         "csv" => {
-            // Column names: standard or SPSS-compatible 8-char
-            let (c_sid, c_pid, c_stat, c_start, c_end, c_qid, c_val, c_rt, c_pres, c_ans) =
-                if spss_names {
-                    (
-                        "sess_id", "part_id", "s_status", "s_start", "s_end", "q_id", "q_resp",
-                        "q_rt_us", "q_pres", "q_ans",
-                    )
-                } else {
-                    (
-                        "session_id",
-                        "participant_id",
-                        "session_status",
-                        "started_at",
-                        "completed_at",
-                        "question_id",
-                        "value",
-                        "reaction_time_us",
-                        "presented_at",
-                        "answered_at",
-                    )
-                };
-
-            let mut csv_out = format!(
-                "{c_sid},{c_pid},{c_stat},{c_start},{c_end},{c_qid},{c_val},{c_rt},{c_pres},{c_ans}\n"
-            );
-
-            for row in &rows {
-                let value_str = match &row.value {
-                    serde_json::Value::String(s) => s.clone(),
-                    other => other.to_string(),
-                };
-                let escaped_value = csv_escape(&value_str);
-
-                csv_out.push_str(&format!(
-                    "{},{},{},{},{},{},{},{},{},{}\n",
-                    row.session_id,
-                    row.participant_id.as_deref().unwrap_or(""),
-                    row.session_status,
-                    row.started_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
-                    row.completed_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
-                    row.question_id,
-                    escaped_value,
-                    row.reaction_time_us
-                        .map(|v| v.to_string())
-                        .unwrap_or_default(),
-                    row.presented_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
-                    row.answered_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
-                ));
-            }
+            let csv_out = render_export_csv(&rows, spss_names);
 
             Ok((
                 [
@@ -1006,12 +982,99 @@ pub async fn export_responses(
     }
 }
 
-fn csv_escape(field: &str) -> String {
-    if field.contains(',') || field.contains('"') || field.contains('\n') {
-        format!("\"{}\"", field.replace('"', "\"\""))
-    } else {
-        field.to_string()
+impl ExportRow {
+    /// Compose the session's version pin as `major.minor.patch`.
+    ///
+    /// An unpinned (or partially pinned) session renders as an EMPTY field, never
+    /// as `0.0.0` — a reader must be able to tell "no version was recorded" apart
+    /// from "version zero". This mirrors the client's `formatQuestionnaireVersion`.
+    fn version_pin(&self) -> String {
+        match (
+            self.questionnaire_version_major,
+            self.questionnaire_version_minor,
+            self.questionnaire_version_patch,
+        ) {
+            (Some(major), Some(minor), Some(patch)) => format!("{major}.{minor}.{patch}"),
+            _ => String::new(),
+        }
     }
+}
+
+/// Render the export rows as CSV.
+///
+/// Extracted from the handler so the column contract and the escaping are
+/// testable without standing up an HTTP round-trip — this producer previously
+/// had no test at all, which is how it shipped interpolating four unescaped
+/// client-supplied fields straight into a `format!`.
+fn render_export_csv(rows: &[ExportRow], spss_names: bool) -> String {
+    // Column names: standard or SPSS-compatible 8-char.
+    let headers: [&str; 12] = if spss_names {
+        [
+            "sess_id", "part_id", "s_status", "q_ver", "s_start", "s_end", "q_id", "q_resp",
+            "q_rt_us", "q_pres", "q_ans", "t_prov",
+        ]
+    } else {
+        [
+            "session_id",
+            "participant_id",
+            "session_status",
+            "questionnaire_version",
+            "started_at",
+            "completed_at",
+            "question_id",
+            "value",
+            "reaction_time_us",
+            "presented_at",
+            "answered_at",
+            "timing_provenance",
+        ]
+    };
+
+    let mut csv_out = headers.join(",");
+    csv_out.push('\n');
+
+    for row in rows {
+        let value_str = match &row.value {
+            serde_json::Value::String(s) => s.clone(),
+            other => other.to_string(),
+        };
+        let provenance_str = row
+            .timing_provenance
+            .as_ref()
+            .map(|p| p.to_string())
+            .unwrap_or_default();
+
+        // EVERY field goes through `csv_field`. Previously only `value` was
+        // escaped, so a participant id of `a,b` — client-supplied at session
+        // creation — shifted every column after it.
+        let fields = [
+            row.session_id.to_string(),
+            row.participant_id.clone().unwrap_or_default(),
+            row.session_status.clone(),
+            row.version_pin(),
+            row.started_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+            row.completed_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+            row.question_id.clone(),
+            value_str,
+            row.reaction_time_us
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+            row.presented_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+            row.answered_at.map(|t| t.to_rfc3339()).unwrap_or_default(),
+            provenance_str,
+        ];
+
+        csv_out.push_str(
+            &fields
+                .iter()
+                .map(|f| csv_field(f))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+        csv_out.push('\n');
+    }
+
+    csv_out
 }
 
 // ── Version History ──────────────────────────────────────────────
@@ -1308,3 +1371,185 @@ async fn sync_questionnaire_variable_definitions(
 }
 
 // Access helpers are in crate::api::access
+
+#[cfg(test)]
+mod export_csv_tests {
+    use super::*;
+
+    /// A pinned, fully-populated export row.
+    fn row(overrides: impl FnOnce(&mut ExportRow)) -> ExportRow {
+        let mut r = ExportRow {
+            session_id: Uuid::nil(),
+            participant_id: Some("p-1".into()),
+            session_status: "completed".into(),
+            started_at: None,
+            completed_at: None,
+            question_id: "q-1".into(),
+            value: serde_json::json!("congruent"),
+            reaction_time_us: Some(420_000),
+            presented_at: None,
+            answered_at: None,
+            questionnaire_version_major: Some(1),
+            questionnaire_version_minor: Some(4),
+            questionnaire_version_patch: Some(2),
+            timing_provenance: Some(serde_json::json!({ "onsetMethod": "raf" })),
+        };
+        overrides(&mut r);
+        r
+    }
+
+    fn data_line(csv: &str) -> String {
+        csv.lines().nth(1).expect("a data line").to_string()
+    }
+
+    /// A minimal RFC-4180 reader used as an independent oracle: it decodes what a
+    /// spreadsheet would actually see, so an assertion about "which cell holds
+    /// what" cannot be satisfied by a string that merely looks right.
+    fn parse_record(csv: &str, record_index: usize) -> Vec<String> {
+        let mut records: Vec<Vec<String>> = vec![];
+        let mut fields: Vec<String> = vec![];
+        let mut field = String::new();
+        let mut in_quotes = false;
+        let mut chars = csv.chars().peekable();
+
+        while let Some(c) = chars.next() {
+            match c {
+                '"' if in_quotes && chars.peek() == Some(&'"') => {
+                    chars.next();
+                    field.push('"');
+                }
+                '"' => in_quotes = !in_quotes,
+                ',' if !in_quotes => fields.push(std::mem::take(&mut field)),
+                '\n' if !in_quotes => {
+                    fields.push(std::mem::take(&mut field));
+                    records.push(std::mem::take(&mut fields));
+                }
+                other => field.push(other),
+            }
+        }
+        if !field.is_empty() || !fields.is_empty() {
+            fields.push(field);
+            records.push(fields);
+        }
+        records
+            .get(record_index)
+            .unwrap_or_else(|| panic!("no record at index {record_index}"))
+            .clone()
+    }
+
+    #[test]
+    fn header_carries_the_version_pin_and_timing_provenance() {
+        let csv = render_export_csv(&[row(|_| {})], false);
+        let header = csv.lines().next().unwrap();
+        assert_eq!(
+            header,
+            "session_id,participant_id,session_status,questionnaire_version,started_at,completed_at,question_id,value,reaction_time_us,presented_at,answered_at,timing_provenance"
+        );
+    }
+
+    #[test]
+    fn spss_header_carries_them_too_within_the_8_char_limit() {
+        let csv = render_export_csv(&[row(|_| {})], true);
+        let header = csv.lines().next().unwrap();
+        assert!(header.contains("q_ver"), "SPSS header drops the version pin");
+        assert!(header.contains("t_prov"), "SPSS header drops the provenance");
+        for name in header.split(',') {
+            assert!(name.len() <= 8, "SPSS name over 8 chars: {name}");
+        }
+    }
+
+    #[test]
+    fn a_pinned_row_renders_the_semver_and_the_provenance_blob() {
+        let csv = render_export_csv(&[row(|_| {})], false);
+        let line = data_line(&csv);
+        let cells: Vec<&str> = line.split(',').collect();
+        assert_eq!(cells[3], "1.4.2");
+        assert!(
+            data_line(&csv).contains("onsetMethod"),
+            "provenance blob missing from the row"
+        );
+    }
+
+    #[test]
+    fn an_unpinned_row_renders_an_empty_cell_not_version_zero() {
+        // "no version recorded" must be distinguishable from "version 0.0.0".
+        let csv = render_export_csv(
+            &[row(|r| {
+                r.questionnaire_version_major = None;
+                r.questionnaire_version_minor = None;
+                r.questionnaire_version_patch = None;
+            })],
+            false,
+        );
+        let line = data_line(&csv);
+        let cells: Vec<&str> = line.split(',').collect();
+        assert_eq!(cells[3], "");
+        assert!(!csv.contains("0.0.0"));
+    }
+
+    #[test]
+    fn a_partially_pinned_row_does_not_fabricate_the_missing_component() {
+        let csv = render_export_csv(&[row(|r| r.questionnaire_version_patch = None)], false);
+        let line = data_line(&csv);
+        let cells: Vec<&str> = line.split(',').collect();
+        assert_eq!(cells[3], "");
+    }
+
+    #[test]
+    fn a_participant_id_with_a_comma_does_not_shift_the_columns() {
+        // The bug: participant_id was interpolated raw, so `a,b` split into two
+        // cells and every column after it was off by one.
+        let csv = render_export_csv(&[row(|r| r.participant_id = Some("a,b".into()))], false);
+        let line = data_line(&csv);
+        assert!(line.contains("\"a,b\""), "participant_id not quoted: {line}");
+
+        // The row still has exactly 12 fields, and the version is still in slot 3.
+        let record = parse_record(&csv, 1);
+        assert_eq!(record.len(), 12, "column count shifted: {record:?}");
+        assert_eq!(record[1], "a,b");
+        assert_eq!(record[3], "1.4.2");
+    }
+
+    #[test]
+    fn a_participant_id_with_a_quote_is_escaped() {
+        let csv = render_export_csv(&[row(|r| r.participant_id = Some("a\"b".into()))], false);
+        assert!(data_line(&csv).contains("\"a\"\"b\""));
+    }
+
+    #[test]
+    fn a_lone_carriage_return_in_a_field_does_not_split_the_row() {
+        let csv = render_export_csv(&[row(|r| r.question_id = "q\r1".into())], false);
+        assert!(csv.contains("\"q\r1\""), "bare CR left unquoted");
+    }
+
+    #[test]
+    fn no_client_supplied_field_can_emit_a_live_formula() {
+        let csv = render_export_csv(
+            &[row(|r| {
+                r.participant_id = Some("=cmd|'/c calc'!A1".into());
+                r.question_id = "@SUM(1+1)".into();
+                r.value = serde_json::json!("=1+1");
+            })],
+            false,
+        );
+
+        let record = parse_record(&csv, 1);
+        for cell in &record {
+            assert!(
+                !cell.starts_with(['=', '@']),
+                "live formula landed in a cell: {cell}"
+            );
+        }
+        assert_eq!(record[1], "'=cmd|'/c calc'!A1");
+        assert_eq!(record[6], "'@SUM(1+1)");
+        assert_eq!(record[7], "'=1+1");
+    }
+
+    #[test]
+    fn a_negative_reaction_time_is_not_mangled() {
+        let csv = render_export_csv(&[row(|r| r.reaction_time_us = Some(-14))], false);
+        let line = data_line(&csv);
+        let cells: Vec<&str> = line.split(',').collect();
+        assert_eq!(cells[8], "-14");
+    }
+}

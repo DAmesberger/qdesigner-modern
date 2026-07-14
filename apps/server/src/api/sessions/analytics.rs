@@ -232,6 +232,7 @@ pub async fn dashboard_summary(
             q.project_id,
             q.status,
             COUNT(DISTINCT r.id)::bigint AS total_responses,
+            COUNT(DISTINCT s.id)::bigint AS total_sessions,
             COUNT(DISTINCT CASE WHEN s.status = 'completed' THEN s.id END)::bigint AS completed_sessions,
             AVG(
                 CASE WHEN s.completed_at IS NOT NULL AND s.started_at IS NOT NULL
@@ -287,17 +288,15 @@ pub async fn dashboard_summary(
         .filter(|q| q.status == "published")
         .count() as i64;
 
-    // Compute average completion rate across questionnaires that have sessions
+    // Average completion rate across questionnaires that have sessions. The
+    // denominator is sessions STARTED — `total_responses` counts response rows,
+    // which is a wholly different quantity (ten completed runs of a ten-question
+    // questionnaire produce ~100 response rows, and dividing by those reported a
+    // 100%-complete study as ~10% complete).
     let completion_rates: Vec<f64> = questionnaires
         .iter()
-        .filter_map(|q| {
-            let total_sessions = q.total_responses.max(q.completed_sessions);
-            if total_sessions > 0 {
-                Some(q.completed_sessions as f64 / total_sessions as f64)
-            } else {
-                None
-            }
-        })
+        .filter(|q| q.total_sessions > 0)
+        .map(|q| completion_rate(q.completed_sessions, q.total_sessions))
         .collect();
 
     let avg_completion_rate = if completion_rates.is_empty() {
@@ -424,10 +423,13 @@ pub async fn cross_project_analytics(
     let mut all_timing_values: Vec<f64> = Vec::new();
     let mut all_variable_values: Vec<f64> = Vec::new();
     let mut total_responses: i64 = 0;
+    let mut total_sessions: i64 = 0;
     let mut total_completed: i64 = 0;
 
-    // Per-questionnaire variable means for cross-comparison
-    let mut variable_means: Vec<(Uuid, f64, Vec<f64>)> = Vec::new();
+    // Arms that produced a numeric mean, in request order: (id, mean, median).
+    // The samples themselves stay in `samples_map` — the cross-comparison loop
+    // needs them WITH their participant ids, not as bare values.
+    let mut variable_arms: Vec<(Uuid, f64, Option<f64>)> = Vec::new();
 
     // Set-based gather: three batched queries over all requested questionnaires
     // instead of the previous per-questionnaire query fan-out. The assembly loop
@@ -444,17 +446,20 @@ pub async fn cross_project_analytics(
                 q.project_id,
                 q.status,
                 COUNT(DISTINCT r.id)::bigint AS total_responses,
+                COUNT(DISTINCT s.id)::bigint AS total_sessions,
                 COUNT(DISTINCT CASE WHEN s.status = 'completed' THEN s.id END)::bigint AS completed_sessions,
                 AVG(
                     CASE WHEN s.completed_at IS NOT NULL AND s.started_at IS NOT NULL
                          THEN EXTRACT(EPOCH FROM (s.completed_at - s.started_at)) * 1000.0
                     END
-                )::float8 AS avg_completion_time_ms
+                )::float8 AS avg_completion_time_ms,
+                q.created_at,
+                q.updated_at
             FROM questionnaire_definitions q
             LEFT JOIN sessions s ON s.questionnaire_id = q.id
             LEFT JOIN responses r ON r.session_id = s.id
             WHERE q.id = ANY($1) AND q.deleted_at IS NULL
-            GROUP BY q.id, q.name, q.project_id, q.status
+            GROUP BY q.id, q.name, q.project_id, q.status, q.created_at, q.updated_at
             "#,
         )
         .bind(&questionnaire_ids)
@@ -522,7 +527,7 @@ pub async fn cross_project_analytics(
             if !values.is_empty() {
                 let stats = compute_numeric_stats(&values);
                 if let Some(mean) = stats.mean {
-                    variable_means.push((qid, mean, values.clone()));
+                    variable_arms.push((qid, mean, stats.median));
                 }
                 all_variable_values.extend(&values);
                 Some(stats)
@@ -533,29 +538,24 @@ pub async fn cross_project_analytics(
             None
         };
 
-        let total_sessions = summary
-            .total_responses
-            .max(summary.completed_sessions)
-            .max(1);
-        let completion_rate = summary.completed_sessions as f64 / total_sessions as f64;
-
         total_responses += summary.total_responses;
+        total_sessions += summary.total_sessions;
         total_completed += summary.completed_sessions;
 
         per_questionnaire.push(QuestionnaireAnalytics {
             questionnaire_id: qid,
             name: summary.name.clone(),
             response_count: summary.total_responses,
+            total_sessions: summary.total_sessions,
             completed_sessions: summary.completed_sessions,
-            completion_rate,
+            completion_rate: completion_rate(summary.completed_sessions, summary.total_sessions),
             timing_stats,
             variable_stats,
         });
     }
 
-    // Overall stats
-    let overall_total = total_responses.max(total_completed).max(1);
-    let overall_completion_rate = total_completed as f64 / overall_total as f64;
+    // Overall stats. Denominator is sessions started, summed across the arms.
+    let overall_completion_rate = completion_rate(total_completed, total_sessions);
 
     let overall_timing_stats = if all_timing_values.is_empty() {
         None
@@ -569,18 +569,23 @@ pub async fn cross_project_analytics(
         Some(compute_numeric_stats(&all_variable_values))
     };
 
-    // Cross-comparisons: pairwise mean/median delta + Pearson correlation
-    let cross_comparisons = if variable_means.len() >= 2 {
+    // Cross-comparisons: pairwise mean/median delta (arm-level — a between-groups
+    // difference needs no pairing) + a Pearson r over participants observed in
+    // BOTH arms. The correlation MUST be paired by participant: correlating the
+    // i-th session of A with the i-th session of B pairs two chronologically
+    // unrelated people and measures nothing.
+    let cross_comparisons = if variable_arms.len() >= 2 {
+        let no_samples: Vec<NumericSample> = Vec::new();
         let mut comparisons = Vec::new();
-        for i in 0..variable_means.len() {
-            for j in (i + 1)..variable_means.len() {
-                let (id_a, mean_a, ref vals_a) = variable_means[i];
-                let (id_b, mean_b, ref vals_b) = variable_means[j];
+        for i in 0..variable_arms.len() {
+            for j in (i + 1)..variable_arms.len() {
+                let (id_a, mean_a, median_a) = variable_arms[i];
+                let (id_b, mean_b, median_b) = variable_arms[j];
 
-                let median_a = compute_numeric_stats(vals_a).median;
-                let median_b = compute_numeric_stats(vals_b).median;
-
-                let correlation = pearson_correlation(vals_a, vals_b);
+                let pairs = pair_samples_by_participant(
+                    samples_map.get(&id_a).unwrap_or(&no_samples),
+                    samples_map.get(&id_b).unwrap_or(&no_samples),
+                );
 
                 comparisons.push(CrossComparison {
                     questionnaire_a: id_a,
@@ -590,7 +595,8 @@ pub async fn cross_project_analytics(
                         (Some(a), Some(b)) => Some(a - b),
                         _ => None,
                     },
-                    correlation,
+                    paired_n: pairs.len() as i64,
+                    correlation: paired_pearson_correlation(&pairs),
                 });
             }
         }
@@ -603,6 +609,7 @@ pub async fn cross_project_analytics(
         questionnaires: per_questionnaire,
         aggregate: AggregateOverview {
             total_responses,
+            total_sessions,
             total_completed_sessions: total_completed,
             overall_completion_rate,
             overall_timing_stats,

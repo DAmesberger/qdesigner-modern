@@ -8,15 +8,31 @@
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import type { ExportRow } from '$lib/shared/types/api';
+import {
+	csvCell,
+	formatQuestionnaireVersion,
+	formatTimingProvenance,
+	xlsxRow,
+} from './exportCell';
 
 export type ScriptFormat = 'spss' | 'r' | 'stata' | 'sas' | 'python';
 export type ResponseExportFormat = 'xlsx' | ScriptFormat;
 
-// Column metadata used across all script generators
-const COLUMNS = [
+/**
+ * The export column contract. Every producer downstream — the XLSX sheet, the
+ * CSV, and all five stats-script bundles — reads this ordered list, so the CSV
+ * column order and the scripts' positional variable lists cannot drift apart.
+ *
+ * `questionnaire_version` and `timing_provenance` are what make an export
+ * scientifically reusable: the first says which build of the instrument produced
+ * the data (without it a result set cannot be replicated), the second says how
+ * each measurement was timed (the basis of the sub-millisecond claim).
+ */
+export const COLUMNS = [
 	{ key: 'session_id', label: 'Session ID', type: 'string' as const },
 	{ key: 'participant_id', label: 'Participant ID', type: 'string' as const },
 	{ key: 'session_status', label: 'Session Status', type: 'string' as const },
+	{ key: 'questionnaire_version', label: 'Questionnaire Version', type: 'string' as const },
 	{ key: 'started_at', label: 'Started At', type: 'datetime' as const },
 	{ key: 'completed_at', label: 'Completed At', type: 'datetime' as const },
 	{ key: 'question_id', label: 'Question ID', type: 'string' as const },
@@ -24,13 +40,15 @@ const COLUMNS = [
 	{ key: 'reaction_time_us', label: 'Reaction Time (microseconds)', type: 'numeric' as const },
 	{ key: 'presented_at', label: 'Presented At', type: 'datetime' as const },
 	{ key: 'answered_at', label: 'Answered At', type: 'datetime' as const },
+	{ key: 'timing_provenance', label: 'Timing Provenance (JSON)', type: 'string' as const },
 ] as const;
 
-function rowToRecord(row: ExportRow): Record<string, string | number | null> {
+export function rowToRecord(row: ExportRow): Record<string, string | number | null> {
 	return {
 		session_id: row.session_id,
 		participant_id: row.participant_id,
 		session_status: row.session_status,
+		questionnaire_version: formatQuestionnaireVersion(row),
 		started_at: row.started_at,
 		completed_at: row.completed_at,
 		question_id: row.question_id,
@@ -38,24 +56,16 @@ function rowToRecord(row: ExportRow): Record<string, string | number | null> {
 		reaction_time_us: row.reaction_time_us,
 		presented_at: row.presented_at,
 		answered_at: row.answered_at,
+		timing_provenance: formatTimingProvenance(row.timing_provenance),
 	};
 }
 
-function rowsToCsv(rows: ExportRow[]): string {
+export function rowsToCsv(rows: ExportRow[]): string {
 	const headers = COLUMNS.map((c) => c.key);
 	const lines = [headers.join(',')];
 	for (const row of rows) {
 		const rec = rowToRecord(row);
-		const vals = headers.map((h) => {
-			const v = rec[h];
-			if (v === null || v === undefined) return '';
-			const s = String(v);
-			if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-				return `"${s.replace(/"/g, '""')}"`;
-			}
-			return s;
-		});
-		lines.push(vals.join(','));
+		lines.push(headers.map((h) => csvCell(rec[h])).join(','));
 	}
 	return lines.join('\n');
 }
@@ -85,7 +95,7 @@ export async function exportToExcel(rows: ExportRow[], questionnaireName: string
 	}));
 
 	for (const row of rows) {
-		responsesSheet.addRow(rowToRecord(row));
+		responsesSheet.addRow(xlsxRow(rowToRecord(row)));
 	}
 
 	// Style the header row
@@ -110,20 +120,24 @@ export async function exportToExcel(rows: ExportRow[], questionnaireName: string
 		{ header: 'Session ID', key: 'session_id', width: 38 },
 		{ header: 'Participant ID', key: 'participant_id', width: 20 },
 		{ header: 'Status', key: 'session_status', width: 14 },
+		{ header: 'Questionnaire Version', key: 'questionnaire_version', width: 20 },
 		{ header: 'Started At', key: 'started_at', width: 28 },
 		{ header: 'Completed At', key: 'completed_at', width: 28 },
 		{ header: 'Response Count', key: 'response_count', width: 16 },
 	];
 	for (const [sid, row] of sessionMap) {
 		const count = rows.filter((r) => r.session_id === sid).length;
-		sessionsSheet.addRow({
-			session_id: row.session_id,
-			participant_id: row.participant_id,
-			session_status: row.session_status,
-			started_at: row.started_at,
-			completed_at: row.completed_at,
-			response_count: count,
-		});
+		sessionsSheet.addRow(
+			xlsxRow({
+				session_id: row.session_id,
+				participant_id: row.participant_id,
+				session_status: row.session_status,
+				questionnaire_version: formatQuestionnaireVersion(row),
+				started_at: row.started_at,
+				completed_at: row.completed_at,
+				response_count: count,
+			})
+		);
 	}
 	const sessHeaderRow = sessionsSheet.getRow(1);
 	sessHeaderRow.font = { bold: true };
@@ -146,8 +160,16 @@ export async function exportToExcel(rows: ExportRow[], questionnaireName: string
 	const sortedRT = [...reactionTimes].sort((a, b) => a - b);
 	const medianRT = sortedRT.length > 0 ? sortedRT[Math.floor(sortedRT.length / 2)] : null;
 
+	// Which builds of the instrument produced this dataset. A dataset spanning
+	// several versions is a legitimate state, but the reader has to be told —
+	// pooling across a major bump means pooling across changed response keys.
+	const versions = [...new Set(rows.map(formatQuestionnaireVersion).filter((v): v is string => v !== null))].sort();
+	const unpinnedRows = rows.filter((r) => formatQuestionnaireVersion(r) === null).length;
+
 	const summaryRows = [
 		{ metric: 'Questionnaire', value: questionnaireName },
+		{ metric: 'Questionnaire Version(s)', value: versions.length > 0 ? versions.join(', ') : 'Unknown' },
+		{ metric: 'Responses Without Version Pin', value: unpinnedRows },
 		{ metric: 'Export Date', value: new Date().toISOString() },
 		{ metric: 'Total Responses', value: rows.length },
 		{ metric: 'Total Sessions', value: totalSessions },
@@ -160,7 +182,7 @@ export async function exportToExcel(rows: ExportRow[], questionnaireName: string
 		{ metric: 'Max Reaction Time (us)', value: sortedRT.length > 0 ? sortedRT[sortedRT.length - 1] : 'N/A' },
 	];
 	for (const r of summaryRows) {
-		summarySheet.addRow(r);
+		summarySheet.addRow(xlsxRow(r));
 	}
 	const sumHeaderRow = summarySheet.getRow(1);
 	sumHeaderRow.font = { bold: true };
@@ -246,16 +268,32 @@ Instructions:
 3. The script will read data.csv and set up a properly typed dataset.
 
 Column descriptions:
-  session_id        - Unique identifier for the participant session (UUID)
-  participant_id    - Optional participant identifier
-  session_status    - Session status: active, completed, or abandoned
-  started_at        - ISO 8601 timestamp when the session started
-  completed_at      - ISO 8601 timestamp when the session completed
-  question_id       - Identifier of the question being answered
-  value             - The participant's response value
-  reaction_time_us  - Reaction time in microseconds (high-precision timing)
-  presented_at      - ISO 8601 timestamp when the question was presented
-  answered_at       - ISO 8601 timestamp when the question was answered
+  session_id            - Unique identifier for the participant session (UUID)
+  participant_id        - Optional participant identifier
+  session_status        - Session status: active, completed, or abandoned
+  questionnaire_version - Semver of the questionnaire build this session was filled
+                          out against (e.g. 1.4.2). Cite this when reporting results:
+                          a major bump means questions were added, removed, reordered,
+                          or their response keys changed, so rows from two different
+                          major versions are NOT directly poolable. Empty when the
+                          session predates version pinning.
+  started_at            - ISO 8601 timestamp when the session started
+  completed_at          - ISO 8601 timestamp when the session completed
+  question_id           - Identifier of the question being answered
+  value                 - The participant's response value
+  reaction_time_us      - Reaction time in microseconds (high-precision timing)
+  presented_at          - ISO 8601 timestamp when the question was presented
+  answered_at           - ISO 8601 timestamp when the question was answered
+  timing_provenance     - JSON blob describing HOW the timing was measured: the onset
+                          and response clocks, applied display/output latency
+                          corrections, and frame health. This is the evidence behind
+                          the sub-millisecond timing claim — check it before trusting
+                          a reaction-time analysis. Empty for non-timed responses.
+
+A note on leading quotes: any cell whose text begins with = + - @ (or a tab/CR) is
+written with a leading apostrophe so spreadsheet software treats it as text rather
+than executing it as a formula. Strip a leading apostrophe if you see one; numbers,
+including negative numbers, are never altered.
 
 Generated by QDesigner Modern on ${new Date().toISOString()}
 `;
@@ -280,13 +318,15 @@ GET DATA
     session_id A36
     participant_id A255
     session_status A20
+    questionnaire_version A20
     started_at A30
     completed_at A30
     question_id A255
     value A1000
     reaction_time_us F12.0
     presented_at A30
-    answered_at A30.
+    answered_at A30
+    timing_provenance A4000.
 EXECUTE.
 
 * Variable labels.
@@ -294,13 +334,15 @@ VARIABLE LABELS
   session_id 'Session ID'
   participant_id 'Participant ID'
   session_status 'Session Status'
+  questionnaire_version 'Questionnaire Version (semver the session was filled against)'
   started_at 'Started At (ISO 8601)'
   completed_at 'Completed At (ISO 8601)'
   question_id 'Question ID'
   value 'Response Value'
   reaction_time_us 'Reaction Time (microseconds)'
   presented_at 'Presented At (ISO 8601)'
-  answered_at 'Answered At (ISO 8601)'.
+  answered_at 'Answered At (ISO 8601)'
+  timing_provenance 'Timing Provenance (JSON: clocks, latency corrections, frame health)'.
 
 * Value labels for session_status.
 VALUE LABELS session_status
@@ -310,8 +352,13 @@ VALUE LABELS session_status
 
 * Set measurement levels.
 VARIABLE LEVEL session_id participant_id question_id value (NOMINAL).
-VARIABLE LEVEL session_status (NOMINAL).
+VARIABLE LEVEL session_status questionnaire_version timing_provenance (NOMINAL).
 VARIABLE LEVEL reaction_time_us (SCALE).
+
+* Which builds of the instrument produced this dataset. Pooling across a major
+* version bump pools across changed response keys — check this before analysing.
+FREQUENCIES VARIABLES=questionnaire_version
+  /ORDER=ANALYSIS.
 
 * Descriptive statistics for reaction times.
 DESCRIPTIVES VARIABLES=reaction_time_us
@@ -361,6 +408,7 @@ df$reaction_time_us <- as.numeric(df$reaction_time_us)
 attr(df$session_id, "label") <- "Session ID"
 attr(df$participant_id, "label") <- "Participant ID"
 attr(df$session_status, "label") <- "Session Status"
+attr(df$questionnaire_version, "label") <- "Questionnaire Version (semver filled against)"
 attr(df$started_at, "label") <- "Started At"
 attr(df$completed_at, "label") <- "Completed At"
 attr(df$question_id, "label") <- "Question ID"
@@ -368,6 +416,17 @@ attr(df$value, "label") <- "Response Value"
 attr(df$reaction_time_us, "label") <- "Reaction Time (microseconds)"
 attr(df$presented_at, "label") <- "Presented At"
 attr(df$answered_at, "label") <- "Answered At"
+attr(df$timing_provenance, "label") <- "Timing Provenance (JSON)"
+
+# ── Instrument version ───────────────────────────────────────────────────────
+# Which builds of the questionnaire produced these rows. Pooling across a MAJOR
+# bump pools across changed response keys — inspect before you analyse.
+
+cat("\\n=== Questionnaire Versions in this Dataset ===\\n")
+print(table(df$questionnaire_version, useNA = "ifany"))
+if (length(unique(na.omit(df$questionnaire_version))) > 1) {
+  warning("Dataset spans multiple questionnaire versions; check comparability before pooling.")
+}
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 
@@ -380,7 +439,7 @@ summary(df)
 # ── Session-level statistics ─────────────────────────────────────────────────
 
 sessions <- unique(df[, c("session_id", "participant_id", "session_status",
-                           "started_at", "completed_at")])
+                           "questionnaire_version", "started_at", "completed_at")])
 cat("\\n=== Session Counts ===\\n")
 print(table(sessions$session_status))
 
@@ -437,6 +496,7 @@ import delimited "data.csv", varnames(1) clear
 label variable session_id "Session ID"
 label variable participant_id "Participant ID"
 label variable session_status "Session Status"
+label variable questionnaire_version "Questionnaire Version (semver filled against)"
 label variable started_at "Started At (ISO 8601)"
 label variable completed_at "Completed At (ISO 8601)"
 label variable question_id "Question ID"
@@ -444,6 +504,12 @@ label variable value "Response Value"
 label variable reaction_time_us "Reaction Time (microseconds)"
 label variable presented_at "Presented At (ISO 8601)"
 label variable answered_at "Answered At (ISO 8601)"
+label variable timing_provenance "Timing Provenance (JSON)"
+
+* ── Instrument version ───────────────────────────────────────────────────────
+* Pooling across a MAJOR bump pools across changed response keys.
+
+tab questionnaire_version, missing
 
 * ── Value labels for session_status ──────────────────────────────────────────
 
@@ -514,13 +580,22 @@ data work.qdesigner_data;
         session_id = "Session ID"
         participant_id = "Participant ID"
         session_status = "Session Status"
+        questionnaire_version = "Questionnaire Version (semver filled against)"
         started_at = "Started At (ISO 8601)"
         completed_at = "Completed At (ISO 8601)"
         question_id = "Question ID"
         value = "Response Value"
         reaction_time_us = "Reaction Time (microseconds)"
         presented_at = "Presented At (ISO 8601)"
-        answered_at = "Answered At (ISO 8601)";
+        answered_at = "Answered At (ISO 8601)"
+        timing_provenance = "Timing Provenance (JSON)";
+run;
+
+/* Which builds of the instrument produced this dataset. Pooling across a MAJOR
+   bump pools across changed response keys — inspect before analysing. */
+proc freq data=work.qdesigner_data;
+    tables questionnaire_version / missing nocum;
+    title "Questionnaire Versions in this Dataset";
 run;
 
 /* Basic descriptive statistics */
@@ -581,6 +656,8 @@ Requirements:
     pip install pandas matplotlib seaborn
 """
 
+import json
+
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
@@ -607,6 +684,30 @@ df["session_status"] = pd.Categorical(
     ordered=True,
 )
 
+
+def _parse_provenance(raw):
+    """timing_provenance is a JSON blob: how each measurement was actually timed."""
+    if pd.isna(raw):
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+df["timing_provenance_parsed"] = df["timing_provenance"].map(_parse_provenance)
+
+# ── Instrument version ───────────────────────────────────────────────────────
+# Which builds of the questionnaire produced these rows. Pooling across a MAJOR
+# bump pools across changed response keys — inspect before you analyse.
+
+print("=== Questionnaire Versions in this Dataset ===")
+print(df["questionnaire_version"].value_counts(dropna=False))
+if df["questionnaire_version"].nunique(dropna=True) > 1:
+    print("WARNING: dataset spans multiple questionnaire versions; "
+          "check comparability before pooling.")
+print()
+
 # ── Overview ─────────────────────────────────────────────────────────────────
 
 print("=== Dataset Info ===")
@@ -624,7 +725,8 @@ print()
 # ── Session-level analysis ───────────────────────────────────────────────────
 
 sessions = df.drop_duplicates(subset=["session_id"])[
-    ["session_id", "participant_id", "session_status", "started_at", "completed_at"]
+    ["session_id", "participant_id", "session_status", "questionnaire_version",
+     "started_at", "completed_at"]
 ].copy()
 
 print("=== Session Counts ===")

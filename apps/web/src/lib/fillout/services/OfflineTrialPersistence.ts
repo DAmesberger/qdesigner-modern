@@ -33,6 +33,7 @@ export class OfflineTrialPersistence {
 			source: event.source,
 			rtUs: event.rtUs,
 			correct: event.correct,
+			isPractice: event.isPractice,
 			sampledTimings: event.sampledTimings,
 			provenance: event.provenance,
 			invalidated: event.invalidated,
@@ -52,6 +53,7 @@ export class OfflineTrialPersistence {
 			source?: string | null;
 			rtUs?: number | null;
 			correct?: boolean | null;
+			isPractice?: boolean;
 			sampledTimings?: unknown;
 			provenance?: unknown;
 			invalidated?: string | null;
@@ -71,6 +73,9 @@ export class OfflineTrialPersistence {
 			source: data.source ?? null,
 			rtUs: data.rtUs ?? null,
 			correct: data.correct ?? null,
+			// Left `undefined` (not coerced to false) when the caller doesn't know:
+			// "unknown practice status" and "known not practice" are different claims.
+			isPractice: data.isPractice,
 			sampledTimings: data.sampledTimings,
 			provenance: data.provenance,
 			invalidated: data.invalidated ?? null,
@@ -89,7 +94,14 @@ export class OfflineTrialPersistence {
 		await SyncLedger.enqueue('trial', clientId, sessionId);
 	}
 
-	/** Canonical content of a stored trial row used for its checksum. */
+	/**
+	 * Canonical content of a stored trial row used for its checksum.
+	 *
+	 * `isPractice` is safe to add to an already-shipped payload only because
+	 * `canonicalize` DROPS `undefined` keys: a row written before the flag existed
+	 * re-hashes to exactly the checksum it was stored with, so no pre-existing row
+	 * is falsely escalated as corrupt. Any future field must keep that property.
+	 */
 	private static trialChecksumPayload(t: FilloutTrial): unknown {
 		return {
 			clientId: t.clientId,
@@ -101,6 +113,7 @@ export class OfflineTrialPersistence {
 			source: t.source,
 			rtUs: t.rtUs,
 			correct: t.correct,
+			isPractice: t.isPractice,
 			sampledTimings: t.sampledTimings,
 			provenance: t.provenance,
 			invalidated: t.invalidated,
@@ -172,14 +185,27 @@ export class OfflineTrialPersistence {
 	/**
 	 * Read a session's local trials for one question (RT-5), synced or not, returning
 	 * only the CLEARTEXT measurement columns the offline cohort box needs
-	 * (`rtUs` / `correct` / `invalidated`). No decryption — the encrypted `optionId`
-	 * answer slot is deliberately not touched, so this stays cheap and side-effect
-	 * free on the feedback render path.
+	 * (`rtUs` / `correct` / `invalidated` / `isPractice`). No decryption — the
+	 * encrypted `optionId` answer slot is deliberately not touched, so this stays
+	 * cheap and side-effect free on the feedback render path.
+	 *
+	 * `isPractice` is carried because the participant's own statistic is rendered
+	 * side by side with a server cohort that now excludes practice trials. If only
+	 * one side dropped its warm-up trials the comparison would be rigged: practice
+	 * RTs are systematically slower, so the participant would appear worse than a
+	 * cohort measured without them.
 	 */
 	static async getTrialMeasurements(
 		sessionId: string,
 		questionId: string
-	): Promise<Array<{ rtUs: number | null; correct: boolean | null; invalidated: string | null }>> {
+	): Promise<
+		Array<{
+			rtUs: number | null;
+			correct: boolean | null;
+			invalidated: string | null;
+			isPractice?: boolean;
+		}>
+	> {
 		const rows = await db.filloutTrials.where('sessionId').equals(sessionId).toArray();
 		return rows
 			.filter((t) => t.questionId === questionId)
@@ -187,6 +213,7 @@ export class OfflineTrialPersistence {
 				rtUs: t.rtUs ?? null,
 				correct: t.correct ?? null,
 				invalidated: t.invalidated ?? null,
+				isPractice: t.isPractice,
 			}));
 	}
 

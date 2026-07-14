@@ -106,7 +106,7 @@
     // Psychometric
     { name: 'SPLIT_HALF', category: 'psychometric', description: 'Split-half reliability with Spearman-Brown correction.', parameters: [{ name: 'items', type: 'array', description: '2D array (participants x items)' }], returns: 'number', example: 'SPLIT_HALF([[4,3,5,2],[3,4,4,3]])' },
     { name: 'KR20', category: 'psychometric', description: 'Kuder-Richardson 20 for dichotomous (0/1) items.', parameters: [{ name: 'items', type: 'array', description: '2D array of 0/1 scores' }], returns: 'number', example: 'KR20([[1,0,1],[1,1,0],[0,1,1]])' },
-    { name: 'OMEGA', category: 'psychometric', description: "McDonald's omega (simplified).", parameters: [{ name: 'items', type: 'array', description: '2D array (participants x items)' }], returns: 'number', example: 'OMEGA([[4,3,5],[3,4,4],[5,5,4]])' },
+    { name: 'OMEGA', category: 'psychometric', description: "McDonald's omega (total), from a single-factor solution — does not assume tau-equivalence.", parameters: [{ name: 'items', type: 'array', description: '2D array (participants x items)' }], returns: 'number', example: 'OMEGA([[4,3,5],[3,4,4],[5,5,4]])' },
     { name: 'SEM', category: 'psychometric', description: 'Standard Error of Measurement.', parameters: [{ name: 'reliability', type: 'number', description: 'Reliability coefficient (0-1)' }, { name: 'sd', type: 'number', description: 'Standard deviation' }], returns: 'number', example: 'SEM(0.85, 15)' },
 
     // IRT

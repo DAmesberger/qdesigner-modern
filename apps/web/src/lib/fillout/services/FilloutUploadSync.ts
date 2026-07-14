@@ -432,6 +432,10 @@ export class FilloutUploadSync {
 			source: t.source ?? null,
 			rt_us: t.rtUs ?? null,
 			correct: t.correct ?? null,
+			// `?? null` on purpose, not `?? false`: a row whose practice status was
+			// never recorded must reach the server as UNKNOWN, so it can be held out
+			// of cohort aggregates rather than asserted to be a real test trial.
+			is_practice: t.isPractice ?? null,
 			sampled_timings: t.sampledTimings ?? null,
 			provenance: t.provenance ?? null,
 			invalidated: t.invalidated ?? null,

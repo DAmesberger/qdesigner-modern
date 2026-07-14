@@ -7,6 +7,7 @@ export * from './functions/array';
 export * from './functions/psychometric';
 export * from './functions/irt';
 export * from './customFunctions';
+export * from './math/eigen';
 export * from './parser';
 export * from './ast-evaluator';
 export * from './policies';

@@ -10,6 +10,7 @@ function source(overrides: Partial<TrialEventSource> = {}): TrialEventSource {
 	return {
 		trialNumber: 3,
 		taskType: 'stroop',
+		isPractice: false,
 		optionId: 'congruent',
 		responseSource: 'keyboard',
 		reactionTime: 421.7,
@@ -60,6 +61,70 @@ describe('buildRuntimeTrialEvent', () => {
 	it('leaves a clean trial uninvalidated', () => {
 		const event = buildRuntimeTrialEvent('q-1', source(), []);
 		expect(event.invalidated).toBeNull();
+	});
+
+	// The live path used to drop `anticipatory` on the floor while the 00048
+	// BACKFILL mapped it to `invalidated = 'anticipatory'`. The same false start was
+	// therefore excluded from cohort aggregates when it arrived by backfill and
+	// pooled into them when it arrived live. An anticipatory response is timed
+	// against a stimulus that had not yet appeared — it is not a reaction time.
+	it('invalidates an anticipatory (false-start) trial, agreeing with the 00048 backfill', () => {
+		const event = buildRuntimeTrialEvent('q-1', source({ anticipatory: true }), []);
+		expect(event.invalidated).toBe('anticipatory');
+	});
+
+	it('ranks visibility above a render failure above a false start', () => {
+		const all = source({
+			visibilityInvalidated: true,
+			invalid: true,
+			invalidReason: 'stimulus-render-failed',
+			anticipatory: true,
+		});
+		expect(buildRuntimeTrialEvent('q-1', all, []).invalidated).toBe('visibility');
+
+		const renderAndFalseStart = source({
+			invalid: true,
+			invalidReason: 'stimulus-render-failed',
+			anticipatory: true,
+		});
+		expect(buildRuntimeTrialEvent('q-1', renderAndFalseStart, []).invalidated).toBe(
+			'stimulus-render-failed'
+		);
+	});
+
+	// Practice RTs are systematically slower — that is what a warm-up is for. The
+	// flag was computed by the compiler, carried on the runtime's TrialResponse, and
+	// then silently dropped here, so warm-up trials entered the cohort quartiles
+	// participants are shown (ADR 0028).
+	it('carries the practice flag through to the persisted trial event', () => {
+		expect(buildRuntimeTrialEvent('q-1', source({ isPractice: true }), []).isPractice).toBe(true);
+		expect(buildRuntimeTrialEvent('q-1', source({ isPractice: false }), []).isPractice).toBe(false);
+	});
+
+	// `invalidated: 'visibility'` is a verdict; these are the evidence for it.
+	// Recording them costs nothing (jsonb) and lets a reviewer see how bad the
+	// interruption was and which phase it landed in (ADR 0027, record-by-default).
+	it('records the visibility-loss evidence in provenance, not just the verdict', () => {
+		const event = buildRuntimeTrialEvent(
+			'q-1',
+			source({
+				visibilityInvalidated: true,
+				visibilityLossCount: 2,
+				visibilityLossPhases: [{ phase: 'stimulus', phaseElapsedMs: 120 }],
+			}),
+			[]
+		);
+		expect(event.provenance).toMatchObject({
+			visibilityLossCount: 2,
+			visibilityLossPhases: [{ phase: 'stimulus', phaseElapsedMs: 120 }],
+		});
+	});
+
+	it('records a clean trial as having lost visibility zero times', () => {
+		expect(buildRuntimeTrialEvent('q-1', source(), []).provenance).toMatchObject({
+			visibilityLossCount: 0,
+			visibilityLossPhases: [],
+		});
 	});
 
 	it('captures the materialized phase plan as sampledTimings', () => {

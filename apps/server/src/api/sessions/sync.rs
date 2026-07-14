@@ -267,11 +267,12 @@ pub async fn sync_session(
     }
 
     // Sync trials with dedup — same chunked strategy as responses/events.
-    // 11 bind columns/row (500 × 11 = 5500 binds), well under Postgres' limit.
+    // 12 bind columns/row (500 × 12 = 6000 binds), well under Postgres' limit.
     for chunk in body.trials.chunks(SYNC_BATCH_ROWS) {
         let mut builder = sqlx::QueryBuilder::<sqlx::Postgres>::new(
             "INSERT INTO trials (session_id, question_id, trial_index, option_id, \
-             source, rt_us, correct, sampled_timings, provenance, invalidated, client_id) ",
+             source, rt_us, correct, is_practice, sampled_timings, provenance, \
+             invalidated, client_id) ",
         );
         builder.push_values(chunk, |mut row, trial| {
             row.push_bind(session_id)
@@ -281,6 +282,8 @@ pub async fn sync_session(
                 .push_bind(&trial.source)
                 .push_bind(trial.rt_us)
                 .push_bind(trial.correct)
+                // NULL when the client didn't know — never coerced to false.
+                .push_bind(trial.is_practice)
                 .push_bind(&trial.sampled_timings)
                 .push_bind(&trial.provenance)
                 .push_bind(&trial.invalidated)
@@ -291,6 +294,29 @@ pub async fn sync_session(
         trials_synced += result.rows_affected() as i32;
         // Same ack contract as responses — the committed chunk is durably held.
         accepted_client_ids.extend(chunk.iter().map(|trial| trial.client_id));
+    }
+
+    // Recover the practice flag / invalidation reason for any trial that arrived
+    // WITHOUT them (ADR 0028, migration 00059).
+    //
+    // A client on the previous build writes a rich block summary — its
+    // `responses[].isPractice` / `.anticipatory` / `.visibilityInvalidated` are all
+    // there — but a trial row with none of them, which was the bug. Cohort
+    // aggregates are fail-closed (they admit only `is_practice = false`), so
+    // without this those trials would be dropped from every statistic FOREVER,
+    // making the cohort silently emptier instead of more honest. The repair copies
+    // the truth back across from the summary the runtime dual-wrote.
+    //
+    // Scoped to this session, and run per batch because sync is CHUNKED: a
+    // session's trials and its block summary can land in different requests, in
+    // either order, so the repair has to converge rather than fire once. It is
+    // guarded on `IS NULL` (a known value is never rewritten) and matches nothing
+    // once a session is clean, which is the steady state for current clients.
+    if !body.trials.is_empty() || !body.responses.is_empty() {
+        sqlx::query("SELECT public.repair_trial_provenance($1)")
+            .bind(session_id)
+            .execute(&mut **tx)
+            .await?;
     }
 
     // Sync variables (upsert)

@@ -251,6 +251,16 @@ export interface TukeyComparison {
 
 export interface TukeyHSDResult {
   comparisons: TukeyComparison[];
+  /**
+   * Always true: `q`, `pValue` and `ci` are NOT computed from the studentized
+   * range distribution. They come from a Sidak-corrected pairwise Student t
+   * approximation (see `StatisticalEngine.studentizedRangePValue`), which is
+   * mildly conservative — p-values run slightly high and intervals slightly
+   * wide relative to an exact Tukey HSD. Report accordingly.
+   */
+  approximate: true;
+  /** The approximation actually used, for reporting/provenance. */
+  approximationMethod: 'sidak-corrected-pairwise-t';
 }
 
 export interface CorrectionResult {

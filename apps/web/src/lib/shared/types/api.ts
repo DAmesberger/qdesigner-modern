@@ -197,7 +197,10 @@ export interface QuestionnaireSummary {
   name: string;
   project_id: string;
   status: string;
+  /** Response ROWS — one per answered question. Never a completion denominator. */
   total_responses: number;
+  /** Sessions started. This is the completion-rate denominator. */
+  total_sessions: number;
   completed_sessions: number;
   avg_completion_time_ms: number | null;
   created_at: string;
@@ -238,6 +241,22 @@ export interface ExportRow {
   reaction_time_us: number | null;
   presented_at: string | null;
   answered_at: string | null;
+  /**
+   * The exact questionnaire semver the session was filled out against. Optional
+   * because the server's export SELECT only began carrying the pin alongside
+   * this field; a row without it exports an empty version cell rather than a
+   * fabricated one.
+   */
+  questionnaire_version_major?: number | null;
+  questionnaire_version_minor?: number | null;
+  questionnaire_version_patch?: number | null;
+  /**
+   * Per-response timing provenance (which clock, what latencies, frame health).
+   * The basis of the platform's sub-millisecond timing claim, so it belongs in
+   * any export a reviewer is expected to trust. Optional for the same reason as
+   * the version pin.
+   */
+  timing_provenance?: unknown;
 }
 
 // Media types
@@ -347,7 +366,10 @@ export interface VerificationResult {
 export interface QuestionnaireAnalytics {
   questionnaireId: string;
   name: string;
+  /** Response ROWS. Not a session count. */
   responseCount: number;
+  /** Sessions started — the completion-rate denominator. */
+  totalSessions: number;
   completedSessions: number;
   completionRate: number;
   timingStats: SessionStatsSummary | null;
@@ -356,6 +378,8 @@ export interface QuestionnaireAnalytics {
 
 export interface AggregateOverview {
   totalResponses: number;
+  /** Sessions started across the compared questionnaires. */
+  totalSessions: number;
   totalCompletedSessions: number;
   overallCompletionRate: number;
   overallTimingStats: SessionStatsSummary | null;
@@ -365,8 +389,16 @@ export interface AggregateOverview {
 export interface CrossComparison {
   questionnaireA: string;
   questionnaireB: string;
+  /** Arm-level differences — these need no participant pairing. */
   meanDelta: number | null;
   medianDelta: number | null;
+  /** Participants observed in BOTH questionnaires. */
+  pairedN: number;
+  /**
+   * Pearson r over those paired participants only. `null` means "not
+   * computable" (fewer than 5 pairs, or no variance) — it does NOT mean zero,
+   * and must never be rendered as `0`.
+   */
   correlation: number | null;
 }
 

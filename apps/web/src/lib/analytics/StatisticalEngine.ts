@@ -3,6 +3,7 @@
  * Advanced statistical calculations for QDesigner Modern analytics
  */
 
+import { jacobiEigen } from '@qdesigner/scripting-engine';
 import type {
   StatisticalSummary,
   CorrelationAnalysis,
@@ -657,6 +658,16 @@ export class StatisticalEngine {
   // Factor Analysis (Principal Component Analysis)
   // ============================================================================
 
+  /**
+   * Principal Component Analysis of the variables' correlation matrix.
+   *
+   * `data[i]` is variable i (a column of the data matrix), not a participant.
+   * Components are the eigenvectors of the correlation matrix; loadings are
+   * `eigenvector * sqrt(eigenvalue)` (the correlation of the variable with the
+   * component), and communalities are the summed squared loadings over the
+   * retained components. Eigenvector signs are fixed by the solver (largest
+   * component positive) so loadings are stable across runs.
+   */
   performPCA(data: number[][], components?: number): FactorAnalysis {
     if (data.length < 2) {
       throw new Error('Need at least 2 variables for PCA');
@@ -668,10 +679,15 @@ export class StatisticalEngine {
 
     const nVars = data.length;
 
-    // Standardize the data
-    const standardizedData = data.map(variable => {
+    // Standardize the data. A zero-variance variable has no correlation with
+    // anything (0/0), which would poison the whole correlation matrix — reject
+    // it here rather than hand NaNs to the eigensolver.
+    const standardizedData = data.map((variable, i) => {
       const mean = this.calculateMean(variable);
       const std = Math.sqrt(this.calculateVariance(variable, mean));
+      if (!isFinite(std) || std === 0) {
+        throw new Error(`PCA requires variables with non-zero variance (variable ${i + 1} is constant)`);
+      }
       return variable.map(value => (value - mean) / std);
     });
 
@@ -687,19 +703,11 @@ export class StatisticalEngine {
       }
     }
 
-    // Simple eigenvalue/eigenvector calculation (for small matrices)
+    // Eigendecomposition of the correlation matrix — already sorted descending,
+    // with sortedEigenvectors[j] the unit eigenvector of sortedEigenvalues[j].
     const eigenResult = this.calculateEigenvalues(correlationMatrix);
-    const eigenvalues = eigenResult.values;
-    const eigenvectors = eigenResult.vectors;
-
-    // Sort by eigenvalue (descending)
-    const sortedIndices = eigenvalues
-      .map((value, index) => ({ value, index }))
-      .sort((a, b) => b.value - a.value)
-      .map(item => item.index);
-
-    const sortedEigenvalues = sortedIndices.map(i => eigenvalues[i]!);
-    const sortedEigenvectors = sortedIndices.map(i => eigenvectors[i]!);
+    const sortedEigenvalues = eigenResult.values;
+    const sortedEigenvectors = eigenResult.vectors;
 
     // Calculate explained variance
     const totalVariance = sortedEigenvalues.reduce((sum, val) => sum + (val ?? 0), 0);
@@ -709,15 +717,19 @@ export class StatisticalEngine {
       return acc;
     }, [] as number[]);
 
-    // Factor loadings
+    // Factor loadings. Default retention is the Kaiser criterion (eigenvalue > 1:
+    // the component explains more variance than a single standardized variable).
     const numComponents = components || Math.min(nVars, sortedEigenvalues.filter(val => val > 1).length);
     const factorLoadings: Record<string, number[]> = {};
-    
+
     for (let i = 0; i < nVars; i++) {
       factorLoadings[`Variable_${i + 1}`] = [];
       for (let j = 0; j < numComponents; j++) {
         const eigenvector = sortedEigenvectors[j] ?? [];
-        const eigenvalue = sortedEigenvalues[j] ?? 0;
+        // A correlation matrix is positive semi-definite, so eigenvalues are
+        // >= 0 — but a trailing one can land at -1e-16 from float noise, and
+        // sqrt() of that is NaN.
+        const eigenvalue = Math.max(0, sortedEigenvalues[j] ?? 0);
         const loading = (eigenvector[i] ?? 0) * Math.sqrt(eigenvalue);
         factorLoadings[`Variable_${i + 1}`]!.push(loading);
       }
@@ -1104,7 +1116,18 @@ export class StatisticalEngine {
   // ============================================================================
 
   /**
-   * Tukey's Honestly Significant Difference (HSD) test
+   * Tukey's Honestly Significant Difference (HSD) test — APPROXIMATE.
+   *
+   * The pairwise mean differences, the standard errors and the q statistics are
+   * exact. The p-values and confidence intervals are NOT: the studentized range
+   * distribution is not implemented, and q/p/CI are instead derived from a
+   * Sidak-corrected pairwise Student t (see `studentizedRangePValue`). The
+   * result carries `approximate: true` and names the method, so callers can
+   * label their output honestly. Expect slightly conservative p-values and
+   * slightly wide intervals versus an exact Tukey HSD.
+   *
+   * p-value and CI are computed under the *same* correction, so
+   * `significant === (the CI excludes zero)` always holds.
    */
   tukeyHSD(groups: number[][], alpha: number = 0.05): TukeyHSDResult {
     if (groups.length < 2) {
@@ -1150,7 +1173,7 @@ export class StatisticalEngine {
       }
     }
 
-    return { comparisons };
+    return { comparisons, approximate: true, approximationMethod: 'sidak-corrected-pairwise-t' };
   }
 
   /**
@@ -1419,35 +1442,49 @@ export class StatisticalEngine {
   }
 
   /**
-   * Approximate p-value for the studentized range distribution
-   * Uses an approximation based on the normal distribution
+   * APPROXIMATE p-value for a studentized range statistic q.
+   *
+   * This is NOT the studentized range distribution. We do not implement it (it
+   * has no closed form; it needs a numerical double integral or lookup tables).
+   * Instead we treat each pairwise comparison as a two-sided Student t test —
+   * t = q / sqrt(2), on the ANOVA's within-groups df — and control the
+   * family-wise error rate across the m = k(k-1)/2 comparisons with a Sidak
+   * correction:
+   *
+   *   p_pairwise = 2 * (1 - T_df(q / sqrt(2)))
+   *   p          = 1 - (1 - p_pairwise)^m
+   *
+   * Sidak (rather than Bonferroni) because it is the exact inverse of
+   * `studentizedRangeInverse`'s critical value, which is what keeps `pValue`
+   * and `ci` from disagreeing (see `tukeyHSD`), and because it is the tighter
+   * of the two. Relative to a true studentized range test this is mildly
+   * conservative: p is somewhat too large and the CI somewhat too wide.
    */
   private studentizedRangePValue(q: number, k: number, df: number): number {
-    // Gleason (1999) approximation for studentized range p-value
-    // Transform to approximate standard normal
-    const v = df;
-    // Rough approximation: convert q to z-like statistic
-    // The studentized range for k groups with df degrees of freedom
-    // can be approximated via simulation tables, but for a pure-math
-    // implementation we use a conservative bound based on Bonferroni
     const numComparisons = (k * (k - 1)) / 2;
-    // Each pairwise comparison is approximately a t-test
     const tApprox = q / Math.sqrt(2);
-    const pPairwise = 2 * (1 - this.studentTCDF(tApprox, v));
-    // Sidak correction gives tighter bound than Bonferroni
+    const pPairwise = 2 * (1 - this.studentTCDF(tApprox, df));
     const pValue = 1 - (1 - pPairwise) ** numComparisons;
     return Math.max(0, Math.min(1, pValue));
   }
 
   /**
-   * Approximate critical value for studentized range distribution
+   * APPROXIMATE critical value of q at family-wise alpha — the exact inverse of
+   * `studentizedRangePValue`, so that `p < alpha` holds if and only if
+   * `q > q_crit` (and therefore if and only if the Tukey CI excludes zero).
+   *
+   * Sidak per-comparison level: alpha_pc = 1 - (1 - alpha)^(1/m),
+   * then q_crit = t_{1 - alpha_pc/2, df} * sqrt(2).
+   *
+   * This used to use a Bonferroni level (alpha/m) while the p-value used Sidak.
+   * Since alpha/m < 1 - (1-alpha)^(1/m), the CI was built from a strictly larger
+   * critical value than the p-value implied, so a comparison could be reported
+   * significant (p < alpha) with a confidence interval that still contained zero.
    */
   private studentizedRangeInverse(alpha: number, k: number, df: number): number {
-    // Approximate using Bonferroni-corrected t critical value.
-    // Upper-tail quantile (positive) — 1 - adjustedAlpha/2, not adjustedAlpha/2.
     const numComparisons = (k * (k - 1)) / 2;
-    const adjustedAlpha = alpha / numComparisons;
-    const tCrit = this.studentTInverse(1 - adjustedAlpha / 2, df);
+    const perComparisonAlpha = 1 - (1 - alpha) ** (1 / numComparisons);
+    const tCrit = this.studentTInverse(1 - perComparisonAlpha / 2, df);
     return tCrit * Math.sqrt(2);
   }
 
@@ -1455,22 +1492,19 @@ export class StatisticalEngine {
   // Utility Methods
   // ============================================================================
 
+  /**
+   * Eigendecomposition of a real symmetric matrix (here: a correlation matrix).
+   *
+   * Delegates to the shared cyclic-Jacobi solver. `values` come back sorted
+   * descending and `vectors[k]` is the unit eigenvector of `values[k]`.
+   *
+   * This used to return the diagonal as the "eigenvalues" and the identity as
+   * the "eigenvectors" — for a correlation matrix that is all-ones and I, so
+   * every PCA reported equal explained variance and an identity loading
+   * pattern regardless of the data.
+   */
   private calculateEigenvalues(matrix: number[][]): { values: number[]; vectors: number[][] } {
-    // Simplified power iteration method for small matrices
-    // In production, use a robust linear algebra library
-    const n = matrix.length;
-    const values: number[] = [];
-    const vectors: number[][] = [];
-
-    // This is a simplified implementation
-    // For production use, implement QR algorithm or use a math library
-    for (let i = 0; i < n; i++) {
-      values.push(matrix[i]?.[i] ?? 0); // Diagonal approximation
-      const vector = Array(n).fill(0);
-      vector[i] = 1;
-      vectors.push(vector);
-    }
-
+    const { values, vectors } = jacobiEigen(matrix);
     return { values, vectors };
   }
 
@@ -1912,8 +1946,57 @@ export class StatisticalEngine {
     this.cacheExpiry.set(key, Date.now() + this.CACHE_TTL);
   }
 
+  /**
+   * Cache-key component for a data array.
+   *
+   * Every cached statistic (descriptive_, correlation_, ttest_, anova_,
+   * regression_, cronbach_, pca_) is keyed on this, so a collision does not
+   * merely waste a slot — it returns *another dataset's* result.
+   *
+   * The previous implementation was `arr.reduce((h, v) => h + v.toString(), '')
+   * .slice(0, 16)`: a delimiter-free concatenation truncated to 16 characters.
+   * It was not a hash. `[1, 2]` and `[12]` produced the same key; any two
+   * datasets agreeing on their first 16 concatenated characters produced the
+   * same key, which for Likert data (one character per response) means any two
+   * datasets whose first 16 answers match.
+   *
+   * Now: 64-bit FNV-1a (two independent 32-bit lanes) over a length-prefixed,
+   * delimited serialization — so distinct arrays serialize distinctly, and the
+   * hash mixes every character into every output bit.
+   */
   private hashArray(arr: number[]): string {
-    return arr.reduce((hash, val) => hash + val.toString(), '').slice(0, 16);
+    let serialized = `${arr.length}:`;
+    for (const value of arr) {
+      // -0 stringifies to "0"; keep it distinguishable. NaN/Infinity stringify
+      // distinctly already.
+      serialized += (Object.is(value, -0) ? '-0' : String(value)) + ';';
+    }
+    return this.hashString(serialized);
+  }
+
+  /** 64-bit FNV-1a-style string hash, returned as 16 hex characters. */
+  private hashString(input: string): string {
+    let lane1 = 0x811c9dc5 | 0;
+    let lane2 = 0x1b873593 | 0;
+
+    for (let i = 0; i < input.length; i++) {
+      const code = input.charCodeAt(i);
+      lane1 = Math.imul(lane1 ^ code, 0x01000193);
+      lane2 = Math.imul(lane2 ^ code, 0x85ebca6b);
+      lane2 ^= lane2 >>> 13;
+    }
+
+    // Final avalanche so the low bits are as mixed as the high ones.
+    lane1 ^= lane1 >>> 16;
+    lane1 = Math.imul(lane1, 0x85ebca6b);
+    lane1 ^= lane1 >>> 13;
+    lane2 = Math.imul(lane2, 0xc2b2ae35);
+    lane2 ^= lane2 >>> 16;
+
+    return (
+      (lane1 >>> 0).toString(16).padStart(8, '0') +
+      (lane2 >>> 0).toString(16).padStart(8, '0')
+    );
   }
 
   /**

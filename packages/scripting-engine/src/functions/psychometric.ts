@@ -1,4 +1,5 @@
 import type { FormulaFunction } from '../types';
+import { jacobiEigen } from '../math/eigen';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- formula functions operate on dynamic values
 type DynamicValue = any;
@@ -25,6 +26,87 @@ function pearsonCorrelation(x: number[], y: number[]): number {
   const denom = Math.sqrt(ssXX * ssYY);
   if (denom === 0) return NaN;
   return ssXY / denom;
+}
+
+/**
+ * Helper: correlation matrix of a set of item columns. Returns null if any
+ * pair is undefined (a zero-variance item, typically).
+ */
+function correlationMatrix(columns: number[][]): number[][] | null {
+  const k = columns.length;
+  const r: number[][] = Array.from({ length: k }, () => Array<number>(k).fill(0));
+
+  for (let i = 0; i < k; i++) {
+    r[i]![i] = 1;
+    for (let j = i + 1; j < k; j++) {
+      const rij = pearsonCorrelation(columns[i]!, columns[j]!);
+      if (isNaN(rij)) return null;
+      r[i]![j] = rij;
+      r[j]![i] = rij;
+    }
+  }
+
+  return r;
+}
+
+/**
+ * Helper: standardized loadings of a single common factor, by iterated
+ * principal-axis factoring (PAF) of the correlation matrix.
+ *
+ * PAF replaces the unit diagonal of R with communality estimates h_i (the
+ * variance of item i explained by the common factor), extracts the leading
+ * eigenpair of that *reduced* matrix, and re-estimates h_i = λ_i². Iterating
+ * to a fixed point separates common variance from item-specific variance —
+ * which is exactly what a reliability coefficient has to do, and what a plain
+ * PCA of the unreduced R does not (PCA pushes unique variance into the
+ * component, inflating the loadings).
+ *
+ * Unlike a tau-equivalent estimate (Cronbach's alpha, the Spearman-Brown
+ * formula), the loadings are free to differ across items — that is the whole
+ * point of omega.
+ *
+ * Returns all-zero loadings when the reduced matrix has no positive leading
+ * eigenvalue — the items share no common variance, so the common factor
+ * explains nothing and omega is 0.
+ */
+function singleFactorLoadings(r: number[][]): number[] {
+  const k = r.length;
+  const maxIterations = 200;
+  const tolerance = 1e-10;
+
+  // Initial communality estimate: the largest absolute correlation in the row.
+  // (The textbook alternative is the squared multiple correlation, which needs
+  // a matrix inverse; for a one-factor extraction both converge to the same
+  // fixed point and this one cannot fail on a singular R.)
+  let communalities = r.map((row, i) =>
+    row.reduce((max, value, j) => (i === j ? max : Math.max(max, Math.abs(value))), 0)
+  );
+
+  let loadings: number[] = Array<number>(k).fill(0);
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    const reduced = r.map((row, i) =>
+      row.map((value, j) => (i === j ? communalities[i]! : value))
+    );
+
+    const { values, vectors } = jacobiEigen(reduced);
+    const eigenvalue = values[0]!;
+    if (!(eigenvalue > 0)) return loadings; // no common factor left to extract
+
+    const eigenvector = vectors[0]!;
+    const scale = Math.sqrt(eigenvalue);
+    loadings = eigenvector.map(component => component * scale);
+
+    // Heywood cases (h > 1) are not admissible: an item cannot have more
+    // common variance than total variance. Clamp instead of diverging.
+    const next = loadings.map(lambda => Math.min(1, lambda * lambda));
+
+    const delta = next.reduce((max, h, i) => Math.max(max, Math.abs(h - communalities[i]!)), 0);
+    communalities = next;
+    if (delta < tolerance) break;
+  }
+
+  return loadings;
 }
 
 // Psychometric Reliability Functions
@@ -133,7 +215,8 @@ export const psychometricFunctions: FormulaFunction[] = [
   {
     name: 'OMEGA',
     category: 'stat',
-    description: "McDonald's omega (simplified, based on average inter-item correlation)",
+    description:
+      "McDonald's omega (total) from a single-factor solution — does not assume tau-equivalence",
     parameters: [
       { name: 'items', type: 'array', description: '2D array (participants x items) of item scores' }
     ],
@@ -158,24 +241,33 @@ export const psychometricFunctions: FormulaFunction[] = [
         columns.push(rows.map(row => row[j]!));
       }
 
-      // Average inter-item correlation
-      let sumR = 0;
-      let count = 0;
-      for (let i = 0; i < k; i++) {
-        for (let j = i + 1; j < k; j++) {
-          const r = pearsonCorrelation(columns[i]!, columns[j]!);
-          if (!isNaN(r)) {
-            sumR += r;
-            count++;
-          }
-        }
-      }
+      const r = correlationMatrix(columns);
+      if (!r) return NaN; // a zero-variance item leaves omega undefined
 
-      if (count === 0) return NaN;
-      const rAvg = sumR / count;
+      const loadings = singleFactorLoadings(r);
 
-      // omega = (k * rAvg) / (1 + (k-1) * rAvg)
-      return (k * rAvg) / (1 + (k - 1) * rAvg);
+      // omega = (sum lambda)^2 / ((sum lambda)^2 + sum(1 - lambda_i^2))
+      //
+      // Numerator: variance of the sum score attributable to the common factor.
+      // Denominator: that plus the summed uniquenesses — i.e. the total variance
+      // of the sum score under the one-factor model. Because each lambda_i enters
+      // separately, items are allowed to load unequally (congeneric); the
+      // tau-equivalent case (all lambda equal) is the special case where omega
+      // coincides with standardized alpha.
+      const sumLoadings = loadings.reduce((sum, lambda) => sum + lambda, 0);
+      const commonVariance = sumLoadings * sumLoadings;
+
+      // A loading is a standardized correlation with the factor, so |lambda| <= 1;
+      // clamp before squaring so a Heywood case cannot produce a negative uniqueness.
+      const uniqueVariance = loadings.reduce(
+        (sum, lambda) => sum + Math.max(0, 1 - Math.min(1, lambda * lambda)),
+        0
+      );
+
+      const total = commonVariance + uniqueVariance;
+      if (total === 0) return NaN;
+
+      return commonVariance / total;
     },
     examples: ['OMEGA([[4,3,5,2],[3,4,4,3],[5,5,4,4]])']
   },

@@ -125,7 +125,12 @@ async fn mk_session(pool: &PgPool, qid: Uuid) -> Uuid {
     .expect("session")
 }
 
-/// Insert a single trial row (client_id is unique; generated per call).
+/// Insert a single TEST (non-practice) trial row; client_id is unique per call.
+///
+/// `is_practice = false` is explicit and load-bearing: `fillout_trial_stats` admits
+/// only trials KNOWN not to be practice (ADR 0028 / migration 00059), so a row left
+/// at the NULL default would be treated as unknown provenance and held out of every
+/// aggregate below. See `trial_practice_aggregates.rs` for that behaviour on purpose.
 async fn insert_trial(
     pool: &PgPool,
     sid: Uuid,
@@ -137,8 +142,9 @@ async fn insert_trial(
 ) {
     sqlx::query(
         "INSERT INTO trials \
-           (session_id, question_id, trial_index, rt_us, correct, invalidated, client_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+           (session_id, question_id, trial_index, rt_us, correct, invalidated, \
+            is_practice, client_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, false, $7)",
     )
     .bind(sid)
     .bind(question_id)

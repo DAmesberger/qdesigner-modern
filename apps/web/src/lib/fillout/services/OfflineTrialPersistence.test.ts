@@ -5,6 +5,7 @@ import { OfflineTrialPersistence } from './OfflineTrialPersistence';
 import { OfflineResponsePersistence } from './OfflineResponsePersistence';
 import { FilloutCrypto } from './crypto/FilloutCrypto';
 import { SyncLedger, DEAD_LETTER_ATTEMPTS } from './integrity/SyncLedger';
+import { computeChecksum } from './integrity/checksum';
 import type { RuntimeTrialEvent } from '$lib/runtime/core/question-runtime';
 
 // Like every other persistence test, the suite runs under the global crypto STUB
@@ -24,6 +25,7 @@ function makeEvent(overrides: Partial<RuntimeTrialEvent> = {}): RuntimeTrialEven
 		source: 'keyboard',
 		rtUs: 421_000,
 		correct: true,
+		isPractice: false,
 		sampledTimings: { phases: [{ name: 'stimulus', durationMs: 500, durationFrames: null }] },
 		provenance: { onsetMethod: 'raf', responseMethod: 'event.timeStamp' },
 		invalidated: null,
@@ -66,6 +68,79 @@ describe('OfflineTrialPersistence.persistTrialEvent', () => {
 		const unsynced = await OfflineTrialPersistence.getUnsyncedTrials('s-enc');
 		expect(unsynced).toHaveLength(1);
 		expect(unsynced[0]!.optionId).toBe('target');
+	});
+
+	// The practice flag has to survive the whole chain — runtime → IndexedDB →
+	// sync → trials.is_practice — or warm-up RTs land in cohort quartiles (ADR 0028).
+	// The write-verify in saveTrial also proves the flag is inside the checksum.
+	it('persists the practice flag durably, distinguishing practice from test trials', async () => {
+		await OfflineTrialPersistence.persistTrialEvent(
+			's-p',
+			makeEvent({ trialIndex: 1, isPractice: true })
+		);
+		await OfflineTrialPersistence.persistTrialEvent(
+			's-p',
+			makeEvent({ trialIndex: 2, isPractice: false })
+		);
+
+		const rows = (await OfflineTrialPersistence.getUnsyncedTrials('s-p')).sort(
+			(a, b) => a.trialIndex - b.trialIndex
+		);
+		expect(rows.map((r) => r.isPractice)).toEqual([true, false]);
+	});
+
+	// VERSION SKEW, simulated for real: a trial row already sitting in a
+	// participant's IndexedDB was checksummed by the PREVIOUS build, whose payload
+	// had no `isPractice` key at all. Adding a key to the checksum payload is only
+	// safe because `canonicalize` drops `undefined` — so the new code re-hashes that
+	// old row to exactly the string the old code hashed. If that property ever
+	// breaks, every pre-existing offline trial is escalated as corrupt and dropped
+	// from the sync stream: silent participant data loss on upgrade.
+	//
+	// So we write the row the way the OLD build wrote it — checksum computed over a
+	// payload with no isPractice key — and read it back with the new code.
+	it('does not escalate a row checksummed by the previous build (no practice key)', async () => {
+		const clientId = crypto.randomUUID();
+		const stored = {
+			clientId,
+			sessionId: 's-old',
+			questionId: 'q-1',
+			trialIndex: 1,
+			paradigm: 'stroop',
+			optionId: await FilloutCrypto.encryptField('s-old', 'a'),
+			source: 'keyboard',
+			rtUs: 400_000,
+			correct: true,
+			sampledTimings: { phases: [] },
+			provenance: {},
+			invalidated: null,
+		};
+		// The old build's checksum payload — note the absent `isPractice`.
+		const legacyChecksum = await computeChecksum(stored);
+		await db.filloutTrials.add({ ...stored, checksum: legacyChecksum, attempts: 0, synced: 0 });
+		await SyncLedger.enqueue('trial', clientId, 's-old');
+
+		// The new code re-verifies it and must still admit it.
+		const rows = await OfflineTrialPersistence.getUnsyncedTrials('s-old');
+		expect(rows).toHaveLength(1);
+		expect(rows[0]!.isPractice).toBeUndefined();
+		expect((await SyncLedger.stats()).deadletter).toBe(0);
+	});
+
+	// The measurement read feeds the participant side of the cohort box, which must
+	// filter practice exactly as the server cohort does.
+	it('exposes the practice flag to the offline cohort box', async () => {
+		await OfflineTrialPersistence.persistTrialEvent(
+			's-m',
+			makeEvent({ trialIndex: 1, isPractice: true })
+		);
+		await OfflineTrialPersistence.persistTrialEvent(
+			's-m',
+			makeEvent({ trialIndex: 2, isPractice: false })
+		);
+
+		const measurements = await OfflineTrialPersistence.getTrialMeasurements('s-m', 'q-1');
+		expect(measurements.map((m) => m.isPractice).sort()).toEqual([false, true]);
 	});
 });
 

@@ -5,6 +5,7 @@
 	import {
 		exportToExcel,
 		exportWithScript,
+		rowsToCsv,
 		type ResponseExportFormat,
 		type ScriptFormat,
 	} from '$lib/analytics/ResponseExportService';
@@ -276,37 +277,13 @@
 		}
 	}
 
+	// The plain CSV button shares the ONE export contract (column set, version pin,
+	// timing provenance, formula-injection guard) with the XLSX and stats-script
+	// bundles rather than reimplementing it — a fourth copy is a fourth place to
+	// forget the escaping.
 	function convertToCSV(rows: ExportRow[]): string {
 		if (rows.length === 0) return '';
-
-		const headers = [
-			'session_id',
-			'participant_id',
-			'session_status',
-			'started_at',
-			'completed_at',
-			'question_id',
-			'value',
-			'reaction_time_us',
-			'presented_at',
-			'answered_at',
-		];
-
-		const csvRows = [headers.join(',')];
-
-		for (const row of rows) {
-			const values = headers.map((header) => {
-				const val = row[header as keyof ExportRow];
-				if (val === null || val === undefined) return '';
-				const str = typeof val === 'object' ? JSON.stringify(val) : String(val);
-				return str.includes(',') || str.includes('"') || str.includes('\n')
-					? `"${str.replace(/"/g, '""')}"`
-					: str;
-			});
-			csvRows.push(values.join(','));
-		}
-
-		return csvRows.join('\n');
+		return rowsToCsv(rows);
 	}
 
 	function formatDate(date: string | null): string {

@@ -16,10 +16,14 @@ const cohort = (over: Partial<ReactionCohort> = {}): ReactionCohort => ({
   ...over,
 });
 
+// A real (non-practice) test trial. `isPractice: false` is explicit because the
+// builder now admits ONLY trials known not to be practice — see the
+// participant/cohort symmetry tests at the bottom of this file.
 const trial = (rtUs: number | null, over: Partial<LocalTrial> = {}): LocalTrial => ({
   rtUs,
   correct: true,
   invalidated: null,
+  isPractice: false,
   ...over,
 });
 
@@ -126,5 +130,62 @@ describe('buildReactionCohortBox', () => {
     expect(result.box.median).toBe(0.8);
     expect(result.participantValue).toBeCloseTo(2 / 3, 5);
     expect(result.unit).toBe('%');
+  });
+});
+
+/**
+ * The participant's own statistic is rendered directly against the server cohort.
+ * The cohort (ADR 0028, `fillout_trial_stats`) admits only `is_practice = false`.
+ * If the participant's side did NOT drop its warm-up trials, the two sides would
+ * be measuring different things, and the participant would be told they are slower
+ * than a cohort that simply never counted its own warm-ups.
+ */
+describe('practice trials never reach the participant statistic (ADR 0028)', () => {
+  it('drops practice trials, so a slow warm-up cannot drag the participant marker', () => {
+    const result = buildReactionCohortBox({
+      cohort: cohort(),
+      participantTrials: [
+        trial(900_000, { isPractice: true }), // 900ms warm-up — the whole point of practice
+        trial(300_000),
+        trial(300_000),
+      ],
+      stat: 'mean',
+    });
+    if (result.kind !== 'chart') throw new Error('expected chart');
+    // Pooling the warm-up would have produced (900+300+300)/3 = 500ms and told this
+    // participant they were slower than the cohort median. They are not.
+    expect(result.participantValue).toBe(300);
+    expect(result.participantTrialCount).toBe(2);
+  });
+
+  it('drops practice trials even when invalidated ones are explicitly included', () => {
+    // includeInvalidated relaxes the INVALIDATION filter. It is not a licence to
+    // pool warm-ups: the cohort it is compared against never contains them.
+    const result = buildReactionCohortBox({
+      cohort: cohort(),
+      participantTrials: [trial(900_000, { isPractice: true }), trial(400_000)],
+      stat: 'mean',
+      includeInvalidated: true,
+    });
+    if (result.kind !== 'chart') throw new Error('expected chart');
+    expect(result.participantValue).toBe(400);
+    expect(result.participantTrialCount).toBe(1);
+  });
+
+  it('drops a trial of UNKNOWN practice status rather than assuming it was a test trial', () => {
+    // `isPractice: undefined` is a row persisted before the flag was carried. It is
+    // not the same claim as "known not practice", and the server holds such rows out
+    // of the cohort too — so the client must, or the comparison is rigged.
+    const result = buildReactionCohortBox({
+      cohort: cohort(),
+      participantTrials: [
+        { rtUs: 900_000, correct: true, invalidated: null }, // no isPractice ⇒ unknown
+        trial(300_000),
+      ],
+      stat: 'mean',
+    });
+    if (result.kind !== 'chart') throw new Error('expected chart');
+    expect(result.participantValue).toBe(300);
+    expect(result.participantTrialCount).toBe(1);
   });
 });

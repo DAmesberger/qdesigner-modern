@@ -50,6 +50,7 @@ export function materializedPhasesFromTrial(trial: ReactionTrialConfig): Schedul
 export interface TrialEventSource {
   trialNumber: number;
   taskType: string;
+  isPractice: boolean;
   optionId: string | null;
   responseSource: string | null;
   reactionTime: number | null;
@@ -66,6 +67,10 @@ export interface TrialEventSource {
   measuredRefreshRateHz: number | null;
   phaseTimeline: CompactPhaseMark[];
   visibilityInvalidated: boolean;
+  /** How many times the tab was hidden during this trial (0 when it never was). */
+  visibilityLossCount?: number;
+  /** Which phase each visibility loss landed in, and how far into it. */
+  visibilityLossPhases?: Array<{ phase: string; phaseElapsedMs: number }>;
   invalid: boolean;
   invalidReason: string | null;
 }
@@ -77,9 +82,20 @@ export interface TrialEventSource {
  * `trials.rt_us` column). `sampledTimings` is the MATERIALIZED phase plan for the
  * trial (ADR 0025 — trials are sampled at generation, so these are the fixed
  * durations that drove this run), kept distinct from `provenance`, the MEASURED
- * environment/timing blob. `invalidated` carries the W-3 visibility stamp, falling
- * back to a stimulus-render invalidation reason so a broken trial is never recorded
- * as a clean one.
+ * environment/timing blob.
+ *
+ * `invalidated` names the single most fundamental reason the trial is not a clean
+ * measurement, in this precedence:
+ *
+ *   1. `visibility`     — the tab was hidden; the timing itself is untrustworthy.
+ *   2. the invalid reason — the stimulus failed to render; nothing was measured.
+ *   3. `anticipatory`   — a false start: the response landed BEFORE onset, so the
+ *                         RT is measured against a stimulus that wasn't shown yet.
+ *
+ * The anticipatory arm is the one the live path used to drop on the floor. The
+ * 00048 backfill has always mapped it (`00048_trials.sql:171-175`), so the same
+ * false start was excluded when it arrived by backfill and silently pooled into
+ * cohort quartiles when it arrived live. Live and backfill now agree.
  */
 export function buildRuntimeTrialEvent(
   questionId: string,
@@ -93,7 +109,9 @@ export function buildRuntimeTrialEvent(
     ? 'visibility'
     : trial.invalid
       ? (trial.invalidReason ?? 'invalid')
-      : null;
+      : trial.anticipatory
+        ? 'anticipatory'
+        : null;
 
   return {
     questionId,
@@ -103,6 +121,7 @@ export function buildRuntimeTrialEvent(
     source: trial.responseSource,
     rtUs,
     correct: trial.isCorrect,
+    isPractice: trial.isPractice,
     sampledTimings: {
       phases: (scheduledPhases ?? []).map((phase) => ({
         name: phase.name,
@@ -122,6 +141,13 @@ export function buildRuntimeTrialEvent(
       timerResolutionMs: trial.timerResolutionMs,
       measuredRefreshRateHz: trial.measuredRefreshRateHz,
       phaseTimeline: trial.phaseTimeline,
+      // The engine counts every visibility loss and records which phase it landed
+      // in, then threw both away here. `invalidated: 'visibility'` is a verdict
+      // with no evidence behind it — a reviewer can't see how bad the interruption
+      // was or whether it touched the stimulus. ADR 0027 is record-by-default, so
+      // record it: jsonb, no schema change, and it rides the existing export.
+      visibilityLossCount: trial.visibilityLossCount ?? 0,
+      visibilityLossPhases: trial.visibilityLossPhases ?? [],
     },
     invalidated,
   };

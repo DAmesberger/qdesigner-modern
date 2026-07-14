@@ -618,10 +618,13 @@ export const formulaReferenceEntries: HelpEntry[] = [
 		key: 'formulas.psychometric.OMEGA',
 		title: 'OMEGA(items)',
 		description:
-			'Calculates McDonald\'s omega reliability based on the average inter-item correlation. A modern alternative to Cronbach\'s alpha that does not assume tau-equivalence.\n\n' +
+			'Calculates McDonald\'s omega (total) reliability. A modern alternative to Cronbach\'s alpha that does not assume tau-equivalence: items may load unequally on the common factor.\n\n' +
+			'**Method:** extracts a single common factor from the item correlation matrix by iterated principal-axis factoring, then\n' +
+			'omega = (sum of the standardized loadings)^2 / ((sum of the loadings)^2 + sum of the uniquenesses (1 - loading^2)).\n\n' +
+			'When all loadings are equal (tau-equivalence) omega coincides with standardized alpha; when they differ, alpha under-estimates reliability and omega does not.\n\n' +
 			'**Parameters:**\n' +
 			'- `items` (array) -- 2D array of item scores (participants x items)\n\n' +
-			'**Returns:** number (0 to 1)\n\n' +
+			'**Returns:** number (0 to 1); 0 when the items share no common variance, NaN for fewer than 2 items/participants\n\n' +
 			'**Example:** `OMEGA([[4,3,5,2],[3,4,4,3],[5,5,4,4]])`',
 		category: 'formulas',
 		tags: ['omega', 'mcdonald', 'reliability', 'internal consistency', 'psychometric']

@@ -657,6 +657,262 @@ describe('StatisticalEngine', () => {
   });
 
   // ==========================================================================
+  // Tukey HSD — internal coherence of p-value and CI
+  // ==========================================================================
+  describe('tukeyHSD coherence', () => {
+    // p-value and CI are computed under the SAME (Sidak) correction, so
+    // "p < alpha" and "the CI excludes zero" are the same statement. They used
+    // not to be: the p-value was Sidak-corrected while the CI used a Bonferroni
+    // critical value (a strictly larger one), so for any comparison whose
+    // reported p landed in (1-(1-alpha/m)^m, alpha) — i.e. (0.04917, 0.05) for
+    // three groups — the result claimed significance with an interval that
+    // still contained zero.
+
+    /** Groups of 5 with sample variance 2.5 each => MSW = 2.5, dfW = 12, and
+     *  the pairwise t works out to exactly the mean difference. */
+    const base = [0, 1, 2, 3, 4];
+
+    it('agrees with its own confidence interval at the margin of significance', () => {
+      // d = 2.775 puts the 0-vs-1 comparison at p = 0.04957 — inside the band
+      // where the two corrections used to disagree.
+      const d = 2.775;
+      const groups = [base, base.map(x => x + d), base.map(x => x + 2 * d)];
+
+      const result = engine.tukeyHSD(groups, 0.05);
+      const marginal = result.comparisons[0]!;
+
+      expect(marginal.pValue).toBeGreaterThan(0.049);
+      expect(marginal.pValue).toBeLessThan(0.05);
+      expect(marginal.significant).toBe(true);
+      // Significant at alpha => the interval must exclude zero.
+      expect(marginal.ci[1]).toBeLessThan(0);
+    });
+
+    it('significant === (CI excludes zero) across the whole significance boundary', () => {
+      for (let d = 2.5; d <= 3.1; d += 0.005) {
+        const groups = [base, base.map(x => x + d), base.map(x => x + 2 * d)];
+        const result = engine.tukeyHSD(groups, 0.05);
+
+        result.comparisons.forEach(comparison => {
+          const excludesZero = comparison.ci[0]! > 0 || comparison.ci[1]! < 0;
+          expect(
+            comparison.significant,
+            `d=${d.toFixed(3)} groups ${comparison.group1}-${comparison.group2}: ` +
+              `p=${comparison.pValue}, ci=[${comparison.ci.join(', ')}]`
+          ).toBe(excludesZero);
+        });
+      }
+    });
+
+    it('holds at other alphas and group counts', () => {
+      const groups = [
+        [1, 2, 3, 4, 5],
+        [3, 4, 5, 6, 7],
+        [4, 6, 8, 10, 12],
+        [2, 3, 3, 4, 9]
+      ];
+
+      for (const alpha of [0.001, 0.01, 0.05, 0.1, 0.2]) {
+        const result = engine.tukeyHSD(groups, alpha);
+        result.comparisons.forEach(comparison => {
+          const excludesZero = comparison.ci[0]! > 0 || comparison.ci[1]! < 0;
+          expect(comparison.significant, `alpha=${alpha}`).toBe(excludesZero);
+          expect(comparison.significant).toBe(comparison.pValue < alpha);
+        });
+      }
+    });
+
+    it('declares itself an approximation', () => {
+      const result = engine.tukeyHSD([base, base.map(x => x + 5)]);
+
+      expect(result.approximate).toBe(true);
+      expect(result.approximationMethod).toBe('sidak-corrected-pairwise-t');
+    });
+  });
+
+  // ==========================================================================
+  // PCA
+  // ==========================================================================
+  describe('performPCA', () => {
+    // A correlation matrix with r constant off the diagonal has a closed-form
+    // spectrum: 1 + (k-1)r once, and 1 - r with multiplicity k-1. Build data
+    // whose SAMPLE correlation matrix is exactly that, from mutually orthogonal
+    // centered columns of an order-8 Hadamard matrix:
+    //   x_i = lambda * f + sqrt(1 - lambda^2) * e_i   =>   r_ij = lambda^2.
+    const hadamardColumn = (j: number): number[] =>
+      Array.from({ length: 8 }, (_, i) => {
+        let bits = 0;
+        for (let b = i & j; b > 0; b >>= 1) bits ^= b & 1;
+        return bits === 0 ? 1 : -1;
+      });
+
+    const lambda = 0.8;
+    const r = lambda * lambda; // 0.64
+    const k = 4;
+    // performPCA takes variables (columns), not participants.
+    const variables = Array.from({ length: k }, (_, item) => {
+      const factor = hadamardColumn(1);
+      const error = hadamardColumn(item + 2);
+      return Array.from(
+        { length: 8 },
+        (_, p) => lambda * factor[p]! + Math.sqrt(1 - lambda * lambda) * error[p]!
+      );
+    });
+
+    it('recovers the closed-form eigenvalues of a known component structure', () => {
+      const result = engine.performPCA(variables);
+
+      // Eigenvalues: 1 + 3(0.64) = 2.92, then 1 - 0.64 = 0.36 three times.
+      expect(result.eigenvalues[0]).toBeCloseTo(1 + (k - 1) * r, 8);
+      expect(result.eigenvalues[1]).toBeCloseTo(1 - r, 8);
+      expect(result.eigenvalues[2]).toBeCloseTo(1 - r, 8);
+      expect(result.eigenvalues[3]).toBeCloseTo(1 - r, 8);
+
+      // They sum to k (the trace of a correlation matrix).
+      expect(result.eigenvalues.reduce((s, v) => s + v, 0)).toBeCloseTo(k, 8);
+    });
+
+    it('reports the true explained variance, not an equal split', () => {
+      const result = engine.performPCA(variables);
+
+      // 2.92 / 4 = 73%, then 0.36 / 4 = 9% each.
+      expect(result.explainedVariance[0]).toBeCloseTo(73, 6);
+      expect(result.explainedVariance[1]).toBeCloseTo(9, 6);
+      expect(result.explainedVariance[2]).toBeCloseTo(9, 6);
+      expect(result.explainedVariance[3]).toBeCloseTo(9, 6);
+
+      expect(result.cumulativeVariance[0]).toBeCloseTo(73, 6);
+      expect(result.cumulativeVariance[3]).toBeCloseTo(100, 6);
+    });
+
+    it('reports the true loadings and communalities, not an identity pattern', () => {
+      const result = engine.performPCA(variables);
+
+      // One component clears the Kaiser criterion (eigenvalue > 1).
+      // Loading = eigenvector component * sqrt(eigenvalue)
+      //         = 0.5 * sqrt(2.92) = 0.8544003745...
+      const expectedLoading = 0.5 * Math.sqrt(1 + (k - 1) * r);
+      expect(expectedLoading).toBeCloseTo(0.8544004, 6);
+
+      for (let i = 1; i <= k; i++) {
+        const loadings = result.factorLoadings[`Variable_${i}`]!;
+        expect(loadings).toHaveLength(1);
+        expect(loadings[0]).toBeCloseTo(expectedLoading, 6);
+
+        // Communality = squared loading = 2.92 / 4 = 0.73.
+        expect(result.communalities[`Variable_${i}`]).toBeCloseTo(expectedLoading ** 2, 6);
+      }
+    });
+
+    it('separates a two-block structure into two components', () => {
+      // Variables 1-2 load on one factor, 3-4 on another (orthogonal) factor.
+      const factorA = hadamardColumn(1);
+      const factorB = hadamardColumn(2);
+      const blocked = [
+        hadamardColumn(3).map((e, p) => 0.8 * factorA[p]! + 0.6 * e),
+        hadamardColumn(4).map((e, p) => 0.8 * factorA[p]! + 0.6 * e),
+        hadamardColumn(5).map((e, p) => 0.8 * factorB[p]! + 0.6 * e),
+        hadamardColumn(6).map((e, p) => 0.8 * factorB[p]! + 0.6 * e)
+      ];
+
+      const result = engine.performPCA(blocked);
+
+      // Two blocks of two items with within-block r = 0.64 and between-block
+      // r = 0: eigenvalues 1.64, 1.64, 0.36, 0.36 => two components retained.
+      expect(result.eigenvalues[0]).toBeCloseTo(1.64, 8);
+      expect(result.eigenvalues[1]).toBeCloseTo(1.64, 8);
+      expect(result.eigenvalues[2]).toBeCloseTo(0.36, 8);
+
+      expect(result.factorLoadings['Variable_1']).toHaveLength(2);
+
+      // Each variable loads on exactly one of the two components.
+      for (let i = 1; i <= 4; i++) {
+        const loadings = result.factorLoadings[`Variable_${i}`]!.map(Math.abs);
+        const strong = loadings.filter(l => l > 0.5).length;
+        expect(strong).toBe(1);
+        // Communality is the same for every item: 1.64 / 2 = 0.82.
+        expect(result.communalities[`Variable_${i}`]).toBeCloseTo(0.82, 6);
+      }
+    });
+
+    it('respects an explicit component count', () => {
+      const result = engine.performPCA(variables, 2);
+
+      expect(result.factorLoadings['Variable_1']).toHaveLength(2);
+    });
+
+    it('rejects a constant variable instead of returning NaNs', () => {
+      expect(() => engine.performPCA([[1, 1, 1, 1], [1, 2, 3, 4]])).toThrow(/non-zero variance/);
+    });
+  });
+
+  // ==========================================================================
+  // Cache keys
+  // ==========================================================================
+  describe('cache keys', () => {
+    it('does not confuse [1, 2] with [12]', () => {
+      // The old key was a delimiter-free concatenation ("12" for both), so the
+      // second call was served the first call's cached result.
+      const pair = engine.calculateDescriptiveStats([1, 2]);
+      const single = engine.calculateDescriptiveStats([12]);
+
+      expect(pair.mean).toBe(1.5);
+      expect(single.mean).toBe(12);
+      expect(single.count).toBe(1);
+    });
+
+    it('does not confuse two Likert datasets that share their first 16 responses', () => {
+      // The old key was truncated to 16 characters. Likert responses stringify
+      // to one character each, so any two datasets agreeing on their first 16
+      // answers collided outright.
+      const shared = [1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1];
+      const lowTail = [...shared, 1, 1, 1, 1]; // mean 50/20 = 2.5
+      const highTail = [...shared, 5, 5, 5, 5]; // mean 66/20 = 3.3
+
+      const low = engine.calculateDescriptiveStats(lowTail);
+      const high = engine.calculateDescriptiveStats(highTail);
+
+      expect(low.mean).toBeCloseTo(2.5, 10);
+      expect(high.mean).toBeCloseTo(3.3, 10);
+      expect(high.max).toBe(5);
+    });
+
+    it('keeps colliding datasets apart in the t-test cache too', () => {
+      const shared = [1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1];
+      const lowTail = [...shared, 1, 1, 1, 1];
+      const highTail = [...shared, 5, 5, 5, 5];
+
+      const low = engine.performTTest(lowTail, undefined, 3, 'one-sample');
+      const high = engine.performTTest(highTail, undefined, 3, 'one-sample');
+
+      // Mean 2.5 is below mu0 = 3, mean 3.3 is above it: the statistics must
+      // have opposite signs.
+      expect(low.statistic).toBeLessThan(0);
+      expect(high.statistic).toBeGreaterThan(0);
+    });
+
+    it('still caches: identical input returns the identical result object', () => {
+      const data = [1, 2, 3, 4, 5];
+
+      const first = engine.calculateDescriptiveStats(data);
+      const second = engine.calculateDescriptiveStats([...data]);
+
+      expect(second).toBe(first);
+    });
+
+    it('keys the correlation cache on the method', () => {
+      const x = [1, 2, 3, 4, 5, 6, 7, 8];
+      const y = [1, 4, 9, 16, 25, 36, 49, 64]; // monotone but non-linear
+
+      const pearson = engine.calculateCorrelation(x, y, 'pearson');
+      const spearman = engine.calculateCorrelation(x, y, 'spearman');
+
+      expect(spearman.coefficient).toBeCloseTo(1, 10); // perfectly monotone
+      expect(pearson.coefficient).toBeLessThan(spearman.coefficient);
+    });
+  });
+
+  // ==========================================================================
   // Edge Cases and Integration
   // ==========================================================================
   describe('edge cases', () => {

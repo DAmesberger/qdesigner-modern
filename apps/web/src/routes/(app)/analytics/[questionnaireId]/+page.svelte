@@ -4,6 +4,7 @@
   import type { TimeSeriesBucket } from '$lib/shared/types/api';
   import { api } from '$lib/services/api';
   import { RealtimeAnalyticsClient } from '$lib/analytics/RealtimeAnalyticsClient.svelte';
+  import { rowsToCsv } from '$lib/analytics/ResponseExportService';
   import { ChevronLeft } from 'lucide-svelte';
   import { buildPsychometrics } from '$lib/analytics/psychometrics';
   import StatisticsCard from '$lib/analytics/components/StatisticsCard.svelte';
@@ -134,21 +135,6 @@
     } finally {
       exportLoading = false;
     }
-  }
-
-  function rowsToCsv(rows: any[]): string {
-    if (rows.length === 0) return '';
-    const headers = Object.keys(rows[0]);
-    const lines = [
-      headers.join(','),
-      ...rows.map(row => headers.map(h => {
-        const val = row[h];
-        if (val === null || val === undefined) return '';
-        const str = String(val);
-        return str.includes(',') || str.includes('"') ? `"${str.replace(/"/g, '""')}"` : str;
-      }).join(','))
-    ];
-    return lines.join('\n');
   }
 
   // E-FLOW-6: live per-arm allocation counts from the authoritative

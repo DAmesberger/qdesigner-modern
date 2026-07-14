@@ -140,6 +140,7 @@
                 <th class="px-4 py-2 text-left font-medium text-muted-foreground">B</th>
                 <th class="px-4 py-2 text-right font-medium text-muted-foreground">Mean &Delta;</th>
                 <th class="px-4 py-2 text-right font-medium text-muted-foreground">Median &Delta;</th>
+                <th class="px-4 py-2 text-right font-medium text-muted-foreground">Paired n</th>
                 <th class="px-4 py-2 text-right font-medium text-muted-foreground">Pearson r</th>
               </tr>
             </thead>
@@ -150,12 +151,25 @@
                   <td class="px-4 py-2 text-foreground">{displayName(c.questionnaireB)}</td>
                   <td class="px-4 py-2 text-right font-medium">{num(c.meanDelta)}</td>
                   <td class="px-4 py-2 text-right font-medium">{num(c.medianDelta)}</td>
-                  <td class="px-4 py-2 text-right font-medium">{num(c.correlation)}</td>
+                  <td class="px-4 py-2 text-right font-medium">{c.pairedN}</td>
+                  <td class="px-4 py-2 text-right font-medium">
+                    {#if c.correlation === null}
+                      <span class="font-normal text-muted-foreground italic">insufficient data</span>
+                    {:else}
+                      {num(c.correlation)}
+                    {/if}
+                  </td>
                 </tr>
               {/each}
             </tbody>
           </table>
         </div>
+        <p class="px-4 py-3 text-xs text-muted-foreground border-t border-border">
+          Mean and median &Delta; compare each questionnaire's full sample. Pearson
+          <em>r</em> is computed only over participants who appear in both questionnaires
+          (a participant with several sessions contributes their mean); it is withheld
+          below 5 paired participants, where the coefficient carries no information.
+        </p>
       </Card>
     {/if}
   </div>

@@ -44,6 +44,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::access;
+use crate::api::csv::csv_field;
 use crate::api::sessions::{
     compute_numeric_stats, load_numeric_samples, parse_aggregate_source, SessionAggregateResponse,
 };
@@ -503,7 +504,7 @@ pub async fn machine_export(
         ];
         let line = fields
             .iter()
-            .map(|f| csv_escape(f))
+            .map(|f| csv_field(f))
             .collect::<Vec<_>>()
             .join(",");
         csv.push_str(&line);
@@ -522,16 +523,6 @@ pub async fn machine_export(
         csv,
     )
         .into_response())
-}
-
-/// Minimal RFC-4180 CSV field escaping: quote when the field contains a comma,
-/// quote, CR, or LF, doubling any embedded quotes.
-fn csv_escape(field: &str) -> String {
-    if field.contains([',', '"', '\n', '\r']) {
-        format!("\"{}\"", field.replace('"', "\"\""))
-    } else {
-        field.to_string()
-    }
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

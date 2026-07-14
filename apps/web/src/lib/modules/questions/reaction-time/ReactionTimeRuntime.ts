@@ -107,6 +107,10 @@ interface TrialResponse {
   measuredRefreshRateHz: number | null;
   /** True when the tab was backgrounded / lost focus during the trial (W-3). */
   visibilityInvalidated: boolean;
+  /** How many times the tab was hidden during this trial — the evidence behind the verdict. */
+  visibilityLossCount: number;
+  /** Which phase each visibility loss landed in, and how far into it. */
+  visibilityLossPhases: Array<{ phase: string; phaseElapsedMs: number }>;
   /** True when the trial was invalidated (e.g. stimulus render failed); not a genuine timeout. */
   invalid: boolean;
   invalidReason: string | null;
@@ -407,6 +411,8 @@ export class ReactionTimeRuntime implements IQuestionRuntime {
       timerResolutionMs: trialResult.provenance.timerResolutionMs,
       measuredRefreshRateHz: trialResult.provenance.measuredRefreshRateHz ?? null,
       visibilityInvalidated: trialResult.provenance.invalidated === 'visibility',
+      visibilityLossCount: trialResult.provenance.visibilityLossCount ?? 0,
+      visibilityLossPhases: trialResult.provenance.visibilityLossPhases ?? [],
       invalid: trialResult.invalid ?? false,
       invalidReason: trialResult.invalidReason ?? null,
       counterbalanceCell,

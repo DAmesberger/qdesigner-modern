@@ -36,6 +36,7 @@ function makeEvent(overrides: Partial<RuntimeTrialEvent> = {}): RuntimeTrialEven
 		source: 'keyboard',
 		rtUs: 380_000,
 		correct: true,
+		isPractice: false,
 		sampledTimings: { phases: [] },
 		provenance: {},
 		invalidated: null,
@@ -107,12 +108,46 @@ describe('FilloutUploadSync — per-trial rows (RT-1b)', () => {
 		);
 
 		expect(result.trialsSynced).toBe(2);
+		// The practice flag has to be ON THE WIRE, or the server can never hold warm-up
+		// trials out of the cohort aggregate (ADR 0028).
+		expect(payload.trials[0]).toHaveProperty('is_practice', false);
 
 		// Acked → rows flip synced=1 and the ledger records them acked.
 		const after = await db.filloutTrials.toArray();
 		expect(after.every((t) => t.synced === 1)).toBe(true);
 		expect((await SyncLedger.stats()).acked).toBe(2);
 		expect(await OfflineTrialPersistence.getUnsyncedTrials(session.id)).toHaveLength(0);
+	});
+
+	// A row persisted before the flag existed must reach the server as NULL, not
+	// `false`. `false` is a claim ("we are sure this was a test trial") that nobody
+	// is entitled to make about a row recorded by a runtime that never tracked it —
+	// and the server admits only `is_practice = false` into cohort aggregates, so a
+	// coerced `false` would quietly readmit exactly the trials we cannot vouch for.
+	it('sends an unknown practice status as null, never as false', async () => {
+		setOnline(true);
+		const session = await OfflineSessionService.createSession('q-rt', 1, 0, 0);
+		await OfflineTrialPersistence.saveTrial(session.id, {
+			questionId: 'q-rt',
+			trialIndex: 1,
+			paradigm: 'flanker',
+			optionId: 'left',
+			rtUs: 380_000,
+			// isPractice deliberately absent — the pre-00059 row shape.
+		});
+
+		apiMock.sessions.sync.mockResolvedValue({
+			responses_synced: 0,
+			events_synced: 0,
+			variables_synced: 0,
+			trials_synced: 1,
+			accepted_client_ids: (await db.filloutTrials.toArray()).map((t) => t.clientId),
+		});
+
+		await new FilloutUploadSync().syncNow();
+
+		const [, payload] = apiMock.sessions.sync.mock.calls[0]!;
+		expect(payload.trials[0].is_practice).toBeNull();
 	});
 
 	it('a permanently-rejected trial dead-letters (not retried forever)', async () => {

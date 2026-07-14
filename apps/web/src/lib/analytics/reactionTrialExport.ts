@@ -18,6 +18,7 @@ import {
   type ReactionTrialRecord,
   type ReactionTrialRow,
 } from '$lib/modules/questions/reaction-time/model/trialRow';
+import { csvCell, formatQuestionnaireVersion, xlsxRow } from './exportCell';
 
 /**
  * Extract the persisted per-trial records from an export row's `value`, or null
@@ -57,21 +58,12 @@ export function buildReactionTrialRows(rows: ExportRow[]): ReactionTrialRow[] {
           sessionId: row.session_id,
           participantId: row.participant_id,
           questionId: row.question_id,
+          questionnaireVersion: formatQuestionnaireVersion(row),
         })
       );
     }
   }
   return out;
-}
-
-/** Serialize one cell value for CSV, quoting when it contains a delimiter. */
-function csvCell(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  const s = typeof value === 'boolean' ? (value ? 'true' : 'false') : String(value);
-  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
 }
 
 /**
@@ -132,7 +124,7 @@ export async function exportReactionTrialsXlsx(
   const sheet = workbook.addWorksheet('Trials');
   sheet.columns = TRIAL_ROW_COLUMNS.map((c) => ({ header: c.header, key: c.key, width: 18 }));
   for (const row of trialRows) {
-    sheet.addRow(row);
+    sheet.addRow(xlsxRow(row));
   }
   const headerRow = sheet.getRow(1);
   headerRow.font = { bold: true };
