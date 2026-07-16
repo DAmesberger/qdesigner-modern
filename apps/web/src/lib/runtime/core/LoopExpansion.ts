@@ -45,6 +45,14 @@ export interface PresentedItemRef {
   loopVariableName?: string;
   /** Total iteration count of the owning loop (exposed as `_iterationCount`). */
   iterationCount?: number;
+  /**
+   * When `true`, this reference came from a RANDOMIZED block and its position in the
+   * emitted sequence is the seeded shuffle result — the runtime must present it in
+   * exactly this order and must NOT re-sort it by `question.order` (doing so silently
+   * undoes the randomization). `false`/absent for authored-order (standard/loop) items,
+   * which the runtime is free to order by `question.order`.
+   */
+  preserveOrder?: boolean;
 }
 
 /** Lookups used to resolve dynamic (non-static) loop sources. */
@@ -106,13 +114,17 @@ export function resolveLoopValues(
  * @param orderForIteration Ordered question ids for a given iteration index (already
  *                          seeded-randomized + filtered to existing questions).
  * @param loopVariableName  Interpolation name for the loop variable (defaults to `loopValue`).
+ * @param preserveOrder     When the block is randomized, tag every ref so the runtime
+ *                          keeps the per-iteration shuffle instead of re-sorting by
+ *                          `question.order`.
  */
 export function buildIterationTuples(params: {
   values: unknown[];
   orderForIteration: (iterationIndex: number) => string[];
   loopVariableName?: string;
+  preserveOrder?: boolean;
 }): PresentedItemRef[] {
-  const { values, orderForIteration } = params;
+  const { values, orderForIteration, preserveOrder } = params;
   const loopVariableName = params.loopVariableName || DEFAULT_LOOP_VARIABLE_NAME;
 
   // No loop (or empty source): a single unlooped pass. iterationIndex 0 drives the
@@ -122,6 +134,7 @@ export function buildIterationTuples(params: {
     return orderForIteration(0).map((questionId) => ({
       questionId,
       iterationIndex: null,
+      preserveOrder,
     }));
   }
 
@@ -135,6 +148,7 @@ export function buildIterationTuples(params: {
         loopValue: values[iterationIndex],
         loopVariableName,
         iterationCount,
+        preserveOrder,
       });
     }
   }
@@ -164,4 +178,20 @@ export function iterationVarPrefix(
  */
 export function isLoopBlock(block: Block, ctx: LoopResolutionContext = {}): boolean {
   return resolveLoopValues(block.loop, ctx).length > 0;
+}
+
+/**
+ * Whether a block's questions should be SHUFFLED (as opposed to presented in authored
+ * order). A "Randomized Block" in the designer sets `type: 'randomized'` (advertised as
+ * "Questions appear in random order"); programmatically-built blocks may instead carry an
+ * explicit {@link RandomizationConfig} whose `type` names a shuffle strategy. Either is
+ * honoured. The designer's randomized block also carries a legacy
+ * `{ enabled, preserveFirst, preserveLast }` payload whose `enabled` flag defaults to
+ * false and does NOT mean "randomization off" — so `block.type` is the source of truth
+ * and is checked first.
+ */
+export function isBlockRandomized(block: Block): boolean {
+  if (block.type === 'randomized') return true;
+  const type = block.randomization?.type;
+  return type === 'all' || type === 'subset' || type === 'latin-square';
 }

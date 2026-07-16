@@ -75,6 +75,12 @@ interface PresentedItem {
   loopVariableName?: string;
   iterationCount?: number;
   /**
+   * True when this item is part of a RANDOMIZED block: its position is the seeded
+   * shuffle result and {@link sortWithinIterationRuns} must leave it in place rather
+   * than re-sorting by `question.order` (which would undo the randomization).
+   */
+  preserveOrder?: boolean;
+  /**
    * Adaptive item-bank entry sentinel (E-FLOW-1). When set, this item is not presented
    * directly; reaching it in showCurrentItem hands control to the CAT loop for the block
    * with this id, which dynamically selects and presents items until its stopping rule
@@ -130,6 +136,15 @@ export interface ServerVariableSnapshot {
 export interface RuntimeConfig {
   canvas: HTMLCanvasElement;
   questionnaire: Questionnaire;
+  /**
+   * The durable, per-session identifier (the fillout session UUID, stable across
+   * resume/reload). Used to SEED block randomization so a participant's randomized
+   * order is (a) independent across participants — controlling order effects — and
+   * (b) reproducible for that participant across resume and reconstructable for
+   * analysis (seed = studySeed::sessionId, scoped per block id). Absent in the
+   * designer preview, which then falls back to a questionnaire-level seed.
+   */
+  sessionId?: string;
   participantId?: string;
   participantNumber?: number;
   conditionGroupCounts?: number[];
@@ -313,8 +328,15 @@ export class QuestionnaireRuntime {
     // reaction/webgl item actually draws via WebGL (CONTRACT-LAZY, Slice 4.7).
     this.resourceManager = new ResourceManager();
     this.responseCollector = new ResponseCollector();
+    // Seed block randomization PER SESSION so each participant gets an independent —
+    // yet reproducible — order. `studySeed` (an explicit study seed, else the
+    // questionnaire id) shifts the whole study's random stream; the durable
+    // `config.sessionId` makes it participant-specific and stable across resume/reload
+    // (BlockRandomizer additionally scopes each draw by block id). Without a sessionId
+    // (designer preview) it falls back to the deterministic study-level seed.
+    const studySeed = config.questionnaire.settings.randomizationSeed || config.questionnaire.id;
     this.blockRandomizer = new BlockRandomizer(
-      config.questionnaire.settings.randomizationSeed || config.questionnaire.id
+      config.sessionId ? `${studySeed}::${config.sessionId}` : studySeed
     );
     this.scriptExecutor = new ScriptExecutor();
     this.screener = new ScreenerController(
@@ -1415,13 +1437,16 @@ export class QuestionnaireRuntime {
         loopValue: ref.loopValue,
         loopVariableName: ref.loopVariableName,
         iterationCount: ref.iterationCount,
+        preserveOrder: ref.preserveOrder,
       });
     }
 
-    // Stable order-sort by `question.order` WITHIN each contiguous same-iteration run.
+    // Stable order-sort by `question.order` WITHIN each contiguous same-iteration run,
+    // but SKIPPING runs that came from a randomized block (see sortWithinIterationRuns).
     // Sorting the whole flattened list (the pre-loop behaviour) would interleave loop
-    // iterations; restricting the sort to a run preserves iteration grouping while
-    // keeping the historical intra-page ordering for non-loop pages.
+    // iterations AND silently undo block randomization; restricting the sort to a run —
+    // and exempting randomized runs — preserves iteration grouping and the seeded
+    // shuffle while keeping the historical intra-page ordering for non-loop pages.
     const ordered = this.sortWithinIterationRuns(items);
 
     // Append the adaptive-block sentinels after the static items (E-FLOW-1). The
@@ -1455,19 +1480,28 @@ export class QuestionnaireRuntime {
   /**
    * Stable-sort each contiguous run of items that share the same `iterationIndex` by
    * `question.order`, leaving the run boundaries (and thus loop-iteration grouping)
-   * intact. Array.prototype.sort is stable, so items with equal order keep expansion
-   * order.
+   * intact — EXCEPT runs flagged {@link PresentedItem.preserveOrder} (items from a
+   * randomized block), which are emitted untouched so their seeded shuffle survives.
+   * Without that exemption the sort re-imposes `question.order` and a "Randomized Block"
+   * presents in authored order — randomization silently doing nothing. Runs are
+   * therefore segmented by BOTH `iterationIndex` AND `preserveOrder`. Array.prototype.sort
+   * is stable, so non-randomized items with equal order keep expansion order.
    */
   private sortWithinIterationRuns(items: PresentedItem[]): PresentedItem[] {
     const result: PresentedItem[] = [];
     let runStart = 0;
     const flushRun = (endExclusive: number) => {
       const run = items.slice(runStart, endExclusive);
-      run.sort((a, b) => (a.question.order || 0) - (b.question.order || 0));
+      // Randomized-block runs keep the shuffle; only authored-order runs are sorted.
+      if (!items[runStart]!.preserveOrder) {
+        run.sort((a, b) => (a.question.order || 0) - (b.question.order || 0));
+      }
       result.push(...run);
     };
+    const sameRun = (a: PresentedItem, b: PresentedItem): boolean =>
+      a.iterationIndex === b.iterationIndex && Boolean(a.preserveOrder) === Boolean(b.preserveOrder);
     for (let i = 1; i <= items.length; i++) {
-      if (i === items.length || items[i]!.iterationIndex !== items[runStart]!.iterationIndex) {
+      if (i === items.length || !sameRun(items[i]!, items[runStart]!)) {
         flushRun(i);
         runStart = i;
       }

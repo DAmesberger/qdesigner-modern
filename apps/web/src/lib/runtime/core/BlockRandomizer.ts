@@ -1,6 +1,7 @@
 import type { Block, Page, Question, RandomizationConfig } from '$lib/shared';
 import {
   buildIterationTuples,
+  isBlockRandomized,
   resolveLoopValues,
   type LoopResolutionContext,
   type PresentedItemRef,
@@ -103,12 +104,16 @@ export class BlockRandomizer {
     if (page.blocks && page.blocks.length > 0) {
       for (const block of page.blocks) {
         const loopValues = resolveLoopValues(block.loop, ctx);
+        const randomized = isBlockRandomized(block);
 
         if (loopValues.length > 0) {
           // Real loop: expand into per-iteration references. Iteration ORDER is
-          // shuffled here (seeded) when requested; question order within an
-          // iteration is (re)randomized per iteration via `randomize`. Loop refs
-          // bypass the `seen` dedup so the same question repeats across iterations.
+          // shuffled here (seeded) when requested; question order within an iteration
+          // is seeded-shuffled per iteration ONLY when the block is randomized —
+          // otherwise the battery keeps its authored order. Loop refs bypass the
+          // `seen` dedup so the same question repeats across iterations, and carry
+          // `preserveOrder` so a randomized battery's shuffle survives the runtime's
+          // per-iteration order-sort.
           const orderedValues = block.loop?.shuffle
             ? this.shuffle(loopValues, `loop:${block.id}`)
             : loopValues;
@@ -117,21 +122,28 @@ export class BlockRandomizer {
             ...buildIterationTuples({
               values: orderedValues,
               loopVariableName: block.loop?.loopVariableName,
-              orderForIteration: (iterationIndex) =>
-                this.randomize(
-                  block.questions,
-                  block.randomization,
-                  `${block.id}:iter:${iterationIndex}`
-                ).filter((id) => questions.has(id)),
+              preserveOrder: randomized,
+              orderForIteration: (iterationIndex) => {
+                const ordered = randomized
+                  ? this.randomize(
+                      block.questions,
+                      block.randomization,
+                      `${block.id}:iter:${iterationIndex}`
+                    )
+                  : [...block.questions];
+                return ordered.filter((id) => questions.has(id));
+              },
             })
           );
           continue;
         }
 
-        // Non-loop block: order + dedup exactly as `randomizePage` does.
+        // Non-loop block: order + dedup exactly as `randomizePage` does. A randomized
+        // block's shuffled order is tagged `preserveOrder` so the runtime does not
+        // re-sort it back into authored order and silently undo the randomization.
         for (const questionId of this.randomizeBlock(block)) {
           if (!seen.has(questionId) && questions.has(questionId)) {
-            result.push({ questionId, iterationIndex: null });
+            result.push({ questionId, iterationIndex: null, preserveOrder: randomized });
             seen.add(questionId);
           }
         }
@@ -164,6 +176,7 @@ export class BlockRandomizer {
   public randomizeBlock(block: Block): string[] {
     const loopValues = block.loop?.values || [];
     const iterations = loopValues.length > 0 ? loopValues : [null];
+    const randomized = isBlockRandomized(block);
 
     const orderedIterations = block.loop?.shuffle
       ? this.shuffle(iterations, `loop:${block.id}`)
@@ -171,9 +184,15 @@ export class BlockRandomizer {
 
     const output: string[] = [];
     for (let iterationIndex = 0; iterationIndex < orderedIterations.length; iterationIndex++) {
+      // Shuffle a block's questions ONLY when it is a randomized block. A standard
+      // block presents in authored order — the previous unconditional shuffle only
+      // "worked" because the runtime re-sorted every block by `question.order`
+      // afterwards, which also silently undid the shuffle for randomized blocks.
       const scopeKey = `${block.id}:iter:${iterationIndex}`;
-      const randomized = this.randomize(block.questions, block.randomization, scopeKey);
-      output.push(...randomized);
+      const ordered = randomized
+        ? this.randomize(block.questions, block.randomization, scopeKey)
+        : [...block.questions];
+      output.push(...ordered);
     }
 
     return output;
