@@ -332,6 +332,8 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         session_media_rate_window_secs: 60,
         session_media_max_files: 10_000,
         session_media_max_total_bytes: 10 * 1024 * 1024 * 1024,
+        client_error_rate_max: 10_000,
+        client_error_rate_window_secs: 60,
     };
 
     Some(AppState {
@@ -349,6 +351,7 @@ async fn build_state_with_storage(storage: Arc<S3StorageService>) -> Option<AppS
         session_create_limiter: RateLimiter::new(10_000, 60, None),
         questionnaire_create_limiter: RateLimiter::new(10_000, 60, None),
         session_media_limiter: RateLimiter::new(10_000, 60, None),
+        client_error_limiter: RateLimiter::new(10_000, 60, None),
         config: Arc::new(config),
     })
 }

@@ -170,6 +170,14 @@ pub struct Config {
     /// `SESSION_MEDIA_MAX_FILES` / `SESSION_MEDIA_MAX_TOTAL_BYTES`.
     pub session_media_max_files: i64,
     pub session_media_max_total_bytes: i64,
+
+    /// Per-IP budget on the anonymous client-error ingest route
+    /// (`POST /api/client-errors`). Default 30 req / 60 s — enough for a
+    /// genuinely crashing page to report, low enough that one looping client
+    /// cannot flood the log.
+    /// `CLIENT_ERROR_RATE_LIMIT_MAX` / `CLIENT_ERROR_RATE_LIMIT_WINDOW_SECS`.
+    pub client_error_rate_max: u64,
+    pub client_error_rate_window_secs: i64,
 }
 
 impl Config {
@@ -344,6 +352,9 @@ impl Config {
             session_media_max_files: env_parse("SESSION_MEDIA_MAX_FILES").unwrap_or(20),
             session_media_max_total_bytes: env_parse("SESSION_MEDIA_MAX_TOTAL_BYTES")
                 .unwrap_or(100 * 1024 * 1024),
+            client_error_rate_max: env_parse("CLIENT_ERROR_RATE_LIMIT_MAX").unwrap_or(30),
+            client_error_rate_window_secs: env_parse("CLIENT_ERROR_RATE_LIMIT_WINDOW_SECS")
+                .unwrap_or(60),
         }
     }
 

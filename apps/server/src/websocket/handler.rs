@@ -8,6 +8,8 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use std::collections::HashSet;
+use std::sync::Arc;
+use tokio::sync::{broadcast, mpsc};
 use uuid::Uuid;
 
 use crate::auth::session;
@@ -15,7 +17,7 @@ use crate::authz::{authorize, Scope};
 use crate::error::ApiError;
 use crate::rbac::models::Permission;
 use crate::state::AppState;
-use crate::websocket::manager::WsMessage;
+use crate::websocket::manager::{BinaryWsMessage, WebSocketState, WsMessage};
 use crate::websocket::yjs_relay;
 
 /// Control subprotocol marker echoed back to complete the handshake.
@@ -45,7 +47,7 @@ pub async fn ws_upgrade(
 
 async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
     let conn_id = Uuid::new_v4();
-    let (mut json_rx, mut binary_rx) = state.websocket_state.add_connection(conn_id, user_id).await;
+    let (json_rx, binary_rx) = state.websocket_state.add_connection(conn_id, user_id).await;
 
     let (mut sender, mut receiver) = socket.split();
 
@@ -62,46 +64,22 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
         }
     });
 
-    // Task: forward JSON broadcast messages to this client.
-    let ws_state_json = state.websocket_state.clone();
-    let json_conn_id = conn_id;
-    let json_tx = ws_tx.clone();
-    let json_forward_task = tokio::spawn(async move {
-        while let Ok(msg) = json_rx.recv().await {
-            if ws_state_json
-                .is_subscribed(&json_conn_id, &msg.channel)
-                .await
-            {
-                let text = serde_json::to_string(&msg).unwrap_or_default();
-                if json_tx.send(Message::Text(text.into())).await.is_err() {
-                    break;
-                }
-            }
-        }
-    });
-
-    // Task: forward binary broadcast messages (Yjs) to this client.
-    let ws_state_binary = state.websocket_state.clone();
-    let binary_conn_id = conn_id;
-    let binary_tx = ws_tx.clone();
-    let binary_forward_task = tokio::spawn(async move {
-        while let Ok(msg) = binary_rx.recv().await {
-            // Skip if this is our own message.
-            if msg.exclude_conn == Some(binary_conn_id) {
-                continue;
-            }
-            if ws_state_binary
-                .is_subscribed(&binary_conn_id, &msg.channel)
-                .await
-                && binary_tx
-                    .send(Message::Binary(msg.data.into()))
-                    .await
-                    .is_err()
-            {
-                break;
-            }
-        }
-    });
+    // Tasks: forward broadcast messages to this client. Both survive a
+    // `broadcast::error::RecvError::Lagged` (a briefly-slow consumer that missed
+    // messages is recoverable) and exit only on `Closed` — see [`forward_json`]
+    // / [`forward_binary`].
+    let json_forward_task = tokio::spawn(forward_json(
+        json_rx,
+        state.websocket_state.clone(),
+        conn_id,
+        ws_tx.clone(),
+    ));
+    let binary_forward_task = tokio::spawn(forward_binary(
+        binary_rx,
+        state.websocket_state.clone(),
+        conn_id,
+        ws_tx.clone(),
+    ));
 
     // Channels this connection subscribed to at the ReadWrite tier. A binary
     // Yjs frame carries no channel of its own — the relay infers it from the
@@ -216,14 +194,14 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
         }
     }
 
-    // Broadcast presence leave for all channels this connection was subscribed to
+    // Broadcast presence leave for all channels this connection was subscribed to.
     let channels = state
         .websocket_state
         .get_connection_channels(&conn_id)
         .await;
-    for channel in channels {
+    for channel in &channels {
         state.websocket_state.broadcast(WsMessage {
-            channel,
+            channel: channel.clone(),
             event: "presence".to_string(),
             payload: serde_json::json!({
                 "user_id": user_id,
@@ -232,12 +210,98 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid) {
         });
     }
 
-    // Cleanup
+    // Cleanup. Unregister the connection BEFORE the room-eviction check so
+    // `channel_connection_count` no longer counts this departing connection.
     json_forward_task.abort();
     binary_forward_task.abort();
     write_task.abort();
     state.websocket_state.remove_connection(&conn_id).await;
+
+    // Evict any Yjs room whose last subscriber just left. Without this, every
+    // questionnaire ever opened pins a `yrs::Doc` for the process lifetime (the
+    // disconnect path never touched `yjs_store`). `evict_room` flushes the
+    // room's pending state before dropping it, so eviction cannot lose edits.
+    for channel in &channels {
+        if let Some(qid) = channel
+            .strip_prefix("designer:")
+            .and_then(|s| Uuid::parse_str(s).ok())
+        {
+            if state
+                .websocket_state
+                .channel_connection_count(channel)
+                .await
+                == 0
+            {
+                state.yjs_store.evict_room(qid).await;
+            }
+        }
+    }
+
     tracing::debug!("WebSocket connection {conn_id} closed for user {user_id}");
+}
+
+/// Forward JSON broadcast messages to one client until the socket writer closes
+/// or the broadcast channel closes.
+///
+/// A [`broadcast::error::RecvError::Lagged`] is **recoverable**: a briefly-slow
+/// consumer missed `n` messages, but the channel is still live and later
+/// messages will arrive. The old `while let Ok(..)` treated `Lagged` like
+/// `Closed` and exited — permanently killing this connection's forward task, so
+/// one momentarily-slow client silently stopped receiving ALL collaborators'
+/// updates and presence on a socket that still looked connected. The only fatal
+/// error is `Closed`.
+async fn forward_json(
+    mut rx: broadcast::Receiver<WsMessage>,
+    ws_state: Arc<WebSocketState>,
+    conn_id: Uuid,
+    out: mpsc::Sender<Message>,
+) {
+    loop {
+        match rx.recv().await {
+            Ok(msg) => {
+                if ws_state.is_subscribed(&conn_id, &msg.channel).await {
+                    let text = serde_json::to_string(&msg).unwrap_or_default();
+                    if out.send(Message::Text(text.into())).await.is_err() {
+                        break;
+                    }
+                }
+            }
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!(%conn_id, skipped = n, "json forward task lagged; continuing");
+            }
+            Err(broadcast::error::RecvError::Closed) => break,
+        }
+    }
+}
+
+/// Forward binary (Yjs) broadcast messages to one client. Same `Lagged`-survives
+/// / `Closed`-exits contract as [`forward_json`]; additionally skips a frame the
+/// broadcaster tagged as originating from this same connection.
+async fn forward_binary(
+    mut rx: broadcast::Receiver<BinaryWsMessage>,
+    ws_state: Arc<WebSocketState>,
+    conn_id: Uuid,
+    out: mpsc::Sender<Message>,
+) {
+    loop {
+        match rx.recv().await {
+            Ok(msg) => {
+                // Skip if this is our own echoed message.
+                if msg.exclude_conn == Some(conn_id) {
+                    continue;
+                }
+                if ws_state.is_subscribed(&conn_id, &msg.channel).await
+                    && out.send(Message::Binary(msg.data.into())).await.is_err()
+                {
+                    break;
+                }
+            }
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!(%conn_id, skipped = n, "binary forward task lagged; continuing");
+            }
+            Err(broadcast::error::RecvError::Closed) => break,
+        }
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -400,5 +464,85 @@ fn parse_channel_resource(channel: &str) -> Option<Uuid> {
     match parts[0] {
         "designer" | "questionnaire" | "analytics" => parts[1].parse::<Uuid>().ok(),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::{timeout, Duration};
+
+    /// #3 — a `broadcast::error::RecvError::Lagged` must NOT kill the forward
+    /// task. We pre-overflow a capacity-2 broadcast so the receiver's first
+    /// `recv()` yields `Lagged`, then assert the task keeps delivering the still
+    /// buffered messages rather than exiting.
+    ///
+    /// Regression guard: with the old `while let Ok(msg) = rx.recv().await` the
+    /// task exits on the first `Lagged`, dropping `out`, so `out_rx.recv()`
+    /// returns `None` and this fails at:
+    ///   "forward task must NOT exit on Lagged — it should keep forwarding".
+    #[tokio::test]
+    async fn json_forward_survives_lagged() {
+        let (tx, rx) = broadcast::channel::<WsMessage>(2);
+        // Overflow: the receiver (subscribed at channel creation) misses the
+        // earliest 3 of these 5 sends, so its next recv() is `Lagged(3)`.
+        for i in 0..5 {
+            let _ = tx.send(WsMessage {
+                channel: "c".to_string(),
+                event: "e".to_string(),
+                payload: serde_json::json!(i),
+            });
+        }
+
+        let ws_state = Arc::new(WebSocketState::new());
+        let conn_id = Uuid::new_v4();
+        ws_state.add_connection(conn_id, Uuid::new_v4()).await;
+        ws_state.subscribe(&conn_id, "c".to_string()).await;
+
+        let (out_tx, mut out_rx) = mpsc::channel::<Message>(16);
+        let task = tokio::spawn(forward_json(rx, ws_state, conn_id, out_tx));
+
+        let received = timeout(Duration::from_secs(2), out_rx.recv())
+            .await
+            .expect("forward task must still be delivering after Lagged (it hung)")
+            .expect("forward task must NOT exit on Lagged — it should keep forwarding");
+        assert!(
+            matches!(received, Message::Text(_)),
+            "recovered delivery should be a forwarded text frame"
+        );
+        task.abort();
+    }
+
+    /// The binary (Yjs) forward task carries the same contract — this is the one
+    /// that actually matters for collaboration, since one briefly-slow tab would
+    /// otherwise stop receiving every collaborator's document updates.
+    #[tokio::test]
+    async fn binary_forward_survives_lagged() {
+        let (tx, rx) = broadcast::channel::<BinaryWsMessage>(2);
+        for i in 0..5u8 {
+            let _ = tx.send(BinaryWsMessage {
+                channel: "designer:c".to_string(),
+                data: vec![i],
+                exclude_conn: None,
+            });
+        }
+
+        let ws_state = Arc::new(WebSocketState::new());
+        let conn_id = Uuid::new_v4();
+        ws_state.add_connection(conn_id, Uuid::new_v4()).await;
+        ws_state.subscribe(&conn_id, "designer:c".to_string()).await;
+
+        let (out_tx, mut out_rx) = mpsc::channel::<Message>(16);
+        let task = tokio::spawn(forward_binary(rx, ws_state, conn_id, out_tx));
+
+        let received = timeout(Duration::from_secs(2), out_rx.recv())
+            .await
+            .expect("binary forward task must still be delivering after Lagged (it hung)")
+            .expect("binary forward task must NOT exit on Lagged — it should keep forwarding");
+        assert!(
+            matches!(received, Message::Binary(_)),
+            "recovered delivery should be a forwarded binary frame"
+        );
+        task.abort();
     }
 }

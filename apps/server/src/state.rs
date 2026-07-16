@@ -42,5 +42,9 @@ pub struct AppState {
     /// Per-IP budget on the anonymous session-media upload route (default
     /// 120/60s). Complements the per-session file-count / total-bytes quota.
     pub session_media_limiter: RateLimiter,
+    /// Per-IP budget on the anonymous client-error ingest route
+    /// (`POST /api/client-errors`, default 30/60s). Its own bucket, never the
+    /// auth limiter — a write-only crash-report sink open to fillout participants.
+    pub client_error_limiter: RateLimiter,
     pub config: Arc<Config>,
 }

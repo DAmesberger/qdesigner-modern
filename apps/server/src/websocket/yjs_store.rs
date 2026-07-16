@@ -263,15 +263,41 @@ impl YjsStore {
         }
     }
 
-    /// Remove a room (e.g. when all editors leave).
-    #[allow(dead_code)]
-    pub async fn remove_room(&self, questionnaire_id: &Uuid) {
-        self.rooms.write().await.remove(questionnaire_id);
+    /// Whether a live collab room currently exists for this questionnaire.
+    ///
+    /// An open room is the **authoritative seeder** of that questionnaire's CRDT
+    /// (rooms are cached only once authoritative — see [`get_or_create_room`]).
+    /// An out-of-band `content` writer must therefore NOT invalidate `yjs_state`
+    /// while a room is open: a content write during a live collab session is the
+    /// autosave echoing the CRDT's own content, and NULLing `yjs_state` there
+    /// would discard the room's authoritative identity and re-introduce page
+    /// duplication on the next re-seed (a reconnect after restart/eviction).
+    ///
+    /// [`get_or_create_room`]: Self::get_or_create_room
+    pub async fn has_active_room(&self, questionnaire_id: &Uuid) -> bool {
+        self.rooms.read().await.contains_key(questionnaire_id)
     }
 
-    /// List all active room IDs (for persistence sweep).
-    #[allow(dead_code)]
-    pub async fn active_rooms(&self) -> Vec<Uuid> {
-        self.rooms.read().await.keys().cloned().collect()
+    /// Evict the room for `questionnaire_id` — called from the WS disconnect path
+    /// once no connection remains subscribed to its channel. Without this every
+    /// questionnaire ever opened pins a `yrs::Doc` for the process lifetime.
+    ///
+    /// Flushes the room's current binary state to `yjs_state` before dropping it,
+    /// so eviction can never lose edits that were applied to the doc but had not
+    /// yet been debounce-persisted. The room is removed from the map under the
+    /// write lock first (so a concurrent [`get_or_create_room`] cannot hand out
+    /// the about-to-be-dropped instance); a later open re-creates it from the
+    /// just-persisted bytes, preserving CRDT item identity.
+    ///
+    /// [`get_or_create_room`]: Self::get_or_create_room
+    pub async fn evict_room(&self, questionnaire_id: Uuid) {
+        let Some(room) = self.rooms.write().await.remove(&questionnaire_id) else {
+            return;
+        };
+        let bytes = {
+            let room = room.lock().await;
+            room.encode_state_as_update()
+        };
+        self.persist(questionnaire_id, &bytes).await;
     }
 }

@@ -173,23 +173,51 @@ async fn main() {
         config.session_media_rate_window_secs,
         redis.clone(),
     );
+    // Anonymous client-error ingest (default 30/60s per IP) — its own bucket so
+    // a crash-report flood can never eat into any auth/session budget.
+    let client_error_limiter = RateLimiter::new(
+        config.client_error_rate_max,
+        config.client_error_rate_window_secs,
+        redis.clone(),
+    );
 
     // ── WebSocket ────────────────────────────────────────────────────
-    let mut websocket_state = WebSocketState::new();
+    let websocket_state = Arc::new(WebSocketState::new());
 
-    // ── Redis Bridge (optional) ──────────────────────────────────────
-    if let Some(ref redis_client) = redis {
-        let bridge = websocket::redis_bridge::RedisBridge::new(redis_client.clone());
-        websocket_state.set_redis_bridge(bridge);
-    }
-
-    let websocket_state = Arc::new(websocket_state);
-
-    // Start Redis bridge subscriber if configured.
-    if let Some(ref redis_client) = redis {
-        let bridge = websocket::redis_bridge::RedisBridge::new(redis_client.clone());
-        bridge.start(websocket_state.clone());
-    }
+    // ── Cross-node Redis relay: DELIBERATELY NOT WIRED (ledger) ───────
+    //
+    // Multi-node Yjs relay is INERT by design here — not half-wired. Single-node
+    // is the only supported deployment today (adapter-auto, no production target
+    // chosen; see CLAUDE.md "Cross-origin isolation"), so leaving it off has zero
+    // blast radius, whereas a relay that *looks* live but isn't is a trap. The
+    // machinery in `websocket::redis_bridge` is retained as a building block;
+    // `WebSocketState::redis_bridge` stays `None`, so `broadcast_binary` never
+    // publishes and no subscriber task runs.
+    //
+    // Why the previous wiring was removed: it CONSTRUCTED TWO independent
+    // `RedisBridge` instances. The one stored in `WebSocketState` (that
+    // `broadcast_binary` publishes into) was never `start()`ed; the one that WAS
+    // started was a *second* instance with its own node_id and publish channel
+    // that nothing fed, so its publisher task saw its sender dropped and exited
+    // at once. Net effect: nothing was ever published to Redis — multi-node relay
+    // was silently dead while appearing configured.
+    //
+    // A CORRECT fix must do THREE things together; a naive "just start the stored
+    // bridge" is worse than off:
+    //   1. Wire exactly ONE bridge (store it AND start that same instance).
+    //   2. Break the echo loop. `broadcast_binary` publishes to Redis, and the
+    //      subscriber re-broadcasts remote frames via `broadcast_binary` — which
+    //      would publish them straight back. Dedup is by node_id only, so two
+    //      nodes ping-pong a frame forever. Remote-applied frames must reach LOCAL
+    //      subscribers only (a `broadcast_binary` variant that does NOT re-publish).
+    //   3. Apply remote frames to the receiving node's OPEN ROOMS (`yjs_store`),
+    //      not merely relay them to sockets. Otherwise each node's debounced
+    //      persist writes its own partial `yrs::Doc` to `yjs_state` and the nodes'
+    //      snapshots overwrite each other — divergence and lost edits.
+    //
+    // Ship it only behind a REDIS_URL-gated (`#[ignore]`) integration test proving
+    // a frame published on one bridge arrives on the other with no echo loop and
+    // both nodes' rooms converging.
 
     // ── Yjs Store ────────────────────────────────────────────────────
     // Pool-backed: the store is the sole seeder of each collaborative document
@@ -258,6 +286,7 @@ async fn main() {
         session_create_limiter,
         questionnaire_create_limiter,
         session_media_limiter,
+        client_error_limiter,
         config: Arc::new(config.clone()),
     };
 

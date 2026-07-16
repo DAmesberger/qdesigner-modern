@@ -6,6 +6,26 @@
 //! `node_id` so a node doesn't re-process its own messages.
 //!
 //! Channel naming: `yjs:{questionnaire_id}` for Yjs binary updates.
+//!
+//! ## LEDGER — this module is a retained building block, NOT wired
+//!
+//! Cross-node relay is deliberately inert (single-node is the only supported
+//! deployment today). `main.rs` does not construct or start a bridge, and
+//! `WebSocketState::redis_bridge` stays `None`, so nothing here runs — hence the
+//! module-wide `#![allow(dead_code)]`. Do not read "compiles" as "works".
+//!
+//! Before wiring this, a correct fix MUST (see the fuller ledger in `main.rs`):
+//!   1. construct exactly ONE bridge and both store AND `start()` that instance
+//!      (the old code built two, so nothing was ever published);
+//!   2. break the echo loop — remote frames re-broadcast via `broadcast_binary`
+//!      would be re-published to Redis (dedup is by `node_id` only), so two nodes
+//!      ping-pong forever; remote-applied frames must be LOCAL-only; and
+//!   3. apply remote frames to the receiving node's open `yjs_store` rooms, or
+//!      each node's debounced persist overwrites `yjs_state` with a partial
+//!      snapshot (divergence / lost edits).
+//!
+//! Gate the eventual fix behind a REDIS_URL-gated integration test.
+#![allow(dead_code)]
 
 use std::sync::Arc;
 use tokio::sync::broadcast;

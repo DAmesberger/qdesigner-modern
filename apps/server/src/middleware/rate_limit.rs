@@ -226,6 +226,21 @@ pub async fn session_media_rate_limit_middleware(
     Ok(next.run(request).await)
 }
 
+/// Per-IP budget on the anonymous client-error ingest route
+/// (`POST /api/client-errors`). A write-only crash-report sink open to every
+/// fillout participant, so it carries its own bucket rather than the auth
+/// limiter: the cap keeps one looping or hostile client from flooding the
+/// server log. Defaults to 30/60s ([`crate::config::Config::client_error_rate_max`]).
+pub async fn client_error_rate_limit_middleware(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    let key = rate_limit_key(&request, state.config.trusted_proxy_hops);
+    enforce(&state.client_error_limiter, key).await?;
+    Ok(next.run(request).await)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

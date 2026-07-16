@@ -445,12 +445,30 @@ pub async fn update_questionnaire(
     if body.content.is_some() {
         parts.push(format!("content = ${bind_idx}"));
         bind_idx += 1;
-        // F-37: a content write here is out-of-band relative to the collab CRDT
-        // (this is the non-collab / autosave writer; the YjsStore's own debounced
-        // persist writes `yjs_state` only, never `content`). Invalidate the cached
-        // CRDT binary so the next room creation re-seeds from the fresh content
-        // instead of masking this edit with a stale `yjs_state`.
-        parts.push("yjs_state = NULL".into());
+        // F-37 (corrected): invalidate the cached CRDT binary ONLY when this
+        // content write is genuinely out-of-band — i.e. when NO collab room is
+        // currently seeding this questionnaire.
+        //
+        // The original F-37 NULLed `yjs_state` on *every* content write on the
+        // premise that a content write is always the non-collab autosave writer.
+        // That premise is false: the debounced autosave keeps running DURING a
+        // collab session (it is triggered by collab-driven edits — a remote Yjs
+        // update flips the store dirty), so an unconditional NULL wiped the live
+        // room's authoritative binary on essentially every keystroke. The
+        // sole-seeder invariant (the server reloads `yjs_state` verbatim to
+        // preserve CRDT item identity across reconnects/restarts) was thereby
+        // broken: after a restart or room eviction the CRDT re-seeds with fresh
+        // identity, and a reconnecting tab duplicates every page.
+        //
+        // An open room in `YjsStore` is the authority: while it is live it owns
+        // `yjs_state` (kept fresh by its own debounced persist) and must not be
+        // clobbered. Only when no room is open is the write truly out-of-band
+        // (REST-only edit, import, template apply, API-key update); there the
+        // stale `yjs_state` must be dropped so the next room re-seeds from the
+        // fresh content instead of masking this edit.
+        if !state.yjs_store.has_active_room(&path.qid).await {
+            parts.push("yjs_state = NULL".into());
+        }
     }
     if body.status.is_some() {
         parts.push(format!("status = ${bind_idx}"));

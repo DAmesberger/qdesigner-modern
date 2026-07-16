@@ -9,8 +9,8 @@ use tower_http::catch_panic::CatchPanicLayer;
 use crate::middleware::api_key::set_api_key_context;
 use crate::middleware::fillout_rls_context::set_fillout_rls_context;
 use crate::middleware::rate_limit::{
-    rate_limit_middleware, session_create_rate_limit_middleware,
-    session_media_rate_limit_middleware,
+    client_error_rate_limit_middleware, rate_limit_middleware,
+    session_create_rate_limit_middleware, session_media_rate_limit_middleware,
 };
 use crate::middleware::rls_context::set_rls_context;
 use crate::middleware::series_rls_context::set_series_rls_context;
@@ -19,6 +19,7 @@ use crate::state::AppState;
 pub mod access;
 pub mod api_keys;
 pub mod auth;
+pub mod client_errors;
 pub mod comments;
 pub mod csv;
 pub mod dev;
@@ -518,6 +519,22 @@ pub fn router(state: AppState) -> Router {
         ))
         .layer(CatchPanicLayer::new());
 
+    // Anonymous client-side crash-report sink (E-OBS). Write-only: no auth, no
+    // RLS, no DB. Rate-limited per IP (its own bucket) so a looping/hostile
+    // client cannot flood the log, and the body is size-capped before the
+    // handler length-clips each field. `POST /api/client-errors`.
+    let client_error_routes = Router::new()
+        .route("/", post(client_errors::report_client_error))
+        // Bound the body well below anything a legitimate report needs; the
+        // handler additionally clips each field. Overrides axum's implicit
+        // 2 MiB default for this route.
+        .layer(DefaultBodyLimit::max(64 * 1024))
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            client_error_rate_limit_middleware,
+        ))
+        .layer(CatchPanicLayer::new());
+
     let ws_route = Router::new()
         .route("/ws", get(crate::websocket::handler::ws_upgrade))
         // Contain a panic in the synchronous upgrade handler as a 500.
@@ -540,6 +557,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/series", series_routes)
         .nest("/api/media", media_routes)
         .nest("/api/sso", sso_routes)
+        .nest("/api/client-errors", client_error_routes)
         .nest("/api/v1", machine_routes)
         .nest("/scim/v2", scim_routes)
         .nest("/api", ws_route)

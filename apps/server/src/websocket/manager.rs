@@ -57,6 +57,12 @@ impl WebSocketState {
     }
 
     /// Set the Redis bridge for cross-node Yjs relay.
+    ///
+    /// Intentionally uncalled: cross-node relay is deliberately NOT wired (see
+    /// the ledger in `main.rs` and `websocket::redis_bridge`). This is the
+    /// integration point a correct future fix hooks into; until then the field
+    /// stays `None` and the relay is inert.
+    #[allow(dead_code)]
     pub fn set_redis_bridge(&mut self, bridge: RedisBridge) {
         self.redis_bridge = Some(Arc::new(bridge));
     }
@@ -143,6 +149,19 @@ impl WebSocketState {
         user_ids
     }
 
+    /// Count the CONNECTIONS currently subscribed to a channel (not distinct
+    /// users — two browser tabs are two connections). The disconnect path uses
+    /// this, after removing the departing connection, to decide when a Yjs
+    /// room's last subscriber has left and the room may be evicted.
+    pub async fn channel_connection_count(&self, channel: &str) -> usize {
+        self.connections
+            .read()
+            .await
+            .values()
+            .filter(|c| c.subscriptions.iter().any(|s| s == channel))
+            .count()
+    }
+
     /// Return all channels a specific connection is subscribed to.
     pub async fn get_connection_channels(&self, conn_id: &Uuid) -> Vec<String> {
         self.connections
@@ -157,5 +176,61 @@ impl WebSocketState {
     #[allow(dead_code)]
     pub async fn connection_count(&self) -> usize {
         self.connections.read().await.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The zero-subscriber detection that gates Yjs room eviction: a channel's
+    /// connection count reflects only the connections still registered AND still
+    /// subscribed, and reaches 0 only once the last of them has left.
+    #[tokio::test]
+    async fn channel_connection_count_reaches_zero_after_last_subscriber_leaves() {
+        let ws = WebSocketState::new();
+        let channel = "designer:11111111-1111-1111-1111-111111111111";
+
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        ws.add_connection(a, Uuid::new_v4()).await;
+        ws.add_connection(b, Uuid::new_v4()).await;
+
+        // A connection that never subscribed does not count.
+        assert_eq!(ws.channel_connection_count(channel).await, 0);
+
+        ws.subscribe(&a, channel.to_string()).await;
+        ws.subscribe(&b, channel.to_string()).await;
+        assert_eq!(ws.channel_connection_count(channel).await, 2);
+
+        // One tab of the same study leaving still leaves the room occupied.
+        ws.remove_connection(&a).await;
+        assert_eq!(
+            ws.channel_connection_count(channel).await,
+            1,
+            "one remaining subscriber must keep the room alive"
+        );
+
+        // The last subscriber leaving is the eviction trigger.
+        ws.remove_connection(&b).await;
+        assert_eq!(
+            ws.channel_connection_count(channel).await,
+            0,
+            "the room may be evicted only once no connection remains"
+        );
+    }
+
+    /// Unsubscribe (without disconnect) also drops the count — a client that
+    /// leaves the designer for another view frees the room too.
+    #[tokio::test]
+    async fn unsubscribe_drops_the_channel_count() {
+        let ws = WebSocketState::new();
+        let channel = "designer:22222222-2222-2222-2222-222222222222";
+        let a = Uuid::new_v4();
+        ws.add_connection(a, Uuid::new_v4()).await;
+        ws.subscribe(&a, channel.to_string()).await;
+        assert_eq!(ws.channel_connection_count(channel).await, 1);
+        ws.unsubscribe(&a, channel).await;
+        assert_eq!(ws.channel_connection_count(channel).await, 0);
     }
 }

@@ -213,7 +213,8 @@ impl Modify for SecurityAddon {
         api::series::list_enrollments,
         api::series::resolve_prompt,
         api::series::complete_prompt,
-        api::series::unsubscribe_prompt
+        api::series::unsubscribe_prompt,
+        api::client_errors::report_client_error
     ),
     components(
         schemas(
@@ -360,7 +361,8 @@ impl Modify for SecurityAddon {
             api::series::SeriesPromptResolution,
             api::series::CompletePromptRequest,
             api::series::CompletePromptResponse,
-            api::series::UnsubscribeResponse
+            api::series::UnsubscribeResponse,
+            api::client_errors::ClientErrorReport
         )
     ),
     modifiers(&SecurityAddon),
@@ -380,7 +382,8 @@ impl Modify for SecurityAddon {
         (name = "media", description = "Organization and session media assets"),
         (name = "sessions", description = "Questionnaire fillout sessions and persisted data"),
         (name = "series", description = "Longitudinal / EMA study series scheduling and enrollment"),
-        (name = "analytics", description = "Aggregated analytics and filtering")
+        (name = "analytics", description = "Aggregated analytics and filtering"),
+        (name = "client-errors", description = "Client-side crash-report ingest")
     )
 )]
 pub struct ApiDoc;
