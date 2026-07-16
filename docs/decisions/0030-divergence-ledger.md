@@ -45,6 +45,17 @@ candidate. A purely mechanical 1:1 conversion needs **no** row.
 | C1 | `QuestionnaireDelete` → Admin (currently Editor at project scope) | Org scope already ranks Delete above Publish (Member has Publish, not Delete); consistency | Changes who-can-delete-a-questionnaire — a live authorization/UX change, must not ride inside a vocabulary refactor |
 | C2 | `QuestionnairePublish` → Admin (currently Editor) | Publishing makes a study live to participants — arguably an Admin act | Same as C1; today Editors publish, and that may be the intended research workflow |
 
+**Resolved 2026-07-16 (§F): both REJECTED — keep at Editor.** Deliberate decision,
+not an oversight. Delete is a *soft*-delete (rows persist; recovery is an operator
+flipping `deleted_at`), publishing is normal authoring authority for the people
+invited to run studies, and every actor holding the Editor tier — including an
+ADR-0033 cross-org project Editor — was deliberately granted write access. This is a
+governance/insider-misuse surface, not data loss or a security hole. Orgs wanting
+stricter control already have the lever: custom roles omitting `questionnaire:delete`
+/ `questionnaire:publish`. Adopting either would 403 existing Editor/cross-org-invitee
+workflows and require re-gating the delete/publish UI — net-negative for the platform's
+collaboration model. Revisit only if a concrete org demands it.
+
 ## Step-3 sweep completion — intentionally unfolded sites & non-sites
 
 The final ADR-0030 call-site sweep (hybrid strategy: route a site through
