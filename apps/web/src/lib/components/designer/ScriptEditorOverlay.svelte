@@ -115,6 +115,12 @@ export const hooks = {
   }
 
   onMount(async () => {
+    // Install MonacoEnvironment.getWorker so Monaco resolves its language-service
+    // workers through Vite bundles instead of 404ing static URLs. Must run before
+    // monaco-editor is imported and an editor is created.
+    const { setupMonacoEnvironment } = await import('$lib/utils/monacoConfig');
+    setupMonacoEnvironment();
+
     const m = await import('monaco-editor');
     monaco = m;
 
