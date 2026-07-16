@@ -118,6 +118,37 @@ export type ChangeMemberRoleRequest = {
     role: string;
 };
 
+/**
+ * A client-side crash report. Matches the frontend contract exactly; every
+ * field except `message` is optional.
+ */
+export type ClientErrorReport = {
+    /**
+     * Human-readable error message.
+     */
+    message: string;
+    /**
+     * Optional stack trace.
+     */
+    stack?: string | null;
+    /**
+     * The document URL where the error occurred.
+     */
+    url?: string | null;
+    /**
+     * The reporting browser's user-agent string.
+     */
+    userAgent?: string | null;
+    /**
+     * Error category (e.g. "error", "unhandledrejection", "runtime").
+     */
+    kind?: string | null;
+    /**
+     * Client-side ISO8601 timestamp of the error.
+     */
+    at?: string | null;
+};
+
 export type CommentResponse = {
     id: string;
     questionnaire_id: string;
@@ -6146,3 +6177,19 @@ export type UnsubscribePromptResponses = {
 };
 
 export type UnsubscribePromptResponse = UnsubscribePromptResponses[keyof UnsubscribePromptResponses];
+
+export type ReportClientErrorData = {
+    body: ClientErrorReport;
+    path?: never;
+    query?: never;
+    url: '/api/client-errors';
+};
+
+export type ReportClientErrorResponses = {
+    /**
+     * Report accepted (write-only sink; the body is never echoed back)
+     */
+    204: void;
+};
+
+export type ReportClientErrorResponse = ReportClientErrorResponses[keyof ReportClientErrorResponses];
