@@ -457,6 +457,20 @@ export class DesignerStore {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw import data with dynamic shape
   importQuestionnaire(data: any) {
+    // A restore/import while a collab session is attached must be written INTO
+    // the Y.Doc, not only into local state: the live doc still holds the old
+    // content, and the next remote update (or the observer firing on the very
+    // next edit) would clobber a local-only restore. Preserve the server-minted
+    // identity (see applyRemoteUpdate) — the Y.Doc carries content, and a
+    // historical version blob may not carry the row id/project/org.
+    if (this.collab) {
+      const normalized = this.documentStore.normalizeQuestionnaire(data);
+      normalized.id ||= this.questionnaire.id;
+      normalized.projectId ||= this.questionnaire.projectId;
+      normalized.organizationId ||= this.questionnaire.organizationId;
+      this.collab.replaceDocument(normalized);
+      return;
+    }
     this.loadQuestionnaireFromDefinition(data);
   }
 
@@ -810,6 +824,25 @@ export class DesignerStore {
       return;
     }
     const next = this.documentStore.addFlowControl(this.questionnaire, flow);
+    this.commit(next, { markDirty: true });
+  }
+
+  /**
+   * Replace the whole flow-rule list (edit / delete / reorder from the flow UI).
+   *
+   * Flow rules are a top-level Y.Array in the CRDT, NOT part of `meta`. Routing a
+   * flow edit through `updateQuestionnaire` (which maps to Y.Doc `meta` under
+   * collab) landed the rules under `meta.flow`, which `yDocToQuestionnaire` never
+   * reads — so the edit was dropped/overwritten on the next remote update. The
+   * flow UI must call this so the change is written into the `flow` array and
+   * survives sync.
+   */
+  setFlow(flows: FlowControl[]) {
+    if (this.collab) {
+      this.collab.setFlowControls(flows);
+      return;
+    }
+    const next = this.documentStore.updateQuestionnaire(this.questionnaire, { flow: flows });
     this.commit(next, { markDirty: true });
   }
 

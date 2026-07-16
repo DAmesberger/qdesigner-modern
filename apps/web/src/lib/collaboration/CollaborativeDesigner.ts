@@ -241,6 +241,24 @@ export class CollaborativeDesigner {
     YjsOps.addFlowControl(this.doc, flow);
   }
 
+  /** Replace the whole flow-rule list in the Y.Doc (edit / delete / reorder). */
+  setFlowControls(flows: FlowControl[]): void {
+    YjsOps.setFlowControls(this.doc, flows);
+  }
+
+  /**
+   * Replace the entire document content in the Y.Doc.
+   *
+   * Used when a restore / import must overwrite the live collaborative document
+   * (e.g. VersionManager restoring a previous version while a session is
+   * attached). `questionnaireToYDoc` clears and re-seeds every shared type in one
+   * transaction, so the change propagates to peers and persists — instead of only
+   * touching local store state that the next remote update would clobber.
+   */
+  replaceDocument(questionnaire: Questionnaire): void {
+    questionnaireToYDoc(questionnaire, this.doc);
+  }
+
   // -----------------------------------------------------------------------
   // Internal observation
   // -----------------------------------------------------------------------

@@ -397,6 +397,33 @@ export function addFlowControl(doc: Y.Doc, flow: FlowControl): void {
   });
 }
 
+/**
+ * Replace the entire flow-rule list in the CRDT.
+ *
+ * Flow rules are a top-level Y.Array (`flow`), NOT part of `meta`. An
+ * edit / delete / reorder in the designer rebuilds the whole list, so the CRDT
+ * write mirrors that: clear the array and re-seed it inside one transaction. The
+ * bug this fixes routed flow edits through `updateMeta` (`meta.set('flow', …)`),
+ * where `yDocToQuestionnaire` never reads them — so the edit was silently
+ * dropped on the next remote update.
+ */
+export function setFlowControls(doc: Y.Doc, flows: FlowControl[]): void {
+  const flowArr = doc.getArray<Y.Map<unknown>>('flow');
+
+  doc.transact(() => {
+    flowArr.delete(0, flowArr.length);
+    for (const flow of flows) {
+      const yF = new Y.Map<unknown>();
+      const plain = JSON.parse(JSON.stringify(flow));
+      for (const [key, value] of Object.entries(plain)) {
+        yF.set(key, value);
+      }
+      flowArr.push([yF]);
+    }
+    touchMeta(doc);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

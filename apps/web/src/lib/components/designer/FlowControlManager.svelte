@@ -118,7 +118,7 @@
           condition: updates.condition || existingFlow.condition || '',
         };
         updatedFlows[index] = merged;
-        designerStore.updateQuestionnaire({ flow: updatedFlows });
+        designerStore.setFlow(updatedFlows);
       }
     }
   }
@@ -137,12 +137,12 @@
       })
     ) {
       const updatedFlows = flowControls.filter((f) => f.id !== flowId);
-      designerStore.updateQuestionnaire({ flow: updatedFlows });
+      designerStore.setFlow(updatedFlows);
     }
   }
 
   function handleFlowUpdate(updatedFlows: FlowControl[]) {
-    designerStore.updateQuestionnaire({ flow: updatedFlows });
+    designerStore.setFlow(updatedFlows);
   }
 
   function resetForm() {
