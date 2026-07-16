@@ -36,7 +36,11 @@ import {
 } from '$lib/fillout/webglPreflight';
 import { TimingGatekeeper } from '$lib/runtime/timing';
 import type { GatekeeperResult } from '$lib/runtime/timing';
-import type { FilloutRuntime, FilloutRuntimeConfig } from '$lib/fillout/runtime/FilloutRuntime';
+import type {
+  FilloutRuntime,
+  FilloutRuntimeConfig,
+  PersistenceFailure,
+} from '$lib/fillout/runtime/FilloutRuntime';
 import type { Session, SeriesPromptResolution } from '$lib/api/generated/types.gen';
 import type { ResumeSnapshot } from '$lib/fillout/runtime/responseMapping';
 
@@ -170,6 +174,7 @@ export class FilloutPageController {
     | 'webgl-unsupported'
     | 'timing-isolation-required'
     | 'media-error'
+    | 'persistence-failed'
   >('welcome');
   overQuotaMessage = $state('');
   // Structured eligibility screen-out outcome (F-20). Set when a `terminate` flow
@@ -189,6 +194,20 @@ export class FilloutPageController {
   // ResourceManager detail is kept in `mediaErrorDetails` for a collapsed secondary line.
   mediaErrorCount = $state(0);
   mediaErrorDetails = $state<string | null>(null);
+
+  // Durable-write failure (participant data-loss guard). When a participant's answer
+  // cannot be written to IndexedDB — quota exhausted (realistic on iOS Safari, private
+  // browsing, a near-full disk, or a media-heavy study), or a write-verify mismatch —
+  // `FilloutRuntime` HALTS the run and fires `onPersistenceFailure`. We route to a
+  // dedicated BLOCKING screen: the runtime is already paused and the form overlay is
+  // unmounted (it only renders on the `runtime` screen), so no further answer is
+  // accepted. This replaces the prior silent behaviour where the callback was unwired —
+  // the run froze mid-item with only the corner sync-panel's deadletter count hinting at
+  // the loss. The runtime's synthetic deadletter ledger row (the audit trail) is left
+  // intact. `persistenceFailure` carries the curated details for the screen;
+  // `persistenceRetrying` gates the Retry button while a re-write is in flight.
+  persistenceFailure = $state<PersistenceFailure | null>(null);
+  persistenceRetrying = $state(false);
 
   // --- Session state ----------------------------------------------------------
   // `session` spans three assignment shapes across create / resume / offline paths
@@ -1169,6 +1188,13 @@ export class FilloutPageController {
           this.liveAnnouncement = buildQuestionAnnouncement(event, inputs.questionList);
           this.recordItemProgress(event);
         },
+        // Durable-write failure (participant data-loss guard): the runtime has ALREADY
+        // halted the run by the time this fires. Route to the blocking screen so the
+        // participant is told, plainly, that their answer could not be saved — instead of
+        // freezing over a hole with only a corner sync-panel to hint at the loss.
+        onPersistenceFailure: (failure) => {
+          this.showPersistenceFailure(failure);
+        },
       });
 
       // W-5: the page may have unmounted while makeRuntime was in flight. dispose()
@@ -1248,6 +1274,50 @@ export class FilloutPageController {
     this.error = null;
     this.screen = 'runtime';
     await this.initializeRuntime();
+  }
+
+  /**
+   * A participant's answer could not be durably stored (the runtime already halted the
+   * run and recorded the integrity escalation on the SyncLedger). Route to the dedicated
+   * BLOCKING screen so no further item is presented and the participant is told, clearly,
+   * that their data could not be saved and what to do (retry / free space / contact the
+   * researcher). Refresh the sync tallies so the synthetic deadletter row is reflected.
+   */
+  private showPersistenceFailure(failure: PersistenceFailure): void {
+    this.persistenceFailure = failure;
+    this.loading = false;
+    this.error = null;
+    this.screen = 'persistence-failed';
+    void this.refreshSyncStats();
+  }
+
+  /**
+   * Re-attempt every unstored answer's durable write ("Retry saving"). On success the
+   * runtime resumes and we return to the runtime screen; on a repeated failure the
+   * participant stays on the blocking screen — the run is still halted, and the realistic
+   * cause (an exhausted quota) needs them to free space first, so there is deliberately no
+   * automatic retry. Idempotent: `retryFailedPersistence` writes each answer under a fresh
+   * clientId and leaves nothing behind that could duplicate it. Refreshes the sync tallies
+   * afterwards so a recovered write clears from the panel.
+   */
+  async retryPersistence(): Promise<void> {
+    if (!this.runtime || this.persistenceRetrying) return;
+    this.persistenceRetrying = true;
+    try {
+      const recovered = await this.runtime.retryFailedPersistence();
+      if (recovered) {
+        this.persistenceFailure = null;
+        this.screen = 'runtime';
+      }
+      // else: still unstored — stay on the blocking screen with the run halted.
+    } catch (err) {
+      // A throwing retry (the same IndexedDB that just failed) leaves the participant
+      // on the blocking screen; log the real cause, never advance over the hole.
+      console.error('Retry of a failed answer write threw:', err as Error);
+    } finally {
+      this.persistenceRetrying = false;
+      await this.refreshSyncStats();
+    }
   }
 
   /**

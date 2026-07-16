@@ -7,6 +7,10 @@ import {
 import type { FilloutDefinition } from '$lib/fillout/types';
 import type { ConsentData } from '$lib/fillout/types';
 import type { QuestionnaireSession } from '$lib/shared';
+import type {
+  FilloutRuntimeConfig,
+  PersistenceFailure,
+} from '$lib/fillout/runtime/FilloutRuntime';
 
 // The controller calls the real module-registration promise inside initializeRuntime;
 // stub it so the lifecycle runs headlessly without pulling in the module graph.
@@ -71,6 +75,7 @@ function makeMocks() {
     resize: vi.fn(),
     handleKeyPress: vi.fn(),
     setFlowVariable: vi.fn(),
+    retryFailedPersistence: vi.fn(async () => true),
   };
   const gatekeeperInstance = { qualify: vi.fn(async () => ({ grade: 'green' })) };
   const offlineSession = {
@@ -407,6 +412,88 @@ describe('FilloutPageController', () => {
       // No second session was created — the same offline session is reused.
       expect(mocks.offlineSession.createSession).toHaveBeenCalledTimes(1);
       expect(controller.session?.id).toBe('offline-1');
+    });
+  });
+
+  describe('durable-write persistence failure (participant data-loss guard)', () => {
+    // Override makeRuntime to capture the config the controller builds, so the test can
+    // fire the runtime's onPersistenceFailure callback and assert the blocking screen.
+    function wireCapture(mocks: ReturnType<typeof makeMocks>): () => FilloutRuntimeConfig | undefined {
+      let captured: FilloutRuntimeConfig | undefined;
+      mocks.services.makeRuntime = vi.fn((config: FilloutRuntimeConfig) => {
+        captured = config;
+        return mocks.runtime;
+      }) as unknown as typeof mocks.services.makeRuntime;
+      return () => captured;
+    }
+
+    const sampleFailure: PersistenceFailure = {
+      questionId: 'q7',
+      error: new Error('QuotaExceededError'),
+      message: 'The storage quota has been exceeded.',
+      unstoredCount: 1,
+    };
+
+    it('routes a durable-write failure to the blocking persistence-failed screen and halts', async () => {
+      const data = makeData({ settings: { requireConsent: false } });
+      const mocks = makeMocks();
+      const getConfig = wireCapture(mocks);
+      const controller = makeController(data, mocks);
+      wireRuntimeInputs(controller, data.questionnaire.definition);
+
+      await controller.createSessionAndStart();
+      expect(controller.screen).toBe('runtime');
+
+      // The wiring under test: the controller MUST pass onPersistenceFailure into the
+      // runtime. Without it the run freezes silently over a lost answer.
+      const onPersistenceFailure = getConfig()?.onPersistenceFailure;
+      expect(typeof onPersistenceFailure).toBe('function');
+
+      // The runtime (already paused) reports that an answer could not be durably stored.
+      onPersistenceFailure?.(sampleFailure);
+
+      expect(controller.screen).toBe('persistence-failed');
+      expect(controller.persistenceFailure?.questionId).toBe('q7');
+      expect(controller.persistenceFailure?.unstoredCount).toBe(1);
+      expect(controller.error).toBeNull();
+    });
+
+    it('retryPersistence returns to the runtime when the re-write succeeds', async () => {
+      const data = makeData({ settings: { requireConsent: false } });
+      const mocks = makeMocks();
+      const getConfig = wireCapture(mocks);
+      const controller = makeController(data, mocks);
+      wireRuntimeInputs(controller, data.questionnaire.definition);
+
+      await controller.createSessionAndStart();
+      getConfig()?.onPersistenceFailure?.(sampleFailure);
+      expect(controller.screen).toBe('persistence-failed');
+
+      mocks.runtime.retryFailedPersistence.mockResolvedValueOnce(true);
+      await controller.retryPersistence();
+
+      expect(mocks.runtime.retryFailedPersistence).toHaveBeenCalledTimes(1);
+      expect(controller.screen).toBe('runtime');
+      expect(controller.persistenceFailure).toBeNull();
+    });
+
+    it('retryPersistence keeps the run halted when the re-write fails again', async () => {
+      const data = makeData({ settings: { requireConsent: false } });
+      const mocks = makeMocks();
+      const getConfig = wireCapture(mocks);
+      const controller = makeController(data, mocks);
+      wireRuntimeInputs(controller, data.questionnaire.definition);
+
+      await controller.createSessionAndStart();
+      getConfig()?.onPersistenceFailure?.(sampleFailure);
+      expect(controller.screen).toBe('persistence-failed');
+
+      mocks.runtime.retryFailedPersistence.mockResolvedValueOnce(false);
+      await controller.retryPersistence();
+
+      expect(mocks.runtime.retryFailedPersistence).toHaveBeenCalledTimes(1);
+      expect(controller.screen).toBe('persistence-failed');
+      expect(controller.persistenceFailure).not.toBeNull();
     });
   });
 

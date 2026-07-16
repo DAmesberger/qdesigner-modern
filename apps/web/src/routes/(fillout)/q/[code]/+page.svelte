@@ -739,6 +739,58 @@
         </details>
       {/if}
     </div>
+  {:else if controller.screen === 'persistence-failed'}
+    <!-- Durable-write failure (participant data-loss guard): a BLOCKING screen shown when
+         the participant's answer could NOT be saved to this device (IndexedDB quota
+         exhausted — realistic on iOS Safari, private browsing, a near-full disk, or a
+         media-heavy study — or a write-verify mismatch). The run is already halted (the
+         runtime is paused and the form overlay is unmounted with this screen), so no
+         further answer is accepted; the participant is told plainly what happened and what
+         to do (retry / free space / contact the researcher). role="alert" so SR users hear
+         the interruption. The raw Dexie cause is tucked into a collapsed <details>. -->
+    <div class="error-container" data-testid="fillout-persistence-error" role="alert">
+      <EmptyState
+        title={m.fillout_persistence_error_title()}
+        description={controller.persistenceFailure && controller.persistenceFailure.unstoredCount > 1
+          ? m.fillout_persistence_error_desc_count({
+              count: controller.persistenceFailure.unstoredCount,
+            })
+          : m.fillout_persistence_error_desc()}
+      />
+      <p class="error-reassurance" data-testid="fillout-persistence-error-reassurance">
+        {m.fillout_persistence_error_reassurance()}
+      </p>
+      <p class="error-reassurance" data-testid="fillout-persistence-error-hint">
+        {m.fillout_persistence_error_hint()}
+      </p>
+      <div class="error-actions">
+        <button
+          type="button"
+          class="error-secondary"
+          data-testid="fillout-persistence-export"
+          onclick={() => controller.exportUnsyncedData()}
+        >
+          {m.fillout_sync_export_failed()}
+        </button>
+        <button
+          type="button"
+          class="error-primary"
+          data-testid="fillout-persistence-retry"
+          disabled={controller.persistenceRetrying}
+          onclick={() => controller.retryPersistence()}
+        >
+          {controller.persistenceRetrying
+            ? m.fillout_persistence_error_saving()
+            : m.fillout_action_retry_save()}
+        </button>
+      </div>
+      {#if controller.persistenceFailure?.message}
+        <details class="error-details" data-testid="fillout-persistence-error-details">
+          <summary>{m.fillout_persistence_error_details()}</summary>
+          <pre>{controller.persistenceFailure.message}</pre>
+        </details>
+      {/if}
+    </div>
   {:else if controller.screen === 'screened-out' && controller.screenOut}
     <ScreenedOutScreen result={controller.screenOut} onClose={() => goto('/')} />
   {:else if controller.screen === 'complete'}
