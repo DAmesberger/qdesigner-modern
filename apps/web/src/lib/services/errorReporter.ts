@@ -95,7 +95,11 @@ function send(payload: ClientErrorPayload): void {
     if (typeof fetch !== 'function') return;
     const result = fetch(ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // The CSRF layer rejects an anonymous state-changing request without this
+      // header (middleware/csrf.rs). The app's api client adds it automatically;
+      // this sink builds its own request, so it must set it too — otherwise every
+      // report 403s and the silent-by-design reporter would swallow every one.
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
       body: JSON.stringify(payload),
       keepalive: true,
       // Anonymous is allowed; never attach credentials to the error sink.
