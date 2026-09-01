@@ -1,7 +1,8 @@
 <script lang="ts">
   interface Props {
-    type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search' | 'date';
+    type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search' | 'date' | 'file';
     value?: string;
+    accept?: string;
     placeholder?: string;
     disabled?: boolean;
     readonly?: boolean;
@@ -9,6 +10,7 @@
     error?: boolean;
     id?: string;
     name?: string;
+    testid?: string;
     describedby?: string;
     pattern?: string;
     min?: number | string;
@@ -31,6 +33,7 @@
   let {
     type = 'text',
     value = $bindable(''),
+    accept = undefined,
     placeholder = '',
     disabled = false,
     readonly = false,
@@ -38,6 +41,7 @@
     error = false,
     id = undefined,
     name = undefined,
+    testid = undefined,
     describedby = undefined,
     pattern = undefined,
     min = undefined,
@@ -60,40 +64,64 @@
   let inputClasses = $derived(`
     block w-full rounded-md border-0 py-1.5 text-foreground bg-background shadow-sm
     ring-1 ring-inset focus:ring-2 focus:ring-inset sm:text-sm sm:leading-6
-    ${error
-      ? 'ring-destructive placeholder:text-destructive focus:ring-destructive'
-      : 'ring-border placeholder:text-muted-foreground focus:ring-primary'
+    ${
+      error
+        ? 'ring-destructive placeholder:text-destructive focus:ring-destructive'
+        : 'ring-border placeholder:text-muted-foreground focus:ring-primary'
     }
     ${disabled ? 'bg-muted text-muted-foreground opacity-50' : ''}
     ${className}
   `);
 </script>
 
-<input
-  {type}
-  {id}
-  {name}
-  {placeholder}
-  {disabled}
-  {readonly}
-  {required}
-  {pattern}
-  {min}
-  {max}
-  {step}
-  minlength={minLength}
-  maxlength={maxLength}
-  inputmode={inputmode}
-  {autocomplete}
-  aria-describedby={describedby}
-  aria-invalid={error ? 'true' : undefined}
-  bind:value
-  class={inputClasses}
-  {oninput}
-  {onchange}
-  {onfocus}
-  {onblur}
-  {onkeydown}
-  {onkeyup}
-  {onkeypress}
-/>
+{#if type === 'file'}
+  <input
+    type="file"
+    {id}
+    {name}
+    {accept}
+    {disabled}
+    {required}
+    aria-describedby={describedby}
+    aria-invalid={error ? 'true' : undefined}
+    data-testid={testid}
+    class={inputClasses}
+    {oninput}
+    {onchange}
+    {onfocus}
+    {onblur}
+    {onkeydown}
+    {onkeyup}
+    {onkeypress}
+  />
+{:else}
+  <input
+    {type}
+    {id}
+    {name}
+    {placeholder}
+    {disabled}
+    {readonly}
+    {required}
+    {pattern}
+    {min}
+    {max}
+    {step}
+    minlength={minLength}
+    maxlength={maxLength}
+    {inputmode}
+    {autocomplete}
+    aria-describedby={describedby}
+    aria-invalid={error ? 'true' : undefined}
+    data-testid={testid}
+    bind:value
+    class={inputClasses}
+    {oninput}
+    {onchange}
+    {onfocus}
+    {onblur}
+    {onkeydown}
+    {onkeyup}
+    {onkeypress}
+  />
+{/if}

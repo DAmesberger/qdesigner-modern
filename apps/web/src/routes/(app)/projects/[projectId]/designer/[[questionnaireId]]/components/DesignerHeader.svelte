@@ -2,7 +2,25 @@
   import { appPaths } from '$lib/routing/paths';
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
-  import { ArrowLeft, Menu, PanelLeft, Share2, FlaskConical, ShieldCheck, Target, Calculator, LayoutDashboard, CalendarClock, Undo2, Redo2, Wrench, ChevronDown, SlidersHorizontal } from 'lucide-svelte';
+  import {
+    ArrowLeft,
+    Menu,
+    PanelLeft,
+    Share2,
+    FlaskConical,
+    ShieldCheck,
+    Target,
+    Calculator,
+    LayoutDashboard,
+    CalendarClock,
+    Undo2,
+    Redo2,
+    Wrench,
+    ChevronDown,
+    SlidersHorizontal,
+    Download,
+    FileSearch,
+  } from 'lucide-svelte';
   import { fly } from 'svelte/transition';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
   import StudySeriesDesigner from '$lib/components/designer/StudySeriesDesigner.svelte';
@@ -15,6 +33,9 @@
   import ReportPagePanel from '$lib/components/designer/ReportPagePanel.svelte';
   import StudySettingsPanel from '$lib/components/designer/StudySettingsPanel.svelte';
   import VersionManager from '$lib/components/designer/VersionManager.svelte';
+  import QuestionnaireDefinitionInspectionDialog from '$lib/components/QuestionnaireDefinitionInspectionDialog.svelte';
+  import { downloadQuestionnaireDefinition } from '$lib/services/questionnaireDefinitionTransfer';
+  import { toast } from '$lib/stores/toast';
   import type { PresenceUser } from '$lib/services/presence.svelte';
 
   interface Props {
@@ -37,6 +58,7 @@
   let showReportPage = $state(false);
   let showStudySettings = $state(false);
   let showTools = $state(false);
+  let showDefinitionInspection = $state(false);
 
   const canUndo = $derived(designerStore.canUndo);
   const canRedo = $derived(designerStore.canRedo);
@@ -45,12 +67,28 @@
   const metaKeyLabel =
     typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
 
-  // Tools overflow menu items — the modal-launching secondary actions grouped
-  // out of the always-visible header (R4-5). `show` flips the matching dialog.
-  type ToolItem = { label: string; icon: typeof Wrench; run: () => void; when?: () => boolean };
+  // Tools overflow menu items — secondary Questionnaire actions grouped out of
+  // the always-visible header (R4-5).
+  type ToolItem = { label: string; icon: typeof Wrench; run: () => unknown; when?: () => boolean };
   const toolItems: ToolItem[] = [
     { label: 'Study settings', icon: SlidersHorizontal, run: () => (showStudySettings = true) },
-    { label: 'Experimental design', icon: FlaskConical, run: () => (showExperimentalDesign = true) },
+    {
+      label: 'Export definition (.qdef.json)',
+      icon: Download,
+      run: exportDefinition,
+      when: () => Boolean(questionnaireId && designerStore.projectId),
+    },
+    {
+      label: 'Inspect definition file',
+      icon: FileSearch,
+      run: () => (showDefinitionInspection = true),
+      when: () => Boolean(designerStore.projectId),
+    },
+    {
+      label: 'Experimental design',
+      icon: FlaskConical,
+      run: () => (showExperimentalDesign = true),
+    },
     {
       label: 'Study series',
       icon: CalendarClock,
@@ -66,7 +104,7 @@
 
   function runTool(item: ToolItem) {
     showTools = false;
-    item.run();
+    void item.run();
   }
 
   function toggleTools(e: MouseEvent) {
@@ -135,9 +173,34 @@
     if (!saved) return;
     await designerStore.publishQuestionnaire();
   }
+
+  async function exportDefinition() {
+    if (!questionnaireId || !designerStore.projectId) return;
+    try {
+      // Export the current authored state, not the last autosave snapshot. A
+      // failed save already tells the author why through the store's single
+      // reporting chokepoint, so it must also block a misleading stale export.
+      if (designerStore.isDirty) {
+        const saved = await designerStore.saveQuestionnaire();
+        if (!saved) return;
+      }
+      await downloadQuestionnaireDefinition(designerStore.projectId, questionnaireId);
+      toast.success('Questionnaire Definition downloaded', {
+        message: 'Participant responses are not included.',
+      });
+    } catch (error) {
+      toast.error('Failed to export Questionnaire Definition', {
+        message: error instanceof Error ? error.message : 'Please try again.',
+      });
+    }
+  }
 </script>
 
-<svelte:window onclick={() => { if (showTools) showTools = false; }} />
+<svelte:window
+  onclick={() => {
+    if (showTools) showTools = false;
+  }}
+/>
 
 <header
   class="flex h-11 items-center gap-3 px-3 bg-[hsl(var(--glass-bg))] backdrop-blur-[var(--glass-blur)] border-b border-[hsl(var(--glass-border))] shadow-[var(--shadow-sm)]"
@@ -158,10 +221,16 @@
   <div class="h-5 w-px bg-border sm:hidden"></div>
 
   <!-- Breadcrumb (desktop) -->
-  <nav class="hidden sm:flex items-center gap-1 text-xs text-muted-foreground" aria-label="Breadcrumb">
+  <nav
+    class="hidden sm:flex items-center gap-1 text-xs text-muted-foreground"
+    aria-label="Breadcrumb"
+  >
     <a href="/projects" class="hover:text-foreground transition-colors">Projects</a>
     <span class="text-muted-foreground/50">›</span>
-    <a href={designerStore.projectId ? `/projects/${designerStore.projectId}` : '/projects'} class="hover:text-foreground transition-colors truncate max-w-32">
+    <a
+      href={designerStore.projectId ? `/projects/${designerStore.projectId}` : '/projects'}
+      class="hover:text-foreground transition-colors truncate max-w-32"
+    >
       {projectName || 'Project'}
     </a>
     <span class="text-muted-foreground/50">›</span>
@@ -212,7 +281,9 @@
     ></div>
     <!-- Tooltip -->
     <div class="absolute right-0 top-full mt-2 hidden group-hover:block z-50">
-      <div class="rounded-md bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-[var(--shadow-md)] border border-border whitespace-nowrap">
+      <div
+        class="rounded-md bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-[var(--shadow-md)] border border-border whitespace-nowrap"
+      >
         {saveTooltip}
       </div>
     </div>
@@ -235,7 +306,9 @@
         </div>
       {/each}
       {#if presenceUsers.length > 3}
-        <div class="w-6 h-6 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground">
+        <div
+          class="w-6 h-6 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground"
+        >
           +{presenceUsers.length - 3}
         </div>
       {/if}
@@ -264,7 +337,11 @@
   </button>
 
   <!-- Undo / redo (primary, always visible on desktop) -->
-  <div class="hidden sm:flex items-center rounded-md border border-border" role="group" aria-label="History">
+  <div
+    class="hidden sm:flex items-center rounded-md border border-border"
+    role="group"
+    aria-label="History"
+  >
     <button
       type="button"
       class="inline-flex items-center rounded-l-md px-2 py-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors duration-150 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground disabled:cursor-not-allowed"
@@ -294,7 +371,9 @@
   <div class="relative hidden sm:block">
     <button
       type="button"
-      class="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150 {showTools ? 'bg-accent text-accent-foreground' : ''}"
+      class="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-150 {showTools
+        ? 'bg-accent text-accent-foreground'
+        : ''}"
       onclick={toggleTools}
       data-testid="designer-tools-button"
       aria-haspopup="menu"
@@ -303,7 +382,9 @@
     >
       <Wrench class="h-3.5 w-3.5" />
       Tools
-      <ChevronDown class="h-3 w-3 transition-transform duration-150 {showTools ? 'rotate-180' : ''}" />
+      <ChevronDown
+        class="h-3 w-3 transition-transform duration-150 {showTools ? 'rotate-180' : ''}"
+      />
     </button>
 
     {#if showTools}
@@ -314,7 +395,9 @@
         tabindex="-1"
         data-testid="designer-tools-menu"
         onclick={(e) => e.stopPropagation()}
-        onkeydown={(e) => { if (e.key === 'Escape') showTools = false; }}
+        onkeydown={(e) => {
+          if (e.key === 'Escape') showTools = false;
+        }}
       >
         {#each toolItems as item (item.label)}
           {#if !item.when || item.when()}
@@ -363,15 +446,14 @@
   >
     {designerStore.isPublishing ? 'Publishing...' : 'Publish'}
     {#if hasValidationErrors}
-      <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-destructive border-2 border-background"></span>
+      <span
+        class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-destructive border-2 border-background"
+      ></span>
     {/if}
   </button>
 </header>
 
-<DistributionPanel
-  isOpen={showDistribution}
-  onclose={() => (showDistribution = false)}
-/>
+<DistributionPanel isOpen={showDistribution} onclose={() => (showDistribution = false)} />
 
 <ExperimentalDesignPanel bind:open={showExperimentalDesign} />
 
@@ -390,3 +472,10 @@
 <QuotaPanel bind:open={showQuotas} />
 
 <ReportPagePanel bind:open={showReportPage} />
+
+{#if designerStore.projectId}
+  <QuestionnaireDefinitionInspectionDialog
+    bind:open={showDefinitionInspection}
+    projectId={designerStore.projectId}
+  />
+{/if}

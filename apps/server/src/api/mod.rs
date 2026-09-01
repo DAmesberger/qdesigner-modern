@@ -225,6 +225,14 @@ pub fn router(state: AppState) -> Router {
             get(questionnaires::export_responses),
         )
         .route(
+            "/{id}/questionnaires/{qid}/definition",
+            get(questionnaires::export_definition),
+        )
+        .route(
+            "/{id}/questionnaire-definitions/dry-run",
+            post(questionnaires::dry_run_definition),
+        )
+        .route(
             "/{id}/members",
             get(projects::list_project_members).post(projects::add_project_member),
         )

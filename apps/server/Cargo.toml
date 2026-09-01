@@ -13,6 +13,7 @@ tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+serde_jcs = "0.2"
 jsonwebtoken = "9"
 argon2 = "0.5"
 uuid = { version = "1", features = ["v4", "serde"] }

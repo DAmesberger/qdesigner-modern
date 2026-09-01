@@ -3,6 +3,8 @@ import {
   bumpVersion as bumpVersionRequest,
   createQuestionnaire as createQuestionnaireRequest,
   deleteQuestionnaire as deleteQuestionnaireRequest,
+  dryRunDefinition as dryRunDefinitionRequest,
+  exportDefinition as exportDefinitionRequest,
   exportResponses as exportResponsesRequest,
   getQuestionnaire as getQuestionnaireRequest,
   getQuestionnaireByCode as getQuestionnaireByCodeRequest,
@@ -13,6 +15,8 @@ import {
 } from '$lib/api/generated/sdk.gen';
 import * as sdk from '$lib/api/generated/sdk.gen';
 import type {
+  ApplyResult as GeneratedApplyResult,
+  DefinitionArtifact as GeneratedDefinitionArtifact,
   QuestionnaireByCode as GeneratedQuestionnaireByCode,
   QuestionnaireVersion as GeneratedQuestionnaireVersion,
 } from '$lib/api/generated/types.gen';
@@ -84,9 +88,7 @@ export const questionnaires = {
         throwOnError: true,
         path: { id: projectId, qid: id },
       })
-    ).then(
-      () => undefined,
-    ),
+    ).then(() => undefined),
   publish: (projectId: string, id: string) =>
     callSdk(() =>
       publishQuestionnaireRequest<true>({
@@ -106,6 +108,25 @@ export const questionnaires = {
         query: { format },
       })
     ) as Promise<ExportRow[]>,
+  exportDefinition: (projectId: string, id: string) =>
+    callSdk(() =>
+      exportDefinitionRequest<true>({
+        client: apiClient,
+        responseStyle: 'data',
+        throwOnError: true,
+        path: { id: projectId, qid: id },
+      })
+    ) as Promise<GeneratedDefinitionArtifact>,
+  dryRunDefinition: (projectId: string, definition: string) =>
+    callSdk(() =>
+      dryRunDefinitionRequest<true>({
+        client: apiClient,
+        responseStyle: 'data',
+        throwOnError: true,
+        path: { id: projectId },
+        body: { definition },
+      })
+    ) as Promise<GeneratedApplyResult>,
   conditionCounts: async (questionnaireId: string) =>
     mapConditionCounts(
       await callSdk(() =>
