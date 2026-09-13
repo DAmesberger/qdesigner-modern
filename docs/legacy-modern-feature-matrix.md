@@ -3,7 +3,7 @@
 > Historical snapshot: subsequent reconciliation is recorded in [the decision index](decisions/README.md). ADR 0039 removes JavaScript execution immediately; ADR 0040 retains PCA delivery. The findings below describe the pre-reconciliation snapshot.
 
 
-**Compared:** legacy `origin/dev` 0.11.0 (`a8701d8`) against modern working tree on 2026-08-31.  
+**Compared:** legacy `origin/dev` 0.11.0 (`a8701d8`) against modern working tree on 2026-08-31.
 **Companion inventory:** [Legacy QDesigner feature audit](./legacy-qdesigner-feature-audit.md)
 
 ## Verdict

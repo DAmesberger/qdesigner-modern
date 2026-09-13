@@ -1,7 +1,7 @@
 # Questionnaire definition exchange and MCP requirements
 
-**Decision date:** 2026-08-31  
-**Status:** successor requirement; architecture reconciled by [ADR 0039](decisions/0039-safe-logic-only-and-qdef-boundary.md). JavaScript execution is removed immediately; compatibility is intentionally broken during development.  
+**Decision date:** 2026-08-31
+**Status:** successor requirement; architecture reconciled by [ADR 0039](decisions/0039-safe-logic-only-and-qdef-boundary.md). JavaScript execution is removed immediately; compatibility is intentionally broken during development.
 **Related:** [Legacy feature audit](./legacy-qdesigner-feature-audit.md), [legacy-modern matrix](./legacy-modern-feature-matrix.md)
 
 ## Decision

@@ -1,7 +1,7 @@
 # Legacy QDesigner feature audit
 
-**Audit date:** 2026-08-31  
-**Legacy repository:** `/home/dev/dev/qdesigner`  
+**Audit date:** 2026-08-31
+**Legacy repository:** `/home/dev/dev/qdesigner`
 **Modern repository:** `/home/dev/dev/qdesigner-modern`
 
 ## Executive summary
