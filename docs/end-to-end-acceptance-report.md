@@ -1,6 +1,8 @@
 # End-to-end acceptance evidence
 
-Status: local software acceptance passed, 2026-09-11. Publication and hosted CI remain outstanding.
+Status: local software acceptance passed, 2026-09-11. This report is the historical local evidence snapshot.
+Publication follow-up and review: [2026-09-13 record](publication-2026-09-13.md);
+current hosted evidence is attached to [PR #148](https://github.com/DAmesberger/qdesigner-modern/pull/148).
 Scope: [acceptance goal](end-to-end-acceptance-goal.md),
 [tracking issue #147](https://github.com/DAmesberger/qdesigner-modern/issues/147).
 
