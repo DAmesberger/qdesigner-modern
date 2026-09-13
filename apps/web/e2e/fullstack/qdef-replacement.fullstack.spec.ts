@@ -84,21 +84,44 @@ test('@fullstack replacing a draft refreshes both collaborators and cannot resto
       'Replacement content';
     const session = await request.get('/api/auth/session', { headers });
     headers['X-CSRF-Token'] = (await session.json()).csrf_token;
-    const applied = await request.post(
-      `/api/projects/${workspace.projectId}/questionnaire-definitions/apply`,
-      {
-        headers,
-        data: {
-          definition: JSON.stringify(replacement),
-          questionnaireId,
-          expectedRevision: before.revision,
-          commit: true,
-          idempotencyKey: `replace-${questionnaireId}`,
-        },
+    // A collaborator's pending autosave can advance the revision without changing
+    // portable content. Reconcile only that case; never overwrite a semantic edit.
+    let expectedRevision = before.revision;
+    let result: { digest: string } | undefined;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const applied = await request.post(
+        `/api/projects/${workspace.projectId}/questionnaire-definitions/apply`,
+        {
+          headers,
+          data: {
+            definition: JSON.stringify(replacement),
+            questionnaireId,
+            expectedRevision,
+            commit: true,
+            idempotencyKey: `replace-${questionnaireId}`,
+          },
+        }
+      );
+      const response = await applied.json();
+      if (applied.status() === 409) {
+        expect(response.committed).toBe(false);
+        expect(response.diagnostics).toEqual([
+          expect.objectContaining({ code: 'REVISION_CONFLICT', path: '/expectedRevision' }),
+        ]);
+        const current = await request.get(`${endpoint}/definition`, { headers });
+        expect(current.status(), await current.text()).toBe(200);
+        const latest = await current.json();
+        expect(latest.canonical).toBe(before.canonical);
+        expect(latest.revision).toBeGreaterThan(expectedRevision);
+        expectedRevision = latest.revision;
+        continue;
       }
-    );
-    expect(applied.status(), await applied.text()).toBe(200);
-    const result = await applied.json();
+      expect(applied.status(), JSON.stringify(response)).toBe(200);
+      expect(response.committed).toBe(true);
+      result = response;
+      break;
+    }
+    expect(result, 'Replacement must commit after unchanged autosaves settle').toBeDefined();
     for (const collaborator of [page, other]) {
       await expect(collaborator.getByTestId('designer-replacement-conflict')).toBeVisible({
         timeout: 10000,
@@ -114,7 +137,7 @@ test('@fullstack replacing a draft refreshes both collaborators and cannot resto
     await saveAndReload(designer);
     const after = await request.get(`${endpoint}/definition`, { headers });
     expect(after.status(), await after.text()).toBe(200);
-    expect((await after.json()).digest).toBe(result.digest);
+    expect((await after.json()).digest).toBe(result!.digest);
   } finally {
     await otherContext.close();
   }
