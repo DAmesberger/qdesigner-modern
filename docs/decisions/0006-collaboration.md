@@ -1,15 +1,21 @@
 # ADR 0006 — Keep collaboration (Yjs); document it
 
-**Status:** Accepted (2026-05-15)
+**Status:** Accepted (2026-05-15); implementation notes reconciled 2026-09-13.
 
-**Decision.** Keep the Yjs-based real-time collaboration layer. Investigation (Phase 0) confirmed it is an **active, end-to-end wired feature**, not dormant scaffolding:
+**Decision.** Keep Yjs collaboration as an always-on feature for authenticated
+questionnaire designers. The server owns the authoritative CRDT seed and enforces
+project membership and write permissions on `designer:{questionnaireId}` channels.
+The browser uses `Y.Doc`; the server uses `yrs::Doc`. Presence is shown in the
+designer header.
 
-- Server: `/api/ws` GET upgrade endpoint mounted at `apps/server/src/api/mod.rs:204`, handler at `apps/server/src/websocket/handler.rs:25`, JWT verified on upgrade, per-channel project-membership check before binary frames, one `yrs::Doc` per `designer:{questionnaire_id}` room.
-- Frontend: `Y.Doc` instantiated at `apps/web/src/lib/collaboration/CollaborativeDesigner.ts:40`, initialized from `apps/web/src/routes/(app)/projects/[projectId]/designer/[[questionnaireId]]/+page.svelte:118` whenever a logged-in user opens a questionnaire.
-- Dependencies: `yjs@13.6.29`, `y-protocols@1.0.7` (web); `yrs@0.25.0` (server). ~1.2k LOC frontend + ~956 LOC server.
-- User-facing: implicit always-on for authenticated designer sessions; presence shown in `DesignerHeader`.
+**Consequences.** The [collaboration architecture](../architecture/collaboration.md)
+documents session-cookie authentication, channel permissions, the room lifecycle,
+and the generation protocol used for revision-safe QDef replacement under
+[ADR 0039](0039-safe-logic-only-and-qdef-boundary.md). A replaced document is never
+merged with an old collaborative document. Old clients receive a reload outcome;
+HTTP saves and binary persistence independently reject stale generations.
 
-**Consequences.**
-- Phase 4 Task 4.3 adds `docs/architecture/collaboration.md` describing the mount point, auth, channel model (`designer:{qid}`), and per-questionnaire Y.Doc lifecycle.
-- The `unsafe impl Send/Sync` at `apps/server/src/websocket/yjs_store.rs:27-28` is audited during Phase 3 Task 3.4 (alongside the RLS connection-pinning work) — verify thread-safety or replace with a safe wrapper. Tracked under the Phase 3 deferred list if not addressed there.
-- No rollback. No flag-gating. The feature stays as it is.
+The current server stores the thread-safe document without a manual unsafe
+`Send`/`Sync` implementation. Awareness is relayed without a server awareness
+object. The Redis collaboration bridge remains inactive; this decision does not
+assert that cross-node live edit broadcasting has shipped.

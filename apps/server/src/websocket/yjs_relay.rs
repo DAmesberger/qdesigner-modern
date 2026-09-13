@@ -2,6 +2,8 @@
 //! WebSocket clients subscribed to the same designer channel.
 //!
 //! Protocol: Binary frames are prefixed with a varuint message type:
+//!   2 = generation envelope: varuint generation followed by an inner frame
+//! Inner message types:
 //!   0 = Sync message (step1, step2, update)
 //!   1 = Awareness message (relayed as-is)
 //!
@@ -15,6 +17,7 @@ use crate::websocket::yjs_store::YjsStore;
 use uuid::Uuid;
 
 /// Message type constants matching the JS side.
+const MSG_GENERATION: u8 = 2;
 const MSG_SYNC: u8 = 0;
 const MSG_AWARENESS: u8 = 1;
 
@@ -46,12 +49,20 @@ pub async fn handle_binary_message(
     conn_id: &Uuid,
     can_write: bool,
 ) -> Vec<Vec<u8>> {
-    if data.len() < 2 {
+    if data.first() != Some(&MSG_GENERATION) {
         return vec![];
     }
 
-    let msg_type = data[0];
-    let payload = &data[1..];
+    let Ok((epoch, offset)) = decode_var_uint(&data[1..]) else {
+        return vec![];
+    };
+    let Ok(epoch) = i32::try_from(epoch) else {
+        return vec![];
+    };
+    let Some((&msg_type, payload)) = data.get(1 + offset..).and_then(|body| body.split_first())
+    else {
+        return vec![];
+    };
 
     match msg_type {
         MSG_SYNC => {
@@ -63,10 +74,18 @@ pub async fn handle_binary_message(
                 conn_id,
                 data,
                 can_write,
+                epoch,
             )
             .await
         }
         MSG_AWARENESS => {
+            let room = yjs_store.get_or_create_room(questionnaire_id).await;
+            let Some(current_epoch) = room.lock().await.epoch else {
+                return vec![];
+            };
+            if current_epoch != epoch {
+                return vec![generation_frame(current_epoch, &[])];
+            }
             // Relay awareness frames to other subscribers without processing.
             ws_state.broadcast_binary(
                 &format!("designer:{questionnaire_id}"),
@@ -91,6 +110,7 @@ async fn handle_sync(
     conn_id: &Uuid,
     raw_frame: &[u8],
     can_write: bool,
+    epoch: i32,
 ) -> Vec<Vec<u8>> {
     if payload.is_empty() {
         return vec![];
@@ -120,6 +140,12 @@ async fn handle_sync(
 
     {
         let mut room = room_lock.lock().await;
+        let Some(current_epoch) = room.epoch else {
+            return vec![];
+        };
+        if current_epoch != epoch {
+            return vec![generation_frame(current_epoch, &[])];
+        }
 
         match sync_type {
             MSG_SYNC_STEP1 => {
@@ -188,10 +214,20 @@ async fn handle_sync(
     }
 
     if let Some(bytes) = persist_snapshot {
-        yjs_store.persist(questionnaire_id, &bytes).await;
+        yjs_store.persist(questionnaire_id, epoch, &bytes).await;
     }
 
     responses
+        .into_iter()
+        .map(|frame| generation_frame(epoch, &frame))
+        .collect()
+}
+
+fn generation_frame(epoch: i32, body: &[u8]) -> Vec<u8> {
+    let mut frame = vec![MSG_GENERATION];
+    encode_var_uint(epoch as usize, &mut frame);
+    frame.extend_from_slice(body);
+    frame
 }
 
 fn decode_var_uint8_array(data: &[u8]) -> Result<&[u8], &'static str> {

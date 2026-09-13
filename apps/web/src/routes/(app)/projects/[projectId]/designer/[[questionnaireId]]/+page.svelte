@@ -8,6 +8,7 @@
   import { CollaborativeDesigner } from '$lib/collaboration/CollaborativeDesigner';
   import type { PageData } from './$types';
 
+  import Button from '$lib/components/ui/Button.svelte';
   import DesignerHeader from './components/DesignerHeader.svelte';
   import LeftSidebar from './components/LeftSidebar.svelte';
   import RightSidebar from './components/RightSidebar.svelte';
@@ -76,7 +77,7 @@
   $effect(() => {
     const dirty = designerStore.isDirty;
     void designerStore.questionnaire; // re-run (reschedule) on each edit
-    if (!dirty || initializationPending || initializationError) return;
+    if (!dirty || initializationPending || initializationError || designerStore.definitionReplaced) return;
 
     const timer = setTimeout(() => {
       if (designerStore.isDirty && !designerStore.isSaving) {
@@ -93,7 +94,7 @@
   // not await async callbacks, but the save is a fetch already in flight by the time
   // the component tears down, so a best-effort fire persists the pending edits.
   beforeNavigate(() => {
-    if (initializationPending || initializationError) return;
+    if (initializationPending || initializationError || designerStore.definitionReplaced) return;
     if (designerStore.isDirty && !designerStore.isSaving) {
       void designerStore.saveQuestionnaire().then((ok) => {
         if (ok) autoSave.resetTracking();
@@ -105,7 +106,7 @@
   // best-effort save AND trigger the browser's native unsaved-changes prompt; the
   // debounce above keeps the unsaved window small when the user proceeds anyway.
   function handleBeforeUnload(event: BeforeUnloadEvent) {
-    if (initializationPending || initializationError) return;
+    if (initializationPending || initializationError || designerStore.definitionReplaced) return;
     if (designerStore.isDirty) {
       void designerStore.saveQuestionnaire();
       event.preventDefault();
@@ -190,6 +191,12 @@
       collab = new CollaborativeDesigner();
       collab.init(designerStore.questionnaire, {
         questionnaireId,
+        collaborationEpoch: designerStore.collaborationEpoch,
+        onReplaced: () => {
+          designerStore.definitionReplaced = true;
+          autoSave.stop();
+          designerStore.setCollab(null);
+        },
       });
 
       // Editing starts only after the authoritative document arrives. Allowing
@@ -203,10 +210,10 @@
         }
       }, 30000);
       const offChange = collab.onChange((updated) => {
-        if (handedOff) designerStore.applyRemoteUpdate(updated);
+        if (handedOff && !designerStore.definitionReplaced) designerStore.applyRemoteUpdate(updated);
       });
       const offSynced = collab.onSynced(() => {
-        if (!collab || initializationError) return;
+        if (!collab || initializationError || designerStore.definitionReplaced) return;
         const docQ = collab.getQuestionnaire();
         const docHasContent = docQ.pages.length > 0 || docQ.questions.length > 0;
         const storeHasContent =
@@ -257,7 +264,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    if (initializationPending || initializationError) return;
+    if (initializationPending || initializationError || designerStore.definitionReplaced) return;
     const isMeta = event.ctrlKey || event.metaKey;
     const isInput = isEditableTarget(event.target);
 
@@ -394,7 +401,13 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-{#if initializationError}
+{#if designerStore.definitionReplaced}
+  <div class="p-8" role="alert" data-testid="designer-replacement-conflict">
+    <h1 class="text-xl font-semibold">This draft was replaced</h1>
+    <p class="mt-3">Editing has stopped because another definition replaced this draft. Reload to continue with the current draft.</p>
+    <Button class="mt-4" onclick={() => window.location.reload()}>Reload Current Draft</Button>
+  </div>
+{:else if initializationError}
   <div class="p-8" role="alert" data-testid="designer-load-error">
     <h1 class="text-xl font-semibold">Questionnaire could not be opened</h1>
     <p class="mt-3 whitespace-pre-wrap">{initializationError}</p>

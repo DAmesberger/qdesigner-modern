@@ -8,15 +8,25 @@
   interface Props {
     open?: boolean;
     projectId: string;
+    replaceQuestionnaireId?: string;
+    onreplaced?: () => void;
     oncreated?: (questionnaireId: string) => void | Promise<void>;
   }
 
-  let { open = $bindable(false), projectId, oncreated }: Props = $props();
+  let {
+    open = $bindable(false),
+    projectId,
+    oncreated,
+    replaceQuestionnaireId,
+    onreplaced,
+  }: Props = $props();
   let inspecting = $state(false);
-  let creating = $state(false);
+  let applying = $state(false);
   let source = $state('');
   let idempotencyKey = $state('');
   let filename = $state('');
+  let expectedRevision = $state<number | null>(null);
+  let currentName = $state('');
   let localError = $state('');
   let result = $state<ApplyResult | null>(null);
 
@@ -32,7 +42,7 @@
   async function inspectFile(event: Event) {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
-    if (!file || inspecting || creating) return;
+    if (!file || inspecting || applying) return;
 
     filename = file.name;
     localError = '';
@@ -42,7 +52,18 @@
     idempotencyKey = crypto.randomUUID();
     try {
       source = await readText(file);
-      result = await api.questionnaires.dryRunDefinition(projectId, source);
+      if (replaceQuestionnaireId) {
+        const current = await api.questionnaires.get(projectId, replaceQuestionnaireId);
+        expectedRevision = current.version;
+        currentName = current.name;
+        result = await api.questionnaires.applyDefinition(projectId, source, idempotencyKey, {
+          questionnaireId: replaceQuestionnaireId,
+          expectedRevision,
+          commit: false,
+        });
+      } else {
+        result = await api.questionnaires.dryRunDefinition(projectId, source);
+      }
     } catch (error) {
       localError =
         error instanceof Error ? error.message : 'The definition could not be inspected.';
@@ -52,23 +73,32 @@
     }
   }
 
-  async function createDraft() {
-    if (!result?.valid || result.committed || creating || inspecting) return;
-    creating = true;
+  async function applyDefinitionChange() {
+    if (!result?.valid || result.committed || applying || inspecting) return;
+    applying = true;
     localError = '';
     try {
-      result = await api.questionnaires.applyDefinition(projectId, source, idempotencyKey);
+      if (replaceQuestionnaireId && expectedRevision === null) return;
+      result = await api.questionnaires.applyDefinition(
+        projectId,
+        source,
+        idempotencyKey,
+        replaceQuestionnaireId && expectedRevision !== null
+          ? { questionnaireId: replaceQuestionnaireId, expectedRevision }
+          : undefined
+      );
       if (result.committed && result.questionnaireId) {
-        await oncreated?.(result.questionnaireId);
+        if (replaceQuestionnaireId) onreplaced?.();
+        else await oncreated?.(result.questionnaireId);
         open = false;
       }
     } catch (error) {
       localError =
         error instanceof Error
           ? error.message
-          : 'The draft could not be created. Retry to check its outcome.';
+          : 'The definition change could not be confirmed. Retry to check its outcome.';
     } finally {
-      creating = false;
+      applying = false;
     }
   }
 
@@ -79,12 +109,19 @@
 
 <Dialog
   bind:open
-  title={oncreated ? 'Import Questionnaire Definition' : 'Inspect Questionnaire Definition'}
+  title={replaceQuestionnaireId
+    ? 'Replace Draft from Definition'
+    : oncreated
+      ? 'Import Questionnaire Definition'
+      : 'Inspect Questionnaire Definition'}
   size="lg"
 >
   <div class="space-y-5">
     <div class="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm text-foreground">
-      {#if oncreated}
+      {#if replaceQuestionnaireId}
+        Preview the incoming definition, then replace this draft. Its current definition is saved in
+        version history. Open collaborators will be asked to reload.
+      {:else if oncreated}
         Preview the definition, then create an editable draft in this project. Publishing is a
         separate action.
       {:else}
@@ -105,7 +142,7 @@
         type="file"
         accept=".qdef.json,application/json,application/vnd.qdesigner.questionnaire+json"
         onchange={inspectFile}
-        disabled={inspecting || creating}
+        disabled={inspecting || applying}
         class="mt-3 block w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-primary-foreground"
         testid="qdef-file-input"
       />
@@ -140,6 +177,11 @@
             </span>
           </div>
 
+          {#if replaceQuestionnaireId && expectedRevision !== null}
+            <p class="mt-4 text-sm">
+              Replacing <strong>{currentName}</strong> from server revision {expectedRevision}.
+            </p>
+          {/if}
           {#if result.metadata}
             <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
               <div>
@@ -181,7 +223,7 @@
           {#if result.diagnostics.length === 0}
             <p class="mt-2 text-sm text-muted-foreground">No diagnostics.</p>
           {:else}
-            <ul class="mt-2 space-y-2">
+            <ul class="mt-2 space-y-2" data-testid="qdef-diagnostics">
               {#each result.diagnostics as diagnostic}
                 <li class="rounded-md border border-border p-3 text-sm">
                   <div class="flex flex-wrap items-center gap-2">
@@ -208,17 +250,28 @@
         </div>
 
         <p class="text-sm font-medium text-foreground">
-          {result.committed ? 'Draft created.' : 'No changes were made.'}
+          {result.committed
+            ? replaceQuestionnaireId
+              ? 'Draft replaced.'
+              : 'Draft created.'
+            : 'No changes were made.'}
         </p>
       </section>
     {/if}
   </div>
 
   {#snippet footer()}
-    <Button variant="outline" onclick={close} disabled={creating}>Close</Button>
-    {#if oncreated && result?.valid && !result.committed}
-      <Button onclick={createDraft} disabled={creating || inspecting} loading={creating}
-        >Create Draft</Button
+    <Button variant="outline" onclick={close} disabled={applying}>Close</Button>
+    {#if replaceQuestionnaireId && result?.diagnostics.some((d) => d.code === 'REVISION_CONFLICT')}
+      <p class="text-sm" data-testid="qdef-revision-conflict-guidance">
+        The current server revision is {result.revision}. Reload the draft, review it, then select
+        your definition file again.
+      </p>
+      <Button onclick={() => window.location.reload()}>Reload Current Draft</Button>
+    {/if}
+    {#if (oncreated || replaceQuestionnaireId) && result?.valid && !result.committed}
+      <Button onclick={applyDefinitionChange} disabled={applying || inspecting} loading={applying}
+        >{replaceQuestionnaireId ? 'Replace Draft' : 'Create Draft'}</Button
       >
     {/if}
   {/snippet}

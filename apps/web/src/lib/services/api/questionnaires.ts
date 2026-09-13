@@ -25,14 +25,19 @@ import { mapConditionCounts } from './mappers';
 import type { QuestionnaireDefinition, ExportRow } from '$lib/shared/types/api';
 
 export const questionnaires = {
-  applyDefinition: (projectId: string, definition: string, idempotencyKey: string) =>
+  applyDefinition: (
+    projectId: string,
+    definition: string,
+    idempotencyKey: string,
+    replacement?: { questionnaireId: string; expectedRevision: number; commit?: boolean }
+  ) =>
     callSdk(async () => {
       const result = await sdk.applyDefinition({
         client: apiClient,
         responseStyle: 'fields',
         throwOnError: false,
         path: { id: projectId },
-        body: { definition, commit: true, idempotencyKey },
+        body: { definition, commit: true, idempotencyKey, ...replacement },
       });
       if (result.data) return result.data;
       // Domain rejections carry actionable paths and hints. Preserve them for
@@ -85,7 +90,11 @@ export const questionnaires = {
         body: data,
       })
     ) as Promise<QuestionnaireDefinition>,
-  update: (projectId: string, id: string, data: Partial<QuestionnaireDefinition>) =>
+  update: (
+    projectId: string,
+    id: string,
+    data: Partial<QuestionnaireDefinition> & { expected_collaboration_epoch?: number }
+  ) =>
     callSdk(() =>
       updateQuestionnaireRequest<true>({
         client: apiClient,

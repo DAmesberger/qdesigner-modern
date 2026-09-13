@@ -24,6 +24,8 @@ import type {
 
 export interface CollaborativeDesignerOptions {
   questionnaireId: string;
+  collaborationEpoch?: number;
+  onReplaced?: () => void;
   wsUrl?: string;
 }
 
@@ -46,7 +48,7 @@ export class CollaborativeDesigner {
         this.doc.getArray('variables'),
         this.doc.getArray('flow'),
       ],
-      { captureTimeout: 500 },
+      { captureTimeout: 500 }
     );
   }
 
@@ -81,6 +83,8 @@ export class CollaborativeDesigner {
     this.disconnect();
     this.provider = new YjsProvider(this.doc, {
       questionnaireId: options.questionnaireId,
+      collaborationEpoch: options.collaborationEpoch,
+      onReplaced: options.onReplaced,
       wsUrl: options.wsUrl,
     });
     this.provider.connect();

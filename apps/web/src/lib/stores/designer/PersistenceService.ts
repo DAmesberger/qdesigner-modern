@@ -15,6 +15,7 @@ export interface PersistedQuestionnaireSummary {
 export interface SavePayload {
   projectId: string;
   questionnaire: Questionnaire;
+  collaborationEpoch?: number;
 }
 
 export interface SaveOutcome {
@@ -45,8 +46,16 @@ export class DesignerPersistenceService {
     return { id: created.id };
   }
 
-  public async save({ projectId, questionnaire }: SavePayload): Promise<SaveOutcome> {
-    const result = await QuestionnairePersistenceService.saveQuestionnaire(questionnaire, projectId);
+  public async save({
+    projectId,
+    questionnaire,
+    collaborationEpoch,
+  }: SavePayload): Promise<SaveOutcome> {
+    const result = await QuestionnairePersistenceService.saveQuestionnaire(
+      questionnaire,
+      projectId,
+      collaborationEpoch
+    );
     return {
       success: result.success,
       id: result.questionnaireId,
@@ -64,13 +73,22 @@ export class DesignerPersistenceService {
     return result.questionnaires;
   }
 
-  public async load(projectId: string, questionnaireId: string): Promise<Questionnaire | null> {
-    const result = await QuestionnairePersistenceService.loadQuestionnaire(projectId, questionnaireId);
+  public async load(
+    projectId: string,
+    questionnaireId: string
+  ): Promise<{ questionnaire: Questionnaire; collaborationEpoch: number } | null> {
+    const result = await QuestionnairePersistenceService.loadQuestionnaire(
+      projectId,
+      questionnaireId
+    );
     if (!result.success || !result.questionnaire) {
       return null;
     }
 
-    return result.questionnaire;
+    return {
+      questionnaire: result.questionnaire,
+      collaborationEpoch: result.collaborationEpoch ?? 0,
+    };
   }
 
   public async publish(projectId: string, questionnaireId: string): Promise<SaveOutcome> {

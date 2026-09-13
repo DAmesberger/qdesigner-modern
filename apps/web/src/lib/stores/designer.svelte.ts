@@ -103,6 +103,8 @@ function writeTranslationEntry(
 }
 
 export class DesignerStore {
+  collaborationEpoch = $state(0);
+  definitionReplaced = $state(false);
   private readonly documentStore = new DocumentStore();
   private readonly persistenceService = new DesignerPersistenceService();
 
@@ -271,6 +273,8 @@ export class DesignerStore {
   }
 
   init(questionnaire: Questionnaire) {
+    this.collaborationEpoch = 0;
+    this.definitionReplaced = false;
     const normalized = this.documentStore.normalizeQuestionnaire(questionnaire);
     this.questionnaire = normalized;
     this.resetHistory(normalized);
@@ -453,6 +457,7 @@ export class DesignerStore {
   loadQuestionnaireFromDefinition(data: any) {
     const normalized = this.documentStore.normalizeQuestionnaire(data);
     this.init(normalized);
+    this.collaborationEpoch = data.collaboration_epoch ?? 0;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- raw import data with dynamic shape
@@ -970,6 +975,7 @@ export class DesignerStore {
    * ever silent again, the author works on and loses everything.
    */
   async saveQuestionnaire(): Promise<boolean> {
+    if (this.definitionReplaced) return false;
     if (!this.projectId) {
       this.saveError = m.designer_save_error_no_project();
       this.surfaceSaveError(m.designer_save_error_title(), this.saveError);
@@ -1022,6 +1028,7 @@ export class DesignerStore {
       const result = await this.persistenceService.save({
         projectId: this.projectId!,
         questionnaire: this.questionnaire,
+        collaborationEpoch: this.collaborationEpoch,
       });
 
       if (!result.success) {
@@ -1067,6 +1074,7 @@ export class DesignerStore {
       const result = await this.persistenceService.save({
         projectId: this.projectId!,
         questionnaire: this.questionnaire,
+        collaborationEpoch: this.collaborationEpoch,
       });
 
       if (!result.success) {
@@ -1202,7 +1210,8 @@ export class DesignerStore {
     const loaded = await this.persistenceService.load(this.projectId, id);
     if (!loaded) return false;
 
-    this.init(loaded);
+    this.init(loaded.questionnaire);
+    this.collaborationEpoch = loaded.collaborationEpoch;
     return true;
   }
 

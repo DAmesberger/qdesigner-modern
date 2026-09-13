@@ -16,6 +16,7 @@ export interface SaveResult {
 export interface LoadResult {
   success: boolean;
   questionnaire?: Questionnaire;
+  collaborationEpoch?: number;
   error?: string;
 }
 
@@ -26,7 +27,8 @@ export class QuestionnairePersistenceService {
    */
   static async saveQuestionnaire(
     questionnaire: Questionnaire,
-    projectId: string
+    projectId: string,
+    collaborationEpoch = 0
   ): Promise<SaveResult> {
     try {
       const content = {
@@ -47,21 +49,22 @@ export class QuestionnairePersistenceService {
         consent: questionnaire.consent,
         flow: questionnaire.flow,
         created: questionnaire.created,
-        modified: new Date().toISOString()
+        modified: new Date().toISOString(),
       };
 
       if (questionnaire.id) {
         // Update existing questionnaire
         await api.questionnaires.update(projectId, questionnaire.id, {
+          expected_collaboration_epoch: collaborationEpoch,
           name: questionnaire.name,
           description: questionnaire.description,
           content,
-          settings: (questionnaire.settings || {}) as Record<string, unknown>
+          settings: (questionnaire.settings || {}) as Record<string, unknown>,
         });
 
         return {
           success: true,
-          questionnaireId: questionnaire.id
+          questionnaireId: questionnaire.id,
         };
       } else {
         // Create new questionnaire
@@ -69,12 +72,12 @@ export class QuestionnairePersistenceService {
           name: questionnaire.name,
           description: questionnaire.description,
           content,
-          settings: (questionnaire.settings || {}) as Record<string, unknown>
+          settings: (questionnaire.settings || {}) as Record<string, unknown>,
         });
 
         return {
           success: true,
-          questionnaireId: result.id
+          questionnaireId: result.id,
         };
       }
     } catch (error) {
@@ -83,7 +86,7 @@ export class QuestionnairePersistenceService {
       return {
         success: false,
         error: failure.message,
-        failure
+        failure,
       };
     }
   }
@@ -114,18 +117,19 @@ export class QuestionnairePersistenceService {
         consent: (content as DynamicValue).consent || undefined,
         flow: (content as DynamicValue).flow || [],
         created: (content as DynamicValue).created || data.createdAt,
-        modified: (content as DynamicValue).modified || data.updatedAt
+        modified: (content as DynamicValue).modified || data.updatedAt,
       };
 
       return {
         success: true,
-        questionnaire
+        questionnaire,
+        collaborationEpoch: data.collaboration_epoch ?? 0,
       };
     } catch (error) {
       console.error('Error loading questionnaire:', error as Error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
     }
   }
@@ -156,14 +160,14 @@ export class QuestionnairePersistenceService {
           version: q.version,
           status: q.status,
           createdAt: q.createdAt,
-          updatedAt: q.updatedAt
-        }))
+          updatedAt: q.updatedAt,
+        })),
       };
     } catch (error) {
       console.error('Error listing questionnaires:', error as Error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
     }
   }
@@ -171,7 +175,10 @@ export class QuestionnairePersistenceService {
   /**
    * Delete a questionnaire
    */
-  static async deleteQuestionnaire(projectId: string, questionnaireId: string): Promise<{ success: boolean; error?: string }> {
+  static async deleteQuestionnaire(
+    projectId: string,
+    questionnaireId: string
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       await api.questionnaires.delete(projectId, questionnaireId);
 
@@ -180,7 +187,7 @@ export class QuestionnairePersistenceService {
       console.error('Error deleting questionnaire:', error as Error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
     }
   }

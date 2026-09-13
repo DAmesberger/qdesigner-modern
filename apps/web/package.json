@@ -50,7 +50,7 @@
     "clean:all": "rm -rf dist .svelte-kit node_modules/.vite node_modules",
     "install:browsers": "playwright install",
     "prepare": "husky install || true",
-    "test:e2e:acceptance": "playwright test e2e/fullstack/designer-creation-fillout.fullstack.spec.ts e2e/fullstack/designer-reaction.fullstack.spec.ts e2e/fullstack/javascript-rejection.fullstack.spec.ts e2e/fullstack/qdef-import.fullstack.spec.ts e2e/form e2e/reaction --project=fullstack-chromium --project=form-chromium --project=reaction-chromium --workers=1 --retries=0 --trace=on"
+    "test:e2e:acceptance": "playwright test e2e/fullstack/designer-creation-fillout.fullstack.spec.ts e2e/fullstack/designer-reaction.fullstack.spec.ts e2e/fullstack/javascript-rejection.fullstack.spec.ts e2e/fullstack/qdef-import.fullstack.spec.ts e2e/fullstack/qdef-replacement.fullstack.spec.ts e2e/form e2e/reaction --project=fullstack-chromium --project=form-chromium --project=reaction-chromium --workers=1 --retries=0 --trace=on"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
