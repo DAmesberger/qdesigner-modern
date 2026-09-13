@@ -36,7 +36,10 @@ function mkQuestion(id: string, order: number) {
 }
 
 /** A single page carrying one block of type `blockType` with q1..q6 (authored order). */
-function buildQuestionnaire(blockType: Block['type']): { questionnaire: Questionnaire; block: Block } {
+function buildQuestionnaire(blockType: Block['type']): {
+  questionnaire: Questionnaire;
+  block: Block;
+} {
   const block = {
     id: 'blk-1',
     pageId: 'p1',
@@ -174,5 +177,12 @@ describe('QuestionnaireRuntime — block randomization', () => {
     const { questionnaire } = buildQuestionnaire('standard');
     const presented = await collectPresentedOrder(questionnaire, 'sess-participant-1');
     expect(presented).toEqual(AUTHORED_IDS);
+  });
+
+  it('uses ordered block references even when registry order disagrees', async () => {
+    const { questionnaire, block } = buildQuestionnaire('standard');
+    block.questions = [...AUTHORED_IDS].reverse();
+    const presented = await collectPresentedOrder(questionnaire, 'sess-stable-reference-order');
+    expect(presented).toEqual([...AUTHORED_IDS].reverse());
   });
 });

@@ -64,6 +64,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # building with `--features dns-verify`.
 hickory-resolver = { version = "0.24", optional = true }
 html5ever = "0.35"
+jsonschema = { version = "0.56.0", default-features = false }
 
 [features]
 # Enable a live DNS TXT lookup at `_qdesigner-verify.<domain>` for domain

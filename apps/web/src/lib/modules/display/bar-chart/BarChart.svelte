@@ -80,6 +80,7 @@
 
   let chartCanvas = $state<HTMLCanvasElement>();
   let chart: Chart | null = null;
+  let chartGeneration = 0;
   let lastChartData: any[] = [];
 
   const config = $derived(analytics.config);
@@ -353,6 +354,7 @@
 
     // Cleanup on unmount
     return () => {
+      chartGeneration += 1;
       if (chart) {
         chart.destroy();
         chart = null;
@@ -363,14 +365,9 @@
   // Create or update chart
   async function createOrUpdateChart(data: any[]) {
     if (!chartCanvas) return;
-
-    // Destroy existing chart if it exists
-    if (chart) {
-      chart.destroy();
-      chart = null;
-    }
-
-    const ctx = chartCanvas.getContext('2d');
+    const canvas = chartCanvas;
+    const generation = ++chartGeneration;
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const Chart = await loadChart();
@@ -378,6 +375,11 @@
     // Use provided data or create placeholder data
     const chartData = data && data.length > 0 ? data : [];
     const { labels, datasets } = await prepareChartData(chartData);
+
+    // Initial mounting and data updates can overlap while Chart.js loads or
+    // expressions resolve. Only the latest request may own this canvas.
+    if (generation !== chartGeneration || canvas !== chartCanvas || !canvas.isConnected) return;
+    chart?.destroy();
 
     chart = new Chart(ctx, {
       type: 'bar',

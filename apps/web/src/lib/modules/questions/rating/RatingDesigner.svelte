@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
   import { X } from 'lucide-svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
@@ -17,74 +18,35 @@
   }
 
   interface Props {
-    question: Question & { config: RatingConfig };
-    onUpdate?: any;
+    question: Question & { config?: RatingConfig };
+    onUpdate?: (updates: Record<string, unknown>) => void;
   }
 
-  let { question = $bindable(), onUpdate }: Props = $props();
-
-  let hasInitializedConfig = $state(false);
-  let lastConfigSnapshot = $state('');
-  let emitConfigUpdate = $state(false);
-
-  function markConfigDirty() {
-    emitConfigUpdate = true;
+  let { question, onUpdate }: Props = $props();
+  const config = $derived(buildModuleRuntimeConfig(question) as unknown as RatingConfig);
+  function updateConfig(updates: Partial<RatingConfig>) {
+    onUpdate?.({ config: { ...question.config, ...updates } });
   }
-
-  // Sync labels array size with levels count
-  $effect(() => {
-    const count = question.config.levels || 5;
-    if (question.config.labels && question.config.labels.length > count) {
-      question.config.labels = question.config.labels.slice(0, count);
-      markConfigDirty();
-    }
-  });
-
   function updateLabel(index: number, value: string) {
-    if (!question.config.labels) {
-      question.config.labels = [];
-    }
-    // Fill gaps with empty strings
-    while (question.config.labels.length <= index) {
-      question.config.labels.push('');
-    }
-    question.config.labels[index] = value;
-    question.config.labels = [...question.config.labels];
-    markConfigDirty();
+    const labels = [...(config.labels ?? [])];
+    while (labels.length <= index) labels.push('');
+    labels[index] = value;
+    updateConfig({ labels });
   }
-
   function removeLabel(index: number) {
-    if (!question.config.labels) return;
-    question.config.labels[index] = '';
-    question.config.labels = [...question.config.labels];
-    markConfigDirty();
+    updateLabel(index, '');
   }
-
-  // Keep parent question config in sync whenever this designer mutates config state.
-  $effect(() => {
-    const snapshot = JSON.stringify(question.config ?? {});
-
-    if (!hasInitializedConfig) {
-      hasInitializedConfig = true;
-      lastConfigSnapshot = snapshot;
-      return;
-    }
-
-    if (snapshot === lastConfigSnapshot) return;
-
-    lastConfigSnapshot = snapshot;
-    if (!emitConfigUpdate) return;
-
-    emitConfigUpdate = false;
-    onUpdate?.({ config: { ...question.config } } as Partial<Question>);
-  });
 </script>
 
-<div class="designer-panel" oninput={markConfigDirty} onchange={markConfigDirty}>
+<div class="designer-panel">
   <!-- Visual Style -->
   <div class="form-group">
     <label for="rating-style">Visual Style</label>
-    <Select id="rating-style" bind:value={question.config.style}>
+    <Select
+      id="rating-style"
+      value={config.style ?? 'stars'}
+      onchange={(e) => updateConfig({ style: e.currentTarget.value as RatingStyle })}
+    >
       <option value="stars">Stars</option>
       <option value="hearts">Hearts</option>
       <option value="thumbs">Thumbs Up</option>
@@ -100,8 +62,8 @@
       type="number"
       min="2"
       max="10"
-      value={String(question.config.levels ?? 5)}
-      oninput={(e) => (question.config.levels = parseInt(e.currentTarget.value) || 2)}
+      value={String(config.levels ?? 5)}
+      oninput={(e) => updateConfig({ levels: parseInt(e.currentTarget.value) || 2 })}
     />
     <p class="help-text">How many rating options (2-10)</p>
   </div>
@@ -114,8 +76,8 @@
       <Checkbox
         id="rating-allow-half"
         label="Allow half-step ratings"
-        checked={question.config.allowHalf ?? false}
-        onchange={(e) => (question.config.allowHalf = e.currentTarget.checked)}
+        checked={config.allowHalf ?? false}
+        onchange={(e) => updateConfig({ allowHalf: e.currentTarget.checked })}
       />
     </div>
 
@@ -123,8 +85,8 @@
       <Checkbox
         id="rating-show-value"
         label="Show numeric value"
-        checked={question.config.showValue ?? false}
-        onchange={(e) => (question.config.showValue = e.currentTarget.checked)}
+        checked={config.showValue ?? false}
+        onchange={(e) => updateConfig({ showValue: e.currentTarget.checked })}
       />
     </div>
   </div>
@@ -135,18 +97,22 @@
     <p class="help-text">Add descriptive labels for each rating level</p>
 
     <div class="labels-list">
-      {#each Array(question.config.levels || 5) as _, index}
+      {#each Array(config.levels || 5) as _, index}
         <div class="label-item">
           <span class="label-index">{index + 1}</span>
           <div class="label-input">
             <Input
               type="text"
-              value={question.config.labels?.[index] ?? ''}
-              placeholder={index === 0 ? 'e.g. Poor' : index === (question.config.levels || 5) - 1 ? 'e.g. Excellent' : `Level ${index + 1}`}
+              value={config.labels?.[index] ?? ''}
+              placeholder={index === 0
+                ? 'e.g. Poor'
+                : index === (config.levels || 5) - 1
+                  ? 'e.g. Excellent'
+                  : `Level ${index + 1}`}
               oninput={(e) => updateLabel(index, e.currentTarget.value)}
             />
           </div>
-          {#if question.config.labels?.[index]}
+          {#if config.labels?.[index]}
             <Button
               variant="ghost"
               size="sm"
@@ -233,5 +199,4 @@
   .label-input {
     flex: 1;
   }
-
 </style>

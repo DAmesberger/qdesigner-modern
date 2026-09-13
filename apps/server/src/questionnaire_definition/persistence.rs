@@ -2,6 +2,7 @@
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::{Connection, PgConnection};
+use std::collections::BTreeSet;
 use uuid::Uuid;
 
 use super::{
@@ -230,9 +231,10 @@ pub(super) async fn apply_prepared(
             .bind(version[0]).bind(version[1]).bind(version[2]).bind(id).execute(&mut *tx).await
     };
     if let Err(failure) = written {
-        if failure.as_database_error().is_some_and(|e| {
-            e.constraint() == Some("questionnaire_definitions_project_id_name_version_key")
-        }) {
+        if failure
+            .as_database_error()
+            .is_some_and(|e| e.constraint() == Some("questionnaire_definitions_project_name_key"))
+        {
             return Ok(invalid(vec![error("QDEF_NAME_CONFLICT", "/questionnaire/name",
                 "A questionnaire with this name already exists in this project.",
                 Some("Choose a different questionnaire name and inspect the definition again, or import into another project."))]));
@@ -267,7 +269,19 @@ struct CurrentDraft {
 
 fn persisted_content(document: &QDefDocument) -> Result<Value, ApiError> {
     let mut questions = Vec::new();
-    for (order, (id, question)) in document.questions.iter().enumerate() {
+    let mut seen = BTreeSet::new();
+    let ordered_ids = document
+        .structure
+        .pages
+        .iter()
+        .flat_map(|page| &page.blocks)
+        .flat_map(|block| &block.question_ids)
+        .chain(document.questions.keys())
+        .filter(|id| seen.insert(*id));
+    for (order, id) in ordered_ids.enumerate() {
+        let question = document.questions.get(id).ok_or_else(|| {
+            ApiError::Internal("Validated structure references a missing question".into())
+        })?;
         let mut value =
             serde_json::to_value(question).map_err(|e| ApiError::Internal(e.to_string()))?;
         value["id"] = json!(id);

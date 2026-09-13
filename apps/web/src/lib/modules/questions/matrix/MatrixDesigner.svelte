@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
   import { nanoid } from 'nanoid';
   import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Edit, Trash } from 'lucide-svelte';
   import Button from '$lib/components/ui/Button.svelte';
@@ -31,17 +32,22 @@
   }
 
   interface Props {
-    question: Question & { config: MatrixConfig };
+    question: Question & { config?: MatrixConfig };
+    onUpdate?: (updates: Record<string, unknown>) => void;
   }
 
-  let { question = $bindable() }: Props = $props();
+  let { question, onUpdate }: Props = $props();
+  const config = $derived(buildModuleRuntimeConfig(question) as unknown as MatrixConfig);
+  function updateConfig(updates: Partial<MatrixConfig>) {
+    onUpdate?.({ config: { ...question.config, ...updates } });
+  }
 
   // Defensive reads: a newly-created or legacy question may lack these
   // fields. Falling back keeps {#each} iteration and comparisons from
   // throwing during render and freezing the entire designer.
-  const rows = $derived(question.config?.rows ?? []);
-  const columns = $derived(question.config?.columns ?? []);
-  const responseType = $derived(question.config?.responseType ?? 'radio');
+  const rows = $derived(config?.rows ?? []);
+  const columns = $derived(config?.columns ?? []);
+  const responseType = $derived(config?.responseType ?? 'radio');
 
   let editingRow: MatrixRow | null = $state(null);
   let editingColumn: MatrixColumn | null = $state(null);
@@ -58,22 +64,22 @@
       required: true,
     };
 
-    question.config.rows = [...(question.config.rows ?? []), newRow];
+    updateConfig({ rows: [...(config.rows ?? []), newRow] });
     newRowLabel = '';
   }
 
   function updateRow(row: MatrixRow) {
-    const current = question.config.rows ?? [];
+    const current = [...(config.rows ?? [])];
     const index = current.findIndex((r) => r.id === row.id);
     if (index !== -1) {
       current[index] = row;
-      question.config.rows = [...current];
+      updateConfig({ rows: current });
     }
     editingRow = null;
   }
 
   function deleteRow(row: MatrixRow) {
-    question.config.rows = (question.config.rows ?? []).filter((r) => r.id !== row.id);
+    updateConfig({ rows: (config.rows ?? []).filter((r) => r.id !== row.id) });
   }
 
   function addColumn() {
@@ -82,30 +88,33 @@
     const newColumn: MatrixColumn = {
       id: nanoid(8),
       label: newColumnLabel.trim(),
-      value: newColumnValue.trim() || newColumnLabel.trim(),
+      value:
+        responseType === 'scale'
+          ? columns.length + 1
+          : newColumnValue.trim() || newColumnLabel.trim(),
     };
 
-    question.config.columns = [...(question.config.columns ?? []), newColumn];
+    updateConfig({ columns: [...(config.columns ?? []), newColumn] });
     newColumnLabel = '';
     newColumnValue = '';
   }
 
   function updateColumn(column: MatrixColumn) {
-    const current = question.config.columns ?? [];
+    const current = [...(config.columns ?? [])];
     const index = current.findIndex((c) => c.id === column.id);
     if (index !== -1) {
       current[index] = column;
-      question.config.columns = [...current];
+      updateConfig({ columns: current });
     }
     editingColumn = null;
   }
 
   function deleteColumn(column: MatrixColumn) {
-    question.config.columns = (question.config.columns ?? []).filter((c) => c.id !== column.id);
+    updateConfig({ columns: (config.columns ?? []).filter((c) => c.id !== column.id) });
   }
 
   function moveRow(index: number, direction: 'up' | 'down') {
-    const newRows = [...(question.config.rows ?? [])];
+    const newRows = [...(config.rows ?? [])];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
 
     if (targetIndex >= 0 && targetIndex < newRows.length) {
@@ -114,13 +123,13 @@
       if (current && target) {
         newRows[index] = target;
         newRows[targetIndex] = current;
-        question.config.rows = newRows;
+        updateConfig({ rows: newRows });
       }
     }
   }
 
   function moveColumn(index: number, direction: 'left' | 'right') {
-    const newColumns = [...(question.config.columns ?? [])];
+    const newColumns = [...(config.columns ?? [])];
     const targetIndex = direction === 'left' ? index - 1 : index + 1;
 
     if (targetIndex >= 0 && targetIndex < newColumns.length) {
@@ -129,27 +138,35 @@
       if (current && target) {
         newColumns[index] = target;
         newColumns[targetIndex] = current;
-        question.config.columns = newColumns;
+        updateConfig({ columns: newColumns });
       }
     }
   }
 
-  // Auto-generate numeric values for scale type
-  $effect(() => {
-    if (responseType === 'scale' && columns.length > 0) {
-      question.config.columns = columns.map((col, index) => ({
-        ...col,
-        value: index + 1,
-      }));
-    }
-  });
+  function updateResponseType(type: MatrixConfig['responseType']) {
+    updateConfig({
+      responseType: type,
+      ...(type === 'scale'
+        ? {
+            columns: columns.map((column, index) => ({
+              ...column,
+              value: typeof column.value === 'number' ? column.value : index + 1,
+            })),
+          }
+        : {}),
+    });
+  }
 </script>
 
 <div class="designer-panel">
   <!-- Response Type -->
   <div class="form-group">
     <label for="response-type">Response Type</label>
-    <Select id="response-type" bind:value={question.config.responseType}>
+    <Select
+      id="response-type"
+      value={config.responseType}
+      onchange={(e) => updateResponseType(e.currentTarget.value as MatrixConfig['responseType'])}
+    >
       <option value="radio">Radio (Single choice per row)</option>
       <option value="checkbox">Checkbox (Multiple choice per row)</option>
       <option value="text">Text Input</option>
@@ -166,8 +183,8 @@
       <Checkbox
         id="matrix-sticky-headers"
         label="Sticky column headers"
-        checked={question.config.stickyHeaders ?? false}
-        onchange={(e) => (question.config.stickyHeaders = e.currentTarget.checked)}
+        checked={config.stickyHeaders ?? false}
+        onchange={(e) => updateConfig({ stickyHeaders: e.currentTarget.checked })}
       />
     </div>
 
@@ -175,14 +192,19 @@
       <Checkbox
         id="matrix-alt-row-colors"
         label="Alternate row colors"
-        checked={question.config.alternateRowColors ?? false}
-        onchange={(e) => (question.config.alternateRowColors = e.currentTarget.checked)}
+        checked={config.alternateRowColors ?? false}
+        onchange={(e) => updateConfig({ alternateRowColors: e.currentTarget.checked })}
       />
     </div>
 
     <div class="form-group">
       <label for="mobile-layout">Mobile Layout</label>
-      <Select id="mobile-layout" bind:value={question.config.mobileLayout}>
+      <Select
+        id="mobile-layout"
+        value={config.mobileLayout}
+        onchange={(e) =>
+          updateConfig({ mobileLayout: e.currentTarget.value as MatrixConfig['mobileLayout'] })}
+      >
         <option value="scroll">Horizontal Scroll</option>
         <option value="accordion">Accordion</option>
         <option value="cards">Cards</option>
@@ -211,7 +233,9 @@
               onchange={(e) => editingRow && (editingRow.required = e.currentTarget.checked)}
             />
             <div class="edit-actions">
-              <Button variant="primary" size="sm" onclick={() => updateRow(editingRow!)}> Save </Button>
+              <Button variant="primary" size="sm" onclick={() => updateRow(editingRow!)}>
+                Save
+              </Button>
               <Button variant="secondary" size="sm" onclick={() => (editingRow = null)}>
                 Cancel
               </Button>
@@ -255,7 +279,13 @@
               >
                 <Edit size={16} />
               </Button>
-              <Button variant="ghost" size="sm" class="hover:text-destructive" onclick={() => deleteRow(row)} aria-label="Delete">
+              <Button
+                variant="ghost"
+                size="sm"
+                class="hover:text-destructive"
+                onclick={() => deleteRow(row)}
+                aria-label="Delete"
+              >
                 <Trash size={16} />
               </Button>
             </div>
@@ -487,6 +517,4 @@
     display: flex;
     gap: 0.5rem;
   }
-
-
 </style>

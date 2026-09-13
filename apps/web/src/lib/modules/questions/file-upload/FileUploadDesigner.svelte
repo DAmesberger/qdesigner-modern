@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
@@ -16,10 +17,15 @@
   }
 
   interface Props {
-    question: Question & { config: FileUploadConfig };
+    question: Question & { config?: FileUploadConfig };
+    onUpdate?: (updates: Record<string, unknown>) => void;
   }
 
-  let { question = $bindable() }: Props = $props();
+  let { question, onUpdate }: Props = $props();
+  const storedConfig = $derived(buildModuleRuntimeConfig(question) as unknown as FileUploadConfig);
+  function updateConfig(updates: Partial<FileUploadConfig>) {
+    onUpdate?.({ config: { ...question.config, ...updates } });
+  }
 
   // Common file types
   const fileTypePresets = [
@@ -44,31 +50,27 @@
   let newAcceptType = $state('');
   let selectedPreset = $state('');
 
-  // Initialize config defaults
-  $effect(() => {
-    if (!question.config.accept) question.config.accept = [];
-    if (!question.config.maxSize) question.config.maxSize = 25 * 1024 * 1024;
-    if (!question.config.maxFiles) question.config.maxFiles = 1;
-    if (question.config.dragDrop === undefined) question.config.dragDrop = true;
+  const config = $derived({
+    accept: [],
+    maxSize: 25 * 1024 * 1024,
+    maxFiles: 1,
+    dragDrop: true,
+    ...storedConfig,
   });
 
   function addAcceptType() {
     if (!newAcceptType) return;
 
-    if (!question.config.accept) {
-      question.config.accept = [];
-    }
-
-    if (!question.config.accept.includes(newAcceptType)) {
-      question.config.accept = [...question.config.accept, newAcceptType];
+    if (!config.accept.includes(newAcceptType)) {
+      updateConfig({ accept: [...config.accept, newAcceptType] });
     }
 
     newAcceptType = '';
   }
 
   function removeAcceptType(type: string) {
-    if (!question.config.accept) return;
-    question.config.accept = question.config.accept.filter((t) => t !== type);
+    if (!config.accept) return;
+    updateConfig({ accept: config.accept.filter((t) => t !== type) });
   }
 
   function applyPreset() {
@@ -76,9 +78,7 @@
 
     const preset = fileTypePresets.find((p) => p.label === selectedPreset);
     if (preset) {
-      question.config.accept = [...(question.config.accept || []), ...preset.value];
-      // Remove duplicates
-      question.config.accept = [...new Set(question.config.accept)];
+      updateConfig({ accept: [...new Set([...(config.accept || []), ...preset.value])] });
     }
 
     selectedPreset = '';
@@ -123,9 +123,9 @@
       </Button>
     </div>
 
-    {#if question.config.accept?.length}
+    {#if config.accept?.length}
       <div class="accept-types-list">
-        {#each question.config.accept as type}
+        {#each config.accept as type}
           <div class="accept-type-item">
             <span>{type}</span>
             <Button
@@ -146,12 +146,16 @@
   <!-- File Size -->
   <div class="form-group">
     <label for="max-size">Maximum File Size</label>
-    <Select id="max-size" bind:value={question.config.maxSize}>
+    <Select
+      id="max-size"
+      value={config.maxSize}
+      onchange={(e) => updateConfig({ maxSize: Number(e.currentTarget.value) })}
+    >
       {#each fileSizePresets as preset}
         <option value={preset.value}>{preset.label}</option>
       {/each}
     </Select>
-    <p class="help-text">Current: {formatFileSize(question.config.maxSize || 0)}</p>
+    <p class="help-text">Current: {formatFileSize(config.maxSize || 0)}</p>
   </div>
 
   <!-- File Count -->
@@ -162,9 +166,11 @@
       type="number"
       min="1"
       max="100"
-      value={question.config.maxFiles != null ? String(question.config.maxFiles) : ''}
+      value={config.maxFiles != null ? String(config.maxFiles) : ''}
       oninput={(e) =>
-        (question.config.maxFiles = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+        updateConfig({
+          maxFiles: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+        })}
     />
     <p class="help-text">Allow multiple file uploads (1 = single file only)</p>
   </div>
@@ -177,14 +183,14 @@
       <Checkbox
         id="file-drag-drop"
         label="Enable drag & drop upload"
-        checked={question.config.dragDrop ?? false}
-        onchange={(e) => (question.config.dragDrop = e.currentTarget.checked)}
+        checked={config.dragDrop ?? false}
+        onchange={(e) => updateConfig({ dragDrop: e.currentTarget.checked })}
       />
     </div>
 
     <p class="help-text">
-      Uploaded files are saved on the device first and delivered when the participant is online,
-      so capture works fully offline. The response is complete as soon as the file is chosen.
+      Uploaded files are saved on the device first and delivered when the participant is online, so
+      capture works fully offline. The response is complete as soon as the file is chosen.
     </p>
   </div>
 
@@ -197,23 +203,21 @@
           <div class="stat">
             <span class="stat-label">Accepted:</span>
             <span class="stat-value">
-              {question.config.accept?.length ? question.config.accept.join(', ') : 'All types'}
+              {config.accept?.length ? config.accept.join(', ') : 'All types'}
             </span>
           </div>
           <div class="stat">
             <span class="stat-label">Max size:</span>
-            <span class="stat-value">{formatFileSize(question.config.maxSize || 0)}</span>
+            <span class="stat-value">{formatFileSize(config.maxSize || 0)}</span>
           </div>
           <div class="stat">
             <span class="stat-label">Max files:</span>
-            <span class="stat-value">{question.config.maxFiles || 1}</span>
+            <span class="stat-value">{config.maxFiles || 1}</span>
           </div>
           <div class="stat">
             <span class="stat-label">Features:</span>
             <span class="stat-value">
-              {[question.config.dragDrop && 'Drag & Drop']
-                .filter(Boolean)
-                .join(', ') || 'Basic upload'}
+              {[config.dragDrop && 'Drag & Drop'].filter(Boolean).join(', ') || 'Basic upload'}
             </span>
           </div>
         </div>

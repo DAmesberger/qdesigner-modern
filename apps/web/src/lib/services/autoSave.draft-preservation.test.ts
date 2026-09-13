@@ -51,6 +51,60 @@ beforeEach(() => {
 });
 
 describe('autosave draft preservation on server failure (F-48)', () => {
+  it('reports failure when local draft persistence fails', async () => {
+    designerStore.setUserId('u1');
+    designerStore.setProjectId('p1');
+    designerStore.loadQuestionnaireFromDefinition({
+      id: 'q-storage-failure',
+      name: 'Study',
+      questions: [],
+      pages: [],
+    });
+    saveDraft.mockRejectedValueOnce(new DOMException('Storage full', 'QuotaExceededError'));
+    expect(await autoSave.saveNow()).toBe(false);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('hands local storage a cloneable snapshot of a reactive imported question', async () => {
+    designerStore.setUserId('u1');
+    designerStore.setProjectId('p1');
+    designerStore.loadQuestionnaireFromDefinition({
+      id: 'q-reactive',
+      name: 'Imported form',
+      versionMajor: 1,
+      versionMinor: 0,
+      versionPatch: 0,
+      questions: [
+        {
+          id: 'text',
+          type: 'text-input',
+          required: true,
+          order: 0,
+          conditions: { show: 'true' },
+          config: { minLength: 5 },
+        },
+      ],
+      pages: [{ id: 'p1', name: 'P', blocks: [{ id: 'b1', name: 'B', questions: ['text'] }] }],
+    });
+    let captured: unknown;
+    // IndexedDB uses the platform structured-clone algorithm. This boundary
+    // deliberately rejects reactive proxies, just as the browser does.
+    saveDraft.mockImplementationOnce(async (_key, data) => {
+      captured = structuredClone(data);
+    });
+    updateMock.mockRejectedValue(new Error('Network unavailable'));
+    expect(await autoSave.saveNow()).toBe(true);
+    expect(captured).toMatchObject({
+      questions: [
+        expect.objectContaining({
+          id: 'text',
+          conditions: { show: 'true' },
+          config: { minLength: 5 },
+        }),
+      ],
+    });
+  });
+
   it('persists the draft and never deletes it when the server save fails', async () => {
     // A persisted questionnaire (has an id) whose server UPDATE fails.
     designerStore.setUserId('u1');

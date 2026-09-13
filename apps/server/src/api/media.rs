@@ -163,10 +163,17 @@ pub fn validate_upload(
         )));
     }
 
+    // infer recognizes WebM's container signature, not its track types. Both
+    // video/webm and audio/webm use that signature (including MediaRecorder's
+    // audio-only Opus output): https://www.webmproject.org/docs/container/.
+    // This exception applies only after the bytes have passed the media gate.
+    let webm_audio = sniffed_mime == "video/webm" && declared_essence == "audio/webm";
+
     // The declared header must agree with the sniffed content. Accept the
     // common `application/octet-stream` default as "unspecified" only when it
     // is the literal generic value — a mismatched concrete type is rejected.
     let declared_ok = declared_essence == sniffed_mime
+        || webm_audio
         || declared_essence == "application/octet-stream"
         || declared_essence.is_empty();
     if !declared_ok {
@@ -175,7 +182,12 @@ pub fn validate_upload(
         )));
     }
 
-    Ok((sniffed_mime.to_string(), kind.extension().to_string()))
+    let canonical_mime = if webm_audio {
+        "audio/webm"
+    } else {
+        sniffed_mime
+    };
+    Ok((canonical_mime.to_string(), kind.extension().to_string()))
 }
 
 /// Recover an image's intrinsic pixel dimensions from its header (F-8).
@@ -847,6 +859,17 @@ pub async fn upload_session_media(
 #[cfg(test)]
 mod validate_upload_tests {
     use super::*;
+
+    #[test]
+    fn browser_audio_webm_uses_the_shared_webm_container_signature() {
+        let header = [0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01];
+        assert_eq!(
+            validate_upload(&header, "audio/webm;codecs=opus").unwrap(),
+            ("audio/webm".into(), "webm".into())
+        );
+        assert!(validate_upload(&png_bytes(), "audio/webm").is_err());
+        assert!(validate_upload(&header, "audio/mpeg").is_err());
+    }
 
     // 8-byte PNG signature followed by a minimal IHDR chunk header so the
     // sniffer has enough to work with.

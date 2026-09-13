@@ -461,7 +461,8 @@
     </div>
   {/if}
 
-  <div class="response-area mt-4">
+  <!-- Disabled answer controls must not swallow the card's edit-mode selection click. -->
+  <div class="response-area mt-4" inert={mode === 'edit'}>
     {#if responseConfig?.component === 'choice'}
       {@const choiceConfig = responseConfig}
       <div class="choices flex flex-col gap-3">

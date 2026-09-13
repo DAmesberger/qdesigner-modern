@@ -16,12 +16,18 @@ export async function createInDesigner(page: Page, workspace: ProvisionedWorkspa
   return designer;
 }
 
-export async function addModule(designer: DesignerPage, type: string, name: string) {
+export async function addModule(
+  designer: DesignerPage,
+  type: string,
+  name: string,
+  category: 'display' | 'question' = 'question'
+) {
   const page = designer.page;
   await designer.closeFlyoutIfOpen();
   if (!(await page.getByTestId('designer-module-palette').isVisible())) {
     await page.getByTestId('rail-add').click();
   }
+  await page.getByTestId(`designer-module-category-${category}`).click();
   await page.getByTestId(`designer-module-${type}`).click();
   await designer.closeFlyoutIfOpen();
   await expect(page.getByLabel('Question Type', { exact: true })).toHaveValue(type);

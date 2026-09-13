@@ -41,7 +41,9 @@ product boundary, not a built-in legacy converter.
 These choices carry the requirements in [the successor specification](../questionnaire-definition-mcp-requirements.md)
 and [#75](https://github.com/DAmesberger/qdesigner-modern/issues/75). They deliberately
 replace the older JavaScript product design. Full Safe Logic authoring/execution,
-complete QDef import/packages and MCP remain implementation work; the existing
-text-only export/dry-run tracer does not satisfy them. The prior sequencing in
+complete QDef import/packages and MCP have separate delivery criteria; incremental
+module support does not satisfy the whole foundation. Track implementation and
+verification in [the QDef delivery goal](../qdef-authoring-delivery-goal.md).
+The prior sequencing in
 #90/#91 that retained JavaScript until replacements shipped is superseded by the
 immediate-removal decision above.

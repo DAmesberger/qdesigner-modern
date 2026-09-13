@@ -2,6 +2,9 @@ import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/svelte';
 import MultipleChoice from '$lib/modules/questions/multiple-choice/MultipleChoice.svelte';
 import Matrix from '$lib/modules/questions/matrix/Matrix.svelte';
+import Scale from '$lib/modules/questions/scale/Scale.svelte';
+import { getModuleDefinition } from '@qdesigner/questionnaire-core';
+import type { ComponentProps } from 'svelte';
 import type { Question } from '@qdesigner/questionnaire-core';
 import { buildModuleRuntimeConfig } from './moduleConfigAdapter';
 
@@ -26,6 +29,41 @@ beforeAll(() => {
  */
 describe('fillout form-question response capture', () => {
   afterEach(() => cleanup());
+
+  it('renders an authored scale with endpoint labels and captures the selected value', async () => {
+    const question = {
+      id: 'agreement',
+      type: 'scale',
+      order: 0,
+      required: true,
+      ...getModuleDefinition('scale').defaultConfig,
+      display: {
+        prompt: 'Agreement',
+        min: 1,
+        max: 5,
+        step: 1,
+        style: 'buttons',
+        labels: { min: 'Disagree', max: 'Agree' },
+      },
+    };
+    const before = structuredClone(question);
+    const onResponse = vi.fn();
+    const screen = render(Scale, {
+      props: {
+        // The stored question is adapted at the production component boundary.
+        question: {
+          ...question,
+          config: buildModuleRuntimeConfig(question as Question),
+        } as unknown as ComponentProps<typeof Scale>['question'],
+        mode: 'runtime',
+        onResponse,
+      },
+    });
+    expect(screen.getByRole('radio', { name: '1 Disagree' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('radio', { name: '5 Agree' }));
+    expect(onResponse.mock.calls.at(-1)?.[0]).toBe(5);
+    expect(question).toEqual(before);
+  });
 
   it('captures a single-choice response from the mounted MultipleChoice component', async () => {
     const question = {

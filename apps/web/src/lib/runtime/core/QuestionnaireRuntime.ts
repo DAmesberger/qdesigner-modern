@@ -435,7 +435,9 @@ export class QuestionnaireRuntime {
       // ${qid}_value / _time / _rt / _correct (and thus {{qid}} interpolation and any
       // dependent conditions) are correct on resume. Skip answers whose question is
       // gone from this (possibly newer/pinned-fallback) definition.
-      const question = this.config.questionnaire.questions.find((q) => q.id === response.questionId);
+      const question = this.config.questionnaire.questions.find(
+        (q) => q.id === response.questionId
+      );
       if (question) {
         const isCorrect = this.evaluateCustomCorrectness(question, response.value);
         this.updateQuestionVariables(question, response, isCorrect);
@@ -562,10 +564,9 @@ export class QuestionnaireRuntime {
       }
       // Shader compile/link, buffer, or uniform creation failures: a genuine
       // GPU/driver problem the participant can't act on. Still route to the gate.
-      throw new WebGLUnavailableError(
-        'This study could not initialize graphics on your device.',
-        { cause: err }
-      );
+      throw new WebGLUnavailableError('This study could not initialize graphics on your device.', {
+        cause: err,
+      });
     }
 
     this.renderer = renderer;
@@ -906,7 +907,8 @@ export class QuestionnaireRuntime {
   private registerAdaptiveReportVariables(): void {
     for (const page of this.config.questionnaire.pages) {
       for (const block of page.blocks || []) {
-        const reportVar = block.type === 'adaptive' ? block.adaptive?.thetaReportVariable : undefined;
+        const reportVar =
+          block.type === 'adaptive' ? block.adaptive?.thetaReportVariable : undefined;
         if (!reportVar) continue;
         this.registerVariableIfMissing({
           id: reportVar,
@@ -1175,11 +1177,17 @@ export class QuestionnaireRuntime {
             .filter((value: unknown) => value !== null && value !== undefined)
         : [];
 
-      if (optionValues.length > 0 && optionValues.every((value: unknown) => typeof value === 'number')) {
+      if (
+        optionValues.length > 0 &&
+        optionValues.every((value: unknown) => typeof value === 'number')
+      ) {
         return 'number';
       }
 
-      if (optionValues.length > 0 && optionValues.every((value: unknown) => typeof value === 'boolean')) {
+      if (
+        optionValues.length > 0 &&
+        optionValues.every((value: unknown) => typeof value === 'boolean')
+      ) {
         return 'boolean';
       }
 
@@ -1376,13 +1384,9 @@ export class QuestionnaireRuntime {
       });
     }
 
-    // Stable order-sort by `question.order` WITHIN each contiguous same-iteration run,
-    // but SKIPPING runs that came from a randomized block (see sortWithinIterationRuns).
-    // Sorting the whole flattened list (the pre-loop behaviour) would interleave loop
-    // iterations AND silently undo block randomization; restricting the sort to a run —
-    // and exempting randomized runs — preserves iteration grouping and the seeded
-    // shuffle while keeping the historical intra-page ordering for non-loop pages.
-    const ordered = this.sortWithinIterationRuns(items);
+    // Block expansion already defines authored order, loop iterations and seeded
+    // randomization. Registry order must never override these stable references.
+    const ordered = items;
 
     // Append the adaptive-block sentinels after the static items (E-FLOW-1). The
     // sentinel's `question` is a placeholder (never presented) that only satisfies the
@@ -1410,38 +1414,6 @@ export class QuestionnaireRuntime {
       if (question) return question;
     }
     return null;
-  }
-
-  /**
-   * Stable-sort each contiguous run of items that share the same `iterationIndex` by
-   * `question.order`, leaving the run boundaries (and thus loop-iteration grouping)
-   * intact — EXCEPT runs flagged {@link PresentedItem.preserveOrder} (items from a
-   * randomized block), which are emitted untouched so their seeded shuffle survives.
-   * Without that exemption the sort re-imposes `question.order` and a "Randomized Block"
-   * presents in authored order — randomization silently doing nothing. Runs are
-   * therefore segmented by BOTH `iterationIndex` AND `preserveOrder`. Array.prototype.sort
-   * is stable, so non-randomized items with equal order keep expansion order.
-   */
-  private sortWithinIterationRuns(items: PresentedItem[]): PresentedItem[] {
-    const result: PresentedItem[] = [];
-    let runStart = 0;
-    const flushRun = (endExclusive: number) => {
-      const run = items.slice(runStart, endExclusive);
-      // Randomized-block runs keep the shuffle; only authored-order runs are sorted.
-      if (!items[runStart]!.preserveOrder) {
-        run.sort((a, b) => (a.question.order || 0) - (b.question.order || 0));
-      }
-      result.push(...run);
-    };
-    const sameRun = (a: PresentedItem, b: PresentedItem): boolean =>
-      a.iterationIndex === b.iterationIndex && Boolean(a.preserveOrder) === Boolean(b.preserveOrder);
-    for (let i = 1; i <= items.length; i++) {
-      if (i === items.length || !sameRun(items[i]!, items[runStart]!)) {
-        flushRun(i);
-        runStart = i;
-      }
-    }
-    return result;
   }
 
   private applyExperimentalDesignToPage(page: Page): Page {
@@ -1639,7 +1611,6 @@ export class QuestionnaireRuntime {
     question: Question,
     metadata: ModuleMetadata
   ): Promise<void> {
-
     const advance = async () => {
       await this.clearPresentation();
       this.currentItemIndex += 1;
@@ -1961,7 +1932,8 @@ export class QuestionnaireRuntime {
     runtimeResult: QuestionRuntimeResult
   ): Promise<void> {
     const timestamp = performance.now();
-    const reactionTime = runtimeResult.reactionTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
+    const reactionTime =
+      runtimeResult.reactionTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
 
     const response: Response = {
       id: nanoid(),
@@ -2009,7 +1981,8 @@ export class QuestionnaireRuntime {
     this.pendingTimeoutQuestionId = null;
 
     const timestamp = responseMetadata?.timestamp ?? performance.now();
-    const reactionTime = responseMetadata?.responseTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
+    const reactionTime =
+      responseMetadata?.responseTimeMs ?? computeReactionTimeMs(onsetTime, timestamp);
 
     const response: Response = {
       id: nanoid(),
@@ -2035,8 +2008,7 @@ export class QuestionnaireRuntime {
     // Adaptive item-bank items (E-FLOW-1) score correctness via the CAT scoring keys
     // (step 5); everything else uses the shared custom-correctness path. Computing it
     // once here keeps `${id}_correct` and the CAT update in agreement.
-    const inAdaptive =
-      this.adaptiveController !== null && this.adaptivePresentedId === question.id;
+    const inAdaptive = this.adaptiveController !== null && this.adaptivePresentedId === question.id;
     const isCorrect = inAdaptive
       ? this.evaluateAdaptiveCorrectness(question, value)
       : this.evaluateCustomCorrectness(question, value);
@@ -2553,7 +2525,7 @@ export class QuestionnaireRuntime {
   ): void {
     if (!this.session.metadata) this.session.metadata = {};
     const pages = this.config.questionnaire.pages;
-    const toPageId = to === 'terminate' ? null : pages[to]?.id ?? null;
+    const toPageId = to === 'terminate' ? null : (pages[to]?.id ?? null);
     const prior = (this.session.metadata.custom?.flowPath as unknown[]) ?? [];
     this.session.metadata.custom = {
       ...this.session.metadata.custom,
@@ -2745,7 +2717,10 @@ export class QuestionnaireRuntime {
     if (!this.session.metadata) {
       this.session.metadata = {};
     }
-    this.session.metadata.qualityReport = this.qualityReport.generate() as unknown as Record<string, unknown>;
+    this.session.metadata.qualityReport = this.qualityReport.generate() as unknown as Record<
+      string,
+      unknown
+    >;
 
     // Eligibility screen-out (F-20): the presence of this blob is what distinguishes a
     // screened-out session from a natural completion downstream (fillout page + analytics).
@@ -2857,11 +2832,7 @@ export class QuestionnaireRuntime {
     }
 
     const responseMap = this.getResponseMap();
-    const result = resolveCarryForward(
-      cfConfig,
-      responseMap,
-      this.config.questionnaire.questions
-    );
+    const result = resolveCarryForward(cfConfig, responseMap, this.config.questionnaire.questions);
 
     // Nothing resolved (source not yet answered)
     if (

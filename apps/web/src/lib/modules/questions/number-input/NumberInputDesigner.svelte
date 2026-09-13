@@ -1,5 +1,9 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import {
+    buildModuleConfigUpdate,
+    buildModuleRuntimeConfig,
+  } from '$lib/runtime/core/moduleConfigAdapter';
   import Input from '$lib/components/ui/forms/Input.svelte';
   import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
 
@@ -15,49 +19,26 @@
   }
 
   interface Props {
-    question: Question & { config: NumberInputConfig };
-    onUpdate?: any;
+    question: Question & { config?: NumberInputConfig };
+    onUpdate?: (updates: Record<string, unknown>) => void;
   }
 
-  let { question = $bindable(), onUpdate }: Props = $props();
-
-  let hasInitializedConfig = $state(false);
-  let lastConfigSnapshot = $state('');
-  let emitConfigUpdate = $state(false);
-
-  function markConfigDirty() {
-    emitConfigUpdate = true;
+  let { question, onUpdate }: Props = $props();
+  const config = $derived(buildModuleRuntimeConfig(question) as unknown as NumberInputConfig);
+  function updateConfig(updates: Partial<NumberInputConfig>) {
+    onUpdate?.(buildModuleConfigUpdate(question, updates));
   }
-
-  // Keep parent question config in sync whenever this designer mutates config state.
-  $effect(() => {
-    const snapshot = JSON.stringify(question.config ?? {});
-
-    if (!hasInitializedConfig) {
-      hasInitializedConfig = true;
-      lastConfigSnapshot = snapshot;
-      return;
-    }
-
-    if (snapshot === lastConfigSnapshot) return;
-
-    lastConfigSnapshot = snapshot;
-    if (!emitConfigUpdate) return;
-
-    emitConfigUpdate = false;
-    onUpdate?.({ config: { ...question.config } } as Partial<Question>);
-  });
 </script>
 
-<div class="designer-panel" oninput={markConfigDirty} onchange={markConfigDirty}>
+<div class="designer-panel">
   <!-- Placeholder -->
   <div class="form-group">
     <label for="placeholder">Placeholder Text</label>
     <Input
       id="placeholder"
       type="text"
-      value={question.config.placeholder ?? ''}
-      oninput={(e) => (question.config.placeholder = e.currentTarget.value)}
+      value={config.placeholder ?? ''}
+      oninput={(e) => updateConfig({ placeholder: e.currentTarget.value })}
       placeholder="Enter placeholder text..."
     />
   </div>
@@ -71,9 +52,11 @@
         <Input
           id="min"
           type="number"
-          value={question.config.min != null ? String(question.config.min) : ''}
+          value={config.min != null ? String(config.min) : ''}
           oninput={(e) =>
-            (question.config.min = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+            updateConfig({
+              min: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+            })}
         />
       </div>
 
@@ -82,9 +65,11 @@
         <Input
           id="max"
           type="number"
-          value={question.config.max != null ? String(question.config.max) : ''}
+          value={config.max != null ? String(config.max) : ''}
           oninput={(e) =>
-            (question.config.max = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+            updateConfig({
+              max: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+            })}
         />
       </div>
     </div>
@@ -97,9 +82,11 @@
           type="number"
           min="0"
           step="any"
-          value={question.config.step != null ? String(question.config.step) : ''}
+          value={config.step != null ? String(config.step) : ''}
           oninput={(e) =>
-            (question.config.step = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+            updateConfig({
+              step: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+            })}
         />
         <p class="help-text">Increment for spin buttons and arrow keys</p>
       </div>
@@ -111,10 +98,12 @@
           type="number"
           min="0"
           max="10"
-          value={question.config.decimalPlaces != null ? String(question.config.decimalPlaces) : ''}
+          value={config.decimalPlaces != null ? String(config.decimalPlaces) : ''}
           oninput={(e) =>
-            (question.config.decimalPlaces =
-              e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+            updateConfig({
+              decimalPlaces:
+                e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+            })}
         />
         <p class="help-text">Leave empty for auto</p>
       </div>
@@ -130,8 +119,8 @@
         <Input
           id="prefix"
           type="text"
-          value={question.config.prefix ?? ''}
-          oninput={(e) => (question.config.prefix = e.currentTarget.value)}
+          value={config.prefix ?? ''}
+          oninput={(e) => updateConfig({ prefix: e.currentTarget.value })}
           placeholder="e.g. $"
         />
       </div>
@@ -141,8 +130,8 @@
         <Input
           id="suffix"
           type="text"
-          value={question.config.suffix ?? ''}
-          oninput={(e) => (question.config.suffix = e.currentTarget.value)}
+          value={config.suffix ?? ''}
+          oninput={(e) => updateConfig({ suffix: e.currentTarget.value })}
           placeholder="e.g. kg"
         />
       </div>
@@ -156,8 +145,8 @@
       <Checkbox
         id="number-spin-buttons"
         label="Show spin buttons (up/down arrows)"
-        checked={question.config.showSpinButtons ?? false}
-        onchange={(e) => (question.config.showSpinButtons = e.currentTarget.checked)}
+        checked={config.showSpinButtons ?? false}
+        onchange={(e) => updateConfig({ showSpinButtons: e.currentTarget.checked })}
       />
     </div>
   </div>

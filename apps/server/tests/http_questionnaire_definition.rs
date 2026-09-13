@@ -213,8 +213,24 @@ async fn a_name_collision_returns_repairable_diagnostics_without_consuming_the_i
         tenant.project_id
     );
     let input = serde_json::json!({"definition": text_definition().to_string(), "commit": true, "idempotencyKey": "first-import"});
-    let (status, _) = json_request(&app, "POST", &uri, Some(&owner.token), Some(&input)).await;
+    let (status, first) = json_request(&app, "POST", &uri, Some(&owner.token), Some(&input)).await;
     assert_eq!(status, StatusCode::OK);
+    // Saving the original must not release its name for another import. The old
+    // (project, name, revision) index accidentally allowed this at revision 2.
+    let (status, saved) = json_request(
+        &app,
+        "PATCH",
+        &format!(
+            "/api/projects/{}/questionnaires/{}",
+            tenant.project_id,
+            first["questionnaireId"].as_str().unwrap()
+        ),
+        Some(&owner.token),
+        Some(&serde_json::json!({"description": "Saved original"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved:?}");
+    assert_eq!(saved["version"], 2);
     let mut collision = input.clone();
     collision["idempotencyKey"] = serde_json::json!("second-import");
     let (status, rejected) =
@@ -507,4 +523,41 @@ async fn authorized_export_and_dry_run_round_trip_without_writing_questionnaire_
         json_request(&app, "GET", &questionnaire_uri, Some(&user.token), None).await;
     assert_eq!(status, StatusCode::OK, "read after dry run: {after:?}");
     assert_eq!(after, before, "dry run must not mutate Questionnaire state");
+}
+
+#[tokio::test]
+async fn concurrent_native_create_and_import_reserve_one_project_name() {
+    let Some(state) = build_test_state().await else {
+        return;
+    };
+    let app = test_app(state);
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+    let native_uri = format!("/api/projects/{}/questionnaires", tenant.project_id);
+    let import_uri = format!(
+        "/api/projects/{}/questionnaire-definitions/apply",
+        tenant.project_id
+    );
+    for attempt in 0..5 {
+        let mut definition = text_definition();
+        definition["questionnaire"]["name"] =
+            serde_json::json!(format!("Concurrent name {attempt}"));
+        let native = serde_json::json!({"name": definition["questionnaire"]["name"]});
+        let imported = serde_json::json!({"definition": definition.to_string(), "commit": true, "idempotencyKey": format!("name-race-{attempt}")});
+        let (first, second) = tokio::join!(
+            json_request(&app, "POST", &native_uri, Some(&owner.token), Some(&native)),
+            json_request(
+                &app,
+                "POST",
+                &import_uri,
+                Some(&owner.token),
+                Some(&imported)
+            )
+        );
+        assert!(
+            (first.0 == StatusCode::CREATED && second.0 == StatusCode::CONFLICT)
+                || (first.0 == StatusCode::CONFLICT && second.0 == StatusCode::OK),
+            "Exactly one writer must reserve the name: {first:?} {second:?}"
+        );
+    }
 }

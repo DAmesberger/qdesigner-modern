@@ -135,14 +135,25 @@ export class DocumentStore {
     normalized.name = source?.name || input?.name || normalized.name;
     normalized.description = source?.description ?? input?.description ?? undefined;
     normalized.organizationId =
-      input?.organizationId || input?.organization_id || source?.organizationId || normalized.organizationId;
-    normalized.projectId = input?.projectId || input?.project_id || source?.projectId || normalized.projectId;
+      input?.organizationId ||
+      input?.organization_id ||
+      source?.organizationId ||
+      normalized.organizationId;
+    normalized.projectId =
+      input?.projectId || input?.project_id || source?.projectId || normalized.projectId;
     normalized.version = source?.version || normalized.version;
-    normalized.versionMajor = source?.versionMajor ?? input?.version_major ?? normalized.versionMajor;
-    normalized.versionMinor = source?.versionMinor ?? input?.version_minor ?? normalized.versionMinor;
-    normalized.versionPatch = source?.versionPatch ?? input?.version_patch ?? normalized.versionPatch;
-    normalized.created = asDate(source?.created || input?.created || input?.created_at || normalized.created);
-    normalized.modified = asDate(source?.modified || input?.modified || input?.updated_at || normalized.modified);
+    normalized.versionMajor =
+      source?.versionMajor ?? input?.version_major ?? normalized.versionMajor;
+    normalized.versionMinor =
+      source?.versionMinor ?? input?.version_minor ?? normalized.versionMinor;
+    normalized.versionPatch =
+      source?.versionPatch ?? input?.version_patch ?? normalized.versionPatch;
+    normalized.created = asDate(
+      source?.created || input?.created || input?.created_at || normalized.created
+    );
+    normalized.modified = asDate(
+      source?.modified || input?.modified || input?.updated_at || normalized.modified
+    );
     // Existing definitions own their optional settings. Applying new-document
     // defaults here changed imported behavior (and its canonical digest) merely
     // by opening and saving it. Supply only the required settings when absent.
@@ -181,7 +192,10 @@ export class DocumentStore {
     return normalized;
   }
 
-  public addPage(questionnaire: Questionnaire, name?: string): { questionnaire: Questionnaire; pageId: string } {
+  public addPage(
+    questionnaire: Questionnaire,
+    name?: string
+  ): { questionnaire: Questionnaire; pageId: string } {
     const next = deepClone(questionnaire);
     const pageId = generateId('page');
     const blockId = generateId('block');
@@ -265,7 +279,9 @@ export class DocumentStore {
     if (!located) return questionnaire;
 
     const questionIds = new Set(located.block.questions || []);
-    located.page.blocks = (located.page.blocks || []).filter((candidate) => candidate.id !== blockId);
+    located.page.blocks = (located.page.blocks || []).filter(
+      (candidate) => candidate.id !== blockId
+    );
 
     if (located.page.blocks.length === 0) {
       const replacement = {
@@ -411,7 +427,10 @@ export class DocumentStore {
     return next;
   }
 
-  public duplicateQuestion(questionnaire: Questionnaire, questionId: string): QuestionInsertResult | null {
+  public duplicateQuestion(
+    questionnaire: Questionnaire,
+    questionId: string
+  ): QuestionInsertResult | null {
     const next = deepClone(questionnaire);
     const source = next.questions.find((question) => question.id === questionId);
     if (!source) return null;
@@ -540,7 +559,7 @@ export class DocumentStore {
   }
 
   public validate(questionnaire: Questionnaire): DocumentValidationResult {
-    const errors: ValidationFinding[] = findJavaScriptHooks(questionnaire).map(diagnostic => ({
+    const errors: ValidationFinding[] = findJavaScriptHooks(questionnaire).map((diagnostic) => ({
       field: diagnostic.path,
       message: `${diagnostic.code}: ${diagnostic.message}`,
       severity: 'error',
@@ -597,7 +616,9 @@ export class DocumentStore {
       });
     });
 
-    const duplicateVariables = this.findDuplicates(questionnaire.variables.map((variable) => variable.name));
+    const duplicateVariables = this.findDuplicates(
+      questionnaire.variables.map((variable) => variable.name)
+    );
     for (const name of duplicateVariables) {
       errors.push({
         field: 'questionnaire.variables',
@@ -746,23 +767,26 @@ export class DocumentStore {
     ): Array<{ value: string | number | boolean; label: string; key?: string }> => {
       if (!Array.isArray(input)) return [];
       const normalized = input
-        .map((option: DynamicValue): { value: string | number | boolean; label: string; key?: string } | null => {
-          if (option === null || option === undefined) return null;
-          const rawValue = option.value ?? option.id ?? option.label;
-          if (rawValue === undefined || rawValue === null) return null;
-          const parsed: { value: string | number | boolean; label: string; key?: string } = {
-            value: rawValue,
-            label: String(option.label ?? rawValue),
-          };
-          if (option.key !== undefined && option.key !== null) {
-            parsed.key = String(option.key);
-          }
-          return parsed;
-        })
-        .filter(
+        .map(
           (
-            option
-          ): option is { value: string | number | boolean; label: string; key?: string } =>
+            option: DynamicValue
+          ): { value: string | number | boolean; label: string; key?: string } | null => {
+            if (option === null || option === undefined) return null;
+            const rawValue = option.value ?? option.id ?? option.label;
+            if (rawValue === undefined || rawValue === null) return null;
+            const parsed: { value: string | number | boolean; label: string; key?: string } = {
+              ...option,
+              value: rawValue,
+              label: String(option.label ?? rawValue),
+            };
+            if (option.key !== undefined && option.key !== null) {
+              parsed.key = String(option.key);
+            }
+            return parsed;
+          }
+        )
+        .filter(
+          (option): option is { value: string | number | boolean; label: string; key?: string } =>
             option !== null
         );
       return normalized;

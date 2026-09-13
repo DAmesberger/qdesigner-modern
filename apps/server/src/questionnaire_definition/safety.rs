@@ -26,6 +26,17 @@ pub(super) fn inspect(value: &Value, path: &str, diagnostics: &mut Vec<Definitio
                     .filter(char::is_ascii_alphanumeric)
                     .flat_map(char::to_lowercase)
                     .collect();
+                // A form deadline action is a closed declarative enum, not an
+                // authored callback. Only this exact field has that meaning.
+                let deadline_action = key == "onTimeout"
+                    && matches!(
+                        path.split('/').collect::<Vec<_>>().as_slice(),
+                        ["", "questions", _, "timing"] | ["", "content", "questions", _, "timing"]
+                    )
+                    && matches!(
+                        child.as_str(),
+                        Some("auto-submit" | "skip" | "terminate" | "warn")
+                    );
                 let executable_field = matches!(
                     normalized.as_str(),
                     "script"
@@ -64,7 +75,8 @@ pub(super) fn inspect(value: &Value, path: &str, diagnostics: &mut Vec<Definitio
                         | "onbeforeunload"
                         | "onunload"
                         | "ontimeout"
-                ) && value_is_non_empty(child);
+                ) && value_is_non_empty(child)
+                    && !deadline_action;
                 let javascript_language = matches!(
                     normalized.as_str(),
                     "language" | "dialect" | "type" | "kind"

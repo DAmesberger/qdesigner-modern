@@ -1,12 +1,7 @@
 //! F-50 — a duplicate questionnaire create returns 409, not 500.
 //!
-//! `create_questionnaire` INSERTs into `questionnaire_definitions`, whose
-//! `UNIQUE(project_id, name, version)` index (00001_initial_schema.sql) trips
-//! a Postgres 23505 when a second questionnaire reuses the same name under one
-//! project (the default `version` is 1 for both). Before the fix the handler
-//! propagated that error with `?`, routing it through `From<sqlx::Error>` →
-//! `ApiError::Database` → 500. It now maps through `ApiError::from_db_error`,
-//! so the benign, client-retryable conflict surfaces as a 409 Conflict.
+//! The database reserves names within a project independently of the mutable
+//! revision. Its 23505 maps through `ApiError::from_db_error` to a repairable 409.
 
 use axum::http::StatusCode;
 
@@ -42,8 +37,17 @@ async fn duplicate_questionnaire_name_create_returns_conflict_not_500() {
         "first create must succeed: {json:?}"
     );
 
-    // Second create with the same name under the same project collides on the
-    // UNIQUE(project_id, name, version) index → must be a 409, never a 500.
+    // The same name must conflict even after the original's revision changes.
+    let id = json["id"].as_str().unwrap();
+    let (status, saved) = json_request(
+        &app,
+        "PATCH",
+        &format!("/api/projects/{project_id}/questionnaires/{id}"),
+        Some(token),
+        Some(&serde_json::json!({"description": "Saved original"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved:?}");
     let (status, json) = json_request(
         &app,
         "POST",
@@ -70,4 +74,57 @@ async fn duplicate_questionnaire_name_create_returns_conflict_not_500() {
         Some(409),
         "error envelope status must be 409: {json:?}"
     );
+}
+
+#[tokio::test]
+async fn rename_conflict_is_repairable_and_does_not_advance_the_draft() {
+    let Some(state) = build_test_state().await else {
+        return;
+    };
+    let app = test_app(state);
+    let user = register_user(&app).await;
+    let tenant = provision_tenant(&app, &user.token).await;
+    let base = format!("/api/projects/{}/questionnaires", tenant.project_id);
+    let (status, first) = json_request(
+        &app,
+        "POST",
+        &base,
+        Some(&user.token),
+        Some(&serde_json::json!({"name": "Original"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{first:?}");
+    let (status, second) = json_request(
+        &app,
+        "POST",
+        &base,
+        Some(&user.token),
+        Some(&serde_json::json!({"name": "Copy"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{second:?}");
+    let uri = format!("{base}/{}", second["id"].as_str().unwrap());
+    let (status, result) = json_request(
+        &app,
+        "PATCH",
+        &uri,
+        Some(&user.token),
+        Some(&serde_json::json!({"name": "Original"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{result:?}");
+    let (status, unchanged) = json_request(&app, "GET", &uri, Some(&user.token), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(unchanged["name"], "Copy");
+    assert_eq!(unchanged["version"], 1);
+    let (status, saved) = json_request(
+        &app,
+        "PATCH",
+        &uri,
+        Some(&user.token),
+        Some(&serde_json::json!({"name": "Copy", "description": "Another save"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved:?}");
+    assert_eq!(saved["version"], 2);
 }

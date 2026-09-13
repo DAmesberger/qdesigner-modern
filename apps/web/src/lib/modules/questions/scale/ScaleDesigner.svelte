@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
   import Input from '$lib/components/ui/forms/Input.svelte';
   import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
   import Button from '$lib/components/ui/Button.svelte';
@@ -24,28 +25,15 @@
   }
 
   interface Props extends QuestionProps {
-    question: Question & { config: ScaleConfig };
+    question: Question & { config?: ScaleConfig };
+    onUpdate?: (updates: Record<string, unknown>) => void;
   }
 
-  let { question, onResponse }: Props = $props();
-
-  // Initialize config if it doesn't exist
-  $effect(() => {
-    if (!question.config) {
-      question.config = {
-        min: 1,
-        max: 10,
-        step: 1,
-        displayType: 'buttons',
-        showValue: true,
-        showLabels: true,
-        orientation: 'horizontal',
-      };
-    }
-  });
+  let { question, onUpdate }: Props = $props();
+  const config = $derived(buildModuleRuntimeConfig(question) as unknown as ScaleConfig);
 
   function updateConfig(updates: Partial<ScaleConfig>) {
-    onResponse?.({
+    onUpdate?.({
       ...question,
       config: {
         ...question.config,
@@ -55,7 +43,7 @@
   }
 
   function updateLabel(index: number, field: keyof ScaleLabel, value: any) {
-    const labels = [...(question.config?.labels || [])];
+    const labels = [...(config?.labels || [])];
     if (labels[index]) {
       labels[index] = { ...labels[index], [field]: value };
       updateConfig({ labels });
@@ -63,11 +51,11 @@
   }
 
   function addLabel() {
-    const labels = [...(question.config?.labels || [])];
+    const labels = [...(config?.labels || [])];
     const nextValue =
-      labels.length > 0 ? Math.max(...labels.map((l) => l.value)) + 1 : question.config?.min || 1;
+      labels.length > 0 ? Math.max(...labels.map((l) => l.value)) + 1 : config?.min || 1;
 
-    if (nextValue <= (question.config?.max || 10)) {
+    if (nextValue <= (config?.max || 10)) {
       labels.push({
         value: nextValue,
         label: `Label ${nextValue}`,
@@ -77,34 +65,10 @@
   }
 
   function removeLabel(index: number) {
-    const labels = [...(question.config?.labels || [])];
+    const labels = [...(config?.labels || [])];
     labels.splice(index, 1);
     updateConfig({ labels });
   }
-
-  // Ensure min/max labels exist
-  $effect(() => {
-    const labels = question.config.labels || [];
-    const hasMinLabel = labels.some((l) => l.value === (question.config?.min || 1));
-    const hasMaxLabel = labels.some((l) => l.value === (question.config?.max || 10));
-
-    if (!hasMinLabel || !hasMaxLabel) {
-      const newLabels = [...labels];
-      if (!hasMinLabel) {
-        newLabels.push({
-          value: question.config?.min || 1,
-          label: 'Minimum',
-        });
-      }
-      if (!hasMaxLabel) {
-        newLabels.push({
-          value: question.config?.max || 10,
-          label: 'Maximum',
-        });
-      }
-      updateConfig({ labels: newLabels.sort((a, b) => a.value - b.value) });
-    }
-  });
 </script>
 
 <div class="scale-designer">
@@ -117,7 +81,7 @@
         <Input
           id="scale-min"
           type="number"
-          value={String(question.config?.min ?? 1)}
+          value={String(config?.min ?? 1)}
           oninput={(e) => updateConfig({ min: parseInt(e.currentTarget.value) || 0 })}
         />
       </div>
@@ -127,7 +91,7 @@
         <Input
           id="scale-max"
           type="number"
-          value={String(question.config?.max ?? 10)}
+          value={String(config?.max ?? 10)}
           oninput={(e) => updateConfig({ max: parseInt(e.currentTarget.value) || 10 })}
         />
       </div>
@@ -139,7 +103,7 @@
           type="number"
           min="0.1"
           step="0.1"
-          value={String(question.config?.step ?? 1)}
+          value={String(config?.step ?? 1)}
           oninput={(e) => updateConfig({ step: parseFloat(e.currentTarget.value) || 1 })}
         />
       </div>
@@ -155,7 +119,7 @@
           type="radio"
           name="displayType"
           value="buttons"
-          checked={question.config?.displayType === 'buttons'}
+          checked={config?.displayType === 'buttons'}
           onchange={() => updateConfig({ displayType: 'buttons' })}
         />
         <span>Buttons</span>
@@ -166,7 +130,7 @@
           type="radio"
           name="displayType"
           value="slider"
-          checked={question.config?.displayType === 'slider'}
+          checked={config?.displayType === 'slider'}
           onchange={() => updateConfig({ displayType: 'slider' })}
         />
         <span>Slider</span>
@@ -177,7 +141,7 @@
           type="radio"
           name="displayType"
           value="stars"
-          checked={question.config?.displayType === 'stars'}
+          checked={config?.displayType === 'stars'}
           onchange={() => updateConfig({ displayType: 'stars' })}
         />
         <span>Stars</span>
@@ -188,7 +152,7 @@
           type="radio"
           name="displayType"
           value="visual-analog"
-          checked={question.config?.displayType === 'visual-analog'}
+          checked={config?.displayType === 'visual-analog'}
           onchange={() => updateConfig({ displayType: 'visual-analog' })}
         />
         <span>Visual Analog Scale</span>
@@ -196,7 +160,7 @@
     </div>
   </div>
 
-  {#if question.config?.displayType === 'buttons'}
+  {#if config?.displayType === 'buttons'}
     <div class="form-section">
       <h3>Orientation</h3>
 
@@ -206,7 +170,7 @@
             type="radio"
             name="orientation"
             value="horizontal"
-            checked={(question.config?.orientation || 'horizontal') === 'horizontal'}
+            checked={(config?.orientation || 'horizontal') === 'horizontal'}
             onchange={() => updateConfig({ orientation: 'horizontal' })}
           />
           <span>Horizontal</span>
@@ -217,7 +181,7 @@
             type="radio"
             name="orientation"
             value="vertical"
-            checked={question.config?.orientation === 'vertical'}
+            checked={config?.orientation === 'vertical'}
             onchange={() => updateConfig({ orientation: 'vertical' })}
           />
           <span>Vertical</span>
@@ -233,7 +197,7 @@
       <Checkbox
         id="scale-show-value"
         label="Show selected value"
-        checked={question.config?.showValue ?? true}
+        checked={config?.showValue ?? true}
         onchange={(e) => updateConfig({ showValue: e.currentTarget.checked })}
       />
     </div>
@@ -242,7 +206,7 @@
       <Checkbox
         id="scale-show-labels"
         label="Show labels"
-        checked={question.config?.showLabels ?? true}
+        checked={config?.showLabels ?? true}
         onchange={(e) => updateConfig({ showLabels: e.currentTarget.checked })}
       />
     </div>
@@ -252,11 +216,11 @@
         >Default Value (optional)
         <Input
           type="number"
-          min={question.config.min}
-          max={question.config.max}
-          step={question.config.step}
+          min={config.min}
+          max={config.max}
+          step={config.step}
           placeholder="No default"
-          value={question.config?.defaultValue != null ? String(question.config.defaultValue) : ''}
+          value={config?.defaultValue != null ? String(config.defaultValue) : ''}
           oninput={(e) =>
             updateConfig({
               defaultValue: e.currentTarget.value ? parseFloat(e.currentTarget.value) : undefined,
@@ -271,7 +235,7 @@
     <p class="help-text">Define custom labels for specific scale values</p>
 
     <div class="labels-list">
-      {#each question.config?.labels || [] as label, index}
+      {#each config?.labels || [] as label, index}
         <div class="label-item">
           <div class="label-fields">
             <div class="field">
@@ -279,9 +243,9 @@
                 >Value
                 <Input
                   type="number"
-                  min={question.config.min}
-                  max={question.config.max}
-                  step={question.config.step}
+                  min={config.min}
+                  max={config.max}
+                  step={config.step}
                   value={String(label.value)}
                   oninput={(e) =>
                     updateLabel(index, 'value', parseFloat(e.currentTarget.value) || 0)}
@@ -301,7 +265,12 @@
               </label>
             </div>
 
-            <Button variant="ghost" size="sm" onclick={() => removeLabel(index)} aria-label="Remove label">
+            <Button
+              variant="ghost"
+              size="sm"
+              onclick={() => removeLabel(index)}
+              aria-label="Remove label"
+            >
               ×
             </Button>
           </div>
@@ -418,5 +387,4 @@
     align-items: flex-end;
     margin-bottom: 0.5rem;
   }
-
 </style>
