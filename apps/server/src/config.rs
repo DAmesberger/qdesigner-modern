@@ -144,6 +144,10 @@ pub struct Config {
     pub session_create_rate_max: u64,
     pub session_create_rate_window_secs: i64,
 
+    /// Session-status reads have a separate IP budget from credential attempts.
+    pub auth_session_rate_max: u64,
+    pub auth_session_rate_window_secs: i64,
+
     /// Per-session sync budget; default 120 requests / 60 seconds. A lab's
     /// participants do not share one auth/IP bucket for answer delivery.
     pub session_sync_rate_max: u64,
@@ -344,6 +348,10 @@ impl Config {
             trusted_proxy_hops: env_parse::<usize>("TRUSTED_PROXY_HOPS").filter(|&n| n > 0),
             session_create_rate_max: env_parse("SESSION_CREATE_RATE_LIMIT_MAX").unwrap_or(60),
             session_create_rate_window_secs: env_parse("SESSION_CREATE_RATE_LIMIT_WINDOW_SECS")
+                .unwrap_or(60),
+            auth_session_rate_max: env_parse("AUTH_SESSION_RATE_LIMIT_MAX").unwrap_or(120),
+            auth_session_rate_window_secs: env_parse("AUTH_SESSION_RATE_LIMIT_WINDOW_SECS")
+                .filter(|value: &i64| *value > 0)
                 .unwrap_or(60),
             session_sync_rate_max: env_parse("SESSION_SYNC_RATE_LIMIT_MAX").unwrap_or(120),
             session_sync_rate_window_secs: env_parse("SESSION_SYNC_RATE_LIMIT_WINDOW_SECS")

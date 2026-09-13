@@ -21,6 +21,8 @@ pub struct AppState {
     pub yjs_store: YjsStore,
     pub redis: Option<Arc<redis::Client>>,
     pub rate_limiter: RateLimiter,
+    /// Session-status reads are bounded independently of login attempts.
+    pub auth_session_limiter: RateLimiter,
     /// Per-email cap on verification-code sends (`authsend:{email}`).
     pub verify_send_limiter: RateLimiter,
     /// Per-email cap on verify-code attempts (`authverify:{email}`).

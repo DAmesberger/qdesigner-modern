@@ -9,7 +9,7 @@ use tower_http::catch_panic::CatchPanicLayer;
 use crate::middleware::api_key::set_api_key_context;
 use crate::middleware::fillout_rls_context::set_fillout_rls_context;
 use crate::middleware::rate_limit::{
-    client_error_rate_limit_middleware, rate_limit_middleware,
+    auth_session_rate_limit_middleware, client_error_rate_limit_middleware, rate_limit_middleware,
     session_create_rate_limit_middleware, session_media_rate_limit_middleware,
     session_sync_rate_limit_middleware,
 };
@@ -46,7 +46,6 @@ pub fn router(state: AppState) -> Router {
         .route("/login", post(auth::login))
         .route("/register", post(auth::register))
         .route("/logout", post(auth::logout))
-        .route("/session", get(auth::session_view))
         .route("/zitadel/start", get(zitadel_auth::zitadel_start))
         .route("/zitadel/callback", get(zitadel_auth::zitadel_callback))
         .route("/verify-email/send", post(auth::send_verification_code))
@@ -61,6 +60,14 @@ pub fn router(state: AppState) -> Router {
             state.clone(),
             rate_limit_middleware,
         ))
+        // Session reads do not spend the credential-attempt budget above.
+        .route(
+            "/session",
+            get(auth::session_view).route_layer(axum_mw::from_fn_with_state(
+                state.clone(),
+                auth_session_rate_limit_middleware,
+            )),
+        )
         // Outermost: contain any panic in a handler or the rate-limit layer
         // as a 500 instead of aborting the connection task.
         .layer(CatchPanicLayer::new());

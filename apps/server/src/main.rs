@@ -129,6 +129,11 @@ async fn main() {
     // ── Rate Limiter ─────────────────────────────────────────────────
     // 10 req / 60s, Redis-backed when available (per-process in-memory fallback).
     let rate_limiter = RateLimiter::new(10, 60, redis.clone());
+    let auth_session_limiter = RateLimiter::new(
+        config.auth_session_rate_max,
+        config.auth_session_rate_window_secs,
+        redis.clone(),
+    );
     // Per-email verification-code send cap (~3 / 15 min) and verify-attempt
     // limiter (~5 / 15 min). Both reuse the same Redis+in-memory RateLimiter so
     // the in-memory fallback still enforces per-process when Redis is down.
@@ -285,6 +290,7 @@ async fn main() {
         yjs_store,
         redis,
         rate_limiter,
+        auth_session_limiter,
         verify_send_limiter,
         verify_attempt_limiter,
         api_key_rate_limiter,

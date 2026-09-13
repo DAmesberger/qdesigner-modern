@@ -564,3 +564,61 @@ async fn sync_is_bounded_per_session_and_returns_retry_after() {
         }
     }
 }
+
+#[tokio::test]
+async fn session_status_reads_do_not_consume_the_login_attempt_budget() {
+    let Some(mut state) = common::build_test_state().await else {
+        return;
+    };
+    let setup = common::test_app(state.clone());
+    let user = common::register_user(&setup).await;
+    state.rate_limiter = RateLimiter::new(1, 60, None);
+    let app = common::test_app(state);
+    for _ in 0..3 {
+        let (status, body) =
+            common::json_request(&app, "GET", "/api/auth/session", Some(&user.token), None).await;
+        assert_eq!(status, StatusCode::OK, "valid session read: {body:?}");
+    }
+    let request = || {
+        common::json_req(
+            "POST",
+            "/api/auth/login",
+            None,
+            Some(&serde_json::json!({})),
+        )
+    };
+    let (first, _) = common::send(&app, request()).await;
+    assert_ne!(
+        first,
+        StatusCode::TOO_MANY_REQUESTS,
+        "reads must not consume login budget"
+    );
+    let (second, _) = common::send(&app, request()).await;
+    assert_eq!(
+        second,
+        StatusCode::TOO_MANY_REQUESTS,
+        "login attempts remain bounded"
+    );
+}
+
+#[tokio::test]
+async fn session_status_reads_remain_bounded_and_return_retry_after() {
+    let Some(mut state) = common::build_test_state().await else {
+        return;
+    };
+    state.auth_session_limiter = RateLimiter::new(2, 60, None);
+    let app = common::test_app(state);
+    for _ in 0..2 {
+        let (status, body) =
+            common::json_request(&app, "GET", "/api/auth/session", None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["authenticated"], false);
+    }
+    let (status, headers, _) = common::send_full(
+        &app,
+        common::json_req("GET", "/api/auth/session", None, None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(headers.get("retry-after").unwrap(), "60");
+}
