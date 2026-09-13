@@ -114,7 +114,9 @@ pub struct DryRunQuestionnaireDefinitionRequest {
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ApplyQuestionnaireDefinitionRequest {
-    pub definition: String,
+    pub definition: Option<String>,
+    #[schema(value_type = Option<Vec<crate::questionnaire_definition::StableDefinitionEdit>>)]
+    pub edits: Option<Box<serde_json::value::RawValue>>,
     #[serde(default)]
     pub commit: bool,
     pub idempotency_key: Option<String>,
@@ -469,7 +471,8 @@ pub async fn dry_run_definition(
         definitions
             .apply(DefinitionApplyInput {
                 project_id,
-                definition: body.definition,
+                definition: Some(body.definition),
+                edits: None,
                 commit: false,
                 idempotency_key: None,
                 questionnaire_id: None,
@@ -507,6 +510,7 @@ pub async fn apply_definition(
         .apply(DefinitionApplyInput {
             project_id,
             definition: body.definition,
+            edits: body.edits.map(|raw| raw.get().to_owned()),
             commit: body.commit,
             idempotency_key: body.idempotency_key,
             questionnaire_id: body.questionnaire_id,

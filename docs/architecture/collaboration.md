@@ -15,7 +15,8 @@ projection is saved separately by the designer's authenticated HTTP save path.
 
 ## Definition replacement
 
-QDef replacement goes through `QuestionnaireDefinition.apply`. The transaction
+QDef replacement and [stable-ID edits](definition-edits.md) go through
+`QuestionnaireDefinition.apply`. The transaction
 checks project write access and the expected server revision, snapshots the prior
 definition and settings, installs the replacement, advances its server revision
 and `collaboration_epoch`, clears `yjs_state`, and records the audit event and
