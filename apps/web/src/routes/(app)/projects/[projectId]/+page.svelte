@@ -11,6 +11,8 @@
     Users2,
   } from 'lucide-svelte';
   import Dialog from '$lib/components/ui/overlays/Dialog.svelte';
+  import Button from '$lib/components/ui/Button.svelte';
+  import QuestionnaireDefinitionInspectionDialog from '$lib/components/QuestionnaireDefinitionInspectionDialog.svelte';
   import ProjectActionsMenu from '$lib/components/ProjectActionsMenu.svelte';
   import QuestionnaireActionsMenu from '$lib/components/QuestionnaireActionsMenu.svelte';
   import { appPaths } from '$lib/routing/paths';
@@ -25,6 +27,7 @@
 
   let { data }: Props = $props();
   let showCreateModal = $state(false);
+  let showImportModal = $state(false);
   let questionnaireName = $state('');
   let questionnaireDescription = $state('');
   let searchQuery = $state('');
@@ -201,6 +204,12 @@
               <BarChart3 class="-ml-1 mr-2 h-5 w-5" />
               Analytics
             </a>
+            {#if canManage}
+              <Button
+                onclick={() => (showImportModal = true)}
+                variant="outline"
+              >Import Definition</Button>
+            {/if}
             <button
               onclick={() => (showCreateModal = true)}
               class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
@@ -395,6 +404,12 @@
 </div>
 
 <!-- Create Questionnaire Modal -->
+<QuestionnaireDefinitionInspectionDialog
+  bind:open={showImportModal}
+  projectId={data.project.id}
+  oncreated={(id) => goto(appPaths.projectDesigner(data.project.id, id))}
+/>
+
 <Dialog
   bind:open={showCreateModal}
   title="Create New Questionnaire"

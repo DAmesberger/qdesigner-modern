@@ -133,7 +133,7 @@ export class DocumentStore {
 
     normalized.id = input?.id || source?.id || normalized.id;
     normalized.name = source?.name || input?.name || normalized.name;
-    normalized.description = source?.description || input?.description || normalized.description;
+    normalized.description = source?.description ?? input?.description ?? undefined;
     normalized.organizationId =
       input?.organizationId || input?.organization_id || source?.organizationId || normalized.organizationId;
     normalized.projectId = input?.projectId || input?.project_id || source?.projectId || normalized.projectId;
@@ -143,10 +143,16 @@ export class DocumentStore {
     normalized.versionPatch = source?.versionPatch ?? input?.version_patch ?? normalized.versionPatch;
     normalized.created = asDate(source?.created || input?.created || input?.created_at || normalized.created);
     normalized.modified = asDate(source?.modified || input?.modified || input?.updated_at || normalized.modified);
-    normalized.settings = {
-      ...normalized.settings,
-      ...(source?.settings || {}),
-    };
+    // Existing definitions own their optional settings. Applying new-document
+    // defaults here changed imported behavior (and its canonical digest) merely
+    // by opening and saving it. Supply only the required settings when absent.
+    if (source?.settings) {
+      normalized.settings = {
+        allowBackNavigation: false,
+        showProgressBar: true,
+        ...source.settings,
+      };
+    }
 
     // Per-locale content translations (MOD-04, ADR 0022) live under
     // settings.translations so they ride the existing settings round-trip
@@ -618,7 +624,7 @@ export class DocumentStore {
 
     const questionIdSet = new Set(questions.map((question) => question.id));
 
-    return rawPages.map((rawPage, pageIndex) => {
+    return rawPages.map((rawPage) => {
       const sourcePage = (rawPage || {}) as Record<string, DynamicValue>;
       const pageId = sourcePage.id || generateId('page');
 
@@ -640,10 +646,10 @@ export class DocumentStore {
         ];
       }
 
-      const normalizedBlocks: Block[] = blocks.map((rawBlock: DynamicValue, blockIndex: number) => ({
+      const normalizedBlocks: Block[] = blocks.map((rawBlock: DynamicValue) => ({
         id: rawBlock.id || generateId('block'),
         pageId,
-        name: rawBlock.name || rawBlock.title || `Block ${blockIndex + 1}`,
+        name: rawBlock.name ?? rawBlock.title,
         type: this.normalizeBlockType(rawBlock.type),
         questions: Array.isArray(rawBlock.questions)
           ? rawBlock.questions.filter((id: string) => questionIdSet.has(id))
@@ -657,7 +663,7 @@ export class DocumentStore {
 
       return {
         id: pageId,
-        name: sourcePage.name || sourcePage.title || `Page ${pageIndex + 1}`,
+        name: sourcePage.name ?? sourcePage.title,
         questions: Array.isArray(sourcePage.questions) ? sourcePage.questions : undefined,
         blocks: normalizedBlocks,
         layout: sourcePage.layout,
@@ -684,9 +690,8 @@ export class DocumentStore {
       questionnaire.pages = this.createEmptyQuestionnaire().pages;
     }
 
-    questionnaire.pages.forEach((page, pageIndex) => {
+    questionnaire.pages.forEach((page) => {
       if (!page.id) page.id = generateId('page');
-      if (!page.name) page.name = `Page ${pageIndex + 1}`;
       if (!Array.isArray(page.blocks) || page.blocks.length === 0) {
         page.blocks = [
           {
@@ -699,11 +704,10 @@ export class DocumentStore {
         ];
       }
 
-      page.blocks = page.blocks.map((block, blockIndex) => ({
+      page.blocks = page.blocks.map((block) => ({
         ...block,
         id: block.id || generateId('block'),
         pageId: page.id,
-        name: block.name || `Block ${blockIndex + 1}`,
         type: this.normalizeBlockType(block.type),
         questions: Array.isArray(block.questions) ? block.questions : [],
       }));

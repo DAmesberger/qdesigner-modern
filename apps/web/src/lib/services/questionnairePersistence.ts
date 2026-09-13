@@ -102,7 +102,7 @@ export class QuestionnairePersistenceService {
       const questionnaire: Questionnaire = {
         id: (content as DynamicValue).id || data.id,
         name: (content as DynamicValue).name || data.name,
-        description: (content as DynamicValue).description || data.description || '',
+        description: (content as DynamicValue).description ?? data.description ?? undefined,
         version: (content as DynamicValue).version || `${data.version}.0.0`,
         versionMajor: (content as DynamicValue).versionMajor ?? data.version_major ?? 1,
         versionMinor: (content as DynamicValue).versionMinor ?? data.version_minor ?? 0,

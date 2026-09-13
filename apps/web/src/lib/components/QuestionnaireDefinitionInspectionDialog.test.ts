@@ -6,6 +6,7 @@ vi.mock('$lib/services/api', () => ({
   api: {
     questionnaires: {
       dryRunDefinition: vi.fn(),
+      applyDefinition: vi.fn(),
     },
   },
 }));
@@ -32,6 +33,46 @@ afterEach(() => {
 });
 
 describe('QuestionnaireDefinitionInspectionDialog', () => {
+  it('retries a failed draft creation with the same key and reports the created identity', async () => {
+    const preview = {
+      valid: true,
+      committed: false,
+      canonical: '{}\n',
+      digest: 'sha256:example',
+      metadata: null,
+      diagnostics: [],
+    };
+    vi.mocked(api.questionnaires.dryRunDefinition).mockResolvedValue(preview);
+    vi.mocked(api.questionnaires.applyDefinition)
+      .mockRejectedValueOnce(new Error('Connection interrupted'))
+      .mockResolvedValueOnce({
+        ...preview,
+        committed: true,
+        questionnaireId: 'new-draft',
+        revision: 1,
+      });
+    const oncreated = vi.fn();
+    render(QuestionnaireDefinitionInspectionDialog, {
+      open: true,
+      projectId: 'project-1',
+      oncreated,
+    });
+    const user = userEvent.setup();
+    await user.upload(
+      screen.getByTestId('qdef-file-input'),
+      new File(['{}'], 'study.qdef.json', { type: 'application/json' })
+    );
+    await user.click(await screen.findByRole('button', { name: 'Create Draft' }));
+    await screen.findByText('Connection interrupted');
+    expect(oncreated).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Create Draft' }));
+    await waitFor(() => expect(oncreated).toHaveBeenCalledWith('new-draft'));
+    const [first, retry] = vi.mocked(api.questionnaires.applyDefinition).mock.calls;
+    expect(first).toEqual(['project-1', '{}', expect.any(String)]);
+    expect(first![2]).not.toBe('');
+    expect(retry).toEqual(first);
+  });
+
   it('uploads a QDef for dry-run inspection and reports metadata, digest, and diagnostics', async () => {
     (api.questionnaires.dryRunDefinition as ReturnType<typeof vi.fn>).mockResolvedValue({
       valid: true,

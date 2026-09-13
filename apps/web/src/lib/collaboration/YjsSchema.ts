@@ -33,7 +33,8 @@ export function questionnaireToYDoc(questionnaire: Questionnaire, doc?: Y.Doc): 
     const meta = ydoc.getMap('meta');
     meta.set('id', questionnaire.id);
     meta.set('name', questionnaire.name);
-    meta.set('description', questionnaire.description ?? '');
+    if (questionnaire.description !== undefined) meta.set('description', questionnaire.description);
+    else meta.delete('description');
     meta.set('version', questionnaire.version);
     meta.set('versionMajor', questionnaire.versionMajor);
     meta.set('versionMinor', questionnaire.versionMinor);
@@ -108,7 +109,7 @@ export function yDocToQuestionnaire(doc: Y.Doc): Questionnaire {
   const questionnaire: Questionnaire = {
     id: (meta.get('id') as string) ?? '',
     name: (meta.get('name') as string) ?? 'Untitled Questionnaire',
-    description: (meta.get('description') as string) ?? '',
+    description: meta.get('description') as string | undefined,
     version: (meta.get('version') as string) ?? '1.0.0',
     versionMajor: (meta.get('versionMajor') as number) ?? 1,
     versionMinor: (meta.get('versionMinor') as number) ?? 0,
@@ -139,7 +140,7 @@ export function yDocToQuestionnaire(doc: Y.Doc): Questionnaire {
 function pageToYMap(page: Page): Y.Map<unknown> {
   const yPage = new Y.Map<unknown>();
   yPage.set('id', page.id);
-  yPage.set('name', page.name ?? '');
+  if (page.name !== undefined) yPage.set('name', page.name);
 
   const yBlocks = new Y.Array<Y.Map<unknown>>();
   for (const block of page.blocks ?? []) {
@@ -157,7 +158,7 @@ function blockToYMap(block: Block): Y.Map<unknown> {
   const yBlock = new Y.Map<unknown>();
   yBlock.set('id', block.id);
   yBlock.set('pageId', block.pageId);
-  yBlock.set('name', block.name ?? '');
+  if (block.name !== undefined) yBlock.set('name', block.name);
   yBlock.set('type', block.type);
 
   const yQuestions = new Y.Array<string>();
@@ -214,7 +215,7 @@ function yMapToPage(yPage: Y.Map<unknown>): Page {
 
   return {
     id: (yPage.get('id') as string) ?? '',
-    name: (yPage.get('name') as string) ?? '',
+    name: yPage.get('name') as string | undefined,
     blocks,
     layout: yPage.get('layout') as Page['layout'],
     conditions: yPage.get('conditions') as Page['conditions'],
@@ -228,7 +229,7 @@ function yMapToBlock(yBlock: Y.Map<unknown>): Block {
   return {
     id: (yBlock.get('id') as string) ?? '',
     pageId: (yBlock.get('pageId') as string) ?? '',
-    name: (yBlock.get('name') as string) ?? '',
+    name: yBlock.get('name') as string | undefined,
     type: (yBlock.get('type') as Block['type']) ?? 'standard',
     questions,
     randomization: yBlock.get('randomization') as Block['randomization'],

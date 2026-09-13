@@ -169,9 +169,13 @@
 {:else if QuestionComponent}
   {@const metadata = moduleRegistry.get(question.type)}
   {#if metadata?.category === 'display' || metadata?.category === 'analytics'}
-    <!-- Display modules (analytics, instructions) use analytics prop -->
+    <!-- Display modules use different public props. Match the live renderer:
+         text runtimes consume instruction, designers consume question, and
+         charts consume analytics. All receive the same normalized config. -->
     <QuestionComponent
       analytics={analyticsData}
+      instruction={fullQuestion}
+      question={fullQuestion}
       {mode}
       {variables}
       onevent={(e: any) => {

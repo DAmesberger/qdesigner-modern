@@ -3,6 +3,7 @@
 //! HTTP, UI, and future MCP adapters must cross this interface instead of
 //! maintaining their own serializers or validators.
 
+mod persistence;
 mod safety;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -48,6 +49,17 @@ pub trait DefinitionAccess {
         project_id: Uuid,
         questionnaire_id: Uuid,
     ) -> Result<Option<StoredQuestionnaire>, ApiError>;
+
+    async fn create(&mut self, input: CreateDefinition) -> Result<ApplyResult, ApiError>;
+}
+
+/// A validated creation command. Only the Definition Module constructs it;
+/// repository adapters cannot substitute unvalidated input for its document.
+pub struct CreateDefinition {
+    project_id: Uuid,
+    idempotency_key: String,
+    document: QDefDocument,
+    result: ApplyResult,
 }
 
 pub struct PostgresDefinitionAccess<'a> {
@@ -67,6 +79,10 @@ impl<'a> PostgresDefinitionAccess<'a> {
 }
 
 impl DefinitionAccess for PostgresDefinitionAccess<'_> {
+    async fn create(&mut self, input: CreateDefinition) -> Result<ApplyResult, ApiError> {
+        persistence::create(self.connection, self.user_id, input).await
+    }
+
     async fn authorize(
         &mut self,
         project_id: Uuid,
@@ -159,6 +175,7 @@ pub struct ApplyInput {
     /// Raw UTF-8 JSON. Parsing is owned by this Module, never by an Adapter.
     pub definition: String,
     pub commit: bool,
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -174,11 +191,15 @@ pub struct DefinitionArtifact {
     pub diagnostics: Vec<DefinitionDiagnostic>,
 }
 
-#[derive(Debug, Clone, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyResult {
     pub valid: bool,
     pub committed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub questionnaire_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision: Option<i32>,
     pub canonical: Option<String>,
     pub digest: Option<String>,
     pub metadata: Option<DefinitionMetadata>,
@@ -192,7 +213,7 @@ pub struct DefinitionValidationFailure {
     pub diagnostics: Vec<DefinitionDiagnostic>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DefinitionMetadata {
     pub questionnaire_name: String,
@@ -202,14 +223,14 @@ pub struct DefinitionMetadata {
     pub page_count: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum DiagnosticSeverity {
     Error,
     Warning,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DefinitionDiagnostic {
     pub code: String,
@@ -523,15 +544,6 @@ impl<A: DefinitionAccess> QuestionnaireDefinition<A> {
             .authorize(input.project_id, DefinitionCapability::Write)
             .await?;
 
-        if input.commit {
-            return Ok(invalid(vec![error(
-                "QDEF_DRY_RUN_ONLY",
-                "/commit",
-                "This QDef tracer supports inspection only and cannot write Questionnaire state.",
-                Some("Run with commit=false. Committing imports is delivered by a later ticket."),
-            )]));
-        }
-
         let raw_definition = match parse_unique_json(&input.definition) {
             Ok(definition) => definition,
             Err(parse_error) => {
@@ -588,10 +600,12 @@ impl<A: DefinitionAccess> QuestionnaireDefinition<A> {
             return Ok(invalid(diagnostics));
         }
 
-        Ok(match canonicalize(&document) {
+        let result = match canonicalize(&document) {
             Ok((canonical, digest)) => ApplyResult {
                 valid: true,
                 committed: false,
+                questionnaire_id: None,
+                revision: None,
                 metadata: Some(metadata(&document)),
                 canonical: Some(canonical),
                 digest: Some(digest),
@@ -603,7 +617,29 @@ impl<A: DefinitionAccess> QuestionnaireDefinition<A> {
                 message,
                 Some("Remove non-finite or otherwise non-canonical JSON values."),
             )]),
-        })
+        };
+        if !input.commit || !result.valid {
+            return Ok(result);
+        }
+        let Some(idempotency_key) = input
+            .idempotency_key
+            .filter(|key| !key.trim().is_empty() && key.len() <= 128)
+        else {
+            return Ok(invalid(vec![error(
+                "IDEMPOTENCY_KEY_REQUIRED",
+                "/idempotencyKey",
+                "Creating a draft requires a nonempty idempotency key of at most 128 bytes.",
+                Some("Generate a key for this import and reuse it when retrying the same request."),
+            )]));
+        };
+        self.access
+            .create(CreateDefinition {
+                project_id: input.project_id,
+                idempotency_key,
+                document,
+                result,
+            })
+            .await
     }
 }
 
@@ -638,6 +674,8 @@ fn document_from_stored(
         content,
         &[
             "id",
+            "projectId",
+            "organizationId",
             "name",
             "description",
             "version",
@@ -686,7 +724,20 @@ fn document_from_stored(
             continue;
         };
         let id = take_required_string(&mut object, "id", &path, &mut diagnostics);
-        object.remove("order"); // Ordering is represented by stable-ID references in blocks.
+        // Ordering is represented by stable-ID references in blocks.
+        object.remove("order");
+
+        // The designer projects an explicit non-response marker onto display
+        // modules on save. It carries no behavior beyond their module type.
+        // Other responseType values remain subject to schema validation.
+        if matches!(
+            object.get("type").and_then(Value::as_str),
+            Some("text-display" | "text-instruction")
+        ) && (object.get("responseType") == Some(&serde_json::json!({"type": "none"}))
+            || object.get("responseType") == Some(&serde_json::json!({"type": "none", "delay": 0})))
+        {
+            object.remove("responseType");
+        }
 
         let question: QDefTextQuestion = match serde_json::from_value(Value::Object(object)) {
             Ok(question) => question,
@@ -714,7 +765,22 @@ fn document_from_stored(
     }
 
     let pages = map_pages(content, &mut diagnostics);
-    let settings: QDefSettings = match serde_json::from_value(stored.settings.clone()) {
+    let mut stored_settings = stored.settings.clone();
+    let default_locale = if let Some(object) = stored_settings.as_object_mut() {
+        let locale = optional_stored_string(
+            object,
+            "language",
+            "/settings",
+            "settings",
+            "QDEF_STORED_SETTINGS_UNSUPPORTED",
+            &mut diagnostics,
+        );
+        object.remove("language");
+        locale
+    } else {
+        None
+    };
+    let settings: QDefSettings = match serde_json::from_value(stored_settings) {
         Ok(settings) => settings,
         Err(parse_error) => {
             diagnostics.push(error(
@@ -742,7 +808,7 @@ fn document_from_stored(
                 "{}.{}.{}",
                 stored.version_major, stored.version_minor, stored.version_patch
             ),
-            default_locale: None,
+            default_locale,
         },
         assets: BTreeMap::new(),
         variables: BTreeMap::new(),
@@ -967,8 +1033,35 @@ fn validate_envelope(definition: &Value) -> Vec<DefinitionDiagnostic> {
     diagnostics
 }
 
+fn semantic_version(source: &str) -> Option<[i32; 3]> {
+    let parts = source
+        .split('.')
+        .map(str::parse::<i32>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    let version: [i32; 3] = parts.try_into().ok()?;
+    (version.iter().all(|part| *part >= 0)
+        && format!("{}.{}.{}", version[0], version[1], version[2]) == source)
+        .then_some(version)
+}
+
 fn validate(document: &QDefDocument) -> Vec<DefinitionDiagnostic> {
     let mut diagnostics = Vec::new();
+    if document.questionnaire.name.trim().is_empty()
+        || document.questionnaire.name.chars().count() > 255
+    {
+        diagnostics.push(error(
+            "QDEF_NAME_INVALID",
+            "/questionnaire/name",
+            "Questionnaire name must contain text and be at most 255 characters.",
+            Some("Choose a nonempty name of at most 255 characters."),
+        ));
+    }
+    if semantic_version(&document.questionnaire.version).is_none() {
+        diagnostics.push(error("QDEF_VERSION_UNSUPPORTED", "/questionnaire/version",
+            "This installation supports three integer version components from 0 to 2147483647, without prerelease or build suffixes.",
+            Some("Use a supported questionnaire version, for example 1.0.0.")));
+    }
     for (field, nonempty) in [
         ("assets", !document.assets.is_empty()),
         ("variables", !document.variables.is_empty()),
@@ -1096,6 +1189,8 @@ fn invalid(diagnostics: Vec<DefinitionDiagnostic>) -> ApplyResult {
     ApplyResult {
         valid: false,
         committed: false,
+        questionnaire_id: None,
+        revision: None,
         canonical: None,
         digest: None,
         metadata: None,
