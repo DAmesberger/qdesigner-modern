@@ -4,7 +4,7 @@
 
 **Decision.** Phase 3.4 will **author** RLS policies and helper functions against the live `apps/server/migrations/` schema. The dead `apps/server/db/migrations/` directory is not a viable migration source and is deleted in Phase 2 Task 2.4 without porting anything.
 
-**Why ADR 0001's "backport" plan doesn't work.** The two schemas diverged at the post-Supabase Rust rewrite (commit `4a0d160 refactor: replace Supabase stack with Rust/Axum backend + PostgreSQL 18`). The dead-dir 010_rls_policies.sql references columns and tables that don't exist in the live schema:
+**Why ADR 0001's "backport" plan doesn't work.** The two schemas diverged during the Rust/Axum and PostgreSQL 18 rewrite (commit `4a0d160`). The dead-dir 010_rls_policies.sql references columns and tables that don't exist in the live schema:
 
 - `media_assets.access_level` — present in dead-dir 008_media.sql, absent in live 00001_initial_schema.sql (live media_assets has only `id, organization_id, filename, content_type, size_bytes, storage_key, uploaded_by, created_at`).
 - `media_collections` table — present in dead dir, absent in live.

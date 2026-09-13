@@ -138,7 +138,7 @@ A single option may carry several bindings at once — e.g. the same `go` option
 
 ## 10.5 External Response Hardware (WebHID)
 
-For labs that use physical **button boxes**, an external **ResponseSource** is available through the browser's **WebHID** API (ADR 0024). HID `inputreport` events carry a high-resolution timestamp on the same clock as keyboard events, so the RT arithmetic is unchanged — hardware responses are timed exactly like keyboard responses.
+For labs that use physical **button boxes**, an external **ResponseSource** is available through the browser's **WebHID** API (ADR 0037). HID `inputreport` events carry a high-resolution timestamp on the same clock as keyboard events, so the RT arithmetic is unchanged — hardware responses are timed exactly like keyboard responses.
 
 ### 10.5.1 Chromium-only, and honest about it
 
@@ -159,7 +159,7 @@ The HID adapter is **descriptor-free**: it does not read a device's HID descript
 
 A **gamepad** ResponseSource also exists and is convenient for authoring (the designer's *Press to Bind* affordance lets you bind a button by pressing it). Be clear about its timing, though: the Gamepad API is **polled**, not event-driven. The poller samples once per animation frame and detects the rising edge, so responses are **quantized to the frame loop (~8–16 ms)**. Retain gamepad for convenience where that resolution is acceptable; do **not** treat it as a precision RT source. For hardware-grade timing use keyboard or a WebHID button box.
 
-> **Deferred by design.** TTL/trigger *output* for EEG/eye-tracker sync, and photodiode/loopback timing-validation hardware, are deliberately out of v1 (ADR 0024). The browser cannot yet bound when an output voltage flips; a photodiode fast-follow would upgrade the display-latency model from *modelled* to *measured*.
+> **Deferred by design.** TTL/trigger *output* for EEG/eye-tracker sync, and photodiode/loopback timing-validation hardware, are deliberately out of v1 (ADR 0037). The browser cannot yet bound when an output voltage flips; a photodiode fast-follow would upgrade the display-latency model from *modelled* to *measured*.
 
 ---
 

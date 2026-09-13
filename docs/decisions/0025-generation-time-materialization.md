@@ -16,5 +16,5 @@ auditable exports (the sampled value is trial data, not a runtime accident),
 and a hot timing path free of sampling logic. Rejected: runtime sampling
 (more flexible for adaptive timing, but breaks replay/provenance) and
 per-trial duration formulas via the scripting engine (sandbox in the hot
-path; same rationale as ADR 0024's rejection of scripted response
+path; same rationale as ADR 0037's rejection of scripted response
 validators).

@@ -6,6 +6,58 @@ frame-accurate stimulus onset and sub-millisecond *relative* precision.
 
 ## Language
 
+### Questionnaire portability
+
+**Questionnaire**:
+The installed, project-owned entity that researchers author, test, version,
+publish, and collect responses against. Installation state such as ownership,
+permissions, draft status, and server revisions belongs to the Questionnaire,
+not to its portable definition.
+_Avoid_: instrument (as a separate domain object), template
+
+**Questionnaire Definition (QDef)**:
+The portable behavioral definition of a Questionnaire: its stable structure,
+question configuration, variables, safe logic, flow, asset references, and
+other behavior needed to reproduce it without transferring installation
+authority or participant data.
+_Avoid_: questionnaire export (ambiguous with response-data export), instrument
+
+**QDef Package**:
+A self-contained portable artifact containing one Questionnaire Definition,
+its content-addressed assets, and optionally deterministic test suites and
+nonsemantic provenance.
+_Avoid_: migration package, template ZIP
+
+### Legacy parity
+
+**Legacy Capability**:
+One independently identified researcher or operator outcome supported by the
+audited legacy QDesigner baseline. Every Legacy Capability receives an
+explicit Capability Disposition, including unsafe, dormant, conditional, and
+obsolete capabilities.
+_Avoid_: matrix row (several capabilities may share one comparison row), ticket
+
+**Outcome parity**:
+The successor preserves the researcher outcome of a Legacy Capability through
+a safe modern workflow; it need not reproduce the legacy implementation
+mechanism. If no safe replacement is known, parity remains unresolved rather
+than silently dropping the capability.
+_Avoid_: feature parity (when it implies mechanism compatibility)
+
+**Capability Disposition**:
+The explicit resolution of a Legacy Capability: implement it, provide a modern
+substitute, demonstrate that it is already covered, retire it by decision, or
+reject it as not actually present in the legacy baseline. Dispositions and
+delivery tickets have a many-to-many relationship.
+_Avoid_: status (ambiguous with implementation progress)
+
+**Safe Logic**:
+Typed, constrained questionnaire expressions and rules that can be authored as
+text or through visual controls over one round-trippable model. Safe Logic has
+allowlisted operations and capability-controlled effects, and has no
+JavaScript escape hatch.
+_Avoid_: script (unqualified), custom JavaScript
+
 ### Reaction measurement
 
 **Paradigm**:

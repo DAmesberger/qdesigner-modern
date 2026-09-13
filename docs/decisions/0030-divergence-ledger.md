@@ -11,14 +11,18 @@ Append a row when you convert a site whose effective check changes, when you
 find a pre-existing asymmetry, or when you defer a tier change as a
 candidate. A purely mechanical 1:1 conversion needs **no** row.
 
+## Current implementation status (reconciled 2026-09-11)
+
+L1–L11 are implemented or resolved decisions. L12/L13 are implemented by ADR 0034; their unfolded descriptions below are historical. L14–L17 remain documented exceptions, so the helper halves are not yet private and the universal-entry goal remains incomplete. C1/C2 are resolved: keep questionnaire delete/publish at Editor. Source evidence: `api/projects.rs` calls `authorize` for delete, update, member mutations and transfer; migrations 00052/00053 supply the org override and ownership permission.
+
 ## Resolved by ADR 0032
 
 | # | Site / concern | Pre-sweep behavior | Post-0032 behavior | Status |
 |---|----------------|--------------------|--------------------|--------|
 | L1 | System-role pass-through below org scope | Only org scope enforced per-permission tiers; project/questionnaire coarse gate was binary read/write | Project scope carries the tier via `min_project_role_for`; questionnaire scope is read-only — the coarse gate enforces tiers at every scope | Resolved (design) |
 | L2 | Questionnaire scope has no write-tier gate (`verify_questionnaire_access` is membership-or-share) | A write routed through questionnaire scope would admit any active org member | Questionnaire scope is read-only; all mutations authorize at `Scope::Project`; invariant rejects non-read permissions at questionnaire scope | Resolved (design) |
-| L3 | Project delete/manage gated by inline `has_project_role(Admin)` (6 sites) | Six handlers gate outside `authorize` because it had no Admin tier | Fold into `authorize(Scope::Project, ProjectDelete \| ProjectManageMembers)` via the tiered gate (rollout step 2) | Pending impl — **see L5 first** |
-| L5 | **Step-2 blocker (found in step-1 review):** the definer gate's `'admin'`/`'owner'` tiers reproduce `has_project_role` = **project_members role only**. But the 6 inline sites gate on **"project admin+ OR org admin+"** (`projects.rs` 664/786/877) and **"project owner OR org owner/admin"** (500/1069) — they OR `has_project_role` with an **org-role override**. | Inline: org owner/admin passes even with no project_members row | If step 2 folds these sites into `verify_project_access(Admin/Owner)` as-is, an org admin/owner who is not a project member is **denied** — a silent tightening. | **Before step 2:** add the org owner/admin override branch to the `'admin'`/`'owner'` arms of `user_has_project_access` (00051), then fold. Dormant in step 1 (no swept site hits these tiers); suite green. |
+| L3 | Project delete/manage gated by inline `has_project_role(Admin)` (6 sites) | Six handlers gate outside `authorize` because it had no Admin tier | Fold into `authorize(Scope::Project, ProjectDelete \| ProjectManageMembers)` via the tiered gate (rollout step 2) | Implemented — project delete, update, member mutations and ownership transfer call `authorize`; L5 prerequisite delivered by migration 00052 (rechecked 2026-09-11) |
+| L5 | **Step-2 blocker (found in step-1 review):** the definer gate's `'admin'`/`'owner'` tiers reproduce `has_project_role` = **project_members role only**. But the 6 inline sites gate on **"project admin+ OR org admin+"** (`projects.rs` 664/786/877) and **"project owner OR org owner/admin"** (500/1069) — they OR `has_project_role` with an **org-role override**. | Inline: org owner/admin passes even with no project_members row | If step 2 folds these sites into `verify_project_access(Admin/Owner)` as-is, an org admin/owner who is not a project member is **denied** — a silent tightening. | **Implemented in migration 00052.** Original prerequisite: add the org owner/admin override branch to the `'admin'`/`'owner'` arms of `user_has_project_access` (00051), then fold. Dormant in step 1 (no swept site hits these tiers); suite green. |
 | L4 | Custom-role grants can never widen past the coarse ceiling | Deny-wins: coarse gate first, custom role narrows only | Unchanged — reaffirmed as intended, not a divergence | Resolved (by design) |
 
 ## Regression already fixed (not a divergence — a break the sweep introduced)
@@ -126,7 +130,7 @@ guest role gone (ADR 0033) — folds them cleanly at `Scope::Project` (option B)
 and fixes their two audit bugs (comment cross-author body rewrite; series
 read-level-gated writes). Their `verify_*` halves stay `pub(crate)` until then.
 
-## How to use during the ADR-0030 sweep completion (~43 sites remaining)
+## Maintaining the remaining exceptions
 
 For each converted site: if the effective check is identical, no row. If it
 differs — a missing half restored, an odd permission corrected, a status

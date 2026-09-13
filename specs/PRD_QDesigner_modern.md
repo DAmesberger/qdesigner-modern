@@ -2,6 +2,8 @@
 
 # QDesigner Modern - Next-Generation Research Platform
 
+> Architecture reconciled 2026-09-11: [ADR 0038](../docs/decisions/0038-current-architecture-and-decision-records.md) defines the current backend and how this historical product vision relates to later decisions. Feature lists below are not a delivery-status ledger.
+
 ## 1. Executive Summary
 
 ### 1.1 Product Overview
@@ -13,9 +15,9 @@ QDesigner Modern is a cloud-native, multi-tenant research platform for designing
 - **Modern reactive architecture** with SvelteKit for optimal performance and developer experience
 - **WebGL-powered rendering** for hardware-accelerated stimulus presentation and visualizations
 - **Multi-tenant SaaS platform** with organization-level isolation and management
-- **Supabase backend** providing real-time data sync, authentication, and PostgreSQL storage
+- **Rust/Axum backend** providing REST APIs, authentication, PostgreSQL 18 storage, and WebSocket collaboration
 - **Microsecond-precision timing** with WebGL frame synchronization and Web Audio API
-- **Advanced scripting engine** with sandboxed JavaScript execution and reactive variables
+- **Safe Logic** with typed expressions/rules and reactive variables; JavaScript hooks are removed (ADR 0039)
 - **Comprehensive testing framework** with unit, integration, and E2E test coverage
 - **Progressive Web App** with offline-first architecture and background sync
 - **Real-time collaboration** enabling multiple researchers to work simultaneously
@@ -118,12 +120,12 @@ To revolutionize research data collection by providing a modern, scalable platfo
   - Sandboxed execution environment
   - Real-time validation and error reporting
 
-- **Modern JavaScript Features**:
-  - ES2022+ syntax support
-  - Async/await for asynchronous operations
-  - Module imports for code reuse
-  - Built-in lodash-like utilities
-  - Custom function libraries
+- **Safe Logic requirements**:
+  - Typed `qexpr/1` expressions and `qrule/1` rules
+  - Textual and visual authoring over one model
+  - Allowlisted functions and capability-controlled effects
+  - Deterministic evaluation and actionable diagnostics
+  - Immediate rejection of legacy JavaScript hooks; see [ADR 0039](../docs/decisions/0039-safe-logic-only-and-qdef-boundary.md)
 
 - **Enhanced Flow Control**:
   - Visual flow diagram editor
@@ -221,7 +223,7 @@ To revolutionize research data collection by providing a modern, scalable platfo
 
 ### 4.3 Multi-Tenant Data Architecture
 
-#### 4.3.1 Supabase Integration
+#### 4.3.1 Rust/Axum and PostgreSQL Integration
 
 - **Database Structure**:
   - PostgreSQL with Row Level Security (RLS)
@@ -231,14 +233,14 @@ To revolutionize research data collection by providing a modern, scalable platfo
   - Real-time subscriptions
 
 - **Authentication & Authorization**:
-  - Supabase Auth with SSO support
+  - Local JWT authentication and OIDC federation through the Rust API
   - SAML/OAuth2/OpenID Connect
   - Multi-factor authentication
   - API key management
   - Fine-grained permissions
 
 - **Real-time Features**:
-  - Live collaboration with Supabase Realtime
+  - Live collaboration through Yjs over WebSocket, with Redis relay
   - Presence indicators
   - Conflict-free replicated data types (CRDTs)
   - Optimistic UI updates
@@ -254,7 +256,7 @@ To revolutionize research data collection by providing a modern, scalable platfo
   - Hot/cold storage tiers
 
 - **Media Storage**:
-  - Supabase Storage for media files
+  - S3-compatible object storage for media files, served through the Rust API
   - CDN integration for global delivery
   - Automatic transcoding
   - Bandwidth optimization
@@ -307,8 +309,8 @@ To revolutionize research data collection by providing a modern, scalable platfo
 
 - **Deployment Strategy**:
   - Vercel/Netlify for frontend
-  - Supabase hosted backend
-  - Edge functions for compute
+  - Rust/Axum service with PostgreSQL 18, Redis and S3-compatible storage
+  - Server-side application logic in the Rust service
   - Global CDN distribution
   - Blue-green deployments
 
@@ -365,11 +367,11 @@ To revolutionize research data collection by providing a modern, scalable platfo
 ┌─────────────────────────────────────────────────────────┐
 │                    API Layer                            │
 ├─────────────────────────────────────────────────────────┤
-│   Supabase Backend                                      │
+│   Rust/Axum Backend                                     │
 │   - PostgreSQL with RLS                                 │
 │   - Authentication & Authorization                      │
-│   - Realtime subscriptions                              │
-│   - Edge Functions (Deno)                               │
+│   - Yjs collaboration over WebSocket                    │
+│   - Redis relay and rate limiting                       │
 │   - Storage API                                         │
 └─────────────────────────────────────────────────────────┘
                           │
@@ -614,7 +616,7 @@ responses
 ### Phase 1: Foundation (Months 1-6)
 - Core platform with SvelteKit
 - Basic question types
-- Supabase integration
+- Rust REST API and PostgreSQL integration
 - Multi-tenant architecture
 - MVP launch
 
@@ -663,7 +665,7 @@ responses
 
 ### A. Technology Stack Details
 - **Frontend**: SvelteKit, TypeScript, Tailwind CSS, WebGL
-- **Backend**: Supabase (PostgreSQL, Auth, Realtime, Storage)
+- **Backend**: Rust/Axum, PostgreSQL 18, Redis, S3-compatible storage
 - **Infrastructure**: Vercel/Netlify, Cloudflare
 - **Testing**: Vitest, Playwright, k6
 - **Monitoring**: Sentry, Datadog, LogRocket
@@ -685,7 +687,7 @@ responses
 
 ---
 
-*Document Version: 1.0*  
-*Generated: December 2024*  
-*Platform: QDesigner Modern - Cloud-Native Research Platform*  
-*Architecture: SvelteKit + Supabase + WebGL*
+*Document Version: 1.0*
+*Generated: December 2024*
+*Platform: QDesigner Modern - Cloud-Native Research Platform*
+*Architecture: SvelteKit + Rust/Axum + PostgreSQL + WebGL*

@@ -1,6 +1,6 @@
 # Kapitel 7: Variablen, Formeln und Scripting
 
-QDesigner beinhaltet ein umfassendes Variablensystem und eine Formel-Engine, die dynamische Frageboegen mit berechneten Scores, bedingten Inhalten, Echtzeit-Feedback und benutzerdefinierter Logik ermoeglichen. Dieses Kapitel behandelt das Variablensystem, die vollstaendige Funktionsreferenz der Formel-Engine, Variablen-Piping und den Skript-Editor.
+QDesigner beinhaltet ein umfassendes Variablensystem und eine Formel-Engine, die dynamische Frageboegen mit berechneten Scores, bedingten Inhalten, Echtzeit-Feedback und benutzerdefinierter Logik ermoeglichen. Dieses Kapitel behandelt das Variablensystem, die vollstaendige Funktionsreferenz der Formel-Engine, Variablen-Piping und den Uebergang zu Safe Logic.
 
 ## 7.1 Uebersicht ueber das Variablensystem
 
@@ -195,30 +195,7 @@ Die Formel-Engine von QDesigner bietet 47+ eingebaute Funktionen in sieben Kateg
 
 ## 7.5 Benutzerdefinierte Funktionen
 
-Forschende koennen eigene Funktionen mit dem `CustomFunctionManager` definieren. Benutzerdefinierte Funktionen werden in JavaScript geschrieben und mit dem Fragebogen gespeichert.
-
-**Definitionsstruktur**:
-```javascript
-{
-  name: 'SCORE_SCALE',
-  description: 'Rohwert in standardisierte Skala umrechnen',
-  parameters: ['rohwert', 'min', 'max', 'neuMin', 'neuMax'],
-  body: `
-    const verhaeltnis = (rohwert - min) / (max - min);
-    return neuMin + verhaeltnis * (neuMax - neuMin);
-  `
-}
-```
-
-**Eingebaute Beispielfunktionen**:
-
-| Funktion | Beschreibung |
-|---|---|
-| `SCORE_SCALE(roh, min, max, neuMin, neuMax)` | Lineare Umskalierung. |
-| `CATEGORY_SCORE(items, gewichte)` | Gewichteter Mittelwert der Items. |
-| `AGE_GROUP(alter)` | Alter in Gruppen kategorisieren (Minderjaehrig, Junger Erwachsener, usw.). |
-| `LIKERT_TO_NUMERIC(antwort)` | Text-Likert-Antworten in Zahlen umwandeln. |
-| `RESPONSE_TIME_CATEGORY(ms)` | RT als Zu schnell / Schnell / Normal / Langsam / Sehr langsam kategorisieren. |
+Eigene Logik muss Safe Logic verwenden. JavaScript-Funktionskoerper und der bisherige CustomFunctionManager wurden entfernt. Die vorhandenen erlaubten Formelfunktionen bleiben verfuegbar; wiederverwendbare Safe-Logic-Funktionen sind noch umzusetzen. Siehe [ADR 0039](../../decisions/0039-safe-logic-only-and-qdef-boundary.md).
 
 ## 7.6 Variablen-Piping
 
@@ -241,77 +218,11 @@ Variablen-Piping funktioniert in:
 - Auswahloptionenbeschriftungen
 - Allen Textfeldern, bei denen `variables: true` in der Anzeigekonfiguration gesetzt ist
 
-## 7.7 Der Skript-Editor
+## 7.7 Safe-Logic-Hooks
 
-Der Skript-Editor bietet pro Frage programmierbare Logik in JavaScript. Er ist ueber den "Skript"-Tab im Eigenschaftenpanel zugaenglich (nur fuer Frageelemente verfuegbar).
+Hooks verwenden ausschliesslich Safe Logic (`qexpr/1`-Ausdruecke und `qrule/1`-Regeln). JavaScript-Editor und Hook-Ausfuehrung wurden entfernt. Bestehende Frageboegen mit JavaScript-Hooks werden mit `UNSAFE_JAVASCRIPT` abgewiesen und muessen vor der Ausfuehrung umgeschrieben werden.
 
-### Editor-Funktionen
-
-- **Monaco Editor**: Vollstaendige VS-Code-Bearbeitungserfahrung mit Syntaxhervorhebung, Klammernabgleich und Fehlerdiagnose.
-- **Typdefinitionen**: IntelliSense fuer die QDesigner-API.
-- **Dunkles Theme**: VS Dark-Farbschema.
-- **Formatieren und Zuruecksetzen**: Werkzeugleisten-Schaltflaechen.
-- **Tastenkuerzel**: Strg+S (speichern), Strg+Leertaste (Vorschlaege).
-
-### Event-Hooks
-
-Skripte exportieren ein `hooks`-Objekt mit vier Lebenszyklus-Hooks:
-
-#### `onMount(context)`
-
-Wird aufgerufen, wenn die Frage zum ersten Mal gerendert wird. Verwendung fuer Initialisierung, Fokus setzen, externe Daten laden, Anfangsvariablenwerte setzen.
-
-```javascript
-onMount: (context) => {
-  context.focusFirstInput();
-  context.variables.set('startZeit', Date.now());
-}
-```
-
-#### `onResponse(response, context)`
-
-Wird aufgerufen, wenn der Nutzer eine Antwort gibt oder aendert. Verwendung fuer Bewertung, Variablenaktualisierung, Seiteneffekte.
-
-```javascript
-onResponse: (response, context) => {
-  if (response.value === 'korrekt') {
-    context.variables.increment('score', 10);
-  }
-}
-```
-
-#### `onValidate(value, context)`
-
-Wird aufgerufen, bevor die Antwort akzeptiert wird. Gibt `true` fuer gueltig oder eine Fehlermeldung als String zurueck.
-
-```javascript
-onValidate: (value, context) => {
-  if (value.length < 10) {
-    return 'Bitte geben Sie mindestens 10 Zeichen ein';
-  }
-  return true;
-}
-```
-
-#### `onNavigate(direction, context)`
-
-Wird aufgerufen, wenn der Nutzer vor- oder zuruecknavigieren moechte. Gibt `true` zum Erlauben oder `false` zum Verhindern zurueck.
-
-### Kontext-API
-
-| Eigenschaft/Methode | Beschreibung |
-|---|---|
-| `context.questionId` | ID der aktuellen Frage. |
-| `context.questionType` | Fragetypkennung. |
-| `context.variables.get(name)` | Variablenwert abrufen. |
-| `context.variables.set(name, wert)` | Variablenwert setzen. |
-| `context.variables.increment(name, um?)` | Numerische Variable erhoehen. |
-| `context.variables.decrement(name, um?)` | Numerische Variable verringern. |
-| `context.hasResponse` | Ob der Nutzer geantwortet hat. |
-| `context.response` | Der aktuelle Antwortwert. |
-| `context.focusFirstInput()` | Erstes Eingabefeld fokussieren. |
-| `context.showError(nachricht)` | Fehlermeldung anzeigen. |
-| `context.showSuccess(nachricht)` | Erfolgsmeldung anzeigen. |
+Die vollstaendige Safe-Logic-Bearbeitung und Hook-Ausfuehrung sind noch umzusetzen. Vorhandene Variablenformeln, Ablaufregeln und modulbasierte Antwortpruefungen bleiben verfuegbar; sie ersetzen keine allgemeine Hook-Engine.
 
 ## 7.8 Praktische Beispiele
 

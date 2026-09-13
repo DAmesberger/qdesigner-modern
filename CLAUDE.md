@@ -15,8 +15,8 @@ apps/
 packages/
   contracts/             @qdesigner/contracts — generated OpenAPI types
   questionnaire-core/    @qdesigner/questionnaire-core — domain types (Questionnaire, Variable, …)
-  scripting-engine/      @qdesigner/scripting-engine — formula evaluator, VariableEngine, ScriptEngine, MonacoConfig
-docs/decisions/          Authoritative ADRs (0001-0036 + phase plans + supervisor protocol + baseline)
+  scripting-engine/      @qdesigner/scripting-engine — formula evaluator, VariableEngine, MonacoConfig
+docs/decisions/          Authoritative ADRs (current/superseded status in README.md; phase plans are historical)
 ```
 
 Workspace is `pnpm-workspace.yaml`: `apps/*` and `packages/*`. Imports use `@qdesigner/<package>` aliases — not relative paths to `packages/`.
@@ -65,15 +65,12 @@ cargo test --manifest-path apps/server/Cargo.toml -- --include-ignored
 
 E2E lanes are Playwright projects, not part of the above gate: `pnpm test:e2e:{smoke,regression,fullstack,reaction,form,visual}`.
 
-**The e2e lanes do not currently run locally**, and the reason is a version mismatch, not your setup: the flake pins `playwright-driver.browsers` (ships `chromium-1217`) while `@playwright/test` resolves to a version demanding a different build, so Playwright refuses to launch. Aligning the flake pin to the npm Playwright version is the real fix. Two further traps once it runs: the lanes need `--workers=1` (five workers each signing up trips the per-IP auth rate limiter and the `workspace` fixture times out), and `preload-fail-closed.reaction.spec.ts` already fails on `main`.
-
-Test count baseline (verified 2026-07-14, ADR 0036 branch):
-- frontend web suite: 176 files / 1870 passing (includes package tests via the vitest glob)
-- scripting-engine standalone: 8 files / 256
-- server: 302 passing across the lib + 46 integration files in `apps/server/tests/`
-
-These are a smoke signal, not a contract — they drift the moment anyone adds a test. If they
-disagree with a fresh run, trust the run and update the line.
+The bounded `pnpm test:e2e:acceptance` gate covers designer-to-data forms and
+Standard RT studies, recovery and JavaScript rejection against the live stack.
+For setup and browser requirements, read `apps/web/e2e/README.md`; for measured
+results and limits, read `docs/end-to-end-acceptance-report.md`. Run with one
+worker and retries disabled. Generate Paraglide/SvelteKit modules before starting
+the browser frontend; concurrent code generation can invalidate an active Vite run.
 
 Do not run two `cargo test` invocations concurrently — the suites share `auth_sessions` fixtures and deadlock.
 
@@ -105,7 +102,7 @@ apps/web/src/
     project-invite/[token]       accept project invitation (ADR 0033 cross-org membership)
     test-runtime/                dev-only runtime harness
   lib/
-    runtime/         core/ (QuestionnaireRuntime, FormQuestionHost + moduleConfigAdapter, FlowGraph, ScriptExecutor, …), reaction/ (ReactionEngine + presets/input/feedback), timing/, validation/, quality/, resources/
+    runtime/         core/ (QuestionnaireRuntime, FormQuestionHost + moduleConfigAdapter, FlowGraph, …), reaction/ (ReactionEngine + presets/input/feedback), timing/, validation/, quality/, resources/
     renderer/        WebGLRenderer + shaders — the ONLY drawing path (v1 reaction stimuli only)
     fillout/         FilloutPageController, runtime/FilloutRuntime, services/ (OfflineSessionService, OfflineResponsePersistence, OfflineTrialPersistence, OfflineBinaryPersistence, FilloutUploadSync, FilloutContentCache, QuotaService, ScreenerController, …)
     services/        api client, auth, offline, persistence, media; db/indexeddb.ts (Dexie)
@@ -146,8 +143,8 @@ apps/server/src/
                    models.rs (Org/Project role enums, Permission)
   websocket/       handler, yjs_store, yjs_relay, yjs_seed, redis_bridge, manager
   state.rs         AppState (pool, jwt_manager, rbac, storage, websocket_state, yjs_store, redis, config,
-                   and six purpose-scoped RateLimiters — auth, verify-send, verify-attempt, api-key,
-                   session-create per-IP, session-create per-questionnaire, session-media)
+                   and purpose-scoped RateLimiters — auth, verify-send, verify-attempt, api-key,
+                   session-create per-IP, session-create per-questionnaire, session-media, session-sync)
   config.rs        env-driven; JWT_SECRET and JWT_REFRESH_SECRET both env_required
   db/              connection + sqlx::migrate!("./migrations")
   error.rs         ApiError
@@ -157,7 +154,7 @@ apps/server/src/
 
 The crate is bin+lib hybrid: `tests/` integration tests import via `qdesigner_server::...`. `tests/common/mod.rs` is the shared harness — self-provisioning migrations, `fixture_pool()` / `app_pool()`, and `build_test_state()` (a full `AppState` for the `http_*` tower round-trip suites).
 
-**Authorization is one call.** Every authenticated handler calls `authz::authorize(&mut **tx, user_id, scope, permission)`; it derives the coarse membership/role-tier gate from `(scope, permission)`, runs it, *then* runs the custom-role tightening — deny wins, and a caller can no longer hold half the check. `api::access::verify_*` and `RbacManager::require_permission` are the composed halves, not the entry point. Project scope is tiered (`min_project_role_for` + `verify_project_access`); questionnaire scope is read-only (questionnaire mutations authorize at project scope). `authorize()` decisions are **RLS-independent** — every query it issues goes through a `SECURITY DEFINER` function (migration `00051`), so an authorization decision can never 404 because RLS hid the row. Residual divergent sites are ledgered in `docs/decisions/0030-divergence-ledger.md`; `tests/authz_matrix.rs` regression-locks the matrix.
+**Authorization enters through `authorize`.** New authenticated handler checks call `authz::authorize(&mut **tx, user_id, scope, permission)`; it derives the coarse membership/role-tier gate from `(scope, permission)`, runs it, *then* runs the custom-role tightening — deny wins, and callers using this entry point cannot hold half the check. `api::access::verify_*` and `RbacManager::require_permission` are the composed halves, not the entry point. Project scope is tiered (`min_project_role_for` + `verify_project_access`); questionnaire scope is read-only (questionnaire mutations authorize at project scope). `authorize()` decisions are **RLS-independent** — every query it issues goes through a `SECURITY DEFINER` function (migration `00051`), so an authorization decision can never 404 because RLS hid the row. Residual divergent sites are ledgered in `docs/decisions/0030-divergence-ledger.md`; `tests/authz_matrix.rs` regression-locks the matrix.
 
 ## Database
 
@@ -217,10 +214,10 @@ Without them the browser clamps `performance.now()` from ~5µs to ~100µs as a S
 
 `packages/scripting-engine/`:
 - Pure formula evaluator (`evaluator.ts`, `ast-evaluator.ts`, `parser.ts`)
-- Function table: `functions/{statistical,array,psychometric,irt}.ts` (typecheck-clean as of P2.1) + `customFunctions.ts`
+- Function table: `functions/{statistical,array,psychometric,irt}.ts`
 - `math/eigen.ts` — the one symmetric (cyclic Jacobi) eigensolver, shared by every consumer that needs eigendecomposition (ADR 0036 D1). Do not hand-roll another.
 - `VariableEngine` (mathjs-backed, runtime evaluator); `sandbox-math.ts` + `policies.ts` back the sandbox
-- `ScriptEngine` (Web Worker isolation; sandbox via `with(Proxy)`, hard timeout via `Worker.terminate()`)
+- Safe Logic is the sole authoring-language target (ADR 0039). JavaScript hooks, custom-function bodies and their editors/executors are removed immediately; legacy executable fields fail validation. Full `qexpr/1` / `qrule/1` hook support remains outstanding.
 - `MonacoConfig` (themes + completion providers consumed by `lib/components/designer/FormulaEditor.svelte`)
 
 Consumers import via `@qdesigner/scripting-engine` (no subpath imports needed; MonacoConfig is re-exported through the main entry — see P2.5 alias-order note).
@@ -234,53 +231,11 @@ Yjs end-to-end:
 
 ## ADR trail
 
-All architectural and scoping decisions live in `docs/decisions/`:
+Read the [decision index](docs/decisions/README.md) when changing architecture or reconciling requirements with implementation. It distinguishes current decisions, supersession and unfinished delivery. ADRs live in `docs/decisions/`; the same directory also holds historical plans and the live authorization divergence ledger.
 
-- `0001-rls.md` — RLS as defense-in-depth. **Complete** after Phase 6.
-- `0002-pipeline.md` — `lib/pipeline/` deleted
-- `0003-scripting.md` — scripting consolidated into the package
-- `0004-aliases.md` — `@qdesigner/*` adopted
-- `0005-types.md` — `questionnaire-core` kept separate from `contracts`
-- `0006-collaboration.md` — Yjs kept (active feature)
-- `0007-rbac-manager.md` — superseded by 0008 (RbacManager has live consumers)
-- `0008-rbac-manager-retained.md` — keep RbacManager; delete only the unused middleware
-- `0009-rls-author-not-port.md` — RLS authored against live schema (not ported from dead dir)
-- `0010-rls-force.md` — superseded by 0011; archived partial-FORCE plan
-- `0011-rls-infra-only.md` — Phase 5 RLS infrastructure (per-request tx, Tx extractor, GUC). **Superseded** by the Phase 6 closeout.
-- `0012-fillout-dual-path-rls.md` — Phase 6 fillout-path strategy: dual GUC, dual-path policies, `questionnaire_definitions` exited from RLS.
-- `0013-admin-mutation-permissive.md` — Phase 6 admin-table mutation policies are permissive `WITH CHECK (true)`; the application layer is the gate. (The gate named here was `api/access::*`; since ADR 0030/0032 it is `authz::authorize`. The *posture* — RLS does not decide mutations — is unchanged.)
-- `0014-qdesigner-app-role.md` — Phase 6 introduces the non-superuser `qdesigner_app` application role; tests inherit the app DSN.
-- `0015-anon-read-rls-exempt.md` — Phase 6 mid-step finding: `users` and `organizations` join `questionnaire_definitions` as RLS-exempt because they have intentional public-anonymous read paths.
-- `0016-supervisor-protocol-v2.md` — bumps `SUPERVISOR_PROTOCOL.md` to v2.
-- `0017-product-completion-arc.md` — opens the Phase 7 product-completion & wire-up arc.
-- `0018-fillout-rendering-contract.md` — Phase 7 hybrid fillout rendering: form-style questions mount runtime Svelte components into the DOM overlay; v1 reaction paradigms stay on WebGL. **Finalized** by 0023.
-- `0019-paraglide-i18n.md` — replace i18next with Paraglide (compile-time i18n).
-- `0020-org-role-change.md` — Phase 8 org member role-change endpoint.
-- `0021-analytics-psychometrics.md` — Phase 8 mounts the analytics psychometrics suite.
-- `0022-questionnaire-translation.md` — Phase 8 per-questionnaire content translation.
-- `0023-fillout-hybrid-rendering.md` — Phase 8 finalizes the hybrid fillout contract: one WebGL path (`ReactionEngine`+`WebGLRenderer`, v1 stimuli only), everything else on the DOM overlay; deletes the hollow `QuestionPresenter`/`runtime/renderers`/`runtime/stimuli` stacks; D1 same-origin media proxy + D2 offline-first single write path + per-session version pinning.
-- `0024-response-model-and-hardware.md` — reaction arc: semantic response model + hardware (WebHID) response devices.
-- `0024-sqlx-offline-macros.md` — sqlx offline mode for query macros. (Duplicate number with the above — both kept.)
-- `0025-generation-time-materialization.md` — trials fully materialize at generation time (seeded TimingSpec sampling); the engine never samples at runtime.
-- `0026-media-fail-closed-offline.md` — reaction media is offline-complete at load and fail-closed at run; pending assets pin against eviction.
-- `0027-validity-policy-record-by-default.md` — timing-validity problems record by default; per-study ValidityPolicy `enforce` is opt-in.
-- `0028-trial-aggregates-explicit-minn.md` — trial aggregates carry an explicit minN disclosure floor.
-- `0029-form-enforcement-and-offline-binaries.md` — form validation blocks at capture (modules own validity; script `onValidate` blocks on verdict, fails open on crash); binary answers go IndexedDB-first with deferred upload, pending provenance, pin-until-ack; storage modes deleted.
-- `0030-single-authorize-entry-point.md` — one `authz::authorize(executor, user, Scope, Permission)` replaces the access::/RbacManager pair at all ~70 authenticated sites (reads included); halves go private post-sweep; behavior-preserving sweep + divergence ledger; matrix test gate. Executes 0008's anticipated consolidation; 0013's RLS posture untouched.
-- `0031-sso-two-products-shared-oidc-client.md` — zitadel_auth (platform auth) and sso (org federation) are deliberate products; the duplicated OIDC mechanism extracts into one `OidcClient` returning verified claims; protocol-scoped seam (future SAML ACS bypasses it); nonce standardized hashed-at-rest; rejection-matrix wiremock gate.
-- `0032-authz-tiered-scopes-rls-independent.md` — continues 0030: project scope becomes tiered (`min_project_role_for` + `verify_project_access`, folds the 6 inline `has_project_role(Admin)` sites); questionnaire scope is read-only (mutations authorize at project scope); `authorize()` decisions are RLS-independent (every internal query `SECURITY DEFINER`, RLS stays a separate defense-in-depth net); `Scope` stays 3 variants with an exhaustive permission→gate match; tiers strictly preserve behavior with candidates ledgered; guardrails = real `0030-divergence-ledger.md` + regression-locking `authz_matrix` tests + keep migration 00050. Motivated by the `resource_shares:486` 404 regression (questionnaire-share guest org-resolution RLS-blocked; fixed at RLS layer by 00050). **Implemented + merged to main** (2026-07-13, commits 12d106a + ebb87ea; ledger L1–L17).
-- `0033-cross-org-project-membership-replaces-shares.md` — **deletes the external-guest/`resource_shares` role** (table, `shares.rs`, share SECURITY DEFINER fns + RLS branches, purge, `ShareDialog`/`guestAnalytics`/`/shared` frontend); replaces external collaboration with **cross-org project membership** (drop the `trg_project_members_org_check` trigger + `verify_org_membership(target)` at add_project_member; project members needn't be org members; `is_project_member` RLS branches on study-data tables; dedicated `project_invitations` flow). Reuses ADR 0032's `ProjectRole` tiers + `authorize()` path. Supersedes migration 00050/L8/R1 and the share branches. Anonymous fillout untouched. Comment/series fold split to ADR 0034. **Implemented + merged (2026-07-13, branch authz/adr-0033-remove-shares → main; units 1/3/4a/4b; live-QA passed).**
-- `0034-comments-series-authz-fold.md` — resolves ledger L12/L13: folds `comments.rs` + `series.rs` into `authorize()` at `Scope::Project` (no new `Permission` — mapped to project tiers) and fixes two audit bugs. Comments: list/create/resolve→`ProjectRead`, edit-body author-only (removes the `resolved`-flag body-edit leak), delete→author OR project-Admin (moderation). Series: reads→`ProjectRead`, mutations (create/update/enroll)→`ProjectWrite` (viewer can no longer mutate). Incidentally closes the `projectVisibility='members'` bypass for these endpoints. **Implemented** (`comments.rs` / `series.rs` authorize at `Scope::Project`; `tests/comments_authz.rs`, `tests/series_authz.rs`).
-- `0035-sso-verified-domain-binding.md` — **fixes the audit's one CRITICAL (SSO account takeover)**. `sso_callback` linked a federated subject to any local account matching the id_token email, with no `email_verified` check and no domain binding — so an org's IdP could assert `victim@othercompany.com` and take over that account. Now BOTH link and provision require (1) `email_verified == true` and (2) the email's domain be a **verified** `organization_domains` row of the **IdP's own org**; anything else **fails closed** (no link, no provision, no session, no account-existence disclosure). Trade accepted: an identity outside the org's verified domains cannot SSO in (verify the domain, or invite them — incl. ADR 0033 cross-org project membership). **Implemented** in `api/sso.rs`.
-- `0036-honest-statistics.md` — **a research platform may report a statistic, or report that it cannot compute one; it may not report a number that looks like the statistic and isn't.** Continues the distribution-core repair in `701bf8d`. Real cyclic Jacobi eigensolver in `scripting-engine/src/math/eigen.ts` (replacing the diagonal-only `calculateEigenvalues` stub) and thus a real PCA and real omega; coherent Tukey; participant-keyed server correlations and honest completion-rate denominators; version pins + `timing_provenance` + CSV formula-injection guards on both export paths; trial aggregates exclude practice trials and invalidate anticipatory responses (ADR 0028). Accepted 2026-07-14.
-- `0030-divergence-ledger.md` — the live ledger of call sites that still diverge from the single `authorize()` entry point (L1–L17). Not an ADR; a working artifact of 0030/0032/0034.
-- `PHASE_6_PLAN.md` — Phase 6 implementation plan (with mid-phase amendments).
-- `PHASE_7_PLAN.md` / `PHASE_7_FINDINGS.md` — Phase 7 product-completion arc plan + findings ledger.
-- `PHASE_8_FILLOUT_FIX_PLAN.md` — Phase 8 fillout renderer & reaction-framework remediation plan (Phases 1–5).
-- `SUPERVISOR_PROTOCOL.md` — message format for the team-lead / supervisor / user loop
-- `baseline.md` — metrics captured at the start of Phase 1 + per-phase rows added at closeout
+For authoring, hooks, QDef or MCP, follow [ADR 0039](docs/decisions/0039-safe-logic-only-and-qdef-boundary.md): Safe Logic only, immediate JavaScript removal, one shared Definition module. For PCA scope, [ADR 0040](docs/decisions/0040-pca-remains-a-delivery-requirement.md) retains the required UI as outstanding work.
 
-When an ADR's status changes, a new ADR supersedes it rather than editing in place.
+Create a successor ADR when changing a decision. Update the older status/forward link; retain its historical rationale. Metadata and evidence corrections do not require a new product decision.
 
 ## Known TODOs
 
@@ -323,14 +278,14 @@ window.testMode.disable();
 ## Working in this repo
 
 - pnpm only. Never npm. `package-lock.json` was removed in P1.1.
-- Tools resolve from the project's nix flake (which also pins `chromium` + `playwright-driver.browsers` for live QA and e2e). CI lives in `.github/workflows/`: `ci.yml` is the PR gate; `e2e.yml` is **on-demand**, not automatic — a green PR does not mean the browser lanes ran.
+- Tools resolve from the project's nix flake (which also pins `chromium` + `playwright-driver.browsers` for live QA and e2e). CI lives in `.github/workflows/`: `ci.yml` runs the source gates; `e2e-acceptance.yml` runs bounded live-stack acceptance on PRs. The broader `e2e.yml` remains on-demand. Check the named workflow results before claiming browser coverage.
 - `cargo clippy --all-targets -- -D warnings` is a real gate, not advisory (`ci.yml`). Note `--all-targets`: clippy without it skips test code and will pass locally while CI fails.
 - `pnpm verify` (repo root) chains lint → check → unit → integration → contracts:check → server fmt/clippy/test. It is the local superset; it is **not** what CI runs — do not assume the two are identical.
 - If you add or change a `sqlx::query!` / `query_as!` macro, regenerate the committed offline cache: `cargo sqlx prepare` (writes `apps/server/.sqlx/`, ADR 0024). CI builds with `SQLX_OFFLINE=true`, so a stale cache fails the build.
 - Always commit through CLAUDE/the human, not from automated scripts.
 - For UI/frontend changes start `pnpm dev` and test the golden path in a browser — `pnpm check` and `pnpm test` verify types/contracts, not feature correctness.
 - Questionnaire objects must carry semver fields (`versionMajor/Minor/Patch`).
-- When the audit/spec docs in `specs/` conflict with the code, the code wins. Several rounds of cleanup confirmed that the original audit's claims (about RbacManager being unused, RLS portability, renderer fragmentation, marketing-surface viability, even some test counts) were diagnostic-only and didn't survive contact with the actual codebase.
+- When dated audit descriptions conflict with the code, inspect current code to establish implementation status. Requirements remain binding; implementation gaps do not reduce delivery scope (ADR 0038). Several rounds of cleanup confirmed that the original audit's claims (about RbacManager being unused, RLS portability, renderer fragmentation, marketing-surface viability, even some test counts) were diagnostic-only and didn't survive contact with the actual codebase.
 
 ## Agent skills
 

@@ -1,6 +1,6 @@
 # 0021 — Mount the analytics psychometrics suite
 
-- Status: Accepted
+- Status: Accepted; PCA numerical rationale superseded by [ADR 0036](0036-honest-statistics.md), and UI deferral superseded by [ADR 0040](0040-pca-remains-a-delivery-requirement.md). The original context below is historical.
 - Date: 2026-07-04
 - Phase: 8 (fork: psychometrics)
 

@@ -320,7 +320,7 @@ The Flow Control Manager (accessible from the Flow panel in the left sidebar) pr
    - **Branch**: Conditional navigation
    - **Loop**: Repeat section
    - **Terminate**: End questionnaire
-3. Enter the **condition** (a formula expression using variable names and JavaScript operators).
+3. Enter the **condition** (a formula expression using variable names and supported formula operators).
 4. For Skip/Branch: Select the **target** from the dropdown of available pages and questions.
 5. For Loop: Enter the **maximum iterations**.
 6. Click "Add Flow".

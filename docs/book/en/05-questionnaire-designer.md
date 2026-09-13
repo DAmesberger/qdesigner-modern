@@ -75,7 +75,7 @@ The canvas supports zoom in/out (Ctrl+= / Ctrl+-) and zoom reset (Ctrl+0).
 
 The right sidebar appears automatically when a question, page, block, or variable is selected. Its top-level tab switcher has three tabs:
 
-- **Properties** (labeled "Question Properties", "Page Properties", etc. depending on the selection): The Properties Panel, itself sub-divided into **Properties**, **Style**, and **Script** tabs (see §5.4).
+- **Properties** (labeled "Question Properties", "Page Properties", etc. depending on the selection): The Properties Panel, itself sub-divided into **Properties** and **Style** tabs (see §5.4).
 - **Translate** (languages icon): The Content Translations panel for translating participant-facing text into additional languages (see §5.14).
 - **Comments** (speech-bubble icon): Threaded comments for collaborative review.
 
@@ -83,7 +83,6 @@ Within the **Properties** tab, the Properties Panel exposes:
 
 - **Properties**: Type-specific configuration fields for the selected item (prompt text, options, validation rules, display settings, carry-forward configuration, attention checks).
 - **Style**: Visual styling controls through the Style Editor (colors, typography, spacing, shadows, custom CSS).
-- **Script**: The Monaco-based script editor for writing event hooks and custom logic (available for questions only).
 
 The right panel can be **pinned** open using the pin button, so it remains visible even when no item is selected. It can also be closed manually.
 
@@ -198,29 +197,9 @@ A **Custom CSS** textarea is always available for writing arbitrary styles.
 
 Available font families: System UI, Arial, Georgia, Times New Roman, Courier New, Inter, Roboto.
 
-### Script Tab
+### Safe Logic hooks
 
-The Script tab uses a Monaco Editor instance (the same editor powering VS Code) to provide a rich code editing experience. It includes:
-
-- Syntax highlighting for JavaScript/TypeScript
-- IntelliSense with auto-completion
-- Type definitions for the QDesigner API (QuestionAPI.Context, VariableSystem, Response, etc.)
-- Format on paste and type
-- Ctrl+S save shortcut
-- Ctrl+Space for suggestions
-
-The script template provides four event hooks:
-
-```javascript
-export const hooks = {
-  onMount: (context) => { /* Question mounted */ },
-  onResponse: (response, context) => { /* User responded */ },
-  onValidate: (value, context) => { /* Return true or error message */ },
-  onNavigate: (direction, context) => { /* Return true to allow */ }
-};
-```
-
-Additional exports: `customRender`, `dynamicStyles`, `apiCalls`.
+JavaScript hook authoring and execution have been removed. The required replacement is Safe Logic (`qexpr/1` and `qrule/1`); its hook editor and execution support remain outstanding. Existing JavaScript hooks must be removed and rewritten before a questionnaire can run. See [ADR 0039](../../decisions/0039-safe-logic-only-and-qdef-boundary.md).
 
 ## 5.5 Block Manager
 

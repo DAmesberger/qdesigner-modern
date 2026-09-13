@@ -1,7 +1,7 @@
 # Reaction Platform Arc — plan of record (2026-07-10)
 
 Product of a grilled design session. Decisions are recorded in ADRs
-0024–0028 + `CONTEXT.md` (glossary: Paradigm, Preset, Trial, TimingSpec,
+0025–0028 and 0037 + `CONTEXT.md` (glossary: Paradigm, Preset, Trial, TimingSpec,
 ResponseSet, ResponseOption, Binding, ResponseSource, Server Variable,
 ValidityPolicy, Offline-complete). Goal: **general platform completeness**
 — every paradigm honestly authorable, all media stimulus kinds first-class
@@ -15,7 +15,7 @@ commands as `gap-plan-2026-07.md`.
 
 ## Decisions in force
 
-- **ADR 0024** ResponseSet model (semantic option ids, multi-source
+- **ADR 0037** ResponseSet model (semantic option ids, multi-source
   bindings, down/up edges, first-wins concurrency); WebHID hardware input;
   trigger output + scripted validators rejected/deferred.
 - **ADR 0025** Trials materialize at generation time (TimingSpec

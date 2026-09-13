@@ -1,6 +1,6 @@
 # Phase 8 — Fillout renderer & reaction-framework remediation plan
 
-Status: **in progress** (implementation started 2026-07-04, branch `phase-8/design-system`).
+Status: **historical implementation closeout** (Phases 1–5 recorded complete 2026-07-04; see the closeout below and `baseline.md`). Historical QA/merge follow-ups are retained; current work is governed by [ADR 0038](0038-current-architecture-and-decision-records.md).
 Origin: audit of the WebGL renderer, reaction-time framework, and multiple-choice
 fillout path (see memory `fillout-rendering-three-stacks`). Three parallel rendering
 stacks exist; only `ReactionEngine` + `WebGLRenderer` draws pixels. Form questions

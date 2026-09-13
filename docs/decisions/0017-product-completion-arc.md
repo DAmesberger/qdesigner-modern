@@ -1,6 +1,6 @@
 # 0017 — Open the Phase 7 Product-Completion & Wire-Up arc
 
-**Status:** Proposed (2026-07-03). Awaiting user approval.
+**Status:** Superseded as the active delivery plan by [ADR 0038](0038-current-architecture-and-decision-records.md) (2026-09-11). Originally proposed 2026-07-03. Historical findings and verification criteria below are retained; this is not a claim that all were completed.
 **Date:** 2026-07-03
 **Supersedes:** nothing. First ADR of the product-facing arc (Phases 1–6 were the backend/RLS cleanup arc, closed at main @ df4fbd0).
 **Related:** `PHASE_7_PLAN.md` (the executable plan), `PHASE_7_FINDINGS.md` (the evidence ledger), ADR slot 0018 (reserved for the fillout-rendering-contract decision this arc forces).
