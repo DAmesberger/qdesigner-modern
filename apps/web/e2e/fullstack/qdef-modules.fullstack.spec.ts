@@ -32,6 +32,19 @@ test('@fullstack all form catalogue modules can be authored, exported, imported 
   const browserErrors: string[] = [];
   page.on('pageerror', (error) => browserErrors.push(error.message));
   const workspace = await provisionWorkspace(request);
+  const headers = { Cookie: `qd_session=${workspace.sessionCookie}` };
+  // Portable exchange targets another project; names are reserved within a project.
+  const destination = await request.post('/api/projects', {
+    headers: { ...headers, 'X-CSRF-Token': workspace.csrfToken },
+    data: {
+      organization_id: workspace.organizationId,
+      name: 'Imported forms',
+      code: `copy-${Date.now()}`,
+      is_public: true,
+    },
+  });
+  expect(destination.status(), await destination.text()).toBe(201);
+  const destinationId = (await destination.json()).id;
   const designer = await createInDesigner(page, workspace, `Form catalogue ${Date.now()}`);
   for (const type of FORM_TYPES) {
     await addModule(
@@ -76,7 +89,6 @@ test('@fullstack all form catalogue modules can be authored, exported, imported 
   expect(browserErrors).toEqual([]);
   await expect(designer.questionCards).toHaveCount(FORM_TYPES.length);
   const originalId = new URL(page.url()).pathname.split('/').at(-1)!;
-  const headers = { Cookie: `qd_session=${workspace.sessionCookie}` };
   const endpoint = `/api/projects/${workspace.projectId}/questionnaires`;
   const exported = await request.get(`${endpoint}/${originalId}/definition`, { headers });
   expect(exported.status(), await exported.text()).toBe(200);
@@ -120,18 +132,6 @@ test('@fullstack all form catalogue modules can be authored, exported, imported 
     aggregation: 'none',
   });
 
-  // Portable exchange targets another project; names are reserved within a project.
-  const destination = await request.post('/api/projects', {
-    headers: { ...headers, 'X-CSRF-Token': workspace.csrfToken },
-    data: {
-      organization_id: workspace.organizationId,
-      name: 'Imported forms',
-      code: `copy-${Date.now()}`,
-      is_public: true,
-    },
-  });
-  expect(destination.status(), await destination.text()).toBe(201);
-  const destinationId = (await destination.json()).id;
   await page.goto(`/projects/${destinationId}`);
   await page.getByRole('button', { name: 'Import Definition', exact: true }).click();
   await page.getByTestId('qdef-file-input').setInputFiles({
