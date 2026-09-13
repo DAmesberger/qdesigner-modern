@@ -5,6 +5,8 @@
 **Auftraggeber:** [Kunde]
 **Gültigkeit:** 30 Tage
 
+**Einordnung:** Dieses Angebot beschreibt Lieferzusagen und Optionen, keinen Nachweis bereits fertiggestellter Funktionen. Implementierungs- und Abnahmegrenzen stehen im [Pflichtenheft-Abgleich](abgleich-pflichtenheft-angebot-2026-09.md) und in den verknüpften Tickets. Eine ADR-Deferral oder ein fehlender UI-Pfad streicht keine vereinbarte Leistung.
+
 ## 1. Ausgangslage und Ziel
 
 Der Auftraggeber betreibt das Fragebogen- und Reaktionszeit-System QDesigner für psychologische und verhaltenswissenschaftliche Studien. Das Altsystem (Chrome-App, CSV/ZIP-Vorlagen, freies JavaScript, lokale Speicherung) ist technisch am Ende seines Lebenszyklus.

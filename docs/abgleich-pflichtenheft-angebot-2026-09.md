@@ -1,26 +1,28 @@
 # Abgleich: Pflichtenheft „QDesigner neu" ↔ Angebot QDesigner Modern
 
-**Datum:** 2. September 2026
-**Zweck:** Jede Anforderung des Pflichtenhefts der Universität wird dem Angebot (`docs/angebot-qdesigner-modern-2026-09.md`, Blöcke L1–L15, Optionen O1–O4) und dem tatsächlichen Stand im Code zugeordnet. Interne Arbeitsgrundlage, nicht Teil des Angebots.
+**Datum:** 2. September 2026; bekannte Umfangs- und Implementierungsfehler abgeglichen am 13. September 2026
+**Zweck:** Jede Anforderung des Pflichtenhefts der Universität wird dem Angebot (`docs/angebot-qdesigner-modern-2026-09.md`, Blöcke L1–L16, Optionen O1–O5) und den dokumentierten Implementierungsgrundlagen zugeordnet. Der vollständige Einzelabgleich aller Legacy-Fähigkeiten bleibt #55/#71. Interne Arbeitsgrundlage, nicht Teil des Angebots.
 
-**Legende Status:** ✅ im Angebot enthalten und im Code vorhanden · 🔶 im Angebot enthalten, Code teilweise · 🟦 im Angebot enthalten, Code noch offen · ❌ nicht im Angebot (neuer Umfang) · ⛔ bewusst ausgeschlossen · ❓ zu klären
+**Evidenzgrenze:** Die Zuordnung ist keine Abnahme aller Anforderungen. Die gezielten September-Korrekturen folgen dem [Codebase-Audit](codebase-requirements-audit-2026-09-11.md), den aktuellen Tickets und dem [Publikationsnachweis](publication-2026-09-13.md). Unveränderte Grundlagen-Angaben stammen aus dem ursprünglichen Abgleich; vollständige Geräte-, Nutzerworkflow- und Capability-Abnahme bleibt getrennt. Implementierungslücken ändern den vereinbarten Lieferumfang nicht.
+
+**Legende Status:** ✅ im Angebot enthalten, Implementierungsgrundlage vorhanden (keine vollständige Abnahme) · 🔶 im Angebot enthalten, Code teilweise · 🟦 im Angebot enthalten, Code noch offen · ❌ nicht im Angebot (neuer Umfang) · ⛔ bewusst ausgeschlossen · ❓ zu klären
 
 ## 1. Ziele (Kap. 1)
 
 | Anforderung | Status | Angebot | Anmerkung |
 |---|---|---|---|
 | Fragebögen (subjektive Daten) | ✅ | L6, L7 | 14 Fragemodule |
-| Leistungsdaten: Reaktionszeit, Entscheidungsverhalten auf Bild/Video | ✅ | L7, L8 | WebGL-Engine, Bild/Audio-Stimuli; Video als Stimulus in Reaktionsblöcken **prüfen** (Medienanzeige ja, frame-genaues Video-Onset nein) |
-| Video-Stopp-Paradigma | ❌ | — | kein Stop-Signal-/Video-Stopp-Preset; Go/No-Go vorhanden. Neu: ca. 8 PT (mit Task-Switching) |
+| Leistungsdaten: Reaktionszeit, Entscheidungsverhalten auf Bild/Video | 🔶 | L7, L8 | WebGL-Bild/Audio und Video-Texturen mit `requestVideoFrameCallback` sind vorhanden. Verfahrensspezifische Abnahme bleibt #116; das separate Video-Stopp-Paradigma bleibt offen. |
+| Video-Stopp-Paradigma | 🟦 | L8 | Im erweiterten Angebot enthalten; dediziertes Stop-Signal-/Video-Stopp-Verfahren und SSRT: #104, #117. Vorhandene Video-Darstellung ersetzt diese Lieferung nicht. |
 | Synchronisierte Sensordaten HR/EKG, EDA, Atmung, EMG, Accelerometer (M2) | ❌ | — | nichts im Code, nicht im Angebot. Siehe §7 |
 | Tests zu Testbatterien zusammenführen | ✅ | L6, L7 | Blöcke, Seiten, Serien; Vorlagenbibliothek |
 | Unmittelbare Ergebnisdarstellung | ✅ | L7, L10 | Teilnehmer-Report, statistisches Feedback, Normen |
 | Individuelle Auswertung wiederholter Messungen | 🔶 | L7, L10 | Selbst-Baseline und RCI im Report vorhanden; personenzentrierte Verlaufsansicht für Testleiter fehlt (siehe 3.4/3.5) |
 | Informationen, Interventionen, Trainingsprogramme (M2) | ❌ | — | Text/Video-Anzeigemodule ja; Programmlogik (Kurse, Fortschritt, Zuweisung) nein. Neu: ca. 30 PT |
 | Endgeräte: Notebook, Tablet, Smartphone | ✅ | L7, L9 | responsive PWA, Touch. Native Apps ⛔ (Abschnitt 3 des Angebots) |
-| Testberichte, Schriftsätze, Serienbriefe | 🔶 | L7 (Report), L11 (Druck) | Teilnehmer-PDF ja; Testleiter-Berichte, Vorlagen, Serienbrief/Batch-PDF nein. Neu: ca. 15 PT |
+| Testberichte, Schriftsätze, Serienbriefe | 🔶 | L11 | Teilnehmer-Report vorhanden. Testleiter-Vorlagen, Parameterwahl und Batch-PDF/ZIP sind im erweiterten Angebot enthalten; #105, #119–#120. |
 | EMA: fix, zufällig, eventbezogen, technologiebezogen (M2) | 🔶 | L3 (Serien) | Serien mit `fixed`, `random-interval`, `event`; Erinnerung nur per E-Mail; keine Push-Benachrichtigung, kein sensor-/technologiegetriggerter Prompt. Erweiterung: ca. 15 PT |
-| Export SPSS, Excel, … | ✅ | L10 | CSV, JSON, XLSX, SPSS (.sav + Syntax), R, Stata, SAS, Python |
+| Export SPSS, Excel, … | 🔶 | L10 | CSV/JSON/XLSX und Analyse-Syntax vorhanden. SPSS-Export liefert bislang CSV plus Syntax, keine native `.sav`; native Datei und gemeinsames Exportprofil bleiben #130/#131. XML bleibt #121. |
 | „KI ready": Testentwicklung, Fehlererkennung | 🟦 | L4, L12 | QDef + MCP sind genau dieser Punkt; im Angebot als „Automatisierungsschnittstelle", im Anschreiben als KI-Anbindung benennen |
 | „KI ready": Datenauswertung, Berichte | ❌ | — | nicht enthalten. Option: KI-Assistent für Auswertung/Berichtstexte über MCP, ca. 20 PT |
 
@@ -45,7 +47,7 @@
 | Randomisierung von Items | ✅ | L7 | randomisierte Blöcke, Optionsrandomisierung |
 | Skip & Jump | ✅ | L7 | Flow-Regeln |
 | Zeitbegrenzungen (Speedtests) | ✅ | L7 | Seiten-/Fragen-Timer, Gesamtbudget |
-| Import von Fragebögen verschiedener Formate | 🔶 | L4 | QDef-Import ja; fremde Formate (QTI, REDCap, LimeSurvey …) nein. ❓ welche Formate gemeint sind |
+| Import von Fragebögen verschiedener Formate | 🔶 | L4 | QDef unterstützt Text-Export und nichtschreibende Inspektion (#76); schreibender Import (#78), vollständige Module und Pakete bleiben offen. Fremdformate (QTI, REDCap, LimeSurvey …) sind nicht zugesagt; konkrete Formate klären. |
 | Vorlagen exportieren/importieren (PDF, XML o.ä., systemspezifisch) | 🟦 | L4, L11 | QDef (.qdef.json/.qdef) = systemspezifisch; PDF-Ausdruck des leeren Bogens: über L11 Druckpfad abdecken |
 | **Import der CSV-Programmdateien aus dem alten QDesigner** | ⛔→O2 | O2 | **Entschieden (2026-09-02):** kein eingebauter Konverter. JavaScript in Alt-Vorlagen ist nicht mechanisch in die Regelsprache übersetzbar. Stattdessen Migrations-Skill über die MCP-Anbindung: Spec #106, Tickets #122–#124. Angebot O2 entsprechend umformuliert (35 PT). |
 
@@ -56,11 +58,11 @@
 | Stroop | ✅ | L6, L8 | Preset vorhanden |
 | N-Back | ✅ | L6, L8 | Preset vorhanden |
 | Go/No-Go | ✅ | L6, L8 | Preset vorhanden |
-| Task-Switching | ❌ | — | kein Preset. Neu: ca. 4 PT (in den 8 PT mit Video-Stopp) |
-| weitere vorhandene Presets | ✅ | | Flanker, Dot-Probe, IAT, SART, Simon, Posner, PVT, RSVP, Sternberg, Temporal Order, Visual Search (14 gesamt; **Angebot nennt 9, korrigieren**) |
+| Task-Switching | 🟦 | L8 | Im erweiterten Angebot enthalten; Preset und wissenschaftliche Auswertung bleiben #115. |
+| weitere vorhandene Presets | ✅ | L6, L8 | Flanker, Dot-Probe, IAT, SART, Simon, Posner, PVT, RSVP, Sternberg, Temporal Order, Visual Search; Katalog enthält vierzehn Paradigmen. Angebot L6 ist korrigiert; katalogweite Abnahme bleibt gesondert. |
 | Stimulusdarstellung, RT ms-genau, Fehlerklassifikation, Abbruchbedingungen | ✅ | L8 | frame-genau, Sub-ms relativ, Korrektheit, Abbruchregeln |
 | Selektive/adaptive Verfahren zwischen und innerhalb von Tests | 🔶 | L7 | adaptive Blöcke (CAT/IRT) und Flow auf Vorergebnisse vorhanden; adaptive Schwierigkeit *innerhalb* eines RT-Tests (Staircase, z. B. N-Back-Level) nicht. Neu: ca. 8 PT |
-| Exakte Zeitauflösung, Bildschirmsynchronität | ✅ | L8 | Kernkompetenz; Provenienz je Trial |
+| Exakte Zeitauflösung, Bildschirmsynchronität | 🔶 | L8 | Frame-basierte Präsentation und Trial-Provenienz sind implementiert. Browser-E2E prüft Softwareverhalten; physische Display-/Eingabelatenz ist ohne externe Referenzmessung nicht zertifiziert. |
 
 ### 3.3 Sensorintegration
 
@@ -81,7 +83,7 @@ Siehe §7 für Vorschlag.
 | Speicherung lokal / Server / Cloud | ✅ | L3, L9 | offline-first + Server; Self-Hosting oder Hosting (Abschnitt 7) |
 | Rohdaten vs. verarbeitete Daten | ✅ | L3, L10 | Trials/Events roh, Scores/Aggregate abgeleitet |
 | Versionierung | ✅ | L3 | Semver-Snapshots, Session pinnt Version |
-| Datenmanagement nach Personen, Wiederholungen, Gruppen | ❌ | — | Sessions sind personenzuordenbar (authentifiziert), aber es gibt keine **Personenakte** (alle Tests einer Person inkl. Wiederholungen), keine **Gruppen/Teams** mit Mitgliedschaftshistorie, keine Sortiervariablen. Neu: ca. 25 PT |
+| Datenmanagement nach Personen, Wiederholungen, Gruppen | 🟦 | L16 | Im Angebot enthalten: Personenakte, historische Gruppen/Teams, Übersichten und Sortier-/Vergleichsmerkmale. Session-Zuordnung ersetzt diese Workflows nicht; #103, #109–#114. |
 | Metadaten (Testbedingungen, Gerät) | ✅ | L8 | Gerätequalifikation, Provenienz |
 
 ### 3.5 Auswertung & Visualisierung
@@ -90,23 +92,25 @@ Siehe §7 für Vorschlag.
 |---|---|---|---|
 | Kennwerte RT, Fehler | ✅ | L10 | HRV ❌ (Sensor) |
 | Zeitreihen, Balken | ✅ | L10 | |
-| Heatmaps | 🔶 | L10 | rudimentär; für Testleiter-Analytik ausbauen, ca. 3 PT |
+| Heatmaps | 🔶 | L10 | Im erweiterten Angebot enthalten; Testleiter-Analyse und Abnahme bleiben #105/#121. |
 | Normwerte, mehrere Vergleichsgruppen wählbar (Sportart, Alter) | 🔶 | L7, L10 | Normtabellen und Kohortenvergleich vorhanden; Auswahl mehrerer Vergleichsgruppen durch Testleiter nein. Neu: ca. 6 PT |
-| Teamspezifische Auswertungen | ❌ | — | hängt an Gruppen (3.4) |
+| Teamspezifische Auswertungen | 🟦 | L16, L10 | Im Angebot enthalten; Personen-/Gruppenmodell und CohortFilter bleiben #103, #109–#114. |
 | Sofortrückmeldung, wiederholte Messungen, Parameter vordefiniert oder vom TL gewählt | 🔶 | L7 | Report ja; TL-seitige Parameterwahl zur Laufzeit nein, ca. 4 PT |
-| „Auf einen Blick": welche Tests hat Person/Gruppe absolviert | ❌ | — | Teil der Personenakte (3.4) |
-| Dynamische Team-Zusammensetzung (Zu-/Abgänge) | ❌ | — | Teil Gruppen mit Historie (3.4) |
+| „Auf einen Blick": welche Tests hat Person/Gruppe absolviert | 🟦 | L16 | Im Angebot enthalten; Übersicht bleibt Teil von #103, #109–#114. |
+| Dynamische Team-Zusammensetzung (Zu-/Abgänge) | 🟦 | L16 | Im Angebot enthalten; datierte Mitgliedschaften bleiben #103, #109–#114. |
+
+PCA ist Bestandteil von L10 und bleibt nach ADR 0040 verpflichtend. Der numerische Kern ist vorhanden; der erreichbare Forscher-Workflow bleibt #145. Eine numerische Methode allein erfüllt die UI-Lieferung nicht.
 
 ### 3.6 Export & Schnittstellen
 
 | Anforderung | Status | Angebot | Anmerkung |
 |---|---|---|---|
 | CSV, JSON | ✅ | L10 | |
-| XML | ❌ | — | trivial, ca. 1 PT |
+| XML | 🟦 | L10 | Im erweiterten Angebot enthalten; Emitter und veröffentlichtes Schema bleiben #121. |
 | PDF | ✅ | L7, L11 | |
 | EDF, BIDS | ❌ | — | nur mit Sensordaten sinnvoll; BIDS-Verhaltensdaten-Layout ca. 5 PT, EDF ca. 5 PT |
 | REST-API | ✅ | L1, L3 | OpenAPI, API-Schlüssel |
-| R, SPSS, Python | ✅ | L10 | |
+| R, SPSS, Python | 🔶 | L10 | Analyse-Syntax/CSV vorhanden. Native SPSS-Datei und konsistentes Exportprofil bleiben #130/#131. |
 
 ## 4. Nicht-funktionale Anforderungen (Kap. 4)
 
@@ -142,7 +146,7 @@ Siehe §7 für Vorschlag.
 | IEC 62304 | ⛔ | — | folgt aus Nicht-MDR |
 | ISO 27001 | ❓ | — | betrifft Betreiber/Hosting; bei Anbieter-Hosting Rechenzentrum mit Zertifikat wählen; Software unterstützt (Audit, Rollen, Verschlüsselung) |
 | Ethikvorgaben | ✅ | L2, L7 | Einwilligung, Betroffenenrechte, Audit |
-| Abnahme: Messgenauigkeit, Stabilität, Doku, Handbuch | ✅ | Abschnitt 9, L14 | |
+| Abnahme: Messgenauigkeit, Stabilität, Doku, Handbuch | 🔶 | Abschnitt 9, L14 | Lieferpflicht bleibt bestehen. Begrenzte Software-Abnahme ist dokumentiert; vollständige Client-Abnahme und physische Timing-Qualifikation sind offen. |
 | Risiken: Sensorinkompatibilität, OS-Latenzen, OS-Updates, Nutzerfehler | 🔶 | L8 | Gerätequalifikation + Provenienz decken OS-Latenz ab; Sensoren offen |
 
 ## 7. Vorschlag: Ergänzungen zum Angebot
@@ -180,7 +184,7 @@ Ins Angebot übernommen (2026-09-02): L16 „Personen- und Gruppenmanagement" 40
 ### 7.4 Offene Fragen an die Universität
 
 1. Welche „verschiedenen Formate" beim Fragebogen-Import (3.1)?
-2. Legacy-CSV: Migration als Dienstleistung (O2) oder Funktion im Produkt?
+2. Legacy-CSV: Repräsentativen Client-Korpus und Prioritäten für den festgelegten Migrations-Skill (O2, #56/#106) bereitstellen; ein eingebauter Konverter ist ausgeschlossen.
 3. Sensorliste: Hersteller und Modelle (Polar, Movesense, Shimmer, BITalino, Biopac …), vorhandene SDKs, Betriebssystem der Messgeräte.
 4. 3D-Brille: Zweck (stereoskopische Stimuli, VR, Blickmessung)?
 5. Latenz-Zielwert („< x ms") konkretisieren.
