@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
-  import { moduleRegistry } from '$lib/modules/registry';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
   import { getDesignerContext } from '$lib/stores/designer-context';
   const designerStore = getDesignerContext();
   import Button from '$lib/components/ui/Button.svelte';
@@ -51,41 +51,12 @@
 
   let { analytics, block, onUpdate }: Props = $props();
 
-  // Use analytics prop if provided, otherwise fall back to block
-  const item = $derived(analytics || block);
-
-  // Initialize config and dataSource if they don't exist
-  $effect(() => {
-    if (item) {
-      let updates: any = {};
-      let needsUpdate = false;
-
-      // Initialize config if missing
-      if (!item.config) {
-        const metadata = moduleRegistry.get('bar-chart');
-        if (metadata?.defaultConfig) {
-          updates.config = metadata.defaultConfig;
-          needsUpdate = true;
-        }
-      }
-
-      // Initialize dataSource if missing
-      if (!item.dataSource) {
-        updates.dataSource = {
-          variables: [],
-          aggregation: 'none',
-        };
-        needsUpdate = true;
-      }
-
-      // Apply updates if needed
-      if (needsUpdate) {
-        onUpdate?.({
-          ...item,
-          ...updates,
-        });
-      }
-    }
+  // Reading an editor must not write defaults into the saved definition.
+  const item = $derived.by(() => {
+    const source = analytics || block;
+    return source
+      ? { ...source, config: buildModuleRuntimeConfig(source) as unknown as BarChartConfig }
+      : undefined;
   });
 
   // Load available variables from designer store using derived
@@ -118,8 +89,8 @@
     yMaxInput = maxValue === 'auto' ? '' : String(maxValue ?? '');
   });
 
-  // Update y-axis bounds
-  $effect(() => {
+  // Persist only user edits; mounting the editor does not rewrite bounds.
+  function updateYMin() {
     if (!item?.config) return;
 
     const newMin = yMinInput === '' ? 'auto' : parseFloat(yMinInput);
@@ -138,9 +109,9 @@
         },
       });
     }
-  });
+  }
 
-  $effect(() => {
+  function updateYMax() {
     if (!item?.config) return;
 
     const newMax = yMaxInput === '' ? 'auto' : parseFloat(yMaxInput);
@@ -159,7 +130,7 @@
         },
       });
     }
-  });
+  }
 
   function toggleVariable(varId: string) {
     if (!item) return;
@@ -264,9 +235,7 @@
           <h4 class="section-title">Data Source</h4>
 
           <div class="mb-4">
-            <span class="block text-sm font-medium text-foreground mb-2"
-              >Variables to Display</span
-            >
+            <span class="block text-sm font-medium text-foreground mb-2">Variables to Display</span>
             <div class="variable-list">
               {#each availableVariables as variable}
                 <label class="variable-option">
@@ -288,7 +257,9 @@
           </div>
 
           <div class="mb-4">
-            <label for="aggregation" class="block mb-1.5 text-sm font-medium text-foreground">Aggregation</label>
+            <label for="aggregation" class="block mb-1.5 text-sm font-medium text-foreground"
+              >Aggregation</label
+            >
             <Select
               id="aggregation"
               value={item.dataSource?.aggregation || 'none'}
@@ -312,7 +283,9 @@
           </div>
 
           <div class="mb-4">
-            <label for="value" class="block mb-1.5 text-sm font-medium text-foreground">Value Expression</label>
+            <label for="value" class="block mb-1.5 text-sm font-medium text-foreground"
+              >Value Expression</label
+            >
             <input
               id="value"
               type="text"
@@ -329,11 +302,15 @@
               placeholder="e.g., variableName or IF(condition, value1, value2)"
               class="input-field"
             />
-            <p class="mt-1 text-xs text-muted-foreground">Enter a variable name or formula to display</p>
+            <p class="mt-1 text-xs text-muted-foreground">
+              Enter a variable name or formula to display
+            </p>
           </div>
 
           <div class="mb-4">
-            <label for="referenceValue" class="block mb-1.5 text-sm font-medium text-foreground">Reference Value (Optional)</label>
+            <label for="referenceValue" class="block mb-1.5 text-sm font-medium text-foreground"
+              >Reference Value (Optional)</label
+            >
             <input
               id="referenceValue"
               type="text"
@@ -350,7 +327,9 @@
               placeholder="e.g., baseline or 100"
               class="input-field"
             />
-            <p class="mt-1 text-xs text-muted-foreground">Enter a reference value or variable for comparison</p>
+            <p class="mt-1 text-xs text-muted-foreground">
+              Enter a reference value or variable for comparison
+            </p>
           </div>
         </div>
       {:else if activeTab === 'appearance'}
@@ -359,7 +338,9 @@
           <h4 class="section-title">Chart Appearance</h4>
 
           <div class="mb-4">
-            <label for="orientation" class="block mb-1.5 text-sm font-medium text-foreground">Orientation</label>
+            <label for="orientation" class="block mb-1.5 text-sm font-medium text-foreground"
+              >Orientation</label
+            >
             <div class="flex gap-4">
               <label class="flex items-center gap-2 cursor-pointer">
                 <input
@@ -484,7 +465,9 @@
 
           {#if item.config?.showErrorBars}
             <div class="mb-4 pl-6">
-              <label for="error-type" class="block mb-1.5 text-sm font-medium text-foreground">Error Type</label>
+              <label for="error-type" class="block mb-1.5 text-sm font-medium text-foreground"
+                >Error Type</label
+              >
               <Select
                 id="error-type"
                 value={item.config?.errorType || 'standardError'}
@@ -508,7 +491,9 @@
 
           <div class="grid grid-cols-2 gap-4">
             <div class="mb-4">
-              <label for="bar-width" class="block mb-1.5 text-sm font-medium text-foreground">Bar Width</label>
+              <label for="bar-width" class="block mb-1.5 text-sm font-medium text-foreground"
+                >Bar Width</label
+              >
               <input
                 id="bar-width"
                 type="range"
@@ -528,11 +513,15 @@
                 step="0.1"
                 class="w-full mb-1"
               />
-              <span class="inline-block ml-2 text-sm font-mono text-muted-foreground">{item?.config?.barWidth || 0.8}</span>
+              <span class="inline-block ml-2 text-sm font-mono text-muted-foreground"
+                >{item?.config?.barWidth || 0.8}</span
+              >
             </div>
 
             <div class="mb-4">
-              <label for="bar-spacing" class="block mb-1.5 text-sm font-medium text-foreground">Bar Spacing</label>
+              <label for="bar-spacing" class="block mb-1.5 text-sm font-medium text-foreground"
+                >Bar Spacing</label
+              >
               <input
                 id="bar-spacing"
                 type="range"
@@ -552,12 +541,16 @@
                 step="0.1"
                 class="w-full mb-1"
               />
-              <span class="inline-block ml-2 text-sm font-mono text-muted-foreground">{item?.config?.barSpacing || 0.2}</span>
+              <span class="inline-block ml-2 text-sm font-mono text-muted-foreground"
+                >{item?.config?.barSpacing || 0.2}</span
+              >
             </div>
           </div>
 
           <div class="mb-4">
-            <label for="color-scheme" class="block mb-1.5 text-sm font-medium text-foreground">Color Scheme</label>
+            <label for="color-scheme" class="block mb-1.5 text-sm font-medium text-foreground"
+              >Color Scheme</label
+            >
             <div class="flex flex-col gap-3">
               {#each colorSchemes as scheme}
                 <label class="color-scheme-option">
@@ -583,7 +576,10 @@
                   <span class="text-sm font-medium text-foreground w-24">{scheme.label}</span>
                   <div class="flex gap-1 flex-1">
                     {#each scheme.preview as color}
-                      <div class="w-8 h-6 rounded border border-border" style="background-color: {color}"></div>
+                      <div
+                        class="w-8 h-6 rounded border border-border"
+                        style="background-color: {color}"
+                      ></div>
                     {/each}
                   </div>
                 </label>
@@ -592,13 +588,14 @@
           </div>
 
           <div class="mb-4">
-            <span class="block text-sm font-medium text-foreground mb-2"
-              >Custom Colors</span
-            >
+            <span class="block text-sm font-medium text-foreground mb-2">Custom Colors</span>
             <div class="flex flex-col gap-2">
               {#each item.config?.colors?.customColors || [] as color, index}
                 <div class="flex items-center gap-2 p-2 bg-muted rounded-md">
-                  <div class="w-8 h-8 rounded border border-border" style="background-color: {color}"></div>
+                  <div
+                    class="w-8 h-8 rounded border border-border"
+                    style="background-color: {color}"
+                  ></div>
                   <span class="flex-1 font-mono text-sm text-foreground">{color}</span>
                   <div class="flex gap-1">
                     <Button
@@ -634,7 +631,7 @@
 
               <div class="flex gap-2 items-center mt-2">
                 <input type="color" bind:value={newColor} class="color-input" />
-                <Button variant="secondary" size="sm" onclick={addCustomColor}> Add Color </Button>
+                <Button variant="secondary" size="sm" onclick={addCustomColor}>Add Color</Button>
               </div>
             </div>
           </div>
@@ -648,7 +645,9 @@
             <h5 class="text-sm font-semibold text-muted-foreground mb-3">X-Axis</h5>
 
             <div class="mb-4">
-              <label for="x-label" class="block mb-1.5 text-sm font-medium text-foreground">Label</label>
+              <label for="x-label" class="block mb-1.5 text-sm font-medium text-foreground"
+                >Label</label
+              >
               <input
                 id="x-label"
                 type="text"
@@ -731,7 +730,9 @@
             <h5 class="text-sm font-semibold text-muted-foreground mb-3">Y-Axis</h5>
 
             <div class="mb-4">
-              <label for="y-label" class="block mb-1.5 text-sm font-medium text-foreground">Label</label>
+              <label for="y-label" class="block mb-1.5 text-sm font-medium text-foreground"
+                >Label</label
+              >
               <input
                 id="y-label"
                 type="text"
@@ -759,22 +760,34 @@
 
             <div class="grid grid-cols-2 gap-4">
               <div class="mb-4">
-                <label for="y-min" class="block mb-1.5 text-sm font-medium text-foreground">Minimum</label>
+                <label for="y-min" class="block mb-1.5 text-sm font-medium text-foreground"
+                  >Minimum</label
+                >
                 <input
                   id="y-min"
                   type="text"
                   bind:value={yMinInput}
+                  oninput={(e) => {
+                    yMinInput = e.currentTarget.value;
+                    updateYMin();
+                  }}
                   placeholder="Auto"
                   class="input-field"
                 />
               </div>
 
               <div class="mb-4">
-                <label for="y-max" class="block mb-1.5 text-sm font-medium text-foreground">Maximum</label>
+                <label for="y-max" class="block mb-1.5 text-sm font-medium text-foreground"
+                  >Maximum</label
+                >
                 <input
                   id="y-max"
                   type="text"
                   bind:value={yMaxInput}
+                  oninput={(e) => {
+                    yMaxInput = e.currentTarget.value;
+                    updateYMax();
+                  }}
                   placeholder="Auto"
                   class="input-field"
                 />

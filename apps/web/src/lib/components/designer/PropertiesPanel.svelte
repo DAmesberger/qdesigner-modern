@@ -44,9 +44,14 @@
   // render; the sections themselves receive an already-narrowed non-null question.
   let supportsCarryForward = $derived(
     !!questionItem &&
-      !['text-display', 'instruction', 'media-display', 'webgl', 'statistical-feedback', 'bar-chart'].includes(
-        questionItem.type
-      )
+      ![
+        'text-display',
+        'instruction',
+        'media-display',
+        'webgl',
+        'statistical-feedback',
+        'bar-chart',
+      ].includes(questionItem.type)
   );
 
   // Save as Template modal visibility (state + form live in SaveTemplateModal).
@@ -66,15 +71,7 @@
           if (updates.config.options) {
             updates.display = {
               ...q.display,
-              options: updates.config.options.map((opt) => ({
-                id: opt.id,
-                label: opt.label,
-                value: opt.value,
-                description: opt.description,
-                icon: opt.icon,
-                image: opt.image,
-                color: opt.color,
-              })),
+              options: updates.config.options.map((opt) => ({ ...opt })),
             };
           }
 
@@ -118,7 +115,6 @@
   // Get the appropriate designer component from module registry
   let designerComponent = $state<ComponentType | null>(null);
   let loadingComponent = $state(false);
-  let moduleCategory = $state<string | null>(null);
   let lastLoadedType = $state<string | null>(null);
   let loadedType = $state<string | null>(null);
 
@@ -133,7 +129,6 @@
       lastLoadedType = null;
       loadedType = null;
       designerComponent = null;
-      moduleCategory = null;
     }
   });
 
@@ -144,18 +139,15 @@
       if (metadata) {
         const component = await moduleRegistry.loadComponent(type, 'designer');
         if (lastLoadedType !== type) return;
-        moduleCategory = metadata.category;
         designerComponent = component;
         loadedType = type;
       } else {
         designerComponent = null;
-        moduleCategory = null;
       }
     } catch (error) {
       if (lastLoadedType !== type) return;
       console.error('Failed to load designer component:', error);
       designerComponent = null;
-      moduleCategory = null;
     } finally {
       if (lastLoadedType === type) loadingComponent = false;
     }
@@ -259,32 +251,17 @@
               {@const DesignerComponent = designerComponent}
               <div class="border-t pt-4">
                 {#key questionItem.id}
-                  {#if moduleCategory === 'instruction'}
-                    <DesignerComponent
-                      instruction={questionItem}
-                      mode="edit"
-                      onUpdate={updateQuestion}
-                      {organizationId}
-                      {userId}
-                    />
-                  {:else if moduleCategory === 'display' || moduleCategory === 'analytics'}
-                    <!-- Display modules (analytics, instructions) -->
-                    <DesignerComponent
-                      analytics={questionItem}
-                      mode="edit"
-                      onUpdate={updateQuestion}
-                      {organizationId}
-                      {userId}
-                    />
-                  {:else if moduleCategory === 'question'}
-                    <DesignerComponent
-                      question={questionItem}
-                      mode="edit"
-                      onUpdate={updateQuestion}
-                      {organizationId}
-                      {userId}
-                    />
-                  {/if}
+                  <!-- Category describes palette grouping, not the component's
+                       prop name. Match the shared renderer's module boundary. -->
+                  <DesignerComponent
+                    question={questionItem}
+                    instruction={questionItem}
+                    analytics={questionItem}
+                    mode="edit"
+                    onUpdate={updateQuestion}
+                    {organizationId}
+                    {userId}
+                  />
                 {/key}
               </div>
             {:else}
@@ -360,7 +337,9 @@
 
                 <!-- Response deadline (E-FLOW-5) -->
                 <div class="border-t pt-3 mt-3">
-                  <span class="block text-sm font-medium text-foreground mb-2">Response deadline</span>
+                  <span class="block text-sm font-medium text-foreground mb-2"
+                    >Response deadline</span
+                  >
                   <div class="grid grid-cols-2 gap-2">
                     <div>
                       <label
@@ -372,10 +351,13 @@
                         type="number"
                         min="0"
                         step="1"
-                        value={questionItem.timing?.deadlineMs ? questionItem.timing.deadlineMs / 1000 : 0}
+                        value={questionItem.timing?.deadlineMs
+                          ? questionItem.timing.deadlineMs / 1000
+                          : 0}
                         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                           const secs = Number(e.currentTarget.value);
-                          const ms = Number.isFinite(secs) && secs > 0 ? Math.round(secs * 1000) : undefined;
+                          const ms =
+                            Number.isFinite(secs) && secs > 0 ? Math.round(secs * 1000) : undefined;
                           updateQuestion({
                             timing: { ...questionItem.timing, deadlineMs: ms },
                           });
@@ -423,8 +405,12 @@
                       type="number"
                       min="0"
                       step="1"
-                      value={questionItem.timing?.warnAtMs !== undefined && questionItem.timing?.deadlineMs
-                        ? Math.max(0, (questionItem.timing.deadlineMs - questionItem.timing.warnAtMs) / 1000)
+                      value={questionItem.timing?.warnAtMs !== undefined &&
+                      questionItem.timing?.deadlineMs
+                        ? Math.max(
+                            0,
+                            (questionItem.timing.deadlineMs - questionItem.timing.warnAtMs) / 1000
+                          )
                         : 0}
                       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                         const before = Number(e.currentTarget.value);
@@ -466,7 +452,9 @@
     {:else if activeTab === 'style'}
       <StyleEditor
         {theme}
-        selectedElement={(['question', 'page', 'global'] as readonly string[]).includes(itemType ?? '')
+        selectedElement={(['question', 'page', 'global'] as readonly string[]).includes(
+          itemType ?? ''
+        )
           ? (itemType as 'question' | 'page' | 'global')
           : 'global'}
         onupdate={handleThemeUpdate}

@@ -2,7 +2,7 @@
   import type { QuestionProps } from '$lib/modules/types';
   import type { Question } from '$lib/shared';
   import { generateId } from '$lib/shared/utils/id';
-  import { moduleRegistry } from '$lib/modules/registry';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
   import Input from '$lib/components/ui/forms/Input.svelte';
   import Checkbox from '$lib/components/ui/forms/Checkbox.svelte';
   import Button from '$lib/components/ui/Button.svelte';
@@ -22,7 +22,7 @@
     label: string;
     value: any;
     icon?: string;
-    image?: string;
+    image?: string | { url?: string; [key: string]: unknown };
     color?: string;
     description?: string;
     exclusive?: boolean;
@@ -34,53 +34,19 @@
     onUpdate?: (updates: any) => void;
   }
 
-  let { question, onResponse, onUpdate }: Props = $props();
+  let { question, onUpdate }: Props = $props();
 
-  // Initialize config if it doesn't exist
-  $effect(() => {
-    if (!question.config) {
-      const metadata = moduleRegistry.get('multiple-choice');
-      if (metadata?.defaultConfig) {
-        const updates = {
-          ...question,
-          config: metadata.defaultConfig,
-        };
-        (onResponse || onUpdate)?.(updates);
-      }
-    }
-  });
-
+  const config = $derived({
+    ...buildModuleRuntimeConfig(question),
+    options:
+      question.config?.options ??
+      (question.display as { options?: ChoiceOption[] } | undefined)?.options ??
+      (question.responseType as { options?: ChoiceOption[] } | undefined)?.options ??
+      (question.response as { options?: ChoiceOption[] } | undefined)?.options ??
+      [],
+  } as MultipleChoiceConfig);
   function updateConfig(updates: Partial<MultipleChoiceConfig>) {
-    const updatedConfig = {
-      ...question.config,
-      ...updates,
-    };
-
-    // Sync display.options with config.options
-    const updatedDisplay = {
-      ...question.display,
-      options:
-        updatedConfig.options?.map((opt: ChoiceOption) => ({
-          id: opt.id,
-          label: opt.label,
-          value: opt.value,
-          description: opt.description,
-          icon: opt.icon,
-          image: opt.image,
-          color: opt.color,
-        })) ||
-        (question.display as any)?.options ||
-        [],
-    };
-
-    const updatedQuestion = {
-      ...question,
-      config: updatedConfig,
-      display: updatedDisplay,
-    };
-
-    // Use onResponse if available, otherwise use onUpdate
-    (onResponse || onUpdate)?.(updatedQuestion);
+    onUpdate?.({ config: { ...question.config, ...updates } });
   }
 
   function updateResponseType(type: 'single' | 'multiple') {
@@ -90,7 +56,7 @@
   }
 
   function addOption() {
-    const currentOptions = question.config?.options || [];
+    const currentOptions = config.options;
     const newOption: ChoiceOption = {
       id: generateId(),
       label: `Option ${currentOptions.length + 1}`,
@@ -103,7 +69,7 @@
   }
 
   function updateOption(index: number, updates: Partial<ChoiceOption>) {
-    const currentOptions = question.config?.options || [];
+    const currentOptions = config.options;
     const newOptions = [...currentOptions];
     const option = newOptions[index];
     if (option) {
@@ -113,7 +79,7 @@
   }
 
   function removeOption(index: number) {
-    const currentOptions = question.config?.options || [];
+    const currentOptions = config.options;
     if (currentOptions.length <= 2) return; // Keep at least 2 options
 
     const newOptions = currentOptions.filter((_, i) => i !== index);
@@ -121,7 +87,7 @@
   }
 
   function moveOption(index: number, direction: 'up' | 'down') {
-    const currentOptions = question.config?.options || [];
+    const currentOptions = config.options;
     const newOptions = [...currentOptions];
     const newIndex = direction === 'up' ? index - 1 : index + 1;
 
@@ -132,7 +98,7 @@
   }
 
   function toggleExclusive(index: number) {
-    const currentOptions = question.config?.options || [];
+    const currentOptions = config.options;
     const option = currentOptions[index];
     if (option) {
       updateOption(index, { exclusive: !option.exclusive });
@@ -157,7 +123,7 @@
             },
             text: e.currentTarget.value,
           };
-          (onResponse || onUpdate)?.(updatedQuestion);
+          onUpdate?.(updatedQuestion);
         }}
         rows="2"
         placeholder="Enter your question text here"
@@ -179,7 +145,7 @@
               description: e.currentTarget.value || undefined,
             },
           };
-          (onResponse || onUpdate)?.(updatedQuestion);
+          onUpdate?.(updatedQuestion);
         }}
         placeholder="Additional context or instructions"
       />
@@ -194,7 +160,7 @@
           type="radio"
           name="responseType"
           value="single"
-          checked={question.config?.responseType?.type === 'single'}
+          checked={config?.responseType?.type === 'single'}
           onchange={() => updateResponseType('single')}
         />
         <span>Single Choice (Radio Buttons)</span>
@@ -204,7 +170,8 @@
           type="radio"
           name="responseType"
           value="multiple"
-          checked={question.config?.responseType?.type === 'multiple'}
+          disabled={question.type === 'single-choice'}
+          checked={config?.responseType?.type === 'multiple'}
           onchange={() => updateResponseType('multiple')}
         />
         <span>Multiple Choice (Checkboxes)</span>
@@ -215,7 +182,7 @@
   <div class="form-section">
     <h3>Options</h3>
     <div class="options-list">
-      {#each question.config?.options || [] as option, index}
+      {#each config?.options || [] as option, index}
         <div class="option-item">
           <div class="option-header">
             <span class="option-number">{index + 1}</span>
@@ -233,7 +200,7 @@
                 variant="ghost"
                 size="xs"
                 onclick={() => moveOption(index, 'down')}
-                disabled={index === (question.config?.options?.length || 0) - 1}
+                disabled={index === (config?.options?.length || 0) - 1}
                 aria-label="Move down"
               >
                 ↓
@@ -243,7 +210,7 @@
                 size="xs"
                 class="hover:text-destructive"
                 onclick={() => removeOption(index)}
-                disabled={(question.config?.options?.length || 0) <= 2}
+                disabled={(config?.options?.length || 0) <= 2}
                 aria-label="Remove option"
               >
                 ×
@@ -305,9 +272,16 @@
                 <Input
                   id={'img-' + index}
                   type="url"
-                  value={option.image || ''}
+                  value={typeof option.image === 'string'
+                    ? option.image
+                    : (option.image?.url ?? '')}
                   oninput={(e) =>
-                    updateOption(index, { image: e.currentTarget.value || undefined })}
+                    updateOption(index, {
+                      image:
+                        typeof option.image === 'object'
+                          ? { ...option.image, url: e.currentTarget.value }
+                          : e.currentTarget.value || undefined,
+                    })}
                   placeholder="https://example.com/image.jpg"
                 />
               </div>
@@ -336,7 +310,7 @@
               </div>
             </div>
 
-            {#if question.config?.responseType?.type === 'multiple'}
+            {#if config?.responseType?.type === 'multiple'}
               <Checkbox
                 id={'exclusive-' + index}
                 label="Exclusive option (deselects others when selected)"
@@ -349,7 +323,8 @@
       {/each}
     </div>
 
-    <Button variant="outline" size="sm" class="w-full mt-3" onclick={addOption}>+ Add Option</Button>
+    <Button variant="outline" size="sm" class="w-full mt-3" onclick={addOption}>+ Add Option</Button
+    >
   </div>
 
   <div class="form-section">
@@ -360,7 +335,7 @@
           type="radio"
           name="layout"
           value="vertical"
-          checked={(question.config?.layout || 'vertical') === 'vertical'}
+          checked={(config?.layout || 'vertical') === 'vertical'}
           onchange={() => updateConfig({ layout: 'vertical' })}
         />
         <span>Vertical</span>
@@ -370,7 +345,7 @@
           type="radio"
           name="layout"
           value="horizontal"
-          checked={question.config?.layout === 'horizontal'}
+          checked={config?.layout === 'horizontal'}
           onchange={() => updateConfig({ layout: 'horizontal' })}
         />
         <span>Horizontal</span>
@@ -380,14 +355,14 @@
           type="radio"
           name="layout"
           value="grid"
-          checked={question.config?.layout === 'grid'}
+          checked={config?.layout === 'grid'}
           onchange={() => updateConfig({ layout: 'grid' })}
         />
         <span>Grid</span>
       </label>
     </div>
 
-    {#if question.config?.layout === 'grid'}
+    {#if config?.layout === 'grid'}
       <div class="field">
         <label for="grid-columns">Columns</label>
         <Input
@@ -395,7 +370,7 @@
           type="number"
           min="2"
           max="4"
-          value={String(question.config?.columns ?? 2)}
+          value={String(config?.columns ?? 2)}
           oninput={(e) => updateConfig({ columns: parseInt(e.currentTarget.value) || 2 })}
         />
       </div>
@@ -408,7 +383,7 @@
       <Checkbox
         id="mc-randomize"
         label="Randomize option order"
-        checked={question.config?.randomizeOptions || false}
+        checked={config?.randomizeOptions || false}
         onchange={(e) => updateConfig({ randomizeOptions: e.currentTarget.checked })}
       />
     </div>
@@ -417,7 +392,7 @@
       <Checkbox
         id="mc-other-option"
         label={'Include "Other" option with text input'}
-        checked={question.config?.otherOption || false}
+        checked={config?.otherOption || false}
         onchange={(e) => updateConfig({ otherOption: e.currentTarget.checked })}
       />
     </div>
@@ -544,5 +519,4 @@
     font-size: 0.875rem;
     margin-top: 0.5rem;
   }
-
 </style>

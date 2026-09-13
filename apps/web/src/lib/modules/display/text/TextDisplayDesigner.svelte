@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { InstructionConfig } from '$lib/modules/types';
+  import type { Question } from '@qdesigner/questionnaire-core';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
   import { marked } from 'marked';
   import DOMPurify from 'isomorphic-dompurify';
   import { Eye, Edit } from 'lucide-svelte';
@@ -27,10 +28,55 @@
   }
 
   interface Props {
-    question: InstructionConfig & { config: TextDisplayConfig };
+    question: Question & { config?: TextDisplayConfig };
+    onUpdate?: (updates: Record<string, unknown>) => void;
   }
 
-  let { question = $bindable() }: Props = $props();
+  let { question, onUpdate }: Props = $props();
+  const storedConfig = $derived(
+    buildModuleRuntimeConfig(question) as unknown as Partial<TextDisplayConfig>
+  );
+  const config = $derived({
+    content: '',
+    markdown: true,
+    variables: false,
+    ...storedConfig,
+    autoAdvance: { enabled: false, delay: 5000, ...storedConfig.autoAdvance },
+    styling: { fontSize: '1rem', textAlign: 'left', fontWeight: 'normal', ...storedConfig.styling },
+  } satisfies TextDisplayConfig);
+
+  function updateField(key: 'content' | 'markdown' | 'variables', value: string | boolean) {
+    if (question.config && Object.hasOwn(question.config, key)) {
+      onUpdate?.({ config: { ...question.config, [key]: value } });
+    } else if (
+      key === 'markdown' &&
+      question.config &&
+      Object.hasOwn(question.config, 'enableMarkdown')
+    ) {
+      onUpdate?.({ config: { ...question.config, enableMarkdown: value } });
+    } else {
+      const field = key === 'markdown' ? 'enableMarkdown' : key;
+      onUpdate?.({ display: { ...question.display, [field]: value } });
+    }
+  }
+
+  function updateNested(
+    key: 'styling' | 'autoAdvance',
+    field: string,
+    value: string | number | boolean
+  ) {
+    const display = question.display as unknown as
+      | Record<string, Record<string, unknown>>
+      | undefined;
+    if (key === 'styling' && !Object.hasOwn(question.config ?? {}, key) && display?.styling) {
+      onUpdate?.({
+        display: { ...question.display, styling: { ...display.styling, [field]: value } },
+      });
+      return;
+    }
+    const existing = (question.config ?? {}) as unknown as Record<string, Record<string, unknown>>;
+    onUpdate?.({ config: { ...question.config, [key]: { ...existing[key], [field]: value } } });
+  }
 
   let previewMode = $state(false);
   let processedPreview = $state('');
@@ -49,9 +95,9 @@
   });
 
   function updatePreview() {
-    let content = question.config.content || '';
+    let content = config.content || '';
 
-    if (question.config.markdown) {
+    if (config.markdown) {
       content = marked.parse(content) as string;
       content = DOMPurify.sanitize(content);
     }
@@ -73,24 +119,7 @@
 
   function insertSnippet(snippet: string) {
     // In a real implementation, this would insert at cursor position
-    question.config.content += '\n' + snippet;
-  }
-
-  // Initialize auto-advance if not set
-  if (!question.config.autoAdvance) {
-    question.config.autoAdvance = {
-      enabled: false,
-      delay: 5000,
-    };
-  }
-
-  // Initialize styling if not set
-  if (!question.config.styling) {
-    question.config.styling = {
-      fontSize: '1rem',
-      textAlign: 'left',
-      fontWeight: 'normal',
-    };
+    updateField('content', config.content + '\n' + snippet);
   }
 </script>
 
@@ -112,7 +141,7 @@
         {previewMode ? 'Edit' : 'Preview'}
       </Button>
 
-      {#if question.config.markdown && !previewMode}
+      {#if config.markdown && !previewMode}
         <div class="toolbar-divider"></div>
         {#each markdownSnippets as snippet}
           <Button
@@ -130,19 +159,19 @@
     {#if previewMode}
       <div
         class="preview-area"
-        style="font-size: {question.config.styling!.fontSize}; text-align: {question.config.styling!
-          .textAlign};"
+        style="font-size: {config.styling!.fontSize}; text-align: {config.styling!.textAlign};"
       >
-        {#if question.config.markdown}
+        {#if config.markdown}
           {@html processedPreview}
         {:else}
-          {question.config.content}
+          {config.content}
         {/if}
       </div>
     {:else}
       <textarea
         id="content"
-        bind:value={question.config.content}
+        value={config.content}
+        oninput={(e) => updateField('content', e.currentTarget.value)}
         placeholder="Enter your text content..."
         rows="10"
         class="textarea"
@@ -154,14 +183,24 @@
   <div class="form-row">
     <div class="form-group">
       <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.markdown} class="checkbox" />
+        <input
+          type="checkbox"
+          checked={config.markdown}
+          onchange={(e) => updateField('markdown', e.currentTarget.checked)}
+          class="checkbox"
+        />
         <span>Enable Markdown formatting</span>
       </label>
     </div>
 
     <div class="form-group">
       <label class="checkbox-label">
-        <input type="checkbox" bind:checked={question.config.variables} class="checkbox" />
+        <input
+          type="checkbox"
+          checked={config.variables}
+          onchange={(e) => updateField('variables', e.currentTarget.checked)}
+          class="checkbox"
+        />
         <span>Enable variable interpolation</span>
       </label>
     </div>
@@ -174,7 +213,11 @@
     <div class="form-row">
       <div class="form-group">
         <label for="font-size">Font Size</label>
-        <Select id="font-size" bind:value={question.config.styling!.fontSize}>
+        <Select
+          id="font-size"
+          value={config.styling!.fontSize}
+          onchange={(e) => updateNested('styling', 'fontSize', e.currentTarget.value)}
+        >
           <option value="0.75rem">Small (0.75rem)</option>
           <option value="0.875rem">Medium Small (0.875rem)</option>
           <option value="1rem">Normal (1rem)</option>
@@ -187,7 +230,11 @@
 
       <div class="form-group">
         <label for="text-align">Text Alignment</label>
-        <Select id="text-align" bind:value={question.config.styling!.textAlign}>
+        <Select
+          id="text-align"
+          value={config.styling!.textAlign}
+          onchange={(e) => updateNested('styling', 'textAlign', e.currentTarget.value)}
+        >
           <option value="left">Left</option>
           <option value="center">Center</option>
           <option value="right">Right</option>
@@ -199,7 +246,11 @@
     <div class="form-row">
       <div class="form-group">
         <label for="font-weight">Font Weight</label>
-        <Select id="font-weight" bind:value={question.config.styling!.fontWeight}>
+        <Select
+          id="font-weight"
+          value={config.styling!.fontWeight}
+          onchange={(e) => updateNested('styling', 'fontWeight', e.currentTarget.value)}
+        >
           <option value="normal">Normal</option>
           <option value="bold">Bold</option>
         </Select>
@@ -210,7 +261,8 @@
         <input
           id="color"
           type="color"
-          bind:value={question.config.styling!.color}
+          value={config.styling!.color}
+          oninput={(e) => updateNested('styling', 'color', e.currentTarget.value)}
           class="color-input"
         />
       </div>
@@ -222,13 +274,14 @@
         <input
           id="bg-color"
           type="color"
-          bind:value={question.config.styling!.backgroundColor}
+          value={config.styling!.backgroundColor}
+          oninput={(e) => updateNested('styling', 'backgroundColor', e.currentTarget.value)}
           class="color-input"
         />
         <Button
           variant="secondary"
           size="sm"
-          onclick={() => (question.config.styling!.backgroundColor = '')}
+          onclick={() => updateNested('styling', 'backgroundColor', '')}
         >
           Clear
         </Button>
@@ -241,7 +294,8 @@
         <input
           id="padding"
           type="text"
-          bind:value={question.config.styling!.padding}
+          value={config.styling!.padding}
+          oninput={(e) => updateNested('styling', 'padding', e.currentTarget.value)}
           placeholder="e.g., 1rem, 20px"
           class="input"
         />
@@ -252,7 +306,8 @@
         <input
           id="border-radius"
           type="text"
-          bind:value={question.config.styling!.borderRadius}
+          value={config.styling!.borderRadius}
+          oninput={(e) => updateNested('styling', 'borderRadius', e.currentTarget.value)}
           placeholder="e.g., 0.5rem, 8px"
           class="input"
         />
@@ -268,20 +323,22 @@
       <label class="checkbox-label">
         <input
           type="checkbox"
-          bind:checked={question.config.autoAdvance!.enabled}
+          checked={config.autoAdvance!.enabled}
+          onchange={(e) => updateNested('autoAdvance', 'enabled', e.currentTarget.checked)}
           class="checkbox"
         />
         <span>Automatically advance after delay</span>
       </label>
     </div>
 
-    {#if question.config.autoAdvance?.enabled}
+    {#if config.autoAdvance?.enabled}
       <div class="form-group">
         <label for="advance-delay">Delay (seconds)</label>
         <input
           id="advance-delay"
           type="number"
-          bind:value={question.config.autoAdvance!.delay}
+          value={config.autoAdvance!.delay}
+          oninput={(e) => updateNested('autoAdvance', 'delay', Number(e.currentTarget.value))}
           min="1000"
           step="1000"
           class="input"
@@ -292,7 +349,7 @@
   </div>
 
   <!-- Help Text -->
-  {#if question.config.markdown}
+  {#if config.markdown}
     <div class="help-section">
       <h5 class="help-title">Markdown Reference</h5>
       <ul class="help-list">
@@ -309,7 +366,7 @@
     </div>
   {/if}
 
-  {#if question.config.variables}
+  {#if config.variables}
     <div class="help-section">
       <h5 class="help-title">Variable Usage</h5>
       <p class="help-text">
@@ -484,5 +541,4 @@
     border-radius: 0.125rem;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   }
-
 </style>

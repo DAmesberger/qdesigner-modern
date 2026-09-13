@@ -1,7 +1,7 @@
 /**
  * Question Factory
  * Creates questions with proper default configurations for all question types
- * 
+ *
  * This is now a compatibility layer that delegates to ModuleFactory
  */
 
@@ -21,7 +21,7 @@ export class QuestionFactory {
     try {
       // Use ModuleFactory to create the module
       const moduleItem = ModuleFactory.create(type);
-      
+
       // Convert ModuleItem to Question format for backward compatibility
       return this.moduleItemToQuestion(moduleItem);
     } catch (_error) {
@@ -29,7 +29,7 @@ export class QuestionFactory {
       throw new Error(`Unknown question type: ${type}. Make sure the module is registered.`);
     }
   }
-  
+
   /**
    * Convert ModuleItem to Question format
    */
@@ -40,9 +40,9 @@ export class QuestionFactory {
       id: item.id,
       type: item.type,
       order: item.order,
-      required: item.validation?.some(v => v.type === 'required' && v.value) || false
+      required: item.validation?.some((v) => v.type === 'required' && v.value) || false,
     };
-    
+
     // Copy standard properties
     if (item.text) question.text = item.text;
     if (item.instruction) question.instruction = item.instruction;
@@ -51,22 +51,22 @@ export class QuestionFactory {
     if (item.validation) question.validation = item.validation;
     if (item.layout) question.layout = item.layout;
     if (item.timing) question.timing = item.timing;
-    
+
     // Handle response configuration
     if (item.config?.response) {
       question.response = {
         type: this.inferResponseType(item.type),
-        ...item.config.response
+        ...item.config.response,
       };
     } else if (item.category === 'instruction') {
       question.response = { type: 'none' };
     }
-    
+
     // Handle display configuration (including media)
     if (item.config?.display) {
       question.display = item.config.display;
     }
-    
+
     // Handle media - should be in display.media for consistency
     if (item.config?.media || item.media) {
       if (!question.display) {
@@ -74,23 +74,42 @@ export class QuestionFactory {
       }
       question.display.media = item.config?.media || item.media;
     }
-    
+
     // Handle navigation configuration
     if (item.config?.navigation) {
       question.navigation = item.config.navigation;
     }
-    
+
     // Copy any additional configuration
-    const { response: _response, display: _display, navigation: _navigation, media: _media, ...otherConfig } = item.config || {};
-    
+    const {
+      response: _response,
+      display: _display,
+      navigation: _navigation,
+      media: _media,
+      config: nestedConfig,
+      dataSource,
+      visualization,
+      displayDuration,
+      autoAdvance,
+      ...otherConfig
+    } = item.config || {};
+
+    if (dataSource !== undefined) question.dataSource = dataSource;
+    if (visualization !== undefined) question.visualization = visualization;
+    if (displayDuration !== undefined) question.displayDuration = displayDuration;
+    // Analytics use a root boolean; text-display owns an object-shaped timer
+    // configuration under config.autoAdvance.
+    if (typeof autoAdvance === 'boolean') question.autoAdvance = autoAdvance;
+    else if (autoAdvance !== undefined) otherConfig.autoAdvance = autoAdvance;
+
     // Store remaining config under config property
-    if (Object.keys(otherConfig).length > 0) {
-      question.config = otherConfig;
+    if (nestedConfig || Object.keys(otherConfig).length > 0) {
+      question.config = { ...otherConfig, ...nestedConfig };
     }
-    
+
     return question as Question;
   }
-  
+
   /**
    * Infer response type from module type
    */
@@ -101,31 +120,30 @@ export class QuestionFactory {
       'number-input': 'number',
       'single-choice': 'single',
       'multiple-choice': 'multiple',
-      'scale': 'scale',
-      'rating': 'rating',
-      'matrix': 'matrix',
-      'ranking': 'ranking',
+      scale: 'scale',
+      rating: 'rating',
+      matrix: 'matrix',
+      ranking: 'ranking',
       'date-time': 'datetime',
       'file-upload': 'file',
       'media-response': 'file',
-      'drawing': 'drawing',
+      drawing: 'drawing',
       'reaction-time': 'keypress',
       'reaction-experiment': 'keypress',
-      'webgl': 'custom'
+      webgl: 'custom',
     };
-    
+
     return typeMap[moduleType] || 'none';
   }
 
-  
   /**
    * Create multiple questions of the same type
    */
   static createMultiple(type: QuestionType, count: number): Question[] {
     const items = ModuleFactory.createMultiple(type, count);
-    return items.map(item => this.moduleItemToQuestion(item));
+    return items.map((item) => this.moduleItemToQuestion(item));
   }
-  
+
   /**
    * Clone a question with a new ID
    */
@@ -144,17 +162,17 @@ export class QuestionFactory {
       variables: (question as any).variables,
       validation: (question as any).validation,
       layout: (question as any).layout,
-      timing: (question as any).timing
+      timing: (question as any).timing,
       /* eslint-enable @typescript-eslint/no-explicit-any */
     };
-    
+
     // Preserve any flat module config (e.g. matrix rows/columns, date-time
     // mode) that lives directly on question.config. Post-flatten these
     // fields are the source of truth for the designer + runtime; without
     // this the clone would silently drop them.
-    if ((question as any).config && typeof (question as any).config === 'object') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- flat module config is dynamic
-      moduleItem.config = { ...moduleItem.config, ...(question as any).config };
+    const config = (question as unknown as { config?: Record<string, unknown> }).config;
+    if (config && typeof config === 'object') {
+      moduleItem.config = { ...moduleItem.config, ...config };
     }
 
     // Extract response configuration
@@ -166,7 +184,7 @@ export class QuestionFactory {
     if (question.display) {
       moduleItem.config.display = question.display;
     }
-    
+
     // Handle legacy media location (backward compatibility)
     if (question.media && !question.display?.media) {
       if (!moduleItem.config.display) {
@@ -174,14 +192,14 @@ export class QuestionFactory {
       }
       moduleItem.config.display.media = question.media;
     }
-    
+
     // Clone using ModuleFactory
     const clonedItem = ModuleFactory.clone(moduleItem);
-    
+
     // Convert back to Question
     return this.moduleItemToQuestion(clonedItem);
   }
-  
+
   /**
    * Get module category from question type
    */

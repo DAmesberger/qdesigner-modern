@@ -73,7 +73,9 @@
   // A capture failure (device quota) blocks Continue via onValidation (ADR 0029
   // Half 2). Oversize recordings surface through the existing error phase.
   let captureError = $state('');
-  let phase = $state<'idle' | 'requesting' | 'countdown' | 'recording' | 'recorded' | 'error'>('idle');
+  let phase = $state<'idle' | 'requesting' | 'countdown' | 'recording' | 'recorded' | 'error'>(
+    'idle'
+  );
   let errorMessage = $state('');
   let stream = $state<MediaStream | null>(null);
   let mediaRecorder = $state<MediaRecorder | null>(null);
@@ -114,18 +116,24 @@
   // Audio bitrate mapping
   function getAudioBitsPerSecond(quality: AudioQuality): number {
     switch (quality) {
-      case 'low': return 64000;
-      case 'medium': return 128000;
-      case 'high': return 256000;
+      case 'low':
+        return 64000;
+      case 'medium':
+        return 128000;
+      case 'high':
+        return 256000;
     }
   }
 
   // Video constraints
   function getVideoConstraints(quality: VideoQuality): MediaTrackConstraints {
     switch (quality) {
-      case 'low': return { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } };
-      case 'medium': return { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
-      case 'high': return { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
+      case 'low':
+        return { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } };
+      case 'medium':
+        return { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+      case 'high':
+        return { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
     }
   }
 
@@ -212,9 +220,13 @@
       phase = 'error';
       if (err instanceof DOMException) {
         if (err.name === 'NotAllowedError') {
-          errorMessage = 'Permission denied. Please allow access to your microphone' + (hasVideo ? ' and camera' : '') + '.';
+          errorMessage =
+            'Permission denied. Please allow access to your microphone' +
+            (hasVideo ? ' and camera' : '') +
+            '.';
         } else if (err.name === 'NotFoundError') {
-          errorMessage = 'No ' + (hasVideo ? 'camera' : 'microphone') + ' found. Please check your device.';
+          errorMessage =
+            'No ' + (hasVideo ? 'camera' : 'microphone') + ' found. Please check your device.';
         } else {
           errorMessage = `Device error: ${err.message}`;
         }
@@ -350,7 +362,13 @@
     let reference: BinaryAnswerReference;
     try {
       reference = sessionId
-        ? await OfflineBinaryPersistence.capture(sessionId, question.id, blob, filename, maxFileSize)
+        ? await OfflineBinaryPersistence.capture(
+            sessionId,
+            question.id,
+            blob,
+            filename,
+            maxFileSize
+          )
         : // Designer preview (no session): keep the reference transient.
           {
             clientId: crypto.randomUUID(),
@@ -519,16 +537,35 @@
   <div class="w-full">
     <!-- Error state -->
     {#if phase === 'error'}
-      <div class="flex flex-col items-center gap-3 px-6 py-8 border-2 border-destructive/30 rounded-xl bg-destructive/10 text-center">
+      <div
+        class="flex flex-col items-center gap-3 px-6 py-8 border-2 border-destructive/30 rounded-xl bg-destructive/10 text-center"
+      >
         <div class="text-destructive">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
         </div>
         <p class="m-0 text-[0.9375rem] text-destructive">{errorMessage}</p>
-        <Button variant="secondary" size="sm" onclick={() => { phase = 'idle'; errorMessage = ''; }}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={() => {
+            phase = 'idle';
+            errorMessage = '';
+          }}
+        >
           Try Again
         </Button>
       </div>
@@ -536,13 +573,10 @@
 
     <!-- Idle state: start button -->
     {#if phase === 'idle'}
-      <div class="flex flex-col items-center gap-3 px-6 py-10 border-2 border-dashed border-border rounded-xl bg-muted text-center max-sm:px-4 max-sm:py-6">
-        <button
-          type="button"
-          class="record-start-btn"
-          onclick={startRecording}
-          {disabled}
-        >
+      <div
+        class="flex flex-col items-center gap-3 px-6 py-10 border-2 border-dashed border-border rounded-xl bg-muted text-center max-sm:px-4 max-sm:py-6"
+      >
+        <button type="button" class="record-start-btn" onclick={startRecording} {disabled}>
           <span class="inline-block w-3 h-3 bg-background rounded-full shrink-0"></span>
           {#if isAudioOnly}
             Record Audio
@@ -563,7 +597,9 @@
 
     <!-- Requesting permission -->
     {#if phase === 'requesting'}
-      <div class="flex flex-col items-center gap-4 px-6 py-10 border-2 border-dashed border-border rounded-xl bg-muted">
+      <div
+        class="flex flex-col items-center gap-4 px-6 py-10 border-2 border-dashed border-border rounded-xl bg-muted"
+      >
         <div class="spinner"></div>
         <p class="m-0 text-muted-foreground text-[0.9375rem]">
           Requesting {hasVideo ? 'camera' : 'microphone'} access...
@@ -573,7 +609,9 @@
 
     <!-- Countdown -->
     {#if phase === 'countdown'}
-      <div class="relative rounded-xl overflow-hidden bg-foreground min-h-[200px] flex items-center justify-center">
+      <div
+        class="relative rounded-xl overflow-hidden bg-foreground min-h-[200px] flex items-center justify-center"
+      >
         {#if hasVideo && videoPreviewEl}
           <!-- video preview is visible behind -->
         {/if}
@@ -582,11 +620,7 @@
         </div>
         <!-- Video preview during countdown -->
         {#if hasVideo}
-          <video
-            bind:this={videoPreviewEl}
-            class="countdown-video-preview"
-            playsinline
-            muted
+          <video bind:this={videoPreviewEl} class="countdown-video-preview" playsinline muted
           ></video>
         {/if}
       </div>
@@ -594,7 +628,9 @@
 
     <!-- Recording state -->
     {#if phase === 'recording'}
-      <div class="flex flex-col gap-4 border-2 border-destructive rounded-xl overflow-hidden bg-destructive/10">
+      <div
+        class="flex flex-col gap-4 border-2 border-destructive rounded-xl overflow-hidden bg-destructive/10"
+      >
         <!-- Video preview -->
         {#if hasVideo}
           <div class="relative bg-foreground">
@@ -604,9 +640,13 @@
               playsinline
               muted
             ></video>
-            <div class="absolute top-3 left-3 flex items-center gap-1.5 py-1 px-2.5 bg-destructive/90 rounded z-[1]">
+            <div
+              class="absolute top-3 left-3 flex items-center gap-1.5 py-1 px-2.5 bg-destructive/90 rounded z-[1]"
+            >
               <span class="recording-dot-animated"></span>
-              <span class="text-[0.6875rem] font-bold text-background uppercase tracking-wide">REC</span>
+              <span class="text-[0.6875rem] font-bold text-background uppercase tracking-wide"
+                >REC</span
+              >
             </div>
           </div>
         {/if}
@@ -614,9 +654,13 @@
         <!-- Audio waveform (audio-only mode) -->
         {#if isAudioOnly}
           <div class="flex flex-col gap-2.5 px-4 pt-4 items-start">
-            <div class="inline-flex items-center gap-1.5 py-1 px-2.5 bg-destructive rounded self-start">
+            <div
+              class="inline-flex items-center gap-1.5 py-1 px-2.5 bg-destructive rounded self-start"
+            >
               <span class="recording-dot-animated"></span>
-              <span class="text-[0.6875rem] font-bold text-background uppercase tracking-wide">Recording</span>
+              <span class="text-[0.6875rem] font-bold text-background uppercase tracking-wide"
+                >Recording</span
+              >
             </div>
             <canvas
               bind:this={waveformCanvas}
@@ -630,13 +674,16 @@
         <!-- Timer and controls -->
         <div class="flex flex-col items-center gap-3 px-4 pb-4">
           <div class="font-mono text-xl font-semibold text-foreground max-sm:text-base">
-            <span class="text-destructive">{formattedTime}</span>
+            <span class="text-destructive" data-testid="recording-duration">{formattedTime}</span>
             <span class="mx-1 text-muted-foreground">/</span>
             <span class="text-muted-foreground">{formattedMaxDuration}</span>
           </div>
 
           <div class="w-full h-1 bg-border rounded-sm overflow-hidden">
-            <div class="h-full bg-destructive transition-[width] duration-1000 ease-linear rounded-sm" style="width: {progressPercent}%"></div>
+            <div
+              class="h-full bg-destructive transition-[width] duration-1000 ease-linear rounded-sm"
+              style="width: {progressPercent}%"
+            ></div>
           </div>
 
           <button
@@ -653,7 +700,9 @@
 
     <!-- Recorded / Playback state -->
     {#if phase === 'recorded'}
-      <div class="playback-panel flex flex-col gap-4 border border-border rounded-xl overflow-hidden bg-card">
+      <div
+        class="playback-panel flex flex-col gap-4 border border-border rounded-xl overflow-hidden bg-card"
+      >
         {#if hasVideo}
           <!-- Participant-recorded media has no authored caption source, so
                there is no track to attach. -->
@@ -668,7 +717,17 @@
         {:else}
           <div class="flex flex-col items-center gap-4 px-6 pt-8 pb-4 bg-muted">
             <div class="text-muted-foreground">
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                 <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -684,16 +743,33 @@
           </div>
         {/if}
 
-        <div class="flex items-center justify-center gap-2 px-4 py-2 text-[0.8125rem] text-muted-foreground">
+        <div
+          class="flex items-center justify-center gap-2 px-4 py-2 text-[0.8125rem] text-muted-foreground"
+        >
           <span>Duration: {formattedTime}</span>
           <span class="text-border">&middot;</span>
           <span>Size: {recordedBlob ? formatBytes(recordedBlob.size) : '---'}</span>
         </div>
 
         {#if blobSizeWarning}
-          <div class="flex items-start gap-2 mx-4 px-3.5 py-2.5 bg-warning/10 border border-warning/50 rounded-md text-[0.8125rem] text-warning leading-relaxed">
-            <svg class="shrink-0 mt-0.5 text-warning" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <div
+            class="flex items-start gap-2 mx-4 px-3.5 py-2.5 bg-warning/10 border border-warning/50 rounded-md text-[0.8125rem] text-warning leading-relaxed"
+          >
+            <svg
+              class="shrink-0 mt-0.5 text-warning"
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+              ></path>
               <line x1="12" y1="9" x2="12" y2="13"></line>
               <line x1="12" y1="17" x2="12.01" y2="17"></line>
             </svg>
@@ -702,14 +778,18 @@
         {/if}
 
         {#if allowRerecord}
-          <Button
-            variant="secondary"
-            size="sm"
-            class="re-record-btn"
-            onclick={reRecord}
-            {disabled}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <Button variant="secondary" size="sm" class="re-record-btn" onclick={reRecord} {disabled}>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <polyline points="1 4 1 10 7 10"></polyline>
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
             </svg>
@@ -735,7 +815,9 @@
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
+    transition:
+      background 0.2s,
+      transform 0.1s;
   }
 
   .record-start-btn:hover:not(:disabled) {
@@ -759,7 +841,9 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   /* Countdown video overlay */
@@ -781,8 +865,15 @@
   }
 
   @keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.15); opacity: 0.8; }
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.15);
+      opacity: 0.8;
+    }
   }
 
   /* Blinking recording dot */
@@ -796,8 +887,13 @@
   }
 
   @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
   }
 
   /* :global for re-record button */

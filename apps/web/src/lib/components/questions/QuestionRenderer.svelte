@@ -131,33 +131,14 @@
     config: buildModuleRuntimeConfig(question as unknown as Question),
   });
 
-  // Transform question to analytics format for display modules
-  const analyticsData = $derived.by(() => {
-    const metadata = moduleRegistry.get(question.type);
-    if (metadata?.category === 'display') {
-      // Transform question data to analytics format
-      return {
-        ...question,
-        dataSource: {
-          variables: question.variables || [],
-          aggregation: 'none' as const,
-        },
-        visualization: {
-          title: (question as any).prompt || (question as any).text || '',
-          subtitle: (question as any).description || '',
-          showLegend: true,
-          showGrid: true,
-          showTooltips: true,
-          colorScheme: 'default' as const,
-        },
-        config: {
-          ...metadata.defaultConfig,
-          ...question.config,
-          ...(question as any),
-        },
-      };
-    }
-    return fullQuestion;
+  // Preserve authored analytics settings and use the same runtime Config adapter.
+  const analyticsData = $derived({
+    ...fullQuestion,
+    dataSource: (question as ExtendedQuestion & { dataSource?: unknown }).dataSource ?? {
+      variables: [],
+      aggregation: 'none',
+    },
+    visualization: (question as ExtendedQuestion & { visualization?: unknown }).visualization ?? {},
   });
 </script>
 

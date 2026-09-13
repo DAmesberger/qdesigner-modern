@@ -151,7 +151,6 @@
     onUpdate?.({
       ...item,
       config: nextConfig,
-      dataSource: nextConfig.dataSource,
     });
   }
 
@@ -226,9 +225,27 @@
       variableId: '',
       scaleName: `Scale ${existingScales.length + 1}`,
       ranges: [
-        { min: 0, max: 10, label: 'Low', description: 'Score falls in the low range', color: DEFAULT_RANGE_COLORS.low },
-        { min: 11, max: 20, label: 'Moderate', description: 'Score falls in the moderate range', color: DEFAULT_RANGE_COLORS.moderate },
-        { min: 21, max: 30, label: 'High', description: 'Score falls in the high range', color: DEFAULT_RANGE_COLORS.high },
+        {
+          min: 0,
+          max: 10,
+          label: 'Low',
+          description: 'Score falls in the low range',
+          color: DEFAULT_RANGE_COLORS.low,
+        },
+        {
+          min: 11,
+          max: 20,
+          label: 'Moderate',
+          description: 'Score falls in the moderate range',
+          color: DEFAULT_RANGE_COLORS.moderate,
+        },
+        {
+          min: 21,
+          max: 30,
+          label: 'High',
+          description: 'Score falls in the high range',
+          color: DEFAULT_RANGE_COLORS.high,
+        },
       ],
     };
     updateConfig({ scoreInterpretation: [...existingScales, newScale] });
@@ -309,9 +326,7 @@
   }
 
   const scaleValidationErrors = $derived.by((): string[][] => {
-    return (config.scoreInterpretation || []).map((scale) =>
-      validateScoreInterpreterConfig(scale)
-    );
+    return (config.scoreInterpretation || []).map((scale) => validateScoreInterpreterConfig(scale));
   });
 </script>
 
@@ -343,7 +358,9 @@
 
     <div class="grid-two">
       <div class="row">
-        <label for="stats-source-mode" class="flex items-center gap-1">Source Mode <HelpTip helpKey="statisticalFeedback.sourceModes" /></label>
+        <label for="stats-source-mode" class="flex items-center gap-1"
+          >Source Mode <HelpTip helpKey="statisticalFeedback.sourceModes" /></label
+        >
         <Select
           id="stats-source-mode"
           value={config.sourceMode}
@@ -358,11 +375,10 @@
         </Select>
         {#if config.sourceMode === 'participant-vs-participant'}
           <div class="behavior-warning" data-testid="stats-source-mode-warning">
-            Participant vs Participant compares two named participants and reads
-            other participants' per-session values. It requires a signed-in
-            researcher, so it will NOT render for anonymous participants during
-            fillout — they see an explanatory message instead. Use Participant vs
-            Cohort for participant-facing feedback.
+            Participant vs Participant compares two named participants and reads other participants'
+            per-session values. It requires a signed-in researcher, so it will NOT render for
+            anonymous participants during fillout — they see an explanatory message instead. Use
+            Participant vs Cohort for participant-facing feedback.
           </div>
         {/if}
       </div>
@@ -385,7 +401,9 @@
       </div>
 
       <div class="row">
-        <label for="stats-chart-type" class="flex items-center gap-1">Chart Type <HelpTip helpKey="statisticalFeedback.charts" /></label>
+        <label for="stats-chart-type" class="flex items-center gap-1"
+          >Chart Type <HelpTip helpKey="statisticalFeedback.charts" /></label
+        >
         <Select
           id="stats-chart-type"
           value={config.chartType}
@@ -476,8 +494,8 @@
             {/if}
           </Select>
           <p class="hint">
-            The earlier administration's value, typically piped in via urlParams or a
-            prior session variable.
+            The earlier administration's value, typically piped in via urlParams or a prior session
+            variable.
           </p>
         </div>
       {/if}
@@ -485,7 +503,9 @@
       {#if config.sourceMode === 'norm-table' || config.sourceMode === 'self-baseline'}
         <div class="row" data-testid="stats-norm-table-row">
           <label for="stats-norm-table" class="flex items-center gap-1">
-            {config.sourceMode === 'norm-table' ? 'Norm Table' : 'Norm Table (for reliable-change index)'}
+            {config.sourceMode === 'norm-table'
+              ? 'Norm Table'
+              : 'Norm Table (for reliable-change index)'}
           </label>
           <Select
             id="stats-norm-table"
@@ -529,7 +549,9 @@
                   step="any"
                   value={config.dataSource.customNorm?.mean ?? 0}
                   oninput={(event) =>
-                    updateCustomNorm({ mean: Number((event.currentTarget as HTMLInputElement).value) })}
+                    updateCustomNorm({
+                      mean: Number((event.currentTarget as HTMLInputElement).value),
+                    })}
                 />
               </div>
               <div class="row">
@@ -542,13 +564,17 @@
                   min="0"
                   value={config.dataSource.customNorm?.sd ?? 1}
                   oninput={(event) =>
-                    updateCustomNorm({ sd: Number((event.currentTarget as HTMLInputElement).value) })}
+                    updateCustomNorm({
+                      sd: Number((event.currentTarget as HTMLInputElement).value),
+                    })}
                 />
               </div>
             </div>
             {#if config.sourceMode === 'self-baseline'}
               <div class="row">
-                <label for="custom-norm-reliability">Test-retest reliability (optional, for RCI)</label>
+                <label for="custom-norm-reliability"
+                  >Test-retest reliability (optional, for RCI)</label
+                >
                 <input
                   id="custom-norm-reliability"
                   class="input"
@@ -586,13 +612,13 @@
           </Select>
           {#if serverVariableOptions.length === 0}
             <p class="hint">
-              No object-typed server variables yet. Create one in the Variables panel
-              (Computation → Server-computed → Full statistics), then bind it here.
+              No object-typed server variables yet. Create one in the Variables panel (Computation →
+              Server-computed → Full statistics), then bind it here.
             </p>
           {:else}
             <p class="hint">
-              Reads the synced <code>{'{ n, mean, sd, median, p25, p75, … }'}</code> bundle straight
-              out of the participant's variables — no network on the render path (works offline).
+              Reads the synced <code>{'{ n, mean, sd, median, p25, p75, … }'}</code> bundle straight out
+              of the participant's variables — no network on the render path (works offline).
             </p>
           {/if}
         </div>
@@ -619,11 +645,11 @@
     {:else}
       {#if config.sourceMode === 'cohort' || config.sourceMode === 'participant-vs-cohort'}
         <div class="behavior-warning" data-testid="stats-cohort-deprecation">
-          Cohort modes fetch live from the analytics API and do NOT render for offline or
-          anonymous participants. For participant-facing feedback, prefer
-          <strong>Server variable (offline-synced)</strong>: declare an object-typed
-          server-computed variable and bind it here — it resolves from the last synced value with
-          no network on the render path.
+          Cohort modes fetch live from the analytics API and do NOT render for offline or anonymous
+          participants. For participant-facing feedback, prefer
+          <strong>Server variable (offline-synced)</strong>: declare an object-typed server-computed
+          variable and bind it here — it resolves from the last synced value with no network on the
+          render path.
         </div>
       {/if}
       <div class="grid-two">
@@ -745,7 +771,9 @@
       <div class="score-scale-card" data-testid={`score-scale-${scaleIdx}`}>
         <div class="scale-header">
           <span class="scale-title">Scale: {scale.scaleName || 'Unnamed'}</span>
-          <button type="button" class="link danger" onclick={() => removeScoreScale(scaleIdx)}>Remove</button>
+          <button type="button" class="link danger" onclick={() => removeScoreScale(scaleIdx)}
+            >Remove</button
+          >
         </div>
 
         <div class="grid-two">
@@ -757,7 +785,9 @@
               type="text"
               value={scale.scaleName}
               oninput={(event) =>
-                updateScoreScale(scaleIdx, { scaleName: (event.currentTarget as HTMLInputElement).value })}
+                updateScoreScale(scaleIdx, {
+                  scaleName: (event.currentTarget as HTMLInputElement).value,
+                })}
             />
           </div>
           <div class="row">
@@ -766,7 +796,9 @@
               id={`scale-variable-${scaleIdx}`}
               value={scale.variableId}
               onchange={(event) =>
-                updateScoreScale(scaleIdx, { variableId: (event.currentTarget as HTMLSelectElement).value })}
+                updateScoreScale(scaleIdx, {
+                  variableId: (event.currentTarget as HTMLSelectElement).value,
+                })}
             >
               <option value="">Select variable...</option>
               {#each designerStore.questionnaire.variables as variable}
@@ -778,7 +810,9 @@
 
         <div class="ranges-header">
           <span>Ranges</span>
-          <button type="button" class="link" onclick={() => addRangeToScale(scaleIdx)}>+ Add Range</button>
+          <button type="button" class="link" onclick={() => addRangeToScale(scaleIdx)}
+            >+ Add Range</button
+          >
         </div>
 
         {#each scale.ranges as range, rangeIdx}
@@ -790,7 +824,9 @@
                 value={range.min}
                 title="Min"
                 oninput={(event) =>
-                  updateRangeInScale(scaleIdx, rangeIdx, { min: Number((event.currentTarget as HTMLInputElement).value) })}
+                  updateRangeInScale(scaleIdx, rangeIdx, {
+                    min: Number((event.currentTarget as HTMLInputElement).value),
+                  })}
               />
               <span class="range-sep">-</span>
               <input
@@ -799,7 +835,9 @@
                 value={range.max}
                 title="Max"
                 oninput={(event) =>
-                  updateRangeInScale(scaleIdx, rangeIdx, { max: Number((event.currentTarget as HTMLInputElement).value) })}
+                  updateRangeInScale(scaleIdx, rangeIdx, {
+                    max: Number((event.currentTarget as HTMLInputElement).value),
+                  })}
               />
               <input
                 class="input range-label-input"
@@ -807,7 +845,9 @@
                 value={range.label}
                 placeholder="Label"
                 oninput={(event) =>
-                  updateRangeInScale(scaleIdx, rangeIdx, { label: (event.currentTarget as HTMLInputElement).value })}
+                  updateRangeInScale(scaleIdx, rangeIdx, {
+                    label: (event.currentTarget as HTMLInputElement).value,
+                  })}
               />
               <input
                 class="color-picker"
@@ -815,9 +855,15 @@
                 value={range.color}
                 title="Color"
                 oninput={(event) =>
-                  updateRangeInScale(scaleIdx, rangeIdx, { color: (event.currentTarget as HTMLInputElement).value })}
+                  updateRangeInScale(scaleIdx, rangeIdx, {
+                    color: (event.currentTarget as HTMLInputElement).value,
+                  })}
               />
-              <button type="button" class="link danger range-remove" onclick={() => removeRangeFromScale(scaleIdx, rangeIdx)}>x</button>
+              <button
+                type="button"
+                class="link danger range-remove"
+                onclick={() => removeRangeFromScale(scaleIdx, rangeIdx)}>x</button
+              >
             </div>
             <input
               class="input range-description-input"
@@ -826,7 +872,9 @@
               placeholder="Description shown to participant (optional)"
               title="Description"
               oninput={(event) =>
-                updateRangeInScale(scaleIdx, rangeIdx, { description: (event.currentTarget as HTMLInputElement).value })}
+                updateRangeInScale(scaleIdx, rangeIdx, {
+                  description: (event.currentTarget as HTMLInputElement).value,
+                })}
             />
             <div class="band-message-field">
               <textarea
@@ -837,7 +885,9 @@
                 placeholder={'Personalized message (optional). Pipe values with {{score.anxiety.value}}, {{score.anxiety.band}}…'}
                 title="Piped narrative shown when the score lands in this band"
                 oninput={(event) =>
-                  updateRangeInScale(scaleIdx, rangeIdx, { message: (event.currentTarget as HTMLTextAreaElement).value })}
+                  updateRangeInScale(scaleIdx, rangeIdx, {
+                    message: (event.currentTarget as HTMLTextAreaElement).value,
+                  })}
               ></textarea>
               {#if messageVariableOptions.length > 0}
                 <Select
@@ -894,7 +944,9 @@
           type="checkbox"
           checked={config.enableReportDownload}
           onchange={(event) =>
-            updateConfig({ enableReportDownload: (event.currentTarget as HTMLInputElement).checked })}
+            updateConfig({
+              enableReportDownload: (event.currentTarget as HTMLInputElement).checked,
+            })}
         />
         Enable "Download Report" Button
       </label>
@@ -926,8 +978,7 @@
           type="checkbox"
           data-testid="stats-require-continue"
           checked={!autoDismiss}
-          onchange={(event) =>
-            setAutoDismiss(!(event.currentTarget as HTMLInputElement).checked)}
+          onchange={(event) => setAutoDismiss(!(event.currentTarget as HTMLInputElement).checked)}
         />
         Require participant to press Continue
       </label>
@@ -950,9 +1001,9 @@
 
       {#if autoDismiss && config.enableReportDownload}
         <div class="behavior-warning" data-testid="stats-behavior-warning">
-          Auto-dismiss is on together with the report button — the panel will
-          advance on a timer and participants may lose the report before they can
-          print it. Consider requiring Continue instead.
+          Auto-dismiss is on together with the report button — the panel will advance on a timer and
+          participants may lose the report before they can print it. Consider requiring Continue
+          instead.
         </div>
       {/if}
     </div>

@@ -2,6 +2,7 @@
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::{Connection, PgConnection};
+use std::collections::BTreeSet;
 use uuid::Uuid;
 
 use super::{
@@ -267,7 +268,19 @@ struct CurrentDraft {
 
 fn persisted_content(document: &QDefDocument) -> Result<Value, ApiError> {
     let mut questions = Vec::new();
-    for (order, (id, question)) in document.questions.iter().enumerate() {
+    let mut seen = BTreeSet::new();
+    let ordered_ids = document
+        .structure
+        .pages
+        .iter()
+        .flat_map(|page| &page.blocks)
+        .flat_map(|block| &block.question_ids)
+        .chain(document.questions.keys())
+        .filter(|id| seen.insert(*id));
+    for (order, id) in ordered_ids.enumerate() {
+        let question = document.questions.get(id).ok_or_else(|| {
+            ApiError::Internal("Validated structure references a missing question".into())
+        })?;
         let mut value =
             serde_json::to_value(question).map_err(|e| ApiError::Internal(e.to_string()))?;
         value["id"] = json!(id);

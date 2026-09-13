@@ -1,0 +1,4909 @@
+{
+  "version": "1.0.0",
+  "modules": {
+    "text-input": {
+      "type": "text-input",
+      "category": "question",
+      "name": "Text Input",
+      "icon": "✏️",
+      "description": "Text input for open-ended responses",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "inputType": "text",
+        "placeholder": "Enter your response...",
+        "multiline": false,
+        "maxLength": 500,
+        "rows": 3,
+        "autoResize": false
+      },
+      "answerType": {
+        "type": "text",
+        "dataType": "string",
+        "aggregations": ["count", "mode", "wordcount", "unique"],
+        "transformations": ["lowercase", "uppercase", "trim", "extract", "categorize"],
+        "schema": {
+          "value": "string",
+          "length": "number"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "inputType": {
+                "enum": ["text", "email", "url", "tel", "password", "search", "number", "textarea"]
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "multiline": {
+                "type": "boolean"
+              },
+              "minLength": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxLength": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "rows": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "autoResize": {
+                "type": "boolean"
+              },
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "pattern": {
+                "type": "string"
+              },
+              "suggestions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "spellCheck": {
+                "type": "boolean"
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "step": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "inputType": {
+                "enum": ["text", "email", "url", "tel", "password", "search", "number", "textarea"]
+              },
+              "placeholder": {
+                "type": "string"
+              },
+              "multiline": {
+                "type": "boolean"
+              },
+              "minLength": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxLength": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "rows": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "autoResize": {
+                "type": "boolean"
+              },
+              "pattern": {
+                "type": "string"
+              },
+              "suggestions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "spellCheck": {
+                "type": "boolean"
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "step": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          },
+          "response": {
+            "type": "object",
+            "properties": {
+              "minLength": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxLength": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "type": {
+            "const": "text-input"
+          },
+          "responseType": {
+            "type": "object",
+            "properties": {
+              "minLength": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxLength": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": [
+            "/config/minLength",
+            "/display/minLength",
+            "/responseType/minLength",
+            "/response/minLength"
+          ],
+          "upper": [
+            "/config/maxLength",
+            "/display/maxLength",
+            "/responseType/maxLength",
+            "/response/maxLength"
+          ]
+        },
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "text-display": {
+      "type": "text-display",
+      "category": "display",
+      "name": "Text Display",
+      "icon": "📄",
+      "description": "Display formatted text with markdown and variable support",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": false,
+        "supportsAnalytics": false,
+        "supportsTiming": true,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "display": {
+          "content": "## Welcome\n\nPlease read the following instructions carefully.",
+          "format": "markdown",
+          "enableMarkdown": true,
+          "variables": false
+        },
+        "autoAdvance": {
+          "enabled": false,
+          "delay": 5000
+        },
+        "styling": {
+          "fontSize": "1rem",
+          "textAlign": "left",
+          "fontWeight": "normal"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "autoAdvance": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              "styling": {
+                "type": "object",
+                "properties": {
+                  "fontSize": {
+                    "type": "string"
+                  },
+                  "fontWeight": {
+                    "type": "string"
+                  },
+                  "textAlign": {
+                    "enum": ["left", "center", "right"]
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                }
+              },
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "autoAdvance": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "delay": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              },
+              "styling": {
+                "type": "object",
+                "properties": {
+                  "fontSize": {
+                    "type": "string"
+                  },
+                  "fontWeight": {
+                    "type": "string"
+                  },
+                  "textAlign": {
+                    "enum": ["left", "center", "right"]
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "text-display"
+          },
+          "responseType": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "text-instruction": {
+      "type": "text-instruction",
+      "category": "display",
+      "name": "Text Instruction",
+      "icon": "📝",
+      "description": "Display text or instructions with markdown support and variable interpolation",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsMedia": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "display": {
+          "content": "Enter your instruction text here...",
+          "format": "markdown",
+          "enableMarkdown": true,
+          "variables": true
+        },
+        "navigation": {
+          "showNext": true,
+          "autoAdvance": false,
+          "advanceDelay": 5000
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              }
+            }
+          },
+          "config": {
+            "type": "object"
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "text-instruction"
+          },
+          "responseType": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "number-input": {
+      "type": "number-input",
+      "category": "question",
+      "name": "Number Input",
+      "icon": "#️⃣",
+      "description": "Numeric input with min/max, step, prefix/suffix, and spin buttons",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "placeholder": "Enter a number...",
+        "step": 1,
+        "prefix": "",
+        "suffix": "",
+        "showSpinButtons": true
+      },
+      "answerType": {
+        "type": "number",
+        "dataType": "number",
+        "aggregations": ["sum", "mean", "median", "mode", "min", "max", "std", "variance", "count"],
+        "transformations": ["round", "ceil", "floor", "abs", "normalize", "scale"],
+        "schema": {
+          "value": "number",
+          "unit": "string"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "placeholder": {
+                "type": "string"
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "step": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "decimalPlaces": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "suffix": {
+                "type": "string"
+              },
+              "showSpinButtons": {
+                "type": "boolean"
+              },
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "placeholder": {
+                "type": "string"
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "step": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "decimalPlaces": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "suffix": {
+                "type": "string"
+              },
+              "showSpinButtons": {
+                "type": "boolean"
+              }
+            }
+          },
+          "response": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            }
+          },
+          "type": {
+            "const": "number-input"
+          },
+          "responseType": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/config/min", "/display/min", "/responseType/min", "/response/min"],
+          "upper": ["/config/max", "/display/max", "/responseType/max", "/response/max"]
+        },
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "multiple-choice": {
+      "type": "multiple-choice",
+      "category": "question",
+      "name": "Multiple Choice",
+      "icon": "☑️",
+      "description": "Single or multiple choice selection with customizable options",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "response": {
+          "type": "single"
+        },
+        "display": {
+          "prompt": "Select an option:",
+          "options": [
+            {
+              "id": "1",
+              "label": "Option 1",
+              "value": 1
+            },
+            {
+              "id": "2",
+              "label": "Option 2",
+              "value": 2
+            },
+            {
+              "id": "3",
+              "label": "Option 3",
+              "value": 3
+            }
+          ],
+          "layout": "vertical",
+          "randomizeOptions": false,
+          "otherOption": false
+        }
+      },
+      "answerType": {
+        "type": "single_choice",
+        "dataType": "string",
+        "aggregations": ["count", "percentage", "mode", "distribution"],
+        "transformations": ["group", "map_value", "to_number"],
+        "schema": {
+          "selectedId": "string",
+          "selectedLabel": "string",
+          "selectedValue": "any"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "value"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "image": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mediaId": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "refId": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": ["image", "video", "audio"]
+                            },
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "height": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "autoplay": {
+                              "type": "boolean"
+                            },
+                            "loop": {
+                              "type": "boolean"
+                            },
+                            "controls": {
+                              "type": "boolean"
+                            },
+                            "size": {
+                              "enum": ["small", "medium", "large", "full"]
+                            },
+                            "position": {
+                              "enum": ["above", "below", "left", "right", "background"]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "exclusive": {
+                      "type": "boolean"
+                    },
+                    "hotkey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "layout": {
+                "enum": ["vertical", "horizontal", "grid"]
+              },
+              "columns": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "randomizeOptions": {
+                "type": "boolean"
+              },
+              "otherOption": {
+                "type": "boolean"
+              },
+              "exclusiveOptions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              "minSelections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxSelections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "randomizationSeed": {
+                "type": ["string", "number"]
+              },
+              "seed": {
+                "type": ["string", "number"]
+              },
+              "responseType": {
+                "enum": ["single", "multiple"]
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "value"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "image": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mediaId": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "refId": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": ["image", "video", "audio"]
+                            },
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "height": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "autoplay": {
+                              "type": "boolean"
+                            },
+                            "loop": {
+                              "type": "boolean"
+                            },
+                            "controls": {
+                              "type": "boolean"
+                            },
+                            "size": {
+                              "enum": ["small", "medium", "large", "full"]
+                            },
+                            "position": {
+                              "enum": ["above", "below", "left", "right", "background"]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "exclusive": {
+                      "type": "boolean"
+                    },
+                    "hotkey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "layout": {
+                "enum": ["vertical", "horizontal", "grid"]
+              },
+              "columns": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "randomizeOptions": {
+                "type": "boolean"
+              },
+              "otherOption": {
+                "type": "boolean"
+              },
+              "exclusiveOptions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              "minSelections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxSelections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "randomizationSeed": {
+                "type": ["string", "number"]
+              },
+              "seed": {
+                "type": ["string", "number"]
+              },
+              "responseType": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "enum": ["single", "multiple"]
+                  },
+                  "minChoices": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "maxChoices": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": ["id", "label", "value"],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "value": {},
+                        "description": {
+                          "type": "string"
+                        },
+                        "icon": {
+                          "type": "string"
+                        },
+                        "image": {
+                          "type": "string"
+                        },
+                        "color": {
+                          "type": "string"
+                        },
+                        "exclusive": {
+                          "type": "boolean"
+                        },
+                        "hotkey": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "response": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "enum": ["single", "multiple"]
+              },
+              "minChoices": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxChoices": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "value"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "image": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mediaId": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "refId": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": ["image", "video", "audio"]
+                            },
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "height": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "autoplay": {
+                              "type": "boolean"
+                            },
+                            "loop": {
+                              "type": "boolean"
+                            },
+                            "controls": {
+                              "type": "boolean"
+                            },
+                            "size": {
+                              "enum": ["small", "medium", "large", "full"]
+                            },
+                            "position": {
+                              "enum": ["above", "below", "left", "right", "background"]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "exclusive": {
+                      "type": "boolean"
+                    },
+                    "hotkey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "type": {
+            "const": "multiple-choice"
+          },
+          "responseType": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "enum": ["single", "multiple"]
+              },
+              "minChoices": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxChoices": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "value"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "image": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mediaId": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "refId": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": ["image", "video", "audio"]
+                            },
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "height": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "autoplay": {
+                              "type": "boolean"
+                            },
+                            "loop": {
+                              "type": "boolean"
+                            },
+                            "controls": {
+                              "type": "boolean"
+                            },
+                            "size": {
+                              "enum": ["small", "medium", "large", "full"]
+                            },
+                            "position": {
+                              "enum": ["above", "below", "left", "right", "background"]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "exclusive": {
+                      "type": "boolean"
+                    },
+                    "hotkey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "anyOf": [
+          {
+            "required": ["config"],
+            "properties": {
+              "config": {
+                "required": ["options"]
+              }
+            }
+          },
+          {
+            "required": ["display"],
+            "properties": {
+              "display": {
+                "required": ["options"]
+              }
+            }
+          },
+          {
+            "required": ["responseType"],
+            "properties": {
+              "responseType": {
+                "required": ["options"]
+              }
+            }
+          },
+          {
+            "required": ["response"],
+            "properties": {
+              "response": {
+                "required": ["options"]
+              }
+            }
+          }
+        ],
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          },
+          {
+            "anyOf": [
+              {
+                "required": ["config"],
+                "properties": {
+                  "config": {
+                    "required": ["options"]
+                  }
+                }
+              },
+              {
+                "required": ["display"],
+                "properties": {
+                  "display": {
+                    "required": ["options"]
+                  }
+                }
+              },
+              {
+                "required": ["responseType"],
+                "properties": {
+                  "responseType": {
+                    "required": ["options"]
+                  }
+                }
+              },
+              {
+                "required": ["response"],
+                "properties": {
+                  "response": {
+                    "required": ["options"]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": [
+            "/config/minSelections",
+            "/display/minSelections",
+            "/config/responseType/minChoices",
+            "/responseType/minChoices",
+            "/response/minChoices"
+          ],
+          "upper": [
+            "/config/maxSelections",
+            "/display/maxSelections",
+            "/config/responseType/maxChoices",
+            "/responseType/maxChoices",
+            "/response/maxChoices"
+          ]
+        },
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ],
+      "uniqueItemKeys": [
+        {
+          "path": "/config/options",
+          "key": "id"
+        },
+        {
+          "path": "/display/options",
+          "key": "id"
+        },
+        {
+          "path": "/response/options",
+          "key": "id"
+        },
+        {
+          "path": "/responseType/options",
+          "key": "id"
+        }
+      ]
+    },
+    "single-choice": {
+      "type": "single-choice",
+      "category": "question",
+      "name": "Single Choice",
+      "icon": "☑️",
+      "description": "Single or multiple choice selection with customizable options",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "response": {
+          "type": "single"
+        },
+        "display": {
+          "prompt": "Select an option:",
+          "options": [
+            {
+              "id": "1",
+              "label": "Option 1",
+              "value": 1
+            },
+            {
+              "id": "2",
+              "label": "Option 2",
+              "value": 2
+            },
+            {
+              "id": "3",
+              "label": "Option 3",
+              "value": 3
+            }
+          ],
+          "layout": "vertical",
+          "randomizeOptions": false,
+          "otherOption": false
+        }
+      },
+      "answerType": {
+        "type": "single_choice",
+        "dataType": "string",
+        "aggregations": ["count", "percentage", "mode", "distribution"],
+        "transformations": ["group", "map_value", "to_number"],
+        "schema": {
+          "selectedId": "string",
+          "selectedLabel": "string",
+          "selectedValue": "any"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "value"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "image": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mediaId": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "refId": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": ["image", "video", "audio"]
+                            },
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "height": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "autoplay": {
+                              "type": "boolean"
+                            },
+                            "loop": {
+                              "type": "boolean"
+                            },
+                            "controls": {
+                              "type": "boolean"
+                            },
+                            "size": {
+                              "enum": ["small", "medium", "large", "full"]
+                            },
+                            "position": {
+                              "enum": ["above", "below", "left", "right", "background"]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "exclusive": {
+                      "type": "boolean"
+                    },
+                    "hotkey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "layout": {
+                "enum": ["vertical", "horizontal", "grid"]
+              },
+              "columns": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "randomizeOptions": {
+                "type": "boolean"
+              },
+              "otherOption": {
+                "type": "boolean"
+              },
+              "exclusiveOptions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              "minSelections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxSelections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "randomizationSeed": {
+                "type": ["string", "number"]
+              },
+              "seed": {
+                "type": ["string", "number"]
+              },
+              "responseType": {
+                "enum": ["single", "multiple"]
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "value"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "image": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mediaId": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "refId": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": ["image", "video", "audio"]
+                            },
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "height": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "autoplay": {
+                              "type": "boolean"
+                            },
+                            "loop": {
+                              "type": "boolean"
+                            },
+                            "controls": {
+                              "type": "boolean"
+                            },
+                            "size": {
+                              "enum": ["small", "medium", "large", "full"]
+                            },
+                            "position": {
+                              "enum": ["above", "below", "left", "right", "background"]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "exclusive": {
+                      "type": "boolean"
+                    },
+                    "hotkey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "layout": {
+                "enum": ["vertical", "horizontal", "grid"]
+              },
+              "columns": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "randomizeOptions": {
+                "type": "boolean"
+              },
+              "otherOption": {
+                "type": "boolean"
+              },
+              "exclusiveOptions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              "minSelections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxSelections": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "randomizationSeed": {
+                "type": ["string", "number"]
+              },
+              "seed": {
+                "type": ["string", "number"]
+              },
+              "responseType": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "enum": ["single"]
+                  },
+                  "minChoices": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "maxChoices": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "options": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": ["id", "label", "value"],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "value": {},
+                        "description": {
+                          "type": "string"
+                        },
+                        "icon": {
+                          "type": "string"
+                        },
+                        "image": {
+                          "type": "string"
+                        },
+                        "color": {
+                          "type": "string"
+                        },
+                        "exclusive": {
+                          "type": "boolean"
+                        },
+                        "hotkey": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "response": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "enum": ["single"]
+              },
+              "minChoices": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxChoices": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "value"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "image": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mediaId": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "refId": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": ["image", "video", "audio"]
+                            },
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "height": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "autoplay": {
+                              "type": "boolean"
+                            },
+                            "loop": {
+                              "type": "boolean"
+                            },
+                            "controls": {
+                              "type": "boolean"
+                            },
+                            "size": {
+                              "enum": ["small", "medium", "large", "full"]
+                            },
+                            "position": {
+                              "enum": ["above", "below", "left", "right", "background"]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "exclusive": {
+                      "type": "boolean"
+                    },
+                    "hotkey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "type": {
+            "const": "single-choice"
+          },
+          "responseType": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "enum": ["single"]
+              },
+              "minChoices": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxChoices": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "value"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "image": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "mediaId": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "refId": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "enum": ["image", "video", "audio"]
+                            },
+                            "alt": {
+                              "type": "string"
+                            },
+                            "caption": {
+                              "type": "string"
+                            },
+                            "width": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "height": {
+                              "type": "number",
+                              "minimum": 0
+                            },
+                            "autoplay": {
+                              "type": "boolean"
+                            },
+                            "loop": {
+                              "type": "boolean"
+                            },
+                            "controls": {
+                              "type": "boolean"
+                            },
+                            "size": {
+                              "enum": ["small", "medium", "large", "full"]
+                            },
+                            "position": {
+                              "enum": ["above", "below", "left", "right", "background"]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "color": {
+                      "type": "string"
+                    },
+                    "exclusive": {
+                      "type": "boolean"
+                    },
+                    "hotkey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "anyOf": [
+          {
+            "required": ["config"],
+            "properties": {
+              "config": {
+                "required": ["options"]
+              }
+            }
+          },
+          {
+            "required": ["display"],
+            "properties": {
+              "display": {
+                "required": ["options"]
+              }
+            }
+          },
+          {
+            "required": ["responseType"],
+            "properties": {
+              "responseType": {
+                "required": ["options"]
+              }
+            }
+          },
+          {
+            "required": ["response"],
+            "properties": {
+              "response": {
+                "required": ["options"]
+              }
+            }
+          }
+        ],
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          },
+          {
+            "anyOf": [
+              {
+                "required": ["config"],
+                "properties": {
+                  "config": {
+                    "required": ["options"]
+                  }
+                }
+              },
+              {
+                "required": ["display"],
+                "properties": {
+                  "display": {
+                    "required": ["options"]
+                  }
+                }
+              },
+              {
+                "required": ["responseType"],
+                "properties": {
+                  "responseType": {
+                    "required": ["options"]
+                  }
+                }
+              },
+              {
+                "required": ["response"],
+                "properties": {
+                  "response": {
+                    "required": ["options"]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": [
+            "/config/minSelections",
+            "/display/minSelections",
+            "/config/responseType/minChoices",
+            "/responseType/minChoices",
+            "/response/minChoices"
+          ],
+          "upper": [
+            "/config/maxSelections",
+            "/display/maxSelections",
+            "/config/responseType/maxChoices",
+            "/responseType/maxChoices",
+            "/response/maxChoices"
+          ]
+        },
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ],
+      "uniqueItemKeys": [
+        {
+          "path": "/config/options",
+          "key": "id"
+        },
+        {
+          "path": "/display/options",
+          "key": "id"
+        },
+        {
+          "path": "/response/options",
+          "key": "id"
+        },
+        {
+          "path": "/responseType/options",
+          "key": "id"
+        }
+      ]
+    },
+    "scale": {
+      "type": "scale",
+      "category": "question",
+      "name": "Scale",
+      "icon": "⭐",
+      "description": "Rating scale with various display options",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "display": {
+          "prompt": "Rate this statement:",
+          "min": 1,
+          "max": 7,
+          "step": 1,
+          "style": "buttons",
+          "showValue": true,
+          "showLabels": true,
+          "orientation": "horizontal",
+          "labels": {
+            "min": "Strongly Disagree",
+            "max": "Strongly Agree"
+          }
+        },
+        "response": {
+          "valueType": "number"
+        }
+      },
+      "answerType": {
+        "type": "likert_scale",
+        "dataType": "number",
+        "aggregations": ["mean", "median", "mode", "std", "distribution", "percentiles"],
+        "transformations": ["normalize", "reverse", "group_by_range"],
+        "schema": {
+          "value": "number",
+          "label": "string",
+          "percentage": "number"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "step": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "displayType": {
+                "enum": ["slider", "buttons", "stars", "visual-analog"]
+              },
+              "style": {
+                "enum": ["slider", "buttons", "stars", "visual-analog"]
+              },
+              "showValue": {
+                "type": "boolean"
+              },
+              "showLabels": {
+                "type": "boolean"
+              },
+              "orientation": {
+                "enum": ["horizontal", "vertical"]
+              },
+              "defaultValue": {
+                "type": "number"
+              },
+              "labels": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "min": {
+                        "type": "string"
+                      },
+                      "max": {
+                        "type": "string"
+                      },
+                      "midpoint": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["value", "label"],
+                      "properties": {
+                        "value": {
+                          "type": "number"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "step": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "displayType": {
+                "enum": ["slider", "buttons", "stars", "visual-analog"]
+              },
+              "style": {
+                "enum": ["slider", "buttons", "stars", "visual-analog"]
+              },
+              "showValue": {
+                "type": "boolean"
+              },
+              "showLabels": {
+                "type": "boolean"
+              },
+              "orientation": {
+                "enum": ["horizontal", "vertical"]
+              },
+              "defaultValue": {
+                "type": "number"
+              },
+              "labels": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "min": {
+                        "type": "string"
+                      },
+                      "max": {
+                        "type": "string"
+                      },
+                      "midpoint": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["value", "label"],
+                      "properties": {
+                        "value": {
+                          "type": "number"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "response": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "step": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          },
+          "type": {
+            "const": "scale"
+          },
+          "responseType": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "step": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/config/min", "/display/min", "/responseType/min", "/response/min"],
+          "upper": ["/config/max", "/display/max", "/responseType/max", "/response/max"],
+          "lowerDefault": 1,
+          "upperDefault": 5
+        },
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "rating": {
+      "type": "rating",
+      "category": "question",
+      "name": "Rating",
+      "icon": "⭐",
+      "description": "Star, heart, thumbs, or numeric rating with optional half-step support",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "levels": 5,
+        "style": "stars",
+        "allowHalf": false,
+        "showValue": true,
+        "labels": []
+      },
+      "answerType": {
+        "type": "likert_scale",
+        "dataType": "number",
+        "aggregations": ["mean", "median", "mode", "std", "distribution", "percentiles"],
+        "transformations": ["normalize", "reverse", "group_by_range"],
+        "schema": {
+          "value": "number",
+          "label": "string",
+          "percentage": "number"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "levels": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 10
+              },
+              "style": {
+                "enum": ["stars", "hearts", "thumbs", "numeric"]
+              },
+              "allowHalf": {
+                "type": "boolean"
+              },
+              "showValue": {
+                "type": "boolean"
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "levels": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 10
+              },
+              "style": {
+                "enum": ["stars", "hearts", "thumbs", "numeric"]
+              },
+              "allowHalf": {
+                "type": "boolean"
+              },
+              "showValue": {
+                "type": "boolean"
+              },
+              "labels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "response": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            }
+          },
+          "type": {
+            "const": "rating"
+          },
+          "responseType": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "matrix": {
+      "type": "matrix",
+      "category": "question",
+      "name": "Matrix Question",
+      "icon": "⊞",
+      "description": "Grid-based questions with rows and columns",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "prompt": "Please evaluate the following items:",
+        "rows": [
+          {
+            "id": "row1",
+            "label": "Item 1",
+            "required": true
+          },
+          {
+            "id": "row2",
+            "label": "Item 2",
+            "required": true
+          }
+        ],
+        "columns": [
+          {
+            "id": "col1",
+            "label": "Strongly Disagree",
+            "value": 1
+          },
+          {
+            "id": "col2",
+            "label": "Disagree",
+            "value": 2
+          },
+          {
+            "id": "col3",
+            "label": "Neutral",
+            "value": 3
+          },
+          {
+            "id": "col4",
+            "label": "Agree",
+            "value": 4
+          },
+          {
+            "id": "col5",
+            "label": "Strongly Agree",
+            "value": 5
+          }
+        ],
+        "responseType": "radio",
+        "mobileLayout": "scroll",
+        "stickyHeaders": false,
+        "alternateRowColors": false
+      },
+      "answerType": {
+        "type": "matrix",
+        "dataType": "object",
+        "aggregations": ["row_means", "column_means", "correlation_matrix"],
+        "transformations": ["flatten", "pivot", "aggregate_by_row"],
+        "schema": {
+          "responses": "Record<string, Record<string, DynamicValue>>"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "rows": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "required": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "columns": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "value"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "width": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "responseType": {
+                "enum": ["single", "multiple", "radio", "checkbox", "text", "dropdown", "scale"]
+              },
+              "mobileLayout": {
+                "enum": ["scroll", "accordion", "cards"]
+              },
+              "stickyHeaders": {
+                "type": "boolean"
+              },
+              "alternateRowColors": {
+                "type": "boolean"
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string"
+              },
+              "rows": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "required": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "columns": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "value"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "value": {},
+                    "width": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "responseType": {
+                "enum": ["single", "multiple", "radio", "checkbox", "text", "dropdown", "scale"]
+              },
+              "mobileLayout": {
+                "enum": ["scroll", "accordion", "cards"]
+              },
+              "stickyHeaders": {
+                "type": "boolean"
+              },
+              "alternateRowColors": {
+                "type": "boolean"
+              }
+            }
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "matrix"
+          },
+          "responseType": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          },
+          {
+            "anyOf": [
+              {
+                "required": ["config"],
+                "properties": {
+                  "config": {
+                    "required": ["rows"]
+                  }
+                }
+              },
+              {
+                "required": ["display"],
+                "properties": {
+                  "display": {
+                    "required": ["rows"]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "required": ["config"],
+                "properties": {
+                  "config": {
+                    "required": ["columns"]
+                  }
+                }
+              },
+              {
+                "required": ["display"],
+                "properties": {
+                  "display": {
+                    "required": ["columns"]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "uniqueItemKeys": [
+        {
+          "path": "/config/rows",
+          "key": "id"
+        },
+        {
+          "path": "/config/columns",
+          "key": "id"
+        },
+        {
+          "path": "/display/rows",
+          "key": "id"
+        },
+        {
+          "path": "/display/columns",
+          "key": "id"
+        }
+      ],
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "ranking": {
+      "type": "ranking",
+      "category": "question",
+      "name": "Ranking Question",
+      "icon": "🔢",
+      "description": "Drag-and-drop ranking task with flexible options",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": true,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "items": [
+          {
+            "id": "item1",
+            "label": "Item 1"
+          },
+          {
+            "id": "item2",
+            "label": "Item 2"
+          },
+          {
+            "id": "item3",
+            "label": "Item 3"
+          },
+          {
+            "id": "item4",
+            "label": "Item 4"
+          }
+        ],
+        "layout": "vertical",
+        "animation": true,
+        "allowPartial": true,
+        "tieBreaking": false,
+        "showNumbers": true,
+        "dragHandlePosition": "left"
+      },
+      "answerType": {
+        "type": "ranking",
+        "dataType": "array",
+        "aggregations": ["average_rank", "top_positions", "kendall_tau", "spearman_rho"],
+        "transformations": ["to_scores", "normalize_ranks"],
+        "schema": {
+          "rankedItems": "Array<{id: string, rank: number, label: string}>"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "layout": {
+                "enum": ["vertical", "horizontal"]
+              },
+              "animation": {
+                "type": "boolean"
+              },
+              "allowPartial": {
+                "type": "boolean"
+              },
+              "tieBreaking": {
+                "type": "boolean"
+              },
+              "showNumbers": {
+                "type": "boolean"
+              },
+              "dragHandlePosition": {
+                "enum": ["left", "right", "both"]
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label"],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "layout": {
+                "enum": ["vertical", "horizontal"]
+              },
+              "animation": {
+                "type": "boolean"
+              },
+              "allowPartial": {
+                "type": "boolean"
+              },
+              "tieBreaking": {
+                "type": "boolean"
+              },
+              "showNumbers": {
+                "type": "boolean"
+              },
+              "dragHandlePosition": {
+                "enum": ["left", "right", "both"]
+              }
+            }
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "ranking"
+          },
+          "responseType": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          },
+          {
+            "anyOf": [
+              {
+                "required": ["config"],
+                "properties": {
+                  "config": {
+                    "required": ["items"]
+                  }
+                }
+              },
+              {
+                "required": ["display"],
+                "properties": {
+                  "display": {
+                    "required": ["items"]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "uniqueItemKeys": [
+        {
+          "path": "/config/items",
+          "key": "id"
+        },
+        {
+          "path": "/display/items",
+          "key": "id"
+        }
+      ],
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "date-time": {
+      "type": "date-time",
+      "category": "question",
+      "name": "Date/Time Question",
+      "icon": "📅",
+      "description": "Date and/or time input with calendar picker",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "prompt": "Please select a date/time:",
+        "mode": "date",
+        "format": "YYYY-MM-DD",
+        "showCalendar": true,
+        "minDate": null,
+        "maxDate": null,
+        "disabledDates": [],
+        "defaultToToday": false,
+        "timeStep": 15
+      },
+      "answerType": {
+        "type": "date",
+        "dataType": "date",
+        "aggregations": ["min", "max", "range", "count"],
+        "transformations": [
+          "format",
+          "to_timestamp",
+          "extract_year",
+          "extract_month",
+          "extract_day"
+        ],
+        "schema": {
+          "value": "string",
+          "timestamp": "number"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "string"
+              },
+              "mode": {
+                "enum": ["date", "time", "datetime"]
+              },
+              "showCalendar": {
+                "type": "boolean"
+              },
+              "minDate": {
+                "type": ["string", "null"]
+              },
+              "maxDate": {
+                "type": ["string", "null"]
+              },
+              "disabledDates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "defaultToToday": {
+                "type": "boolean"
+              },
+              "timeStep": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string"
+              },
+              "mode": {
+                "enum": ["date", "time", "datetime"]
+              },
+              "format": {
+                "type": "string"
+              },
+              "showCalendar": {
+                "type": "boolean"
+              },
+              "minDate": {
+                "type": ["string", "null"]
+              },
+              "maxDate": {
+                "type": ["string", "null"]
+              },
+              "disabledDates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "defaultToToday": {
+                "type": "boolean"
+              },
+              "timeStep": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "date-time"
+          },
+          "responseType": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        },
+        {
+          "lower": ["/config/minDate", "/display/minDate"],
+          "upper": ["/config/maxDate", "/display/maxDate"],
+          "date": true
+        }
+      ],
+      "dateValues": [
+        "/config/minDate",
+        "/config/maxDate",
+        "/config/disabledDates/*",
+        "/display/minDate",
+        "/display/maxDate",
+        "/display/disabledDates/*"
+      ]
+    },
+    "file-upload": {
+      "type": "file-upload",
+      "category": "question",
+      "name": "File Upload",
+      "icon": "📎",
+      "description": "File upload with drag & drop, validation, and multiple storage options",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "display": {
+          "prompt": "Upload a file:",
+          "accept": [],
+          "maxSize": 10485760,
+          "maxFiles": 1,
+          "dragDrop": true
+        }
+      },
+      "answerType": {
+        "type": "file_upload",
+        "dataType": "object",
+        "aggregations": ["count", "size_stats", "type_distribution"],
+        "transformations": ["extract_metadata"],
+        "schema": {
+          "fileName": "string",
+          "fileSize": "number",
+          "fileType": "string",
+          "uploadId": "string",
+          "metadata": "object"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "accept": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "maxSize": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maxFiles": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "dragDrop": {
+                "type": "boolean"
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "accept": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "maxSize": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maxFiles": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "dragDrop": {
+                "type": "boolean"
+              }
+            }
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "file-upload"
+          },
+          "responseType": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "media-response": {
+      "type": "media-response",
+      "category": "question",
+      "name": "Media Response",
+      "icon": "🎙️",
+      "description": "Audio and video recording with live preview, waveform visualization, and playback",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "display": {
+          "prompt": "Record your response:",
+          "recordingMode": "audio",
+          "maxDuration": 120,
+          "maxFileSize": 52428800,
+          "audioQuality": "medium",
+          "videoQuality": "medium",
+          "allowRerecord": true,
+          "countdown": 3
+        }
+      },
+      "answerType": {
+        "type": "file_upload",
+        "dataType": "object",
+        "aggregations": ["count", "size_stats", "type_distribution"],
+        "transformations": ["extract_metadata"],
+        "schema": {
+          "fileName": "string",
+          "fileSize": "number",
+          "fileType": "string",
+          "uploadId": "string",
+          "metadata": "object"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "recordingMode": {
+                "enum": ["audio", "video-audio", "video-only"]
+              },
+              "maxDuration": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "maxFileSize": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "audioQuality": {
+                "enum": ["low", "medium", "high"]
+              },
+              "videoQuality": {
+                "enum": ["low", "medium", "high"]
+              },
+              "allowRerecord": {
+                "type": "boolean"
+              },
+              "countdown": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "recordingMode": {
+                "enum": ["audio", "video-audio", "video-only"]
+              },
+              "maxDuration": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "maxFileSize": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "audioQuality": {
+                "enum": ["low", "medium", "high"]
+              },
+              "videoQuality": {
+                "enum": ["low", "medium", "high"]
+              },
+              "allowRerecord": {
+                "type": "boolean"
+              },
+              "countdown": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "media-response"
+          },
+          "responseType": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "drawing": {
+      "type": "drawing",
+      "category": "question",
+      "name": "Drawing/Sketch",
+      "icon": "🎨",
+      "description": "Canvas-based drawing task with tools, shapes, and analysis capabilities",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": true,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "display": {
+          "prompt": "Draw something:",
+          "tools": ["pen", "eraser"],
+          "colors": ["#000000", "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF"],
+          "canvas": {
+            "width": 600,
+            "height": 400,
+            "background": null
+          }
+        },
+        "analysis": {
+          "extractFeatures": false,
+          "detectShapes": false,
+          "measurePressure": false,
+          "trackTiming": false
+        }
+      },
+      "answerType": {
+        "type": "drawing",
+        "dataType": "object",
+        "aggregations": ["stroke_count", "duration_stats", "pressure_stats"],
+        "transformations": ["extract_features", "to_image"],
+        "schema": {
+          "strokes": "Array<{points: Array<{x: number, y: number, pressure: number}>, timestamp: number}>",
+          "duration": "number",
+          "imageData": "string"
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "tools": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "enum": ["pen", "eraser", "line", "shape"]
+                }
+              },
+              "colors": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "canvas": {
+                "type": "object",
+                "properties": {
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "background": {
+                    "type": ["string", "null"]
+                  }
+                }
+              },
+              "analysis": {
+                "type": "object",
+                "properties": {
+                  "extractFeatures": {
+                    "type": "boolean"
+                  },
+                  "detectShapes": {
+                    "type": "boolean"
+                  },
+                  "measurePressure": {
+                    "type": "boolean"
+                  },
+                  "trackTiming": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "tools": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "enum": ["pen", "eraser", "line", "shape"]
+                }
+              },
+              "colors": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "canvas": {
+                "type": "object",
+                "properties": {
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "background": {
+                    "type": ["string", "null"]
+                  }
+                }
+              },
+              "analysis": {
+                "type": "object",
+                "properties": {
+                  "extractFeatures": {
+                    "type": "boolean"
+                  },
+                  "detectShapes": {
+                    "type": "boolean"
+                  },
+                  "measurePressure": {
+                    "type": "boolean"
+                  },
+                  "trackTiming": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "drawing"
+          },
+          "responseType": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "instruction": {
+      "type": "instruction",
+      "category": "instruction",
+      "name": "Text Instruction",
+      "icon": "📝",
+      "description": "Display text or instructions with markdown support and variable interpolation",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsMedia": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "display": {
+          "content": "Enter your instruction text here...",
+          "format": "markdown",
+          "enableMarkdown": true,
+          "variables": true
+        },
+        "navigation": {
+          "showNext": true,
+          "autoAdvance": false,
+          "advanceDelay": 5000
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              }
+            }
+          },
+          "config": {
+            "type": "object"
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "instruction"
+          },
+          "responseType": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "media-display": {
+      "type": "media-display",
+      "category": "instruction",
+      "name": "Media Display",
+      "icon": "📝",
+      "description": "Display text or instructions with markdown support and variable interpolation",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsMedia": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "display": {
+          "content": "Enter your instruction text here...",
+          "format": "markdown",
+          "enableMarkdown": true,
+          "variables": true
+        },
+        "navigation": {
+          "showNext": true,
+          "autoAdvance": false,
+          "advanceDelay": 5000
+        }
+      },
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              }
+            }
+          },
+          "config": {
+            "type": "object"
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "media-display"
+          },
+          "responseType": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "bar-chart": {
+      "type": "bar-chart",
+      "category": "display",
+      "name": "Bar Chart",
+      "icon": "📊",
+      "description": "Visualize data as vertical or horizontal bars with optional error bars",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": false,
+        "supportsAnalytics": true,
+        "supportsTiming": false,
+        "supportsVariables": true
+      },
+      "defaultConfig": {
+        "display": {
+          "prompt": "Chart Feedback",
+          "chartType": "bar",
+          "dataSource": "",
+          "orientation": "horizontal",
+          "showErrorBars": false,
+          "errorType": "standardError",
+          "stacked": false,
+          "showValues": true,
+          "showDataLabels": true,
+          "barWidth": 0.8,
+          "barSpacing": 0.2,
+          "value": "",
+          "referenceValue": "",
+          "colors": {
+            "scheme": "default",
+            "customColors": []
+          },
+          "axes": {
+            "x": {
+              "label": "",
+              "showGrid": false,
+              "showTicks": true
+            },
+            "y": {
+              "label": "",
+              "showGrid": true,
+              "showTicks": true,
+              "min": "auto",
+              "max": "auto"
+            }
+          }
+        }
+      },
+      "source": "apps/web/src/lib/modules/display/bar-chart/metadata.ts",
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "orientation": {
+                "enum": ["horizontal", "vertical"]
+              },
+              "showErrorBars": {
+                "type": "boolean"
+              },
+              "errorType": {
+                "enum": ["standardError", "standardDeviation", "confidence95"]
+              },
+              "stacked": {
+                "type": "boolean"
+              },
+              "showValues": {
+                "type": "boolean"
+              },
+              "showDataLabels": {
+                "type": "boolean"
+              },
+              "barWidth": {
+                "type": "number",
+                "minimum": 0
+              },
+              "barSpacing": {
+                "type": "number",
+                "minimum": 0
+              },
+              "value": {
+                "type": "string"
+              },
+              "referenceValue": {
+                "type": "string"
+              },
+              "colors": {
+                "type": "object",
+                "properties": {
+                  "scheme": {
+                    "type": "string"
+                  },
+                  "customColors": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "axes": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "showGrid": {
+                        "type": "boolean"
+                      },
+                      "showTicks": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "y": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "showGrid": {
+                        "type": "boolean"
+                      },
+                      "showTicks": {
+                        "type": "boolean"
+                      },
+                      "min": {
+                        "oneOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "const": "auto"
+                          }
+                        ]
+                      },
+                      "max": {
+                        "oneOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "const": "auto"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "orientation": {
+                "enum": ["horizontal", "vertical"]
+              },
+              "showErrorBars": {
+                "type": "boolean"
+              },
+              "errorType": {
+                "enum": ["standardError", "standardDeviation", "confidence95"]
+              },
+              "stacked": {
+                "type": "boolean"
+              },
+              "showValues": {
+                "type": "boolean"
+              },
+              "showDataLabels": {
+                "type": "boolean"
+              },
+              "barWidth": {
+                "type": "number",
+                "minimum": 0
+              },
+              "barSpacing": {
+                "type": "number",
+                "minimum": 0
+              },
+              "value": {
+                "type": "string"
+              },
+              "referenceValue": {
+                "type": "string"
+              },
+              "colors": {
+                "type": "object",
+                "properties": {
+                  "scheme": {
+                    "type": "string"
+                  },
+                  "customColors": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "axes": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "showGrid": {
+                        "type": "boolean"
+                      },
+                      "showTicks": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "y": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "showGrid": {
+                        "type": "boolean"
+                      },
+                      "showTicks": {
+                        "type": "boolean"
+                      },
+                      "min": {
+                        "oneOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "const": "auto"
+                          }
+                        ]
+                      },
+                      "max": {
+                        "oneOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "const": "auto"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "bar-chart"
+          },
+          "responseType": {
+            "type": "object"
+          },
+          "dataSource": {
+            "type": "object",
+            "properties": {
+              "variables": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "aggregation": {
+                "enum": ["none", "mean", "sum", "count", "min", "max"]
+              },
+              "groupBy": {
+                "type": "string"
+              }
+            }
+          },
+          "visualization": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "showLegend": {
+                "type": "boolean"
+              },
+              "showGrid": {
+                "type": "boolean"
+              },
+              "showTooltips": {
+                "type": "boolean"
+              },
+              "colorScheme": {
+                "enum": ["default", "categorical", "sequential", "diverging"]
+              },
+              "customColors": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "autoAdvance": {
+            "type": "boolean"
+          },
+          "displayDuration": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ]
+    },
+    "statistical-feedback": {
+      "type": "statistical-feedback",
+      "category": "display",
+      "name": "Statistical Feedback",
+      "icon": "📈",
+      "description": "Configurable statistical feedback panel with current-session, cohort, and participant comparison modes",
+      "capabilities": {
+        "supportsScripting": true,
+        "supportsConditionals": true,
+        "supportsValidation": true,
+        "supportsAnalytics": true,
+        "supportsTiming": true,
+        "supportsVariables": true
+      },
+      "options": {
+        "chartTypes": [
+          {
+            "value": "bar",
+            "label": "Bar Chart"
+          },
+          {
+            "value": "line",
+            "label": "Line Chart"
+          },
+          {
+            "value": "radar",
+            "label": "Radar Chart"
+          },
+          {
+            "value": "scatter",
+            "label": "Scatter Plot"
+          },
+          {
+            "value": "histogram",
+            "label": "Histogram"
+          },
+          {
+            "value": "box",
+            "label": "Box Plot"
+          },
+          {
+            "value": "trajectory",
+            "label": "Trajectory (repeated measures)"
+          },
+          {
+            "value": "table",
+            "label": "Table"
+          }
+        ]
+      },
+      "defaultConfig": {
+        "config": {
+          "title": "Statistical Feedback",
+          "subtitle": "Instant metrics from your questionnaire data",
+          "chartType": "bar",
+          "sourceMode": "current-session",
+          "metric": "mean",
+          "showPercentile": true,
+          "showSummary": true,
+          "refreshMs": 0,
+          "dataSource": {
+            "questionnaireId": "",
+            "source": "variable",
+            "key": "",
+            "currentVariable": "",
+            "participantId": "{{participantId}}",
+            "comparisonParticipantId": ""
+          }
+        },
+        "dataSource": {
+          "variables": [],
+          "aggregation": "none"
+        },
+        "visualization": {
+          "title": "Statistical Feedback",
+          "subtitle": "",
+          "showLegend": false,
+          "showGrid": true,
+          "showTooltips": true,
+          "colorScheme": "default"
+        },
+        "autoAdvance": false,
+        "displayDuration": 3500
+      },
+      "source": "apps/web/src/lib/modules/display/statistical-feedback/metadata.ts",
+      "questionSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "enum": ["text", "plain", "markdown", "html"]
+              },
+              "title": {
+                "type": "string"
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "chartType": {
+                "enum": [
+                  "bar",
+                  "line",
+                  "radar",
+                  "scatter",
+                  "histogram",
+                  "box",
+                  "bell-curve",
+                  "gauge",
+                  "table",
+                  "trajectory"
+                ]
+              },
+              "sourceMode": {
+                "enum": [
+                  "current-session",
+                  "cohort",
+                  "participant-vs-cohort",
+                  "participant-vs-participant",
+                  "norm-table",
+                  "self-baseline",
+                  "server-variable"
+                ]
+              },
+              "metric": {
+                "enum": ["count", "mean", "median", "std_dev", "p90", "p95", "p99", "z_score"]
+              },
+              "showPercentile": {
+                "type": "boolean"
+              },
+              "showSummary": {
+                "type": "boolean"
+              },
+              "refreshMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "dataSource": {
+                "type": "object",
+                "properties": {
+                  "questionnaireId": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "enum": ["variable", "response"]
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "currentVariable": {
+                    "type": "string"
+                  },
+                  "participantId": {
+                    "type": "string"
+                  },
+                  "comparisonParticipantId": {
+                    "type": "string"
+                  },
+                  "normTableId": {
+                    "type": "string"
+                  },
+                  "customNorm": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "mean": {
+                        "type": "number"
+                      },
+                      "sd": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "reliability": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    }
+                  },
+                  "baselineVariable": {
+                    "type": "string"
+                  },
+                  "serverVariable": {
+                    "type": "string"
+                  },
+                  "fallbackNormTableId": {
+                    "type": "string"
+                  }
+                }
+              },
+              "scoreInterpretation": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "variableId": {
+                      "type": "string"
+                    },
+                    "scaleName": {
+                      "type": "string"
+                    },
+                    "ranges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "min": {
+                            "type": "number"
+                          },
+                          "max": {
+                            "type": "number"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["min", "max", "label", "description", "color"]
+                      }
+                    }
+                  },
+                  "required": ["variableId", "scaleName", "ranges"]
+                }
+              },
+              "enableReportDownload": {
+                "type": "boolean"
+              },
+              "reportTitle": {
+                "type": "string"
+              }
+            }
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "chartType": {
+                "enum": [
+                  "bar",
+                  "line",
+                  "radar",
+                  "scatter",
+                  "histogram",
+                  "box",
+                  "bell-curve",
+                  "gauge",
+                  "table",
+                  "trajectory"
+                ]
+              },
+              "sourceMode": {
+                "enum": [
+                  "current-session",
+                  "cohort",
+                  "participant-vs-cohort",
+                  "participant-vs-participant",
+                  "norm-table",
+                  "self-baseline",
+                  "server-variable"
+                ]
+              },
+              "metric": {
+                "enum": ["count", "mean", "median", "std_dev", "p90", "p95", "p99", "z_score"]
+              },
+              "showPercentile": {
+                "type": "boolean"
+              },
+              "showSummary": {
+                "type": "boolean"
+              },
+              "refreshMs": {
+                "type": "number",
+                "minimum": 0
+              },
+              "dataSource": {
+                "type": "object",
+                "properties": {
+                  "questionnaireId": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "enum": ["variable", "response"]
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "currentVariable": {
+                    "type": "string"
+                  },
+                  "participantId": {
+                    "type": "string"
+                  },
+                  "comparisonParticipantId": {
+                    "type": "string"
+                  },
+                  "normTableId": {
+                    "type": "string"
+                  },
+                  "customNorm": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "mean": {
+                        "type": "number"
+                      },
+                      "sd": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "reliability": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    }
+                  },
+                  "baselineVariable": {
+                    "type": "string"
+                  },
+                  "serverVariable": {
+                    "type": "string"
+                  },
+                  "fallbackNormTableId": {
+                    "type": "string"
+                  }
+                }
+              },
+              "scoreInterpretation": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "variableId": {
+                      "type": "string"
+                    },
+                    "scaleName": {
+                      "type": "string"
+                    },
+                    "ranges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "min": {
+                            "type": "number"
+                          },
+                          "max": {
+                            "type": "number"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "color": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["min", "max", "label", "description", "color"]
+                      }
+                    }
+                  },
+                  "required": ["variableId", "scaleName", "ranges"]
+                }
+              },
+              "enableReportDownload": {
+                "type": "boolean"
+              },
+              "reportTitle": {
+                "type": "string"
+              }
+            }
+          },
+          "response": {
+            "type": "object"
+          },
+          "type": {
+            "const": "statistical-feedback"
+          },
+          "responseType": {
+            "type": "object"
+          },
+          "dataSource": {
+            "type": "object",
+            "properties": {
+              "variables": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "aggregation": {
+                "enum": ["none", "mean", "sum", "count", "min", "max"]
+              },
+              "groupBy": {
+                "type": "string"
+              }
+            }
+          },
+          "visualization": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "showLegend": {
+                "type": "boolean"
+              },
+              "showGrid": {
+                "type": "boolean"
+              },
+              "showTooltips": {
+                "type": "boolean"
+              },
+              "colorScheme": {
+                "enum": ["default", "categorical", "sequential", "diverging"]
+              },
+              "customColors": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "autoAdvance": {
+            "type": "boolean"
+          },
+          "displayDuration": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/$defs/commonQuestion"
+          }
+        ]
+      },
+      "orderedBounds": [
+        {
+          "lower": ["/timing/minTime"],
+          "upper": ["/timing/maxTime"]
+        },
+        {
+          "lower": ["/timing/warnAtMs"],
+          "upper": ["/timing/deadlineMs"]
+        }
+      ],
+      "effectiveConfigSchema": {
+        "type": "object",
+        "allOf": [
+          {
+            "if": {
+              "required": ["sourceMode"],
+              "properties": {
+                "sourceMode": {
+                  "enum": ["cohort", "participant-vs-cohort", "participant-vs-participant"]
+                }
+              }
+            },
+            "then": {
+              "required": ["dataSource"],
+              "properties": {
+                "dataSource": {
+                  "required": ["questionnaireId", "key"],
+                  "properties": {
+                    "questionnaireId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "key": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["sourceMode"],
+              "properties": {
+                "sourceMode": {
+                  "enum": ["norm-table"]
+                }
+              }
+            },
+            "then": {
+              "required": ["dataSource"],
+              "properties": {
+                "dataSource": {
+                  "allOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "required": ["currentVariable"],
+                          "properties": {
+                            "currentVariable": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        },
+                        {
+                          "required": ["key"],
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "required": ["normTableId"],
+                      "properties": {
+                        "normTableId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    },
+                    {
+                      "if": {
+                        "required": ["normTableId"],
+                        "properties": {
+                          "normTableId": {
+                            "const": "custom"
+                          }
+                        }
+                      },
+                      "then": {
+                        "required": ["customNorm"],
+                        "properties": {
+                          "customNorm": {
+                            "required": ["mean", "sd"]
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["sourceMode"],
+              "properties": {
+                "sourceMode": {
+                  "enum": ["self-baseline"]
+                }
+              }
+            },
+            "then": {
+              "required": ["dataSource"],
+              "properties": {
+                "dataSource": {
+                  "allOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "required": ["currentVariable"],
+                          "properties": {
+                            "currentVariable": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        },
+                        {
+                          "required": ["key"],
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "required": ["baselineVariable"],
+                      "properties": {
+                        "baselineVariable": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["sourceMode"],
+              "properties": {
+                "sourceMode": {
+                  "enum": ["server-variable"]
+                }
+              }
+            },
+            "then": {
+              "required": ["dataSource"],
+              "properties": {
+                "dataSource": {
+                  "allOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "required": ["currentVariable"],
+                          "properties": {
+                            "currentVariable": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        },
+                        {
+                          "required": ["key"],
+                          "properties": {
+                            "key": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "required": ["serverVariable"],
+                      "properties": {
+                        "serverVariable": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["sourceMode"],
+              "properties": {
+                "sourceMode": {
+                  "enum": ["participant-vs-participant"]
+                }
+              }
+            },
+            "then": {
+              "required": ["dataSource"],
+              "properties": {
+                "dataSource": {
+                  "required": ["participantId", "comparisonParticipantId"],
+                  "properties": {
+                    "participantId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "comparisonParticipantId": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "commonQuestion": {
+      "type": "object",
+      "properties": {
+        "navigation": {
+          "type": "object",
+          "properties": {
+            "showPrevious": {
+              "type": "boolean"
+            },
+            "showNext": {
+              "type": "boolean"
+            },
+            "autoAdvance": {
+              "type": "boolean"
+            },
+            "advanceDelay": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "instruction": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "randomize": {
+          "type": "boolean"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conditions": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "show": {
+                  "type": "string"
+                },
+                "enable": {
+                  "type": "string"
+                },
+                "require": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "formula": {
+                    "type": "string"
+                  },
+                  "expression": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "enum": ["show", "hide", "enable", "disable"]
+                  },
+                  "action": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "timing": {
+          "type": "object",
+          "properties": {
+            "minTime": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maxTime": {
+              "type": "number",
+              "minimum": 0
+            },
+            "showTimer": {
+              "type": "boolean"
+            },
+            "warningTime": {
+              "type": "number",
+              "minimum": 0
+            },
+            "deadlineMs": {
+              "type": "number",
+              "minimum": 0
+            },
+            "onTimeout": {
+              "enum": ["auto-submit", "skip", "terminate", "warn"]
+            },
+            "warnAtMs": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "attentionCheck": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "type": {
+              "enum": ["instructed", "trap"]
+            },
+            "correctAnswer": {}
+          }
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "mediaId": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "refId": {
+                "type": "string"
+              },
+              "type": {
+                "enum": ["image", "video", "audio"]
+              },
+              "alt": {
+                "type": "string"
+              },
+              "caption": {
+                "type": "string"
+              },
+              "width": {
+                "type": "number",
+                "minimum": 0
+              },
+              "height": {
+                "type": "number",
+                "minimum": 0
+              },
+              "autoplay": {
+                "type": "boolean"
+              },
+              "loop": {
+                "type": "boolean"
+              },
+              "controls": {
+                "type": "boolean"
+              },
+              "size": {
+                "enum": ["small", "medium", "large", "full"]
+              },
+              "position": {
+                "enum": ["above", "below", "left", "right", "background"]
+              }
+            }
+          }
+        },
+        "layout": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": ["vertical", "horizontal", "grid"]
+            },
+            "columns": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "spacing": {
+              "type": "number",
+              "minimum": 0
+            },
+            "alignment": {
+              "enum": ["left", "center", "right"]
+            },
+            "position": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              }
+            },
+            "size": {
+              "type": "object",
+              "properties": {
+                "width": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            },
+            "opacity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "rotation": {
+              "type": "number"
+            }
+          }
+        },
+        "styling": {
+          "type": "object",
+          "properties": {
+            "fontSize": {
+              "type": "string"
+            },
+            "fontWeight": {
+              "type": "string"
+            },
+            "textAlign": {
+              "enum": ["left", "center", "right"]
+            },
+            "color": {
+              "type": "string"
+            }
+          }
+        },
+        "display": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "prompt": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "enableMarkdown": {
+              "type": "boolean"
+            },
+            "variables": {
+              "type": "boolean"
+            },
+            "media": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "mediaId": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "refId": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": ["image", "video", "audio"]
+                  },
+                  "alt": {
+                    "type": "string"
+                  },
+                  "caption": {
+                    "type": "string"
+                  },
+                  "width": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "height": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "autoplay": {
+                    "type": "boolean"
+                  },
+                  "loop": {
+                    "type": "boolean"
+                  },
+                  "controls": {
+                    "type": "boolean"
+                  },
+                  "size": {
+                    "enum": ["small", "medium", "large", "full"]
+                  },
+                  "position": {
+                    "enum": ["above", "below", "left", "right", "background"]
+                  }
+                }
+              }
+            },
+            "instruction": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -5,7 +5,21 @@
   import { getModulesByCategory } from '$lib/modules/registry';
   import type { ModuleMetadata, ModuleCategory } from '$lib/modules/types';
   import { onMount } from 'svelte';
-  import { Monitor, MessageSquare, CheckSquare, Star, Type, Grid3x3, ListOrdered, Calendar, Paperclip, Pen, FlaskConical, Plus, Loader2 } from 'lucide-svelte';
+  import {
+    Monitor,
+    MessageSquare,
+    CheckSquare,
+    Star,
+    Type,
+    Grid3x3,
+    ListOrdered,
+    Calendar,
+    Paperclip,
+    Pen,
+    FlaskConical,
+    Plus,
+    Loader2,
+  } from 'lucide-svelte';
 
   // `reaction-time` hosts the standard-paradigm library (E-REACT-2: Go/No-Go,
   // SART, Simon, Posner, visual search, Sternberg, PVT, temporal-order, RSVP) via
@@ -30,7 +44,11 @@
   // Filtered modules based on category and search
   const filteredModules = $derived(
     (() => {
-      let filtered = modules.filter((m) => m.category === selectedCategory);
+      let filtered = modules.filter(
+        (m) =>
+          m.category === selectedCategory ||
+          (selectedCategory === 'display' && m.category === 'instruction')
+      );
       filtered = filtered.filter((m) => !HIDDEN_LEGACY_TYPES.has(m.type));
 
       if (searchQuery) {
@@ -75,6 +93,7 @@
       const categoryModules = getModulesByCategory(cat.id as ModuleCategory);
       allModules.push(...categoryModules);
     });
+    allModules.push(...getModulesByCategory('instruction'));
     modules = allModules;
   }
 
@@ -100,7 +119,7 @@
     const block = designerStore.currentBlock;
     const pageId = designerStore.currentPageId;
 
-    if (module.category === 'display') {
+    if (module.category === 'display' || module.category === 'instruction') {
       // Display modules (instructions, analytics, etc.)
       if (block) {
         designerStore.addQuestion(block.id, module.type as any);
@@ -118,10 +137,7 @@
   }
 </script>
 
-<div
-  class="p-4 flex flex-col h-full"
-  data-testid="designer-module-palette"
->
+<div class="p-4 flex flex-col h-full" data-testid="designer-module-palette">
   <h3 class="text-sm font-semibold text-foreground mb-4">Module Palette</h3>
 
   <!-- Search -->
@@ -164,7 +180,9 @@
         <span class="ml-2 text-sm">Loading question types...</span>
       </div>
     {:else if loadError}
-      <div class="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+      <div
+        class="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+      >
         <p>{loadError}</p>
         <button
           type="button"
@@ -198,11 +216,15 @@
         >
           <div class="flex items-start space-x-3">
             <span class="text-muted-foreground">
-              {#if module.type === 'text-display' || module.type === 'instruction'}<Monitor class="w-6 h-6" />
+              {#if module.type === 'text-display' || module.type === 'instruction'}<Monitor
+                  class="w-6 h-6"
+                />
               {:else if module.type === 'multiple-choice'}<CheckSquare class="w-6 h-6" />
               {:else if module.type === 'single-choice'}<CheckSquare class="w-6 h-6" />
               {:else if module.type === 'scale' || module.type === 'rating'}<Star class="w-6 h-6" />
-              {:else if module.type === 'text-input' || module.type === 'number-input'}<Type class="w-6 h-6" />
+              {:else if module.type === 'text-input' || module.type === 'number-input'}<Type
+                  class="w-6 h-6"
+                />
               {:else if module.type === 'matrix'}<Grid3x3 class="w-6 h-6" />
               {:else if module.type === 'ranking'}<ListOrdered class="w-6 h-6" />
               {:else if module.type === 'date-time'}<Calendar class="w-6 h-6" />
@@ -222,12 +244,14 @@
                   >
                 {/if}
                 {#if module.capabilities.supportsConditionals}
-                  <span class="text-xs px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full"
+                  <span
+                    class="text-xs px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full"
                     >Conditionals</span
                   >
                 {/if}
                 {#if module.capabilities.supportsTiming}
-                  <span class="text-xs px-2 py-0.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-full"
+                  <span
+                    class="text-xs px-2 py-0.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-full"
                     >Timing</span
                   >
                 {/if}

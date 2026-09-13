@@ -3,6 +3,7 @@
 //! HTTP, UI, and future MCP adapters must cross this interface instead of
 //! maintaining their own serializers or validators.
 
+mod catalogue;
 mod diff;
 mod edits;
 mod persistence;
@@ -425,7 +426,7 @@ struct QDefDocument {
     questionnaire: QDefQuestionnaire,
     assets: BTreeMap<String, Value>,
     variables: BTreeMap<String, Value>,
-    questions: BTreeMap<String, QDefTextQuestion>,
+    questions: BTreeMap<String, QDefQuestion>,
     structure: QDefStructure,
     flow: Vec<Value>,
     rules: Vec<Value>,
@@ -447,12 +448,19 @@ struct QDefQuestionnaire {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct QDefTextQuestion {
+struct QDefQuestion {
     #[serde(rename = "type")]
     kind: String,
     #[serde(default)]
     required: bool,
-    display: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    display: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instruction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_type: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -463,6 +471,38 @@ struct QDefTextQuestion {
     response: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     validation: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data_source: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    visualization: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auto_advance: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    display_duration: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prompt: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    randomize: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timing: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    conditions: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tags: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attention_check: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    media: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    layout: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    styling: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -675,6 +715,13 @@ fn parse_source(source: &str) -> Result<Value, Vec<DefinitionDiagnostic>> {
 fn prepare_document(raw: Value) -> Result<PreparedDocument, Vec<DefinitionDiagnostic>> {
     let mut diagnostics = validate_envelope(&raw);
     safety::inspect(&raw, "", &mut diagnostics);
+    if let Some(questions) = raw.get("questions").and_then(Value::as_object) {
+        for (id, question) in questions {
+            if let Some(kind) = question.get("type").and_then(Value::as_str) {
+                diagnostics.extend(catalogue::validate(kind, id, question));
+            }
+        }
+    }
     if has_errors(&diagnostics) {
         return Err(diagnostics);
     }
@@ -839,7 +886,11 @@ fn document_from_stored(
             object.remove("responseType");
         }
 
-        let question: QDefTextQuestion = match serde_json::from_value(Value::Object(object)) {
+        let raw_question = Value::Object(object);
+        if let (Some(id), Some(kind)) = (&id, raw_question.get("type").and_then(Value::as_str)) {
+            diagnostics.extend(catalogue::validate(kind, id, &raw_question));
+        }
+        let question: QDefQuestion = match serde_json::from_value(raw_question) {
             Ok(question) => question,
             Err(parse_error) => {
                 diagnostics.push(error(
@@ -1183,24 +1234,13 @@ fn validate(document: &QDefDocument) -> Vec<DefinitionDiagnostic> {
     let mut block_ids = BTreeSet::new();
     let mut referenced_questions = BTreeSet::new();
 
-    for (id, question) in &document.questions {
+    for id in document.questions.keys() {
         if id.trim().is_empty() {
             diagnostics.push(error(
                 "QDEF_ID_EMPTY",
                 "/questions",
                 "Question registry keys cannot be empty.",
                 Some("Give every question a stable, non-empty id."),
-            ));
-        }
-        if !matches!(question.kind.as_str(), "text-display" | "text-instruction") {
-            diagnostics.push(error(
-                "QDEF_QUESTION_TYPE_UNSUPPORTED",
-                format!("/questions/{}/type", pointer_segment(id)),
-                format!(
-                    "Question type '{}' is not supported by the text-only QDef tracer.",
-                    question.kind
-                ),
-                Some("Use text-display or text-instruction for this tracer."),
             ));
         }
     }

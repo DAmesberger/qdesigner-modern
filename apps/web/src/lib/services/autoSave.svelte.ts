@@ -95,29 +95,30 @@ class AutoSaveService {
   /**
    * Perform the auto-save
    */
-  private async performAutoSave(questionnaire: Questionnaire, userId: string) {
+  private async performAutoSave(questionnaire: Questionnaire, userId: string): Promise<boolean> {
     if (this.isAutoSaving) {
-      return; // Already saving
+      return false; // Already saving
     }
 
     this.isAutoSaving = true;
 
     try {
+      const snapshot = $state.snapshot(questionnaire);
       // Save to IndexedDB as draft. A `DatabaseClosedError` here (another tab
       // upgraded the shared-profile DB) is transient — reopen and retry once
       // before treating it as a real failure.
       try {
-        await db.saveDraft(this.getDraftKey(questionnaire), questionnaire, userId, true);
+        await db.saveDraft(this.getDraftKey(snapshot), snapshot, userId, true);
       } catch (err) {
         if (describeDexieError(err).isDatabaseClosed) {
           await ensureDbOpen();
-          await db.saveDraft(this.getDraftKey(questionnaire), questionnaire, userId, true);
+          await db.saveDraft(this.getDraftKey(snapshot), snapshot, userId, true);
         } else {
           throw err;
         }
       }
 
-      this.lastSavedContent = JSON.stringify(questionnaire);
+      this.lastSavedContent = JSON.stringify(snapshot);
 
       if (this.config.showNotifications) {
         toast.info('Auto-saved', { duration: 2000 });
@@ -136,6 +137,7 @@ class AutoSaveService {
           // Draft is still saved locally, so this is not critical
         }
       }
+      return true;
     } catch (error) {
       // Log the REAL Dexie failure (name/message/inner), not the opaque minified
       // constructor name ("DexieError2") that `console.error(error)` alone prints.
@@ -149,6 +151,7 @@ class AutoSaveService {
             : 'Auto-save failed',
         { duration: 4000 }
       );
+      return false;
     } finally {
       this.isAutoSaving = false;
     }
@@ -171,8 +174,7 @@ class AutoSaveService {
     }
 
     try {
-      await this.performAutoSave(state.questionnaire, state.userId);
-      return true;
+      return await this.performAutoSave(state.questionnaire, state.userId);
     } catch (error) {
       console.error('Manual save failed:', error as Error);
       return false;

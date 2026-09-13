@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
   import Input from '$lib/components/ui/forms/Input.svelte';
@@ -17,10 +18,15 @@
   }
 
   interface Props {
-    question: Question & { config: DateTimeConfig };
+    question: Question & { config?: DateTimeConfig };
+    onUpdate?: (updates: Record<string, unknown>) => void;
   }
 
-  let { question = $bindable() }: Props = $props();
+  let { question, onUpdate }: Props = $props();
+  const config = $derived(buildModuleRuntimeConfig(question) as unknown as DateTimeConfig);
+  function updateConfig(updates: Partial<DateTimeConfig>) {
+    onUpdate?.({ config: { ...question.config, ...updates } });
+  }
 
   let newDisabledDate = $state('');
 
@@ -33,49 +39,33 @@
   // Defensive read: a newly-created or legacy question may lack `mode`.
   // Falling back keeps formatExamples[mode] iteration and mode comparisons
   // from throwing during render and freezing the entire designer.
-  const mode = $derived(question.config?.mode ?? 'date');
+  const mode = $derived(config?.mode ?? 'date');
 
   function addDisabledDate() {
     if (!newDisabledDate) return;
 
-    if (!question.config.disabledDates) {
-      question.config.disabledDates = [];
-    }
-
-    if (!question.config.disabledDates.includes(newDisabledDate)) {
-      question.config.disabledDates = [...question.config.disabledDates, newDisabledDate];
+    if (!config.disabledDates?.includes(newDisabledDate)) {
+      updateConfig({ disabledDates: [...(config.disabledDates ?? []), newDisabledDate] });
     }
 
     newDisabledDate = '';
   }
 
   function removeDisabledDate(date: string) {
-    if (!question.config.disabledDates) return;
-    question.config.disabledDates = question.config.disabledDates.filter((d) => d !== date);
+    if (!config.disabledDates) return;
+    updateConfig({ disabledDates: config.disabledDates.filter((d) => d !== date) });
   }
-
-  // Update format when mode changes
-  $effect(() => {
-    const defaultFormats = {
-      date: 'YYYY-MM-DD',
-      time: 'HH:mm',
-      datetime: 'YYYY-MM-DD HH:mm',
-    };
-
-    if (
-      !question.config.format ||
-      !question.config.format.includes(mode === 'time' ? ':' : '-')
-    ) {
-      question.config.format = defaultFormats[mode];
-    }
-  });
 </script>
 
 <div class="designer-panel">
   <!-- Input Mode -->
   <div class="form-group">
     <label for="mode" class="label-text">Input Mode</label>
-    <Select id="mode" bind:value={question.config.mode}>
+    <Select
+      id="mode"
+      value={config.mode ?? 'date'}
+      onchange={(e) => updateConfig({ mode: e.currentTarget.value as DateTimeConfig['mode'] })}
+    >
       <option value="date">Date Only</option>
       <option value="time">Time Only</option>
       <option value="datetime">Date & Time</option>
@@ -85,12 +75,23 @@
   <!-- Date Format -->
   <div class="form-group">
     <label for="format" class="label-text">Display Format</label>
-    <Input id="format" type="text" bind:value={question.config.format} placeholder="e.g., YYYY-MM-DD" />
+    <Input
+      id="format"
+      type="text"
+      value={config.format ?? ''}
+      oninput={(e) => updateConfig({ format: e.currentTarget.value })}
+      placeholder="e.g., YYYY-MM-DD"
+    />
     <div class="format-examples">
       <p class="help-text">Examples for {mode}:</p>
       <div class="example-chips">
         {#each formatExamples[mode] as example}
-          <Button variant="outline" size="xs" class="font-mono" onclick={() => (question.config.format = example)}>
+          <Button
+            variant="outline"
+            size="xs"
+            class="font-mono"
+            onclick={() => updateConfig({ format: example })}
+          >
             {example}
           </Button>
         {/each}
@@ -107,8 +108,8 @@
         <Checkbox
           id="datetime-show-calendar"
           label="Show calendar picker button"
-          checked={question.config.showCalendar ?? false}
-          onchange={(e) => (question.config.showCalendar = e.currentTarget.checked)}
+          checked={config.showCalendar ?? false}
+          onchange={(e) => updateConfig({ showCalendar: e.currentTarget.checked })}
         />
       </div>
     {/if}
@@ -117,15 +118,19 @@
       <Checkbox
         id="datetime-default-today"
         label="Default to today's date/time"
-        checked={question.config.defaultToToday ?? false}
-        onchange={(e) => (question.config.defaultToToday = e.currentTarget.checked)}
+        checked={config.defaultToToday ?? false}
+        onchange={(e) => updateConfig({ defaultToToday: e.currentTarget.checked })}
       />
     </div>
 
     {#if mode === 'time' || mode === 'datetime'}
       <div class="form-group">
         <label for="time-step">Time Step (minutes)</label>
-        <Select id="time-step" bind:value={question.config.timeStep}>
+        <Select
+          id="time-step"
+          value={config.timeStep}
+          onchange={(e) => updateConfig({ timeStep: Number(e.currentTarget.value) })}
+        >
           <option value={1}>1 minute</option>
           <option value={5}>5 minutes</option>
           <option value={10}>10 minutes</option>
@@ -147,8 +152,8 @@
         <Input
           id="min-date"
           type="date"
-          value={question.config.minDate ?? ''}
-          oninput={(e) => (question.config.minDate = e.currentTarget.value || null)}
+          value={config.minDate ?? ''}
+          oninput={(e) => updateConfig({ minDate: e.currentTarget.value || null })}
         />
         <p class="help-text">Earliest date that can be selected</p>
       </div>
@@ -158,8 +163,8 @@
         <Input
           id="max-date"
           type="date"
-          value={question.config.maxDate ?? ''}
-          oninput={(e) => (question.config.maxDate = e.currentTarget.value || null)}
+          value={config.maxDate ?? ''}
+          oninput={(e) => updateConfig({ maxDate: e.currentTarget.value || null })}
         />
         <p class="help-text">Latest date that can be selected</p>
       </div>
@@ -174,14 +179,19 @@
             bind:value={newDisabledDate}
             placeholder="Select date to disable"
           />
-          <Button variant="secondary" size="sm" onclick={addDisabledDate} disabled={!newDisabledDate}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onclick={addDisabledDate}
+            disabled={!newDisabledDate}
+          >
             Add
           </Button>
         </div>
 
-        {#if question.config.disabledDates?.length}
+        {#if config.disabledDates?.length}
           <div class="disabled-dates-list">
-            {#each question.config.disabledDates as date}
+            {#each config.disabledDates as date}
               <div class="disabled-date-item">
                 <span>{date}</span>
                 <Button
@@ -207,20 +217,20 @@
     <div class="preview-box">
       <div class="preview-content">
         <p class="preview-label">Input Type: <strong>{mode}</strong></p>
-        <p class="preview-label">Format: <strong>{question.config.format}</strong></p>
+        <p class="preview-label">Format: <strong>{config.format}</strong></p>
 
-        {#if question.config.minDate || question.config.maxDate}
+        {#if config.minDate || config.maxDate}
           <div class="preview-constraints">
-            {#if question.config.minDate}
-              <p>Min: {question.config.minDate}</p>
+            {#if config.minDate}
+              <p>Min: {config.minDate}</p>
             {/if}
-            {#if question.config.maxDate}
-              <p>Max: {question.config.maxDate}</p>
+            {#if config.maxDate}
+              <p>Max: {config.maxDate}</p>
             {/if}
           </div>
         {/if}
 
-        {#if question.config.defaultToToday}
+        {#if config.defaultToToday}
           <p class="preview-note">Will default to current date/time</p>
         {/if}
       </div>

@@ -1,5 +1,9 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import {
+    buildModuleConfigUpdate,
+    buildModuleRuntimeConfig,
+  } from '$lib/runtime/core/moduleConfigAdapter';
   import { X } from 'lucide-svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
@@ -23,81 +27,37 @@
   }
 
   interface Props {
-    question: Question & { config: TextInputConfig };
-    onUpdate?: any;
+    question: Question & { config?: TextInputConfig };
+    onUpdate?: (updates: Record<string, unknown>) => void;
   }
 
-  let { question = $bindable(), onUpdate }: Props = $props();
-
+  let { question, onUpdate }: Props = $props();
+  const config = $derived(buildModuleRuntimeConfig(question) as unknown as TextInputConfig);
+  function updateConfig(updates: Partial<TextInputConfig>) {
+    onUpdate?.(buildModuleConfigUpdate(question, updates));
+  }
   let newSuggestion = $state('');
-  let hasInitializedConfig = $state(false);
-  let lastConfigSnapshot = $state('');
-  let emitConfigUpdate = $state(false);
-
-  function markConfigDirty() {
-    emitConfigUpdate = true;
-  }
-
   function addSuggestion() {
-    if (!newSuggestion.trim()) return;
-
-    if (!question.config.suggestions) {
-      question.config.suggestions = [];
-    }
-
-    if (!question.config.suggestions.includes(newSuggestion.trim())) {
-      question.config.suggestions = [...question.config.suggestions, newSuggestion.trim()];
-      markConfigDirty();
-    }
-
+    const value = newSuggestion.trim();
+    if (value && !config.suggestions?.includes(value))
+      updateConfig({ suggestions: [...(config.suggestions ?? []), value] });
     newSuggestion = '';
   }
-
   function removeSuggestion(index: number) {
-    if (!question.config.suggestions) return;
-    question.config.suggestions = question.config.suggestions.filter((_, i) => i !== index);
-    markConfigDirty();
+    updateConfig({ suggestions: (config.suggestions ?? []).filter((_, i) => i !== index) });
   }
-
-  // Update validation based on input type
-  $effect(() => {
-    if (question.config.inputType === 'email' && !question.config.pattern) {
-      question.config.pattern = '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$';
-      markConfigDirty();
-    } else if (question.config.inputType === 'url' && !question.config.pattern) {
-      question.config.pattern = '^https?://.*';
-      markConfigDirty();
-    } else if (question.config.inputType === 'tel' && !question.config.pattern) {
-      question.config.pattern = '^[\\d\\s\\-\\+\\(\\)]+$';
-      markConfigDirty();
-    }
-  });
-
-  // Keep parent question config in sync whenever this designer mutates config state.
-  $effect(() => {
-    const snapshot = JSON.stringify(question.config ?? {});
-
-    if (!hasInitializedConfig) {
-      hasInitializedConfig = true;
-      lastConfigSnapshot = snapshot;
-      return;
-    }
-
-    if (snapshot === lastConfigSnapshot) return;
-
-    lastConfigSnapshot = snapshot;
-    if (!emitConfigUpdate) return;
-
-    emitConfigUpdate = false;
-    onUpdate?.({ config: { ...question.config } } as Partial<Question>);
-  });
 </script>
 
-<div class="designer-panel" oninput={markConfigDirty} onchange={markConfigDirty}>
+<div class="designer-panel">
   <!-- Input Type Selection -->
   <div class="form-group">
     <label for="input-type">Input Type</label>
-    <Select id="input-type" bind:value={question.config.inputType}>
+    <Select
+      id="input-type"
+      value={config.inputType}
+      onchange={(e) =>
+        updateConfig({ inputType: e.currentTarget.value as TextInputConfig['inputType'] })}
+    >
       <option value="text">Text</option>
       <option value="number">Number</option>
       <option value="email">Email</option>
@@ -113,24 +73,24 @@
     <Input
       id="placeholder"
       type="text"
-      value={question.config.placeholder ?? ''}
-      oninput={(e) => (question.config.placeholder = e.currentTarget.value)}
+      value={config.placeholder ?? ''}
+      oninput={(e) => updateConfig({ placeholder: e.currentTarget.value })}
       placeholder="Enter placeholder text..."
     />
   </div>
 
   <!-- Text-specific options -->
-  {#if question.config.inputType === 'text'}
+  {#if config.inputType === 'text'}
     <div class="form-group">
       <Checkbox
         id="text-multiline"
         label="Multi-line input (textarea)"
-        checked={question.config.multiline ?? false}
-        onchange={(e) => (question.config.multiline = e.currentTarget.checked)}
+        checked={config.multiline ?? false}
+        onchange={(e) => updateConfig({ multiline: e.currentTarget.checked })}
       />
     </div>
 
-    {#if question.config.multiline}
+    {#if config.multiline}
       <div class="form-group">
         <label for="rows">Number of Rows</label>
         <Input
@@ -138,9 +98,11 @@
           type="number"
           min="2"
           max="20"
-          value={question.config.rows != null ? String(question.config.rows) : ''}
+          value={config.rows != null ? String(config.rows) : ''}
           oninput={(e) =>
-            (question.config.rows = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+            updateConfig({
+              rows: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+            })}
         />
       </div>
 
@@ -148,24 +110,26 @@
         <Checkbox
           id="text-auto-resize"
           label="Auto-resize height"
-          checked={question.config.autoResize ?? false}
-          onchange={(e) => (question.config.autoResize = e.currentTarget.checked)}
+          checked={config.autoResize ?? false}
+          onchange={(e) => updateConfig({ autoResize: e.currentTarget.checked })}
         />
       </div>
     {/if}
   {/if}
 
   <!-- Number-specific options -->
-  {#if question.config.inputType === 'number'}
+  {#if config.inputType === 'number'}
     <div class="form-row">
       <div class="form-group">
         <label for="min">Min Value</label>
         <Input
           id="min"
           type="number"
-          value={question.config.min != null ? String(question.config.min) : ''}
+          value={config.min != null ? String(config.min) : ''}
           oninput={(e) =>
-            (question.config.min = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+            updateConfig({
+              min: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+            })}
         />
       </div>
 
@@ -174,9 +138,11 @@
         <Input
           id="max"
           type="number"
-          value={question.config.max != null ? String(question.config.max) : ''}
+          value={config.max != null ? String(config.max) : ''}
           oninput={(e) =>
-            (question.config.max = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+            updateConfig({
+              max: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+            })}
         />
       </div>
     </div>
@@ -188,9 +154,11 @@
         type="number"
         min="0"
         step="0.1"
-        value={question.config.step != null ? String(question.config.step) : ''}
+        value={config.step != null ? String(config.step) : ''}
         oninput={(e) =>
-          (question.config.step = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+          updateConfig({
+            step: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+          })}
       />
     </div>
   {/if}
@@ -205,9 +173,11 @@
           id="min-length"
           type="number"
           min="0"
-          value={question.config.minLength != null ? String(question.config.minLength) : ''}
+          value={config.minLength != null ? String(config.minLength) : ''}
           oninput={(e) =>
-            (question.config.minLength = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+            updateConfig({
+              minLength: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+            })}
         />
       </div>
 
@@ -217,24 +187,26 @@
           id="max-length"
           type="number"
           min="0"
-          value={question.config.maxLength != null ? String(question.config.maxLength) : ''}
+          value={config.maxLength != null ? String(config.maxLength) : ''}
           oninput={(e) =>
-            (question.config.maxLength = e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value))}
+            updateConfig({
+              maxLength: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value),
+            })}
         />
       </div>
     </div>
   </div>
 
   <!-- Pattern validation -->
-  {#if question.config.inputType !== 'email' && question.config.inputType !== 'url' && question.config.inputType !== 'tel'}
+  {#if config.inputType !== 'email' && config.inputType !== 'url' && config.inputType !== 'tel'}
     <div class="form-group">
       <label for="pattern">Validation Pattern (RegEx)</label>
       <Input
         id="pattern"
         type="text"
         class="font-mono"
-        value={question.config.pattern ?? ''}
-        oninput={(e) => (question.config.pattern = e.currentTarget.value)}
+        value={config.pattern ?? ''}
+        oninput={(e) => updateConfig({ pattern: e.currentTarget.value })}
         placeholder="e.g., ^[A-Z]{2}\d{4}$"
       />
       <p class="help-text">Regular expression for custom validation</p>
@@ -246,8 +218,8 @@
     <Checkbox
       id="text-spell-check"
       label="Enable spell check"
-      checked={question.config.spellCheck ?? false}
-      onchange={(e) => (question.config.spellCheck = e.currentTarget.checked)}
+      checked={config.spellCheck ?? false}
+      onchange={(e) => updateConfig({ spellCheck: e.currentTarget.checked })}
     />
   </div>
 
@@ -263,14 +235,19 @@
         placeholder="Add a suggestion..."
         onkeydown={(e) => e.key === 'Enter' && addSuggestion()}
       />
-      <Button variant="secondary" size="sm" onclick={addSuggestion} disabled={!newSuggestion.trim()}>
+      <Button
+        variant="secondary"
+        size="sm"
+        onclick={addSuggestion}
+        disabled={!newSuggestion.trim()}
+      >
         Add
       </Button>
     </div>
 
-    {#if question.config.suggestions?.length}
+    {#if config.suggestions?.length}
       <div class="suggestions-list">
-        {#each question.config.suggestions as suggestion, i}
+        {#each config.suggestions as suggestion, i}
           <div class="suggestion-item">
             <span>{suggestion}</span>
             <Button
@@ -358,5 +335,4 @@
     border-radius: 0.375rem;
     font-size: 0.875rem;
   }
-
 </style>

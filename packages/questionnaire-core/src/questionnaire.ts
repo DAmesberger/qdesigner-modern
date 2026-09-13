@@ -86,7 +86,9 @@ export interface Questionnaire {
   translations?: QuestionnaireTranslations;
 }
 
-export function formatSemver(q: Pick<Questionnaire, 'versionMajor' | 'versionMinor' | 'versionPatch'>): string {
+export function formatSemver(
+  q: Pick<Questionnaire, 'versionMajor' | 'versionMinor' | 'versionPatch'>
+): string {
   return `${q.versionMajor}.${q.versionMinor}.${q.versionPatch}`;
 }
 
@@ -826,6 +828,7 @@ export interface PageSettings {
 export const QuestionTypes = {
   // Display-only questions
   TEXT_DISPLAY: 'text-display',
+  TEXT_INSTRUCTION: 'text-instruction',
   INSTRUCTION: 'instruction',
   MEDIA_DISPLAY: 'media-display',
   WEBGL: 'webgl',
@@ -1558,7 +1561,7 @@ export interface TextDisplayQuestion extends BaseQuestion {
 }
 
 export interface InstructionQuestion extends BaseQuestion {
-  type: typeof QuestionTypes.INSTRUCTION;
+  type: typeof QuestionTypes.INSTRUCTION | typeof QuestionTypes.TEXT_INSTRUCTION;
   display: TextDisplayConfig;
 }
 
@@ -1723,7 +1726,7 @@ export function isTextDisplayQuestion(q: Question): q is TextDisplayQuestion {
 }
 
 export function isInstructionQuestion(q: Question): q is InstructionQuestion {
-  return q.type === QuestionTypes.INSTRUCTION;
+  return q.type === QuestionTypes.INSTRUCTION || q.type === QuestionTypes.TEXT_INSTRUCTION;
 }
 
 export function isMediaDisplayQuestion(q: Question): q is MediaDisplayQuestion {

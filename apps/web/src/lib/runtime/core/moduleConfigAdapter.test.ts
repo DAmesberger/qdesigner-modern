@@ -8,6 +8,27 @@ import { buildModuleRuntimeConfig, FORM_STYLE_QUESTION_TYPES } from './moduleCon
 const build = (q: unknown) => buildModuleRuntimeConfig(q as Question);
 
 describe('buildModuleRuntimeConfig', () => {
+  it('renders a portable choice image without changing its authored media configuration', () => {
+    const question = {
+      type: 'single-choice',
+      config: {
+        options: [
+          {
+            id: 'a',
+            label: 'A',
+            value: 'a',
+            image: { type: 'image', url: 'https://example.org/a.png', alt: 'Option A' },
+          },
+        ],
+      },
+    };
+    expect(build(question).options?.[0]?.image).toBe('https://example.org/a.png');
+    expect(question.config.options[0]?.image).toEqual({
+      type: 'image',
+      url: 'https://example.org/a.png',
+      alt: 'Option A',
+    });
+  });
   it('always returns a plain object (never undefined) so components never deref undefined config', () => {
     expect(build(undefined)).toEqual({});
     expect(build(null)).toEqual({});
@@ -52,6 +73,15 @@ describe('buildModuleRuntimeConfig', () => {
     expect(config.options![0]).toMatchObject({ value: 'x', label: 'X' });
   });
 
+  it('retains response fields when responseType supplies only the answer kind', () => {
+    const config = build({
+      type: 'single-choice',
+      responseType: { type: 'single' },
+      response: { options: [{ id: 'a', label: 'A', value: 1 }] },
+    });
+    expect(config.options).toEqual([{ id: 'a', label: 'A', value: 1 }]);
+  });
+
   it('maps matrix rows/columns and converts the stored responseType to a widget kind', () => {
     const config = build({
       type: 'matrix',
@@ -81,11 +111,21 @@ describe('buildModuleRuntimeConfig', () => {
     });
     expect(config.min).toBe(0);
     expect(config.max).toBe(10);
-    expect(config.labels).toEqual({ min: 'Low', max: 'High' });
+    expect(config.labels).toEqual([
+      { value: 0, label: 'Low' },
+      { value: 10, label: 'High' },
+    ]);
   });
 
   it('lists the advanced types among form-style types (MOD-02)', () => {
-    for (const type of ['matrix', 'ranking', 'date-time', 'file-upload', 'media-response', 'drawing']) {
+    for (const type of [
+      'matrix',
+      'ranking',
+      'date-time',
+      'file-upload',
+      'media-response',
+      'drawing',
+    ]) {
       expect(FORM_STYLE_QUESTION_TYPES).toContain(type);
     }
   });

@@ -10,6 +10,7 @@
  */
 
 import type { Question } from '@qdesigner/questionnaire-core';
+import { getModuleDefinition } from '@qdesigner/questionnaire-core';
 
 /**
  * Loosely-typed view over a stored question and its nested `display` / `config` /
@@ -58,7 +59,10 @@ export interface ModuleRuntimeConfig {
   min?: number;
   max?: number;
   levels?: number;
-  labels?: { min?: string; max?: string };
+  labels?:
+    | { min?: string; max?: string; midpoint?: string }
+    | Array<{ value: number; label: string; description?: string }>
+    | string[];
   inputType?: string;
   minLength?: number;
   maxLength?: number;
@@ -86,6 +90,9 @@ function normalizeChoiceOptions(options: unknown): NormalizedChoiceOption[] {
         id: String(o.id ?? o.value ?? index),
         label: String(o.label ?? o.value ?? ''),
         value,
+        ...(o.image && typeof o.image === 'object'
+          ? { image: (o.image as { url?: string }).url }
+          : {}),
       };
     })
     .filter((option): option is NormalizedChoiceOption => option !== null);
@@ -117,7 +124,14 @@ export function resolveQuestionPrompt(question: Question): string | undefined {
   const q = (question ?? {}) as unknown as LegacyQuestionView;
   const display: LegacyQuestionView = q.display ?? {};
   const config: LegacyQuestionView = q.config ?? {};
-  return firstNonEmptyString(q.title, q.prompt, config.prompt, display.prompt, display.content, q.text);
+  return firstNonEmptyString(
+    q.title,
+    q.prompt,
+    config.prompt,
+    display.prompt,
+    display.content,
+    q.text
+  );
 }
 
 /** Canonical description precedence: `description → display.description → instruction`. */
@@ -125,6 +139,26 @@ export function resolveQuestionDescription(question: Question): string | undefin
   const q = (question ?? {}) as unknown as LegacyQuestionView;
   const display: LegacyQuestionView = q.display ?? {};
   return firstNonEmptyString(q.description, display.description, q.instruction);
+}
+
+/** An explicit clear must also remove inherited values from authored sources. */
+export function buildModuleConfigUpdate(question: Question, updates: Record<string, unknown>) {
+  const source = question as unknown as LegacyQuestionView;
+  const patch: Record<string, Record<string, unknown>> = {
+    config: { ...source.config, ...updates },
+  };
+  for (const [field, value] of Object.entries(updates)) {
+    if (value !== undefined) continue;
+    for (const container of ['display', 'responseType', 'response'] as const) {
+      const original = source[container];
+      if (original && typeof original === 'object' && field in original) {
+        // Keep the undefined property until the parent applies its shallow patch;
+        // JSON serialization then removes it from the persisted source object.
+        patch[container] = { ...original, ...patch[container], [field]: undefined };
+      }
+    }
+  }
+  return patch;
 }
 
 /**
@@ -136,7 +170,10 @@ export function buildModuleRuntimeConfig(question: Question): ModuleRuntimeConfi
   const q = (question ?? {}) as unknown as LegacyQuestionView;
   const display: LegacyQuestionView = q.display ?? {};
   const existing: LegacyQuestionView = q.config ?? {};
-  const responseType: LegacyQuestionView = (q.responseType ?? q.response ?? {}) as LegacyQuestionView;
+  const responseType: LegacyQuestionView = {
+    ...q.response,
+    ...(q.responseType as LegacyQuestionView | undefined),
+  };
 
   // Start from display, then let an already-present flat config win. Both are
   // loosely-typed legacy views (unknown-valued fields), so the merged base is cast
@@ -161,6 +198,32 @@ export function buildModuleRuntimeConfig(question: Question): ModuleRuntimeConfi
   }
 
   switch (q.type) {
+    case 'text-display': {
+      base.markdown = base.markdown ?? base.enableMarkdown ?? base.format === 'markdown';
+      return base;
+    }
+
+    case 'bar-chart': {
+      const defaults = getModuleDefinition('bar-chart').defaultConfig?.display as Record<
+        string,
+        unknown
+      >;
+      const defaultAxes = defaults.axes as Record<string, Record<string, unknown>>;
+      const axes = base.axes as Record<string, Record<string, unknown>> | undefined;
+      return {
+        ...defaults,
+        ...base,
+        colors: {
+          ...(defaults.colors as Record<string, unknown>),
+          ...(base.colors as Record<string, unknown> | undefined),
+        },
+        axes: {
+          x: { ...defaultAxes.x, ...axes?.x },
+          y: { ...defaultAxes.y, ...axes?.y },
+        },
+      };
+    }
+
     case 'multiple-choice': {
       const isMultiple =
         responseType.type === 'multiple' ||
@@ -186,11 +249,34 @@ export function buildModuleRuntimeConfig(question: Question): ModuleRuntimeConfi
     case 'matrix': {
       base.rows = existing.rows ?? display.rows ?? [];
       base.columns = existing.columns ?? display.columns ?? [];
-      base.responseType = normalizeMatrixResponseType(existing.responseType ?? display.responseType);
+      base.responseType = normalizeMatrixResponseType(
+        existing.responseType ?? display.responseType
+      );
       return base;
     }
 
-    case 'scale':
+    case 'scale': {
+      base.min = base.min ?? responseType.min ?? 1;
+      base.max = base.max ?? responseType.max ?? 5;
+      base.step = base.step ?? responseType.step ?? 1;
+      base.displayType = base.displayType ?? base.style ?? 'buttons';
+      base.showLabels = base.showLabels ?? true;
+      const labels = base.labels;
+      if (!Array.isArray(labels)) {
+        const min = labels?.min ?? display.minLabel ?? responseType.minLabel;
+        const max = labels?.max ?? display.maxLabel ?? responseType.maxLabel;
+        const midpoint = labels?.midpoint;
+        base.labels = [
+          ...(typeof min === 'string' ? [{ value: base.min, label: min }] : []),
+          ...(typeof midpoint === 'string'
+            ? [{ value: (base.min + base.max) / 2, label: midpoint }]
+            : []),
+          ...(typeof max === 'string' ? [{ value: base.max, label: max }] : []),
+        ];
+      }
+      return base;
+    }
+
     case 'rating': {
       base.min = base.min ?? responseType.min ?? 1;
       base.max = base.max ?? responseType.max ?? 5;

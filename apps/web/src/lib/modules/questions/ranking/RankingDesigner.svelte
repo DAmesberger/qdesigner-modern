@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
   import { nanoid } from 'nanoid';
   import { ChevronUp, ChevronDown, Edit, Copy, Trash } from 'lucide-svelte';
   import Button from '$lib/components/ui/Button.svelte';
@@ -23,16 +24,21 @@
   }
 
   interface Props {
-    question: Question & { config: RankingConfig };
+    question: Question & { config?: RankingConfig };
+    onUpdate?: (updates: Record<string, unknown>) => void;
   }
 
-  let { question = $bindable() }: Props = $props();
+  let { question, onUpdate }: Props = $props();
+  const config = $derived(buildModuleRuntimeConfig(question) as unknown as RankingConfig);
+  function updateConfig(updates: Partial<RankingConfig>) {
+    onUpdate?.({ config: { ...question.config, ...updates } });
+  }
 
   // Defensive read: config may be transiently absent (e.g. when the
   // selection moves to another question) or lack `items` on a legacy
   // question. Falling back keeps {#each} iteration and .length from
   // throwing during render and freezing the entire designer.
-  const items = $derived(question.config?.items ?? []);
+  const items = $derived(config?.items ?? []);
 
   let editingItem: RankingItem | null = $state(null);
   let newItemLabel = $state('');
@@ -45,26 +51,26 @@
       label: newItemLabel.trim(),
     };
 
-    question.config.items = [...(question.config.items ?? []), newItem];
+    updateConfig({ items: [...(config.items ?? []), newItem] });
     newItemLabel = '';
   }
 
   function updateItem(item: RankingItem) {
-    const current = question.config.items ?? [];
+    const current = [...(config.items ?? [])];
     const index = current.findIndex((i) => i.id === item.id);
     if (index !== -1) {
       current[index] = item;
-      question.config.items = [...current];
+      updateConfig({ items: current });
     }
     editingItem = null;
   }
 
   function deleteItem(item: RankingItem) {
-    question.config.items = (question.config.items ?? []).filter((i) => i.id !== item.id);
+    updateConfig({ items: (config.items ?? []).filter((i) => i.id !== item.id) });
   }
 
   function moveItem(index: number, direction: 'up' | 'down') {
-    const newItems = [...(question.config.items ?? [])];
+    const newItems = [...(config.items ?? [])];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
 
     if (targetIndex >= 0 && targetIndex < newItems.length) {
@@ -73,7 +79,7 @@
       if (current && target) {
         newItems[index] = target;
         newItems[targetIndex] = current;
-        question.config.items = newItems;
+        updateConfig({ items: newItems });
       }
     }
   }
@@ -84,11 +90,11 @@
       label: `${item.label} (copy)`,
     };
 
-    const current = question.config.items ?? [];
+    const current = [...(config.items ?? [])];
     const index = current.findIndex((i) => i.id === item.id);
     const newItems = [...current];
     newItems.splice(index + 1, 0, newItem);
-    question.config.items = newItems;
+    updateConfig({ items: newItems });
   }
 </script>
 
@@ -149,7 +155,12 @@
               >
                 <Edit size={16} />
               </Button>
-              <Button variant="ghost" size="sm" onclick={() => duplicateItem(item)} aria-label="Duplicate">
+              <Button
+                variant="ghost"
+                size="sm"
+                onclick={() => duplicateItem(item)}
+                aria-label="Duplicate"
+              >
                 <Copy size={16} />
               </Button>
               <Button
@@ -191,7 +202,11 @@
 
     <div class="form-group">
       <label for="layout">Layout Direction</label>
-      <Select id="layout" bind:value={question.config.layout}>
+      <Select
+        id="layout"
+        value={config.layout}
+        onchange={(e) => updateConfig({ layout: e.currentTarget.value as RankingConfig['layout'] })}
+      >
         <option value="vertical">Vertical (Top to Bottom)</option>
         <option value="horizontal">Horizontal (Side by Side)</option>
       </Select>
@@ -201,8 +216,8 @@
       <Checkbox
         id="ranking-show-numbers"
         label="Show rank numbers"
-        checked={question.config.showNumbers ?? false}
-        onchange={(e) => (question.config.showNumbers = e.currentTarget.checked)}
+        checked={config.showNumbers ?? false}
+        onchange={(e) => updateConfig({ showNumbers: e.currentTarget.checked })}
       />
     </div>
 
@@ -210,8 +225,8 @@
       <Checkbox
         id="ranking-animation"
         label="Enable drag animations"
-        checked={question.config.animation ?? false}
-        onchange={(e) => (question.config.animation = e.currentTarget.checked)}
+        checked={config.animation ?? false}
+        onchange={(e) => updateConfig({ animation: e.currentTarget.checked })}
       />
     </div>
   </div>
@@ -224,8 +239,8 @@
       <Checkbox
         id="ranking-allow-partial"
         label="Allow partial ranking (not all items need to be ranked)"
-        checked={question.config.allowPartial ?? false}
-        onchange={(e) => (question.config.allowPartial = e.currentTarget.checked)}
+        checked={config.allowPartial ?? false}
+        onchange={(e) => updateConfig({ allowPartial: e.currentTarget.checked })}
       />
     </div>
 
@@ -233,10 +248,10 @@
       <Checkbox
         id="ranking-tie-breaking"
         label="Enable tie-breaking (allow equal ranks)"
-        checked={question.config.tieBreaking ?? false}
-        onchange={(e) => (question.config.tieBreaking = e.currentTarget.checked)}
+        checked={config.tieBreaking ?? false}
+        onchange={(e) => updateConfig({ tieBreaking: e.currentTarget.checked })}
       />
-      {#if question.config.tieBreaking}
+      {#if config.tieBreaking}
         <p class="help-text">Participants can assign the same rank to multiple items</p>
       {/if}
     </div>

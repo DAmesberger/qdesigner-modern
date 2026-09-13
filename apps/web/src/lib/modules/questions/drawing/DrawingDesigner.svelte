@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Question } from '$lib/shared';
-  import { untrack } from 'svelte';
+  import { buildModuleRuntimeConfig } from '$lib/runtime/core/moduleConfigAdapter';
+  import { getModuleDefinition } from '@qdesigner/questionnaire-core';
   import Button from '$lib/components/ui/Button.svelte';
   import Select from '$lib/components/ui/forms/Select.svelte';
 
@@ -21,10 +22,15 @@
   }
 
   interface Props {
-    question: Question & { config: DrawingConfig };
+    question: Question & { config?: DrawingConfig };
+    onUpdate?: (updates: Record<string, unknown>) => void;
   }
 
-  let { question = $bindable() }: Props = $props();
+  let { question, onUpdate }: Props = $props();
+  const storedConfig = $derived(buildModuleRuntimeConfig(question) as unknown as DrawingConfig);
+  function updateConfig(updates: Partial<DrawingConfig>) {
+    onUpdate?.({ config: { ...question.config, ...updates } });
+  }
 
   // Color presets
   const colorPresets = [
@@ -56,59 +62,42 @@
   let selectedColorPreset = $state('');
   let selectedSizePreset = $state('');
 
-  // Seed config defaults once per question (keyed on identity), outside the
-  // reactive read graph — so this one-time normalization does not re-run as a
-  // reactive effect on every deep config edit.
-  function normalizeDrawingConfig(q: Question & { config: DrawingConfig }) {
-    if (!q.config) {
-      q.config = {
-        tools: ['pen', 'eraser'],
-        colors: ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'],
-        canvas: {
-          width: 600,
-          height: 400,
-        },
-        analysis: {},
-      };
-    } else {
-      if (!q.config.tools) q.config.tools = ['pen', 'eraser'];
-      if (!q.config.colors)
-        q.config.colors = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'];
-      if (!q.config.canvas) q.config.canvas = {};
-      if (!q.config.canvas.width) q.config.canvas.width = 600;
-      if (!q.config.canvas.height) q.config.canvas.height = 400;
-      if (!q.config.analysis) q.config.analysis = {};
-    }
+  const defaults = getModuleDefinition('drawing').defaultConfig?.display as DrawingConfig &
+    Required<Pick<DrawingConfig, 'tools' | 'colors'>>;
+  const config = $derived({
+    ...defaults,
+    ...storedConfig,
+    canvas: { ...defaults.canvas, ...storedConfig.canvas },
+    analysis: { ...storedConfig.analysis },
+  } satisfies DrawingConfig);
+
+  function updateCanvas(updates: NonNullable<DrawingConfig['canvas']>) {
+    updateConfig({ canvas: { ...storedConfig.canvas, ...updates } });
+  }
+  function updateAnalysis(updates: NonNullable<DrawingConfig['analysis']>) {
+    updateConfig({ analysis: { ...storedConfig.analysis, ...updates } });
   }
 
-  $effect(() => {
-    const id = question.id;
-    void id;
-    untrack(() => normalizeDrawingConfig(question));
-  });
-
   function toggleTool(tool: 'pen' | 'eraser' | 'line' | 'shape') {
-    if (!question.config.tools) question.config.tools = [];
-
-    const index = question.config.tools.indexOf(tool);
+    const index = config.tools.indexOf(tool);
     if (index >= 0) {
-      question.config.tools = question.config.tools.filter((t) => t !== tool);
+      updateConfig({ tools: config.tools.filter((t) => t !== tool) });
     } else {
-      question.config.tools = [...question.config.tools, tool];
+      updateConfig({ tools: [...config.tools, tool] });
     }
   }
 
   function addColor() {
-    if (!newColor || !question.config.colors) return;
+    if (!newColor || !config.colors) return;
 
-    if (!question.config.colors.includes(newColor)) {
-      question.config.colors = [...question.config.colors, newColor];
+    if (!config.colors.includes(newColor)) {
+      updateConfig({ colors: [...config.colors, newColor] });
     }
   }
 
   function removeColor(color: string) {
-    if (!question.config.colors) return;
-    question.config.colors = question.config.colors.filter((c) => c !== color);
+    if (!config.colors) return;
+    updateConfig({ colors: config.colors.filter((c) => c !== color) });
   }
 
   function applyColorPreset() {
@@ -116,7 +105,7 @@
 
     const preset = colorPresets.find((p) => p.name === selectedColorPreset);
     if (preset) {
-      question.config.colors = [...preset.colors];
+      updateConfig({ colors: [...preset.colors] });
     }
 
     selectedColorPreset = '';
@@ -126,9 +115,8 @@
     if (!selectedSizePreset) return;
 
     const preset = sizePresets.find((p) => p.name === selectedSizePreset);
-    if (preset && question.config.canvas) {
-      question.config.canvas.width = preset.width;
-      question.config.canvas.height = preset.height;
+    if (preset && config.canvas) {
+      updateCanvas({ width: preset.width, height: preset.height });
     }
 
     selectedSizePreset = '';
@@ -143,7 +131,7 @@
       <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
-          checked={question.config.tools?.includes('pen')}
+          checked={config.tools?.includes('pen')}
           onchange={() => toggleTool('pen')}
         />
         <span>✏️ Pen</span>
@@ -152,7 +140,7 @@
       <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
-          checked={question.config.tools?.includes('eraser')}
+          checked={config.tools?.includes('eraser')}
           onchange={() => toggleTool('eraser')}
         />
         <span>🧹 Eraser</span>
@@ -161,7 +149,7 @@
       <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
-          checked={question.config.tools?.includes('line')}
+          checked={config.tools?.includes('line')}
           onchange={() => toggleTool('line')}
         />
         <span>📏 Line</span>
@@ -170,7 +158,7 @@
       <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
-          checked={question.config.tools?.includes('shape')}
+          checked={config.tools?.includes('shape')}
           onchange={() => toggleTool('shape')}
         />
         <span>⬜ Shapes</span>
@@ -187,7 +175,7 @@
     <div class="flex gap-2 mb-2">
       <input type="color" bind:value={newColor} class="w-12 h-10 p-1 cursor-pointer" />
       <input type="text" bind:value={newColor} placeholder="#000000" class="flex-1 max-w-[150px]" />
-      <Button variant="secondary" size="sm" onclick={addColor}> Add Color </Button>
+      <Button variant="secondary" size="sm" onclick={addColor}>Add Color</Button>
     </div>
 
     <!-- Color presets -->
@@ -209,11 +197,14 @@
     </div>
 
     <!-- Color list -->
-    {#if question.config.colors?.length}
+    {#if config.colors?.length}
       <div class="flex flex-col gap-2 mt-2">
-        {#each question.config.colors as color}
+        {#each config.colors as color}
           <div class="flex items-center gap-2 p-2 bg-muted rounded-md">
-            <div class="w-6 h-6 border border-border rounded" style="background-color: {color}"></div>
+            <div
+              class="w-6 h-6 border border-border rounded"
+              style="background-color: {color}"
+            ></div>
             <span class="flex-1 text-sm font-mono">{color}</span>
             <button class="remove-btn" onclick={() => removeColor(color)} aria-label="Remove color">
               ✕
@@ -226,7 +217,9 @@
 
   <!-- Canvas Settings -->
   <div class="mt-8 pt-6 border-t border-border">
-    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Canvas Settings</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">
+      Canvas Settings
+    </h4>
 
     <!-- Size presets -->
     <div class="mb-4">
@@ -238,21 +231,27 @@
             <option value={preset.name}>{preset.name} ({preset.width}×{preset.height})</option>
           {/each}
         </Select>
-        <Button variant="secondary" size="sm" onclick={applySizePreset} disabled={!selectedSizePreset}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onclick={applySizePreset}
+          disabled={!selectedSizePreset}
+        >
           Apply
         </Button>
       </div>
     </div>
 
     <!-- Custom size -->
-    {#if question.config.canvas}
+    {#if config.canvas}
       <div class="grid grid-cols-2 gap-4">
         <div class="mb-4">
           <label for="canvas-width">Width (px)</label>
           <input
             id="canvas-width"
             type="number"
-            bind:value={question.config.canvas.width}
+            value={config.canvas.width}
+            oninput={(e) => updateCanvas({ width: Number(e.currentTarget.value) })}
             min="100"
             max="1200"
             class="input"
@@ -264,7 +263,8 @@
           <input
             id="canvas-height"
             type="number"
-            bind:value={question.config.canvas.height}
+            value={config.canvas.height}
+            oninput={(e) => updateCanvas({ height: Number(e.currentTarget.value) })}
             min="100"
             max="1200"
             class="input"
@@ -276,13 +276,16 @@
 
   <!-- Analysis Options -->
   <div class="mt-8 pt-6 border-t border-border">
-    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">Analysis Options</h4>
+    <h4 class="mb-4 text-sm font-semibold text-foreground uppercase tracking-wide">
+      Analysis Options
+    </h4>
 
-    {#if question.config.analysis}
+    {#if config.analysis}
       <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
-          bind:checked={question.config.analysis.extractFeatures}
+          checked={config.analysis.extractFeatures}
+          onchange={(e) => updateAnalysis({ extractFeatures: e.currentTarget.checked })}
           class="w-4 h-4 cursor-pointer"
         />
         <span>Extract drawing features (stroke count, colors used)</span>
@@ -291,7 +294,8 @@
       <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
-          bind:checked={question.config.analysis.detectShapes}
+          checked={config.analysis.detectShapes}
+          onchange={(e) => updateAnalysis({ detectShapes: e.currentTarget.checked })}
           class="w-4 h-4 cursor-pointer"
         />
         <span>Detect shapes in drawing</span>
@@ -300,7 +304,8 @@
       <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
-          bind:checked={question.config.analysis.measurePressure}
+          checked={config.analysis.measurePressure}
+          onchange={(e) => updateAnalysis({ measurePressure: e.currentTarget.checked })}
           class="w-4 h-4 cursor-pointer"
         />
         <span>Measure drawing pressure (if supported)</span>
@@ -309,7 +314,8 @@
       <label class="flex items-center gap-2 cursor-pointer mb-2">
         <input
           type="checkbox"
-          bind:checked={question.config.analysis.trackTiming}
+          checked={config.analysis.trackTiming}
+          onchange={(e) => updateAnalysis({ trackTiming: e.currentTarget.checked })}
           class="w-4 h-4 cursor-pointer"
         />
         <span>Track drawing timing and speed</span>
@@ -328,19 +334,20 @@
     <div class="bg-muted border border-border rounded-lg p-4">
       <div
         class="bg-background border-2 border-border rounded-md relative mx-auto flex flex-col items-center justify-center gap-4"
-        style="width: {question.config.canvas?.width || 600}px; height: {question.config.canvas
-          ?.height || 400}px; max-width: 100%;"
+        style="width: {config.canvas?.width || 600}px; height: {config.canvas?.height ||
+          400}px; max-width: 100%;"
       >
         <div class="flex gap-2">
-          {#each question.config.tools || [] as tool}
+          {#each config.tools || [] as tool}
             <span class="text-2xl">
               {#if tool === 'pen'}✏️{:else if tool === 'eraser'}🧹{:else if tool === 'line'}📏{:else if tool === 'shape'}⬜{/if}
             </span>
           {/each}
         </div>
         <div class="flex gap-1">
-          {#each question.config.colors || [] as color}
-            <span class="w-6 h-6 border border-border rounded" style="background-color: {color}"></span>
+          {#each config.colors || [] as color}
+            <span class="w-6 h-6 border border-border rounded" style="background-color: {color}"
+            ></span>
           {/each}
         </div>
       </div>
