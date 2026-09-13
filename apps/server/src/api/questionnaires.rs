@@ -108,6 +108,15 @@ pub struct DryRunQuestionnaireDefinitionRequest {
     pub definition: String,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ApplyQuestionnaireDefinitionRequest {
+    pub definition: String,
+    #[serde(default)]
+    pub commit: bool,
+    pub idempotency_key: Option<String>,
+}
+
 // ── Handlers ─────────────────────────────────────────────────────────
 
 /// GET /api/questionnaires/by-code/:code
@@ -451,9 +460,57 @@ pub async fn dry_run_definition(
                 project_id,
                 definition: body.definition,
                 commit: false,
+                idempotency_key: None,
             })
             .await?,
     ))
+}
+
+/// POST /api/projects/:id/questionnaire-definitions/apply
+#[utoipa::path(
+    post,
+    path = "/api/projects/{id}/questionnaire-definitions/apply",
+    request_body = ApplyQuestionnaireDefinitionRequest,
+    params(("id" = Uuid, Path, description = "Target project id")),
+    security(("bearerAuth" = [])),
+    responses(
+        (status = 200, description = "Inspected definition or committed draft", body = DefinitionApplyResult),
+        (status = 403, description = "Access denied", body = crate::openapi::ErrorEnvelope),
+        (status = 409, description = "Conflicting import key or questionnaire name", body = DefinitionApplyResult),
+        (status = 422, description = "Invalid definition or import parameters", body = DefinitionApplyResult)
+    ),
+    tags = ["questionnaire-definitions"]
+)]
+pub async fn apply_definition(
+    State(state): State<AppState>,
+    user: AuthenticatedUser,
+    tx: Tx,
+    Path(project_id): Path<Uuid>,
+    Json(body): Json<ApplyQuestionnaireDefinitionRequest>,
+) -> Result<Response, ApiError> {
+    let mut tx = tx.tx().await?;
+    let access = PostgresDefinitionAccess::new(&state, &mut tx, user.user_id);
+    let result = QuestionnaireDefinition::new(access)
+        .apply(DefinitionApplyInput {
+            project_id,
+            definition: body.definition,
+            commit: body.commit,
+            idempotency_key: body.idempotency_key,
+        })
+        .await?;
+    let status = if result.diagnostics.iter().any(|d| {
+        matches!(
+            d.code.as_str(),
+            "IDEMPOTENCY_CONFLICT" | "QDEF_NAME_CONFLICT"
+        )
+    }) {
+        axum::http::StatusCode::CONFLICT
+    } else if body.commit && !result.committed {
+        axum::http::StatusCode::UNPROCESSABLE_ENTITY
+    } else {
+        axum::http::StatusCode::OK
+    };
+    Ok((status, Json(result)).into_response())
 }
 
 /// PATCH /api/projects/:id/questionnaires/:qid

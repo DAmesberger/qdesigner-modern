@@ -5620,6 +5620,84 @@
         ]
       }
     },
+    "/api/projects/{id}/questionnaire-definitions/apply": {
+      "post": {
+        "tags": [
+          "questionnaire-definitions"
+        ],
+        "summary": "POST /api/projects/:id/questionnaire-definitions/apply",
+        "operationId": "apply_definition",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Target project id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyQuestionnaireDefinitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Inspected definition or committed draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicting import key or questionnaire name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid definition or import parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyResult"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/questionnaires/{id}/versions": {
       "get": {
         "tags": [
@@ -8724,6 +8802,27 @@
           }
         }
       },
+      "ApplyQuestionnaireDefinitionRequest": {
+        "type": "object",
+        "required": [
+          "definition"
+        ],
+        "properties": {
+          "definition": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "boolean"
+          },
+          "idempotencyKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "ApplyResult": {
         "type": "object",
         "required": [
@@ -8737,6 +8836,20 @@
           },
           "committed": {
             "type": "boolean"
+          },
+          "questionnaireId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "revision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
           },
           "canonical": {
             "type": [

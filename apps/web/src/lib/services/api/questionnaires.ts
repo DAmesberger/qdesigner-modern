@@ -25,6 +25,21 @@ import { mapConditionCounts } from './mappers';
 import type { QuestionnaireDefinition, ExportRow } from '$lib/shared/types/api';
 
 export const questionnaires = {
+  applyDefinition: (projectId: string, definition: string, idempotencyKey: string) =>
+    callSdk(async () => {
+      const result = await sdk.applyDefinition({
+        client: apiClient,
+        responseStyle: 'fields',
+        throwOnError: false,
+        path: { id: projectId },
+        body: { definition, commit: true, idempotencyKey },
+      });
+      if (result.data) return result.data;
+      // Domain rejections carry actionable paths and hints. Preserve them for
+      // the inspection view; authentication and transport errors use callSdk.
+      if (result.error && 'diagnostics' in result.error) return result.error;
+      throw result.error;
+    }) as Promise<GeneratedApplyResult>,
   getByCode: (code: string) =>
     callSdk(() =>
       getQuestionnaireByCodeRequest<true>({

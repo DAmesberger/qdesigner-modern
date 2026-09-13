@@ -143,10 +143,16 @@ export class DocumentStore {
     normalized.versionPatch = source?.versionPatch ?? input?.version_patch ?? normalized.versionPatch;
     normalized.created = asDate(source?.created || input?.created || input?.created_at || normalized.created);
     normalized.modified = asDate(source?.modified || input?.modified || input?.updated_at || normalized.modified);
-    normalized.settings = {
-      ...normalized.settings,
-      ...(source?.settings || {}),
-    };
+    // Existing definitions own their optional settings. Applying new-document
+    // defaults here changed imported behavior (and its canonical digest) merely
+    // by opening and saving it. Supply only the required settings when absent.
+    if (source?.settings) {
+      normalized.settings = {
+        allowBackNavigation: false,
+        showProgressBar: true,
+        ...source.settings,
+      };
+    }
 
     // Per-locale content translations (MOD-04, ADR 0022) live under
     // settings.translations so they ride the existing settings round-trip

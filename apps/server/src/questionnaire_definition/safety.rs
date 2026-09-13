@@ -1,4 +1,4 @@
-//! Fail-closed executable-content checks for the text-only Definition tracer.
+//! Executable-content checks shared by Definition inspection and commits.
 //! These validate input without sanitizing or rewriting researcher content.
 use std::cell::Cell;
 
@@ -12,6 +12,15 @@ pub(super) fn inspect(value: &Value, path: &str, diagnostics: &mut Vec<Definitio
         Value::Object(object) => {
             for (key, child) in object {
                 let child_path = format!("{path}/{}", pointer_segment(key));
+                // Registry members are stable IDs, not configuration field names.
+                // Their values still pass through the same executable checks.
+                if matches!(
+                    path,
+                    "/questions" | "/variables" | "/assets" | "/extensions"
+                ) {
+                    inspect(child, &child_path, diagnostics);
+                    continue;
+                }
                 let normalized: String = key
                     .chars()
                     .filter(char::is_ascii_alphanumeric)
@@ -21,8 +30,13 @@ pub(super) fn inspect(value: &Value, path: &str, diagnostics: &mut Vec<Definitio
                     normalized.as_str(),
                     "script"
                         | "scripts"
+                        | "javascript"
+                        | "javascripts"
+                        | "hook"
                         | "hooks"
+                        | "customfunction"
                         | "customfunctions"
+                        | "globalscript"
                         | "globalscripts"
                         | "onenter"
                         | "onexit"
@@ -33,18 +47,57 @@ pub(super) fn inspect(value: &Value, path: &str, diagnostics: &mut Vec<Definitio
                         | "oninit"
                         | "onload"
                         | "onerror"
+                        | "onclick"
+                        | "onsubmit"
+                        | "onchange"
+                        | "oninput"
+                        | "onkeydown"
+                        | "onkeyup"
+                        | "onkeypress"
+                        | "onfocus"
+                        | "onblur"
+                        | "onbeforeunload"
+                        | "onunload"
+                        | "ontimeout"
                 ) && value_is_non_empty(child);
-                let javascript_language = normalized == "language"
-                    && child.as_str().is_some_and(|s| {
+                let javascript_language = matches!(
+                    normalized.as_str(),
+                    "language" | "dialect" | "type" | "kind"
+                ) && child.as_str().is_some_and(|s| {
+                    let language = s.split(';').next().unwrap_or(s).trim().to_ascii_lowercase();
+                    matches!(
+                        language.as_str(),
+                        "javascript"
+                            | "ecmascript"
+                            | "js"
+                            | "text/javascript"
+                            | "application/javascript"
+                            | "text/ecmascript"
+                            | "application/ecmascript"
+                    )
+                });
+                // These nodes have JavaScript execution semantics and no Safe
+                // Logic equivalent. Shared expression names (e.g. a safe member
+                // lookup) are validated by the typed Safe Logic model instead.
+                let javascript_node = matches!(normalized.as_str(), "type" | "kind")
+                    && child.as_str().is_some_and(|kind| {
                         matches!(
-                            s.to_ascii_lowercase().as_str(),
-                            "javascript" | "ecmascript" | "js"
+                            kind,
+                            "ImportExpression"
+                                | "ImportDeclaration"
+                                | "NewExpression"
+                                | "FunctionExpression"
+                                | "FunctionDeclaration"
+                                | "ArrowFunctionExpression"
+                                | "ClassExpression"
+                                | "ClassDeclaration"
+                                | "ThisExpression"
                         )
                     });
                 let executable_url =
                     matches!(normalized.as_str(), "url" | "href" | "src" | "action")
                         && child.as_str().is_some_and(active_url);
-                if executable_field || javascript_language || executable_url {
+                if executable_field || javascript_language || javascript_node || executable_url {
                     reject(&child_path, diagnostics);
                 } else {
                     inspect(child, &child_path, diagnostics);
@@ -66,8 +119,8 @@ pub(super) fn inspect(value: &Value, path: &str, diagnostics: &mut Vec<Definitio
 fn reject(path: &str, diagnostics: &mut Vec<DefinitionDiagnostic>) {
     diagnostics.push(error(
         "UNSAFE_EXECUTABLE", path,
-        "Executable fields or active HTML are not supported by the text-only QDef tracer.",
-        Some("Remove JavaScript/active markup. Use passive text markup; Safe Logic requires its separately delivered QDef capability."),
+        "Questionnaire Definitions cannot contain authored JavaScript or active HTML.",
+        Some("Remove executable fields and active markup. Express required behavior in Safe Logic (qexpr/1 or qrule/1); unsupported Safe Logic capabilities must be resolved before import."),
     ));
 }
 

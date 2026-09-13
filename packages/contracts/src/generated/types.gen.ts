@@ -56,9 +56,17 @@ export type ApiKeyRecord = {
     created_at?: string | null;
 };
 
+export type ApplyQuestionnaireDefinitionRequest = {
+    definition: string;
+    commit?: boolean;
+    idempotencyKey?: string | null;
+};
+
 export type ApplyResult = {
     valid: boolean;
     committed: boolean;
+    questionnaireId?: string | null;
+    revision?: number | null;
     canonical?: string | null;
     digest?: string | null;
     metadata?: null | DefinitionMetadata;
@@ -4817,6 +4825,44 @@ export type DryRunDefinitionResponses = {
 };
 
 export type DryRunDefinitionResponse = DryRunDefinitionResponses[keyof DryRunDefinitionResponses];
+
+export type ApplyDefinitionData = {
+    body: ApplyQuestionnaireDefinitionRequest;
+    path: {
+        /**
+         * Target project id
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/questionnaire-definitions/apply';
+};
+
+export type ApplyDefinitionErrors = {
+    /**
+     * Access denied
+     */
+    403: ErrorEnvelope;
+    /**
+     * Conflicting import key or questionnaire name
+     */
+    409: ApplyResult;
+    /**
+     * Invalid definition or import parameters
+     */
+    422: ApplyResult;
+};
+
+export type ApplyDefinitionError = ApplyDefinitionErrors[keyof ApplyDefinitionErrors];
+
+export type ApplyDefinitionResponses = {
+    /**
+     * Inspected definition or committed draft
+     */
+    200: ApplyResult;
+};
+
+export type ApplyDefinitionResponse = ApplyDefinitionResponses[keyof ApplyDefinitionResponses];
 
 export type ListVersionsData = {
     body?: never;

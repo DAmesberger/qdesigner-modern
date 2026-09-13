@@ -241,6 +241,10 @@ pub fn router(state: AppState) -> Router {
             post(questionnaires::dry_run_definition),
         )
         .route(
+            "/{id}/questionnaire-definitions/apply",
+            post(questionnaires::apply_definition),
+        )
+        .route(
             "/{id}/members",
             get(projects::list_project_members).post(projects::add_project_member),
         )

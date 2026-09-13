@@ -8,10 +8,14 @@
   interface Props {
     open?: boolean;
     projectId: string;
+    oncreated?: (questionnaireId: string) => void | Promise<void>;
   }
 
-  let { open = $bindable(false), projectId }: Props = $props();
+  let { open = $bindable(false), projectId, oncreated }: Props = $props();
   let inspecting = $state(false);
+  let creating = $state(false);
+  let source = $state('');
+  let idempotencyKey = $state('');
   let filename = $state('');
   let localError = $state('');
   let result = $state<ApplyResult | null>(null);
@@ -28,14 +32,17 @@
   async function inspectFile(event: Event) {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
-    if (!file || inspecting) return;
+    if (!file || inspecting || creating) return;
 
     filename = file.name;
     localError = '';
     result = null;
     inspecting = true;
+    source = '';
+    idempotencyKey = crypto.randomUUID();
     try {
-      result = await api.questionnaires.dryRunDefinition(projectId, await readText(file));
+      source = await readText(file);
+      result = await api.questionnaires.dryRunDefinition(projectId, source);
     } catch (error) {
       localError =
         error instanceof Error ? error.message : 'The definition could not be inspected.';
@@ -45,17 +52,45 @@
     }
   }
 
+  async function createDraft() {
+    if (!result?.valid || result.committed || creating || inspecting) return;
+    creating = true;
+    localError = '';
+    try {
+      result = await api.questionnaires.applyDefinition(projectId, source, idempotencyKey);
+      if (result.committed && result.questionnaireId) {
+        await oncreated?.(result.questionnaireId);
+        open = false;
+      }
+    } catch (error) {
+      localError =
+        error instanceof Error
+          ? error.message
+          : 'The draft could not be created. Retry to check its outcome.';
+    } finally {
+      creating = false;
+    }
+  }
+
   function close() {
     open = false;
   }
 </script>
 
-<Dialog bind:open title="Inspect Questionnaire Definition" size="lg">
+<Dialog
+  bind:open
+  title={oncreated ? 'Import Questionnaire Definition' : 'Inspect Questionnaire Definition'}
+  size="lg"
+>
   <div class="space-y-5">
     <div class="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm text-foreground">
-      <span class="font-medium">Dry run only.</span>
-      This validates a Questionnaire Definition and never changes Questionnaire state. It does not import
-      or export participant responses.
+      {#if oncreated}
+        Preview the definition, then create an editable draft in this project. Publishing is a
+        separate action.
+      {:else}
+        <span class="font-medium">Dry run only.</span>
+        This validates a Questionnaire Definition and never changes Questionnaire state.
+      {/if}
     </div>
 
     <div>
@@ -70,7 +105,7 @@
         type="file"
         accept=".qdef.json,application/json,application/vnd.qdesigner.questionnaire+json"
         onchange={inspectFile}
-        disabled={inspecting}
+        disabled={inspecting || creating}
         class="mt-3 block w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-primary-foreground"
         testid="qdef-file-input"
       />
@@ -93,7 +128,7 @@
       <section class="space-y-4" aria-live="polite">
         <div class="rounded-md border border-border p-4">
           <div class="flex items-center justify-between gap-3">
-            <h3 class="font-medium text-foreground">
+            <h3 class="font-medium text-foreground" data-testid="qdef-validation-heading">
               {result.valid ? 'Definition is valid' : 'Definition needs attention'}
             </h3>
             <span
@@ -172,12 +207,19 @@
           {/if}
         </div>
 
-        <p class="text-sm font-medium text-foreground">No changes were made.</p>
+        <p class="text-sm font-medium text-foreground">
+          {result.committed ? 'Draft created.' : 'No changes were made.'}
+        </p>
       </section>
     {/if}
   </div>
 
   {#snippet footer()}
-    <Button variant="outline" onclick={close}>Close</Button>
+    <Button variant="outline" onclick={close} disabled={creating}>Close</Button>
+    {#if oncreated && result?.valid && !result.committed}
+      <Button onclick={createDraft} disabled={creating || inspecting} loading={creating}
+        >Create Draft</Button
+      >
+    {/if}
   {/snippet}
 </Dialog>

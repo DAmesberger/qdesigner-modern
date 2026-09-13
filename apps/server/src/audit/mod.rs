@@ -29,6 +29,7 @@ use crate::error::ApiError;
 /// `as_str` output (add a new arm instead).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuditAction {
+    QuestionnaireDefinitionImported,
     MemberAdded,
     MemberRoleChanged,
     MemberRemoved,
@@ -98,6 +99,7 @@ pub enum AuditAction {
 impl AuditAction {
     pub fn as_str(&self) -> &'static str {
         match self {
+            AuditAction::QuestionnaireDefinitionImported => "questionnaire.definition_imported",
             AuditAction::MemberAdded => "member.added",
             AuditAction::MemberRoleChanged => "member.role_changed",
             AuditAction::MemberRemoved => "member.removed",
@@ -139,6 +141,7 @@ impl AuditAction {
 /// Stable `resource_type` identifiers. Kept as associated `&str`s rather
 /// than an enum so call sites read as plain data.
 pub mod resource {
+    pub const QUESTIONNAIRE: &str = "questionnaire";
     pub const ORGANIZATION: &str = "organization";
     pub const ORG_MEMBER: &str = "organization_member";
     pub const INVITATION: &str = "invitation";
