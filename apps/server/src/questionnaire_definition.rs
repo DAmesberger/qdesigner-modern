@@ -1234,7 +1234,16 @@ fn validate(document: &QDefDocument) -> Vec<DefinitionDiagnostic> {
                     Some("Use a standard block for this tracer."),
                 ));
             }
+            let mut block_references = BTreeSet::new();
             for (question_index, question_id) in block.question_ids.iter().enumerate() {
+                if !block_references.insert(question_id) {
+                    diagnostics.push(error(
+                        "QDEF_DUPLICATE_REFERENCE",
+                        format!("/structure/pages/{page_index}/blocks/{block_index}/questionIds/{question_index}"),
+                        format!("Question reference '{question_id}' occurs more than once in this block."),
+                        Some("Reference each question at most once per block so its stable path is unambiguous."),
+                    ));
+                }
                 if !document.questions.contains_key(question_id) {
                     diagnostics.push(error(
                         "QDEF_REFERENCE_NOT_FOUND",

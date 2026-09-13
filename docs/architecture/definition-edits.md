@@ -42,6 +42,9 @@ Replacing an array element must preserve its ID. Direct edits to its `id` field
 are rejected. Add/remove operations can intentionally express an identity change
 and repair every affected reference in the same batch. Final validation runs after
 all operations, so temporary dangling references inside a batch are allowed.
+Each question can occur at most once within a block's reference list; repeated
+references in that list produce `QDEF_DUPLICATE_REFERENCE`. The same question
+may still appear in different blocks, where its full stable paths are distinct.
 
 The resulting QDef passes the same safety, schema, module and reference validation
 as a full replacement. Raw duplicate keys are rejected before deserialization;

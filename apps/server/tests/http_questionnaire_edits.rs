@@ -168,6 +168,10 @@ async fn invalid_batches_roll_back_every_edit_and_do_not_consume_the_retry_key()
             "QDEF_REFERENCE_NOT_FOUND",
         ),
         (
+            json!({"op": "replace", "path": "/pages/@intro/blocks/@main/questions", "value": ["a", "a", "b"]}),
+            "QDEF_DUPLICATE_REFERENCE",
+        ),
+        (
             json!({"op": "remove", "path": "/questions/@missing"}),
             "EDIT_TARGET_NOT_FOUND",
         ),
@@ -461,5 +465,46 @@ async fn edits_require_one_bounded_change_and_a_target_revision_before_any_write
     assert_eq!(
         drafts, before,
         "Rejected edit requests leave the initial project drafts unchanged"
+    );
+}
+
+#[tokio::test]
+async fn importing_repeated_references_requires_unambiguous_ids_within_each_block() {
+    let Some(state) = build_test_state().await else {
+        return;
+    };
+    let app = test_app(state);
+    let owner = register_user(&app).await;
+    let tenant = provision_tenant(&app, &owner.token).await;
+    let uri = format!(
+        "/api/projects/{}/questionnaire-definitions/apply",
+        tenant.project_id
+    );
+    let mut source = definition();
+    source["structure"]["pages"][0]["blocks"][0]["questionIds"] = json!(["a", "a", "b"]);
+    let mut input = json!({"definition": source.to_string(), "commit": true, "idempotencyKey": "unambiguous-references"});
+    let (status, rejected) =
+        json_request(&app, "POST", &uri, Some(&owner.token), Some(&input)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{rejected:?}");
+    assert_eq!(
+        rejected["diagnostics"][0]["code"],
+        "QDEF_DUPLICATE_REFERENCE"
+    );
+    assert_eq!(rejected["committed"], false);
+    source["structure"]["pages"][0]["blocks"][0]["questionIds"] = json!(["a", "b"]);
+    source["structure"]["pages"][1]["blocks"][0]["questionIds"] = json!(["a", "c"]);
+    input["definition"] = json!(source.to_string());
+    let (status, created) =
+        json_request(&app, "POST", &uri, Some(&owner.token), Some(&input)).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "Cross-block references remain valid: {created:?}"
+    );
+    assert_eq!(created["revision"], 1);
+    let canonical: Value = serde_json::from_str(created["canonical"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        canonical["structure"]["pages"][1]["blocks"][0]["questionIds"],
+        json!(["a", "c"])
     );
 }
